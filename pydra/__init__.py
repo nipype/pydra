@@ -1,4 +1,1 @@
-
-from ._version import get_versions
-__version__ = get_versions()['version']
-del get_versions
+from .__about__ import __version__
