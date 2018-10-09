@@ -2,7 +2,7 @@ import pdb
 import inspect, os
 import logging
 logger = logging.getLogger('nipype.workflow')
-from .node import Node
+from nipype import Node as Nipype1Node
 
 
 # dj: might create a new class or move to State
@@ -254,7 +254,7 @@ class DotDict(dict):
 
 class CurrentInterface(object):
     def __init__(self, interface, name):
-        self.nn = Node(interface=interface, name=name)
+        self.nn = Nipype1Node(interface=interface, name=name)
         self.output = {}
 
     def run(self, inputs, base_dir, dir_nm_el):
