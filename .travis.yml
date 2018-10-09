@@ -1,0 +1,15 @@
+language: python
+python:
+  - 3.5
+  - 3.6
+matrix:
+  include:
+    - python: 3.7
+      dist: xenial
+      sudo: true
+
+install:
+  - python -r requirements.txt
+
+script:
+  - py.test -vs engine/tests/test_newnode.py
