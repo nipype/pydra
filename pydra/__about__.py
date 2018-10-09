@@ -37,16 +37,18 @@ first-class operations. It forms the core of the Nipype 2.0 ecosystem.
 NETWORKX_MIN_VERSION = '1.9'
 PYTEST_MIN_VERSION = '3.0'
 
-NAME = 'pydra'
-MAINTAINER = 'nipype developers'
-MAINTAINER_EMAIL = 'neuroimaging@python.org'
-DESCRIPTION = description
-LONG_DESCRIPTION = long_description
-URL = 'https://github.com/nipype/pydra'
-DOWNLOAD_URL = 'http://github.com/nipype/pydra/archives/master'
-LICENSE = 'Apache License, 2.0'
-AUTHOR = MAINTAINER
-AUTHOR_EMAIL = MAINTAINER_EMAIL
+__packagename__ = 'pydra'
+__author__ = __maintainer__ = 'nipype developers'
+__email__ = 'neuroimaging@python.org'
+__license__ = 'Apache License, 2.0'
+__status__ = 'Pre-Alpha'
+__description__ = description
+__longdesc__ = long_description
+__url__ = 'https://github.com/nipype/pydra'
+
+DOWNLOAD_URL = (
+    'http://github.com/nipype/{name}/archives/{ver}.tar.gz'.format(
+        name=__packagename__, ver=__version__))
 PLATFORMS = 'OS Independent'
 MAJOR = __version__.split('.')[0]
 MINOR = __version__.split('.')[1]
@@ -54,17 +56,19 @@ MICRO = __version__.replace('-', '.').split('.')[2]
 ISRELEASE = (len(__version__.replace('-', '.').split('.')) == 3
              or 'post' in __version__.replace('-', '.').split('.')[-1])
 VERSION = __version__
-PROVIDES = ['nipype']
+PROVIDES = ['pydra']
 REQUIRES = [
     'networkx>=%s' % NETWORKX_MIN_VERSION,
     'pytest>=%s' % PYTEST_MIN_VERSION,
     'pytest-xdist',
 ]
 
+SETUP_REQUIRES = ['setuptools>=27.0']
 TESTS_REQUIRES = ['pytest-cov', 'codecov', 'pytest-env']
+LINKS_REQUIRES = [
+]
 
 EXTRA_REQUIRES = {
-    'doc': ['Sphinx>=1.4'],
     'tests': TESTS_REQUIRES,
 }
 
