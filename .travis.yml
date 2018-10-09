@@ -8,9 +8,7 @@ python:
 
 install:
   - pip install --upgrade pip setuptools wheel
-  - pip install -r requirements.txt
-  - pip wheel --no-deps .
-  - pip install pydra*.whl
+  - pip install ".[all]"
 
 script:
   - py.test -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
