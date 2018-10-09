@@ -1,9 +1,8 @@
 import pdb
 import inspect, os
 import logging
-logger = logging.getLogger('nipype.workflow')
 from nipype import Node as Nipype1Node
-
+logger = logging.getLogger('nipype.workflow')
 
 # dj: might create a new class or move to State
 
