@@ -1,9 +1,3 @@
-from __future__ import print_function, division, unicode_literals, absolute_import
-from builtins import object
-
-from future import standard_library
-standard_library.install_aliases()
-
 import re, os, pdb, time
 import multiprocessing as mp
 #import multiprocess as mp
@@ -18,6 +12,26 @@ import logging
 logger = logging.getLogger('nipype.workflow')
 
 
+def get_worker_class(worker):
+    try:
+        if issubclass(worker, Worker):
+            return worker
+    except TypeError:
+        pass
+
+    workers = {
+        "mp": MpWorker,
+        "serial": SerialWorker,
+        "dask": DaskWorker,
+        "cf": ConcurrentFuturesWorker,
+    }
+
+    try:
+        return workers[worker]
+    except KeyError:
+        raise Exception("Uknown worker {}. Available workers are {}".format(worker, ','.join(workers.keys())))
+
+
 class Worker(object):
     def __init__(self):
         logger.debug("Initialize Worker")
@@ -29,9 +43,15 @@ class Worker(object):
     def close(self):
         raise NotImplementedError
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        self.close()
+
 
 class MpWorker(Worker):
-    def __init__(self, nr_proc=4): #should be none
+    def __init__(self, nr_proc=None):
         self.nr_proc = nr_proc
         self.pool = mp.Pool(processes=self.nr_proc)
         logger.debug('Initialize MpWorker')
@@ -95,4 +115,3 @@ class DaskWorker(Worker):
     def close(self):
         #self.cluster.close()
         self.client.close()
-
