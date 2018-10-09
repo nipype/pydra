@@ -29,7 +29,9 @@ def get_worker_class(worker):
     try:
         return workers[worker]
     except KeyError:
-        raise Exception("Uknown worker {}. Available workers are {}".format(worker, ','.join(workers.keys())))
+        raise Exception(
+            "Uknown worker {}. Available workers are {}."
+            .format(worker, ', '.join(workers.keys())))
 
 
 class Worker(object):
