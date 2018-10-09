@@ -13,5 +13,4 @@ install:
   - pip install pydra*.whl
 
 script:
-  - py.test -n auto -vs pydra/engine/tests/test_newnode.py \
-        pydra/engine/tests/test_auxiliary.py
+  - py.test -n auto -vs pydra/engine/tests/test_newnode.py
