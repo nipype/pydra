@@ -1,7 +1,3 @@
-from __future__ import (print_function, division, unicode_literals,
-                        absolute_import)
-from builtins import str, bytes, open
-
 import os
 import networkx as nx
 import itertools
@@ -555,7 +551,9 @@ class NewWorkflow(NewBase):
 
 
     def add_nodes(self, nodes):
-        """adding nodes without defining connections"""
+        """adding nodes without defining connections
+            most likely it will be removed at the end
+        """
         self.graph.add_nodes_from(nodes)
         for nn in nodes:
             self._nodes.append(nn)
@@ -565,6 +563,7 @@ class NewWorkflow(NewBase):
             self._node_mappers[nn.name] = nn.mapper
 
 
+    # TODO: workingir shouldn't have None
     def add(self, runnable, name=None, workingdir=None, inputs=None, output_names=None, mapper=None,
             mem_gb=None, print_val=True, out_read=False, **kwargs):
         if is_function(runnable):

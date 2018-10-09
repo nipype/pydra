@@ -13,7 +13,7 @@ from fmriprep.interfaces.freesurfer import PatchedConcatenateLTA as ConcatenateL
 @pytest.fixture()
 def change_dir(request):
     orig_dir = os.getcwd()
-    test_dir = os.path.join(orig_dir, "/nipype/nipype/pipeline/engine/test_neuro")
+    test_dir = os.path.join(orig_dir, "/pydra/engine/test_neuro")
     os.makedirs(test_dir, exist_ok=True)
     os.chdir(test_dir)
 
@@ -35,6 +35,7 @@ Inputs = {"subject_id": "sub-01",
           "subjects_dir": "/fmriprep_test/output1/freesurfer/"
 }
 
+Plugins = ["serial"]
 Plugins = ["serial", "mp", "cf", "dask"]
 
 def select_target(subject_id, space):
@@ -81,10 +82,11 @@ def test_neuro(change_dir, plugin):
 
     wf.add(name='rename_src',
            runnable=Rename(format_string='%(subject)s', keep_ext=True),
-                                in_file="source_file", subject="subject_id",
+                                in_file="source_file",
                                 output_names=["out_file"],
            print_val=False)\
-    #    .map_node('subject') #TODO: now it's only one subject
+        .map_node('subject', inputs={"subject": [space for space in Inputs["output_spaces"]
+                                               if space.startswith("fs")]}) #TODO: now it's only one subject
 
 
     # wf.add('resampling_xfm',
@@ -129,7 +131,7 @@ def test_neuro(change_dir, plugin):
                                   out_type='gii'), print_val=False,
            subjects_dir="subjects_dir", subject_id="subject_id", reg_file="set_xfm_source.out_file",
            target_subject="targets.out", source_file="rename_src.out_file", output_names=["out_file"])\
-        .map_node(mapper=['_targets', 'hemi'], inputs={"hemi": ['lh', 'rh']})
+        .map_node(mapper=[('_targets', "_rename_src"), 'hemi'], inputs={"hemi": ['lh', 'rh']})
 
 
     sub = Submitter(plugin=plugin, runnable=wf)
