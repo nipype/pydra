@@ -9,7 +9,10 @@ matrix:
       sudo: true
 
 install:
-  - python -r requirements.txt
+  - pip install --upgrade pip setuptools wheel
+  - pip install -r requirements.txt
+  - pip wheel --no-deps .
+  - pip install pydra*.whl
 
 script:
-  - py.test -vs engine/tests/test_newnode.py
+  - py.test -vs pydra/engine/tests/test_newnode.py
