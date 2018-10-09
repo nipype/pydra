@@ -2,7 +2,7 @@ import pdb
 import inspect, os
 import logging
 logger = logging.getLogger('nipype.workflow')
-from nipype import Node
+from .node import Node
 
 
 # dj: might create a new class or move to State
@@ -50,7 +50,7 @@ def _ordering(el, i, output_mapper, current_sign=None, other_mappers=None):
         output_mapper.append(el)
     else:
         raise Exception("mapper has to be a string, a tuple or a list")
-    
+
     if i > 0:
         output_mapper.append(current_sign)
 
@@ -75,7 +75,7 @@ def mapping_axis(state_inputs, mapper_rpn):
             right = stack.pop()
             left = stack.pop()
             if left == "OUT":
-                if state_inputs[right].shape == current_shape: #todo:should we allow for one-element array? 
+                if state_inputs[right].shape == current_shape: #todo:should we allow for one-element array?
                     axis_for_input[right] = current_axis
                 else:
                     raise Exception("arrays for scalar operations should have the same size")
@@ -94,7 +94,7 @@ def mapping_axis(state_inputs, mapper_rpn):
                     axis_for_input[right] = current_axis
                 else:
                     raise Exception("arrays for scalar operations should have the same size")
-                
+
             stack.append("OUT")
 
         elif el == "*":
@@ -120,7 +120,7 @@ def mapping_axis(state_inputs, mapper_rpn):
                 axis_for_input[right] = [i + state_inputs[left].ndim
                                          for i in range(state_inputs[right].ndim)]
                 current_axis = axis_for_input[left] + axis_for_input[right]
-                current_shape = tuple([i for i in 
+                current_shape = tuple([i for i in
                                        state_inputs[left].shape + state_inputs[right].shape])
             stack.append("OUT")
 
@@ -149,12 +149,12 @@ def converting_axis2input(state_inputs, axis_for_input, ndim):
     for i in range(ndim):
         input_for_axis.append([])
         shape.append(0)
-        
+
     for inp, axis in axis_for_input.items():
         for (i, ax) in enumerate(axis):
             input_for_axis[ax].append(inp)
             shape[ax] = state_inputs[inp].shape[i]
-            
+
     return input_for_axis, shape
 
 

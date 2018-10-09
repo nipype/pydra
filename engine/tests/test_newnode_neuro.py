@@ -1,7 +1,7 @@
 import os
 import pytest
 
-from ..newengine import NewNode, NewWorkflow
+from ..node import Node, Workflow
 from ..submitter import Submitter
 
 #dj niworkflows vs ...??
@@ -54,7 +54,7 @@ def test_neuro(change_dir, plugin):
     #dj: why do I need outputs?
 
 
-    wf = NewWorkflow(name=Name, inputs=Inputs, workingdir="test_neuro_{}".format(plugin), print_val=False,
+    wf = Workflow(name=Name, inputs=Inputs, workingdir="test_neuro_{}".format(plugin), print_val=False,
                      wf_output_names=[("sampler", "out_file", "sampler_out"), ("targets", "out", "target_out")])
 
     # @interface
