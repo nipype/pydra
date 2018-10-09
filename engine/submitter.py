@@ -1,7 +1,7 @@
 import os, pdb, time
 from copy import deepcopy
 
-from .workers import get_worker
+from .workers import get_worker_class
 
 import logging
 logger = logging.getLogger('nipype.workflow')
