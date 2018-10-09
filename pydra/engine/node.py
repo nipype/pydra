@@ -92,6 +92,7 @@ class NodeBase(object):
                   if not isinstance(value, list) else np.array(value)
                   for key, value in inputs.items()}
         self._inputs.update(inputs)
+        self._state_inputs.update(inputs)
 
     @property
     def state_inputs(self):
