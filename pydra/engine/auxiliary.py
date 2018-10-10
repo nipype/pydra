@@ -1,8 +1,8 @@
 import pdb
 import inspect, os
 import logging
+from nipype import Node as Nipype1Node
 logger = logging.getLogger('nipype.workflow')
-from nipype import Node
 
 # dj: might create a new class or move to State
 
@@ -86,8 +86,7 @@ def mapping_axis(state_inputs, mapper_rpn):
             right = stack.pop()
             left = stack.pop()
             if left == "OUT":
-                if state_inputs[
-                        right].shape == current_shape:  #todo:should we allow for one-element array?
+                if state_inputs[right].shape == current_shape: #todo:should we allow for one-element array?
                     axis_for_input[right] = current_axis
                 else:
                     raise Exception(
@@ -109,9 +108,7 @@ def mapping_axis(state_inputs, mapper_rpn):
                     axis_for_input[left] = current_axis
                     axis_for_input[right] = current_axis
                 else:
-                    raise Exception(
-                        "arrays for scalar operations should have the same size"
-                    )
+                    raise Exception("arrays for scalar operations should have the same size")
 
             stack.append("OUT")
 
@@ -150,10 +147,8 @@ def mapping_axis(state_inputs, mapper_rpn):
                     for i in range(state_inputs[right].ndim)
                 ]
                 current_axis = axis_for_input[left] + axis_for_input[right]
-                current_shape = tuple([
-                    i for i in state_inputs[left].shape +
-                    state_inputs[right].shape
-                ])
+                current_shape = tuple([i for i in
+                                       state_inputs[left].shape + state_inputs[right].shape])
             stack.append("OUT")
 
         else:
@@ -295,7 +290,7 @@ class DotDict(dict):
 
 class CurrentInterface(object):
     def __init__(self, interface, name):
-        self.nn = Node(interface=interface, name=name)
+        self.nn = Nipype1Node(interface=interface, name=name)
         self.output = {}
 
     def run(self, inputs, base_dir, dir_nm_el):
