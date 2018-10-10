@@ -1318,7 +1318,7 @@ def test_current_node_2(change_dir, plugin):
 
     in_file_l = ["/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
                  "/Users/dorota/nipype_workshop/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"]
-    nn = Node(name="NA", inputs={"in_file": in_file_l}, mapper="in_file", interface=interf_bet, print_val=False,
+    nn = Node(name="NA", inputs={"in_file": in_file_l}, mapper="in_file", interface=interf_bet, write_state=False,
                  workingdir="test_cnd2_{}".format(plugin), output_names=["out_file"])
 
     sub = Submitter(plugin=plugin, runnable=nn)
@@ -1338,9 +1338,10 @@ def test_current_wf_1(change_dir, plugin):
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     nn = Node(name="fsl", inputs={"in_file": "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"}, interface=interf_bet,
-                 workingdir="nn", output_names=["out_file"], print_val=False)
+                 workingdir="nn", output_names=["out_file"], write_state=False)
 
-    wf = Workflow( workingdir="test_cwf_1_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")], print_val=False)
+    wf = Workflow( workingdir="test_cwf_1_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")],
+                   write_state=False)
     wf.add_nodes([nn])
 
     sub = Submitter(plugin=plugin, runnable=wf)
@@ -1358,9 +1359,10 @@ def test_current_wf_1a(change_dir, plugin):
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     nn = Node(name="fsl", inputs={"in_file": "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"}, interface=interf_bet,
-                 workingdir="nn", output_names=["out_file"], print_val=False)
+                 workingdir="nn", output_names=["out_file"], write_state=False)
 
-    wf = Workflow(workingdir="test_cwf_1a_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")], print_val=False)
+    wf = Workflow(workingdir="test_cwf_1a_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")],
+                  write_state=False)
     wf.add(runnable=nn)
 
     sub = Submitter(plugin=plugin, runnable=wf)
@@ -1377,8 +1379,9 @@ def test_current_wf_1b(change_dir, plugin):
     """Wf with a current interface, no mapper; using wf.add(nipype CurrentInterface)"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
-    wf = Workflow(workingdir="test_cwf_1b_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")], print_val=False)
-    wf.add(runnable=interf_bet, name="fsl", workingdir="nn", output_names=["out_file"], print_val=False,
+    wf = Workflow(workingdir="test_cwf_1b_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")],
+                  write_state=False)
+    wf.add(runnable=interf_bet, name="fsl", workingdir="nn", output_names=["out_file"], write_state=False,
            inputs={"in_file": "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"})
 
     sub = Submitter(plugin=plugin, runnable=wf)
@@ -1394,8 +1397,9 @@ def test_current_wf_1b(change_dir, plugin):
 def test_current_wf_1c(change_dir, plugin):
     """Wf with a current interface, no mapper; using wf.add(nipype interface) """
 
-    wf = Workflow(workingdir="test_cwf_1c_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")], print_val=False)
-    wf.add(runnable=fsl.BET(), name="fsl", workingdir="nn", output_names=["out_file"], print_val=False,
+    wf = Workflow(workingdir="test_cwf_1c_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")],
+                  write_state=False)
+    wf.add(runnable=fsl.BET(), name="fsl", workingdir="nn", output_names=["out_file"], write_state=False,
            inputs={"in_file": "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"})
 
     sub = Submitter(plugin=plugin, runnable=wf)
@@ -1415,11 +1419,11 @@ def test_current_wf_2(change_dir, plugin):
     in_file_l = ["/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
                  "/Users/dorota/nipype_workshop/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"]
 
-    nn = Node(name="fsl", interface=interf_bet, print_val=False,
+    nn = Node(name="fsl", interface=interf_bet, write_state=False,
                  workingdir="nn", output_names=["out_file"])
 
     wf = Workflow( workingdir="test_cwf_2_{}".format(plugin), name="cw2", wf_output_names=[("fsl", "out_file", "fsl_out")],
-                      inputs={"in_file": in_file_l}, mapper="in_file", print_val=False)
+                      inputs={"in_file": in_file_l}, mapper="in_file", write_state=False)
     wf.add_nodes([nn])
     wf.connect_wf_input("in_file", "fsl", "in_file")
 
@@ -1442,12 +1446,12 @@ def test_current_wf_2a(change_dir, plugin):
     in_file_l = ["/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
                  "/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"]
 
-    nn = Node(name="fsl", interface=interf_bet, print_val=False,
+    nn = Node(name="fsl", interface=interf_bet, write_state=False,
                  workingdir="nn", output_names=["out_file"],
                  inputs={"in_file": in_file_l}, mapper="in_file")
 
     wf = Workflow( workingdir="test_cwf_2a_{}".format(plugin), name="cw2a", wf_output_names=[("fsl", "out_file", "fsl_out")],
-                      print_val=False)
+                   write_state=False)
     wf.add_nodes([nn])
    # wf.connect_wf_input("in_file", "fsl", "in_file")
 
