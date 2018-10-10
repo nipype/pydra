@@ -12,3 +12,6 @@ install:
 
 script:
   - py.test -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+
+after_script:
+- codecov --file cov.xml --flags unittests -e TRAVIS_JOB_NUMBER
