@@ -1,15 +1,17 @@
+dist: xenial
+sudo: true
+
 language: python
 python:
-  - 3.5
   - 3.6
-matrix:
-  include:
-    - python: 3.7
-      dist: xenial
-      sudo: true
+  - 3.7
 
 install:
-  - python -r requirements.txt
+  - pip install --upgrade pip setuptools wheel
+  - pip install ".[all]"
 
 script:
-  - py.test -vs engine/tests/test_newnode.py
+  - py.test -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+
+after_script:
+- codecov --file cov.xml --flags unittests -e TRAVIS_JOB_NUMBER

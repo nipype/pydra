@@ -8,7 +8,11 @@ from ..submitter import Submitter
 from nipype.interfaces.utility import Rename
 import nipype.interfaces.freesurfer as fs
 
-from fmriprep.interfaces.freesurfer import PatchedConcatenateLTA as ConcatenateLTA
+no_fmriprep = False
+try:
+    from fmriprep.interfaces.freesurfer import PatchedConcatenateLTA as ConcatenateLTA
+except ImportError:
+    no_fmriprep = True
 
 @pytest.fixture()
 def change_dir(request):
@@ -42,6 +46,7 @@ def select_target(subject_id, space):
     """ Given a source subject ID and a target space, get the target subject ID """
     return subject_id if space == 'fsnative' else space
 
+@pytest.mark.skipif(no_fmriprep, reason="No fmriprep")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_neuro(change_dir, plugin):
 
