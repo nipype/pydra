@@ -1,9 +1,6 @@
-import re, os, pdb, time
+import time
 import multiprocessing as mp
-#import multiprocess as mp
-import itertools
 
-#from pycon_utils import make_cluster
 from dask.distributed import Client
 
 import concurrent.futures as cf
@@ -25,7 +22,7 @@ class Worker(object):
 
 
 class MpWorker(Worker):
-    def __init__(self, nr_proc=4): #should be none
+    def __init__(self, nr_proc=4):  # should be none
         self.nr_proc = nr_proc
         self.pool = mp.Pool(processes=self.nr_proc)
         logger.debug('Initialize MpWorker')
@@ -34,8 +31,9 @@ class MpWorker(Worker):
         self.pool.apply_async(interface, (inp[0], inp[1]))
 
     def close(self):
-        # added this method since I was having somtetimes problem with reading results from (existing) files
-        # i thought that pool.close() should work, but still was getting some errors, so testing terminate
+        # added this method since I was having somtetimes problem with reading results from
+        # (existing) files. i thought that pool.close() should work, but still was getting some
+        # errors, so testing terminate
         self.pool.terminate()
 
 
@@ -59,9 +57,9 @@ class ConcurrentFuturesWorker(Worker):
 
     def run_el(self, interface, inp):
         x = self.pool.submit(interface, inp[0], inp[1])
-        #print("X, DONE", x.done())
+        # print("X, DONE", x.done())
         x.add_done_callback(lambda x: print("DONE ", interface, inp, x.done))
-        #print("DIR", x.result())
+        # print("DIR", x.result())
 
     def close(self):
         self.pool.shutdown()
@@ -69,24 +67,23 @@ class ConcurrentFuturesWorker(Worker):
 
 class DaskWorker(Worker):
     def __init__(self):
-        from distributed.deploy.local import LocalCluster
+        # from distributed.deploy.local import LocalCluster
         logger.debug("Initialize Dask Worker")
-        #self.cluster = LocalCluster()
-        self.client = Client()#self.cluster)
-        #print("BOKEH", self.client.scheduler_info()["address"] + ":" + str(self.client.scheduler_info()["services"]["bokeh"]))
-
+        # self.cluster = LocalCluster()
+        self.client = Client()  # self.cluster)
+        # print("BOKEH", self.client.scheduler_info()["address"] + ":" + str(
+        #           self.client.scheduler_info()["services"]["bokeh"]))
 
     def run_el(self, interface, inp):
         print("DASK, run_el: ", interface, inp, time.time())
-        # dask  doesn't copy the node second time, so it doesn't see that I change input in the meantime (??)
+        # dask doesn't copy the node second time, so it doesn't see that I change input in the
+        # meantime (??)
         x = self.client.submit(interface, inp[0], inp[1])
         print("DASK, status: ", x.status)
         # this important, otherwise dask will not finish the job
         x.add_done_callback(lambda x: print("DONE ", interface, inp))
         print("res", x.result())
 
-
     def close(self):
-        #self.cluster.close()
+        # self.cluster.close()
         self.client.close()
-
