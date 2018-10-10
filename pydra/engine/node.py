@@ -5,7 +5,6 @@ import pdb
 import networkx as nx
 import numpy as np
 
-
 from nipype.utils.filemanip import loadpkl
 from nipype import logging
 
@@ -15,8 +14,14 @@ logger = logging.getLogger('nipype.workflow')
 
 
 class NodeBase(object):
-    def __init__(self, name, mapper=None, inputs=None, other_mappers=None,
-                 write_state=True, *args, **kwargs):
+    def __init__(self,
+                 name,
+                 mapper=None,
+                 inputs=None,
+                 other_mappers=None,
+                 write_state=True,
+                 *args,
+                 **kwargs):
         """A base structure for nodes in the computational graph (i.e. both
         ``Node`` and ``Workflow``).
 
@@ -52,7 +57,8 @@ class NodeBase(object):
         self._mapper = mapper
         self._other_mappers = other_mappers
         # create state (takes care of mapper, connects inputs with axes, so we can ask for specifc element)
-        self._state = state.State(mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
+        self._state = state.State(
+            mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
         self._output = {}
         self._result = {}
         # flag that says if the node/wf is ready to run (has all input)
@@ -79,7 +85,8 @@ class NodeBase(object):
     def mapper(self, mapper):
         self._mapper = mapper
         # updating state
-        self._state = state.State(mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
+        self._state = state.State(
+            mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
 
     @property
     def inputs(self):
@@ -88,9 +95,10 @@ class NodeBase(object):
     @inputs.setter
     def inputs(self, inputs):
         # Massage inputs dict
-        inputs = {".".join((self.name, key)): value
-                  if not isinstance(value, list) else np.array(value)
-                  for key, value in inputs.items()}
+        inputs = {
+            ".".join((self.name, key)): value if not isinstance(value, list) else np.array(value)
+            for key, value in inputs.items()
+        }
         self._inputs.update(inputs)
         self._state_inputs.update(inputs)
 
@@ -102,7 +110,6 @@ class NodeBase(object):
     def state_inputs(self, state_inputs):
         self._state_inputs.update(state_inputs)
 
-
     @property
     def output(self):
         return self._output
@@ -113,10 +120,8 @@ class NodeBase(object):
             self._reading_results()
         return self._result
 
-
     def prepare_state_input(self):
         self._state.prepare_state_input(state_inputs=self.state_inputs)
-
 
     def map(self, mapper, inputs=None):
         if self._mapper:
@@ -129,22 +134,20 @@ class NodeBase(object):
             self._state_inputs.update(self.inputs)
         if mapper:
             # updating state if we have a new mapper
-            self._state = state.State(mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
-
+            self._state = state.State(
+                mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
 
     def join(self, field, node=None):
         # TBD
         pass
-
 
     def checking_input_el(self, ind):
         """checking if all inputs are available (for specific state element)"""
         try:
             self.get_input_el(ind)
             return True
-        except: #TODO specify
+        except:  #TODO specify
             return False
-
 
     # dj: this is not used for a single node
     def get_input_el(self, ind):
@@ -155,19 +158,23 @@ class NodeBase(object):
             state_dict = self.state.state_ind(ind)
         # reading extra inputs that come from previous nodes
         for (from_node, from_socket, to_socket) in self.needed_outputs:
-            dir_nm_el_from = "_".join(["{}:{}".format(i, j) for i, j in list(state_dict.items())
-                                       if i in list(from_node._state_inputs.keys())])
+            dir_nm_el_from = "_".join([
+                "{}:{}".format(i, j) for i, j in list(state_dict.items())
+                if i in list(from_node._state_inputs.keys())
+            ])
             if not from_node.mapper:
                 dir_nm_el_from = ""
 
             if is_node(from_node) and is_current_interface(from_node.interface):
-                file_from = self._reading_ci_output(node=from_node, dir_nm_el=dir_nm_el_from, out_nm=from_socket)
+                file_from = self._reading_ci_output(
+                    node=from_node, dir_nm_el=dir_nm_el_from, out_nm=from_socket)
                 if file_from and os.path.exists(file_from):
                     inputs_dict["{}.{}".format(self.name, to_socket)] = file_from
                 else:
                     raise Exception("{} doesnt exist".format(file_from))
-            else: # assuming here that I want to read the file (will not be used with the current interfaces)
-                file_from = os.path.join(from_node.workingdir, dir_nm_el_from, from_socket+".txt")
+            else:  # assuming here that I want to read the file (will not be used with the current interfaces)
+                file_from = os.path.join(from_node.workingdir, dir_nm_el_from,
+                                         from_socket + ".txt")
                 with open(file_from) as f:
                     content = f.readline()
                     try:
@@ -182,14 +189,14 @@ class NodeBase(object):
         if not node:
             node = self
         result_pklfile = os.path.join(os.getcwd(), node.workingdir, dir_nm_el,
-                                      node.interface.nn.name, "result_{}.pklz".format(node.interface.nn.name))
+                                      node.interface.nn.name, "result_{}.pklz".format(
+                                          node.interface.nn.name))
         if os.path.exists(result_pklfile):
             out_file = getattr(loadpkl(result_pklfile).outputs, out_nm)
             if os.path.exists(out_file):
                 return out_file
 
         return False
-
 
     # checking if all outputs are saved
     @property
@@ -201,7 +208,6 @@ class NodeBase(object):
         else:
             return self._check_all_results()
 
-
     def get_output(self):
         raise NotImplementedError
 
@@ -210,7 +216,6 @@ class NodeBase(object):
 
     def _reading_results(self):
         raise NotImplementedError
-
 
     def _dict_tuple2list(self, container):
         if type(container) is dict:
@@ -223,12 +228,26 @@ class NodeBase(object):
 
 
 class Node(NodeBase):
-    def __init__(self, name, interface, inputs=None, mapper=None, join_by=None,
-                 workingdir=None, other_mappers=None,
-                 output_names=None, write_state=True, *args, **kwargs):
-        super(Node, self).__init__(name=name, mapper=mapper, inputs=inputs,
-                                   other_mappers=other_mappers, write_state=write_state,
-                                   *args, **kwargs)
+    def __init__(self,
+                 name,
+                 interface,
+                 inputs=None,
+                 mapper=None,
+                 join_by=None,
+                 workingdir=None,
+                 other_mappers=None,
+                 output_names=None,
+                 write_state=True,
+                 *args,
+                 **kwargs):
+        super(Node, self).__init__(
+            name=name,
+            mapper=mapper,
+            inputs=inputs,
+            other_mappers=other_mappers,
+            write_state=write_state,
+            *args,
+            **kwargs)
 
         # working directory for node, will be change if node is a part of a wf
         self.workingdir = workingdir
@@ -237,7 +256,7 @@ class Node(NodeBase):
         if is_function_interface(self.interface):
             # adding node name to the interface's name mapping
             self.interface.input_map = dict((key, "{}.{}".format(self.name, value))
-                                             for (key, value) in self.interface.input_map.items())
+                                            for (key, value) in self.interface.input_map.items())
             # list of output names taken from interface output name
             self.output_names = self.interface._output_nm
         elif is_current_interface(self.interface):
@@ -245,8 +264,6 @@ class Node(NodeBase):
             self.output_names = output_names
         if not self.output_names:
             self.output_names = []
-
-
 
     # dj: not sure if I need it
     # def __deepcopy__(self, memo): # memo is a dict of id's to copies
@@ -275,7 +292,7 @@ class Node(NodeBase):
         dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(state_dict.items())])
         print("Run interface el, dict={}".format(state_dict))
         logger.debug("Run interface el, name={}, inputs_dict={}, state_dict={}".format(
-                                                            self.name, inputs_dict, state_dict))
+            self.name, inputs_dict, state_dict))
         if is_function_interface(self.interface):
             res = self.interface.run(inputs_dict)
             output = self.interface.output
@@ -285,8 +302,10 @@ class Node(NodeBase):
         elif is_current_interface(self.interface):
             if not self.mapper:
                 dir_nm_el = ""
-            res = self.interface.run(inputs=inputs_dict, base_dir=os.path.join(os.getcwd(), self.workingdir),
-                                     dir_nm_el=dir_nm_el)
+            res = self.interface.run(
+                inputs=inputs_dict,
+                base_dir=os.path.join(os.getcwd(), self.workingdir),
+                dir_nm_el=dir_nm_el)
 
         # TODO when join
         #if self._joinByKey:
@@ -298,16 +317,14 @@ class Node(NodeBase):
         #    dir_nm_el = os.path.join(dir_join, dir_nm_el)
         return res
 
-
     def _writting_results_tmp(self, state_dict, dir_nm_el, output):
         """temporary method to write the results in the files (this is usually part of a interface)"""
         if not self.mapper:
             dir_nm_el = ''
         os.makedirs(os.path.join(self.workingdir, dir_nm_el), exist_ok=True)
         for key_out, val_out in output.items():
-            with open(os.path.join(self.workingdir, dir_nm_el, key_out+".txt"), "w") as fout:
+            with open(os.path.join(self.workingdir, dir_nm_el, key_out + ".txt"), "w") as fout:
                 fout.write(str(val_out))
-
 
     def get_output(self):
         """collecting all outputs and updating self._output"""
@@ -348,7 +365,6 @@ class Node(NodeBase):
                             (state_dict, self._reading_ci_output(dir_nm_el="", out_nm=key_out))
         return self._output
 
-
     # dj: version without join
     def _check_all_results(self):
         """checking if all files that should be created are present"""
@@ -363,14 +379,14 @@ class Node(NodeBase):
 
             for key_out in self.output_names:
                 if is_function_interface(self.interface):
-                    if not os.path.isfile(os.path.join(self.workingdir, dir_nm_el, key_out+".txt")):
+                    if not os.path.isfile(
+                            os.path.join(self.workingdir, dir_nm_el, key_out + ".txt")):
                         return False
                 elif is_current_interface(self.interface):
                     if not self._reading_ci_output(dir_nm_el, key_out):
                         return False
         self._is_complete = True
         return True
-
 
     def _reading_results(self):
         """temporary: reading results from output files (that is now just txt)
@@ -402,10 +418,19 @@ class Node(NodeBase):
 
 
 class Workflow(NodeBase):
-    def __init__(self, name, inputs=None, wf_output_names=None, mapper=None, #join_by=None,
-                 nodes=None, workingdir=None, write_state=True, *args, **kwargs):
-        super(Workflow, self).__init__(name=name, mapper=mapper, inputs=inputs,
-                                       write_state=write_state, *args, **kwargs)
+    def __init__(
+            self,
+            name,
+            inputs=None,
+            wf_output_names=None,
+            mapper=None,  #join_by=None,
+            nodes=None,
+            workingdir=None,
+            write_state=True,
+            *args,
+            **kwargs):
+        super(Workflow, self).__init__(
+            name=name, mapper=mapper, inputs=inputs, write_state=write_state, *args, **kwargs)
 
         self.graph = nx.DiGraph()
         # all nodes in the workflow (probably will be removed)
@@ -444,7 +469,6 @@ class Workflow(NodeBase):
 
         #    self.add(name, value)
 
-
     @property
     def nodes(self):
         return self._nodes
@@ -454,7 +478,6 @@ class Workflow(NodeBase):
         # TODO: should I always update the graph?
         return list(nx.topological_sort(self.graph))
 
-
     def map_node(self, mapper, node=None, inputs=None):
         """this is setting a mapper to the wf's nodes (not to the wf)"""
         if not node:
@@ -463,7 +486,6 @@ class Workflow(NodeBase):
             raise Exception("Cannot assign two mappings to the same input")
         node.map(mapper=mapper, inputs=inputs)
         self._node_mappers[node.name] = node.mapper
-
 
     def get_output(self):
         # not sure, if I should collecto output of all nodes or only the ones that are used in wf.output
@@ -487,17 +509,21 @@ class Workflow(NodeBase):
                         for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
                             if self.write_state:
                                 wf_inputs_dict = self.state.state_values(ind)
-                                dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(wf_inputs_dict.items())])
+                                dir_nm_el = "_".join([
+                                    "{}:{}".format(i, j) for i, j in list(wf_inputs_dict.items())
+                                ])
                             else:
                                 wf_ind_dict = self.state.state_ind(ind)
-                                dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(wf_ind_dict.items())])
-                            self._output[out_wf_nm][dir_nm_el] = self.node_outputs[node_nm][i][out_nd_nm]
+                                dir_nm_el = "_".join(
+                                    ["{}:{}".format(i, j) for i, j in list(wf_ind_dict.items())])
+                            self._output[out_wf_nm][dir_nm_el] = self.node_outputs[node_nm][i][
+                                out_nd_nm]
                     else:
                         self._output[out_wf_nm] = self.node_outputs[node_nm][out_nd_nm]
                 else:
-                    raise Exception("the key {} is already used in workflow.result".format(out_wf_nm))
+                    raise Exception(
+                        "the key {} is already used in workflow.result".format(out_wf_nm))
         return self._output
-
 
     # dj: version without join
     # TODO: might merge with the function from Node
@@ -513,7 +539,6 @@ class Workflow(NodeBase):
         self._is_complete = True
         return True
 
-
     # TODO: should try to merge with the function from Node
     def _reading_results(self):
         """reading all results of the workflow
@@ -521,7 +546,7 @@ class Workflow(NodeBase):
         """
         if self.wf_output_names:
             for out in self.wf_output_names:
-                key_out = out[2] if len(out)==3 else out[1]
+                key_out = out[2] if len(out) == 3 else out[1]
                 self._result[key_out] = []
                 if self.mapper:
                     for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
@@ -529,12 +554,14 @@ class Workflow(NodeBase):
                             wf_inputs_dict = self.state.state_values(ind)
                         else:
                             wf_inputs_dict = self.state.state_ind(ind)
-                        dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(wf_inputs_dict.items())])
-                        res_l= []
+                        dir_nm_el = "_".join(
+                            ["{}:{}".format(i, j) for i, j in list(wf_inputs_dict.items())])
+                        res_l = []
                         val_l = self._dict_tuple2list(self.output[key_out][dir_nm_el])
                         for val in val_l:
                             with open(val[1]) as fout:
-                                logger.debug('Reading Results: file={}, st_dict={}'.format(val[1], val[0]))
+                                logger.debug('Reading Results: file={}, st_dict={}'.format(
+                                    val[1], val[0]))
                                 res_l.append((val[0], eval(fout.readline())))
                         self._result[key_out].append((wf_inputs_dict, res_l))
                 else:
@@ -543,11 +570,11 @@ class Workflow(NodeBase):
                         #TODO: I think that val shouldn't be dict here...
                         # TMP solution
                         if type(val) is dict:
-                            val = [v for k,v in val.items()][0]
+                            val = [v for k, v in val.items()][0]
                         with open(val[1]) as fout:
-                            logger.debug('Reading Results: file={}, st_dict={}'.format(val[1], val[0]))
+                            logger.debug('Reading Results: file={}, st_dict={}'.format(
+                                val[1], val[0]))
                             self._result[key_out].append((val[0], eval(fout.readline())))
-
 
     def add_nodes(self, nodes):
         """adding nodes without defining connections
@@ -561,37 +588,63 @@ class Workflow(NodeBase):
             self._node_names[nn.name] = nn
             self._node_mappers[nn.name] = nn.mapper
 
-
     # TODO: workingir shouldn't have None
-    def add(self, runnable, name=None, workingdir=None, inputs=None, output_names=None, mapper=None,
-            write_state=True, out_read=False, **kwargs):
+    def add(self,
+            runnable,
+            name=None,
+            workingdir=None,
+            inputs=None,
+            output_names=None,
+            mapper=None,
+            write_state=True,
+            out_read=False,
+            **kwargs):
         if is_function(runnable):
             if not output_names:
                 output_names = ["out"]
-            interface = aux.FunctionInterface(function=runnable, output_nm=output_names, out_read=out_read)
+            interface = aux.FunctionInterface(
+                function=runnable, output_nm=output_names, out_read=out_read)
             if not name:
                 raise Exception("you have to specify name for the node")
             if not workingdir:
                 workingdir = name
-            node = Node(interface=interface, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
-                           other_mappers=self._node_mappers, write_state=write_state)
+            node = Node(
+                interface=interface,
+                workingdir=workingdir,
+                name=name,
+                inputs=inputs,
+                mapper=mapper,
+                other_mappers=self._node_mappers,
+                write_state=write_state)
         elif is_function_interface(runnable) or is_current_interface(runnable):
             if not name:
                 raise Exception("you have to specify name for the node")
             if not workingdir:
                 workingdir = name
-            node = Node(interface=runnable, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
-                           other_mappers=self._node_mappers, output_names=output_names,
-                           write_state=write_state)
+            node = Node(
+                interface=runnable,
+                workingdir=workingdir,
+                name=name,
+                inputs=inputs,
+                mapper=mapper,
+                other_mappers=self._node_mappers,
+                output_names=output_names,
+                write_state=write_state)
         elif is_nipype_interface(runnable):
             ci = aux.CurrentInterface(interface=runnable, name=name)
             if not name:
                 raise Exception("you have to specify name for the node")
             if not workingdir:
                 workingdir = name
-            node = Node(interface=ci, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
-                           other_mappers=self._node_mappers, output_names=output_names,
-                           write_state=write_state)
+            node = Node(
+                interface=ci,
+                workingdir=workingdir,
+                name=name,
+                inputs=inputs,
+                mapper=mapper,
+                other_mappers=self._node_mappers,
+                output_names=output_names,
+                write_state=write_state)
         elif is_node(runnable):
             node = runnable
         elif is_workflow(runnable):
@@ -607,10 +660,9 @@ class Workflow(NodeBase):
                 from_node_nm, from_socket = source.split(".")
                 self.connect(from_node_nm, from_socket, node.name, inp)
             # TODO not sure if i need it, just check if from_node_nm is not None??
-            except(ValueError):
+            except (ValueError):
                 self.connect_wf_input(source, node.name, inp)
         return self
-
 
     def connect(self, from_node_nm, from_socket, to_node_nm, to_socket):
         from_node = self._node_names[from_node_nm]
@@ -622,10 +674,8 @@ class Workflow(NodeBase):
         # from_node.sending_output.append((from_socket, to_node, to_socket))
         logger.debug('connecting {} and {}'.format(from_node, to_node))
 
-
     def connect_wf_input(self, inp_wf, node_nm, inp_nd):
         self.needed_inp_wf.append((node_nm, inp_wf, inp_nd))
-
 
     def preparing(self, wf_inputs=None, wf_inputs_ind=None):
         """preparing nodes which are connected: setting the final mapper and state_inputs"""
@@ -633,22 +683,29 @@ class Workflow(NodeBase):
         for node_nm, inp_wf, inp_nd in self.needed_inp_wf:
             node = self._node_names[node_nm]
             if "{}.{}".format(self.name, inp_wf) in wf_inputs:
-                node.state_inputs.update({"{}.{}".format(node_nm, inp_nd): wf_inputs["{}.{}".format(self.name, inp_wf)]})
-                node.inputs.update({"{}.{}".format(node_nm, inp_nd): wf_inputs["{}.{}".format(self.name, inp_wf)]})
+                node.state_inputs.update({
+                    "{}.{}".format(node_nm, inp_nd):
+                    wf_inputs["{}.{}".format(self.name, inp_wf)]
+                })
+                node.inputs.update({
+                    "{}.{}".format(node_nm, inp_nd):
+                    wf_inputs["{}.{}".format(self.name, inp_wf)]
+                })
             else:
                 raise Exception("{}.{} not in the workflow inputs".format(self.name, inp_wf))
         for nn in self.graph_sorted:
             if self.write_state:
                 dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(wf_inputs.items())])
             else:
-                dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(wf_inputs_ind.items())])
+                dir_nm_el = "_".join(
+                    ["{}:{}".format(i, j) for i, j in list(wf_inputs_ind.items())])
             if not self.mapper:
                 dir_nm_el = ""
             nn.workingdir = os.path.join(self.workingdir, dir_nm_el, nn.name)
-            nn._is_complete = False # helps when mp is used
+            nn._is_complete = False  # helps when mp is used
             try:
                 for inp, (out_node, out_var) in self.connected_var[nn].items():
-                    nn.ready2run = False #it has some history (doesnt have to be in the loop)
+                    nn.ready2run = False  #it has some history (doesnt have to be in the loop)
                     nn.state_inputs.update(out_node.state_inputs)
                     nn.needed_outputs.append((out_node, out_var, inp))
                     #if there is no mapper provided, i'm assuming that mapper is taken from the previous node
@@ -657,7 +714,7 @@ class Workflow(NodeBase):
                     else:
                         pass
                     #TODO: implement inner mapper
-            except(KeyError):
+            except (KeyError):
                 # tmp: we don't care about nn that are not in self.connected_var
                 pass
 
@@ -677,17 +734,22 @@ class Workflow(NodeBase):
 def is_function(obj):
     return hasattr(obj, '__call__')
 
+
 def is_function_interface(obj):
     return type(obj) is aux.FunctionInterface
+
 
 def is_current_interface(obj):
     return type(obj) is aux.CurrentInterface
 
+
 def is_nipype_interface(obj):
     return hasattr(obj, "_run_interface")
 
+
 def is_node(obj):
     return type(obj) is Node
+
 
 def is_workflow(obj):
     return type(obj) is Workflow

@@ -1,0 +1,16 @@
+pydra.egg-info
+build
+dist
+
+__pycache__
+*.pyc
+
+.ipynb_checkpoints
+*.ipynb
+
+.coverage*
+!.coveragerc
+cov.xml
+
+.*.swp
+*~

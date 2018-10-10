@@ -25,7 +25,7 @@ class Worker(object):
 
 
 class MpWorker(Worker):
-    def __init__(self, nr_proc=4): #should be none
+    def __init__(self, nr_proc=4):  #should be none
         self.nr_proc = nr_proc
         self.pool = mp.Pool(processes=self.nr_proc)
         logger.debug('Initialize MpWorker')
@@ -72,9 +72,8 @@ class DaskWorker(Worker):
         from distributed.deploy.local import LocalCluster
         logger.debug("Initialize Dask Worker")
         #self.cluster = LocalCluster()
-        self.client = Client()#self.cluster)
+        self.client = Client()  #self.cluster)
         #print("BOKEH", self.client.scheduler_info()["address"] + ":" + str(self.client.scheduler_info()["services"]["bokeh"]))
-
 
     def run_el(self, interface, inp):
         print("DASK, run_el: ", interface, inp, time.time())
@@ -85,8 +84,6 @@ class DaskWorker(Worker):
         x.add_done_callback(lambda x: print("DONE ", interface, inp))
         print("res", x.result())
 
-
     def close(self):
         #self.cluster.close()
         self.client.close()
-
