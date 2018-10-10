@@ -27,9 +27,9 @@ class NodeBase(object):
             Unique name of this node
         mapper : str or (list or tuple of (str or mappers))
             Whether inputs should be mapped at run time
-        inputs : str or list of str
+        inputs : dictionary (input name, input value or list of values)
             States this node's input names
-        other_mappers : str or (list or tuple of (str or mappers))
+        other_mappers : dictionary (name of a node, mapper of the node)
             information about other nodes' mappers from workflow (in case the mapper
             from previous node is used)
         write_state : True
@@ -92,6 +92,7 @@ class NodeBase(object):
                   if not isinstance(value, list) else np.array(value)
                   for key, value in inputs.items()}
         self._inputs.update(inputs)
+        self._state_inputs.update(inputs)
 
     @property
     def state_inputs(self):
@@ -442,14 +443,6 @@ class Workflow(NodeBase):
         #        continue
 
         #    self.add(name, value)
-
-    @property
-    def inputs(self):
-        return self._inputs
-
-    @inputs.setter
-    def inputs(self, inputs):
-        self._inputs.update(dict(("{}.{}".format(self.name, key), value) for (key, value) in inputs.items()))
 
 
     @property

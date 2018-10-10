@@ -59,7 +59,7 @@ def test_neuro(change_dir, plugin):
     #dj: why do I need outputs?
 
 
-    wf = Workflow(name=Name, inputs=Inputs, workingdir="test_neuro_{}".format(plugin), print_val=False,
+    wf = Workflow(name=Name, inputs=Inputs, workingdir="test_neuro_{}".format(plugin), write_state=False,
                      wf_output_names=[("sampler", "out_file", "sampler_out"), ("targets", "out", "target_out")])
 
     # @interface
@@ -76,7 +76,7 @@ def test_neuro(change_dir, plugin):
     #dj: don't have option in map to connect with wf input
 
     wf.add(runnable=select_target, name="targets", subject_id="subject_id", output_names=["out"],
-           out_read=True, print_val=False)\
+           out_read=True, write_state=False)\
         .map_node(mapper="space", inputs={"space": [space for space in Inputs["output_spaces"]
                                                if space.startswith("fs")]})
 
@@ -89,7 +89,7 @@ def test_neuro(change_dir, plugin):
            runnable=Rename(format_string='%(subject)s', keep_ext=True),
                                 in_file="source_file",
                                 output_names=["out_file"],
-           print_val=False)\
+           write_state=False)\
         .map_node('subject', inputs={"subject": [space for space in Inputs["output_spaces"]
                                                if space.startswith("fs")]}) #TODO: now it's only one subject
 
@@ -108,10 +108,10 @@ def test_neuro(change_dir, plugin):
            runnable=fs.utils.LTAConvert(in_lta='identity.nofile', out_lta=True),
            source_file="source_file", target_file="t1_preproc",
            output_names=["out_lta"],
-           print_val=False)\
+           write_state=False)\
         .add(name='set_xfm_source', runnable=ConcatenateLTA(out_type='RAS2RAS'),
             in_lta2="t1_2_fsnative_forward_transform", in_lta1="resampling_xfm.out_lta",
-            output_names=["out_file"], print_val=False)
+            output_names=["out_file"], write_state=False)
 
 
 
@@ -133,7 +133,7 @@ def test_neuro(change_dir, plugin):
            runnable=fs.SampleToSurface(sampling_method='average', sampling_range=(0, 1, 0.2),
                                   sampling_units='frac', interp_method='trilinear',
                                   cortex_mask=True, override_reg_subj=True,
-                                  out_type='gii'), print_val=False,
+                                  out_type='gii'), write_state=False,
            subjects_dir="subjects_dir", subject_id="subject_id", reg_file="set_xfm_source.out_file",
            target_subject="targets.out", source_file="rename_src.out_file", output_names=["out_file"])\
         .map_node(mapper=[('_targets', "_rename_src"), 'hemi'], inputs={"hemi": ['lh', 'rh']})
