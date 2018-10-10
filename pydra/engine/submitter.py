@@ -12,7 +12,7 @@ class Submitter(object):
     def __init__(self, plugin, runnable):
         self.plugin = plugin
         self.node_line = []
-        self._to_finish = [] # used only for wf
+        self._to_finish = []  # used only for wf
         if self.plugin == "mp":
             self.worker = MpWorker()
         elif self.plugin == "serial":
@@ -24,13 +24,12 @@ class Submitter(object):
         else:
             raise Exception("plugin {} not available".format(self.plugin))
 
-        if hasattr(runnable, 'interface'): # a node
+        if hasattr(runnable, 'interface'):  # a node
             self.node = runnable
-        elif hasattr(runnable, "graph"): # a workflow
+        elif hasattr(runnable, "graph"):  # a workflow
             self.workflow = runnable
         else:
             raise Exception("runnable has to be a Node or Workflow")
-
 
     def run(self):
         """main running method, checks if submitter id for Node or Workflow"""
@@ -39,16 +38,15 @@ class Submitter(object):
         elif hasattr(self, "workflow"):
             self.run_workflow()
 
-
     def run_node(self):
         """the main method to run a Node"""
         self.node.prepare_state_input()
         self._submit_node(self.node)
         while not self.node.is_complete:
-            logger.debug("Submitter, in while, to_finish: {}".format(self.node))
+            logger.debug("Submitter, in while, to_finish: {}".format(
+                self.node))
             time.sleep(3)
         self.node.get_output()
-
 
     def _submit_node(self, node):
         """submitting nodes's interface for all states"""
@@ -59,7 +57,6 @@ class Submitter(object):
         """submitting node's interface for one element of states"""
         logger.debug("SUBMIT WORKER, node: {}, ind: {}".format(node, ind))
         self.worker.run_el(node.run_interface_el, (i, ind))
-
 
     def run_workflow(self, workflow=None, ready=True):
         """the main function to run Workflow"""
@@ -81,10 +78,12 @@ class Submitter(object):
         else:
             if ready:
                 if workflow.print_val:
-                        workflow.preparing(wf_inputs=workflow.inputs)
+                    workflow.preparing(wf_inputs=workflow.inputs)
                 else:
-                    inputs_ind = dict((key, None) for (key, _) in workflow.inputs.items())
-                    workflow.preparing(wf_inputs=workflow.inputs, wf_inputs_ind=inputs_ind)
+                    inputs_ind = dict(
+                        (key, None) for (key, _) in workflow.inputs.items())
+                    workflow.preparing(
+                        wf_inputs=workflow.inputs, wf_inputs_ind=inputs_ind)
                 self._run_workflow_nd(workflow=workflow)
             else:
                 self.node_line.append((workflow, 0, ()))
@@ -92,18 +91,19 @@ class Submitter(object):
         # this parts submits nodes that are waiting to be run
         # it should stop when nothing is waiting
         while self._nodes_check():
-            logger.debug("Submitter, in while, node_line: {}".format(self.node_line))
+            logger.debug("Submitter, in while, node_line: {}".format(
+                self.node_line))
             time.sleep(3)
 
         # this part simply waiting for all "last nodes" to finish
         while self._output_check():
-            logger.debug("Submitter, in while, to_finish: {}".format(self._to_finish))
+            logger.debug("Submitter, in while, to_finish: {}".format(
+                self._to_finish))
             time.sleep(3)
 
         # calling only for the main wf (other wf will be called inside the function)
         if workflow is self.workflow:
             workflow.get_output()
-
 
     def _run_workflow_el(self, workflow, i, ind, collect_inp=False):
         """running one internal workflow (if workflow has a mapper)"""
@@ -116,18 +116,18 @@ class Submitter(object):
             workflow.preparing(wf_inputs=wf_inputs)
         else:
             wf_inputs_ind = workflow.state.state_ind(ind)
-            workflow.preparing(wf_inputs=wf_inputs, wf_inputs_ind=wf_inputs_ind)
+            workflow.preparing(
+                wf_inputs=wf_inputs, wf_inputs_ind=wf_inputs_ind)
         self._run_workflow_nd(workflow=workflow)
-
 
     def _run_workflow_nd(self, workflow):
         """iterating over all nodes from a workflow and submitting them or adding to the node_line"""
         for (i_n, node) in enumerate(workflow.graph_sorted):
-            if workflow.parent_wf and workflow.parent_wf.mapper: # for now if parent_wf, parent_wf has to have mapper
+            if workflow.parent_wf and workflow.parent_wf.mapper:  # for now if parent_wf, parent_wf has to have mapper
                 workflow.parent_wf.inner_nodes[node.name].append(node)
             node.prepare_state_input()
             self._to_finish.append(node)
-             # submitting all the nodes who are self sufficient (self.workflow.graph is already sorted)
+            # submitting all the nodes who are self sufficient (self.workflow.graph is already sorted)
             if node.ready2run:
                 if hasattr(node, 'interface'):
                     self._submit_node(node)
@@ -148,24 +148,25 @@ class Submitter(object):
                 for (i, ind) in enumerate(nn.state.index_generator):
                     self._to_finish.append(nn)
                     self.node_line.append((nn, i, ind))
-            else: #wf
+            else:  #wf
                 self.run_workflow(workflow=nn, ready=False)
-
 
     def _nodes_check(self):
         """checking which nodes-states are ready to run and running the ones that are ready"""
         _to_remove = []
         for (to_node, i, ind) in self.node_line:
             if hasattr(to_node, 'interface'):
-                print("_NODES_CHECK INPUT", to_node.name, to_node.checking_input_el(ind))
+                print("_NODES_CHECK INPUT", to_node.name,
+                      to_node.checking_input_el(ind))
                 if to_node.checking_input_el(ind):
                     self._submit_node_el(to_node, i, ind)
                     _to_remove.append((to_node, i, ind))
                 else:
                     pass
-            else: #wf
+            else:  #wf
                 if to_node.checking_input_el(ind):
-                    self._run_workflow_el(workflow=to_node, i=i, ind=ind, collect_inp=True)
+                    self._run_workflow_el(
+                        workflow=to_node, i=i, ind=ind, collect_inp=True)
                     _to_remove.append((to_node, i, ind))
                 else:
                     pass
@@ -173,7 +174,6 @@ class Submitter(object):
         for rn in _to_remove:
             self.node_line.remove(rn)
         return self.node_line
-
 
     # this I believe can be done for entire node
     def _output_check(self):
@@ -186,7 +186,6 @@ class Submitter(object):
         for rn in _to_remove:
             self._to_finish.remove(rn)
         return self._to_finish
-
 
     def close(self):
         self.worker.close()

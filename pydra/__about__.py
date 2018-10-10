@@ -8,15 +8,13 @@ __version__ = get_versions()['version']
 del get_versions
 
 CLASSIFIERS = [
-    'Development Status :: 2 - Pre-Alpha',
-    'Environment :: Console',
+    'Development Status :: 2 - Pre-Alpha', 'Environment :: Console',
     'Intended Audience :: Science/Research',
     'License :: OSI Approved :: Apache Software License',
     'Operating System :: MacOS :: MacOS X',
     'Operating System :: POSIX :: Linux',
     'Programming Language :: Python :: 3.6',
-    'Programming Language :: Python :: 3.7',
-    'Topic :: Scientific/Engineering'
+    'Programming Language :: Python :: 3.7', 'Topic :: Scientific/Engineering'
 ]
 
 description = 'Pydra dataflow engine'
@@ -45,9 +43,8 @@ __description__ = description
 __longdesc__ = long_description
 __url__ = 'https://github.com/nipype/pydra'
 
-DOWNLOAD_URL = (
-    'http://github.com/nipype/{name}/archives/{ver}.tar.gz'.format(
-        name=__packagename__, ver=__version__))
+DOWNLOAD_URL = ('http://github.com/nipype/{name}/archives/{ver}.tar.gz'.format(
+    name=__packagename__, ver=__version__))
 PLATFORMS = 'OS Independent'
 MAJOR = __version__.split('.')[0]
 MINOR = __version__.split('.')[1]
@@ -64,8 +61,7 @@ REQUIRES = [
 
 SETUP_REQUIRES = ['setuptools>=27.0']
 TESTS_REQUIRES = ['pytest-cov', 'codecov', 'pytest-env', 'pytest-xdist']
-LINKS_REQUIRES = [
-]
+LINKS_REQUIRES = []
 
 EXTRA_REQUIRES = {
     'tests': TESTS_REQUIRES,

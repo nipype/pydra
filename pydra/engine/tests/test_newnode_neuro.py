@@ -14,6 +14,7 @@ try:
 except ImportError:
     no_fmriprep = True
 
+
 @pytest.fixture()
 def change_dir(request):
     orig_dir = os.getcwd()
@@ -26,25 +27,34 @@ def change_dir(request):
 
     request.addfinalizer(move2orig)
 
+
 import pdb
 
 Name = "example"
 DEFAULT_MEMORY_MIN_GB = None
 # TODO, adding fields to Inputs (subject_id)
-Inputs = {"subject_id": "sub-01",
-          "output_spaces": ["fsaverage", "fsaverage5"],
-          "source_file": "/fmriprep_test/workdir1/fmriprep_wf/single_subject_01_wf/func_preproc_ses_test_task_fingerfootlips_wf/bold_t1_trans_wf/merge/vol0000_xform-00000_merged.nii",
-          "t1_preproc": "/fmriprep_test/output1/fmriprep/sub-01/anat/sub-01_T1w_preproc.nii.gz",
-          "t1_2_fsnative_forward_transform": "/fmriprep_test/workdir1/fmriprep_wf/single_subject_01_wf/anat_preproc_wf/surface_recon_wf/t1_2_fsnative_xfm/out.lta",
-          "subjects_dir": "/fmriprep_test/output1/freesurfer/"
+Inputs = {
+    "subject_id":
+    "sub-01",
+    "output_spaces": ["fsaverage", "fsaverage5"],
+    "source_file":
+    "/fmriprep_test/workdir1/fmriprep_wf/single_subject_01_wf/func_preproc_ses_test_task_fingerfootlips_wf/bold_t1_trans_wf/merge/vol0000_xform-00000_merged.nii",
+    "t1_preproc":
+    "/fmriprep_test/output1/fmriprep/sub-01/anat/sub-01_T1w_preproc.nii.gz",
+    "t1_2_fsnative_forward_transform":
+    "/fmriprep_test/workdir1/fmriprep_wf/single_subject_01_wf/anat_preproc_wf/surface_recon_wf/t1_2_fsnative_xfm/out.lta",
+    "subjects_dir":
+    "/fmriprep_test/output1/freesurfer/"
 }
 
 Plugins = ["serial"]
 Plugins = ["serial", "mp", "cf", "dask"]
 
+
 def select_target(subject_id, space):
     """ Given a source subject ID and a target space, get the target subject ID """
     return subject_id if space == 'fsnative' else space
+
 
 @pytest.mark.skipif(no_fmriprep, reason="No fmriprep")
 @pytest.mark.parametrize("plugin", Plugins)
@@ -58,16 +68,18 @@ def test_neuro(change_dir, plugin):
     #
     #dj: why do I need outputs?
 
-
-    wf = NewWorkflow(name=Name, inputs=Inputs, workingdir="test_neuro_{}".format(plugin), print_val=False,
-                     wf_output_names=[("sampler", "out_file", "sampler_out"), ("targets", "out", "target_out")])
+    wf = NewWorkflow(
+        name=Name,
+        inputs=Inputs,
+        workingdir="test_neuro_{}".format(plugin),
+        print_val=False,
+        wf_output_names=[("sampler", "out_file", "sampler_out"),
+                         ("targets", "out", "target_out")])
 
     # @interface
     # def select_target(subject_id, space):
     #     """ Given a source subject ID and a target space, get the target subject ID """
     #     return subject_id if space == 'fsnative' else space
-
-
 
     # wf.add('targets', select_target(subject_id=wf.inputs.subject_id))
     #   .map('space', space=[space for space in wf.inputs.output_spaces
@@ -93,7 +105,6 @@ def test_neuro(change_dir, plugin):
         .map_node('subject', inputs={"subject": [space for space in Inputs["output_spaces"]
                                                if space.startswith("fs")]}) #TODO: now it's only one subject
 
-
     # wf.add('resampling_xfm',
     #        fs.utils.LTAConvert(in_lta='identity.nofile',
     #                            out_lta=True,
@@ -112,8 +123,6 @@ def test_neuro(change_dir, plugin):
         .add(name='set_xfm_source', runnable=ConcatenateLTA(out_type='RAS2RAS'),
             in_lta2="t1_2_fsnative_forward_transform", in_lta1="resampling_xfm.out_lta",
             output_names=["out_file"], print_val=False)
-
-
 
     # wf.add('sampler',
     #        fs.SampleToSurface(sampling_method='average', sampling_range=(0, 1, 0.2),
@@ -137,7 +146,6 @@ def test_neuro(change_dir, plugin):
            subjects_dir="subjects_dir", subject_id="subject_id", reg_file="set_xfm_source.out_file",
            target_subject="targets.out", source_file="rename_src.out_file", output_names=["out_file"])\
         .map_node(mapper=[('_targets', "_rename_src"), 'hemi'], inputs={"hemi": ['lh', 'rh']})
-
 
     sub = Submitter(plugin=plugin, runnable=wf)
     sub.run()
