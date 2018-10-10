@@ -1,7 +1,7 @@
 import os, pdb, time
 from copy import deepcopy
 
-from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
+from .workers import get_worker_class
 
 import logging
 logger = logging.getLogger('nipype.workflow')
@@ -13,16 +13,8 @@ class Submitter(object):
         self.plugin = plugin
         self.node_line = []
         self._to_finish = [] # used only for wf
-        if self.plugin == "mp":
-            self.worker = MpWorker()
-        elif self.plugin == "serial":
-            self.worker = SerialWorker()
-        elif self.plugin == "dask":
-            self.worker = DaskWorker()
-        elif self.plugin == "cf":
-            self.worker = ConcurrentFuturesWorker()
-        else:
-            raise Exception("plugin {} not available".format(self.plugin))
+
+        self.worker = get_worker_class(plugin)()
 
         if hasattr(runnable, 'interface'): # a node
             self.node = runnable
@@ -128,7 +120,7 @@ class Submitter(object):
             node.prepare_state_input()
             self._to_finish.append(node)
              # submitting all the nodes who are self sufficient (self.workflow.graph is already sorted)
-            if node.ready2run:
+            if node.ready_to_run:
                 if hasattr(node, 'interface'):
                     self._submit_node(node)
                 else:  # it's workflow

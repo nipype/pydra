@@ -40,7 +40,7 @@ class NewBase(object):
         self._output = {}
         self._result = {}
         # flag that says if the node/wf is ready to run (has all input)
-        self.ready2run = True
+        self.ready_to_run = True
         # needed outputs from other nodes if the node part of a wf
         self.needed_outputs = []
         # flag that says if node finished all jobs
@@ -206,7 +206,7 @@ class NewBase(object):
 
 class NewNode(NewBase):
     def __init__(self, name, interface, inputs=None, mapper=None, join_by=None,
-                 workingdir=None, other_mappers=None, mem_gb=None, cache_location=None,
+                 workingdir='.', other_mappers=None, mem_gb=None, cache_location=None,
                  output_names=None, print_val=True, *args, **kwargs):
         super(NewNode, self).__init__(name=name, mapper=mapper, inputs=inputs,
                                       other_mappers=other_mappers, mem_gb=mem_gb,
@@ -226,7 +226,7 @@ class NewNode(NewBase):
         elif is_current_interface(self.interface):
             # list of  interf_key_out
             self.output_names = output_names
-        if not self.output_names:
+        if not output_names:
             self.output_names = []
 
 
@@ -396,7 +396,7 @@ class NewNode(NewBase):
 
 class NewWorkflow(NewBase):
     def __init__(self, name, inputs=None, wf_output_names=None, mapper=None, #join_by=None,
-                 nodes=None, workingdir=None, mem_gb=None, cache_location=None, print_val=True, *args, **kwargs):
+                 nodes=None, workingdir='.', mem_gb=None, cache_location=None, print_val=True, *args, **kwargs):
         super(NewWorkflow, self).__init__(name=name, mapper=mapper, inputs=inputs, mem_gb=mem_gb,
                                           cache_location=cache_location, print_val=print_val, *args, **kwargs)
 
@@ -564,7 +564,7 @@ class NewWorkflow(NewBase):
 
 
     # TODO: workingir shouldn't have None
-    def add(self, runnable, name=None, workingdir=None, inputs=None, output_names=None, mapper=None,
+    def add(self, runnable, name=None, workingdir='.', inputs=None, output_names=None, mapper=None,
             mem_gb=None, print_val=True, out_read=False, **kwargs):
         if is_function(runnable):
             if not output_names:
@@ -649,7 +649,7 @@ class NewWorkflow(NewBase):
             nn._is_complete = False # helps when mp is used
             try:
                 for inp, (out_node, out_var) in self.connected_var[nn].items():
-                    nn.ready2run = False #it has some history (doesnt have to be in the loop)
+                    nn.ready_to_run = False #it has some history (doesnt have to be in the loop)
                     nn.state_inputs.update(out_node.state_inputs)
                     nn.needed_outputs.append((out_node, out_var, inp))
                     #if there is no mapper provided, i'm assuming that mapper is taken from the previous node
