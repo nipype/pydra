@@ -12,11 +12,8 @@ class State(object):
         if self._mapper:
             # changing mapper (as in rpn), so I can read from left to right
             # e.g. if mapper=('d', ['e', 'r']), _mapper_rpn=['d', 'e', 'r', '*', '.']
-            self._mapper_rpn = aux.mapper2rpn(
-                self._mapper, other_mappers=other_mappers)
-            self._input_names_mapper = [
-                i for i in self._mapper_rpn if i not in ["*", "."]
-            ]
+            self._mapper_rpn = aux.mapper2rpn(self._mapper, other_mappers=other_mappers)
+            self._input_names_mapper = [i for i in self._mapper_rpn if i not in ["*", "."]]
         else:
             self._mapper_rpn = []
             self._input_names_mapper = []
@@ -34,8 +31,7 @@ class State(object):
         # dictionary[key=input names] = list of axes related to
         # e.g. {'r': [1], 'e': [0], 'd': [0, 1]}
         # ndim - int, number of dimension for the "final array" (that is not created)
-        self._axis_for_input, self._ndim = aux.mapping_axis(
-            self.state_inputs, self._mapper_rpn)
+        self._axis_for_input, self._ndim = aux.mapping_axis(self.state_inputs, self._mapper_rpn)
 
         # list of inputs variable for each axis
         # e.g. [['e', 'd'], ['r', 'd']]
@@ -73,9 +69,8 @@ class State(object):
 
         for ii, index in enumerate(ind):
             if index > self._shape[ii] - 1:
-                raise IndexError(
-                    "index {} is out of bounds for axis {} with size {}".
-                    format(index, ii, self._shape[ii]))
+                raise IndexError("index {} is out of bounds for axis {} with size {}".format(
+                    index, ii, self._shape[ii]))
 
         state_dict = {}
         for input, ax in self._axis_for_input.items():
@@ -99,9 +94,8 @@ class State(object):
 
         for ii, index in enumerate(ind):
             if index > self._shape[ii] - 1:
-                raise IndexError(
-                    "index {} is out of bounds for axis {} with size {}".
-                    format(index, ii, self._shape[ii]))
+                raise IndexError("index {} is out of bounds for axis {} with size {}".format(
+                    index, ii, self._shape[ii]))
 
         state_dict = {}
         for input, ax in self._axis_for_input.items():

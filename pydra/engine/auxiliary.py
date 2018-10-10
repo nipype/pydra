@@ -11,8 +11,7 @@ logger = logging.getLogger('nipype.workflow')
 def mapper2rpn(mapper, other_mappers=None):
     """ Functions that translate mapper to "reverse polish notation."""
     output_mapper = []
-    _ordering(
-        mapper, i=0, output_mapper=output_mapper, other_mappers=other_mappers)
+    _ordering(mapper, i=0, output_mapper=output_mapper, other_mappers=other_mappers)
     return output_mapper
 
 
@@ -24,15 +23,13 @@ def _ordering(el, i, output_mapper, current_sign=None, other_mappers=None):
             node_nm = el[0][1:]
             if node_nm not in other_mappers:
                 raise Exception("can't ask for mapper from {}".format(node_nm))
-            mapper_mod = change_mapper(
-                mapper=other_mappers[node_nm], name=node_nm)
+            mapper_mod = change_mapper(mapper=other_mappers[node_nm], name=node_nm)
             el = (mapper_mod, el[1])
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_mappers:
                 raise Exception("can't ask for mapper from {}".format(node_nm))
-            mapper_mod = change_mapper(
-                mapper=other_mappers[node_nm], name=node_nm)
+            mapper_mod = change_mapper(mapper=other_mappers[node_nm], name=node_nm)
             el = (el[0], mapper_mod)
         _iterate_list(el, ".", other_mappers, output_mapper=output_mapper)
     elif type(el) is list:
@@ -40,15 +37,13 @@ def _ordering(el, i, output_mapper, current_sign=None, other_mappers=None):
             node_nm = el[0][1:]
             if node_nm not in other_mappers:
                 raise Exception("can't ask for mapper from {}".format(node_nm))
-            mapper_mod = change_mapper(
-                mapper=other_mappers[node_nm], name=node_nm)
+            mapper_mod = change_mapper(mapper=other_mappers[node_nm], name=node_nm)
             el[0] = mapper_mod
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_mappers:
                 raise Exception("can't ask for mapper from {}".format(node_nm))
-            mapper_mod = change_mapper(
-                mapper=other_mappers[node_nm], name=node_nm)
+            mapper_mod = change_mapper(mapper=other_mappers[node_nm], name=node_nm)
             el[1] = mapper_mod
         _iterate_list(el, "*", other_mappers, output_mapper=output_mapper)
     elif type(el) is str:
@@ -64,11 +59,7 @@ def _iterate_list(element, sign, other_mappers, output_mapper):
     """ Used in the mapper2rpn to get recursion. """
     for i, el in enumerate(element):
         _ordering(
-            el,
-            i,
-            current_sign=sign,
-            other_mappers=other_mappers,
-            output_mapper=output_mapper)
+            el, i, current_sign=sign, other_mappers=other_mappers, output_mapper=output_mapper)
 
 
 # functions used in State to know which element should be used for a specific axis
@@ -90,17 +81,13 @@ def mapping_axis(state_inputs, mapper_rpn):
                         right].shape == current_shape:  #todo:should we allow for one-element array?
                     axis_for_input[right] = current_axis
                 else:
-                    raise Exception(
-                        "arrays for scalar operations should have the same size"
-                    )
+                    raise Exception("arrays for scalar operations should have the same size")
 
             elif right == "OUT":
                 if state_inputs[left].shape == current_shape:
                     axis_for_input[left] = current_axis
                 else:
-                    raise Exception(
-                        "arrays for scalar operations should have the same size"
-                    )
+                    raise Exception("arrays for scalar operations should have the same size")
 
             else:
                 if state_inputs[right].shape == state_inputs[left].shape:
@@ -109,9 +96,7 @@ def mapping_axis(state_inputs, mapper_rpn):
                     axis_for_input[left] = current_axis
                     axis_for_input[right] = current_axis
                 else:
-                    raise Exception(
-                        "arrays for scalar operations should have the same size"
-                    )
+                    raise Exception("arrays for scalar operations should have the same size")
 
             stack.append("OUT")
 
@@ -120,17 +105,14 @@ def mapping_axis(state_inputs, mapper_rpn):
             left = stack.pop()
             if left == "OUT":
                 axis_for_input[right] = [
-                    i + 1 + current_axis[-1]
-                    for i in range(state_inputs[right].ndim)
+                    i + 1 + current_axis[-1] for i in range(state_inputs[right].ndim)
                 ]
                 current_axis = current_axis + axis_for_input[right]
-                current_shape = tuple(
-                    [i for i in current_shape + state_inputs[right].shape])
+                current_shape = tuple([i for i in current_shape + state_inputs[right].shape])
             elif right == "OUT":
                 for key in axis_for_input:
                     axis_for_input[key] = [
-                        i + state_inputs[left].ndim
-                        for i in axis_for_input[key]
+                        i + state_inputs[left].ndim for i in axis_for_input[key]
                     ]
 
                 axis_for_input[left] = [
@@ -138,22 +120,17 @@ def mapping_axis(state_inputs, mapper_rpn):
                     for i in range(state_inputs[left].ndim)
                 ]
                 current_axis = current_axis + [
-                    i + 1 + current_axis[-1]
-                    for i in range(state_inputs[left].ndim)
+                    i + 1 + current_axis[-1] for i in range(state_inputs[left].ndim)
                 ]
-                current_shape = tuple(
-                    [i for i in state_inputs[left].shape + current_shape])
+                current_shape = tuple([i for i in state_inputs[left].shape + current_shape])
             else:
                 axis_for_input[left] = list(range(state_inputs[left].ndim))
                 axis_for_input[right] = [
-                    i + state_inputs[left].ndim
-                    for i in range(state_inputs[right].ndim)
+                    i + state_inputs[left].ndim for i in range(state_inputs[right].ndim)
                 ]
                 current_axis = axis_for_input[left] + axis_for_input[right]
-                current_shape = tuple([
-                    i for i in state_inputs[left].shape +
-                    state_inputs[right].shape
-                ])
+                current_shape = tuple(
+                    [i for i in state_inputs[left].shape + state_inputs[right].shape])
             stack.append("OUT")
 
         else:
@@ -251,24 +228,19 @@ class FunctionInterface(object):
                 try:
                     input[key_fun] = input.pop(key_inp)
                 except KeyError:
-                    raise Exception(
-                        "no {} in the input dictionary".format(key_inp))
+                    raise Exception("no {} in the input dictionary".format(key_inp))
         fun_output = self.function(**input)
-        logger.debug("Function Interf, input={}, fun_out={}".format(
-            input, fun_output))
+        logger.debug("Function Interf, input={}, fun_out={}".format(input, fun_output))
         if type(fun_output) is tuple:
             if len(self._output_nm) == len(fun_output):
                 for i, out in enumerate(fun_output):
                     self.output[self._output_nm[i]] = out
             else:
-                raise Exception(
-                    "length of output_nm doesnt match length of the function output"
-                )
+                raise Exception("length of output_nm doesnt match length of the function output")
         elif len(self._output_nm) == 1:
             self.output[self._output_nm[0]] = fun_output
         else:
-            raise Exception(
-                "output_nm doesnt match length of the function output")
+            raise Exception("output_nm doesnt match length of the function output")
 
         return fun_output
 

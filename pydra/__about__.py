@@ -9,12 +9,10 @@ del get_versions
 
 CLASSIFIERS = [
     'Development Status :: 2 - Pre-Alpha', 'Environment :: Console',
-    'Intended Audience :: Science/Research',
-    'License :: OSI Approved :: Apache Software License',
-    'Operating System :: MacOS :: MacOS X',
-    'Operating System :: POSIX :: Linux',
-    'Programming Language :: Python :: 3.6',
-    'Programming Language :: Python :: 3.7', 'Topic :: Scientific/Engineering'
+    'Intended Audience :: Science/Research', 'License :: OSI Approved :: Apache Software License',
+    'Operating System :: MacOS :: MacOS X', 'Operating System :: POSIX :: Linux',
+    'Programming Language :: Python :: 3.6', 'Programming Language :: Python :: 3.7',
+    'Topic :: Scientific/Engineering'
 ]
 
 description = 'Pydra dataflow engine'

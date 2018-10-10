@@ -73,8 +73,7 @@ def test_neuro(change_dir, plugin):
         inputs=Inputs,
         workingdir="test_neuro_{}".format(plugin),
         write_state=False,
-        wf_output_names=[("sampler", "out_file", "sampler_out"),
-                         ("targets", "out", "target_out")])
+        wf_output_names=[("sampler", "out_file", "sampler_out"), ("targets", "out", "target_out")])
 
     # @interface
     # def select_target(subject_id, space):
