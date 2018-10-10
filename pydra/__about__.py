@@ -57,18 +57,19 @@ ISRELEASE = (len(__version__.replace('-', '.').split('.')) == 3
 VERSION = __version__
 PROVIDES = ['pydra']
 REQUIRES = [
+    'nipype>=1.1.3',
     'networkx>=%s' % NETWORKX_MIN_VERSION,
     'pytest>=%s' % PYTEST_MIN_VERSION,
-    'pytest-xdist',
 ]
 
 SETUP_REQUIRES = ['setuptools>=27.0']
-TESTS_REQUIRES = ['pytest-cov', 'codecov', 'pytest-env']
+TESTS_REQUIRES = ['pytest-cov', 'codecov', 'pytest-env', 'pytest-xdist']
 LINKS_REQUIRES = [
 ]
 
 EXTRA_REQUIRES = {
     'tests': TESTS_REQUIRES,
+    'plugins': ['dask', 'distributed'],
 }
 
 
