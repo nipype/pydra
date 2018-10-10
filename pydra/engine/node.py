@@ -27,9 +27,9 @@ class NodeBase(object):
             Unique name of this node
         mapper : str or (list or tuple of (str or mappers))
             Whether inputs should be mapped at run time
-        inputs : str or list of str
+        inputs : dictionary (input name, input value or list of values)
             States this node's input names
-        other_mappers : str or (list or tuple of (str or mappers))
+        other_mappers : dictionary (name of a node, mapper of the node)
             information about other nodes' mappers from workflow (in case the mapper
             from previous node is used)
         write_state : True
