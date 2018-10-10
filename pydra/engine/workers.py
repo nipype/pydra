@@ -1,9 +1,3 @@
-from __future__ import print_function, division, unicode_literals, absolute_import
-from builtins import object
-
-from future import standard_library
-standard_library.install_aliases()
-
 import re, os, pdb, time
 import multiprocessing as mp
 #import multiprocess as mp
