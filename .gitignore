@@ -11,3 +11,6 @@ __pycache__
 .coverage*
 !.coveragerc
 cov.xml
+
+.*.swp
+*~
