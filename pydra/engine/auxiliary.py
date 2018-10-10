@@ -86,7 +86,8 @@ def mapping_axis(state_inputs, mapper_rpn):
             right = stack.pop()
             left = stack.pop()
             if left == "OUT":
-                if state_inputs[right].shape == current_shape: #todo:should we allow for one-element array?
+                if state_inputs[
+                        right].shape == current_shape:  #todo:should we allow for one-element array?
                     axis_for_input[right] = current_axis
                 else:
                     raise Exception(
@@ -108,7 +109,9 @@ def mapping_axis(state_inputs, mapper_rpn):
                     axis_for_input[left] = current_axis
                     axis_for_input[right] = current_axis
                 else:
-                    raise Exception("arrays for scalar operations should have the same size")
+                    raise Exception(
+                        "arrays for scalar operations should have the same size"
+                    )
 
             stack.append("OUT")
 
@@ -147,8 +150,10 @@ def mapping_axis(state_inputs, mapper_rpn):
                     for i in range(state_inputs[right].ndim)
                 ]
                 current_axis = axis_for_input[left] + axis_for_input[right]
-                current_shape = tuple([i for i in
-                                       state_inputs[left].shape + state_inputs[right].shape])
+                current_shape = tuple([
+                    i for i in state_inputs[left].shape +
+                    state_inputs[right].shape
+                ])
             stack.append("OUT")
 
         else:

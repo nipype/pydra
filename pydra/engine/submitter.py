@@ -78,7 +78,7 @@ class Submitter(object):
         else:
             if ready:
                 if workflow.write_state:
-                        workflow.preparing(wf_inputs=workflow.inputs)
+                    workflow.preparing(wf_inputs=workflow.inputs)
                 else:
                     inputs_ind = dict(
                         (key, None) for (key, _) in workflow.inputs.items())

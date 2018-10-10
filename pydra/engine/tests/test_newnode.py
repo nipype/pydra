@@ -63,7 +63,8 @@ def test_node_2():
 def test_node_3():
     """Node with interface, inputs and mapper"""
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
-    nn = Node(name="NA", interface=interf_addtwo, inputs={"a": [3, 5]}, mapper="a")
+    nn = Node(
+        name="NA", interface=interf_addtwo, inputs={"a": [3, 5]}, mapper="a")
     assert nn.mapper == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
 
@@ -107,8 +108,11 @@ def test_node_4a():
 def test_node_5(plugin, change_dir):
     """Node with interface and inputs, no mapper, running interface"""
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
-    nn = Node(name="NA", inputs={"a": 3}, interface=interf_addtwo,
-                 workingdir="test_nd5_{}".format(plugin))
+    nn = Node(
+        name="NA",
+        inputs={"a": 3},
+        interface=interf_addtwo,
+        workingdir="test_nd5_{}".format(plugin))
 
     assert (nn.inputs["NA.a"] == np.array([3])).all()
 
@@ -133,7 +137,10 @@ def test_node_5(plugin, change_dir):
 def test_node_6(plugin, change_dir):
     """Node with interface, inputs and the simplest mapper, running interface"""
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
-    nn = Node(name="NA", interface=interf_addtwo, workingdir="test_nd6_{}".format(plugin))
+    nn = Node(
+        name="NA",
+        interface=interf_addtwo,
+        workingdir="test_nd6_{}".format(plugin))
     nn.map(mapper="a", inputs={"a": [3, 5]})
 
     assert nn.mapper == "NA.a"
@@ -160,7 +167,10 @@ def test_node_6(plugin, change_dir):
 def test_node_7(plugin, change_dir):
     """Node with interface, inputs and scalar mapper, running interface"""
     interf_addvar = FunctionInterface(fun_addvar, ["out"])
-    nn = Node(name="NA", interface=interf_addvar, workingdir="test_nd7_{}".format(plugin))
+    nn = Node(
+        name="NA",
+        interface=interf_addvar,
+        workingdir="test_nd7_{}".format(plugin))
     # scalar mapper
     nn.map(mapper=("a", "b"), inputs={"a": [3, 5], "b": [2, 1]})
 
@@ -189,7 +199,10 @@ def test_node_7(plugin, change_dir):
 def test_node_8(plugin, change_dir):
     """Node with interface, inputs and vector mapper, running interface"""
     interf_addvar = FunctionInterface(fun_addvar, ["out"])
-    nn = Node(name="NA", interface=interf_addvar, workingdir="test_nd8_{}".format(plugin))
+    nn = Node(
+        name="NA",
+        interface=interf_addvar,
+        workingdir="test_nd8_{}".format(plugin))
     # [] for outer product
     nn.map(mapper=["a", "b"], inputs={"a": [3, 5], "b": [2, 1]})
 
@@ -277,7 +290,8 @@ def test_workflow_2(plugin, change_dir):
 
     # the second node does not have explicit mapper (but keeps the mapper from the NA node)
     interf_addvar = FunctionInterface(fun_addvar, ["out"])
-    nb = Node(name="NB", interface=interf_addvar, inputs={"b": 10}, workingdir="nb")
+    nb = Node(
+        name="NB", interface=interf_addvar, inputs={"b": 10}, workingdir="nb")
 
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
@@ -764,7 +778,10 @@ def test_workflow_6b(plugin, change_dir):
 def test_workflow_7(plugin, change_dir):
     """using inputs for workflow and connect_workflow"""
     # adding inputs to the workflow directly
-    wf = Workflow(name="wf7", inputs={"wfa": [3, 5]}, workingdir="test_wf7_{}".format(plugin))
+    wf = Workflow(
+        name="wf7",
+        inputs={"wfa": [3, 5]},
+        workingdir="test_wf7_{}".format(plugin))
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na")
 
@@ -791,7 +808,10 @@ def test_workflow_7(plugin, change_dir):
 @python35_only
 def test_workflow_7a(plugin, change_dir):
     """using inputs for workflow and kwarg arg in add (instead of connect)"""
-    wf = Workflow(name="wf7a", inputs={"wfa": [3, 5]}, workingdir="test_wf7a_{}".format(plugin))
+    wf = Workflow(
+        name="wf7a",
+        inputs={"wfa": [3, 5]},
+        workingdir="test_wf7a_{}".format(plugin))
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na")
     # using kwrg argument in the add method (instead of connect or connect_wf_input
@@ -816,7 +836,8 @@ def test_workflow_7a(plugin, change_dir):
 @python35_only
 def test_workflow_8(plugin, change_dir):
     """using inputs for workflow and connect_wf_input for the second node"""
-    wf = Workflow(name="wf8", workingdir="test_wf8_{}".format(plugin), inputs={"b": 10})
+    wf = Workflow(
+        name="wf8", workingdir="test_wf8_{}".format(plugin), inputs={"b": 10})
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na")
     na.map(mapper="a", inputs={"a": [3, 5]})
@@ -1086,8 +1107,10 @@ def test_workflow_11(plugin, change_dir):
 @python35_only
 def test_workflow_12(plugin, change_dir):
     """testing if wf.result works (the same workflow as in test_workflow_6)"""
-    wf = Workflow(name="wf12", workingdir="test_wf12_{}".format(plugin),
-                     wf_output_names=[("NA", "out", "NA_out"), ("NB", "out")])
+    wf = Workflow(
+        name="wf12",
+        workingdir="test_wf12_{}".format(plugin),
+        wf_output_names=[("NA", "out", "NA_out"), ("NB", "out")])
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na")
 
@@ -1132,8 +1155,10 @@ def test_workflow_12(plugin, change_dir):
 @python35_only
 def test_workflow_12a(plugin, change_dir):
     """testing if wf.result raises exceptione (the same workflow as in test_workflow_6)"""
-    wf = Workflow(name="wf12a", workingdir="test_wf12a_{}".format(plugin),
-                     wf_output_names=[("NA", "out", "wf_out"), ("NB", "out", "wf_out")])
+    wf = Workflow(
+        name="wf12a",
+        workingdir="test_wf12a_{}".format(plugin),
+        wf_output_names=[("NA", "out", "wf_out"), ("NB", "out", "wf_out")])
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na")
 
@@ -1161,8 +1186,12 @@ def test_workflow_12a(plugin, change_dir):
 @python35_only
 def test_workflow_13(plugin, change_dir):
     """using inputs for workflow and connect_wf_input"""
-    wf = Workflow(name="wf13", inputs={"wfa": [3, 5]}, mapper="wfa", workingdir="test_wf13_{}".format(plugin),
-                     wf_output_names=[("NA", "out", "NA_out")])
+    wf = Workflow(
+        name="wf13",
+        inputs={"wfa": [3, 5]},
+        mapper="wfa",
+        workingdir="test_wf13_{}".format(plugin),
+        wf_output_names=[("NA", "out", "NA_out")])
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na")
     wf.add(na)
@@ -1192,10 +1221,19 @@ def test_workflow_13(plugin, change_dir):
 @python35_only
 def test_workflow_13a(plugin, change_dir):
     """using inputs for workflow and connect_wf_input (the node has 2 inputs)"""
-    wf = Workflow(name="wf13a", inputs={"wfa": [3, 5]}, mapper="wfa", workingdir="test_wf13a_{}".format(plugin),
-                     wf_output_names=[("NA", "out", "NA_out")])
+    wf = Workflow(
+        name="wf13a",
+        inputs={"wfa": [3, 5]},
+        mapper="wfa",
+        workingdir="test_wf13a_{}".format(plugin),
+        wf_output_names=[("NA", "out", "NA_out")])
     interf_addvar = FunctionInterface(fun_addvar, ["out"])
-    na = Node(name="NA", interface=interf_addvar, workingdir="na", mapper="b", inputs={"b": [10, 20]})
+    na = Node(
+        name="NA",
+        interface=interf_addvar,
+        workingdir="na",
+        mapper="b",
+        inputs={"b": [10, 20]})
     wf.add(na)
     wf.connect_wf_input("wfa", "NA", "a")
 
@@ -1233,8 +1271,10 @@ def test_workflow_13a(plugin, change_dir):
 @python35_only
 def test_workflow_13c(plugin, change_dir):
     """using inputs for workflow and connect_wf_input, using wf.map(mapper, inputs)"""
-    wf = Workflow(name="wf13c", workingdir="test_wf13c_{}".format(plugin),
-                     wf_output_names=[("NA", "out", "NA_out")])
+    wf = Workflow(
+        name="wf13c",
+        workingdir="test_wf13c_{}".format(plugin),
+        wf_output_names=[("NA", "out", "NA_out")])
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na")
     wf.add(na).map(mapper="wfa", inputs={"wfa": [3, 5]})
@@ -1263,9 +1303,11 @@ def test_workflow_13c(plugin, change_dir):
     @python35_only
     def test_workflow_13b(plugin, change_dir):
         """using inputs for workflow and connect_wf_input, using wf.map(mapper)"""
-        wf = Workflow(name="wf13b", inputs={"wfa": [3, 5]},
-                         workingdir="test_wf13b_{}".format(plugin),
-                         wf_output_names=[("NA", "out", "NA_out")])
+        wf = Workflow(
+            name="wf13b",
+            inputs={"wfa": [3, 5]},
+            workingdir="test_wf13b_{}".format(plugin),
+            wf_output_names=[("NA", "out", "NA_out")])
         interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
         na = Node(name="NA", interface=interf_addtwo, workingdir="na")
         wf.add(na).map(mapper="wfa")
@@ -1299,13 +1341,18 @@ def test_workflow_13c(plugin, change_dir):
 def test_workflow_14(plugin, change_dir):
     """workflow with a workflow as a node (no mapper)"""
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
-    na = Node(name="NA", interface=interf_addtwo, workingdir="na", inputs={"a": 3})
-    wfa = Workflow(name="wfa", workingdir="test_wfa",
-                      wf_output_names=[("NA", "out", "NA_out")])
+    na = Node(
+        name="NA", interface=interf_addtwo, workingdir="na", inputs={"a": 3})
+    wfa = Workflow(
+        name="wfa",
+        workingdir="test_wfa",
+        wf_output_names=[("NA", "out", "NA_out")])
     wfa.add(na)
 
-    wf = Workflow(name="wf14", workingdir="test_wf14_{}".format(plugin),
-                     wf_output_names=[("wfa", "NA_out", "wfa_out")])
+    wf = Workflow(
+        name="wf14",
+        workingdir="test_wf14_{}".format(plugin),
+        wf_output_names=[("wfa", "NA_out", "wfa_out")])
     wf.add(wfa)
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -1325,13 +1372,18 @@ def test_workflow_14a(plugin, change_dir):
     """workflow with a workflow as a node (no mapper, using connect_wf_input in wfa)"""
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na")
-    wfa = Workflow(name="wfa", workingdir="test_wfa", inputs={"a": 3},
-                      wf_output_names=[("NA", "out", "NA_out")])
+    wfa = Workflow(
+        name="wfa",
+        workingdir="test_wfa",
+        inputs={"a": 3},
+        wf_output_names=[("NA", "out", "NA_out")])
     wfa.add(na)
     wfa.connect_wf_input("a", "NA", "a")
 
-    wf = Workflow(name="wf14a", workingdir="test_wf14a_{}".format(plugin),
-                     wf_output_names=[("wfa", "NA_out", "wfa_out")])
+    wf = Workflow(
+        name="wf14a",
+        workingdir="test_wf14a_{}".format(plugin),
+        wf_output_names=[("wfa", "NA_out", "wfa_out")])
     wf.add(wfa)
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -1351,13 +1403,18 @@ def test_workflow_14b(plugin, change_dir):
     """workflow with a workflow as a node (no mapper, using connect_wf_input in wfa and wf)"""
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na")
-    wfa = Workflow(name="wfa", workingdir="test_wfa",
-                      wf_output_names=[("NA", "out", "NA_out")])
+    wfa = Workflow(
+        name="wfa",
+        workingdir="test_wfa",
+        wf_output_names=[("NA", "out", "NA_out")])
     wfa.add(na)
     wfa.connect_wf_input("a", "NA", "a")
 
-    wf = Workflow(name="wf14b", workingdir="test_wf14b_{}".format(plugin),
-                     wf_output_names=[("wfa", "NA_out", "wfa_out")], inputs={"a": 3})
+    wf = Workflow(
+        name="wf14b",
+        workingdir="test_wf14b_{}".format(plugin),
+        wf_output_names=[("wfa", "NA_out", "wfa_out")],
+        inputs={"a": 3})
     wf.add(wfa)
     wf.connect_wf_input("a", "wfa", "a")
 
@@ -1377,14 +1434,22 @@ def test_workflow_14b(plugin, change_dir):
 def test_workflow_15(plugin, change_dir):
     """workflow with a workflow as a node with mapper (like 14 but with a mapper)"""
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
-    na = Node(name="NA", interface=interf_addtwo, workingdir="na",
-                 inputs={"a": [3, 5]}, mapper="a")
-    wfa = Workflow(name="wfa", workingdir="test_wfa",
-                      wf_output_names=[("NA", "out", "NA_out")])
+    na = Node(
+        name="NA",
+        interface=interf_addtwo,
+        workingdir="na",
+        inputs={"a": [3, 5]},
+        mapper="a")
+    wfa = Workflow(
+        name="wfa",
+        workingdir="test_wfa",
+        wf_output_names=[("NA", "out", "NA_out")])
     wfa.add(na)
 
-    wf = Workflow(name="wf15", workingdir="test_wf15_{}".format(plugin),
-                     wf_output_names=[("wfa", "NA_out", "wfa_out")])
+    wf = Workflow(
+        name="wf15",
+        workingdir="test_wf15_{}".format(plugin),
+        wf_output_names=[("wfa", "NA_out", "wfa_out")])
     wf.add(wfa)
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -1402,17 +1467,23 @@ def test_workflow_15(plugin, change_dir):
 @python35_only
 def test_workflow_16(plugin, change_dir):
     """workflow with two nodes, and one is a workflow (no mapper)"""
-    wf = Workflow(name="wf16", workingdir="test_wf16_{}".format(plugin),
-                     wf_output_names=[("wfb", "NB_out"), ("NA", "out", "NA_out")])
+    wf = Workflow(
+        name="wf16",
+        workingdir="test_wf16_{}".format(plugin),
+        wf_output_names=[("wfb", "NB_out"), ("NA", "out", "NA_out")])
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
-    na = Node(name="NA", interface=interf_addtwo, workingdir="na", inputs={"a": 3})
+    na = Node(
+        name="NA", interface=interf_addtwo, workingdir="na", inputs={"a": 3})
     wf.add(na)
 
     # the second node does not have explicit mapper (but keeps the mapper from the NA node)
     interf_addvar = FunctionInterface(fun_addvar, ["out"])
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb")
-    wfb = Workflow(name="wfb", workingdir="test_wfb", inputs={"b": 10},
-                      wf_output_names=[("NB", "out", "NB_out")])
+    wfb = Workflow(
+        name="wfb",
+        workingdir="test_wfb",
+        inputs={"b": 10},
+        wf_output_names=[("NB", "out", "NB_out")])
     wfb.add(nb)
     wfb.connect_wf_input("b", "NB", "b")
     wfb.connect_wf_input("a", "NB", "a")
@@ -1442,8 +1513,10 @@ def test_workflow_16(plugin, change_dir):
 @python35_only
 def test_workflow_16a(plugin, change_dir):
     """workflow with two nodes, and one is a workflow (with mapper)"""
-    wf = Workflow(name="wf16a", workingdir="test_wf16a_{}".format(plugin),
-                     wf_output_names=[("wfb", "NB_out"), ("NA", "out", "NA_out")])
+    wf = Workflow(
+        name="wf16a",
+        workingdir="test_wf16a_{}".format(plugin),
+        wf_output_names=[("wfb", "NB_out"), ("NA", "out", "NA_out")])
     interf_addtwo = FunctionInterface(fun_addtwo, ["out"])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na")
     na.map(mapper="a", inputs={"a": [3, 5]})
@@ -1452,8 +1525,11 @@ def test_workflow_16a(plugin, change_dir):
     # the second node does not have explicit mapper (but keeps the mapper from the NA node)
     interf_addvar = FunctionInterface(fun_addvar, ["out"])
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb")
-    wfb = Workflow(name="wfb", workingdir="test_wfb", inputs={"b": 10},
-                      wf_output_names=[("NB", "out", "NB_out")])
+    wfb = Workflow(
+        name="wfb",
+        workingdir="test_wfb",
+        inputs={"b": 10},
+        wf_output_names=[("NB", "out", "NB_out")])
     wfb.add(nb)
     wfb.connect_wf_input("b", "NB", "b")
     wfb.connect_wf_input("a", "NB", "a")
@@ -1497,8 +1573,15 @@ def test_current_node_1(change_dir, plugin):
     """Node with a current interface and inputs, no mapper, running interface"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
-    nn = Node(name="NA", inputs={"in_file": "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"}, interface=interf_bet,
-                 workingdir="test_cnd1_{}".format(plugin), output_names=["out_file"])
+    nn = Node(
+        name="NA",
+        inputs={
+            "in_file":
+            "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"
+        },
+        interface=interf_bet,
+        workingdir="test_cnd1_{}".format(plugin),
+        output_names=["out_file"])
 
     sub = Submitter(plugin=plugin, runnable=nn)
     sub.run()
@@ -1516,10 +1599,18 @@ def test_current_node_2(change_dir, plugin):
     """Node with a current interface and mapper"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
-    in_file_l = ["/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
-                 "/Users/dorota/nipype_workshop/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"]
-    nn = Node(name="NA", inputs={"in_file": in_file_l}, mapper="in_file", interface=interf_bet, write_state=False,
-                 workingdir="test_cnd2_{}".format(plugin), output_names=["out_file"])
+    in_file_l = [
+        "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
+        "/Users/dorota/nipype_workshop/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"
+    ]
+    nn = Node(
+        name="NA",
+        inputs={"in_file": in_file_l},
+        mapper="in_file",
+        interface=interf_bet,
+        write_state=False,
+        workingdir="test_cnd2_{}".format(plugin),
+        output_names=["out_file"])
 
     sub = Submitter(plugin=plugin, runnable=nn)
     sub.run()
@@ -1539,11 +1630,22 @@ def test_current_wf_1(change_dir, plugin):
     """Wf with a current interface, no mapper"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
-    nn = Node(name="fsl", inputs={"in_file": "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"}, interface=interf_bet,
-                 workingdir="nn", output_names=["out_file"], write_state=False)
+    nn = Node(
+        name="fsl",
+        inputs={
+            "in_file":
+            "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"
+        },
+        interface=interf_bet,
+        workingdir="nn",
+        output_names=["out_file"],
+        write_state=False)
 
-    wf = Workflow( workingdir="test_cwf_1_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")],
-                   write_state=False)
+    wf = Workflow(
+        workingdir="test_cwf_1_{}".format(plugin),
+        name="cw1",
+        wf_output_names=[("fsl", "out_file", "fsl_out")],
+        write_state=False)
     wf.add_nodes([nn])
 
     sub = Submitter(plugin=plugin, runnable=wf)
@@ -1562,11 +1664,22 @@ def test_current_wf_1a(change_dir, plugin):
     """Wf with a current interface, no mapper"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
-    nn = Node(name="fsl", inputs={"in_file": "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"}, interface=interf_bet,
-                 workingdir="nn", output_names=["out_file"], write_state=False)
+    nn = Node(
+        name="fsl",
+        inputs={
+            "in_file":
+            "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"
+        },
+        interface=interf_bet,
+        workingdir="nn",
+        output_names=["out_file"],
+        write_state=False)
 
-    wf = Workflow(workingdir="test_cwf_1a_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")],
-                  write_state=False)
+    wf = Workflow(
+        workingdir="test_cwf_1a_{}".format(plugin),
+        name="cw1",
+        wf_output_names=[("fsl", "out_file", "fsl_out")],
+        write_state=False)
     wf.add(runnable=nn)
 
     sub = Submitter(plugin=plugin, runnable=wf)
@@ -1585,10 +1698,21 @@ def test_current_wf_1b(change_dir, plugin):
     """Wf with a current interface, no mapper; using wf.add(nipype CurrentInterface)"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
-    wf = Workflow(workingdir="test_cwf_1b_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")],
-                  write_state=False)
-    wf.add(runnable=interf_bet, name="fsl", workingdir="nn", output_names=["out_file"], write_state=False,
-           inputs={"in_file": "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"})
+    wf = Workflow(
+        workingdir="test_cwf_1b_{}".format(plugin),
+        name="cw1",
+        wf_output_names=[("fsl", "out_file", "fsl_out")],
+        write_state=False)
+    wf.add(
+        runnable=interf_bet,
+        name="fsl",
+        workingdir="nn",
+        output_names=["out_file"],
+        write_state=False,
+        inputs={
+            "in_file":
+            "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"
+        })
 
     sub = Submitter(plugin=plugin, runnable=wf)
     sub.run()
@@ -1605,10 +1729,21 @@ def test_current_wf_1b(change_dir, plugin):
 def test_current_wf_1c(change_dir, plugin):
     """Wf with a current interface, no mapper; using wf.add(nipype interface) """
 
-    wf = Workflow(workingdir="test_cwf_1c_{}".format(plugin), name="cw1", wf_output_names=[("fsl", "out_file", "fsl_out")],
-                  write_state=False)
-    wf.add(runnable=fsl.BET(), name="fsl", workingdir="nn", output_names=["out_file"], write_state=False,
-           inputs={"in_file": "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"})
+    wf = Workflow(
+        workingdir="test_cwf_1c_{}".format(plugin),
+        name="cw1",
+        wf_output_names=[("fsl", "out_file", "fsl_out")],
+        write_state=False)
+    wf.add(
+        runnable=fsl.BET(),
+        name="fsl",
+        workingdir="nn",
+        output_names=["out_file"],
+        write_state=False,
+        inputs={
+            "in_file":
+            "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"
+        })
 
     sub = Submitter(plugin=plugin, runnable=wf)
     sub.run()
@@ -1626,14 +1761,25 @@ def test_current_wf_2(change_dir, plugin):
     """Wf with a current interface and mapper"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
-    in_file_l = ["/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
-                 "/Users/dorota/nipype_workshop/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"]
+    in_file_l = [
+        "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
+        "/Users/dorota/nipype_workshop/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"
+    ]
 
-    nn = Node(name="fsl", interface=interf_bet, write_state=False,
-                 workingdir="nn", output_names=["out_file"])
+    nn = Node(
+        name="fsl",
+        interface=interf_bet,
+        write_state=False,
+        workingdir="nn",
+        output_names=["out_file"])
 
-    wf = Workflow( workingdir="test_cwf_2_{}".format(plugin), name="cw2", wf_output_names=[("fsl", "out_file", "fsl_out")],
-                      inputs={"in_file": in_file_l}, mapper="in_file", write_state=False)
+    wf = Workflow(
+        workingdir="test_cwf_2_{}".format(plugin),
+        name="cw2",
+        wf_output_names=[("fsl", "out_file", "fsl_out")],
+        inputs={"in_file": in_file_l},
+        mapper="in_file",
+        write_state=False)
     wf.add_nodes([nn])
     wf.connect_wf_input("in_file", "fsl", "in_file")
 
@@ -1655,15 +1801,25 @@ def test_current_wf_2a(change_dir, plugin):
     """Wf with a current interface and mapper"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
-    in_file_l = ["/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
-                 "/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"]
+    in_file_l = [
+        "/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
+        "/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"
+    ]
 
-    nn = Node(name="fsl", interface=interf_bet, write_state=False,
-                 workingdir="nn", output_names=["out_file"],
-                 inputs={"in_file": in_file_l}, mapper="in_file")
+    nn = Node(
+        name="fsl",
+        interface=interf_bet,
+        write_state=False,
+        workingdir="nn",
+        output_names=["out_file"],
+        inputs={"in_file": in_file_l},
+        mapper="in_file")
 
-    wf = Workflow( workingdir="test_cwf_2a_{}".format(plugin), name="cw2a", wf_output_names=[("fsl", "out_file", "fsl_out")],
-                   write_state=False)
+    wf = Workflow(
+        workingdir="test_cwf_2a_{}".format(plugin),
+        name="cw2a",
+        wf_output_names=[("fsl", "out_file", "fsl_out")],
+        write_state=False)
     wf.add_nodes([nn])
     # wf.connect_wf_input("in_file", "fsl", "in_file")
 

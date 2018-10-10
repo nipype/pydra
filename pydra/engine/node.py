@@ -5,7 +5,6 @@ import pdb
 import networkx as nx
 import numpy as np
 
-
 from nipype.utils.filemanip import loadpkl
 from nipype import logging
 
@@ -15,8 +14,14 @@ logger = logging.getLogger('nipype.workflow')
 
 
 class NodeBase(object):
-    def __init__(self, name, mapper=None, inputs=None, other_mappers=None,
-                 write_state=True, *args, **kwargs):
+    def __init__(self,
+                 name,
+                 mapper=None,
+                 inputs=None,
+                 other_mappers=None,
+                 write_state=True,
+                 *args,
+                 **kwargs):
         """A base structure for nodes in the computational graph (i.e. both
         ``Node`` and ``Workflow``).
 
@@ -94,9 +99,11 @@ class NodeBase(object):
     @inputs.setter
     def inputs(self, inputs):
         # Massage inputs dict
-        inputs = {".".join((self.name, key)): value
-                  if not isinstance(value, list) else np.array(value)
-                  for key, value in inputs.items()}
+        inputs = {
+            ".".join((self.name, key)):
+            value if not isinstance(value, list) else np.array(value)
+            for key, value in inputs.items()
+        }
         self._inputs.update(inputs)
         self._state_inputs.update(inputs)
 
@@ -234,12 +241,26 @@ class NodeBase(object):
 
 
 class Node(NodeBase):
-    def __init__(self, name, interface, inputs=None, mapper=None, join_by=None,
-                 workingdir=None, other_mappers=None,
-                 output_names=None, write_state=True, *args, **kwargs):
-        super(Node, self).__init__(name=name, mapper=mapper, inputs=inputs,
-                                   other_mappers=other_mappers, write_state=write_state,
-                                   *args, **kwargs)
+    def __init__(self,
+                 name,
+                 interface,
+                 inputs=None,
+                 mapper=None,
+                 join_by=None,
+                 workingdir=None,
+                 other_mappers=None,
+                 output_names=None,
+                 write_state=True,
+                 *args,
+                 **kwargs):
+        super(Node, self).__init__(
+            name=name,
+            mapper=mapper,
+            inputs=inputs,
+            other_mappers=other_mappers,
+            write_state=write_state,
+            *args,
+            **kwargs)
 
         # working directory for node, will be change if node is a part of a wf
         self.workingdir = workingdir
@@ -328,7 +349,8 @@ class Node(NodeBase):
         """collecting all outputs and updating self._output"""
         for key_out in self.output_names:
             self._output[key_out] = {}
-            for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
+            for (i, ind) in enumerate(
+                    itertools.product(*self.state.all_elements)):
                 if self.write_state:
                     state_dict = self.state.state_values(ind)
                 else:
@@ -423,10 +445,24 @@ class Node(NodeBase):
 
 
 class Workflow(NodeBase):
-    def __init__(self, name, inputs=None, wf_output_names=None, mapper=None, #join_by=None,
-                 nodes=None, workingdir=None, write_state=True, *args, **kwargs):
-        super(Workflow, self).__init__(name=name, mapper=mapper, inputs=inputs,
-                                       write_state=write_state, *args, **kwargs)
+    def __init__(
+            self,
+            name,
+            inputs=None,
+            wf_output_names=None,
+            mapper=None,  #join_by=None,
+            nodes=None,
+            workingdir=None,
+            write_state=True,
+            *args,
+            **kwargs):
+        super(Workflow, self).__init__(
+            name=name,
+            mapper=mapper,
+            inputs=inputs,
+            write_state=write_state,
+            *args,
+            **kwargs)
 
         self.graph = nx.DiGraph()
         # all nodes in the workflow (probably will be removed)
@@ -464,7 +500,6 @@ class Workflow(NodeBase):
         #        continue
 
         #    self.add(name, value)
-
 
     @property
     def nodes(self):
@@ -506,7 +541,8 @@ class Workflow(NodeBase):
                 if out_wf_nm not in self._output.keys():
                     if self.mapper:
                         self._output[out_wf_nm] = {}
-                        for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
+                        for (i, ind) in enumerate(
+                                itertools.product(*self.state.all_elements)):
                             if self.write_state:
                                 wf_inputs_dict = self.state.state_values(ind)
                                 dir_nm_el = "_".join([
@@ -556,7 +592,8 @@ class Workflow(NodeBase):
                 key_out = out[2] if len(out) == 3 else out[1]
                 self._result[key_out] = []
                 if self.mapper:
-                    for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
+                    for (i, ind) in enumerate(
+                            itertools.product(*self.state.all_elements)):
                         if self.write_state:
                             wf_inputs_dict = self.state.state_values(ind)
                         else:
@@ -602,8 +639,16 @@ class Workflow(NodeBase):
             self._node_mappers[nn.name] = nn.mapper
 
     # TODO: workingir shouldn't have None
-    def add(self, runnable, name=None, workingdir=None, inputs=None, output_names=None, mapper=None,
-            write_state=True, out_read=False, **kwargs):
+    def add(self,
+            runnable,
+            name=None,
+            workingdir=None,
+            inputs=None,
+            output_names=None,
+            mapper=None,
+            write_state=True,
+            out_read=False,
+            **kwargs):
         if is_function(runnable):
             if not output_names:
                 output_names = ["out"]
@@ -613,25 +658,43 @@ class Workflow(NodeBase):
                 raise Exception("you have to specify name for the node")
             if not workingdir:
                 workingdir = name
-            node = Node(interface=interface, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
-                           other_mappers=self._node_mappers, write_state=write_state)
+            node = Node(
+                interface=interface,
+                workingdir=workingdir,
+                name=name,
+                inputs=inputs,
+                mapper=mapper,
+                other_mappers=self._node_mappers,
+                write_state=write_state)
         elif is_function_interface(runnable) or is_current_interface(runnable):
             if not name:
                 raise Exception("you have to specify name for the node")
             if not workingdir:
                 workingdir = name
-            node = Node(interface=runnable, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
-                           other_mappers=self._node_mappers, output_names=output_names,
-                           write_state=write_state)
+            node = Node(
+                interface=runnable,
+                workingdir=workingdir,
+                name=name,
+                inputs=inputs,
+                mapper=mapper,
+                other_mappers=self._node_mappers,
+                output_names=output_names,
+                write_state=write_state)
         elif is_nipype_interface(runnable):
             ci = aux.CurrentInterface(interface=runnable, name=name)
             if not name:
                 raise Exception("you have to specify name for the node")
             if not workingdir:
                 workingdir = name
-            node = Node(interface=ci, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
-                           other_mappers=self._node_mappers, output_names=output_names,
-                           write_state=write_state)
+            node = Node(
+                interface=ci,
+                workingdir=workingdir,
+                name=name,
+                inputs=inputs,
+                mapper=mapper,
+                other_mappers=self._node_mappers,
+                output_names=output_names,
+                write_state=write_state)
         elif is_node(runnable):
             node = runnable
         elif is_workflow(runnable):
@@ -683,7 +746,8 @@ class Workflow(NodeBase):
                     self.name, inp_wf))
         for nn in self.graph_sorted:
             if self.write_state:
-                dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(wf_inputs.items())])
+                dir_nm_el = "_".join(
+                    ["{}:{}".format(i, j) for i, j in list(wf_inputs.items())])
             else:
                 dir_nm_el = "_".join([
                     "{}:{}".format(i, j)
