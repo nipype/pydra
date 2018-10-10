@@ -1,9 +1,3 @@
-from __future__ import print_function, division, unicode_literals, absolute_import
-from builtins import object
-
-from future import standard_library
-standard_library.install_aliases()
-
 import os, pdb, time
 from copy import deepcopy
 
