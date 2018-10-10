@@ -444,14 +444,6 @@ class Workflow(NodeBase):
 
         #    self.add(name, value)
 
-    @property
-    def inputs(self):
-        return self._inputs
-
-    @inputs.setter
-    def inputs(self, inputs):
-        self._inputs.update(dict(("{}.{}".format(self.name, key), value) for (key, value) in inputs.items()))
-
 
     @property
     def nodes(self):
