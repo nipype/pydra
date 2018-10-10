@@ -1,39 +1,55 @@
+"""Basic compute graph elements"""
 import os
-import networkx as nx
 import itertools
+import pdb
+import networkx as nx
 import numpy as np
+
+
+from nipype.utils.filemanip import loadpkl
+from nipype import logging
 
 from . import state
 from . import auxiliary as aux
-from . import submitter as sub
-
-from nipype.utils.filemanip import loadpkl
-
-import logging
 logger = logging.getLogger('nipype.workflow')
 
-import pdb
 
-# dj ??: should I use EngineBase?
-class NewBase(object):
-    def __init__(self, name, mapper=None, inputs=None, other_mappers=None, mem_gb=None,
-                 cache_location=None, print_val=True, *args, **kwargs):
+class NodeBase(object):
+    def __init__(self, name, mapper=None, inputs=None, other_mappers=None,
+                 write_state=True, *args, **kwargs):
+        """A base structure for nodes in the computational graph (i.e. both
+        ``Node`` and ``Workflow``).
+
+        Parameters
+        ----------
+
+        name : str
+            Unique name of this node
+        mapper : str or (list or tuple of (str or mappers))
+            Whether inputs should be mapped at run time
+        inputs : dictionary (input name, input value or list of values)
+            States this node's input names
+        other_mappers : dictionary (name of a node, mapper of the node)
+            information about other nodes' mappers from workflow (in case the mapper
+            from previous node is used)
+        write_state : True
+            flag that says if value of state input should be written out to output
+            and directories (otherwise indices are used)
+
+
+
+        """
         self.name = name
-        #dj TODO: I should think what is needed in the __init__ (I redefine some of rhe attributes anyway)
+        self._inputs = {}
+        self._state_inputs = {}
+
         if inputs:
-            # adding name of the node to the input name
-            self._inputs = dict(("{}.{}".format(self.name, key), value) for (key, value) in inputs.items())
-            self._inputs = dict((key, np.array(val)) if type(val) is list else (key, val)
-                                for (key, val) in self._inputs.items())
-            self._state_inputs = self._inputs.copy()
-        else:
-            self._inputs = {}
-            self._state_inputs = {}
+            self.inputs = inputs
+
         if mapper:
             # adding name of the node to the input name within the mapper
             mapper = aux.change_mapper(mapper, self.name)
         self._mapper = mapper
-        # information about other nodes' mappers from workflow (in case the mapper from previous node is used)
         self._other_mappers = other_mappers
         # create state (takes care of mapper, connects inputs with axes, so we can ask for specifc element)
         self._state = state.State(mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
@@ -45,13 +61,7 @@ class NewBase(object):
         self.needed_outputs = []
         # flag that says if node finished all jobs
         self._is_complete = False
-        # flag that says if value of state input should be printed in output and directories (otherwise indices)
-        self.print_val = print_val
-
-        # TODO: don't use it yet
-        self.mem_gb = mem_gb
-        self.cache_location = cache_location
-
+        self.write_state = write_state
 
     # TBD
     def join(self, field):
@@ -70,6 +80,19 @@ class NewBase(object):
         self._mapper = mapper
         # updating state
         self._state = state.State(mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
+
+    @property
+    def inputs(self):
+        return self._inputs
+
+    @inputs.setter
+    def inputs(self, inputs):
+        # Massage inputs dict
+        inputs = {".".join((self.name, key)): value
+                  if not isinstance(value, list) else np.array(value)
+                  for key, value in inputs.items()}
+        self._inputs.update(inputs)
+        self._state_inputs.update(inputs)
 
     @property
     def state_inputs(self):
@@ -102,11 +125,8 @@ class NewBase(object):
             self._mapper = aux.change_mapper(mapper, self.name)
 
         if inputs:
-            inputs = dict(("{}.{}".format(self.name, key), value) for (key, value) in inputs.items())
-            inputs = dict((key, np.array(val)) if type(val) is list else (key, val)
-                          for (key, val) in inputs.items())
-            self._inputs.update(inputs)
-            self._state_inputs.update(inputs)
+            self.inputs = inputs
+            self._state_inputs.update(self.inputs)
         if mapper:
             # updating state if we have a new mapper
             self._state = state.State(mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
@@ -131,7 +151,7 @@ class NewBase(object):
         """collecting all inputs required to run the node (for specific state element)"""
         state_dict = self.state.state_values(ind)
         inputs_dict = {k: state_dict[k] for k in self._inputs.keys()}
-        if not self.print_val:
+        if not self.write_state:
             state_dict = self.state.state_ind(ind)
         # reading extra inputs that come from previous nodes
         for (from_node, from_socket, to_socket) in self.needed_outputs:
@@ -167,10 +187,8 @@ class NewBase(object):
             out_file = getattr(loadpkl(result_pklfile).outputs, out_nm)
             if os.path.exists(out_file):
                 return out_file
-            else:
-                return False
-        else:
-            return False
+
+        return False
 
 
     # checking if all outputs are saved
@@ -204,14 +222,13 @@ class NewBase(object):
         return val_l
 
 
-class NewNode(NewBase):
+class Node(NodeBase):
     def __init__(self, name, interface, inputs=None, mapper=None, join_by=None,
-                 workingdir=None, other_mappers=None, mem_gb=None, cache_location=None,
-                 output_names=None, print_val=True, *args, **kwargs):
-        super(NewNode, self).__init__(name=name, mapper=mapper, inputs=inputs,
-                                      other_mappers=other_mappers, mem_gb=mem_gb,
-                                      cache_location=cache_location, print_val=print_val,
-                                      *args, **kwargs)
+                 workingdir=None, other_mappers=None,
+                 output_names=None, write_state=True, *args, **kwargs):
+        super(Node, self).__init__(name=name, mapper=mapper, inputs=inputs,
+                                   other_mappers=other_mappers, write_state=write_state,
+                                   *args, **kwargs)
 
         # working directory for node, will be change if node is a part of a wf
         self.workingdir = workingdir
@@ -249,21 +266,11 @@ class NewNode(NewBase):
     #         memo[id_self] = _copy
     #     return _copy
 
-
-    @property
-    def inputs(self):
-        return self._inputs
-
-    @inputs.setter
-    def inputs(self, inputs):
-        self._inputs.update(inputs)
-
-
     def run_interface_el(self, i, ind):
         """ running interface one element generated from node_state."""
         logger.debug("Run interface el, name={}, i={}, ind={}".format(self.name, i, ind))
         state_dict, inputs_dict = self.get_input_el(ind)
-        if not self.print_val:
+        if not self.write_state:
             state_dict = self.state.state_ind(ind)
         dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(state_dict.items())])
         print("Run interface el, dict={}".format(state_dict))
@@ -307,7 +314,7 @@ class NewNode(NewBase):
         for key_out in self.output_names:
             self._output[key_out] = {}
             for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
-                if self.print_val:
+                if self.write_state:
                     state_dict = self.state.state_values(ind)
                 else:
                     state_dict = self.state.state_ind(ind)
@@ -333,7 +340,7 @@ class NewNode(NewBase):
                             with open(output) as fout:
                                 try:
                                     output = eval(fout.readline())
-                                except NewWorkflow:
+                                except Workflow:
                                     output = fout.readline()
                         self._output[key_out] = (state_dict, output)
                     elif is_current_interface(self.interface):
@@ -346,7 +353,7 @@ class NewNode(NewBase):
     def _check_all_results(self):
         """checking if all files that should be created are present"""
         for ind in itertools.product(*self.state.all_elements):
-            if self.print_val:
+            if self.write_state:
                 state_dict = self.state.state_values(ind)
             else:
                 state_dict = self.state.state_ind(ind)
@@ -384,7 +391,7 @@ class NewNode(NewBase):
                 with open(filename) as fout:
                     self._result[key_out].append(({}, eval(fout.readline())))
 
-    # dj: removing temp. from NewNode class
+    # dj: removing temp. from Node class
     # def run(self, plugin="serial"):
     #     """preparing the node to run and run the interface"""
     #     self.prepare_state_input()
@@ -394,11 +401,11 @@ class NewNode(NewBase):
     #     self.collecting_output()
 
 
-class NewWorkflow(NewBase):
+class Workflow(NodeBase):
     def __init__(self, name, inputs=None, wf_output_names=None, mapper=None, #join_by=None,
-                 nodes=None, workingdir=None, mem_gb=None, cache_location=None, print_val=True, *args, **kwargs):
-        super(NewWorkflow, self).__init__(name=name, mapper=mapper, inputs=inputs, mem_gb=mem_gb,
-                                          cache_location=cache_location, print_val=print_val, *args, **kwargs)
+                 nodes=None, workingdir=None, write_state=True, *args, **kwargs):
+        super(Workflow, self).__init__(name=name, mapper=mapper, inputs=inputs,
+                                       write_state=write_state, *args, **kwargs)
 
         self.graph = nx.DiGraph()
         # all nodes in the workflow (probably will be removed)
@@ -427,7 +434,7 @@ class NewWorkflow(NewBase):
         self.parent_wf = None
         # dj not sure what was the motivation, wf_klasses gives an empty list
         #mro = self.__class__.mro()
-        #wf_klasses = mro[:mro.index(NewWorkflow)][::-1]
+        #wf_klasses = mro[:mro.index(Workflow)][::-1]
         #items = {}
         #for klass in wf_klasses:
         #    items.update(klass.__dict__)
@@ -436,14 +443,6 @@ class NewWorkflow(NewBase):
         #        continue
 
         #    self.add(name, value)
-
-    @property
-    def inputs(self):
-        return self._inputs
-
-    @inputs.setter
-    def inputs(self, inputs):
-        self._inputs.update(dict(("{}.{}".format(self.name, key), value) for (key, value) in inputs.items()))
 
 
     @property
@@ -486,7 +485,7 @@ class NewWorkflow(NewBase):
                     if self.mapper:
                         self._output[out_wf_nm] = {}
                         for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
-                            if self.print_val:
+                            if self.write_state:
                                 wf_inputs_dict = self.state.state_values(ind)
                                 dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(wf_inputs_dict.items())])
                             else:
@@ -526,7 +525,7 @@ class NewWorkflow(NewBase):
                 self._result[key_out] = []
                 if self.mapper:
                     for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
-                        if self.print_val:
+                        if self.write_state:
                             wf_inputs_dict = self.state.state_values(ind)
                         else:
                             wf_inputs_dict = self.state.state_ind(ind)
@@ -565,7 +564,7 @@ class NewWorkflow(NewBase):
 
     # TODO: workingir shouldn't have None
     def add(self, runnable, name=None, workingdir=None, inputs=None, output_names=None, mapper=None,
-            mem_gb=None, print_val=True, out_read=False, **kwargs):
+            write_state=True, out_read=False, **kwargs):
         if is_function(runnable):
             if not output_names:
                 output_names = ["out"]
@@ -574,25 +573,25 @@ class NewWorkflow(NewBase):
                 raise Exception("you have to specify name for the node")
             if not workingdir:
                 workingdir = name
-            node = NewNode(interface=interface, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
-                           other_mappers=self._node_mappers, mem_gb=mem_gb, print_val=print_val)
+            node = Node(interface=interface, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
+                           other_mappers=self._node_mappers, write_state=write_state)
         elif is_function_interface(runnable) or is_current_interface(runnable):
             if not name:
                 raise Exception("you have to specify name for the node")
             if not workingdir:
                 workingdir = name
-            node = NewNode(interface=runnable, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
-                           other_mappers=self._node_mappers, mem_gb_node=mem_gb, output_names=output_names,
-                           print_val=print_val)
+            node = Node(interface=runnable, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
+                           other_mappers=self._node_mappers, output_names=output_names,
+                           write_state=write_state)
         elif is_nipype_interface(runnable):
             ci = aux.CurrentInterface(interface=runnable, name=name)
             if not name:
                 raise Exception("you have to specify name for the node")
             if not workingdir:
                 workingdir = name
-            node = NewNode(interface=ci, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
-                           other_mappers=self._node_mappers, mem_gb_node=mem_gb, output_names=output_names,
-                           print_val=print_val)
+            node = Node(interface=ci, workingdir=workingdir, name=name, inputs=inputs, mapper=mapper,
+                           other_mappers=self._node_mappers, output_names=output_names,
+                           write_state=write_state)
         elif is_node(runnable):
             node = runnable
         elif is_workflow(runnable):
@@ -639,7 +638,7 @@ class NewWorkflow(NewBase):
             else:
                 raise Exception("{}.{} not in the workflow inputs".format(self.name, inp_wf))
         for nn in self.graph_sorted:
-            if self.print_val:
+            if self.write_state:
                 dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(wf_inputs.items())])
             else:
                 dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(wf_inputs_ind.items())])
@@ -664,7 +663,7 @@ class NewWorkflow(NewBase):
 
             nn.prepare_state_input()
 
-    # removing temp. from NewWorkflow
+    # removing temp. from Workflow
     # def run(self, plugin="serial"):
     #     #self.preparing(wf_inputs=self.inputs) # moved to submitter
     #     self.prepare_state_input()
@@ -688,7 +687,7 @@ def is_nipype_interface(obj):
     return hasattr(obj, "_run_interface")
 
 def is_node(obj):
-    return type(obj) is NewNode
+    return type(obj) is Node
 
 def is_workflow(obj):
-    return type(obj) is NewWorkflow
+    return type(obj) is Workflow

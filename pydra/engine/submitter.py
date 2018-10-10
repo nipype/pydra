@@ -80,7 +80,7 @@ class Submitter(object):
                     self.node_line.append((new_workflow, i, ind))
         else:
             if ready:
-                if workflow.print_val:
+                if workflow.write_state:
                         workflow.preparing(wf_inputs=workflow.inputs)
                 else:
                     inputs_ind = dict((key, None) for (key, _) in workflow.inputs.items())
@@ -112,7 +112,7 @@ class Submitter(object):
             st_inputs, wf_inputs = workflow.get_input_el(ind)
         else:
             wf_inputs = workflow.state.state_values(ind)
-        if workflow.print_val:
+        if workflow.write_state:
             workflow.preparing(wf_inputs=wf_inputs)
         else:
             wf_inputs_ind = workflow.state.state_ind(ind)
