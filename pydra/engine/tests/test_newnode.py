@@ -1458,10 +1458,7 @@ def test_current_node_1(change_dir, plugin):
 
     nn = Node(
         name="NA",
-        inputs={
-            "in_file":
-            str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")
-        },
+        inputs={"in_file": str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")},
         interface=interf_bet,
         workingdir="test_cnd1_{}".format(plugin),
         output_names=["out_file"])
@@ -1511,10 +1508,7 @@ def test_current_wf_1(change_dir, plugin):
 
     nn = Node(
         name="fsl",
-        inputs={
-            "in_file":
-            str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")
-        },
+        inputs={"in_file": str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")},
         interface=interf_bet,
         workingdir="nn",
         output_names=["out_file"],
@@ -1543,10 +1537,7 @@ def test_current_wf_1a(change_dir, plugin):
 
     nn = Node(
         name="fsl",
-        inputs={
-            "in_file":
-            str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")
-        },
+        inputs={"in_file": str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")},
         interface=interf_bet,
         workingdir="nn",
         output_names=["out_file"],
@@ -1584,10 +1575,7 @@ def test_current_wf_1b(change_dir, plugin):
         workingdir="nn",
         output_names=["out_file"],
         write_state=False,
-        inputs={
-            "in_file":
-            str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")
-        })
+        inputs={"in_file": str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")})
 
     sub = Submitter(plugin=plugin, runnable=wf)
     sub.run()
@@ -1613,10 +1601,7 @@ def test_current_wf_1c(change_dir, plugin):
         workingdir="nn",
         output_names=["out_file"],
         write_state=False,
-        inputs={
-            "in_file":
-            str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")
-        })
+        inputs={"in_file": str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")})
 
     sub = Submitter(plugin=plugin, runnable=wf)
     sub.run()
