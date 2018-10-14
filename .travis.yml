@@ -6,9 +6,16 @@ python:
   - 3.6
   - 3.7
 
+env:
+  - PYDRA_TEST_DATA=/tmp/pydra_test_data
+
 install:
   - pip install --upgrade pip setuptools wheel
   - pip install ".[all]"
+
+before_script:
+  - pip install datalad
+  - bash tools/get_test_data.sh
 
 script:
   - py.test -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
