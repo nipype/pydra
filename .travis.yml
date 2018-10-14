@@ -12,7 +12,7 @@ env:
 before_install:
   - travis_retry bash <(wget -q -O- http://neuro.debian.net/_files/neurodebian-travis.sh);
   - travis_retry sudo apt-get update
-  - travis_retry sudo apt-get install fsl-core git-annex-standalone datalad
+  - travis_retry sudo apt-get install fsl git-annex-standalone datalad
   - travis_retry pip install --upgrade pip setuptools wheel
 
 install:
