@@ -3,10 +3,9 @@ import os
 import itertools
 
 import networkx as nx
-import numpy as np
-
 from nipype.utils.filemanip import loadpkl
 from nipype import logging
+import numpy as np
 
 from pydra.engine import state
 from pydra.engine import auxiliary as aux
@@ -33,6 +32,7 @@ class NodeBase(object):
         flag that says if value of state input should be written out to output
         and directories (otherwise indices are used)
     """
+
     def __init__(self,
                  name,
                  mapper=None,
@@ -66,10 +66,6 @@ class NodeBase(object):
         # flag that says if node finished all jobs
         self._is_complete = False
         self.write_state = write_state
-
-    # TBD
-    def join(self, field):
-        pass
 
     @property
     def state(self):
@@ -144,7 +140,7 @@ class NodeBase(object):
         try:
             self.get_input_el(ind)
             return True
-        except:  #TODO specify
+        except Exception:  #TODO specify
             return False
 
     # dj: this is not used for a single node

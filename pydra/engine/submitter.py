@@ -1,6 +1,5 @@
 from copy import deepcopy
 import logging
-import os
 import time
 
 from pydra.engine.workers import _get_worker
