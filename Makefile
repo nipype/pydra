@@ -7,11 +7,11 @@ dist: clean
 clean-pyc:
 	find . -name '*.pyc' -type f -exec rm {} +
 	find . -name '*.pyo' -type f -exec rm {} +
-	find . -name '__pycache__' -type d -exec rm --recursive {} +
+	find . -name '__pycache__' -type d -exec rm -r {} +
 
 clean-build:
-	rm --recursive --force build/
-	rm --recursive --force dist/
+	rm -rf build/
+	rm -rf dist/
 
 clean: clean-pyc clean-build
 
