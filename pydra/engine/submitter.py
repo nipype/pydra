@@ -14,7 +14,7 @@ class Submitter(object):
         self.node_line = []
         self._to_finish = []  # used only for wf
 
-        self.worker = _get_worker(plugin=plugin)
+        self.worker = _get_worker(plugin=plugin)()
 
         if hasattr(runnable, 'interface'):  # a node
             self.node = runnable
