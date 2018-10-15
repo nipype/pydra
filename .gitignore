@@ -14,3 +14,5 @@ cov.xml
 
 .*.swp
 *~
+
+dask-worker-space
