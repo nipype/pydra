@@ -191,7 +191,7 @@ class NodeBase(object):
         result_pklfile = os.path.join(os.getcwd(), node.workingdir, dir_nm_el,
                                       node.interface.nn.name, "result_{}.pklz".format(
                                           node.interface.nn.name))
-        if os.path.exists(result_pklfile):
+        if os.path.exists(result_pklfile) and os.stat(result_pklfile).st_size > 0:
             out = getattr(loadpkl(result_pklfile).outputs, out_nm)
             if out:
                 return out
