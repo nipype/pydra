@@ -1,7 +1,7 @@
 """Auxiliary elements."""
 import inspect
-import os
 import logging
+import os
 
 from nipype import Node as Nipype1Node
 
@@ -217,8 +217,7 @@ class FunctionInterface(object):
             raise Exception("output_nm should be a list")
         if not input_map:
             self.input_map = {}
-        # TODO use signature
-        for key in inspect.getargspec(function)[0]:
+        for key in inspect.getfullargspec(function).args:
             if key not in self.input_map.keys():
                 self.input_map[key] = key
         # flags if we want to read the txt file to save in node.output
