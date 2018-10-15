@@ -1,19 +1,26 @@
 """Worker objects."""
 import concurrent.futures as cf
-import os
-import re
-import time
-import itertools
 import logging
 import multiprocessing as mp
+import time
+
+from pydra.engine import utils
 
 logger = logging.getLogger('nipype.workflow')
 
 
 def _get_worker(plugin):
     """Return worker object given a string or `Worker` subclass."""
-    if issubclass(plugin, Worker):
-        return plugin
+    try:
+        if issubclass(plugin, Worker):
+            return plugin
+    except TypeError:
+        pass
+    try:
+        if isinstance(plugin, Worker):
+            return plugin
+    except TypeError:
+        pass
 
     w = {
         'mp': MpWorker,
@@ -27,7 +34,6 @@ def _get_worker(plugin):
     except KeyError:
         avail = "', '".join(w.keys())
         raise KeyError("unknown plugin '{}'. available workers are '{}'.".format(plugin, avail))
-
 
 
 class Worker(object):
@@ -86,6 +92,7 @@ class ConcurrentFuturesWorker(Worker):
 
 
 class DaskWorker(Worker):
+    @utils._check_dependencies("dask", "distributed")
     def __init__(self):
 
         from dask.distributed import Client
