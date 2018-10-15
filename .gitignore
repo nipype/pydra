@@ -16,3 +16,4 @@ cov.xml
 *~
 
 dask-worker-space
+test_outputs
