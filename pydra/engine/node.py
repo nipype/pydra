@@ -561,7 +561,8 @@ class Workflow(NodeBase):
                 raise Exception("you need to specify input_names")
             if not name:
                 raise Exception("you have to specify name for the node")
-            nipype1_interf = Function(function=runnable, input_names=["a"], output_names=["out"])
+            nipype1_interf = Function(function=runnable, input_names=input_names,
+                                      output_names=output_names)
             interface = aux.CurrentInterface(interface=nipype1_interf, name="addtwo")
             if not workingdir:
                 workingdir = name

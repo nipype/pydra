@@ -18,7 +18,7 @@ except ImportError:
 @pytest.fixture()
 def change_dir(request):
     orig_dir = os.getcwd()
-    test_dir = os.path.join(orig_dir, "/pydra/engine/test_neuro")
+    test_dir = os.path.join(orig_dir, "/pydra/pydra/engine/test_neuro")
     os.makedirs(test_dir, exist_ok=True)
     os.chdir(test_dir)
 
@@ -34,8 +34,7 @@ Name = "example"
 DEFAULT_MEMORY_MIN_GB = None
 # TODO, adding fields to Inputs (subject_id)
 Inputs = {
-    "subject_id":
-    "sub-01",
+    "subject_id": "sub-01",
     "output_spaces": ["fsaverage", "fsaverage5"],
     "source_file":
     "/fmriprep_test/workdir1/fmriprep_wf/single_subject_01_wf/func_preproc_ses_test_task_fingerfootlips_wf/bold_t1_trans_wf/merge/vol0000_xform-00000_merged.nii",
@@ -68,11 +67,8 @@ def test_neuro(change_dir, plugin):
     #
     #dj: why do I need outputs?
 
-    wf = Workflow(
-        name=Name,
-        inputs=Inputs,
-        workingdir="test_neuro_{}".format(plugin),
-        write_state=False,
+    wf = Workflow(name=Name, inputs=Inputs,
+                  workingdir="test_neuro_{}".format(plugin), write_state=False,
         wf_output_names=[("sampler", "out_file", "sampler_out"), ("targets", "out", "target_out")])
 
     # @interface
@@ -86,7 +82,8 @@ def test_neuro(change_dir, plugin):
 
     #dj: don't have option in map to connect with wf input
 
-    wf.add(runnable=select_target, name="targets", subject_id="subject_id", output_names=["out"],
+    wf.add(runnable=select_target, name="targets", subject_id="subject_id",
+           input_names=["subject_id", "space"], output_names=["out"],
            out_read=True, write_state=False)\
         .map_node(mapper="space", inputs={"space": [space for space in Inputs["output_spaces"]
                                                if space.startswith("fs")]})
@@ -117,8 +114,7 @@ def test_neuro(change_dir, plugin):
     wf.add(name='resampling_xfm',
            runnable=fs.utils.LTAConvert(in_lta='identity.nofile', out_lta=True),
            source_file="source_file", target_file="t1_preproc",
-           output_names=["out_lta"],
-           write_state=False)\
+           output_names=["out_lta"], write_state=False)\
         .add(name='set_xfm_source', runnable=ConcatenateLTA(out_type='RAS2RAS'),
             in_lta2="t1_2_fsnative_forward_transform", in_lta1="resampling_xfm.out_lta",
             output_names=["out_file"], write_state=False)
