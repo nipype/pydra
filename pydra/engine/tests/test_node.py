@@ -1449,7 +1449,7 @@ def test_workflow_16a(plugin, change_dir):
 # testing CurrentInterface that is a temporary wrapper for current interfaces
 
 
-@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_DATA_DIR/ds000114")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_node_1(change_dir, plugin):
@@ -1470,7 +1470,7 @@ def test_current_node_1(change_dir, plugin):
     assert "out_file" in nn.output.keys()
 
 
-@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_DATA_DIR/ds000114")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_node_2(change_dir, plugin):
@@ -1499,7 +1499,7 @@ def test_current_node_2(change_dir, plugin):
     assert "NA.in_file:1" in nn.output["out_file"].keys()
 
 
-@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_DATA_DIR/ds000114")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1(change_dir, plugin):
@@ -1528,7 +1528,7 @@ def test_current_wf_1(change_dir, plugin):
     assert "fsl_out" in wf.output.keys()
 
 
-@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_DATA_DIR/ds000114")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1a(change_dir, plugin):
@@ -1557,7 +1557,7 @@ def test_current_wf_1a(change_dir, plugin):
     assert "fsl_out" in wf.output.keys()
 
 
-@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_DATA_DIR/ds000114")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1b(change_dir, plugin):
@@ -1584,7 +1584,7 @@ def test_current_wf_1b(change_dir, plugin):
     assert "fsl_out" in wf.output.keys()
 
 
-@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_DATA_DIR/ds000114")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1c(change_dir, plugin):
@@ -1610,7 +1610,7 @@ def test_current_wf_1c(change_dir, plugin):
     assert "fsl_out" in wf.output.keys()
 
 
-@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_DATA_DIR/ds000114")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_2(change_dir, plugin):
@@ -1648,7 +1648,7 @@ def test_current_wf_2(change_dir, plugin):
     assert 'cw2.in_file:1' in wf.output["fsl_out"].keys()
 
 
-@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_DATA_DIR/ds000114")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_2a(change_dir, plugin):
