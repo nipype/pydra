@@ -1,8 +1,8 @@
+"""State object."""
 from collections import OrderedDict
 import itertools
-import pdb
 
-from . import auxiliary as aux
+from pydra.engine import auxiliary as aux
 
 
 class State(object):

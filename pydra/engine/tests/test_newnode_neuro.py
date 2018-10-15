@@ -1,12 +1,13 @@
 import os
 import pytest
 
-from ..node import Node, Workflow
-from ..submitter import Submitter
-
 #dj niworkflows vs ...??
 from nipype.interfaces.utility import Rename
 import nipype.interfaces.freesurfer as fs
+
+from pydra.engine.node import Node
+from pydra.engine.node import Workflow
+from pydra.engine.submitter import Submitter
 
 no_fmriprep = False
 try:
@@ -28,12 +29,10 @@ def change_dir(request):
     request.addfinalizer(move2orig)
 
 
-import pdb
-
-Name = "example"
+name = "example"
 DEFAULT_MEMORY_MIN_GB = None
-# TODO, adding fields to Inputs (subject_id)
-Inputs = {
+# TODO, adding fields to inputs (subject_id)
+inputs = {
     "subject_id":
     "sub-01",
     "output_spaces": ["fsaverage", "fsaverage5"],
@@ -47,8 +46,7 @@ Inputs = {
     "/fmriprep_test/output1/freesurfer/"
 }
 
-Plugins = ["serial"]
-Plugins = ["serial", "mp", "cf", "dask"]
+plugins = ["serial", "mp", "cf", "dask"]
 
 
 def select_target(subject_id, space):
@@ -57,7 +55,7 @@ def select_target(subject_id, space):
 
 
 @pytest.mark.skipif(no_fmriprep, reason="No fmriprep")
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 def test_neuro(change_dir, plugin):
 
     # wf = Workflow(name, mem_gb_node=DEFAULT_MEMORY_MIN_GB,
@@ -69,8 +67,8 @@ def test_neuro(change_dir, plugin):
     #dj: why do I need outputs?
 
     wf = Workflow(
-        name=Name,
-        inputs=Inputs,
+        name=name,
+        inputs=inputs,
         workingdir="test_neuro_{}".format(plugin),
         write_state=False,
         wf_output_names=[("sampler", "out_file", "sampler_out"), ("targets", "out", "target_out")])
@@ -88,7 +86,7 @@ def test_neuro(change_dir, plugin):
 
     wf.add(runnable=select_target, name="targets", subject_id="subject_id", output_names=["out"],
            out_read=True, write_state=False)\
-        .map_node(mapper="space", inputs={"space": [space for space in Inputs["output_spaces"]
+        .map_node(mapper="space", inputs={"space": [space for space in inputs["output_spaces"]
                                                if space.startswith("fs")]})
 
     # wf.add('rename_src', Rename(format_string='%(subject)s',
@@ -101,7 +99,7 @@ def test_neuro(change_dir, plugin):
                                 in_file="source_file",
                                 output_names=["out_file"],
            write_state=False)\
-        .map_node('subject', inputs={"subject": [space for space in Inputs["output_spaces"]
+        .map_node('subject', inputs={"subject": [space for space in inputs["output_spaces"]
                                                if space.startswith("fs")]}) #TODO: now it's only one subject
 
     # wf.add('resampling_xfm',

@@ -1,15 +1,33 @@
-import re, os, pdb, time
-import multiprocessing as mp
-#import multiprocess as mp
-import itertools
-
-#from pycon_utils import make_cluster
-from dask.distributed import Client
-
+"""Worker objects."""
 import concurrent.futures as cf
-
+import os
+import re
+import time
+import itertools
 import logging
+import multiprocessing as mp
+
 logger = logging.getLogger('nipype.workflow')
+
+
+def _get_worker(plugin):
+    """Return worker object given a string or `Worker` subclass."""
+    if issubclass(plugin, Worker):
+        return plugin
+
+    w = {
+        'mp': MpWorker,
+        'serial': SerialWorker,
+        'cf': ConcurrentFuturesWorker,
+        'dask': DaskWorker,
+    }
+
+    try:
+        return w[plugin]
+    except KeyError:
+        avail = "', '".join(w.keys())
+        raise KeyError("unknown plugin '{}'. available workers are '{}'.".format(plugin, avail))
+
 
 
 class Worker(object):
@@ -69,7 +87,10 @@ class ConcurrentFuturesWorker(Worker):
 
 class DaskWorker(Worker):
     def __init__(self):
+
+        from dask.distributed import Client
         from distributed.deploy.local import LocalCluster
+
         logger.debug("Initialize Dask Worker")
         #self.cluster = LocalCluster()
         self.client = Client()  #self.cluster)

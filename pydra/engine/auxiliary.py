@@ -1,7 +1,10 @@
-import pdb
-import inspect, os
+"""Auxiliary elements."""
+import inspect
+import os
 import logging
+
 from nipype import Node as Nipype1Node
+
 logger = logging.getLogger('nipype.workflow')
 
 # dj: might create a new class or move to State
@@ -17,36 +20,36 @@ def mapper2rpn(mapper, other_mappers=None):
 
 def _ordering(el, i, output_mapper, current_sign=None, other_mappers=None):
     """ Used in the mapper2rpn to get a proper order of fields and signs. """
-    if type(el) is tuple:
+    if isinstance(el, tuple):
         # checking if the mapper dont contain mapper from previous nodes, i.e. has str "_NA", etc.
-        if type(el[0]) is str and el[0].startswith("_"):
+        if isinstance(el[0], str) and el[0].startswith("_"):
             node_nm = el[0][1:]
             if node_nm not in other_mappers:
                 raise Exception("can't ask for mapper from {}".format(node_nm))
             mapper_mod = change_mapper(mapper=other_mappers[node_nm], name=node_nm)
             el = (mapper_mod, el[1])
-        if type(el[1]) is str and el[1].startswith("_"):
+        if isinstance(el[1], str) and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_mappers:
                 raise Exception("can't ask for mapper from {}".format(node_nm))
             mapper_mod = change_mapper(mapper=other_mappers[node_nm], name=node_nm)
             el = (el[0], mapper_mod)
         _iterate_list(el, ".", other_mappers, output_mapper=output_mapper)
-    elif type(el) is list:
-        if type(el[0]) is str and el[0].startswith("_"):
+    elif isinstance(el, list):
+        if isinstance(el[0], str) and el[0].startswith("_"):
             node_nm = el[0][1:]
             if node_nm not in other_mappers:
                 raise Exception("can't ask for mapper from {}".format(node_nm))
             mapper_mod = change_mapper(mapper=other_mappers[node_nm], name=node_nm)
             el[0] = mapper_mod
-        if type(el[1]) is str and el[1].startswith("_"):
+        if isinstance(el[1], str) and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_mappers:
                 raise Exception("can't ask for mapper from {}".format(node_nm))
             mapper_mod = change_mapper(mapper=other_mappers[node_nm], name=node_nm)
             el[1] = mapper_mod
         _iterate_list(el, "*", other_mappers, output_mapper=output_mapper)
-    elif type(el) is str:
+    elif isinstance(el, str):
         output_mapper.append(el)
     else:
         raise Exception("mapper has to be a string, a tuple or a list")
@@ -71,7 +74,7 @@ def mapping_axis(state_inputs, mapper_rpn):
     stack = []
     current_axis = None
     current_shape = None
-    #pdb.set_trace()
+
     for el in mapper_rpn:
         if el == ".":
             right = stack.pop()
@@ -208,7 +211,7 @@ class FunctionInterface(object):
 
     def __init__(self, function, output_nm, out_read=False, input_map=None):
         self.function = function
-        if type(output_nm) is list:
+        if isinstance(output_nm, list):
             self._output_nm = output_nm
         else:
             raise Exception("output_nm should be a list")
@@ -231,7 +234,7 @@ class FunctionInterface(object):
                     raise Exception("no {} in the input dictionary".format(key_inp))
         fun_output = self.function(**input)
         logger.debug("Function Interf, input={}, fun_out={}".format(input, fun_output))
-        if type(fun_output) is tuple:
+        if isinstance(fun_output, tuple):
             if len(self._output_nm) == len(fun_output):
                 for i, out in enumerate(fun_output):
                     self.output[self._output_nm[i]] = out

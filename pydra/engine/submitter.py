@@ -1,9 +1,10 @@
-import os, pdb, time
 from copy import deepcopy
-
-from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
-
 import logging
+import os
+import time
+
+from pydra.engine.workers import _get_worker
+
 logger = logging.getLogger('nipype.workflow')
 
 
@@ -13,16 +14,8 @@ class Submitter(object):
         self.plugin = plugin
         self.node_line = []
         self._to_finish = []  # used only for wf
-        if self.plugin == "mp":
-            self.worker = MpWorker()
-        elif self.plugin == "serial":
-            self.worker = SerialWorker()
-        elif self.plugin == "dask":
-            self.worker = DaskWorker()
-        elif self.plugin == "cf":
-            self.worker = ConcurrentFuturesWorker()
-        else:
-            raise Exception("plugin {} not available".format(self.plugin))
+
+        self.worker = _get_worker(plugin=plugin)
 
         if hasattr(runnable, 'interface'):  # a node
             self.node = runnable

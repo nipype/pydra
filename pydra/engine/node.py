@@ -1,19 +1,38 @@
-"""Basic compute graph elements"""
+"""Basic compute graph elements."""
 import os
 import itertools
-import pdb
+
 import networkx as nx
 import numpy as np
 
 from nipype.utils.filemanip import loadpkl
 from nipype import logging
 
-from . import state
-from . import auxiliary as aux
+from pydra.engine import state
+from pydra.engine import auxiliary as aux
+
 logger = logging.getLogger('nipype.workflow')
 
 
 class NodeBase(object):
+    """A base structure for nodes in the computational graph (i.e. both
+    ``Node`` and ``Workflow``).
+
+    Parameters
+    ----------
+    name : str
+        Unique name of this node
+    mapper : str or (list or tuple of (str or mappers))
+        Whether inputs should be mapped at run time
+    inputs : dictionary (input name, input value or list of values)
+        States this node's input names
+    other_mappers : dictionary (name of a node, mapper of the node)
+        information about other nodes' mappers from workflow (in case the mapper
+        from previous node is used)
+    write_state : True
+        flag that says if value of state input should be written out to output
+        and directories (otherwise indices are used)
+    """
     def __init__(self,
                  name,
                  mapper=None,
@@ -22,28 +41,7 @@ class NodeBase(object):
                  write_state=True,
                  *args,
                  **kwargs):
-        """A base structure for nodes in the computational graph (i.e. both
-        ``Node`` and ``Workflow``).
 
-        Parameters
-        ----------
-
-        name : str
-            Unique name of this node
-        mapper : str or (list or tuple of (str or mappers))
-            Whether inputs should be mapped at run time
-        inputs : dictionary (input name, input value or list of values)
-            States this node's input names
-        other_mappers : dictionary (name of a node, mapper of the node)
-            information about other nodes' mappers from workflow (in case the mapper
-            from previous node is used)
-        write_state : True
-            flag that says if value of state input should be written out to output
-            and directories (otherwise indices are used)
-
-
-
-        """
         self.name = name
         self._inputs = {}
         self._state_inputs = {}
@@ -218,9 +216,9 @@ class NodeBase(object):
         raise NotImplementedError
 
     def _dict_tuple2list(self, container):
-        if type(container) is dict:
+        if isinstance(container, dict):
             val_l = [val for (_, val) in container.items()]
-        elif type(container) is tuple:
+        elif isinstance(container, tuple):
             val_l = [container]
         else:
             raise Exception("{} has to be dict or tuple".format(container))
@@ -569,7 +567,7 @@ class Workflow(NodeBase):
                     for val in val_l:
                         #TODO: I think that val shouldn't be dict here...
                         # TMP solution
-                        if type(val) is dict:
+                        if isinstance(val, dict):
                             val = [v for k, v in val.items()][0]
                         with open(val[1]) as fout:
                             logger.debug('Reading Results: file={}, st_dict={}'.format(
@@ -736,11 +734,11 @@ def is_function(obj):
 
 
 def is_function_interface(obj):
-    return type(obj) is aux.FunctionInterface
+    return isinstance(obj, aux.FunctionInterface)
 
 
 def is_current_interface(obj):
-    return type(obj) is aux.CurrentInterface
+    return isinstance(obj, aux.CurrentInterface)
 
 
 def is_nipype_interface(obj):
@@ -748,8 +746,8 @@ def is_nipype_interface(obj):
 
 
 def is_node(obj):
-    return type(obj) is Node
+    return isinstance(obj, Node)
 
 
 def is_workflow(obj):
-    return type(obj) is Workflow
+    return isinstance(obj, Workflow)

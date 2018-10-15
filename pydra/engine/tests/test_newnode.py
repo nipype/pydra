@@ -1,13 +1,15 @@
+import os
+import sys
+import time
+
 from nipype.utils.filemanip import save_json, makedirs, to_str
 from nipype.interfaces import fsl
-
-from ..node import Node, Workflow
-from ..auxiliary import FunctionInterface, CurrentInterface
-from ..submitter import Submitter
-
-import sys, time, os
 import numpy as np
-import pytest, pdb
+import pytest
+
+from pydra.engine.node import Node, Workflow
+from pydra.engine.auxiliary import FunctionInterface, CurrentInterface
+from pydra.engine.submitter import Submitter
 
 python35_only = pytest.mark.skipif(sys.version_info < (3, 5), reason="requires Python>3.4")
 
@@ -25,8 +27,7 @@ def change_dir(request):
     request.addfinalizer(move2orig)
 
 
-Plugins = ["serial"]
-Plugins = ["serial", "mp", "cf", "dask"]
+plugins = ["serial", "mp", "cf", "dask"]
 
 
 def fun_addtwo(a):
@@ -101,7 +102,7 @@ def test_node_4a():
     assert nn.state.state_values([1]) == {"NA.a": 5}
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_node_5(plugin, change_dir):
     """Node with interface and inputs, no mapper, running interface"""
@@ -130,7 +131,7 @@ def test_node_5(plugin, change_dir):
         assert nn.result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_node_6(plugin, change_dir):
     """Node with interface, inputs and the simplest mapper, running interface"""
@@ -157,7 +158,7 @@ def test_node_6(plugin, change_dir):
         assert nn.result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_node_7(plugin, change_dir):
     """Node with interface, inputs and scalar mapper, running interface"""
@@ -186,7 +187,7 @@ def test_node_7(plugin, change_dir):
         assert nn.result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_node_8(plugin, change_dir):
     """Node with interface, inputs and vector mapper, running interface"""
@@ -244,7 +245,7 @@ def test_workflow_0(plugin="serial"):
     assert len(wf.graph.nodes) == 1
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_1(plugin, change_dir):
     """workflow with one node with a mapper"""
@@ -267,7 +268,7 @@ def test_workflow_1(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_2(plugin, change_dir):
     """workflow with two nodes, second node without mapper"""
@@ -308,7 +309,7 @@ def test_workflow_2(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_2a(plugin, change_dir):
     """workflow with two nodes, second node with a scalar mapper"""
@@ -350,7 +351,7 @@ def test_workflow_2a(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_2b(plugin):
     """workflow with two nodes, second node with a vector mapper"""
@@ -407,7 +408,7 @@ def test_workflow_2b(plugin):
 # using add method to add nodes
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_3(plugin, change_dir):
     """using add(node) method"""
@@ -433,7 +434,7 @@ def test_workflow_3(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_3a(plugin, change_dir):
     """using add(interface) method"""
@@ -458,7 +459,7 @@ def test_workflow_3a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_3b(plugin, change_dir):
     """using add (function) method"""
@@ -481,7 +482,7 @@ def test_workflow_3b(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_4(plugin, change_dir):
     """ using add(node) method
@@ -523,7 +524,7 @@ def test_workflow_4(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_4a(plugin, change_dir):
     """ using add(node) method with kwarg arg to connect nodes (instead of wf.connect) """
@@ -564,7 +565,7 @@ def test_workflow_4a(plugin, change_dir):
 # using map after add method
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_5(plugin, change_dir):
     """using a map method for one node"""
@@ -589,7 +590,7 @@ def test_workflow_5(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_5a(plugin, change_dir):
     """using a map method for one node (using add and map in one chain)"""
@@ -612,7 +613,7 @@ def test_workflow_5a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_6(plugin, change_dir):
     """using a map method for two nodes (using last added node as default)"""
@@ -650,7 +651,7 @@ def test_workflow_6(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_6a(plugin, change_dir):
     """using a map method for two nodes (specifying the node)"""
@@ -689,7 +690,7 @@ def test_workflow_6a(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_6b(plugin, change_dir):
     """using a map method for two nodes (specifying the node), using kwarg arg instead of connect"""
@@ -729,7 +730,7 @@ def test_workflow_6b(plugin, change_dir):
 # tests for a workflow that have its own input
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_7(plugin, change_dir):
     """using inputs for workflow and connect_workflow"""
@@ -756,7 +757,7 @@ def test_workflow_7(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_7a(plugin, change_dir):
     """using inputs for workflow and kwarg arg in add (instead of connect)"""
@@ -780,7 +781,7 @@ def test_workflow_7a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_8(plugin, change_dir):
     """using inputs for workflow and connect_wf_input for the second node"""
@@ -821,7 +822,7 @@ def test_workflow_8(plugin, change_dir):
 # testing if _NA in mapper works, using interfaces in add
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_9(plugin, change_dir):
     """using add(interface) method and mapper from previous nodes"""
@@ -857,7 +858,7 @@ def test_workflow_9(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_10(plugin, change_dir):
     """using add(interface) method and scalar mapper from previous nodes"""
@@ -896,7 +897,7 @@ def test_workflow_10(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_10a(plugin, change_dir):
     """using add(interface) method and vector mapper from previous nodes"""
@@ -963,7 +964,7 @@ def test_workflow_10a(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_11(plugin, change_dir):
     """using add(interface) method and vector mapper from previous two nodes"""
@@ -1025,7 +1026,7 @@ def test_workflow_11(plugin, change_dir):
 # checking workflow.result
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_12(plugin, change_dir):
     """testing if wf.result works (the same workflow as in test_workflow_6)"""
@@ -1058,7 +1059,6 @@ def test_workflow_12(plugin, change_dir):
     key_sort = list(expected[0][0].keys())
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.result["NA_out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-    #pdb.set_trace()
     assert wf.is_complete
     for i, res in enumerate(expected):
         assert wf.result["NA_out"][i][0] == res[0]
@@ -1073,7 +1073,7 @@ def test_workflow_12(plugin, change_dir):
         assert wf.result["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_12a(plugin, change_dir):
     """testing if wf.result raises exceptione (the same workflow as in test_workflow_6)"""
@@ -1103,7 +1103,7 @@ def test_workflow_12a(plugin, change_dir):
 # tests for a workflow that have its own input and mapper
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_13(plugin, change_dir):
     """using inputs for workflow and connect_wf_input"""
@@ -1130,7 +1130,7 @@ def test_workflow_13(plugin, change_dir):
         assert wf.result["NA_out"][i][1][0][1] == res[1][0][1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_13a(plugin, change_dir):
     """using inputs for workflow and connect_wf_input (the node has 2 inputs)"""
@@ -1175,7 +1175,7 @@ def test_workflow_13a(plugin, change_dir):
             assert wf.result["NA_out"][i][1][j][1] == res[1][j][1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_13c(plugin, change_dir):
     """using inputs for workflow and connect_wf_input, using wf.map(mapper, inputs)"""
@@ -1199,7 +1199,7 @@ def test_workflow_13c(plugin, change_dir):
         assert wf.result["NA_out"][i][1][0][0] == res[1][0][0]
         assert wf.result["NA_out"][i][1][0][1] == res[1][0][1]
 
-    @pytest.mark.parametrize("plugin", Plugins)
+    @pytest.mark.parametrize("plugin", plugins)
     @python35_only
     def test_workflow_13b(plugin, change_dir):
         """using inputs for workflow and connect_wf_input, using wf.map(mapper)"""
@@ -1228,7 +1228,7 @@ def test_workflow_13c(plugin, change_dir):
 # workflow as a node
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_14(plugin, change_dir):
     """workflow with a workflow as a node (no mapper)"""
@@ -1254,7 +1254,7 @@ def test_workflow_14(plugin, change_dir):
         assert wf.result["wfa_out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_14a(plugin, change_dir):
     """workflow with a workflow as a node (no mapper, using connect_wf_input in wfa)"""
@@ -1285,7 +1285,7 @@ def test_workflow_14a(plugin, change_dir):
         assert wf.result["wfa_out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_14b(plugin, change_dir):
     """workflow with a workflow as a node (no mapper, using connect_wf_input in wfa and wf)"""
@@ -1314,7 +1314,7 @@ def test_workflow_14b(plugin, change_dir):
         assert wf.result["wfa_out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_15(plugin, change_dir):
     """workflow with a workflow as a node with mapper (like 14 but with a mapper)"""
@@ -1341,7 +1341,7 @@ def test_workflow_15(plugin, change_dir):
         assert wf.result["wfa_out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_16(plugin, change_dir):
     """workflow with two nodes, and one is a workflow (no mapper)"""
@@ -1386,7 +1386,7 @@ def test_workflow_16(plugin, change_dir):
         assert wf.result["NB_out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_workflow_16a(plugin, change_dir):
     """workflow with two nodes, and one is a workflow (with mapper)"""
@@ -1443,7 +1443,7 @@ def test_workflow_16a(plugin, change_dir):
 
 @pytest.mark.skipif(
     not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_current_node_1(change_dir, plugin):
     """Node with a current interface and inputs, no mapper, running interface"""
@@ -1468,7 +1468,7 @@ def test_current_node_1(change_dir, plugin):
 
 @pytest.mark.skipif(
     not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_current_node_2(change_dir, plugin):
     """Node with a current interface and mapper"""
@@ -1498,7 +1498,7 @@ def test_current_node_2(change_dir, plugin):
 
 @pytest.mark.skipif(
     not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_current_wf_1(change_dir, plugin):
     """Wf with a current interface, no mapper"""
@@ -1531,7 +1531,7 @@ def test_current_wf_1(change_dir, plugin):
 
 @pytest.mark.skipif(
     not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_current_wf_1a(change_dir, plugin):
     """Wf with a current interface, no mapper"""
@@ -1564,7 +1564,7 @@ def test_current_wf_1a(change_dir, plugin):
 
 @pytest.mark.skipif(
     not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_current_wf_1b(change_dir, plugin):
     """Wf with a current interface, no mapper; using wf.add(nipype CurrentInterface)"""
@@ -1595,7 +1595,7 @@ def test_current_wf_1b(change_dir, plugin):
 
 @pytest.mark.skipif(
     not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_current_wf_1c(change_dir, plugin):
     """Wf with a current interface, no mapper; using wf.add(nipype interface) """
@@ -1625,7 +1625,7 @@ def test_current_wf_1c(change_dir, plugin):
 
 @pytest.mark.skipif(
     not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_current_wf_2(change_dir, plugin):
     """Wf with a current interface and mapper"""
@@ -1664,7 +1664,7 @@ def test_current_wf_2(change_dir, plugin):
 
 @pytest.mark.skipif(
     not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
-@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.parametrize("plugin", plugins)
 @python35_only
 def test_current_wf_2a(change_dir, plugin):
     """Wf with a current interface and mapper"""

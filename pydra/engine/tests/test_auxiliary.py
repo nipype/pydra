@@ -1,4 +1,4 @@
-from .. import auxiliary as aux
+from pydra.engine import auxiliary as aux
 
 import numpy as np
 import pytest
