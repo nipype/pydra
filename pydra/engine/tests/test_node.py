@@ -1656,8 +1656,8 @@ def test_current_wf_2a(change_dir, plugin):
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     in_file_l = [
-        "/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
-        "/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"
+        str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"),
+        str(DS114_DIR / "sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz")
     ]
 
     nn = Node(
