@@ -32,7 +32,7 @@ def change_dir(request):
 name = "example"
 DEFAULT_MEMORY_MIN_GB = None
 # TODO, adding fields to inputs (subject_id)
-inputs = {
+INPUTS = {
     "subject_id":
     "sub-01",
     "output_spaces": ["fsaverage", "fsaverage5"],
@@ -68,7 +68,7 @@ def test_neuro(change_dir, plugin):
 
     wf = Workflow(
         name=name,
-        inputs=inputs,
+        inputs=INPUTS,
         workingdir="test_neuro_{}".format(plugin),
         write_state=False,
         wf_output_names=[("sampler", "out_file", "sampler_out"), ("targets", "out", "target_out")])
@@ -86,7 +86,7 @@ def test_neuro(change_dir, plugin):
 
     wf.add(runnable=select_target, name="targets", subject_id="subject_id", output_names=["out"],
            out_read=True, write_state=False)\
-        .map_node(mapper="space", inputs={"space": [space for space in inputs["output_spaces"]
+        .map_node(mapper="space", inputs={"space": [space for space in INPUTS["output_spaces"]
                                                if space.startswith("fs")]})
 
     # wf.add('rename_src', Rename(format_string='%(subject)s',
@@ -99,7 +99,7 @@ def test_neuro(change_dir, plugin):
                                 in_file="source_file",
                                 output_names=["out_file"],
            write_state=False)\
-        .map_node('subject', inputs={"subject": [space for space in inputs["output_spaces"]
+        .map_node('subject', inputs={"subject": [space for space in INPUTS["output_spaces"]
                                                if space.startswith("fs")]}) #TODO: now it's only one subject
 
     # wf.add('resampling_xfm',
