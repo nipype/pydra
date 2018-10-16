@@ -164,23 +164,14 @@ class NodeBase(object):
             ])
             if not from_node.mapper:
                 dir_nm_el_from = ""
-
-            if is_node(from_node) and is_current_interface(from_node.interface):
+            # TODO: do I need this if, what if this is wf?
+            if is_node(from_node):
                 out_from = self._reading_ci_output(
                     node=from_node, dir_nm_el=dir_nm_el_from, out_nm=from_socket)
                 if out_from:
                     inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
                 else:
-                    raise Exception("{} doesnt exist".format(file_from))
-            else:  # assuming here that I want to read the file (will not be used with the current interfaces)
-                file_from = os.path.join(from_node.workingdir, dir_nm_el_from,
-                                         from_socket + ".txt")
-                with open(file_from) as f:
-                    content = f.readline()
-                    try:
-                        inputs_dict["{}.{}".format(self.name, to_socket)] = eval(content)
-                    except NameError:
-                        inputs_dict["{}.{}".format(self.name, to_socket)] = content
+                    raise Exception("output from {} doesnt exist".format(from_node))
 
         return state_dict, inputs_dict
 
@@ -302,14 +293,6 @@ class Node(NodeBase):
         #    dir_nm_el = os.path.join(dir_join, dir_nm_el)
         return res
 
-    def _writting_results_tmp(self, state_dict, dir_nm_el, output):
-        """temporary method to write the results in the files (this is usually part of a interface)"""
-        if not self.mapper:
-            dir_nm_el = ''
-        os.makedirs(os.path.join(self.workingdir, dir_nm_el), exist_ok=True)
-        for key_out, val_out in output.items():
-            with open(os.path.join(self.workingdir, dir_nm_el, key_out + ".txt"), "w") as fout:
-                fout.write(str(val_out))
 
     def get_output(self):
         """collecting all outputs and updating self._output"""
