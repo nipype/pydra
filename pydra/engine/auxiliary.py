@@ -200,51 +200,6 @@ def _add_name(mlist, name):
     return mlist
 
 
-#Function interface
-
-
-class FunctionInterface(object):
-    """ A new function interface """
-
-    def __init__(self, function, output_nm, out_read=False, input_map=None):
-        self.function = function
-        if type(output_nm) is list:
-            self._output_nm = output_nm
-        else:
-            raise Exception("output_nm should be a list")
-        if not input_map:
-            self.input_map = {}
-        # TODO use signature
-        for key in inspect.getargspec(function)[0]:
-            if key not in self.input_map.keys():
-                self.input_map[key] = key
-        # flags if we want to read the txt file to save in node.output
-        self.out_read = out_read
-
-    def run(self, input):
-        self.output = {}
-        if self.input_map:
-            for (key_fun, key_inp) in self.input_map.items():
-                try:
-                    input[key_fun] = input.pop(key_inp)
-                except KeyError:
-                    raise Exception("no {} in the input dictionary".format(key_inp))
-        fun_output = self.function(**input)
-        logger.debug("Function Interf, input={}, fun_out={}".format(input, fun_output))
-        if type(fun_output) is tuple:
-            if len(self._output_nm) == len(fun_output):
-                for i, out in enumerate(fun_output):
-                    self.output[self._output_nm[i]] = out
-            else:
-                raise Exception("length of output_nm doesnt match length of the function output")
-        elif len(self._output_nm) == 1:
-            self.output[self._output_nm[0]] = fun_output
-        else:
-            raise Exception("output_nm doesnt match length of the function output")
-
-        return fun_output
-
-
 # want to use to access input as dot,
 # but it doesnt work since im using "." within names (using my old syntax with - also cant work)
 # https://stackoverflow.com/questions/2352181/how-to-use-a-dot-to-access-members-of-dictionary
