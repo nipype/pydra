@@ -63,6 +63,7 @@ LINKS_REQUIRES = []
 
 EXTRA_REQUIRES = {
     'tests': TESTS_REQUIRES,
+    'dev': TESTS_REQUIRES + ['yapf>=0.22'],
     'plugins': ['dask', 'distributed'],
 }
 

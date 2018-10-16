@@ -1,3 +1,9 @@
+import sys
+import os
+import time
+import numpy as np
+from pathlib import Path
+
 from nipype.utils.filemanip import save_json, makedirs, to_str
 from nipype.interfaces import fsl
 
@@ -5,9 +11,11 @@ from ..node import Node, Workflow
 from ..auxiliary import FunctionInterface, CurrentInterface
 from ..submitter import Submitter
 
-import sys, time, os
-import numpy as np
-import pytest, pdb
+import pytest
+import pdb
+
+TEST_DATA_DIR = Path(os.getenv('PYDRA_TEST_DATA', '/nonexistent/path'))
+DS114_DIR = TEST_DATA_DIR / 'ds000114'
 
 python35_only = pytest.mark.skipif(sys.version_info < (3, 5), reason="requires Python>3.4")
 
@@ -1441,8 +1449,7 @@ def test_workflow_16a(plugin, change_dir):
 # testing CurrentInterface that is a temporary wrapper for current interfaces
 
 
-@pytest.mark.skipif(
-    not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_node_1(change_dir, plugin):
@@ -1451,10 +1458,7 @@ def test_current_node_1(change_dir, plugin):
 
     nn = Node(
         name="NA",
-        inputs={
-            "in_file":
-            "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"
-        },
+        inputs={"in_file": str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")},
         interface=interf_bet,
         workingdir="test_cnd1_{}".format(plugin),
         output_names=["out_file"])
@@ -1466,8 +1470,7 @@ def test_current_node_1(change_dir, plugin):
     assert "out_file" in nn.output.keys()
 
 
-@pytest.mark.skipif(
-    not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_node_2(change_dir, plugin):
@@ -1475,8 +1478,8 @@ def test_current_node_2(change_dir, plugin):
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     in_file_l = [
-        "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
-        "/Users/dorota/nipype_workshop/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"
+        str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"),
+        str(DS114_DIR / "sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz")
     ]
     nn = Node(
         name="NA",
@@ -1496,8 +1499,7 @@ def test_current_node_2(change_dir, plugin):
     assert "NA.in_file:1" in nn.output["out_file"].keys()
 
 
-@pytest.mark.skipif(
-    not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1(change_dir, plugin):
@@ -1506,10 +1508,7 @@ def test_current_wf_1(change_dir, plugin):
 
     nn = Node(
         name="fsl",
-        inputs={
-            "in_file":
-            "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"
-        },
+        inputs={"in_file": str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")},
         interface=interf_bet,
         workingdir="nn",
         output_names=["out_file"],
@@ -1529,8 +1528,7 @@ def test_current_wf_1(change_dir, plugin):
     assert "fsl_out" in wf.output.keys()
 
 
-@pytest.mark.skipif(
-    not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1a(change_dir, plugin):
@@ -1539,10 +1537,7 @@ def test_current_wf_1a(change_dir, plugin):
 
     nn = Node(
         name="fsl",
-        inputs={
-            "in_file":
-            "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"
-        },
+        inputs={"in_file": str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")},
         interface=interf_bet,
         workingdir="nn",
         output_names=["out_file"],
@@ -1562,8 +1557,7 @@ def test_current_wf_1a(change_dir, plugin):
     assert "fsl_out" in wf.output.keys()
 
 
-@pytest.mark.skipif(
-    not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1b(change_dir, plugin):
@@ -1581,10 +1575,7 @@ def test_current_wf_1b(change_dir, plugin):
         workingdir="nn",
         output_names=["out_file"],
         write_state=False,
-        inputs={
-            "in_file":
-            "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"
-        })
+        inputs={"in_file": str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")})
 
     sub = Submitter(plugin=plugin, runnable=wf)
     sub.run()
@@ -1593,8 +1584,7 @@ def test_current_wf_1b(change_dir, plugin):
     assert "fsl_out" in wf.output.keys()
 
 
-@pytest.mark.skipif(
-    not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1c(change_dir, plugin):
@@ -1611,10 +1601,7 @@ def test_current_wf_1c(change_dir, plugin):
         workingdir="nn",
         output_names=["out_file"],
         write_state=False,
-        inputs={
-            "in_file":
-            "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"
-        })
+        inputs={"in_file": str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz")})
 
     sub = Submitter(plugin=plugin, runnable=wf)
     sub.run()
@@ -1623,8 +1610,7 @@ def test_current_wf_1c(change_dir, plugin):
     assert "fsl_out" in wf.output.keys()
 
 
-@pytest.mark.skipif(
-    not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_2(change_dir, plugin):
@@ -1632,8 +1618,8 @@ def test_current_wf_2(change_dir, plugin):
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     in_file_l = [
-        "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
-        "/Users/dorota/nipype_workshop/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"
+        str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"),
+        str(DS114_DIR / "sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz")
     ]
 
     nn = Node(
@@ -1662,8 +1648,7 @@ def test_current_wf_2(change_dir, plugin):
     assert 'cw2.in_file:1' in wf.output["fsl_out"].keys()
 
 
-@pytest.mark.skipif(
-    not os.path.exists("/Users/dorota/nipype_workshop/data/ds000114"), reason="adding data")
+@pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_2a(change_dir, plugin):
@@ -1671,8 +1656,8 @@ def test_current_wf_2a(change_dir, plugin):
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     in_file_l = [
-        "/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
-        "/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"
+        str(DS114_DIR / "sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz"),
+        str(DS114_DIR / "sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz")
     ]
 
     nn = Node(
