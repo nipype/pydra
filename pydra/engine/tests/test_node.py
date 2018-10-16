@@ -160,8 +160,8 @@ def test_node_6(plugin, change_dir):
     nn.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
 
     for i, res in enumerate(expected):
-        assert nn.result["out"][i][1][0] == res[0]
-        assert nn.result["out"][i][1][1] == res[1]
+        assert nn.result["out"][i][0] == res[0]
+        assert nn.result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -189,8 +189,8 @@ def test_node_7(plugin, change_dir):
     nn.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
 
     for i, res in enumerate(expected):
-        assert nn.result["out"][i][1][0] == res[0]
-        assert nn.result["out"][i][1][1] == res[1]
+        assert nn.result["out"][i][0] == res[0]
+        assert nn.result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -218,8 +218,8 @@ def test_node_8(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     nn.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert nn.result["out"][i][1][0] == res[0]
-        assert nn.result["out"][i][1][1] == res[1]
+        assert nn.result["out"][i][0] == res[0]
+        assert nn.result["out"][i][1] == res[1]
 
 
 # tests for workflows
@@ -257,8 +257,8 @@ def test_workflow_1(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -288,8 +288,8 @@ def test_workflow_2(plugin, change_dir):
     expected_A.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_A):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     # results from NB keeps the "state input" from the first node
     # two elements as in NA
@@ -298,14 +298,14 @@ def test_workflow_2(plugin, change_dir):
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
     #output of the wf
     wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.result["out"][i][1][0] == res[0]
-        assert wf.result["out"][i][1][1] == res[1]
+        assert wf.result["out"][i][0] == res[0]
+        assert wf.result["out"][i][1] == res[1]
 
 
 
@@ -337,8 +337,8 @@ def test_workflow_2a(plugin, change_dir):
     expected_A.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_A):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     # two elements (scalar mapper)
     expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
@@ -346,14 +346,14 @@ def test_workflow_2a(plugin, change_dir):
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
     # output of the wf
     wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.result["out"][i][1][0] == res[0]
-        assert wf.result["out"][i][1][1] == res[1]
+        assert wf.result["out"][i][0] == res[0]
+        assert wf.result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -383,8 +383,8 @@ def test_workflow_2b(plugin):
     expected_A.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_A):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     # four elements (outer product)
     expected_B = [({"NA.a": 3, "NB.c": 1}, 6), ({"NA.a": 3, "NB.c": 2}, 7),
@@ -393,14 +393,14 @@ def test_workflow_2b(plugin):
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
     # output of the wf
     wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.result["out"][i][1][0] == res[0]
-        assert wf.result["out"][i][1][1] == res[1]
+        assert wf.result["out"][i][0] == res[0]
+        assert wf.result["out"][i][1] == res[1]
 
 
 # using add method to add nodes
@@ -426,8 +426,8 @@ def test_workflow_3(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -450,8 +450,8 @@ def test_workflow_3a(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -474,8 +474,8 @@ def test_workflow_3b(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -505,16 +505,16 @@ def test_workflow_4(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -542,16 +542,16 @@ def test_workflow_4a(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
 # using map after add method
@@ -577,8 +577,8 @@ def test_workflow_5(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -599,8 +599,8 @@ def test_workflow_5a(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -627,16 +627,16 @@ def test_workflow_6(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -664,16 +664,16 @@ def test_workflow_6a(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -698,16 +698,16 @@ def test_workflow_6b(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
 # tests for a workflow that have its own input
@@ -735,8 +735,8 @@ def test_workflow_7(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -758,8 +758,8 @@ def test_workflow_7a(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -785,16 +785,16 @@ def test_workflow_8(plugin, change_dir):
     expected_A.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_A):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     expected_B = [({"NA.a": 3, "NB.c": 10}, 15), ({"NA.a": 5, "NB.c": 10}, 17)]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
 # testing if _NA in mapper works, using interfaces in add
@@ -820,16 +820,16 @@ def test_workflow_9(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -853,16 +853,16 @@ def test_workflow_10(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     expected_B = [({"NA.b": 3, "NA.c": 0, "NB.c": 2}, 5), ({"NA.b": 5, "NA.c": 10, "NB.c": 1}, 16)]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -888,8 +888,8 @@ def test_workflow_10a(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     expected_B = [({"NA.b": 3, "NA.c": 0, "NB.c": 2}, 5),
                   ({"NA.b": 3, "NA.c": 10, "NB.c": 1}, 14),
@@ -899,8 +899,8 @@ def test_workflow_10a(plugin, change_dir):
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][1][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1][1] == res[1]
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
 # TODO: this test started sometimes failing for mp and cf
@@ -927,8 +927,8 @@ def test_workflow_11(plugin, change_dir):
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][1][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1][1] == res[1]
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
 
     expected_C = [({"NA.b": 3,"NA.c": 0,"NB.a": 1}, 6),
                   ({"NA.b": 3,"NA.c": 0,"NB.a": 2}, 7),
@@ -938,8 +938,8 @@ def test_workflow_11(plugin, change_dir):
     expected_C.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[2].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_C):
-        assert wf.nodes[2].result["out"][i][1][0] == res[0]
-        assert wf.nodes[2].result["out"][i][1][1] == res[1]
+        assert wf.nodes[2].result["out"][i][0] == res[0]
+        assert wf.nodes[2].result["out"][i][1] == res[1]
 
 
 # checking workflow.result
@@ -973,19 +973,19 @@ def test_workflow_12(plugin, change_dir):
     key_sort = list(expected[0][0].keys())
     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.result["NA_out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-    #pdb.set_trace()
+
     assert wf.is_complete
     for i, res in enumerate(expected):
-        assert wf.result["NA_out"][i][1][0] == res[0]
-        assert wf.result["NA_out"][i][1][1] == res[1]
+        assert wf.result["NA_out"][i][0] == res[0]
+        assert wf.result["NA_out"][i][1] == res[1]
 
     expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        assert wf.result["out"][i][1][0] == res[0]
-        assert wf.result["out"][i][1][1] == res[1]
+        assert wf.result["out"][i][0] == res[0]
+        assert wf.result["out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1059,8 +1059,8 @@ def test_workflow_13a(plugin, change_dir):
     for i, res in enumerate(expected):
         assert wf.result["NA_out"][i][0] == res[0]
         for j in range(len(res[1])):
-            assert wf.result["NA_out"][i][1][j][1][0] == res[1][j][0]
-            assert wf.result["NA_out"][i][1][j][1][1] == res[1][j][1]
+            assert wf.result["NA_out"][i][1][j][0] == res[1][j][0]
+            assert wf.result["NA_out"][i][1][j][1] == res[1][j][1]
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
@@ -1133,7 +1133,6 @@ def test_workflow_14(plugin, change_dir):
 
     assert wf.is_complete
     expected = [({"NA.a": 3}, 5)]
-    # TODO (res): think if this is a correct format of wf.result (compare to 15)
     for i, res in enumerate(expected):
         assert wf.result["wfa_out"][i][0] == res[0]
         assert wf.result["wfa_out"][i][1] == res[1]
@@ -1210,8 +1209,8 @@ def test_workflow_15(plugin, change_dir):
     assert wf.is_complete
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
-        assert wf.result["wfa_out"][i][1][0] == res[0]
-        assert wf.result["wfa_out"][i][1][1] == res[1]
+        assert wf.result["wfa_out"][i][0] == res[0]
+        assert wf.result["wfa_out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1286,10 +1285,9 @@ def test_workflow_16a(plugin, change_dir):
 
     expected_A = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected_A):
-        assert wf.result["NA_out"][i][1][0] == res[0]
-        assert wf.result["NA_out"][i][1][1] == res[1]
+        assert wf.result["NA_out"][i][0] == res[0]
+        assert wf.result["NA_out"][i][1] == res[1]
 
-    # TODO (res): it's inconsistent with NA_out!!!
     # TODO (res): the naming rememebrs only the node, doesnt remember that came from NA...
     # the naming should have names with workflows??
     expected_B = [({"NB.b": 5, "NB.c": 10}, 15), ({"NB.b": 7, "NB.c": 10}, 17)]

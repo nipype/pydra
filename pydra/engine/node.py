@@ -322,9 +322,8 @@ class Node(NodeBase):
                     state_dict = self.state.state_ind(ind)
                 dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(state_dict.items())])
                 if self.mapper:
-                    #TODO (res): should be ... = (state_dict, self._reading_ci_output(dir...) ??
                     self._output[key_out][dir_nm_el] = \
-                        (state_dict, (state_dict, self._reading_ci_output(dir_nm_el=dir_nm_el, out_nm=key_out)))
+                        (state_dict, self._reading_ci_output(dir_nm_el=dir_nm_el, out_nm=key_out))
                 else:
                     self._output[key_out] = \
                         (state_dict, self._reading_ci_output(dir_nm_el="", out_nm=key_out))
@@ -521,12 +520,6 @@ class Workflow(NodeBase):
                 else:
                     val_l = self._dict_tuple2list(self.output[key_out])
                     for val in val_l:
-                        # TODO: do i still neeed it?
-                        #TODO: I think that val shouldn't be dict here...
-                        # TMP solution
-                        if type(val) is dict:
-                            pdb.set_trace()
-                            val = [v for k, v in val.items()][0]
                         self._result[key_out].append(val)
 
 
