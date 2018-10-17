@@ -1,5 +1,6 @@
 """Abstract base classes for compute objects"""
 
+import os
 
 class Interface():
 
@@ -41,12 +42,12 @@ class Interface():
         """Configuration objects for parameters of the interface"""
         return self.configs_
 
-    def run_interface(self):
+    def run_interface(self, **kwargs):
         output_dict = None
         return output_dict
 
     def __call__(self, *args, **kwargs):
-        return self.run_interface(*args, **kwargs)
+        return self.run_interface(**kwargs)
 
     def from_spec(self, path):
         """Create interface from a spec
@@ -67,6 +68,7 @@ class Interface():
 class Task(Interface):
 
     execution_environment_ = None
+    cache_dir_ = None
 
     @property
     def result(self):
@@ -75,19 +77,29 @@ class Task(Interface):
         else:
             load_result()
 
-    def run(self, **kwargs):
-        if not cache_available():
+    @property
+    def hashval(self):
+        return compute_hash(self.inputs)
+
+    def output_dir(self):
+        return os.path.join(self.cache_dir_, self.hashval)
+
+    def run(self, cache_locations=None, **kwargs):
+        if not cache_available(self, cache_locations):
             env = create_environment(self.execution_environment_) # includes isolation of inputs
             id = record_provenance(self, env)
             resources = start_monitor()
             outputs = None
             try:
-                outputs = self(**kwargs)
+                outputs = self.run_interface(**kwargs)
                 resources = stop_monitor()
             except Exception as e:
                 record_error(self, e)
             update_provenance(id, outputs, resources)
         return self.result
+
+    def __call__(self, **kwargs):
+        return self.run(**kwargs)
 
 
 class FunctionTask(Task):
