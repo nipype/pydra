@@ -69,25 +69,37 @@ def mapping_axis(state_inputs, mapper_rpn):
     """Having inputs and mapper (in rpn notation), functions returns the axes of output for every input."""
     axis_for_input = {}
     stack = []
+    # to remember current axis
     current_axis = None
-    current_shape = None
-    #pdb.set_trace()
+    # to remember shapes and axes for partial results
+    out_shape = {}
+    out_axes = {}
+    # to remember imput names for partial results
+    out_inputname = {}
     for el in mapper_rpn:
+        # scalar mapper
         if el == ".":
             right = stack.pop()
             left = stack.pop()
-            if left == "OUT":
-                if state_inputs[
-                        right].shape == current_shape:  #todo:should we allow for one-element array?
-                    axis_for_input[right] = current_axis
+            # when both, left and right, are already products of partial mapper
+            if left.startswith("OUT") and right.startswith("OUT"):
+                if out_shape[left] != out_shape[right]:
+                    raise Exception("arrays for scalar operations should have the same size")
+                current_inputs = out_inputname[left] + out_inputname[right]
+            # when left is already product of partial mapper
+            elif left.startswith("OUT"):
+                if state_inputs[right].shape == out_shape[left]:  #todo:should we allow for one-element array?
+                    axis_for_input[right] = out_axes[left]
                 else:
                     raise Exception("arrays for scalar operations should have the same size")
-
-            elif right == "OUT":
-                if state_inputs[left].shape == current_shape:
-                    axis_for_input[left] = current_axis
+                current_inputs = out_inputname[left] + [right]
+            # when right is already product of partial mapper
+            elif right.startswith("OUT"):
+                if state_inputs[left].shape == out_shape[right]:
+                    axis_for_input[left] = out_axes[right]
                 else:
                     raise Exception("arrays for scalar operations should have the same size")
+                current_inputs = out_inputname[right] + [left]
 
             else:
                 if state_inputs[right].shape == state_inputs[left].shape:
@@ -95,34 +107,54 @@ def mapping_axis(state_inputs, mapper_rpn):
                     current_shape = state_inputs[left].shape
                     axis_for_input[left] = current_axis
                     axis_for_input[right] = current_axis
+                    current_inputs = [left, right]
                 else:
                     raise Exception("arrays for scalar operations should have the same size")
+            # adding partial output to the stack
+            stack.append("OUT_{}".format(len(out_shape)))
+            out_inputname["OUT_{}".format(len(out_shape))] = current_inputs
+            out_axes["OUT_{}".format(len(out_shape))] = current_axis
+            out_shape["OUT_{}".format(len(out_shape))] = current_shape
 
-            stack.append("OUT")
-
+        # outer mapper
         elif el == "*":
             right = stack.pop()
             left = stack.pop()
-            if left == "OUT":
+            # when both, left and right, are already products of partial mapper
+            if left.startswith("OUT") and right.startswith("OUT"):
+                # changing all axis_for_input for inputs from right
+                for key in out_inputname[right]:
+                    axis_for_input[key] = [
+                        i + len(out_axes[left]) for i in axis_for_input[key]
+                    ]
+                current_axis = out_axes[left] +\
+                               [i + (out_axes[left][-1] + 1) for i in out_axes[right]]
+                current_shape = tuple([i for i in out_shape[left] + out_shape[right]])
+                current_inputs = out_inputname[left] + out_inputname[right]
+            # when left is already product of partial mapper
+            elif left.startswith("OUT"):
                 axis_for_input[right] = [
-                    i + 1 + current_axis[-1] for i in range(state_inputs[right].ndim)
+                    i + (out_axes[left][-1] + 1) for i in range(state_inputs[right].ndim)
                 ]
-                current_axis = current_axis + axis_for_input[right]
-                current_shape = tuple([i for i in current_shape + state_inputs[right].shape])
-            elif right == "OUT":
-                for key in axis_for_input:
+                current_axis = out_axes[left] + axis_for_input[right]
+                current_shape = tuple([i for i in out_shape[left] + state_inputs[right].shape])
+                current_inputs = out_inputname[left] + [right]
+            # when right is already product of partial mapper
+            elif right.startswith("OUT"):
+                # changing all axis_for_input for inputs from right
+                for key in out_inputname[right]:
                     axis_for_input[key] = [
                         i + state_inputs[left].ndim for i in axis_for_input[key]
                     ]
-
                 axis_for_input[left] = [
-                    i - len(current_shape) + current_axis[-1] + 1
+                    i - len(out_shape[right]) + (out_axes[right][-1] + 1)
                     for i in range(state_inputs[left].ndim)
                 ]
-                current_axis = current_axis + [
-                    i + 1 + current_axis[-1] for i in range(state_inputs[left].ndim)
+                current_axis = out_axes[right] + [
+                    i + (out_axes[right][-1] + 1) for i in range(state_inputs[left].ndim)
                 ]
-                current_shape = tuple([i for i in state_inputs[left].shape + current_shape])
+                current_shape = tuple([i for i in state_inputs[left].shape + out_shape[right]])
+                current_inputs = out_inputname[right] + [left]
             else:
                 axis_for_input[left] = list(range(state_inputs[left].ndim))
                 axis_for_input[right] = [
@@ -131,8 +163,14 @@ def mapping_axis(state_inputs, mapper_rpn):
                 current_axis = axis_for_input[left] + axis_for_input[right]
                 current_shape = tuple(
                     [i for i in state_inputs[left].shape + state_inputs[right].shape])
-            stack.append("OUT")
+                current_inputs = [left, right]
+            # adding partial output to the stack
+            stack.append("OUT_{}".format(len(out_shape)))
+            out_inputname["OUT_{}".format(len(out_shape))] = current_inputs
+            out_axes["OUT_{}".format(len(out_shape))] = current_axis
+            out_shape["OUT_{}".format(len(out_shape))] = current_shape
 
+        # just a name of input
         else:
             stack.append(el)
 
@@ -140,7 +178,7 @@ def mapping_axis(state_inputs, mapper_rpn):
         pass
     elif len(stack) > 1:
         raise Exception("exception from mapping_axis")
-    elif stack[0] != "OUT":
+    elif not stack[0].startswith("OUT"):
         current_axis = [i for i in range(state_inputs[stack[0]].ndim)]
         axis_for_input[stack[0]] = current_axis
 
