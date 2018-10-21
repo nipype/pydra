@@ -9,7 +9,7 @@ from . import auxiliary as aux
 class State(object):
     def __init__(self, node_name, mapper=None, other_mappers=None, combiner=None):
         self._mapper = mapper
-        self._combiner = combiner
+        self.combiner = combiner
         self.node_name = node_name
         if self._mapper:
             # changing mapper (as in rpn), so I can read from left to right
@@ -42,7 +42,7 @@ class State(object):
         self._input_for_axis, self._shape = aux.converting_axis2input(
             self.state_inputs, self._axis_for_input, self._ndim)
 
-        if self._combiner:
+        if self.combiner:
             self._prepare_combining()
 
         # list of all possible indexes in each dim, will be use to iterate
@@ -72,7 +72,7 @@ class State(object):
     def _prepare_combining(self):
         self.inp_to_remove = []
         axes_to_remove = []
-        for comb_el in self._combiner:
+        for comb_el in self.combiner:
             self.inp_to_remove.append(comb_el)
             axes = self._axis_for_input[comb_el]
             for ax in axes:

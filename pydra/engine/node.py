@@ -59,13 +59,12 @@ class NodeBase(object):
             mapper = aux.change_mapper(mapper, self.name)
         self._mapper = mapper
         self._other_mappers = other_mappers
+        # create state (takes care of mapper, connects inputs with axes, so we can ask for specifc element)
+        self._state = state.State(
+            mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
         self._combiner = None
         if combiner:
             self.combiner = combiner
-        # create state (takes care of mapper, connects inputs with axes, so we can ask for specifc element)
-        self._state = state.State(
-            mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers,
-            combiner=self._combiner)
         self._output = {}
         self._result = {}
         # flag that says if the node/wf is ready to run (has all input)
@@ -112,6 +111,7 @@ class NodeBase(object):
         elif type(combiner) is not list:
             raise Exception("combiner should be a string or a list")
         self._combiner = aux.change_mapper(combiner, self.name)
+        self.state.combiner = self._combiner
         for el in self._combiner:
             if not aux.search_mapper(el, self.mapper):
                 raise Exception("element {} of combiner is not found in the mapper {}".format(

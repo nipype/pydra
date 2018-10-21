@@ -33,7 +33,7 @@ def change_dir(request):
 
 
 Plugins = ["serial"]
-#Plugins = ["serial", "mp", "cf", "dask"]
+Plugins = ["serial", "mp", "cf", "dask"]
 
 
 def fun_addtwo(a):
@@ -194,7 +194,7 @@ def test_node_combine_6b():
     assert str(excinfo.value) == "combiner is already set"
 
 
-def test_node_combine_6b():
+def test_node_combine_6c():
     """Node with interface, inputs, combiner set by combine method (no mapper)"""
     nn = Node(name="NA", interface=interf_addtwo, inputs={"a": [3, 5]})
     with pytest.raises(Exception) as excinfo:
@@ -242,7 +242,7 @@ def test_node_combine_9():
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_node_combine_10(plugin, change_dir):
-    """Node with interface, inputs and the simplest mapper, running interface"""
+    """simplest combiner in init, running the node"""
     nn = Node(name="NA", interface=interf_addtwo, workingdir="test_nd10_{}".format(plugin),
               output_names=["out"], mapper="a", combiner="a", inputs={"a": [3, 5]})
 
@@ -263,6 +263,61 @@ def test_node_combine_10(plugin, change_dir):
         for j, res in enumerate(res_comb):
             assert nn.result["out"][i][1][j][0] == res[0]
             assert nn.result["out"][i][1][j][1] == res[1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_node_combine_10a(plugin, change_dir):
+    """simplest combiner by combine, running the node"""
+    nn = Node(name="NA", interface=interf_addtwo, workingdir="test_nd10a_{}".format(plugin),
+              output_names=["out"], inputs={"a": [3, 5]})
+    nn.map(mapper="a").combine(combiner="a")
+    assert nn.mapper == "NA.a"
+    assert nn.combiner == ["NA.a"]
+
+    sub = Submitter(plugin=plugin, runnable=nn)
+    sub.run()
+    sub.close()
+
+    # checking the results
+    expected = [[({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]]
+    # to be sure that there is the same order (not sure if node itself should keep the order)
+    key_sort = list(expected[0][0][0].keys())
+    [exp.sort(key=lambda t: [t[0][key] for key in key_sort]) for exp in expected]
+    [res[1].sort(key=lambda t: [t[0][key] for key in key_sort]) for res in nn.result["out"]]
+    for i, res_comb in enumerate(expected):
+        for j, res in enumerate(res_comb):
+            assert nn.result["out"][i][1][j][0] == res[0]
+            assert nn.result["out"][i][1][j][1] == res[1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_node_combine_10b(plugin, change_dir):
+    """simplest combiner in init, running the node"""
+    nn = Node(name="NA", interface=interf_addtwo, workingdir="test_nd10b_{}".format(plugin),
+              output_names=["out"], mapper="a", inputs={"a": [3, 5]})
+    nn.combiner = "a"
+
+    assert nn.mapper == "NA.a"
+    assert nn.combiner == ["NA.a"]
+
+    sub = Submitter(plugin=plugin, runnable=nn)
+    sub.run()
+    sub.close()
+
+    # checking the results
+    expected = [[({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]]
+    # to be sure that there is the same order (not sure if node itself should keep the order)
+    key_sort = list(expected[0][0][0].keys())
+    [exp.sort(key=lambda t: [t[0][key] for key in key_sort]) for exp in expected]
+    [res[1].sort(key=lambda t: [t[0][key] for key in key_sort]) for res in nn.result["out"]]
+    for i, res_comb in enumerate(expected):
+        for j, res in enumerate(res_comb):
+            assert nn.result["out"][i][1][j][0] == res[0]
+            assert nn.result["out"][i][1][j][1] == res[1]
+
+
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -853,7 +908,6 @@ def test_workflow_combine_0(plugin="serial"):
     assert len(wf.graph.nodes) == 1
 
 
-@pytest.mark.skip()
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_combine_1(plugin, change_dir):
@@ -861,10 +915,11 @@ def test_workflow_combine_1(plugin, change_dir):
     wf = Workflow(name="wf1", workingdir="test_wf1_{}".format(plugin))
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"],
               mapper="a", combiner="a", inputs={"a": [3, 5]})
-    #na.map(mapper="a", inputs={"a": [3, 5]})#.combine(combiner="a")
-    pdb.set_trace()
     wf.add_nodes([na])
-    pdb.set_trace()
+
+    assert wf.nodes[0].mapper == "NA.a"
+    assert wf.nodes[0].combiner == ["NA.a"]
+
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
     sub.close()
@@ -883,7 +938,6 @@ def test_workflow_combine_1(plugin, change_dir):
             assert results[i][0] == expected_state[i]
 
 
-@pytest.mark.skip()
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_combine_1a(plugin, change_dir):
@@ -894,6 +948,9 @@ def test_workflow_combine_1a(plugin, change_dir):
     na.map(mapper="a", inputs={"a": [3, 5]}).combine(combiner="a")
     wf.add_nodes([na])
 
+    assert wf.nodes[0].mapper == "NA.a"
+    assert wf.nodes[0].combiner == ["NA.a"]
+
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
     sub.close()
@@ -903,7 +960,6 @@ def test_workflow_combine_1a(plugin, change_dir):
     key_sort = list(expected[0][0][0].keys())
     [exp.sort(key=lambda t: [t[0][key] for key in key_sort]) for exp in expected]
     results = wf.nodes[0].result["out"]
-    pdb.set_trace()
     results.sort()
     [res[1].sort(key=lambda t: [t[0][key] for key in key_sort]) for res in results]
     for i, res_comb in enumerate(expected):
