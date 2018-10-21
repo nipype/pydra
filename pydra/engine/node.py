@@ -17,6 +17,7 @@ class NodeBase(object):
     def __init__(self,
                  name,
                  mapper=None,
+                 combiner=None,
                  inputs=None,
                  other_mappers=None,
                  write_state=True,
@@ -32,6 +33,8 @@ class NodeBase(object):
             Unique name of this node
         mapper : str or (list or tuple of (str or mappers))
             Whether inputs should be mapped at run time
+        combiner: str or list of strings (names of variables)
+            variables that should be used to combine results together
         inputs : dictionary (input name, input value or list of values)
             States this node's input names
         other_mappers : dictionary (name of a node, mapper of the node)
@@ -56,9 +59,13 @@ class NodeBase(object):
             mapper = aux.change_mapper(mapper, self.name)
         self._mapper = mapper
         self._other_mappers = other_mappers
+        self._combiner = None
+        if combiner:
+            self.combiner = combiner
         # create state (takes care of mapper, connects inputs with axes, so we can ask for specifc element)
         self._state = state.State(
-            mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
+            mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers,
+            combiner=self._combiner)
         self._output = {}
         self._result = {}
         # flag that says if the node/wf is ready to run (has all input)
@@ -83,10 +90,32 @@ class NodeBase(object):
 
     @mapper.setter
     def mapper(self, mapper):
-        self._mapper = mapper
+        if self._mapper:
+            raise Exception("mapper is already set")
+        self._mapper = aux.change_mapper(mapper, self.name)
         # updating state
         self._state = state.State(
             mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
+
+    @property
+    def combiner(self):
+        return self._combiner
+
+    @combiner.setter
+    def combiner(self, combiner):
+        if self._combiner:
+            raise Exception("combiner is already set")
+        if not self.mapper:
+            raise Exception("mapper has to be set before setting combiner")
+        if type(combiner) is str:
+            combiner = [combiner]
+        elif type(combiner) is not list:
+            raise Exception("combiner should be a string or a list")
+        self._combiner = aux.change_mapper(combiner, self.name)
+        for el in self._combiner:
+            if not aux.search_mapper(el, self.mapper):
+                raise Exception("element {} of combiner is not found in the mapper {}".format(
+                    el, self.mapper))
 
     @property
     def inputs(self):
@@ -124,22 +153,17 @@ class NodeBase(object):
         self._state.prepare_state_input(state_inputs=self.state_inputs)
 
     def map(self, mapper, inputs=None):
-        if self._mapper:
-            raise Exception("mapper is already set")
-        else:
-            self._mapper = aux.change_mapper(mapper, self.name)
-
+        self.mapper = mapper
         if inputs:
             self.inputs = inputs
             self._state_inputs.update(self.inputs)
-        if mapper:
-            # updating state if we have a new mapper
-            self._state = state.State(
-                mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers)
+        return self
 
-    def join(self, field, node=None):
-        # TBD
-        pass
+
+    def combine(self, combiner):
+        self.combiner = combiner
+        return self
+
 
     def checking_input_el(self, ind):
         """checking if all inputs are available (for specific state element)"""
@@ -207,9 +231,12 @@ class NodeBase(object):
     def _reading_results(self):
         raise NotImplementedError
 
-    def _dict_tuple2list(self, container):
+    def _dict_tuple2list(self, container, key=False):
         if type(container) is dict:
-            val_l = [val for (_, val) in container.items()]
+            if key:
+                val_l = [(key, val) for (key, val) in container.items()]
+            else:
+                val_l = [val for (_, val) in container.items()]
         elif type(container) is tuple:
             val_l = [container]
         else:
@@ -305,12 +332,27 @@ class Node(NodeBase):
                     state_dict = self.state.state_ind(ind)
                 dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(state_dict.items())])
                 if self.mapper:
-                    self._output[key_out][dir_nm_el] = \
-                        (state_dict, self._reading_ci_output(dir_nm_el=dir_nm_el, out_nm=key_out))
+                    output_el = (state_dict, self._reading_ci_output(dir_nm_el=dir_nm_el,
+                                                                     out_nm=key_out))
+                    #print("OUTPUT_EL", output_el)
+                    if not self.combiner: # only mapper
+                        self._output[key_out][dir_nm_el] = output_el
+                    else: #assuming that only combined output is saved
+                        self._combined_output(key_out, state_dict, output_el)
                 else:
                     self._output[key_out] = \
                         (state_dict, self._reading_ci_output(dir_nm_el="", out_nm=key_out))
         return self._output
+
+
+    def _combined_output(self, key_out, state_dict, output_el):
+        dir_nm_comb = "_".join(["{}:{}".format(i, j)
+                                for i, j in list(state_dict.items())
+                                if i not in self.state.inp_to_remove])
+        if dir_nm_comb in self._output[key_out].keys():
+            self._output[key_out][dir_nm_comb].append(output_el)
+        else:
+            self._output[key_out][dir_nm_comb] = [output_el]
 
     # dj: version without join
     def _check_all_results(self):
@@ -330,16 +372,24 @@ class Node(NodeBase):
         self._is_complete = True
         return True
 
+
     def _reading_results(self):
         """temporary: reading results from output files (that is now just txt)
             should be probably just reading output for self.output_names
         """
         for key_out in self.output_names:
-            self._result[key_out] = []
+            #self._result[key_out] = []
             if self._state_inputs:
-                val_l = self._dict_tuple2list(self._output[key_out])
-                for (st_dict, out) in val_l:
-                    self._result[key_out].append((st_dict, out))
+                # TODO: should I remember state (both with ain w/o combiner)
+                if not self.combiner:
+                    val_l = self._dict_tuple2list(self._output[key_out])
+                    #for (st_dict, out) in val_l:
+                    self._result[key_out] = val_l
+                else:
+                    val_l = self._dict_tuple2list(self._output[key_out], key=True)
+                    self._result[key_out] = val_l
+                    #for val in val_l:
+
             else:
                 # st_dict should be {}
                 # not sure if this is used (not tested)

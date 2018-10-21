@@ -35,7 +35,7 @@ def change_dir(request):
 
 
 Plugins = ["serial"]
-Plugins = ["serial", "mp", "cf", "dask"]
+#Plugins = ["serial", "mp", "cf", "dask"]
 
 
 def fun_addtwo(a):
@@ -54,6 +54,13 @@ def fun_addvar(b, c):
 
 _interf_addvar = Function(function=fun_addvar, input_names=["b", "c"], output_names=["out"])
 interf_addvar = CurrentInterface(interface=_interf_addvar, name="addvar")
+
+
+def fun_addvar4(a, b, c, d):
+    return a + b + c + d
+
+_interf_addvar4 = Function(function=fun_addvar4, input_names=["a", "b", "c", "d"], output_names=["out"])
+interf_addvar4 = CurrentInterface(interface=_interf_addvar4, name="addvar4")
 
 
 def test_node_1():
@@ -110,6 +117,14 @@ def test_node_4a():
     nn.prepare_state_input()
     assert nn.state.state_values([0]) == {"NA.a": 3}
     assert nn.state.state_values([1]) == {"NA.a": 5}
+
+
+def test_node_4b():
+    """Node with interface and inputs. trying to set mapper twice"""
+    nn = Node(name="NA", mapper="a", interface=interf_addtwo, inputs={"a": [3, 5]})
+    with pytest.raises(Exception) as excinfo:
+        nn.map(mapper="a")
+    assert str(excinfo.value) == "mapper is already set"
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -220,6 +235,21 @@ def test_node_8(plugin, change_dir):
     for i, res in enumerate(expected):
         assert nn.result["out"][i][0] == res[0]
         assert nn.result["out"][i][1] == res[1]
+
+#
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_node_9(plugin, change_dir):
+    """scalar and outer mapper, one combiner (from scalar part)"""
+    nn = Node(name="NA", interface=interf_addvar4, workingdir="test_nd16_{}".format(plugin),
+              output_names=["out"], mapper=(["a", "b"], ["c", "d"]),
+              inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1,2]})
+
+    assert nn.mapper == (["NA.a", "NA.b"], ["NA.c", "NA.d"])
+
+    sub = Submitter(plugin=plugin, runnable=nn)
+    sub.run()
+    sub.close()
 
 
 # tests for workflows

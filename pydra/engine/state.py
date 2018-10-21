@@ -1,13 +1,15 @@
 from collections import OrderedDict
 import itertools
+from copy import deepcopy
 import pdb
 
 from . import auxiliary as aux
 
 
 class State(object):
-    def __init__(self, node_name, mapper=None, other_mappers=None):
+    def __init__(self, node_name, mapper=None, other_mappers=None, combiner=None):
         self._mapper = mapper
+        self._combiner = combiner
         self.node_name = node_name
         if self._mapper:
             # changing mapper (as in rpn), so I can read from left to right
@@ -36,8 +38,12 @@ class State(object):
         # list of inputs variable for each axis
         # e.g. [['e', 'd'], ['r', 'd']]
         # shape - list, e.g. [2,3]
+        # TODO: do I need it?
         self._input_for_axis, self._shape = aux.converting_axis2input(
             self.state_inputs, self._axis_for_input, self._ndim)
+
+        if self._combiner:
+            self._prepare_combining()
 
         # list of all possible indexes in each dim, will be use to iterate
         # e.g. [[0, 1], [0, 1, 2]]
@@ -61,6 +67,41 @@ class State(object):
     @property
     def shape(self):
         return self._shape
+
+
+    def _prepare_combining(self):
+        self.inp_to_remove = []
+        axes_to_remove = []
+        for comb_el in self._combiner:
+            self.inp_to_remove.append(comb_el)
+            axes = self._axis_for_input[comb_el]
+            for ax in axes:
+                if ax in axes_to_remove:
+                    raise Exception("can't combine by {}, axis {} already removed".format(
+                        comb_el, ax
+                    ))
+                inputs = deepcopy(self._input_for_axis[ax])
+                inputs.remove(comb_el)
+                if inputs:
+                    for other_inp in inputs:
+                        self.inp_to_remove.append(other_inp)
+            axes_to_remove += axes
+        self._prepare_final_mapper(axes_to_remove)
+
+
+    def _prepare_final_mapper(self, axes_to_remove):
+        # TODO not sure if I have to change these atr, or only mappers
+        # TODO: this actually should be simply done using method from aux after the mapper is changed
+        self._input_for_axis_comb = self._input_for_axis.copy()
+        axes_to_remove.sort(reverse=True)
+        for ax in axes_to_remove:
+            self._input_for_axis_comb.pop(ax)
+        self._axis_for_input_comb = self._axis_for_input.copy()
+        for inp in self.inp_to_remove:
+            self._axis_for_input_comb.pop(inp)
+        # TODO
+        # change mapper_rpn - > different mapper
+
 
     def state_values(self, ind, value=True):
         """returns state input as a dictionary (input name, value)"""
