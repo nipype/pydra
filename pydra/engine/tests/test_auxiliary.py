@@ -109,7 +109,29 @@ def test_mapping_axis_error():
      {"a": [1, 2], "b": [1, 2], "c": [0]}, 3, [["c"], ["a", "b"], ["a", "b"]])
 ])
 def test_converting_axis2input(inputs, axis_inputs, ndim, expected):
-    assert aux.converting_axis2input(inputs, axis_inputs, ndim)[0] == expected
+    assert aux.converting_axis2input(state_inputs=inputs, axis_for_input=axis_inputs,
+                                     ndim=ndim)[0] == expected
+
+
+@pytest.mark.parametrize("rpn, expected, ndim", [
+    (["a"], {"a": [0]}, 1),
+    (["a", "b", "."], {"a": [0],"b": [0]}, 1),
+    (["a", "b", "*"], {"a": [0],"b": [1]}, 2),
+    (["a", "b", ".", "c", "*"], {"a": [0], "b": [0], "c": [1]}, 2),
+    (["c", "a", "b", ".", "*"], {"a": [1], "b": [1], "c": [0]}, 2),
+    (["a", "b", ".", "c", "*"], {"a": [0], "b": [0], "c": [1]}, 2),
+    (["c", "a", "b", ".", "*"], {"a": [1], "b": [1], "c": [0]}, 2),
+    (["a", "b", "*", "c", "."], {"a": [0], "b": [1], "c": [0, 1]}, 2),
+    (["a", "b", "*", "c", "d", "*", "."], {"a":[0], "b": [1], "c": [0], "d": [1]}, 2),
+    (["a", "b", ".", "c", "d", ".", "*"], {"a": [0], "b": [0], "c": [1], "d": [1]}, 2)
+])
+def test_matching_input_from_mapper(rpn, expected, ndim):
+    res = aux.matching_input_from_mapper(rpn)
+    print(res)
+    for key in expected.keys():
+        assert res[0][key] == expected[key]
+    assert res[1] == ndim
+
 
 
 @pytest.mark.parametrize("mapper_rpn, input_to_remove, final_mapper_rpn", [

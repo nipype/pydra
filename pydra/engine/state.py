@@ -9,7 +9,6 @@ from . import auxiliary as aux
 class State(object):
     def __init__(self, node_name, mapper=None, other_mappers=None, combiner=None):
         self._mapper = mapper
-        self.combiner = combiner
         self.node_name = node_name
         if self._mapper:
             # changing mapper (as in rpn), so I can read from left to right
@@ -19,6 +18,11 @@ class State(object):
         else:
             self._mapper_rpn = []
             self._input_names_mapper = []
+
+        if combiner:
+            self.combiner = combiner
+        else:
+            self._combiner = combiner
 
     def prepare_state_input(self, state_inputs):
         """prepare all inputs, should be called once all input is available"""
@@ -40,7 +44,8 @@ class State(object):
         # shape - list, e.g. [2,3]
         # TODO: do I need it?
         self._input_for_axis, self._shape = aux.converting_axis2input(
-            self.state_inputs, self._axis_for_input, self._ndim)
+            state_inputs=self.state_inputs, axis_for_input=self._axis_for_input,
+            ndim=self._ndim)
 
         # list of all possible indexes in each dim, will be use to iterate
         # e.g. [[0, 1], [0, 1, 2]]
@@ -48,7 +53,8 @@ class State(object):
         self.index_generator = itertools.product(*self.all_elements)
 
         if self.combiner:
-            self._prepare_combining()
+            self._prepare_axis_inputs_combine()
+
 
 
     def __getitem__(self, ind):
@@ -62,6 +68,24 @@ class State(object):
     #    return self._mapper
 
     @property
+    def combiner(self):
+        return self._combiner
+
+    @combiner.setter
+    def combiner(self, combiner):
+        # if self._combiner:
+        #     raise Exception("combiner is already set")
+        # else:
+        self._combiner = combiner
+        for el in self._combiner:
+            if not aux.search_mapper(el, self._mapper):
+                raise Exception("element {} of combiner is not found in the mapper {}".format(
+                    el, self._mapper))
+
+        self._prepare_combine()
+
+
+    @property
     def ndim(self):
         return self._ndim
 
@@ -70,30 +94,36 @@ class State(object):
         return self._shape
 
 
-    def _prepare_combining(self):
+    def _prepare_combine(self):
         self.inp_to_remove = []
         axes_to_remove = []
+        # temporary axis_for_input (without knowing specific input)
+        # need it to know which inputs are binded together
+        axis_for_input_tmp, ndim_tmp = aux.matching_input_from_mapper(self._mapper_rpn)
+        input_for_axis_tmp = aux.converting_axis2input(axis_for_input=axis_for_input_tmp,
+                                                       ndim=ndim_tmp)
         for comb_el in self.combiner:
             self.inp_to_remove.append(comb_el)
-            axes = self._axis_for_input[comb_el]
+            axes = axis_for_input_tmp[comb_el]
             for ax in axes:
                 if ax in axes_to_remove:
                     raise Exception("can't combine by {}, axis {} already removed".format(
                         comb_el, ax
                     ))
-                inputs = deepcopy(self._input_for_axis[ax])
+                inputs = deepcopy(input_for_axis_tmp[ax])
                 inputs.remove(comb_el)
                 if inputs:
                     for other_inp in inputs:
                         self.inp_to_remove.append(other_inp)
             axes_to_remove += axes
-        self._prepare_final_mapper()
+        self._prepare_mapper_combine()
 
 
-    def _prepare_final_mapper(self):
+    def _prepare_mapper_combine(self):
         self._mapper_rpn_comb = aux.remove_inp_from_mapper_rpn(self._mapper_rpn, self.inp_to_remove)
         self.mapper_comb = aux.rpn2mapper(self._mapper_rpn_comb)
 
+    def _prepare_axis_inputs_combine(self):
         # todo: do i need it?
         self._state_inputs_comb = self.state_inputs.copy()
         for inp in self.inp_to_remove:
@@ -101,7 +131,8 @@ class State(object):
         self._axis_for_input_comb, self._ndim_comb = aux.mapping_axis(self._state_inputs_comb,
                                                                          self._mapper_rpn_comb)
         self._input_for_axis_comb, self._shape_comb = aux.converting_axis2input(
-            self._state_inputs_comb, self._axis_for_input_comb, self._ndim_comb)
+            state_inputs=self._state_inputs_comb, axis_for_input=self._axis_for_input_comb,
+            ndim=self._ndim_comb)
 
 
 

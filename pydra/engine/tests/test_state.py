@@ -10,12 +10,13 @@ python35_only = pytest.mark.skipif(sys.version_info < (3, 5), reason="requires P
 
 def test_state_1():
     st = State(node_name="test", mapper="a", combiner="a")
-    st.prepare_state_input({"a": np.array([3,5])})
 
     assert st._mapper == "a"
     assert st._mapper_rpn == ["a"]
     assert st.mapper_comb is None
     assert st._mapper_rpn_comb == []
+
+    st.prepare_state_input({"a": np.array([3, 5])})
 
     expected_axis_for_input = {"a": [0]}
     for key, val in expected_axis_for_input.items():
@@ -33,12 +34,13 @@ def test_state_1():
 
 def test_state_2():
     st = State(node_name="test", mapper=("a", "b"), combiner="a")
-    st.prepare_state_input({"a": np.array([3,5]), "b": np.array([3,5])})
 
     assert st._mapper == ("a", "b")
     assert st._mapper_rpn == ["a", "b", "."]
     assert st.mapper_comb is None
     assert st._mapper_rpn_comb == []
+
+    st.prepare_state_input({"a": np.array([3,5]), "b": np.array([3,5])})
 
     expected_axis_for_input = {"a": [0], "b": [0]}
     for key, val in expected_axis_for_input.items():
@@ -56,12 +58,13 @@ def test_state_2():
 
 def test_state_3():
     st = State(node_name="test", mapper=["a", "b"], combiner="a")
-    st.prepare_state_input({"a": np.array([3,5]), "b": np.array([3,5])})
 
     assert st._mapper == ["a", "b"]
     assert st._mapper_rpn == ["a", "b", "*"]
     assert st.mapper_comb == "b"
     assert st._mapper_rpn_comb == ["b"]
+
+    st.prepare_state_input({"a": np.array([3,5]), "b": np.array([3,5])})
 
     expected_axis_for_input = {"a": [0], "b": [1]}
     for key, val in expected_axis_for_input.items():
@@ -79,12 +82,13 @@ def test_state_3():
 
 def test_state_4():
     st = State(node_name="test", mapper=["a", ("b", "c")], combiner="b")
-    st.prepare_state_input({"a": np.array([3,5]), "b": np.array([3,5]), "c": np.array([3,5])})
 
     assert st._mapper == ["a", ("b", "c")]
     assert st._mapper_rpn == ["a", "b", "c", ".", "*"]
     assert st.mapper_comb == "a"
     assert st._mapper_rpn_comb == ["a"]
+
+    st.prepare_state_input({"a": np.array([3,5]), "b": np.array([3,5]), "c": np.array([3,5])})
 
     expected_axis_for_input = {"a": [0], "b": [1], "c": [1]}
     for key, val in expected_axis_for_input.items():
@@ -102,12 +106,13 @@ def test_state_4():
 
 def test_state_5():
     st = State(node_name="test", mapper=("a", ["b", "c"]), combiner="b")
-    st.prepare_state_input({"a": np.array([[3, 5], [3,5]]), "b": np.array([3,5]), "c": np.array([3,5])})
 
     assert st._mapper == ("a", ["b", "c"])
     assert st._mapper_rpn == ["a", "b", "c", "*", "."]
     assert st.mapper_comb == "c"
     assert st._mapper_rpn_comb == ["c"]
+
+    st.prepare_state_input({"a": np.array([[3, 5], [3, 5]]), "b": np.array([3, 5]), "c": np.array([3, 5])})
 
     expected_axis_for_input = {"a": [0, 1], "b": [0], "c": [1]}
     for key, val in expected_axis_for_input.items():

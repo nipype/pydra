@@ -189,7 +189,7 @@ def mapping_axis(state_inputs, mapper_rpn):
     return axis_for_input, ndim
 
 
-def converting_axis2input(state_inputs, axis_for_input, ndim):
+def converting_axis2input(axis_for_input, ndim, state_inputs=None):
     """ Having axes for all the input fields, the function returns fields for each axis. """
     input_for_axis = []
     shape = []
@@ -200,12 +200,99 @@ def converting_axis2input(state_inputs, axis_for_input, ndim):
     for inp, axis in axis_for_input.items():
         for (i, ax) in enumerate(axis):
             input_for_axis[ax].append(inp)
-            shape[ax] = state_inputs[inp].shape[i]
+            if state_inputs is not None:
+                shape[ax] = state_inputs[inp].shape[i]
 
-    return input_for_axis, shape
+    if state_inputs is not None:
+        return input_for_axis, shape
+    else:
+        return input_for_axis
 
 
 #function used in State if combiner
+
+def matching_input_from_mapper(mapper_rpn):
+    """similar to mapping_axis, but without state_input,
+        finding inputs that are for the same axes.
+        can't find the final dimensions without inputs.
+    """
+    axes_for_inputs = {}
+    output_inputs = {}
+    stack_inp = []
+    for el in mapper_rpn:
+        if el == ".":
+            right, left = stack_inp.pop(), stack_inp.pop()
+            out_nm = "OUT{}".format(len(output_inputs))
+            if left.startswith("OUT") and right.startswith("OUT"):
+                output_inputs[out_nm] = output_inputs[left] + output_inputs[right]
+                axes_for_inputs[out_nm] = axes_for_inputs[left].copy()
+            elif right.startswith("OUT"):
+                output_inputs[out_nm] = output_inputs[right] + [left]
+                axes_for_inputs[out_nm] = axes_for_inputs[right].copy()
+                axes_for_inputs[left] = axes_for_inputs[right].copy()
+            elif left.startswith("OUT"):
+                output_inputs[out_nm] = output_inputs[left] + [right]
+                axes_for_inputs[out_nm] = axes_for_inputs[left].copy()
+                axes_for_inputs[right] = axes_for_inputs[left].copy()
+            else:
+                output_inputs[out_nm] = [left, right]
+                axes_for_inputs[left] = [0]
+                axes_for_inputs[out_nm] = [0]
+                axes_for_inputs[right] = [0]
+            stack_inp.append(out_nm)
+        elif el == "*":
+            right, left = stack_inp.pop(), stack_inp.pop()
+            out_nm = "OUT{}".format(len(output_inputs))
+            if left.startswith("OUT") and right.startswith("OUT"):
+                output_inputs[out_nm] = output_inputs[left] + output_inputs[right]
+                for inp in output_inputs[right] + [right]:
+                    axes_for_inputs[inp] = [i + len(axes_for_inputs[left])
+                                            for i in axes_for_inputs[inp]]
+                axes_for_inputs[out_nm] = axes_for_inputs[left] + axes_for_inputs[right]
+            elif right.startswith("OUT"):
+                output_inputs[out_nm] = output_inputs[right] + [left]
+                axes_for_inputs[left] = [min(axes_for_inputs[right]) - 1]
+                axes_for_inputs[out_nm] = axes_for_inputs[left] + axes_for_inputs[right]
+            elif left.startswith("OUT"):
+                output_inputs[out_nm] = output_inputs[left] + [right]
+                axes_for_inputs[right] = [max(axes_for_inputs[left]) + 1]
+                axes_for_inputs[out_nm] = axes_for_inputs[left] + axes_for_inputs[right]
+            else:
+                output_inputs[out_nm] = [left, right]
+                axes_for_inputs[left] = [0]
+                axes_for_inputs[right] = [1]
+                axes_for_inputs[out_nm] = [0, 1]
+            stack_inp.append(out_nm)
+        else:
+            stack_inp.append(el)
+
+    # checking if at the end I have only one element
+    if len(stack_inp) == 1 and stack_inp[0].startswith("OUT"):
+        pass
+    elif len(stack_inp) == 1:
+        axes_for_inputs[stack_inp[0]] = [0]
+    else:
+        raise Exception("something wrong with the mappper")
+
+    # removing "OUT*" elements
+    axes_for_inputs = dict((key, val) for (key, val) in axes_for_inputs.items()
+                           if not key.startswith("OUT"))
+
+    # checking if I have any axes below 0
+    all_axes = []
+    for _, val in axes_for_inputs.items():
+        all_axes += val
+    min_ax = min(all_axes)
+    # moving all axes in case min_ax <0 , so everything starts from 0
+    if min_ax < 0:
+        axes_for_inputs = dict((key, [v + abs(min_ax) for v in val])
+                               for (key, val) in axes_for_inputs.items())
+
+    #dimensions
+    ndim = len(set(all_axes))
+
+    return axes_for_inputs, ndim
+
 
 def remove_inp_from_mapper_rpn(mapper_rpn, inputs_to_remove):
     """modifying mapper_rpn: removing inputs due to combining"""

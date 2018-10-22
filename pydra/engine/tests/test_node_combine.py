@@ -33,7 +33,7 @@ def change_dir(request):
 
 
 Plugins = ["serial"]
-Plugins = ["serial", "mp", "cf", "dask"]
+#Plugins = ["serial", "mp", "cf", "dask"]
 
 
 def fun_addtwo(a):
@@ -66,6 +66,13 @@ def fun_addvar4(a, b, c, d):
 
 _interf_addvar4 = Function(function=fun_addvar4, input_names=["a", "b", "c", "d"], output_names=["out"])
 interf_addvar4 = CurrentInterface(interface=_interf_addvar4, name="addvar4")
+
+
+def fun_sumlist(a):
+    return sum(a)
+
+_interf_sumlist = Function(function=fun_sumlist, input_names=["a"], output_names=["out"])
+interf_sumlist = CurrentInterface(interface=_interf_sumlist, name="sumlist")
 
 
 # initializing nodes, setting containers
@@ -603,16 +610,11 @@ def test_node_combine_14b(plugin, change_dir):
 @python35_only
 def test_node_combine_14c(plugin, change_dir):
     """outer and scalar mapper, two combiners (second one from scalar part - should be the same)"""
-    nn = Node(name="NA", interface=interf_addvar3, workingdir="test_nd14c_{}".format(plugin),
-              output_names=["out"], mapper=["a", ("b", "c")], combiner=["a", "b", "c"],
-              inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
-
-    assert nn.mapper == ["NA.a", ("NA.b", "NA.c")]
-    assert nn.combiner == ["NA.a", "NA.b", "NA.c"]
-
-    sub = Submitter(plugin=plugin, runnable=nn)
-    with pytest.raises(Exception):
-        sub.run()
+    with pytest.raises(Exception) as excinfo:
+        nn = Node(name="NA", interface=interf_addvar3, workingdir="test_nd14c_{}".format(plugin),
+                  output_names=["out"], mapper=["a", ("b", "c")], combiner=["a", "b", "c"],
+                  inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+    assert "already removed" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -654,16 +656,12 @@ def test_node_combine_14d(plugin, change_dir):
 @python35_only
 def test_node_combine_14e(plugin, change_dir):
     """outer and scalar mapper, two combiners (second one from scalar part - should be the same)"""
-    nn = Node(name="NA", interface=interf_addvar3, workingdir="test_nd14e_{}".format(plugin),
-              output_names=["out"], mapper=["a", ("b", "c")], combiner=["b", "c"],
-              inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
-
-    assert nn.mapper == ["NA.a", ("NA.b", "NA.c")]
-    assert nn.combiner == ["NA.b", "NA.c"]
-
-    sub = Submitter(plugin=plugin, runnable=nn)
-    with pytest.raises(Exception):
-        sub.run()
+    with pytest.raises(Exception) as excinfo:
+        nn = Node(name="NA", interface=interf_addvar3, output_names=["out"],
+                  workingdir="test_nd14e_{}".format(plugin),
+                  mapper=["a", ("b", "c")], combiner=["b", "c"],
+                  inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+    assert "already removed" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -704,18 +702,14 @@ def test_node_combine_15(plugin, change_dir):
 @python35_only
 def test_node_combine_15a(plugin, change_dir):
     """scalar and outer mapper, two combiners (from scalar and outer parts)"""
-    nn = Node(name="NA", interface=interf_addvar3, workingdir="test_nd15a_{}".format(plugin),
-              output_names=["out"], mapper=("a", ["b", "c"]), combiner=["a", "b"],
-              inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]})
+    with pytest.raises(Exception) as excinfo:
+        nn = Node(name="NA", interface=interf_addvar3, output_names=["out"],
+                  workingdir="test_nd15a_{}".format(plugin),
+                  mapper=("a", ["b", "c"]), combiner=["a", "b"],
+                  inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]})
+    assert "already removed" in str(excinfo.value)
 
-    assert nn.mapper == ("NA.a", ["NA.b", "NA.c"])
-    assert nn.combiner == ["NA.a", "NA.b"]
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    with pytest.raises(Exception):
-        sub.run()
-
-#
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_node_combine_15b(plugin, change_dir):
@@ -794,16 +788,12 @@ def test_node_combine_15d(plugin, change_dir):
     """scalar and outer mapper, one combiner (from outer part)
     We assumed that this is OK, but will eliminate also a
     """
-    nn = Node(name="NA", interface=interf_addvar3, workingdir="test_nd15d_{}".format(plugin),
-              output_names=["out"], mapper=("a", ["b", "c"]), combiner=["c", "a"],
-              inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]})
-
-    assert nn.mapper == ("NA.a", ["NA.b", "NA.c"])
-    assert nn.combiner == ["NA.c", "NA.a"]
-
-    sub = Submitter(plugin=plugin, runnable=nn)
-    with pytest.raises(Exception):
-        sub.run()
+    with pytest.raises(Exception) as excinfo:
+        nn = Node(name="NA", interface=interf_addvar3, output_names=["out"],
+                  workingdir="test_nd15d_{}".format(plugin),
+                  mapper=("a", ["b", "c"]), combiner=["c", "a"],
+                  inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]})
+    assert "already removed" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -878,16 +868,12 @@ def test_node_combine_16a(plugin, change_dir):
 @python35_only
 def test_node_combine_16b(plugin, change_dir):
     """scalar and outer mapper, two combiner from the same axis (exception)"""
-    nn = Node(name="NA", interface=interf_addvar4, workingdir="test_nd16b_{}".format(plugin),
-              output_names=["out"], mapper=(["a", "b"], ["c", "d"]), combiner=["a", "c"],
-              inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1,2]})
-
-    assert nn.mapper == (["NA.a", "NA.b"], ["NA.c", "NA.d"])
-    assert nn.combiner == ["NA.a", "NA.c"]
-
-    sub = Submitter(plugin=plugin, runnable=nn)
-    with pytest.raises(Exception):
-        sub.run()
+    with pytest.raises(Exception) as excinfo:
+        nn = Node(name="NA", interface=interf_addvar4, output_names=["out"],
+                  workingdir="test_nd16b_{}".format(plugin),
+                  mapper=(["a", "b"], ["c", "d"]), combiner=["a", "c"],
+                  inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1,2]})
+    assert "already removed" in str(excinfo.value)
 
 
 # # tests for workflows
@@ -969,45 +955,53 @@ def test_workflow_combine_1a(plugin, change_dir):
             assert results[i][0] == expected_state[i]
 
 
-# @pytest.mark.parametrize("plugin", Plugins)
-# @python35_only
-# def test_workflow_2(plugin, change_dir):
-#     """workflow with two nodes, second node without mapper"""
-#     wf = Workflow(name="wf2", workingdir="test_wf2_{}".format(plugin),
-#                   wf_output_names=[("NB", "out")])
-#     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-#     na.map(mapper="a", inputs={"a": [3, 5]})
-#
-#     # the second node does not have explicit mapper (but keeps the mapper from the NA node)
-#     nb = Node(name="NB", interface=interf_addvar, inputs={"c": 10}, workingdir="nb",
-#               output_names=["out"])
-#
-#     # adding 2 nodes and create a connection (as it is now)
-#     wf.add_nodes([na, nb])
-#     wf.connect("NA", "out", "NB", "b")
-#     assert wf.nodes[0].mapper == "NA.a"
-#
-#     sub = Submitter(runnable=wf, plugin=plugin)
-#     sub.run()
-#     sub.close()
-#
-#     expected_A = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
-#     key_sort = list(expected_A[0][0].keys())
-#     expected_A.sort(key=lambda t: [t[0][key] for key in key_sort])
-#     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected_A):
-#         assert wf.nodes[0].result["out"][i][0] == res[0]
-#         assert wf.nodes[0].result["out"][i][1] == res[1]
-#
-#     # results from NB keeps the "state input" from the first node
-#     # two elements as in NA
-#     expected_B = [({"NA.a": 3, "NB.c": 10}, 15), ({"NA.a": 5, "NB.c": 10}, 17)]
-#     key_sort = list(expected_B[0][0].keys())
-#     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
-#     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected_B):
-#         assert wf.nodes[1].result["out"][i][0] == res[0]
-#         assert wf.nodes[1].result["out"][i][1] == res[1]
+@pytest.mark.xfail(reason="wip")
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_workflow_combine_2(plugin, change_dir):
+    """workflow with two nodes, first one with mapper and combiner"""
+    wf = Workflow(name="wf2", workingdir="test_wf2_{}".format(plugin),
+                  wf_output_names=[("NB", "out")])
+    na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
+    na.map(mapper="a", inputs={"a": [3, 5]}).combine(combiner="a")
+
+    # the second node does not have explicit mapper (but keeps the mapper from the NA node)
+    nb = Node(name="NB", interface=interf_sumlist, workingdir="nb", output_names=["out"])
+
+    # adding 2 nodes and create a connection (as it is now)
+    wf.add_nodes([na, nb])
+    wf.connect("NA", "out", "NB", "a")
+    #pdb.set_trace()
+    assert wf.nodes[0].mapper == "NA.a"
+    assert wf.nodes[0].combiner == ["NA.a"]
+
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    expected = [[({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]]
+    expected_state = [""]
+    key_sort = list(expected[0][0][0].keys())
+    [exp.sort(key=lambda t: [t[0][key] for key in key_sort]) for exp in expected]
+    results = wf.nodes[0].result["out"]
+    results.sort()
+    [res[1].sort(key=lambda t: [t[0][key] for key in key_sort]) for res in results]
+    for i, res_comb in enumerate(expected):
+        for j, res in enumerate(res_comb):
+            assert results[i][1][j][0] == res[0]
+            assert results[i][1][j][1] == res[1]
+            assert results[i][0] == expected_state[i]
+
+
+    # # results from NB keeps the "state input" from the first node
+    # # two elements as in NA
+    # expected_B = [({"NA.a": 3, "NB.c": 10}, 15), ({"NA.a": 5, "NB.c": 10}, 17)]
+    # key_sort = list(expected_B[0][0].keys())
+    # expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
+    # wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
+    # for i, res in enumerate(expected_B):
+    #     assert wf.nodes[1].result["out"][i][0] == res[0]
+    #     assert wf.nodes[1].result["out"][i][1] == res[1]
 #
 #     #output of the wf
 #     wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
