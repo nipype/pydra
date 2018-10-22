@@ -42,13 +42,14 @@ class State(object):
         self._input_for_axis, self._shape = aux.converting_axis2input(
             self.state_inputs, self._axis_for_input, self._ndim)
 
-        if self.combiner:
-            self._prepare_combining()
-
         # list of all possible indexes in each dim, will be use to iterate
         # e.g. [[0, 1], [0, 1, 2]]
         self.all_elements = [range(i) for i in self._shape]
         self.index_generator = itertools.product(*self.all_elements)
+
+        if self.combiner:
+            self._prepare_combining()
+
 
     def __getitem__(self, ind):
         if type(ind) is int:
@@ -86,21 +87,22 @@ class State(object):
                     for other_inp in inputs:
                         self.inp_to_remove.append(other_inp)
             axes_to_remove += axes
-        self._prepare_final_mapper(axes_to_remove)
+        self._prepare_final_mapper()
 
 
-    def _prepare_final_mapper(self, axes_to_remove):
-        # TODO not sure if I have to change these atr, or only mappers
-        # TODO: this actually should be simply done using method from aux after the mapper is changed
-        self._input_for_axis_comb = self._input_for_axis.copy()
-        axes_to_remove.sort(reverse=True)
-        for ax in axes_to_remove:
-            self._input_for_axis_comb.pop(ax)
-        self._axis_for_input_comb = self._axis_for_input.copy()
+    def _prepare_final_mapper(self):
+        self._mapper_rpn_comb = aux.remove_inp_from_mapper_rpn(self._mapper_rpn, self.inp_to_remove)
+        self.mapper_comb = aux.rpn2mapper(self._mapper_rpn_comb)
+
+        # todo: do i need it?
+        self._state_inputs_comb = self.state_inputs.copy()
         for inp in self.inp_to_remove:
-            self._axis_for_input_comb.pop(inp)
-        # TODO
-        # change mapper_rpn - > different mapper
+            self._state_inputs_comb.pop(inp)
+        self._axis_for_input_comb, self._ndim_comb = aux.mapping_axis(self._state_inputs_comb,
+                                                                         self._mapper_rpn_comb)
+        self._input_for_axis_comb, self._shape_comb = aux.converting_axis2input(
+            self._state_inputs_comb, self._axis_for_input_comb, self._ndim_comb)
+
 
 
     def state_values(self, ind, value=True):

@@ -63,7 +63,7 @@ def _iterate_list(element, sign, other_mappers, output_mapper):
 
 
 # functions used in State to know which element should be used for a specific axis
-
+# TODO: should I moved it to State?
 
 def mapping_axis(state_inputs, mapper_rpn):
     """Having inputs and mapper (in rpn notation), functions returns the axes of output for every input."""
@@ -203,6 +203,79 @@ def converting_axis2input(state_inputs, axis_for_input, ndim):
             shape[ax] = state_inputs[inp].shape[i]
 
     return input_for_axis, shape
+
+
+#function used in State if combiner
+
+def remove_inp_from_mapper_rpn(mapper_rpn, inputs_to_remove):
+    """modifying mapper_rpn: removing inputs due to combining"""
+    mapper_rpn_copy = mapper_rpn.copy()
+    # reverting order
+    mapper_rpn_copy.reverse()
+    stack_inp = []
+    stack_sgn = []
+    from_last_sign = []
+    for (ii, el) in enumerate(mapper_rpn_copy):
+        # element is a sign
+        if el == "." or el == "*":
+            stack_sgn.append((ii, el))
+            from_last_sign.append(0)
+        # it's an input but not to remove
+        elif el not in inputs_to_remove:
+            if from_last_sign:
+                from_last_sign[-1] += 1
+            stack_inp.append((ii, el))
+        # it'a an input that should be removed
+        else:
+            if not from_last_sign:
+                pass
+            elif from_last_sign[-1] <= 1:
+                stack_sgn.pop()
+                from_last_sign.pop()
+            else:
+                stack_sgn.pop(-1*from_last_sign.pop())
+
+    # creating the final mapper_rpn after combining
+    remaining_elements = stack_sgn + stack_inp
+    remaining_elements.sort(reverse=True)
+    mapper_rpn_combined = [el for (i,el) in remaining_elements]
+    return mapper_rpn_combined
+
+
+def rpn2mapper(mapper_rpn):
+    """recurrent algorithm to move from mapper_rpn to mapper.
+       every time combines pairs of input in one input,
+       ends when the length is one
+     """
+    if mapper_rpn == []:
+        return None
+    if len(mapper_rpn) == 1:
+        return mapper_rpn[0]
+
+    mapper_rpn_copy = mapper_rpn.copy()
+    signs = [".", "*"]
+    mapper_modified = []
+
+    while mapper_rpn_copy:
+        el = mapper_rpn_copy.pop()
+        # element is a sign
+        if el in signs:
+            if mapper_rpn_copy[-1] not in signs and mapper_rpn_copy[-2] not in signs:
+                right, left = mapper_rpn_copy.pop(), mapper_rpn_copy.pop()
+                if el == ".":
+                    mapper_modified.append((left, right))
+                elif el == "*":
+                    mapper_modified.append([left, right])
+            else:
+                mapper_modified.append(el)
+        else:
+            mapper_modified.append(el)
+
+    # reversing the list and combining more
+    mapper_modified.reverse()
+    return rpn2mapper(mapper_modified)
+
+
 
 
 # used in the Node to change names in a mapper

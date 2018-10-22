@@ -10,6 +10,7 @@ import pytest
     (["a", "b"], ["a", "b", "*"]),
     (["a", ("b", "c")], ["a", "b", "c", ".", "*"]),
     ([("a", "b"), "c"], ["a", "b", ".", "c", "*"]),
+    (["a", ["b", ["c", "d"]]], ["a", "b", "c", "d", "*", "*", "*"]),
     (["a", ("b", ["c", "d"])], ["a", "b", "c", "d", "*", ".", "*"]),
     ((["a", "b"], "c"), ["a", "b", "*", "c", "."]),
     ((["a", "b"], ["c", "d"]), ["a", "b", "*", "c", "d", "*", "."]),
@@ -17,6 +18,22 @@ import pytest
 ])
 def test_mapper2rpn(mapper, rpn):
     assert aux.mapper2rpn(mapper) == rpn
+
+
+@pytest.mark.parametrize("mapper, rpn", [
+    ("a", ["a"]),
+    (("a", "b"), ["a", "b", "."]),
+    (["a", "b"], ["a", "b", "*"]),
+    (["a", ("b", "c")], ["a", "b", "c", ".", "*"]),
+    ([("a", "b"), "c"], ["a", "b", ".", "c", "*"]),
+    (["a", ["b", ["c", "d"]]], ["a", "b", "c", "d", "*", "*", "*"]),
+    (["a", ("b", ["c", "d"])], ["a", "b", "c", "d", "*", ".", "*"]),
+    ((["a", "b"], "c"), ["a", "b", "*", "c", "."]),
+    ((["a", "b"], ["c", "d"]), ["a", "b", "*", "c", "d", "*", "."]),
+    ([("a", "b"), ("c", "d")], ["a", "b", ".", "c", "d", ".", "*"])
+])
+def test_rpn2mapper(mapper, rpn):
+    assert aux.rpn2mapper(rpn) == mapper
 
 
 @pytest.mark.parametrize("mapper, other_mappers, rpn",[
@@ -81,7 +98,7 @@ def test_mapping_axis_error():
     ({"a": np.array([1, 2]), "b": np.array([3, 4, 1])},
      {"a": [0], "b": [1]}, 2, [["a"], ["b"]]),
     ({"a": np.array([1, 2]), "b": np.array([3, 4]), "c": np.array([1, 2, 3])},
-     {"a": [0], "b": [0], "c": [1]}, 2, [["a", "b"]]),
+     {"a": [0], "b": [0], "c": [1]}, 2, [["a", "b"], ["c"]]),
     ({"a": np.array([1, 2]), "b": np.array([3, 4]), "c": np.array([1, 2, 3])},
      {"a": [1], "b": [1], "c": [0]}, 2, [["c"], ["a", "b"]]),
     ({"a": np.array([[1, 2], [1, 2]]), "b": np.array([[3, 4], [3, 3]]),
@@ -92,4 +109,22 @@ def test_mapping_axis_error():
      {"a": [1, 2], "b": [1, 2], "c": [0]}, 3, [["c"], ["a", "b"], ["a", "b"]])
 ])
 def test_converting_axis2input(inputs, axis_inputs, ndim, expected):
-    aux.converting_axis2input(inputs, axis_inputs, ndim)[0] == expected
+    assert aux.converting_axis2input(inputs, axis_inputs, ndim)[0] == expected
+
+
+@pytest.mark.parametrize("mapper_rpn, input_to_remove, final_mapper_rpn", [
+    (["a", "b", "."], ["b", "a"], []),
+    (["a", "b", "*"], ["b"], ["a"]),
+    (["a", "b", "c", ".", "*"], ["b", "c"], ["a"]),
+    (["a", "b", "c", ".", "*"], ["a"], ["b", "c", "."]),
+    (["a", "b", ".", "c", "*"], ["a", "b"], ["c"]),
+    (["a", "b", "c", "d", "*", "*", "*"], ["c"], ["a", "b", "d", "*", "*"]),
+    (["a", "b", "c", "d", "*", "*", "*"], ["a"], ["b", "c", "d", "*", "*"]),
+    (["a", "b", "c", "d", "*", ".", "*"], ["a"], ["b", "c", "d", "*", "."]),
+    (["a", "b", "*", "c", "."], ["a", "c"], ["b"]),
+    (["a", "b", "*", "c", "d", "*", "."], ["a", "c"], ["b", "d", "."]),
+    (["a", "b", ".", "c", "d", ".", "*"], ["a", "b"], ["c", "d", "."])
+])
+def test_remove_inp_from_mapper_rpn(mapper_rpn, input_to_remove, final_mapper_rpn):
+    assert aux.remove_inp_from_mapper_rpn(mapper_rpn, input_to_remove) ==\
+           final_mapper_rpn
