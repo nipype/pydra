@@ -955,7 +955,32 @@ def test_workflow_combine_1a(plugin, change_dir):
             assert results[i][0] == expected_state[i]
 
 
-@pytest.mark.xfail(reason="wip")
+#
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_workflow_combine_2tmp(plugin, change_dir):
+    """workflow with two nodes, first one with mapper and combiner"""
+    wf = Workflow(name="wf2", workingdir="test_wf2_{}".format(plugin),
+                  wf_output_names=[("NB", "out")])
+    na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"],
+              inputs={"a": 3})
+    #na.map(mapper="a", inputs={"a": [3, 5]}).combine(combiner="a")
+
+    # the second node does not have explicit mapper (but keeps the mapper from the NA node)
+    nb = Node(name="NB", interface=interf_sumlist, workingdir="nb", output_names=["out"])
+
+    # adding 2 nodes and create a connection (as it is now)
+    wf.add_nodes([na, nb])
+    wf.connect("NA", "out", "NB", "a")
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    pdb.set_trace()
+    pass
+
+
+#@pytest.mark.xfail(reason="wip")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_combine_2(plugin, change_dir):
@@ -971,7 +996,7 @@ def test_workflow_combine_2(plugin, change_dir):
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "a")
-    #pdb.set_trace()
+    pdb.set_trace()
     assert wf.nodes[0].mapper == "NA.a"
     assert wf.nodes[0].combiner == ["NA.a"]
 
