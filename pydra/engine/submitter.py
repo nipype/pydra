@@ -62,6 +62,7 @@ class Submitter(object):
         if not workflow:
             workflow = self.workflow
         workflow.prepare_state_input()
+
         # TODO: should I have inner_nodes for all workflow (to avoid if wf.mapper)??
         if workflow.mapper:
             for key in workflow._node_names.keys():

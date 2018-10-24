@@ -119,7 +119,6 @@ class State(object):
         self._prepare_mapper_combine()
 
 
-    # TODO: should I call it from mapper?
     def _prepare_mapper_combine(self):
         self._mapper_rpn_comb = aux.remove_inp_from_mapper_rpn(self._mapper_rpn, self.inp_to_remove)
         self.mapper_comb = aux.rpn2mapper(self._mapper_rpn_comb)
