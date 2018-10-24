@@ -955,7 +955,6 @@ def test_workflow_combine_1a(plugin, change_dir):
             assert results[i][0] == expected_state[i]
 
 
-@pytest.mark.xfail(reason="wip")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_combine_2(plugin, change_dir):
@@ -971,14 +970,13 @@ def test_workflow_combine_2(plugin, change_dir):
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "a")
-    #pdb.set_trace()
+
     assert wf.nodes[0].mapper == "NA.a"
     assert wf.nodes[0].combiner == ["NA.a"]
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
     sub.close()
-
     expected = [[({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]]
     expected_state = [""]
     key_sort = list(expected[0][0][0].keys())
@@ -992,22 +990,23 @@ def test_workflow_combine_2(plugin, change_dir):
             assert results[i][1][j][1] == res[1]
             assert results[i][0] == expected_state[i]
 
+    expected_B = [({"NA.a": [3, 5]}, 12)]
+    key_sort = list(expected_B[0][0].keys())
+    expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
+    wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
+    for i, res in enumerate(expected_B):
+        # TODO not sure if I should remember input "NA.a": [3, 5]
+        for key in res[0].keys():
+            assert (wf.nodes[1].result["out"][i][0][key] == res[0][key]).all()
+        assert wf.nodes[1].result["out"][i][1] == res[1]
 
-    # # results from NB keeps the "state input" from the first node
-    # # two elements as in NA
-    # expected_B = [({"NA.a": 3, "NB.c": 10}, 15), ({"NA.a": 5, "NB.c": 10}, 17)]
-    # key_sort = list(expected_B[0][0].keys())
-    # expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
-    # wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-    # for i, res in enumerate(expected_B):
-    #     assert wf.nodes[1].result["out"][i][0] == res[0]
-    #     assert wf.nodes[1].result["out"][i][1] == res[1]
-#
-#     #output of the wf
-#     wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected_B):
-#         assert wf.result["out"][i][0] == res[0]
-#         assert wf.result["out"][i][1] == res[1]
+    #output of the wf
+    wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
+    for i, res in enumerate(expected_B):
+        # TODO not sure if I should remember input "NA.a": [3, 5]
+        for key in res[0].keys():
+            assert (wf.nodes[1].result["out"][i][0][key] == res[0][key]).all()
+        assert wf.result["out"][i][1] == res[1]
 #
 #
 #

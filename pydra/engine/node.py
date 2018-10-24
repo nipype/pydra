@@ -4,6 +4,7 @@ import itertools
 import pdb
 import networkx as nx
 import numpy as np
+from collections import OrderedDict
 
 from nipype.utils.filemanip import loadpkl
 from nipype import logging, Function
@@ -146,6 +147,7 @@ class NodeBase(object):
     def prepare_state_input(self):
         self._state.prepare_state_input(state_inputs=self.state_inputs)
 
+
     def map(self, mapper, inputs=None):
         self.mapper = mapper
         if inputs:
@@ -176,22 +178,92 @@ class NodeBase(object):
             state_dict = self.state.state_ind(ind)
         # reading extra inputs that come from previous nodes
         for (from_node, from_socket, to_socket) in self.needed_outputs:
+            # if the previous node has combiner I have to collect all elements
+            if from_node.state.combiner:
+                inputs_dict["{}.{}".format(self.name, to_socket)] =\
+                    self._get_input_comb(from_node, from_socket, state_dict)
+            else:
+                dir_nm_el_from = "_".join([
+                    "{}:{}".format(i, j) for i, j in list(state_dict.items())
+                    if i in list(from_node._state_inputs.keys())
+                ])
+                if not from_node.mapper:
+                    dir_nm_el_from = ""
+                # TODO: do I need this if, what if this is wf?
+                if is_node(from_node):
+                    out_from = self._reading_ci_output(
+                        node=from_node, dir_nm_el=dir_nm_el_from, out_nm=from_socket)
+                    if out_from:
+                        inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
+                    else:
+                        raise Exception("output from {} doesnt exist".format(from_node))
+
+        return state_dict, inputs_dict
+
+
+    def _get_input_comb(self, from_node, from_socket, state_dict):
+        """collecting all outputs from previous node that has combiner"""
+        state_dict_all = self._state_dict_all_comb(from_node, state_dict)
+        inputs_all = []
+        for state in state_dict_all:
             dir_nm_el_from = "_".join([
-                "{}:{}".format(i, j) for i, j in list(state_dict.items())
-                if i in list(from_node._state_inputs.keys())
-            ])
-            if not from_node.mapper:
-                dir_nm_el_from = ""
-            # TODO: do I need this if, what if this is wf?
+                "{}:{}".format(i, j) for i, j in list(state.items())])
             if is_node(from_node):
                 out_from = self._reading_ci_output(
                     node=from_node, dir_nm_el=dir_nm_el_from, out_nm=from_socket)
                 if out_from:
-                    inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
+                    inputs_all.append(out_from)
                 else:
                     raise Exception("output from {} doesnt exist".format(from_node))
+        return inputs_all
 
-        return state_dict, inputs_dict
+
+
+    def _state_dict_all_comb(self, from_node, state_dict):
+        """collecting state dictionary for all elements that were combined together"""
+        elements_per_axes = {}
+        axis_for_input = {}
+        all_axes = []
+        for inp in from_node.combiner:
+            axis_for_input[inp] = from_node.state._axis_for_input[inp]
+            for (i, ax)  in enumerate(axis_for_input[inp]):
+                elements_per_axes[ax] = state_dict[inp].shape[i]
+                all_axes.append(ax)
+        all_axes = list(set(all_axes))
+        all_axes.sort()
+        shape = [el for (ax, el) in sorted(elements_per_axes.items())]
+        all_elements = [range(i) for i in shape]
+        index_generator = itertools.product(*all_elements)
+        state_dict_all = []
+        for ind in index_generator:
+            state_dict_all.append(self._state_dict_el_for_comb(ind, state_dict,
+                                                               axis_for_input))
+        return state_dict_all
+
+
+    # similar to State.stae_value (could be combined?)
+    def _state_dict_el_for_comb(self, ind, state_inputs, axis_for_input, value=True):
+        """state input for a specific ind (used for connection)"""
+        state_dict_el = {}
+        for input, ax in axis_for_input.items():
+            # checking which axes are important for the input
+            sl_ax = slice(ax[0], ax[-1] + 1)
+            # taking the indexes for the axes
+            ind_inp = tuple(ind[sl_ax])  # used to be list
+            if value:
+                state_dict_el[input] = state_inputs[input][ind_inp]
+            else:  # using index instead of value
+                ind_inp_str = "x".join([str(el) for el in ind_inp])
+                state_dict_el[input] = ind_inp_str
+        # adding values from input that are not used in the mapper
+        for input in set(state_inputs) - set(axis_for_input):
+            if value:
+                state_dict_el[input] = state_inputs[input]
+            else:
+                state_dict_el[input] = None
+        # in py3.7 we can skip OrderedDict
+        return OrderedDict(sorted(state_dict_el.items(), key=lambda t: t[0]))
+
 
     def _reading_ci_output(self, dir_nm_el, out_nm, node=None):
         """used for current interfaces: checking if the output exists and returns the path if it does"""
@@ -445,7 +517,11 @@ class Workflow(NodeBase):
         if node.mapper:
             raise Exception("Cannot assign two mappings to the same input")
         node.map(mapper=mapper, inputs=inputs)
-        self._node_mappers[node.name] = node.mapper
+        if node.combiner:
+            self._node_mappers[node.name] = node.state.mapper_comb
+        else:
+            self._node_mappers[node.name] = node.mapper
+
 
     def get_output(self):
         # not sure, if I should collecto output of all nodes or only the ones that are used in wf.output
@@ -537,7 +613,12 @@ class Workflow(NodeBase):
             #self._inputs.update(nn.inputs)
             self.connected_var[nn] = {}
             self._node_names[nn.name] = nn
-            self._node_mappers[nn.name] = nn.mapper
+            # when we have a combiner in a previous node, we have to pass the final mapper
+            if nn.combiner:
+                self._node_mappers[nn.name] = nn.state.mapper_comb
+            else:
+                self._node_mappers[nn.name] = nn.mapper
+
 
     # TODO: workingir shouldn't have None
     def add(self, runnable, name=None, workingdir=None, inputs=None, input_names=None,
@@ -639,14 +720,16 @@ class Workflow(NodeBase):
                     nn.needed_outputs.append((out_node, out_var, inp))
                     #if there is no mapper provided, i'm assuming that mapper is taken from the previous node
                     if (not nn.mapper or nn.mapper == out_node.mapper) and out_node.mapper:
-                        nn.mapper = out_node.mapper
+                        if out_node.combiner:
+                            nn.mapper = out_node.state.mapper_comb
+                        else:
+                            nn.mapper = out_node.mapper
                     else:
                         pass
                     #TODO: implement inner mapper
             except (KeyError):
                 # tmp: we don't care about nn that are not in self.connected_var
                 pass
-
             nn.prepare_state_input()
 
     # removing temp. from Workflow
