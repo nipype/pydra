@@ -33,7 +33,7 @@ def change_dir(request):
 
 
 Plugins = ["serial"]
-#Plugins = ["serial", "mp", "cf", "dask"]
+Plugins = ["serial", "mp", "cf", "dask"]
 
 
 def fun_addtwo(a):
@@ -218,9 +218,9 @@ def test_node_combine_7():
     assert str(excinfo.value) ==\
            "element NA.b of combiner is not found in the mapper NA.a"
 
-# testing prepare state inputs TODO
 
-@pytest.mark.skip()
+# testing prepare state inputs
+
 def test_node_combine_8():
     """Node with interface, inputs, mapper and combiner"""
     nn = Node(name="NA", interface=interf_addtwo, inputs={"a": [3, 5]},
@@ -231,18 +231,17 @@ def test_node_combine_8():
     nn.prepare_state_input()
     assert nn.state._input_for_axis == [["NA.a"]]
 
-@pytest.mark.skip()
+
 def test_node_combine_9():
     """Node with interface,  two inputs, mapper and combiner"""
     nn = Node(name="NA", interface=interf_addvar,
               inputs={"a": [3, 5], "b": [10, 20]},
               mapper=["a", "b"], combiner=["a", "b"])
     assert nn.mapper == ["NA.a", "NA.b"]
-    assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
-    assert (nn.inputs["NA.b"] == np.array([10, 20])).all()
-    assert nn.state._mapper == ["NA.a", "NA.b"]
     assert nn.combiner == ["NA.a", "NA.b"]
 
+    nn.prepare_state_input()
+    assert nn.state._input_for_axis == [["NA.a"], ["NA.b"]]
 
 # running nodes with combiner
 
@@ -977,6 +976,7 @@ def test_workflow_combine_2(plugin, change_dir):
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
     sub.close()
+
     expected = [[({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]]
     expected_state = [""]
     key_sort = list(expected[0][0][0].keys())
@@ -990,12 +990,11 @@ def test_workflow_combine_2(plugin, change_dir):
             assert results[i][1][j][1] == res[1]
             assert results[i][0] == expected_state[i]
 
-    expected_B = [({"NA.a": [3, 5]}, 12)]
+    expected_B = [({}, 12)]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        # TODO not sure if I should remember input "NA.a": [3, 5]
         for key in res[0].keys():
             assert (wf.nodes[1].result["out"][i][0][key] == res[0][key]).all()
         assert wf.nodes[1].result["out"][i][1] == res[1]
@@ -1003,182 +1002,66 @@ def test_workflow_combine_2(plugin, change_dir):
     #output of the wf
     wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
     for i, res in enumerate(expected_B):
-        # TODO not sure if I should remember input "NA.a": [3, 5]
         for key in res[0].keys():
             assert (wf.nodes[1].result["out"][i][0][key] == res[0][key]).all()
         assert wf.result["out"][i][1] == res[1]
-#
-#
-#
-# @pytest.mark.parametrize("plugin", Plugins)
-# @python35_only
-# def test_workflow_2a(plugin, change_dir):
-#     """workflow with two nodes, second node with a scalar mapper"""
-#     wf = Workflow(name="wf2", workingdir="test_wf2a_{}".format(plugin),
-#                   wf_output_names=[("NB", "out")])
-#     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-#     na.map(mapper="a", inputs={"a": [3, 5]})
-#
-#     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
-#     # explicit scalar mapper between "a" from NA and b
-#     nb.map(mapper=("NA.a", "c"), inputs={"c": [2, 1]})
-#
-#     wf.add_nodes([na, nb])
-#     wf.connect("NA", "out", "NB", "b")
-#
-#     assert wf.nodes[0].mapper == "NA.a"
-#     assert wf.nodes[1].mapper == ("NA.a", "NB.c")
-#
-#     sub = Submitter(runnable=wf, plugin=plugin)
-#     sub.run()
-#     sub.close()
-#
-#     expected_A = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
-#     key_sort = list(expected_A[0][0].keys())
-#     expected_A.sort(key=lambda t: [t[0][key] for key in key_sort])
-#     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected_A):
-#         assert wf.nodes[0].result["out"][i][0] == res[0]
-#         assert wf.nodes[0].result["out"][i][1] == res[1]
-#
-#     # two elements (scalar mapper)
-#     expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
-#     key_sort = list(expected_B[0][0].keys())
-#     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
-#     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected_B):
-#         assert wf.nodes[1].result["out"][i][0] == res[0]
-#         assert wf.nodes[1].result["out"][i][1] == res[1]
-#
-#     # output of the wf
-#     wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected_B):
-#         assert wf.result["out"][i][0] == res[0]
-#         assert wf.result["out"][i][1] == res[1]
-#
-#
-# @pytest.mark.parametrize("plugin", Plugins)
-# @python35_only
-# def test_workflow_2b(plugin):
-#     """workflow with two nodes, second node with a vector mapper"""
-#     wf = Workflow(name="wf2", workingdir="test_wf2b_{}".format(plugin),
-#                   wf_output_names=[("NB", "out")])
-#     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-#     na.map(mapper="a", inputs={"a": [3, 5]})
-#     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
-#     # outer mapper
-#     nb.map(mapper=["NA.a", "c"], inputs={"c": [2, 1]})
-#
-#     wf.add_nodes([na, nb])
-#     wf.connect("NA", "out", "NB", "b")
-#
-#     assert wf.nodes[0].mapper == "NA.a"
-#     assert wf.nodes[1].mapper == ["NA.a", "NB.c"]
-#
-#     sub = Submitter(runnable=wf, plugin=plugin)
-#     sub.run()
-#     sub.close()
-#
-#     expected_A = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
-#     key_sort = list(expected_A[0][0].keys())
-#     expected_A.sort(key=lambda t: [t[0][key] for key in key_sort])
-#     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected_A):
-#         assert wf.nodes[0].result["out"][i][0] == res[0]
-#         assert wf.nodes[0].result["out"][i][1] == res[1]
-#
-#     # four elements (outer product)
-#     expected_B = [({"NA.a": 3, "NB.c": 1}, 6), ({"NA.a": 3, "NB.c": 2}, 7),
-#                   ({"NA.a": 5, "NB.c": 1}, 8), ({"NA.a": 5, "NB.c": 2}, 9)]
-#     key_sort = list(expected_B[0][0].keys())
-#     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
-#     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected_B):
-#         assert wf.nodes[1].result["out"][i][0] == res[0]
-#         assert wf.nodes[1].result["out"][i][1] == res[1]
-#
-#     # output of the wf
-#     wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected_B):
-#         assert wf.result["out"][i][0] == res[0]
-#         assert wf.result["out"][i][1] == res[1]
-#
-#
-# # using add method to add nodes
-#
-# @pytest.mark.parametrize("plugin", Plugins)
-# @python35_only
-# def test_workflow_3(plugin, change_dir):
-#     """using add(node) method"""
-#     wf = Workflow(name="wf3", workingdir="test_wf3_{}".format(plugin))
-#     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-#     na.map(mapper="a", inputs={"a": [3, 5]})
-#     # using add method (as in the Satra's example) with a node
-#     wf.add(na)
-#
-#     assert wf.nodes[0].mapper == "NA.a"
-#
-#     sub = Submitter(runnable=wf, plugin=plugin)
-#     sub.run()
-#     sub.close()
-#
-#     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
-#     key_sort = list(expected[0][0].keys())
-#     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
-#     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected):
-#         assert wf.nodes[0].result["out"][i][0] == res[0]
-#         assert wf.nodes[0].result["out"][i][1] == res[1]
-#
-#
-# @pytest.mark.parametrize("plugin", Plugins)
-# @python35_only
-# def test_workflow_3a(plugin, change_dir):
-#     """using add(interface) method"""
-#     wf = Workflow(name="wf3a", workingdir="test_wf3a_{}".format(plugin))
-#     # using the add method with an interface
-#     wf.add(interf_addtwo, workingdir="na", mapper="a", inputs={"a": [3, 5]}, name="NA",
-#            output_names=["out"])
-#
-#     assert wf.nodes[0].mapper == "NA.a"
-#
-#     sub = Submitter(runnable=wf, plugin=plugin)
-#     sub.run()
-#     sub.close()
-#
-#     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
-#     key_sort = list(expected[0][0].keys())
-#     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
-#     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected):
-#         assert wf.nodes[0].result["out"][i][0] == res[0]
-#         assert wf.nodes[0].result["out"][i][1] == res[1]
-#
-#
-# @pytest.mark.parametrize("plugin", Plugins)
-# @python35_only
-# def test_workflow_3b(plugin, change_dir):
-#     """using add (function) method"""
-#     wf = Workflow(name="wf3b", workingdir="test_wf3b_{}".format(plugin))
-#     # using the add method with a function
-#     wf.add(fun_addtwo, input_names=["a"], workingdir="na", mapper="a",
-#            inputs={"a": [3, 5]}, name="NA", output_names=["out"])
-#
-#     assert wf.nodes[0].mapper == "NA.a"
-#
-#     sub = Submitter(runnable=wf, plugin=plugin)
-#     sub.run()
-#     sub.close()
-#
-#     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
-#     key_sort = list(expected[0][0].keys())
-#     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
-#     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected):
-#         assert wf.nodes[0].result["out"][i][0] == res[0]
-#         assert wf.nodes[0].result["out"][i][1] == res[1]
-#
-#
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_workflow_combine_3(plugin, change_dir):
+    """workflow with two nodes, first one with mapper and combiner (different than mapper)"""
+    wf = Workflow(name="wf3", workingdir="test_wf3_{}".format(plugin),
+                  wf_output_names=[("NB", "out")])
+    na = Node(name="NA", interface=interf_addvar, workingdir="na", output_names=["out"])
+    na.map(mapper=["b", "c"], inputs={"b": [3, 5], "c": [10, 20]}).combine(combiner="b")
+
+    # the second node does not have explicit mapper (but keeps the mapper from the NA node)
+    nb = Node(name="NB", interface=interf_sumlist, workingdir="nb", output_names=["out"])
+
+    # adding 2 nodes and create a connection (as it is now)
+    wf.add_nodes([na, nb])
+    wf.connect("NA", "out", "NB", "a")
+
+    assert wf.nodes[0].mapper == ["NA.b", "NA.c"]
+    assert wf.nodes[0].combiner == ["NA.b"]
+
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    expected = [[({"NA.b": 3, "NA.c": 10}, 13), ({"NA.b": 5, "NA.c": 10}, 15)],
+                [({"NA.b": 3, "NA.c": 20}, 23), ({"NA.b": 5, "NA.c": 20}, 25)]]
+    expected_state = ["NA.c:10", "NA.c:20"]
+    key_sort = list(expected[0][0][0].keys())
+    [exp.sort(key=lambda t: [t[0][key] for key in key_sort]) for exp in expected]
+    results = wf.nodes[0].result["out"]
+    results.sort()
+    [res[1].sort(key=lambda t: [t[0][key] for key in key_sort]) for res in results]
+    for i, res_comb in enumerate(expected):
+        for j, res in enumerate(res_comb):
+            assert results[i][1][j][0] == res[0]
+            assert results[i][1][j][1] == res[1]
+            assert results[i][0] == expected_state[i]
+
+
+    expectedB = [({"NA.c": 10}, 28), ({"NA.c": 20}, 48)]
+    key_sort = list(expectedB[0][0].keys())
+    expectedB.sort(key=lambda t: [t[0][key] for key in key_sort])
+    wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
+    for i, res in enumerate(expectedB):
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
+
+
+    #output of the wf
+    wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
+    for i, res in enumerate(expectedB):
+        assert wf.result["out"][i][0] == res[0]
+        assert wf.result["out"][i][1] == res[1]
+
+
+
 # @pytest.mark.parametrize("plugin", Plugins)
 # @python35_only
 # def test_workflow_4(plugin, change_dir):

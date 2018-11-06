@@ -52,11 +52,13 @@ class NodeBase(object):
             # adding name of the node to the input name within the mapper
             mapper = aux.change_mapper(mapper, self.name)
         self._mapper = mapper
-        self._other_mappers = other_mappers
+        if other_mappers:
+            self._other_mappers = other_mappers
+        else:
+            self._other_mappers = {}
         self._combiner = None
         if combiner:
             self.combiner = combiner
-        # create state (takes care of mapper, connects inputs with axes, so we can ask for specifc element)
         self._state = state.State(mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers,
                                   combiner=self.combiner)
         self._output = {}
@@ -69,9 +71,7 @@ class NodeBase(object):
         self._is_complete = False
         self.write_state = write_state
 
-    # TBD
-    def join(self, field):
-        pass
+
 
     @property
     def state(self):
@@ -278,6 +278,22 @@ class NodeBase(object):
                 return out
         return False
 
+
+    # TODO: this is used now only for node, it probbably should be also for wf
+    def _directory_name_state_surv(self, state_dict):
+        """eliminating all inputs from state dictionary that are not in
+        the mapper anymore (e.g. because of the combiner);
+        create name of the dictionary
+        """
+        state_surv_dict = dict((key, val) for (key, val) in state_dict.items()
+                               if key in self.state._mapper_rpn)
+        dir_nm_el = "_".join(["{}:{}".format(i, j)
+                              for i, j in list(state_surv_dict.items())])
+        if not self.mapper:
+            dir_nm_el = ""
+        return dir_nm_el, state_surv_dict
+
+
     # checking if all outputs are saved
     @property
     def is_complete(self):
@@ -351,25 +367,15 @@ class Node(NodeBase):
         state_dict, inputs_dict = self.get_input_el(ind)
         if not self.write_state:
             state_dict = self.state.state_ind(ind)
-        dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(state_dict.items())])
-        print("Run interface el, dict={}".format(state_dict))
+        dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
+        print("Run interface el, dict={}".format(state_surv_dict))
         logger.debug("Run interface el, name={}, inputs_dict={}, state_dict={}".format(
-            self.name, inputs_dict, state_dict))
-        if not self.mapper:
-            dir_nm_el = ""
+            self.name, inputs_dict, state_surv_dict))
         res = self.interface.run(
             inputs=inputs_dict,
             base_dir=os.path.join(os.getcwd(), self.workingdir),
             dir_nm_el=dir_nm_el)
 
-        # TODO when join
-        #if self._joinByKey:
-        #    dir_join = "join_" + "_".join(["{}.{}".format(i, j) for i, j in list(state_dict.items()) if i not in self._joinByKey])
-        #elif self._join:
-        #    dir_join = "join_"
-        #if self._joinByKey or self._join:
-        #    os.makedirs(os.path.join(self.nodedir, dir_join), exist_ok=True)
-        #    dir_nm_el = os.path.join(dir_join, dir_nm_el)
         return res
 
 
@@ -382,18 +388,17 @@ class Node(NodeBase):
                     state_dict = self.state.state_values(ind)
                 else:
                     state_dict = self.state.state_ind(ind)
-                dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(state_dict.items())])
+                dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
                 if self.mapper:
-                    output_el = (state_dict, self._reading_ci_output(dir_nm_el=dir_nm_el,
+                    output_el = (state_surv_dict, self._reading_ci_output(dir_nm_el,
                                                                      out_nm=key_out))
-                    #print("OUTPUT_EL", output_el)
                     if not self.combiner: # only mapper
                         self._output[key_out][dir_nm_el] = output_el
                     else: #assuming that only combined output is saved
                         self._combined_output(key_out, state_dict, output_el)
                 else:
                     self._output[key_out] = \
-                        (state_dict, self._reading_ci_output(dir_nm_el="", out_nm=key_out))
+                        (state_surv_dict, self._reading_ci_output(dir_nm_el, out_nm=key_out))
         return self._output
 
 
@@ -406,7 +411,7 @@ class Node(NodeBase):
         else:
             self._output[key_out][dir_nm_comb] = [output_el]
 
-    # dj: version without join
+
     def _check_all_results(self):
         """checking if all files that should be created are present"""
         for ind in itertools.product(*self.state.all_elements):
@@ -414,10 +419,7 @@ class Node(NodeBase):
                 state_dict = self.state.state_values(ind)
             else:
                 state_dict = self.state.state_ind(ind)
-            dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(state_dict.items())])
-            if not self.mapper:
-                dir_nm_el = ""
-
+            dir_nm_el, _ = self._directory_name_state_surv(state_dict)
             for key_out in self.output_names:
                 if not self._reading_ci_output(dir_nm_el, key_out):
                     return False
@@ -512,7 +514,9 @@ class Workflow(NodeBase):
 
     def map_node(self, mapper, node=None, inputs=None):
         """this is setting a mapper to the wf's nodes (not to the wf)"""
-        if not node:
+        if type(node) is str:
+            node = self._node_names[node]
+        elif node is None:
             node = self._last_added
         if node.mapper:
             raise Exception("Cannot assign two mappings to the same input")
@@ -561,7 +565,7 @@ class Workflow(NodeBase):
                         "the key {} is already used in workflow.result".format(out_wf_nm))
         return self._output
 
-    # dj: version without join
+
     # TODO: might merge with the function from Node
     def _check_all_results(self):
         """checking if all files that should be created are present"""
@@ -603,6 +607,7 @@ class Workflow(NodeBase):
                         self._result[key_out].append(val)
 
 
+    # TODO: this should be probably using add method
     def add_nodes(self, nodes):
         """adding nodes without defining connections
             most likely it will be removed at the end
@@ -618,11 +623,12 @@ class Workflow(NodeBase):
                 self._node_mappers[nn.name] = nn.state.mapper_comb
             else:
                 self._node_mappers[nn.name] = nn.mapper
+            nn.other_mappers = self._node_mappers
 
 
     # TODO: workingir shouldn't have None
     def add(self, runnable, name=None, workingdir=None, inputs=None, input_names=None,
-            output_names=None, mapper=None, write_state=True, **kwargs):
+            output_names=None, mapper=None, combiner=None, write_state=True, **kwargs):
         if is_function(runnable):
             if not output_names:
                 output_names = ["out"]
@@ -637,7 +643,8 @@ class Workflow(NodeBase):
                 workingdir = name
             node = Node(interface=interface, workingdir=workingdir, name=name,
                         inputs=inputs, mapper=mapper, other_mappers=self._node_mappers,
-                        write_state=write_state, output_names=output_names)
+                        combiner=combiner, output_names=output_names,
+                        write_state=write_state)
         elif is_current_interface(runnable):
             if not name:
                 raise Exception("you have to specify name for the node")
@@ -645,7 +652,8 @@ class Workflow(NodeBase):
                 workingdir = name
             node = Node(interface=runnable, workingdir=workingdir, name=name,
                         inputs=inputs, mapper=mapper, other_mappers=self._node_mappers,
-                        output_names=output_names, write_state=write_state)
+                        combiner=combiner, output_names=output_names,
+                        write_state=write_state)
         elif is_nipype_interface(runnable):
             ci = aux.CurrentInterface(interface=runnable, name=name)
             if not name:
@@ -654,16 +662,17 @@ class Workflow(NodeBase):
                 workingdir = name
             node = Node(interface=ci, workingdir=workingdir, name=name, inputs=inputs,
                         mapper=mapper, other_mappers=self._node_mappers,
-                        output_names=output_names, write_state=write_state)
+                        combiner=combiner, output_names=output_names,
+                        write_state=write_state)
         elif is_node(runnable):
             node = runnable
+            node.other_mappers = self._node_mappers
         elif is_workflow(runnable):
             node = runnable
         else:
             raise ValueError("Unknown workflow element: {!r}".format(runnable))
         self.add_nodes([node])
         self._last_added = node
-
         # connecting inputs to other nodes outputs
         for (inp, source) in kwargs.items():
             try:

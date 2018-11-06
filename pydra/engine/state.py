@@ -9,11 +9,15 @@ from . import auxiliary as aux
 class State(object):
     def __init__(self, node_name, mapper=None, other_mappers=None, combiner=None):
         self._mapper = mapper
+        if other_mappers:
+            self._other_mappers = other_mappers
+        else:
+            self._other_mappers = {}
         self.node_name = node_name
         if self._mapper:
             # changing mapper (as in rpn), so I can read from left to right
             # e.g. if mapper=('d', ['e', 'r']), _mapper_rpn=['d', 'e', 'r', '*', '.']
-            self._mapper_rpn = aux.mapper2rpn(self._mapper, other_mappers=other_mappers)
+            self._mapper_rpn = aux.mapper2rpn(self._mapper, other_mappers=self._other_mappers)
             self._input_names_mapper = [i for i in self._mapper_rpn if i not in ["*", "."]]
         else:
             self._mapper_rpn = []
@@ -24,11 +28,9 @@ class State(object):
         else:
             self._combiner = combiner
 
+
     def prepare_state_input(self, state_inputs):
         """prepare all inputs, should be called once all input is available"""
-
-        # dj TOTHINK: I actually stopped using state_inputs for now, since people wanted to have mapper not only
-        # for state inputs. Might have to come back....
         self.state_inputs = state_inputs
 
         # not all input field have to be use in the mapper, can be an extra scalar
