@@ -1433,6 +1433,7 @@ def test_workflow_16a(plugin, change_dir):
     # TODO (res): the naming remembers only the node, doesnt remember that came from NA...
     # TODO (res): because nb doesnt have mapper, but only wfb, and wf.result reads from node results,
     # TODO ...  : we dont have any state values here. probably should change it that wf can see wfb.b values
+    #TODO (res): compare wf.result and wfb.rsult (wfb has to many var in state_Dict)
     # the naming should have names with workflows??
     expected_B = [({}, 15), ({}, 17)]
     key_sort = list(expected_B[0][0].keys())

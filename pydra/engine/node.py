@@ -183,12 +183,7 @@ class NodeBase(object):
                 inputs_dict["{}.{}".format(self.name, to_socket)] =\
                     self._get_input_comb(from_node, from_socket, state_dict)
             else:
-                dir_nm_el_from = "_".join([
-                    "{}:{}".format(i, j) for i, j in list(state_dict.items())
-                    if i in list(from_node._state_inputs.keys())
-                ])
-                if not from_node.mapper:
-                    dir_nm_el_from = ""
+                dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
                 # TODO: do I need this if, what if this is wf?
                 if is_node(from_node):
                     out_from = self._reading_ci_output(
@@ -197,7 +192,6 @@ class NodeBase(object):
                         inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
                     else:
                         raise Exception("output from {} doesnt exist".format(from_node))
-
         return state_dict, inputs_dict
 
 
@@ -549,13 +543,9 @@ class Workflow(NodeBase):
                         for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
                             if self.write_state:
                                 wf_inputs_dict = self.state.state_values(ind)
-                                dir_nm_el = "_".join([
-                                    "{}:{}".format(i, j) for i, j in list(wf_inputs_dict.items())
-                                ])
                             else:
-                                wf_ind_dict = self.state.state_ind(ind)
-                                dir_nm_el = "_".join(
-                                    ["{}:{}".format(i, j) for i, j in list(wf_ind_dict.items())])
+                                wf_inputs_dict = self.state.state_ind(ind)
+                            dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_dict)
                             self._output[out_wf_nm][dir_nm_el] = self.node_outputs[node_nm][i][
                                 out_nd_nm]
                     else:
@@ -594,8 +584,7 @@ class Workflow(NodeBase):
                             wf_inputs_dict = self.state.state_values(ind)
                         else:
                             wf_inputs_dict = self.state.state_ind(ind)
-                        dir_nm_el = "_".join(
-                            ["{}:{}".format(i, j) for i, j in list(wf_inputs_dict.items())])
+                        dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_dict)
                         res_l = []
                         val_l = self._dict_tuple2list(self.output[key_out][dir_nm_el])
                         for val in val_l:
@@ -714,8 +703,11 @@ class Workflow(NodeBase):
                 raise Exception("{}.{} not in the workflow inputs".format(self.name, inp_wf))
         for nn in self.graph_sorted:
             if self.write_state:
+                # TODO: related to test_node::test_workflow_16a
+                #dir_nm_el, _ = self._directory_name_state_surv(wf_inputs)
                 dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(wf_inputs.items())])
             else:
+                #dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_ind)
                 dir_nm_el = "_".join(
                     ["{}:{}".format(i, j) for i, j in list(wf_inputs_ind.items())])
             if not self.mapper:

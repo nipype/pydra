@@ -84,7 +84,7 @@ def test_neuro(change_dir, plugin):
 
     wf.add(runnable=select_target, name="targets", subject_id="subject_id",
            input_names=["subject_id", "space"], output_names=["out"],
-           out_read=True, write_state=False)\
+           write_state=False)\
         .map_node(mapper="space", inputs={"space": [space for space in Inputs["output_spaces"]
                                                if space.startswith("fs")]})
 
