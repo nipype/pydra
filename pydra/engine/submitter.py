@@ -65,8 +65,8 @@ class Submitter(object):
             workflow = self.workflow
         workflow.prepare_state_input()
 
-        # TODO: should I have inner_nodes for all workflow (to avoid if wf.mapper)??
-        if workflow.mapper:
+        # TODO: should I have inner_nodes for all workflow (to avoid if wf.splitter)??
+        if workflow.splitter:
             for key in workflow._node_names.keys():
                 workflow.inner_nodes[key] = []
             for (i, ind) in enumerate(workflow.state.index_generator):
@@ -103,7 +103,7 @@ class Submitter(object):
             workflow.get_output()
 
     def _run_workflow_el(self, workflow, i, ind, collect_inp=False):
-        """running one internal workflow (if workflow has a mapper)"""
+        """running one internal workflow (if workflow has a splitter)"""
         # TODO: can I simplify and remove collect inp? where should it be?
         if collect_inp:
             st_inputs, wf_inputs = workflow.get_input_el(ind)
@@ -120,7 +120,7 @@ class Submitter(object):
     def _run_workflow_nd(self, workflow):
         """iterating over all nodes from a workflow and submitting them or adding to the node_line"""
         for (i_n, node) in enumerate(workflow.graph_sorted):
-            if workflow.parent_wf and workflow.parent_wf.mapper:  # for now if parent_wf, parent_wf has to have mapper
+            if workflow.parent_wf and workflow.parent_wf.splitter:  # for now if parent_wf, parent_wf has to have splitter
                 workflow.parent_wf.inner_nodes[node.name].append(node)
             node.prepare_state_input()
             self._to_finish.append(node)

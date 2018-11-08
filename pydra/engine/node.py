@@ -15,8 +15,8 @@ logger = logging.getLogger('nipype.workflow')
 
 
 class NodeBase(object):
-    def __init__(self, name, mapper=None, combiner=None, inputs=None,
-                 other_mappers=None, write_state=True, *args, **kwargs):
+    def __init__(self, name, splitter=None, combiner=None, inputs=None,
+                 other_splitters=None, write_state=True, *args, **kwargs):
         """A base structure for nodes in the computational graph (i.e. both
         ``Node`` and ``Workflow``).
 
@@ -25,14 +25,14 @@ class NodeBase(object):
 
         name : str
             Unique name of this node
-        mapper : str or (list or tuple of (str or mappers))
-            Whether inputs should be mapped at run time
+        splitter : str or (list or tuple of (str or splitters))
+            Whether inputs should be split at run time
         combiner: str or list of strings (names of variables)
             variables that should be used to combine results together
         inputs : dictionary (input name, input value or list of values)
             States this node's input names
-        other_mappers : dictionary (name of a node, mapper of the node)
-            information about other nodes' mappers from workflow (in case the mapper
+        other_splitters : dictionary (name of a node, splitter of the node)
+            information about other nodes' splitters from workflow (in case the splitter
             from previous node is used)
         write_state : True
             flag that says if value of state input should be written out to output
@@ -48,18 +48,18 @@ class NodeBase(object):
         if inputs:
             self.inputs = inputs
 
-        if mapper:
-            # adding name of the node to the input name within the mapper
-            mapper = aux.change_mapper(mapper, self.name)
-        self._mapper = mapper
-        if other_mappers:
-            self._other_mappers = other_mappers
+        if splitter:
+            # adding name of the node to the input name within the splitter
+            splitter = aux.change_splitter(splitter, self.name)
+        self._splitter = splitter
+        if other_splitters:
+            self._other_splitters = other_splitters
         else:
-            self._other_mappers = {}
+            self._other_splitters = {}
         self._combiner = None
         if combiner:
             self.combiner = combiner
-        self._state = state.State(mapper=self._mapper, node_name=self.name, other_mappers=self._other_mappers,
+        self._state = state.State(splitter=self._splitter, node_name=self.name, other_splitters=self._other_splitters,
                                   combiner=self.combiner)
         self._output = {}
         self._result = {}
@@ -78,17 +78,17 @@ class NodeBase(object):
         return self._state
 
     @property
-    def mapper(self):
-        return self._mapper
+    def splitter(self):
+        return self._splitter
 
-    @mapper.setter
-    def mapper(self, mapper):
-        if self._mapper:
-            raise Exception("mapper is already set")
-        self._mapper = aux.change_mapper(mapper, self.name)
+    @splitter.setter
+    def splitter(self, splitter):
+        if self._splitter:
+            raise Exception("splitter is already set")
+        self._splitter = aux.change_splitter(splitter, self.name)
         # updating state
-        self._state = state.State(mapper=self._mapper, node_name=self.name, combiner=self.combiner,
-                                  other_mappers=self._other_mappers)
+        self._state = state.State(splitter=self._splitter, node_name=self.name, combiner=self.combiner,
+                                  other_splitters=self._other_splitters)
 
     @property
     def combiner(self):
@@ -98,19 +98,19 @@ class NodeBase(object):
     def combiner(self, combiner):
         if self._combiner:
             raise Exception("combiner is already set")
-        if not self.mapper:
-            raise Exception("mapper has to be set before setting combiner")
+        if not self.splitter:
+            raise Exception("splitter has to be set before setting combiner")
         if type(combiner) is str:
             combiner = [combiner]
         elif type(combiner) is not list:
             raise Exception("combiner should be a string or a list")
-        self._combiner = aux.change_mapper(combiner, self.name)
+        self._combiner = aux.change_splitter(combiner, self.name)
         if hasattr(self, "state"):
             self.state.combiner = self._combiner
         for el in self._combiner:
-            if not aux.search_mapper(el, self.mapper):
-                raise Exception("element {} of combiner is not found in the mapper {}".format(
-                    el, self.mapper))
+            if not aux.search_splitter(el, self.splitter):
+                raise Exception("element {} of combiner is not found in the splitter {}".format(
+                    el, self.splitter))
 
     @property
     def inputs(self):
@@ -148,8 +148,8 @@ class NodeBase(object):
         self._state.prepare_state_input(state_inputs=self.state_inputs)
 
 
-    def map(self, mapper, inputs=None):
-        self.mapper = mapper
+    def split(self, splitter, inputs=None):
+        self.splitter = splitter
         if inputs:
             self.inputs = inputs
             self._state_inputs.update(self.inputs)
@@ -249,7 +249,7 @@ class NodeBase(object):
             else:  # using index instead of value
                 ind_inp_str = "x".join([str(el) for el in ind_inp])
                 state_dict_el[input] = ind_inp_str
-        # adding values from input that are not used in the mapper
+        # adding values from input that are not used in the splitter
         for input in set(state_inputs) - set(axis_for_input):
             if value:
                 state_dict_el[input] = state_inputs[input]
@@ -276,14 +276,14 @@ class NodeBase(object):
     # TODO: this is used now only for node, it probbably should be also for wf
     def _directory_name_state_surv(self, state_dict):
         """eliminating all inputs from state dictionary that are not in
-        the mapper anymore (e.g. because of the combiner);
+        the splitter anymore (e.g. because of the combiner);
         create name of the dictionary
         """
         state_surv_dict = dict((key, val) for (key, val) in state_dict.items()
-                               if key in self.state._mapper_rpn)
+                               if key in self.state._splitter_rpn)
         dir_nm_el = "_".join(["{}:{}".format(i, j)
                               for i, j in list(state_surv_dict.items())])
-        if not self.mapper:
+        if not self.splitter:
             dir_nm_el = ""
         return dir_nm_el, state_surv_dict
 
@@ -321,11 +321,11 @@ class NodeBase(object):
 
 
 class Node(NodeBase):
-    def __init__(self, name, interface, inputs=None, mapper=None, workingdir=None,
-                 other_mappers=None, output_names=None, write_state=True,
+    def __init__(self, name, interface, inputs=None, splitter=None, workingdir=None,
+                 other_splitters=None, output_names=None, write_state=True,
                  combiner=None, *args, **kwargs):
-        super(Node, self).__init__(name=name, mapper=mapper, inputs=inputs,
-                                   other_mappers=other_mappers, write_state=write_state,
+        super(Node, self).__init__(name=name, splitter=splitter, inputs=inputs,
+                                   other_splitters=other_splitters, write_state=write_state,
                                    combiner=combiner, *args, **kwargs)
 
         # working directory for node, will be change if node is a part of a wf
@@ -342,16 +342,16 @@ class Node(NodeBase):
     #     id_self = id(self)        # memoization avoids unnecesary recursion
     #     _copy = memo.get(id_self)
     #     if _copy is None:
-    #         # changing names of inputs and input_map, so it doesnt contain node.name
+    #         # changing names of inputs and input_split, so it doesnt contain node.name
     #         inputs_copy = dict((key[len(self.name)+1:], deepcopy(value))
     #                            for (key, value) in self.inputs.items())
     #         interface_copy = deepcopy(self.interface)
-    #         interface_copy.input_map = dict((key, val[len(self.name)+1:])
-    #                                         for (key, val) in interface_copy.input_map.items())
+    #         interface_copy.input_split = dict((key, val[len(self.name)+1:])
+    #                                         for (key, val) in interface_copy.input_split.items())
     #         _copy = type(self)(
     #             name=deepcopy(self.name), interface=interface_copy,
-    #             inputs=inputs_copy, mapper=deepcopy(self.mapper),
-    #             base_dir=deepcopy(self.nodedir), other_mappers=deepcopy(self._other_mappers))
+    #             inputs=inputs_copy, splitter=deepcopy(self.splitter),
+    #             base_dir=deepcopy(self.nodedir), other_splitters=deepcopy(self._other_splitters))
     #         memo[id_self] = _copy
     #     return _copy
 
@@ -382,10 +382,10 @@ class Node(NodeBase):
                 else:
                     state_dict = self.state.state_ind(ind)
                 dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
-                if self.mapper:
+                if self.splitter:
                     output_el = (state_surv_dict, self._reading_ci_output(dir_nm_el,
                                                                      out_nm=key_out))
-                    if not self.combiner: # only mapper
+                    if not self.combiner: # only splitter
                         self._output[key_out][dir_nm_el] = output_el
                     else: #assuming that only combined output is saved
                         self._combined_output(key_out, state_dict, output_el)
@@ -454,9 +454,9 @@ class Node(NodeBase):
 
 
 class Workflow(NodeBase):
-    def __init__(self, name, inputs=None, wf_output_names=None, mapper=None,
+    def __init__(self, name, inputs=None, wf_output_names=None, splitter=None,
                  nodes=None, workingdir=None, write_state=True, *args, **kwargs):
-        super(Workflow, self).__init__(name=name, mapper=mapper, inputs=inputs,
+        super(Workflow, self).__init__(name=name, splitter=splitter, inputs=inputs,
                                        write_state=write_state, *args, **kwargs)
 
         self.graph = nx.DiGraph()
@@ -472,15 +472,15 @@ class Workflow(NodeBase):
             self.connected_var[nn] = {}
         # key: name of a node, value: the node
         self._node_names = {}
-        # key: name of a node, value: mapper of the node
-        self._node_mappers = {}
+        # key: name of a node, value: splitter of the node
+        self._node_splitters = {}
         # dj: not sure if this should be different than base_dir
         self.workingdir = os.path.join(os.getcwd(), workingdir)
         # list of (nodename, output name in the name, output name in wf) or (nodename, output name in the name)
         # dj: using different name than for node, since this one it is defined by a user
         self.wf_output_names = wf_output_names
 
-        # nodes that are created when the workflow has mapper (key: node name, value: list of nodes)
+        # nodes that are created when the workflow has splitter (key: node name, value: list of nodes)
         self.inner_nodes = {}
         # in case of inner workflow this points to the main/parent workflow
         self.parent_wf = None
@@ -506,19 +506,19 @@ class Workflow(NodeBase):
         return list(nx.topological_sort(self.graph))
 
 
-    def map_node(self, mapper, node=None, inputs=None):
-        """this is setting a mapper to the wf's nodes (not to the wf)"""
+    def split_node(self, splitter, node=None, inputs=None):
+        """this is setting a splitter to the wf's nodes (not to the wf)"""
         if type(node) is str:
             node = self._node_names[node]
         elif node is None:
             node = self._last_added
-        if node.mapper:
-            raise Exception("Cannot assign two mappers to the same node")
-        node.map(mapper=mapper, inputs=inputs)
+        if node.splitter:
+            raise Exception("Cannot assign two splitters to the same node")
+        node.split(splitter=splitter, inputs=inputs)
         if node.combiner:
-            self._node_mappers[node.name] = node.state.mapper_comb
+            self._node_splitters[node.name] = node.state.splitter_comb
         else:
-            self._node_mappers[node.name] = node.mapper
+            self._node_splitters[node.name] = node.splitter
         return self
 
 
@@ -538,7 +538,7 @@ class Workflow(NodeBase):
         # not sure, if I should collecto output of all nodes or only the ones that are used in wf.output
         self.node_outputs = {}
         for nn in self.graph:
-            if self.mapper:
+            if self.splitter:
                 self.node_outputs[nn.name] = [ni.get_output() for ni in self.inner_nodes[nn.name]]
             else:
                 self.node_outputs[nn.name] = nn.get_output()
@@ -551,7 +551,7 @@ class Workflow(NodeBase):
                 else:
                     raise Exception("wf_output_names should have 2 or 3 elements")
                 if out_wf_nm not in self._output.keys():
-                    if self.mapper:
+                    if self.splitter:
                         self._output[out_wf_nm] = {}
                         for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
                             if self.write_state:
@@ -591,7 +591,7 @@ class Workflow(NodeBase):
             for out in self.wf_output_names:
                 key_out = out[2] if len(out) == 3 else out[1]
                 self._result[key_out] = []
-                if self.mapper:
+                if self.splitter:
                     for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
                         if self.write_state:
                             wf_inputs_dict = self.state.state_values(ind)
@@ -620,17 +620,17 @@ class Workflow(NodeBase):
             #self._inputs.update(nn.inputs)
             self.connected_var[nn] = {}
             self._node_names[nn.name] = nn
-            # when we have a combiner in a previous node, we have to pass the final mapper
+            # when we have a combiner in a previous node, we have to pass the final splitter
             if nn.combiner:
-                self._node_mappers[nn.name] = nn.state.mapper_comb
+                self._node_splitters[nn.name] = nn.state.splitter_comb
             else:
-                self._node_mappers[nn.name] = nn.mapper
-            nn.other_mappers = self._node_mappers
+                self._node_splitters[nn.name] = nn.splitter
+            nn.other_splitters = self._node_splitters
 
 
     # TODO: workingir shouldn't have None
     def add(self, runnable, name=None, workingdir=None, inputs=None, input_names=None,
-            output_names=None, mapper=None, combiner=None, write_state=True, **kwargs):
+            output_names=None, splitter=None, combiner=None, write_state=True, **kwargs):
         if is_function(runnable):
             if not output_names:
                 output_names = ["out"]
@@ -644,7 +644,7 @@ class Workflow(NodeBase):
             if not workingdir:
                 workingdir = name
             node = Node(interface=interface, workingdir=workingdir, name=name,
-                        inputs=inputs, mapper=mapper, other_mappers=self._node_mappers,
+                        inputs=inputs, splitter=splitter, other_splitters=self._node_splitters,
                         combiner=combiner, output_names=output_names,
                         write_state=write_state)
         elif is_current_interface(runnable):
@@ -653,7 +653,7 @@ class Workflow(NodeBase):
             if not workingdir:
                 workingdir = name
             node = Node(interface=runnable, workingdir=workingdir, name=name,
-                        inputs=inputs, mapper=mapper, other_mappers=self._node_mappers,
+                        inputs=inputs, splitter=splitter, other_splitters=self._node_splitters,
                         combiner=combiner, output_names=output_names,
                         write_state=write_state)
         elif is_nipype_interface(runnable):
@@ -663,12 +663,12 @@ class Workflow(NodeBase):
             if not workingdir:
                 workingdir = name
             node = Node(interface=ci, workingdir=workingdir, name=name, inputs=inputs,
-                        mapper=mapper, other_mappers=self._node_mappers,
+                        splitter=splitter, other_splitters=self._node_splitters,
                         combiner=combiner, output_names=output_names,
                         write_state=write_state)
         elif is_node(runnable):
             node = runnable
-            node.other_mappers = self._node_mappers
+            node.other_splitters = self._node_splitters
         elif is_workflow(runnable):
             node = runnable
         else:
@@ -699,7 +699,7 @@ class Workflow(NodeBase):
         self.needed_inp_wf.append((node_nm, inp_wf, inp_nd))
 
     def preparing(self, wf_inputs=None, wf_inputs_ind=None, st_inputs=None):
-        """preparing nodes which are connected: setting the final mapper and state_inputs"""
+        """preparing nodes which are connected: setting the final splitter and state_inputs"""
         #pdb.set_trace()
         for node_nm, inp_wf, inp_nd in self.needed_inp_wf:
             node = self._node_names[node_nm]
@@ -721,7 +721,7 @@ class Workflow(NodeBase):
             else:
                 # wf_inputs_ind is already ok, doesn't need st_inputs_ind
                   dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_ind)
-            if not self.mapper:
+            if not self.splitter:
                 dir_nm_el = ""
             nn.workingdir = os.path.join(self.workingdir, dir_nm_el, nn.name)
             nn._is_complete = False  # helps when mp is used
@@ -730,15 +730,15 @@ class Workflow(NodeBase):
                     nn.ready2run = False  #it has some history (doesnt have to be in the loop)
                     nn.state_inputs.update(out_node.state_inputs)
                     nn.needed_outputs.append((out_node, out_var, inp))
-                    #if there is no mapper provided, i'm assuming that mapper is taken from the previous node
-                    if (not nn.mapper or nn.mapper == out_node.mapper) and out_node.mapper:
+                    #if there is no splitter provided, i'm assuming that splitter is taken from the previous node
+                    if (not nn.splitter or nn.splitter == out_node.splitter) and out_node.splitter:
                         if out_node.combiner:
-                            nn.mapper = out_node.state.mapper_comb
+                            nn.splitter = out_node.state.splitter_comb
                         else:
-                            nn.mapper = out_node.mapper
+                            nn.splitter = out_node.splitter
                     else:
                         pass
-                    #TODO: implement inner mapper
+                    #TODO: implement inner splitter
             except (KeyError):
                 # tmp: we don't care about nn that are not in self.connected_var
                 pass

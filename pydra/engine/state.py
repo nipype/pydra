@@ -7,21 +7,21 @@ from . import auxiliary as aux
 
 
 class State(object):
-    def __init__(self, node_name, mapper=None, other_mappers=None, combiner=None):
-        self._mapper = mapper
-        if other_mappers:
-            self._other_mappers = other_mappers
+    def __init__(self, node_name, splitter=None, other_splitters=None, combiner=None):
+        self._splitter = splitter
+        if other_splitters:
+            self._other_splitters = other_splitters
         else:
-            self._other_mappers = {}
+            self._other_splitters = {}
         self.node_name = node_name
-        if self._mapper:
-            # changing mapper (as in rpn), so I can read from left to right
-            # e.g. if mapper=('d', ['e', 'r']), _mapper_rpn=['d', 'e', 'r', '*', '.']
-            self._mapper_rpn = aux.mapper2rpn(self._mapper, other_mappers=self._other_mappers)
-            self._input_names_mapper = [i for i in self._mapper_rpn if i not in ["*", "."]]
+        if self._splitter:
+            # changing splitter (as in rpn), so I can read from left to right
+            # e.g. if splitter=('d', ['e', 'r']), _splitter_rpn=['d', 'e', 'r', '*', '.']
+            self._splitter_rpn = aux.splitter2rpn(self._splitter, other_splitters=self._other_splitters)
+            self._input_names_splitter = [i for i in self._splitter_rpn if i not in ["*", "."]]
         else:
-            self._mapper_rpn = []
-            self._input_names_mapper = []
+            self._splitter_rpn = []
+            self._input_names_splitter = []
 
         if combiner:
             self.combiner = combiner
@@ -33,13 +33,13 @@ class State(object):
         """prepare all inputs, should be called once all input is available"""
         self.state_inputs = state_inputs
 
-        # not all input field have to be use in the mapper, can be an extra scalar
+        # not all input field have to be use in the splitter, can be an extra scalar
         self._input_names = list(self.state_inputs.keys())
 
         # dictionary[key=input names] = list of axes related to
         # e.g. {'r': [1], 'e': [0], 'd': [0, 1]}
         # ndim - int, number of dimension for the "final array" (that is not created)
-        self._axis_for_input, self._ndim = aux.mapping_axis(self.state_inputs, self._mapper_rpn)
+        self._axis_for_input, self._ndim = aux.splitting_axis(self.state_inputs, self._splitter_rpn)
 
         # list of inputs variable for each axis
         # e.g. [['e', 'd'], ['r', 'd']]
@@ -66,8 +66,8 @@ class State(object):
 
     # not used?
     #@property
-    #def mapper(self):
-    #    return self._mapper
+    #def splitter(self):
+    #    return self._splitter
 
     @property
     def combiner(self):
@@ -80,9 +80,9 @@ class State(object):
         # else:
         self._combiner = combiner
         for el in self._combiner:
-            if not aux.search_mapper(el, self._mapper):
-                raise Exception("element {} of combiner is not found in the mapper {}".format(
-                    el, self._mapper))
+            if not aux.search_splitter(el, self._splitter):
+                raise Exception("element {} of combiner is not found in the splitter {}".format(
+                    el, self._splitter))
 
         self._prepare_combine()
 
@@ -101,7 +101,7 @@ class State(object):
         axes_to_remove = []
         # temporary axis_for_input (without knowing specific input)
         # need it to know which inputs are binded together
-        axis_for_input_tmp, ndim_tmp = aux.matching_input_from_mapper(self._mapper_rpn)
+        axis_for_input_tmp, ndim_tmp = aux.matching_input_from_splitter(self._splitter_rpn)
         input_for_axis_tmp = aux.converting_axis2input(axis_for_input=axis_for_input_tmp,
                                                        ndim=ndim_tmp)
         for comb_el in self.combiner:
@@ -118,21 +118,21 @@ class State(object):
                     for other_inp in inputs:
                         self.inp_to_remove.append(other_inp)
             axes_to_remove += axes
-        self._prepare_mapper_combine()
+        self._prepare_splitter_combine()
 
 
-    # TODO: should I call it from mapper?
-    def _prepare_mapper_combine(self):
-        self._mapper_rpn_comb = aux.remove_inp_from_mapper_rpn(self._mapper_rpn, self.inp_to_remove)
-        self.mapper_comb = aux.rpn2mapper(self._mapper_rpn_comb)
+    # TODO: should I call it from splitter?
+    def _prepare_splitter_combine(self):
+        self._splitter_rpn_comb = aux.remove_inp_from_splitter_rpn(self._splitter_rpn, self.inp_to_remove)
+        self.splitter_comb = aux.rpn2splitter(self._splitter_rpn_comb)
 
     def _prepare_axis_inputs_combine(self):
         # todo: do i need it?
         self._state_inputs_comb = self.state_inputs.copy()
         for inp in self.inp_to_remove:
             self._state_inputs_comb.pop(inp)
-        self._axis_for_input_comb, self._ndim_comb = aux.mapping_axis(self._state_inputs_comb,
-                                                                         self._mapper_rpn_comb)
+        self._axis_for_input_comb, self._ndim_comb = aux.splitting_axis(self._state_inputs_comb,
+                                                                         self._splitter_rpn_comb)
         self._input_for_axis_comb, self._shape_comb = aux.converting_axis2input(
             state_inputs=self._state_inputs_comb, axis_for_input=self._axis_for_input_comb,
             ndim=self._ndim_comb)
@@ -160,8 +160,8 @@ class State(object):
             else: # using index instead of value
                 ind_inp_str = "x".join([str(el) for el in ind_inp])
                 state_dict[input] = ind_inp_str
-        # adding values from input that are not used in the mapper
-        for input in set(self._input_names) - set(self._input_names_mapper):
+        # adding values from input that are not used in the splitter
+        for input in set(self._input_names) - set(self._input_names_splitter):
             if value:
                 state_dict[input] = self.state_inputs[input]
             else:

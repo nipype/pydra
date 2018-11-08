@@ -66,27 +66,27 @@ interf_addvar4 = CurrentInterface(interface=_interf_addvar4, name="addvar4")
 def test_node_1():
     """Node with mandatory arguments only"""
     nn = Node(name="NA", interface=interf_addtwo)
-    assert nn.mapper is None
+    assert nn.splitter is None
     assert nn.inputs == {}
-    assert nn.state._mapper is None
+    assert nn.state._splitter is None
 
 
 def test_node_2():
     """Node with interface and inputs"""
     nn = Node(name="NA", interface=interf_addtwo, inputs={"a": 3})
-    assert nn.mapper is None
+    assert nn.splitter is None
     # adding NA to the name of the variable
     assert nn.inputs == {"NA.a": 3}
-    assert nn.state._mapper is None
+    assert nn.state._splitter is None
 
 
 def test_node_3():
-    """Node with interface, inputs and mapper"""
-    nn = Node(name="NA", interface=interf_addtwo, inputs={"a": [3, 5]}, mapper="a")
-    assert nn.mapper == "NA.a"
+    """Node with interface, inputs and splitter"""
+    nn = Node(name="NA", interface=interf_addtwo, inputs={"a": [3, 5]}, splitter="a")
+    assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
 
-    assert nn.state._mapper == "NA.a"
+    assert nn.state._splitter == "NA.a"
 
     nn.prepare_state_input()
     assert nn.state.state_values([0]) == {"NA.a": 3}
@@ -94,43 +94,43 @@ def test_node_3():
 
 
 def test_node_4():
-    """Node with interface and inputs. mapper set using map method"""
+    """Node with interface and inputs. splitter set using split method"""
     nn = Node(name="NA", interface=interf_addtwo, inputs={"a": [3, 5]})
-    nn.map(mapper="a")
-    assert nn.mapper == "NA.a"
+    nn.split(splitter="a")
+    assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
 
     nn.prepare_state_input()
-    assert nn.state._mapper == "NA.a"
+    assert nn.state._splitter == "NA.a"
     assert nn.state.state_values([0]) == {"NA.a": 3}
     assert nn.state.state_values([1]) == {"NA.a": 5}
 
 
 def test_node_4a():
-    """Node with interface, mapper and inputs set with the map method"""
+    """Node with interface, splitter and inputs set with the split method"""
     nn = Node(name="NA", interface=interf_addtwo)
-    nn.map(mapper="a", inputs={"a": [3, 5]})
-    assert nn.mapper == "NA.a"
+    nn.split(splitter="a", inputs={"a": [3, 5]})
+    assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
 
-    assert nn.state._mapper == "NA.a"
+    assert nn.state._splitter == "NA.a"
     nn.prepare_state_input()
     assert nn.state.state_values([0]) == {"NA.a": 3}
     assert nn.state.state_values([1]) == {"NA.a": 5}
 
 
 def test_node_4b():
-    """Node with interface and inputs. trying to set mapper twice"""
-    nn = Node(name="NA", mapper="a", interface=interf_addtwo, inputs={"a": [3, 5]})
+    """Node with interface and inputs. trying to set splitter twice"""
+    nn = Node(name="NA", splitter="a", interface=interf_addtwo, inputs={"a": [3, 5]})
     with pytest.raises(Exception) as excinfo:
-        nn.map(mapper="a")
-    assert str(excinfo.value) == "mapper is already set"
+        nn.split(splitter="a")
+    assert str(excinfo.value) == "splitter is already set"
 
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_node_5(plugin, change_dir):
-    """Node with interface and inputs, no mapper, running interface"""
+    """Node with interface and inputs, no splitter, running interface"""
     nn = Node(name="NA", inputs={"a": 3}, interface=interf_addtwo,
         workingdir="test_nd5_{}".format(plugin), output_names=["out"])
 
@@ -155,12 +155,12 @@ def test_node_5(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_node_6(plugin, change_dir):
-    """Node with interface, inputs and the simplest mapper, running interface"""
+    """Node with interface, inputs and the simplest splitter, running interface"""
     nn = Node(name="NA", interface=interf_addtwo, workingdir="test_nd6_{}".format(plugin),
               output_names=["out"])
-    nn.map(mapper="a", inputs={"a": [3, 5]})
+    nn.split(splitter="a", inputs={"a": [3, 5]})
 
-    assert nn.mapper == "NA.a"
+    assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
 
     sub = Submitter(plugin=plugin, runnable=nn)
@@ -182,13 +182,13 @@ def test_node_6(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_node_7(plugin, change_dir):
-    """Node with interface, inputs and scalar mapper, running interface"""
+    """Node with interface, inputs and scalar splitter, running interface"""
     nn = Node(name="NA", interface=interf_addvar, workingdir="test_nd7_{}".format(plugin),
               output_names=["out"])
-    # scalar mapper
-    nn.map(mapper=("b", "c"), inputs={"b": [3, 5], "c": [2, 1]})
+    # scalar splitter
+    nn.split(splitter=("b", "c"), inputs={"b": [3, 5], "c": [2, 1]})
 
-    assert nn.mapper == ("NA.b", "NA.c")
+    assert nn.splitter == ("NA.b", "NA.c")
     assert (nn.inputs["NA.b"] == np.array([3, 5])).all()
     assert (nn.inputs["NA.c"] == np.array([2, 1])).all()
 
@@ -211,13 +211,13 @@ def test_node_7(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_node_8(plugin, change_dir):
-    """Node with interface, inputs and vector mapper, running interface"""
+    """Node with interface, inputs and vector splitter, running interface"""
     nn = Node(name="NA", interface=interf_addvar, workingdir="test_nd8_{}".format(plugin),
               output_names=["out"])
     # [] for outer product
-    nn.map(mapper=["b", "c"], inputs={"b": [3, 5], "c": [2, 1]})
+    nn.split(splitter=["b", "c"], inputs={"b": [3, 5], "c": [2, 1]})
 
-    assert nn.mapper == ["NA.b", "NA.c"]
+    assert nn.splitter == ["NA.b", "NA.c"]
     assert (nn.inputs["NA.b"] == np.array([3, 5])).all()
     assert (nn.inputs["NA.c"] == np.array([2, 1])).all()
 
@@ -240,12 +240,12 @@ def test_node_8(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_node_9(plugin, change_dir):
-    """scalar and outer mapper, one combiner (from scalar part)"""
+    """scalar and outer splitter, one combiner (from scalar part)"""
     nn = Node(name="NA", interface=interf_addvar4, workingdir="test_nd16_{}".format(plugin),
-              output_names=["out"], mapper=(["a", "b"], ["c", "d"]),
+              output_names=["out"], splitter=(["a", "b"], ["c", "d"]),
               inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1,2]})
 
-    assert nn.mapper == (["NA.a", "NA.b"], ["NA.c", "NA.d"])
+    assert nn.splitter == (["NA.a", "NA.b"], ["NA.c", "NA.d"])
 
     sub = Submitter(plugin=plugin, runnable=nn)
     sub.run()
@@ -257,14 +257,14 @@ def test_node_9(plugin, change_dir):
 
 @python35_only
 def test_workflow_0(plugin="serial"):
-    """workflow (without run) with one node with a mapper"""
+    """workflow (without run) with one node with a splitter"""
     wf = Workflow(name="wf0", workingdir="test_wf0_{}".format(plugin))
-    # defining a node with mapper and inputs first
+    # defining a node with splitter and inputs first
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["a"])
-    na.map(mapper="a", inputs={"a": [3, 5]})
+    na.split(splitter="a", inputs={"a": [3, 5]})
     # one of the way of adding nodes to the workflow
     wf.add_nodes([na])
-    assert wf.nodes[0].mapper == "NA.a"
+    assert wf.nodes[0].splitter == "NA.a"
     assert (wf.nodes[0].inputs['NA.a'] == np.array([3, 5])).all()
     assert len(wf.graph.nodes) == 1
 
@@ -272,10 +272,10 @@ def test_workflow_0(plugin="serial"):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_1(plugin, change_dir):
-    """workflow with one node with a mapper"""
+    """workflow with one node with a splitter"""
     wf = Workflow(name="wf1", workingdir="test_wf1_{}".format(plugin))
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-    na.map(mapper="a", inputs={"a": [3, 5]})
+    na.split(splitter="a", inputs={"a": [3, 5]})
     wf.add_nodes([na])
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -294,20 +294,20 @@ def test_workflow_1(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_2(plugin, change_dir):
-    """workflow with two nodes, second node without mapper"""
+    """workflow with two nodes, second node without splitter"""
     wf = Workflow(name="wf2", workingdir="test_wf2_{}".format(plugin),
                   wf_output_names=[("NB", "out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-    na.map(mapper="a", inputs={"a": [3, 5]})
+    na.split(splitter="a", inputs={"a": [3, 5]})
 
-    # the second node does not have explicit mapper (but keeps the mapper from the NA node)
+    # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=interf_addvar, inputs={"c": 10}, workingdir="nb",
               output_names=["out"])
 
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "b")
-    assert wf.nodes[0].mapper == "NA.a"
+    assert wf.nodes[0].splitter == "NA.a"
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -342,21 +342,21 @@ def test_workflow_2(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_2a(plugin, change_dir):
-    """workflow with two nodes, second node with a scalar mapper"""
+    """workflow with two nodes, second node with a scalar splitter"""
     wf = Workflow(name="wf2", workingdir="test_wf2a_{}".format(plugin),
                   wf_output_names=[("NB", "out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-    na.map(mapper="a", inputs={"a": [3, 5]})
+    na.split(splitter="a", inputs={"a": [3, 5]})
 
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
-    # explicit scalar mapper between "a" from NA and b
-    nb.map(mapper=("NA.a", "c"), inputs={"c": [2, 1]})
+    # explicit scalar splitter between "a" from NA and b
+    nb.split(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
 
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "b")
 
-    assert wf.nodes[0].mapper == "NA.a"
-    assert wf.nodes[1].mapper == ("NA.a", "NB.c")
+    assert wf.nodes[0].splitter == "NA.a"
+    assert wf.nodes[1].splitter == ("NA.a", "NB.c")
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -370,7 +370,7 @@ def test_workflow_2a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-    # two elements (scalar mapper)
+    # two elements (scalar splitter)
     expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
@@ -389,20 +389,20 @@ def test_workflow_2a(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_2b(plugin):
-    """workflow with two nodes, second node with a vector mapper"""
+    """workflow with two nodes, second node with a vector splitter"""
     wf = Workflow(name="wf2", workingdir="test_wf2b_{}".format(plugin),
                   wf_output_names=[("NB", "out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-    na.map(mapper="a", inputs={"a": [3, 5]})
+    na.split(splitter="a", inputs={"a": [3, 5]})
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
-    # outer mapper
-    nb.map(mapper=["NA.a", "c"], inputs={"c": [2, 1]})
+    # outer splitter
+    nb.split(splitter=["NA.a", "c"], inputs={"c": [2, 1]})
 
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "b")
 
-    assert wf.nodes[0].mapper == "NA.a"
-    assert wf.nodes[1].mapper == ["NA.a", "NB.c"]
+    assert wf.nodes[0].splitter == "NA.a"
+    assert wf.nodes[1].splitter == ["NA.a", "NB.c"]
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -441,11 +441,11 @@ def test_workflow_3(plugin, change_dir):
     """using add(node) method"""
     wf = Workflow(name="wf3", workingdir="test_wf3_{}".format(plugin))
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-    na.map(mapper="a", inputs={"a": [3, 5]})
+    na.split(splitter="a", inputs={"a": [3, 5]})
     # using add method (as in the Satra's example) with a node
     wf.add(na)
 
-    assert wf.nodes[0].mapper == "NA.a"
+    assert wf.nodes[0].splitter == "NA.a"
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -466,10 +466,10 @@ def test_workflow_3a(plugin, change_dir):
     """using add(interface) method"""
     wf = Workflow(name="wf3a", workingdir="test_wf3a_{}".format(plugin))
     # using the add method with an interface
-    wf.add(interf_addtwo, workingdir="na", mapper="a", inputs={"a": [3, 5]}, name="NA",
+    wf.add(interf_addtwo, workingdir="na", splitter="a", inputs={"a": [3, 5]}, name="NA",
            output_names=["out"])
 
-    assert wf.nodes[0].mapper == "NA.a"
+    assert wf.nodes[0].splitter == "NA.a"
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -490,10 +490,10 @@ def test_workflow_3b(plugin, change_dir):
     """using add (function) method"""
     wf = Workflow(name="wf3b", workingdir="test_wf3b_{}".format(plugin))
     # using the add method with a function
-    wf.add(fun_addtwo, input_names=["a"], workingdir="na", mapper="a",
+    wf.add(fun_addtwo, input_names=["a"], workingdir="na", splitter="a",
            inputs={"a": [3, 5]}, name="NA", output_names=["out"])
 
-    assert wf.nodes[0].mapper == "NA.a"
+    assert wf.nodes[0].splitter == "NA.a"
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -516,12 +516,12 @@ def test_workflow_4(plugin, change_dir):
     """
     wf = Workflow(name="wf4", workingdir="test_wf4_{}".format(plugin))
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-    na.map(mapper="a", inputs={"a": [3, 5]})
+    na.split(splitter="a", inputs={"a": [3, 5]})
     wf.add(na)
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
-    # explicit mapper with a variable from the previous node
+    # explicit splitter with a variable from the previous node
     # providing inputs with b
-    nb.map(mapper=("NA.a", "c"), inputs={"c": [2, 1]})
+    nb.split(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
     wf.add(nb)
     # connect method as it is in the current version
     wf.connect("NA", "out", "NB", "b")
@@ -553,13 +553,13 @@ def test_workflow_4a(plugin, change_dir):
     """ using add(node) method with kwarg arg to connect nodes (instead of wf.connect) """
     wf = Workflow(name="wf4a", workingdir="test_wf4a_{}".format(plugin))
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-    na.map(mapper="a", inputs={"a": [3, 5]})
+    na.split(splitter="a", inputs={"a": [3, 5]})
     wf.add(na)
 
 
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
-    # explicit mapper with a variable from the previous node
-    nb.map(mapper=("NA.a", "c"), inputs={"c": [2, 1]})
+    # explicit splitter with a variable from the previous node
+    nb.split(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
     # instead of "connect", using kwrg argument in the add method as in the example
     wf.add(nb, b="NA.out")
 
@@ -593,9 +593,9 @@ def test_workflow_4b(plugin, change_dir):
     """
     wf = Workflow(name="wf4b", workingdir="test_wf4b_{}".format(plugin))
     wf.add(runnable=interf_addtwo, name="NA", workingdir="na", output_names=["out"],
-           mapper="a", inputs={"a": [3, 5]})
+           splitter="a", inputs={"a": [3, 5]})
     wf.add(runnable=interf_addvar, name="NB", workingdir="nb", output_names=["out"],
-           mapper=("NA.a", "c"), inputs={"c": [2, 1]})
+           splitter=("NA.a", "c"), inputs={"c": [2, 1]})
     # connect method as it is in the current version
     wf.connect("NA", "out", "NB", "b")
 
@@ -624,7 +624,7 @@ def test_workflow_4b(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4c(plugin, change_dir):
-    """ using add(interf) method (map after add)
+    """ using add(interf) method (split after add)
         using wf.connect to connect two nodes
     """
     wf = Workflow(name="wf4c", workingdir="test_wf4c_{}".format(plugin))
@@ -632,8 +632,8 @@ def test_workflow_4c(plugin, change_dir):
            inputs={"a": [3, 5]})
     wf.add(runnable=interf_addvar, name="NB", workingdir="nb", output_names=["out"],
            inputs={"c": [2, 1]})
-    wf.map_node(mapper="a", node="NA")
-    wf.map_node(mapper=("NA.a", "c"), node="NB")
+    wf.split_node(splitter="a", node="NA")
+    wf.split_node(splitter=("NA.a", "c"), node="NB")
 
     wf.connect("NA", "out", "NB", "b")
 
@@ -661,7 +661,7 @@ def test_workflow_4c(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4d(plugin, change_dir):
-    """ using add(interf) method (map after add)
+    """ using add(interf) method (split after add)
         using wf.connect to connect two nodes
     """
     wf = Workflow(name="wf4d", workingdir="test_wf4d_{}".format(plugin))
@@ -672,8 +672,8 @@ def test_workflow_4d(plugin, change_dir):
 
     wf.connect("NA", "out", "NB", "b")
 
-    wf.map_node(mapper="a", node="NA")
-    wf.map_node(mapper=("NA.a", "c"), node="NB")
+    wf.split_node(splitter="a", node="NA")
+    wf.split_node(splitter=("NA.a", "c"), node="NB")
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -696,19 +696,19 @@ def test_workflow_4d(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
-# using map after add method
+# using split after add method
 
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_5(plugin, change_dir):
-    """using a map method for one node"""
+    """using a split method for one node"""
     wf = Workflow(name="wf5", workingdir="test_wf5_{}".format(plugin))
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
 
     wf.add(na)
-    # using the map method after add (using mapper for the last added node as default)
-    wf.map_node(mapper="a", inputs={"a": [3, 5]})
+    # using the split method after add (using splitter for the last added node as default)
+    wf.split_node(splitter="a", inputs={"a": [3, 5]})
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -726,11 +726,11 @@ def test_workflow_5(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_5a(plugin, change_dir):
-    """using a map method for one node (using add and map in one chain)"""
+    """using a split method for one node (using add and split in one chain)"""
     wf = Workflow(name="wf5a", workingdir="test_wf5a_{}".format(plugin))
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
 
-    wf.add(na).map_node(mapper="a", inputs={"a": [3, 5]})
+    wf.add(na).split_node(splitter="a", inputs={"a": [3, 5]})
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -748,16 +748,16 @@ def test_workflow_5a(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_6(plugin, change_dir):
-    """using a map method for two nodes (using last added node as default)"""
+    """using a split method for two nodes (using last added node as default)"""
     wf = Workflow(name="wf6", workingdir="test_wf6_{}".format(plugin))
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
 
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
-    # using the map methods after add (using mapper for the last added nodes as default)
+    # using the split methods after add (using splitter for the last added nodes as default)
     wf.add(na)
-    wf.map_node(mapper="a", inputs={"a": [3, 5]})
+    wf.split_node(splitter="a", inputs={"a": [3, 5]})
     wf.add(nb)
-    wf.map_node(mapper=("NA.a", "c"), inputs={"c": [2, 1]})
+    wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
     wf.connect("NA", "out", "NB", "b")
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -784,17 +784,17 @@ def test_workflow_6(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_6a(plugin, change_dir):
-    """using a map method for two nodes (specifying the node)"""
+    """using a split method for two nodes (specifying the node)"""
     wf = Workflow(name="wf6a", workingdir="test_wf6a_{}".format(plugin))
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
 
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
-    # using the map method after add (specifying the node)
+    # using the split method after add (specifying the node)
     wf.add(na)
     wf.add(nb)
-    wf.map_node(mapper="a", inputs={"a": [3, 5]}, node=na)
+    wf.split_node(splitter="a", inputs={"a": [3, 5]}, node=na)
     # TODO: should we se ("b", "c") instead?? shold I forget "NA.a" value?
-    wf.map_node(mapper=("NA.a", "c"), inputs={"c": [2, 1]}, node=nb)
+    wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]}, node=nb)
     wf.connect("NA", "out", "NB", "b")
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -821,15 +821,15 @@ def test_workflow_6a(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_6b(plugin, change_dir):
-    """using a map method for two nodes (specifying the node), using kwarg arg instead of connect"""
+    """using a split method for two nodes (specifying the node), using kwarg arg instead of connect"""
     wf = Workflow(name="wf6b", workingdir="test_wf6b_{}".format(plugin))
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
 
     wf.add(na)
     wf.add(nb, b="NA.out")
-    wf.map_node(mapper="a", inputs={"a": [3, 5]}, node=na)
-    wf.map_node(mapper=("NA.a", "c"), inputs={"c": [2, 1]}, node=nb)
+    wf.split_node(splitter="a", inputs={"a": [3, 5]}, node=na)
+    wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]}, node=nb)
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -866,7 +866,7 @@ def test_workflow_7(plugin, change_dir):
     wf.add(na)
     # connecting the node with inputs from the workflow
     wf.connect_wf_input("wfa", "NA", "a")
-    wf.map_node(mapper="a")
+    wf.split_node(splitter="a")
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -889,7 +889,7 @@ def test_workflow_7a(plugin, change_dir):
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
     # using kwrg argument in the add method (instead of connect or connect_wf_input
     wf.add(na, a="wfa")
-    wf.map_node(mapper="a")
+    wf.split_node(splitter="a")
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -910,13 +910,13 @@ def test_workflow_8(plugin, change_dir):
     """using inputs for workflow and connect_wf_input for the second node"""
     wf = Workflow(name="wf8", workingdir="test_wf8_{}".format(plugin), inputs={"c": 10})
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-    na.map(mapper="a", inputs={"a": [3, 5]})
+    na.split(splitter="a", inputs={"a": [3, 5]})
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
 
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "b")
     wf.connect_wf_input("c", "NB", "c")
-    assert wf.nodes[0].mapper == "NA.a"
+    assert wf.nodes[0].splitter == "NA.a"
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -939,19 +939,19 @@ def test_workflow_8(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
 
-# testing if _NA in mapper works, using interfaces in add
+# testing if _NA in splitter works, using interfaces in add
 
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_9(plugin, change_dir):
-    """using add(interface) method and mapper from previous nodes"""
+    """using add(interface) method and splitter from previous nodes"""
     wf = Workflow(name="wf9", workingdir="test_wf9_{}".format(plugin))
     wf.add(name="NA", runnable=interf_addtwo, workingdir="na",
-           output_names=["out"]).map_node(mapper="a", inputs={"a": [3, 5]})
-    # _NA means that I'm using mapper from the NA node, it's the same as ("NA.a", "b")
+           output_names=["out"]).split_node(splitter="a", inputs={"a": [3, 5]})
+    # _NA means that I'm using splitter from the NA node, it's the same as ("NA.a", "b")
     wf.add(name="NB", runnable=interf_addvar, workingdir="nb", b="NA.out",
-           output_names=["out"]).map_node(mapper=("_NA", "c"), inputs={"c": [2, 1]})
+           output_names=["out"]).split_node(splitter=("_NA", "c"), inputs={"c": [2, 1]})
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -977,14 +977,14 @@ def test_workflow_9(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_10(plugin, change_dir):
-    """using add(interface) method and scalar mapper from previous nodes"""
+    """using add(interface) method and scalar splitter from previous nodes"""
     wf = Workflow(name="wf10", workingdir="test_wf10_{}".format(plugin))
     wf.add(name="NA", runnable=interf_addvar, workingdir="na",
-           output_names=["out"]).map_node(
-        mapper=("b", "c"), inputs={"b": [3, 5], "c": [0, 10]})
-    # _NA means that I'm using mapper from the NA node, it's the same as (("NA.a", NA.b), "b")
+           output_names=["out"]).split_node(
+        splitter=("b", "c"), inputs={"b": [3, 5], "c": [0, 10]})
+    # _NA means that I'm using splitter from the NA node, it's the same as (("NA.a", NA.b), "b")
     wf.add(name="NB", runnable=interf_addvar, workingdir="nb", b="NA.out",
-           output_names=["out"]).map_node(mapper=("_NA", "c"), inputs={"c": [2, 1]})
+           output_names=["out"]).split_node(splitter=("_NA", "c"), inputs={"c": [2, 1]})
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -1010,15 +1010,15 @@ def test_workflow_10(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_10a(plugin, change_dir):
-    """using add(interface) method and vector mapper from previous nodes"""
+    """using add(interface) method and vector splitter from previous nodes"""
     wf = Workflow(name="wf10a", workingdir="test_wf10a_{}".format(plugin))
     wf.add(name="NA", runnable=interf_addvar, workingdir="na",
-           output_names=["out"]).map_node(
-            mapper=["b", "c"], inputs={"b": [3, 5], "c": [0, 10]})
-    # _NA means that I'm using mapper from the NA node, it's the same as (["NA.a", NA.b], "b")
+           output_names=["out"]).split_node(
+            splitter=["b", "c"], inputs={"b": [3, 5], "c": [0, 10]})
+    # _NA means that I'm using splitter from the NA node, it's the same as (["NA.a", NA.b], "b")
     wf.add(name="NB", runnable=interf_addvar, workingdir="nb", b="NA.out",
-           output_names=["out"]).map_node(
-            mapper=("_NA", "c"), inputs={"c": [[2, 1], [0, 0]]})
+           output_names=["out"]).split_node(
+            splitter=("_NA", "c"), inputs={"c": [[2, 1], [0, 0]]})
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -1049,16 +1049,16 @@ def test_workflow_10a(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_11(plugin, change_dir):
-    """using add(interface) method and vector mapper from previous two nodes"""
+    """using add(interface) method and vector splitter from previous two nodes"""
     wf = Workflow(name="wf11", workingdir="test_wf11_{}".format(plugin))
     wf.add(name="NA", runnable=interf_addvar, workingdir="na",
-           output_names=["out"]).map_node(
-            mapper=("b", "c"), inputs={"b": [3, 5],"c": [0, 10]})
+           output_names=["out"]).split_node(
+            splitter=("b", "c"), inputs={"b": [3, 5],"c": [0, 10]})
     wf.add(name="NB", runnable=interf_addtwo, workingdir="nb",
-           output_names=["out"]).map_node(mapper="a", inputs={"a": [2, 1]})
-    # _NA, _NB means that I'm using mappers from the NA/NB nodes, it's the same as [("NA.a", NA.b), "NB.a"]
+           output_names=["out"]).split_node(splitter="a", inputs={"a": [2, 1]})
+    # _NA, _NB means that I'm using splitters from the NA/NB nodes, it's the same as [("NA.a", NA.b), "NB.a"]
     wf.add(name="NC", runnable=interf_addvar, workingdir="nc", b="NA.out", c="NB.out",
-           output_names=["out"]).map_node(mapper=["_NA", "_NB"])  # TODO: this should eb default?
+           output_names=["out"]).split_node(splitter=["_NA", "_NB"])  # TODO: this should eb default?
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -1095,11 +1095,11 @@ def test_workflow_12(plugin, change_dir):
         wf_output_names=[("NA", "out", "NA_out"), ("NB", "out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
-    # using the map methods after add (using mapper for the last added nodes as default)
+    # using the split methods after add (using splitter for the last added nodes as default)
     wf.add(na)
-    wf.map_node(mapper="a", inputs={"a": [3, 5]})
+    wf.split_node(splitter="a", inputs={"a": [3, 5]})
     wf.add(nb)
-    wf.map_node(mapper=("NA.a", "c"), inputs={"c": [2, 1]})
+    wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
     wf.connect("NA", "out", "NB", "b")
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -1138,11 +1138,11 @@ def test_workflow_12a(plugin, change_dir):
         wf_output_names=[("NA", "out", "wf_out"), ("NB", "out", "wf_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
-    # using the map methods after add (using mapper for the last added nodes as default)
+    # using the split methods after add (using splitter for the last added nodes as default)
     wf.add(na)
-    wf.map_node(mapper="a", inputs={"a": [3, 5]})
+    wf.split_node(splitter="a", inputs={"a": [3, 5]})
     wf.add(nb)
-    wf.map_node(mapper=("NA.a", "c"), inputs={"c": [2, 1]})
+    wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
     wf.connect("NA", "out", "NB", "b")
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -1152,13 +1152,13 @@ def test_workflow_12a(plugin, change_dir):
     assert str(exinfo.value) == "the key wf_out is already used in workflow.result"
 
 
-# tests for a workflow that have its own input and mapper
+# tests for a workflow that have its own input and splitter
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_13(plugin, change_dir):
     """using inputs for workflow and connect_wf_input"""
-    wf = Workflow(name="wf13", inputs={"wfa": [3, 5]}, mapper="wfa",
+    wf = Workflow(name="wf13", inputs={"wfa": [3, 5]}, splitter="wfa",
         workingdir="test_wf13_{}".format(plugin),
         wf_output_names=[("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
@@ -1181,10 +1181,10 @@ def test_workflow_13(plugin, change_dir):
 @python35_only
 def test_workflow_13a(plugin, change_dir):
     """using inputs for workflow and connect_wf_input (the node has 2 inputs)"""
-    wf = Workflow(name="wf13a", inputs={"wfa": [3, 5]}, mapper="wfa",
+    wf = Workflow(name="wf13a", inputs={"wfa": [3, 5]}, splitter="wfa",
         workingdir="test_wf13a_{}".format(plugin),
         wf_output_names=[("NA", "out", "NA_out")])
-    na = Node(name="NA", interface=interf_addvar, workingdir="na", mapper="c",
+    na = Node(name="NA", interface=interf_addvar, workingdir="na", splitter="c",
               inputs={"c": [10, 20]}, output_names=["out"])
     wf.add(na)
     wf.connect_wf_input("wfa", "NA", "b")
@@ -1207,13 +1207,13 @@ def test_workflow_13a(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_13b(plugin, change_dir):
-    """using inputs for workflow and connect_wf_input, using wf.map(mapper)"""
+    """using inputs for workflow and connect_wf_input, using wf.split(splitter)"""
     wf = Workflow(name="wf13b", inputs={"wfa": [3, 5]},
         workingdir="test_wf13b_{}".format(plugin),
         wf_output_names=[("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na",
               output_names=["out"])
-    wf.add(na).map(mapper="wfa")
+    wf.add(na).split(splitter="wfa")
     wf.connect_wf_input("wfa", "NA", "a")
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -1234,12 +1234,12 @@ def test_workflow_13b(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_13c(plugin, change_dir):
-    """using inputs for workflow and connect_wf_input, using wf.map(mapper, inputs)"""
+    """using inputs for workflow and connect_wf_input, using wf.split(splitter, inputs)"""
     wf = Workflow(name="wf13c", workingdir="test_wf13c_{}".format(plugin),
         wf_output_names=[("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na",
               output_names=["out"])
-    wf.add(na).map(mapper="wfa", inputs={"wfa": [3, 5]})
+    wf.add(na).split(splitter="wfa", inputs={"wfa": [3, 5]})
     wf.connect_wf_input("wfa", "NA", "a")
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -1259,7 +1259,7 @@ def test_workflow_13c(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_14(plugin, change_dir):
-    """workflow with a workflow as a node (no mapper)"""
+    """workflow with a workflow as a node (no splitter)"""
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", inputs={"a": 3},
               output_names=["out"])
     wfa = Workflow(name="wfa", workingdir="test_wfa", wf_output_names=[("NA", "out", "NA_out")])
@@ -1283,7 +1283,7 @@ def test_workflow_14(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_14a(plugin, change_dir):
-    """workflow with a workflow as a node (no mapper, using connect_wf_input in wfa)"""
+    """workflow with a workflow as a node (no splitter, using connect_wf_input in wfa)"""
     na = Node(name="NA", interface=interf_addtwo, workingdir="na",
               output_names=["out"])
     wfa = Workflow(name="wfa", workingdir="test_wfa", inputs={"a": 3},
@@ -1309,7 +1309,7 @@ def test_workflow_14a(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_14b(plugin, change_dir):
-    """workflow with a workflow as a node (no mapper, using connect_wf_input in wfa and wf)"""
+    """workflow with a workflow as a node (no splitter, using connect_wf_input in wfa and wf)"""
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
     wfa = Workflow(name="wfa", workingdir="test_wfa", wf_output_names=[("NA", "out", "NA_out")])
     wfa.add(na)
@@ -1334,9 +1334,9 @@ def test_workflow_14b(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_15(plugin, change_dir):
-    """workflow with a workflow as a node with mapper (like 14 but with a mapper)"""
+    """workflow with a workflow as a node with splitter (like 14 but with a splitter)"""
     na = Node(name="NA", interface=interf_addtwo, workingdir="na",
-              inputs={"a": [3, 5]}, mapper="a", output_names=["out"])
+              inputs={"a": [3, 5]}, splitter="a", output_names=["out"])
     wfa = Workflow(name="wfa", workingdir="test_wfa", wf_output_names=[("NA", "out", "NA_out")])
     wfa.add(na)
 
@@ -1358,14 +1358,14 @@ def test_workflow_15(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_16(plugin, change_dir):
-    """workflow with two nodes, and one is a workflow (no mapper)"""
+    """workflow with two nodes, and one is a workflow (no splitter)"""
     wf = Workflow(name="wf16", workingdir="test_wf16_{}".format(plugin),
             wf_output_names=[("wfb", "NB_out"), ("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", inputs={"a": 3},
               output_names=["out"])
     wf.add(na)
 
-    # the second node does not have explicit mapper (but keeps the mapper from the NA node)
+    # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb",
               output_names=["out"])
     wfb = Workflow(name="wfb", workingdir="test_wfb", inputs={"c": 10},
@@ -1398,14 +1398,14 @@ def test_workflow_16(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_16a(plugin, change_dir):
-    """workflow with two nodes, and one is a workflow (with mapper)"""
+    """workflow with two nodes, and one is a workflow (with splitter)"""
     wf = Workflow(name="wf16a", workingdir="test_wf16a_{}".format(plugin),
         wf_output_names=[("wfb", "NB_out"), ("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na",
               output_names=["out"])
-    na.map(mapper="a", inputs={"a": [3, 5]})
+    na.split(splitter="a", inputs={"a": [3, 5]})
     wf.add(na)
-    # the second node does not have explicit mapper (but keeps the mapper from the NA node)
+    # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb",
               output_names=["out"])
     wfb = Workflow(name="wfb", workingdir="test_wfb", inputs={"c": 10},
@@ -1417,7 +1417,7 @@ def test_workflow_16a(plugin, change_dir):
     # adding 2 nodes and create a connection (as it is now)
     wf.add(wfb)
     wf.connect("NA", "out", "wfb", "b")
-    assert wf.nodes[0].mapper == "NA.a"
+    assert wf.nodes[0].splitter == "NA.a"
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -1431,7 +1431,7 @@ def test_workflow_16a(plugin, change_dir):
         assert wf.result["NA_out"][i][1] == res[1]
 
     # TODO (res): the naming remembers only the node, doesnt remember that came from NA...
-    # TODO (res): because nb doesnt have mapper, but only wfb, and wf.result reads from node results,
+    # TODO (res): because nb doesnt have splitter, but only wfb, and wf.result reads from node results,
     # TODO ...  : we dont have any state values here. probably should change it that wf can see wfb.b values
     #TODO (res): compare wf.result and wfb.rsult (wfb has to many var in state_Dict)
     # the naming should have names with workflows??
@@ -1450,16 +1450,16 @@ def test_workflow_16a(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_16b(plugin, change_dir):
-    """workflow with two nodes, and one is a workflow (with mapper)
+    """workflow with two nodes, and one is a workflow (with splitter)
         the sae as 16b, but using indices instead of values (write_state=False)
     """
     wf = Workflow(name="wf16b", workingdir="test_wf16b_{}".format(plugin),
         wf_output_names=[("wfb", "NB_out"), ("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na",
               output_names=["out"], write_state=False)
-    na.map(mapper="a", inputs={"a": [3, 5]})
+    na.split(splitter="a", inputs={"a": [3, 5]})
     wf.add(na)
-    # the second node does not have explicit mapper (but keeps the mapper from the NA node)
+    # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=interf_addvar, workingdir="nb",
               output_names=["out"])
     wfb = Workflow(name="wfb", workingdir="test_wfb", inputs={"c": 10},
@@ -1471,7 +1471,7 @@ def test_workflow_16b(plugin, change_dir):
     # adding 2 nodes and create a connection (as it is now)
     wf.add(wfb)
     wf.connect("NA", "out", "wfb", "b")
-    assert wf.nodes[0].mapper == "NA.a"
+    assert wf.nodes[0].splitter == "NA.a"
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -1486,7 +1486,7 @@ def test_workflow_16b(plugin, change_dir):
         assert wf.result["NA_out"][i][1] == res[1]
 
     # TODO (res): the naming remembers only the node, doesnt remember that came from NA...
-    # TODO (res): because nb doesnt have mapper, but only wfb, and wf.result reads from node results,
+    # TODO (res): because nb doesnt have splitter, but only wfb, and wf.result reads from node results,
     # TODO ...  : we dont have any state values here. probably should change it that wf can see wfb.b values
     #TODO (res): compare wf.result and wfb.rsult (wfb has to many var in state_Dict)
     # the naming should have names with workflows??
@@ -1514,7 +1514,7 @@ T1_file_list = [
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_node_1(change_dir, plugin):
-    """Node with a current interface and inputs, no mapper, running interface"""
+    """Node with a current interface and inputs, no splitter, running interface"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
     nn = Node(
         name="NA",
@@ -1534,7 +1534,7 @@ def test_current_node_1(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_node_2(change_dir, plugin):
-    """Node with a current interface and mapper"""
+    """Node with a current interface and splitter"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     in_file_l = [
@@ -1544,7 +1544,7 @@ def test_current_node_2(change_dir, plugin):
     nn = Node(
         name="NA",
         inputs={"in_file": in_file_l},
-        mapper="in_file",
+        splitter="in_file",
         interface=interf_bet,
         write_state=False,
         workingdir="test_cnd2_{}".format(plugin),
@@ -1563,7 +1563,7 @@ def test_current_node_2(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1(change_dir, plugin):
-    """Wf with a current interface, no mapper"""
+    """Wf with a current interface, no splitter"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     nn = Node(
@@ -1592,7 +1592,7 @@ def test_current_wf_1(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1a(change_dir, plugin):
-    """Wf with a current interface, no mapper"""
+    """Wf with a current interface, no splitter"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     nn = Node(
@@ -1621,7 +1621,7 @@ def test_current_wf_1a(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1b(change_dir, plugin):
-    """Wf with a current interface, no mapper; using wf.add(nipype CurrentInterface)"""
+    """Wf with a current interface, no splitter; using wf.add(nipype CurrentInterface)"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     wf = Workflow(
@@ -1648,7 +1648,7 @@ def test_current_wf_1b(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_1c(change_dir, plugin):
-    """Wf with a current interface, no mapper; using wf.add(nipype interface) """
+    """Wf with a current interface, no splitter; using wf.add(nipype interface) """
 
     wf = Workflow(
         workingdir="test_cwf_1c_{}".format(plugin),
@@ -1674,7 +1674,7 @@ def test_current_wf_1c(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_2(change_dir, plugin):
-    """Wf with a current interface and mapper"""
+    """Wf with a current interface and splitter"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     in_file_l = [
@@ -1694,7 +1694,7 @@ def test_current_wf_2(change_dir, plugin):
         name="cw2",
         wf_output_names=[("fsl", "out_file", "fsl_out")],
         inputs={"in_file": in_file_l},
-        mapper="in_file",
+        splitter="in_file",
         write_state=False)
     wf.add_nodes([nn])
     wf.connect_wf_input("in_file", "fsl", "in_file")
@@ -1712,7 +1712,7 @@ def test_current_wf_2(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_current_wf_2a(change_dir, plugin):
-    """Wf with a current interface and mapper"""
+    """Wf with a current interface and splitter"""
     interf_bet = CurrentInterface(interface=fsl.BET(), name="fsl_interface")
 
     in_file_l = [
@@ -1727,7 +1727,7 @@ def test_current_wf_2a(change_dir, plugin):
         workingdir="nn",
         output_names=["out_file"],
         inputs={"in_file": in_file_l},
-        mapper="in_file")
+        splitter="in_file")
 
     wf = Workflow(
         workingdir="test_cwf_2a_{}".format(plugin),
