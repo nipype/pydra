@@ -369,7 +369,6 @@ class Node(NodeBase):
             inputs=inputs_dict,
             base_dir=os.path.join(os.getcwd(), self.workingdir),
             dir_nm_el=dir_nm_el)
-
         return res
 
 
@@ -685,7 +684,7 @@ class Workflow(NodeBase):
     def connect_wf_input(self, inp_wf, node_nm, inp_nd):
         self.needed_inp_wf.append((node_nm, inp_wf, inp_nd))
 
-    def preparing(self, wf_inputs=None, wf_inputs_ind=None):
+    def preparing(self, wf_inputs=None, wf_inputs_ind=None, st_inputs=None):
         """preparing nodes which are connected: setting the final mapper and state_inputs"""
         #pdb.set_trace()
         for node_nm, inp_wf, inp_nd in self.needed_inp_wf:
@@ -703,13 +702,11 @@ class Workflow(NodeBase):
                 raise Exception("{}.{} not in the workflow inputs".format(self.name, inp_wf))
         for nn in self.graph_sorted:
             if self.write_state:
-                # TODO: related to test_node::test_workflow_16a
-                #dir_nm_el, _ = self._directory_name_state_surv(wf_inputs)
-                dir_nm_el = "_".join(["{}:{}".format(i, j) for i, j in list(wf_inputs.items())])
+                if not st_inputs: st_inputs=wf_inputs
+                dir_nm_el, _ = self._directory_name_state_surv(st_inputs)
             else:
-                #dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_ind)
-                dir_nm_el = "_".join(
-                    ["{}:{}".format(i, j) for i, j in list(wf_inputs_ind.items())])
+                # wf_inputs_ind is already ok, doesn't need st_inputs_ind
+                  dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_ind)
             if not self.mapper:
                 dir_nm_el = ""
             nn.workingdir = os.path.join(self.workingdir, dir_nm_el, nn.name)

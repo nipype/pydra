@@ -1158,7 +1158,7 @@ def test_workflow_12a(plugin, change_dir):
 @python35_only
 def test_workflow_13(plugin, change_dir):
     """using inputs for workflow and connect_wf_input"""
-    wf = Workflow(name="wf13", inputs={"wfa": [3, 5]},mapper="wfa",
+    wf = Workflow(name="wf13", inputs={"wfa": [3, 5]}, mapper="wfa",
         workingdir="test_wf13_{}".format(plugin),
         wf_output_names=[("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
@@ -1422,7 +1422,7 @@ def test_workflow_16a(plugin, change_dir):
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
     sub.close()
-
+    # wf.result for NB_out doeant have state in results
     assert wf.is_complete
 
     expected_A = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
@@ -1445,6 +1445,62 @@ def test_workflow_16a(plugin, change_dir):
     for i, res in enumerate(expected_B):
         assert wf.result["NB_out"][i][0] == res[0]
         assert wf.result["NB_out"][i][1] == res[1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_workflow_16b(plugin, change_dir):
+    """workflow with two nodes, and one is a workflow (with mapper)
+        the sae as 16b, but using indices instead of values (write_state=False)
+    """
+    wf = Workflow(name="wf16b", workingdir="test_wf16b_{}".format(plugin),
+        wf_output_names=[("wfb", "NB_out"), ("NA", "out", "NA_out")])
+    na = Node(name="NA", interface=interf_addtwo, workingdir="na",
+              output_names=["out"], write_state=False)
+    na.map(mapper="a", inputs={"a": [3, 5]})
+    wf.add(na)
+    # the second node does not have explicit mapper (but keeps the mapper from the NA node)
+    nb = Node(name="NB", interface=interf_addvar, workingdir="nb",
+              output_names=["out"])
+    wfb = Workflow(name="wfb", workingdir="test_wfb", inputs={"c": 10},
+        wf_output_names=[("NB", "out", "NB_out")], write_state=False)
+    wfb.add(nb)
+    wfb.connect_wf_input("b", "NB", "b")
+    wfb.connect_wf_input("c", "NB", "c")
+
+    # adding 2 nodes and create a connection (as it is now)
+    wf.add(wfb)
+    wf.connect("NA", "out", "wfb", "b")
+    assert wf.nodes[0].mapper == "NA.a"
+
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    # wf.result for NB_out doeant have state in results
+    assert wf.is_complete
+
+    expected_A = [({"NA.a": "0"}, 5), ({"NA.a": "1"}, 7)]
+    for i, res in enumerate(expected_A):
+        assert wf.result["NA_out"][i][0] == res[0]
+        assert wf.result["NA_out"][i][1] == res[1]
+
+    # TODO (res): the naming remembers only the node, doesnt remember that came from NA...
+    # TODO (res): because nb doesnt have mapper, but only wfb, and wf.result reads from node results,
+    # TODO ...  : we dont have any state values here. probably should change it that wf can see wfb.b values
+    #TODO (res): compare wf.result and wfb.rsult (wfb has to many var in state_Dict)
+    # the naming should have names with workflows??
+    expected_B = [({}, 15), ({}, 17)]
+    key_sort = list(expected_B[0][0].keys())
+    expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
+    if wf.result["NB_out"][0][0]: #has some state valuse
+        wf.result["NB_out"].sort(key=lambda t: [t[0][key] for key in key_sort])
+    else: # dictionary empty so sorting regarding the values
+        wf.result["NB_out"].sort()
+    for i, res in enumerate(expected_B):
+        assert wf.result["NB_out"][i][0] == res[0]
+        assert wf.result["NB_out"][i][1] == res[1]
+
 
 
 # testing CurrentInterface that is a temporary wrapper for current interfaces

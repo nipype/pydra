@@ -52,10 +52,12 @@ class Submitter(object):
         for (i, ind) in enumerate(node.state.index_generator):
             self._submit_node_el(node, i, ind)
 
+
     def _submit_node_el(self, node, i, ind):
         """submitting node's interface for one element of states"""
         logger.debug("SUBMIT WORKER, node: {}, ind: {}".format(node, ind))
         self.worker.run_el(node.run_interface_el, (i, ind))
+
 
     def run_workflow(self, workflow=None, ready=True):
         """the main function to run Workflow"""
@@ -107,8 +109,9 @@ class Submitter(object):
             st_inputs, wf_inputs = workflow.get_input_el(ind)
         else:
             wf_inputs = workflow.state.state_values(ind)
+            st_inputs = wf_inputs
         if workflow.write_state:
-            workflow.preparing(wf_inputs=wf_inputs)
+            workflow.preparing(wf_inputs=wf_inputs, st_inputs=st_inputs)
         else:
             wf_inputs_ind = workflow.state.state_ind(ind)
             workflow.preparing(wf_inputs=wf_inputs, wf_inputs_ind=wf_inputs_ind)
