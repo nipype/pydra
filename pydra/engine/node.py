@@ -505,6 +505,7 @@ class Workflow(NodeBase):
         # TODO: should I always update the graph?
         return list(nx.topological_sort(self.graph))
 
+
     def map_node(self, mapper, node=None, inputs=None):
         """this is setting a mapper to the wf's nodes (not to the wf)"""
         if type(node) is str:
@@ -512,12 +513,25 @@ class Workflow(NodeBase):
         elif node is None:
             node = self._last_added
         if node.mapper:
-            raise Exception("Cannot assign two mappings to the same input")
+            raise Exception("Cannot assign two mappers to the same node")
         node.map(mapper=mapper, inputs=inputs)
         if node.combiner:
             self._node_mappers[node.name] = node.state.mapper_comb
         else:
             self._node_mappers[node.name] = node.mapper
+        return self
+
+
+    def combine_node(self, combiner, node=None):
+        """this is setting a combiner to the wf's nodes (not to the wf)"""
+        if type(node) is str:
+            node = self._node_names[node]
+        elif node is None:
+            node = self._last_added
+        if node.combiner:
+            raise Exception("Cannot assign two combiners to the same node")
+        node.combine(combiner=combiner)
+        return self
 
 
     def get_output(self):
