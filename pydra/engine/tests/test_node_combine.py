@@ -1014,7 +1014,7 @@ def test_workflow_combine_3(plugin, change_dir):
     wf = Workflow(name="wf3", workingdir="test_wf3_{}".format(plugin),
                   wf_output_names=[("NB", "out")])
     na = Node(name="NA", interface=interf_addvar, workingdir="na", output_names=["out"])
-    na.split(splitter=["b", "c"], inputs={"b": [3, 5], "c": [10, 20]}).combine(combiner="b")
+    na.split(splitter=["b", "c"], inputs={"b": [3, 5, 7], "c": [10, 20]}).combine(combiner="b")
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=interf_sumlist, workingdir="nb", output_names=["out"])
@@ -1030,8 +1030,8 @@ def test_workflow_combine_3(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [[({"NA.b": 3, "NA.c": 10}, 13), ({"NA.b": 5, "NA.c": 10}, 15)],
-                [({"NA.b": 3, "NA.c": 20}, 23), ({"NA.b": 5, "NA.c": 20}, 25)]]
+    expected = [[({"NA.b": 3, "NA.c": 10}, 13), ({"NA.b": 5, "NA.c": 10}, 15), ({"NA.b": 7, "NA.c": 10}, 17)],
+                [({"NA.b": 3, "NA.c": 20}, 23), ({"NA.b": 5, "NA.c": 20}, 25), ({"NA.b": 7, "NA.c": 20}, 27)]]
     expected_state = ["NA.c:10", "NA.c:20"]
     key_sort = list(expected[0][0][0].keys())
     [exp.sort(key=lambda t: [t[0][key] for key in key_sort]) for exp in expected]
@@ -1045,7 +1045,7 @@ def test_workflow_combine_3(plugin, change_dir):
             assert results[i][0] == expected_state[i]
 
 
-    expectedB = [({"NA.c": 10}, 28), ({"NA.c": 20}, 48)]
+    expectedB = [({"NA.c": 10}, 45), ({"NA.c": 20}, 75)]
     key_sort = list(expectedB[0][0].keys())
     expectedB.sort(key=lambda t: [t[0][key] for key in key_sort])
     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
@@ -1061,45 +1061,99 @@ def test_workflow_combine_3(plugin, change_dir):
         assert wf.result["out"][i][1] == res[1]
 
 
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_workflow_combine_3a(plugin, change_dir):
+    """workflow with two nodes, first one with splitter and combiner (different than splitter)"""
+    wf = Workflow(name="wf3a", workingdir="test_wf3a_{}".format(plugin),
+                  wf_output_names=[("NB", "out")])
+    na = Node(name="NA", interface=interf_addvar, workingdir="na", output_names=["out"])
+    na.split(splitter=["b", "c"], inputs={"b": [3, 5, 7], "c": [10, 20]}).combine(combiner="c")
 
-# @pytest.mark.parametrize("plugin", Plugins)
-# @python35_only
-# def test_workflow_4(plugin, change_dir):
-#     """ using add(node) method
-#         using wf.connect to connect two nodes
-#     """
-#     wf = Workflow(name="wf4", workingdir="test_wf4_{}".format(plugin))
-#     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
-#     na.split(splitter="a", inputs={"a": [3, 5]})
-#     wf.add(na)
-#     nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
-#     # explicit splitter with a variable from the previous node
-#     # providing inputs with b
-#     nb.split(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
-#     wf.add(nb)
-#     # connect method as it is in the current version
-#     wf.connect("NA", "out", "NB", "b")
-#
-#     sub = Submitter(runnable=wf, plugin=plugin)
-#     sub.run()
-#     sub.close()
-#
-#     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
-#     key_sort = list(expected[0][0].keys())
-#     expected.sort(key=lambda t: [t[0][key] for key in key_sort])
-#     wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected):
-#         assert wf.nodes[0].result["out"][i][0] == res[0]
-#         assert wf.nodes[0].result["out"][i][1] == res[1]
-#
-#     expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
-#     key_sort = list(expected_B[0][0].keys())
-#     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
-#     wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
-#     for i, res in enumerate(expected_B):
-#         assert wf.nodes[1].result["out"][i][0] == res[0]
-#         assert wf.nodes[1].result["out"][i][1] == res[1]
-#
+    # the second node does not have explicit splitter (but keeps the splitter from the NA node)
+    nb = Node(name="NB", interface=interf_sumlist, workingdir="nb", output_names=["out"])
+
+    # adding 2 nodes and create a connection (as it is now)
+    wf.add_nodes([na, nb])
+    wf.connect("NA", "out", "NB", "a")
+
+    assert wf.nodes[0].splitter == ["NA.b", "NA.c"]
+    assert wf.nodes[0].combiner == ["NA.c"]
+
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    expected = [[({"NA.b": 3, "NA.c": 10}, 13), ({"NA.b": 3, "NA.c": 20}, 23)],
+                [({"NA.b": 5, "NA.c": 10}, 15), ({"NA.b": 5, "NA.c": 20}, 25)],
+                [({"NA.b": 7, "NA.c": 10}, 17), ({"NA.b": 7, "NA.c": 20}, 27)]]
+    expected_state = ["NA.b:3", "NA.b:5", "NA.b:7"]
+    key_sort = list(expected[0][0][0].keys())
+    [exp.sort(key=lambda t: [t[0][key] for key in key_sort]) for exp in expected]
+    results = wf.nodes[0].result["out"]
+    results.sort()
+    [res[1].sort(key=lambda t: [t[0][key] for key in key_sort]) for res in results]
+    for i, res_comb in enumerate(expected):
+        for j, res in enumerate(res_comb):
+            assert results[i][1][j][0] == res[0]
+            assert results[i][1][j][1] == res[1]
+            assert results[i][0] == expected_state[i]
+
+
+    expectedB = [({"NA.b": 3}, 36), ({"NA.b": 5}, 40), ({"NA.b": 7}, 44)]
+    key_sort = list(expectedB[0][0].keys())
+    expectedB.sort(key=lambda t: [t[0][key] for key in key_sort])
+    wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
+    for i, res in enumerate(expectedB):
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
+
+
+    #output of the wf
+    wf.result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
+    for i, res in enumerate(expectedB):
+        assert wf.result["out"][i][0] == res[0]
+        assert wf.result["out"][i][1] == res[1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_workflow_4(plugin, change_dir):
+    """ using add(node) method
+        using wf.connect to connect two nodes
+    """
+    wf = Workflow(name="wf4", workingdir="test_wf4_{}".format(plugin))
+    na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
+    na.split(splitter="a", inputs={"a": [3, 5]})
+    wf.add(na)
+    nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
+    # explicit splitter with a variable from the previous node
+    # providing inputs with b
+    nb.split(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
+    wf.add(nb)
+    # connect method as it is in the current version
+    wf.connect("NA", "out", "NB", "b")
+
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
+    key_sort = list(expected[0][0].keys())
+    expected.sort(key=lambda t: [t[0][key] for key in key_sort])
+    wf.nodes[0].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
+    for i, res in enumerate(expected):
+        assert wf.nodes[0].result["out"][i][0] == res[0]
+        assert wf.nodes[0].result["out"][i][1] == res[1]
+
+    expected_B = [({"NA.a": 3, "NB.c": 2}, 7), ({"NA.a": 5, "NB.c": 1}, 8)]
+    key_sort = list(expected_B[0][0].keys())
+    expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
+    wf.nodes[1].result["out"].sort(key=lambda t: [t[0][key] for key in key_sort])
+    for i, res in enumerate(expected_B):
+        assert wf.nodes[1].result["out"][i][0] == res[0]
+        assert wf.nodes[1].result["out"][i][1] == res[1]
+
 #
 # @pytest.mark.parametrize("plugin", Plugins)
 # @python35_only

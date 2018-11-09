@@ -220,11 +220,17 @@ class NodeBase(object):
         all_axes = []
         for inp in from_node.combiner:
             axis_for_input[inp] = from_node.state._axis_for_input[inp]
-            for (i, ax)  in enumerate(axis_for_input[inp]):
+            for (i, ax) in enumerate(axis_for_input[inp]):
                 elements_per_axes[ax] = state_dict[inp].shape[i]
                 all_axes.append(ax)
         all_axes = list(set(all_axes))
         all_axes.sort()
+        # axes in axis_for_input have to be shifted, so they start in 0
+        # they should fit all_elements format
+        for inp, ax_l in axis_for_input.items():
+            ax_new_l = [all_axes.index(ax) for ax in ax_l]
+            axis_for_input[inp] = ax_new_l
+        # collecting shapes for all axes of the combiner
         shape = [el for (ax, el) in sorted(elements_per_axes.items())]
         all_elements = [range(i) for i in shape]
         index_generator = itertools.product(*all_elements)
