@@ -97,46 +97,74 @@ class State(object):
 
 
     def _prepare_combine(self):
-        self.inp_to_remove = []
-        axes_to_remove = []
+        # input and axes that will be removed when combiner applied
+        self.comb_inp_to_remove = []
+        self.comb_axes_to_remove = []
         # temporary axis_for_input (without knowing specific input)
-        # need it to know which inputs are binded together
+        # need to know which inputs are bound together
         axis_for_input_tmp, ndim_tmp = aux.matching_input_from_splitter(self._splitter_rpn)
         input_for_axis_tmp = aux.converting_axis2input(axis_for_input=axis_for_input_tmp,
                                                        ndim=ndim_tmp)
         for comb_el in self.combiner:
-            self.inp_to_remove.append(comb_el)
+            self.comb_inp_to_remove.append(comb_el)
             axes = axis_for_input_tmp[comb_el]
             for ax in axes:
-                if ax in axes_to_remove:
+                if ax in self.comb_axes_to_remove:
                     raise Exception("can't combine by {}, axis {} already removed".format(
                         comb_el, ax
                     ))
-                inputs = deepcopy(input_for_axis_tmp[ax])
-                inputs.remove(comb_el)
-                if inputs:
-                    for other_inp in inputs:
-                        self.inp_to_remove.append(other_inp)
-            axes_to_remove += axes
+            self.comb_axes_to_remove += axes
+
+        # sorting and removing repeated values
+        self.comb_axes_to_remove = list(set(self.comb_axes_to_remove))
+        self.comb_axes_to_remove.sort()
+
+        # (original axis, new axis) for axes that remain after combining
+        self.partial_comb_input_rem_axes = {}
+        # (original axis of the input, axis from the combiner space) for axes that are combined
+        self.partial_comb_input_comb_axes = {}
+        for ax in self.comb_axes_to_remove:
+            inputs = deepcopy(input_for_axis_tmp[ax])
+            for other_inp in set(inputs) - set(self.combiner):
+                self.comb_inp_to_remove.append(other_inp)
+                # saving remaining axes and position in a final splitter
+                remaining_axes = set(axis_for_input_tmp[other_inp])\
+                                 - set(self.comb_axes_to_remove)
+                if remaining_axes:
+                    self.partial_comb_input_rem_axes[other_inp] = []
+                    for rem_ax in remaining_axes:
+                        axes_shift = (rem_ax, rem_ax - len([i for i in self.comb_axes_to_remove
+                                                            if i < rem_ax]))
+                        self.partial_comb_input_rem_axes[other_inp].append(axes_shift)
+
+                combined_axes = list(set(axis_for_input_tmp[other_inp]) - set(remaining_axes))
+                combined_axes.sort()
+                if combined_axes:
+                    self.partial_comb_input_comb_axes[other_inp] = []
+                    for ind_ax, comb_ax in enumerate(combined_axes):
+                        axes_shift = (ind_ax, self.comb_axes_to_remove.index(comb_ax))
+                        self.partial_comb_input_comb_axes[other_inp].append(axes_shift)
+
         self._prepare_splitter_combine()
 
 
     # TODO: should I call it from splitter?
     def _prepare_splitter_combine(self):
-        self._splitter_rpn_comb = aux.remove_inp_from_splitter_rpn(self._splitter_rpn, self.inp_to_remove)
+        self._splitter_rpn_comb = aux.remove_inp_from_splitter_rpn(self._splitter_rpn,
+                                                                   self.comb_inp_to_remove)
         self.splitter_comb = aux.rpn2splitter(self._splitter_rpn_comb)
+
 
     def _prepare_axis_inputs_combine(self):
         # todo: do i need it?
         self._state_inputs_comb = self.state_inputs.copy()
-        for inp in self.inp_to_remove:
+        for inp in self.comb_inp_to_remove:
             self._state_inputs_comb.pop(inp)
         self._axis_for_input_comb, self._ndim_comb = aux.splitting_axis(self._state_inputs_comb,
                                                                          self._splitter_rpn_comb)
         self._input_for_axis_comb, self._shape_comb = aux.converting_axis2input(
             state_inputs=self._state_inputs_comb, axis_for_input=self._axis_for_input_comb,
             ndim=self._ndim_comb)
-
 
 
     def state_values(self, ind, value=True):

@@ -173,10 +173,16 @@ class NodeBase(object):
     def get_input_el(self, ind):
         """collecting all inputs required to run the node (for specific state element)"""
         state_dict = self.state.state_values(ind)
+        if hasattr(self, "partial_split_input"):
+            for inp, ax_shift in self.partial_split_input.items():
+                ax_shift.sort(reverse=True)
+                for (orig_ax, new_ax) in ax_shift:
+                    state_dict[inp] = np.take(state_dict[inp], indices=ind[new_ax], axis=orig_ax)
         inputs_dict = {k: state_dict[k] for k in self._inputs.keys()}
         if not self.write_state:
             state_dict = self.state.state_ind(ind)
-        # reading extra inputs that come from previous nodes
+
+         # reading extra inputs that come from previous nodes
         for (from_node, from_socket, to_socket) in self.needed_outputs:
             # if the previous node has combiner I have to collect all elements
             if from_node.state.combiner:
@@ -241,7 +247,7 @@ class NodeBase(object):
         return state_dict_all
 
 
-    # similar to State.stae_value (could be combined?)
+    # similar to State.state_value (could be combined?)
     def _state_dict_el_for_comb(self, ind, state_inputs, axis_for_input, value=True):
         """state input for a specific ind (used for connection)"""
         state_dict_el = {}
@@ -255,8 +261,21 @@ class NodeBase(object):
             else:  # using index instead of value
                 ind_inp_str = "x".join([str(el) for el in ind_inp])
                 state_dict_el[input] = ind_inp_str
+
+        if hasattr(self, "partial_comb_input"):
+            for input, ax_shift in self.partial_comb_input.items():
+                ind_inp = []
+                partial_input = state_inputs[input]
+                for (inp_ax, comb_ax) in ax_shift:
+                    ind_inp.append(ind[comb_ax])
+                    partial_input = np.take(partial_input, indices=ind[comb_ax], axis=inp_ax)
+                if value:
+                    state_dict_el[input] = partial_input
+                else:  # using index instead of value
+                    ind_inp_str = "x".join([str(el) for el in ind_inp])
+                    state_dict_el[input] = ind_inp_str
         # adding values from input that are not used in the splitter
-        for input in set(state_inputs) - set(axis_for_input):
+        for input in set(state_inputs) - set(axis_for_input) - set(self.partial_comb_input):
             if value:
                 state_dict_el[input] = state_inputs[input]
             else:
@@ -404,7 +423,7 @@ class Node(NodeBase):
     def _combined_output(self, key_out, state_dict, output_el):
         dir_nm_comb = "_".join(["{}:{}".format(i, j)
                                 for i, j in list(state_dict.items())
-                                if i not in self.state.inp_to_remove])
+                                if i not in self.state.comb_inp_to_remove])
         if dir_nm_comb in self._output[key_out].keys():
             self._output[key_out][dir_nm_comb].append(output_el)
         else:
@@ -738,8 +757,12 @@ class Workflow(NodeBase):
                     nn.needed_outputs.append((out_node, out_var, inp))
                     #if there is no splitter provided, i'm assuming that splitter is taken from the previous node
                     if (not nn.splitter or nn.splitter == out_node.splitter) and out_node.splitter:
+                        # TODO!!: what if I have more connections, not only from one node
                         if out_node.combiner:
                             nn.splitter = out_node.state.splitter_comb
+                            # adding information about partially combined input from previous nodes
+                            nn.partial_split_input = out_node.state.partial_comb_input_rem_axes
+                            nn.partial_comb_input = out_node.state.partial_comb_input_comb_axes
                         else:
                             nn.splitter = out_node.splitter
                     else:
