@@ -107,8 +107,11 @@ class NodeBase(object):
         self._combiner = aux.change_splitter(combiner, self.name)
         if hasattr(self, "state"):
             self.state.combiner = self._combiner
+        # updating state
+        self._state = state.State(splitter=self._splitter, node_name=self.name, other_splitters=self._other_splitters,
+                                  combiner=self.combiner)
         for el in self._combiner:
-            if not aux.search_splitter(el, self.splitter):
+            if el not in self.state._splitter_rpn:
                 raise Exception("element {} of combiner is not found in the splitter {}".format(
                     el, self.splitter))
 

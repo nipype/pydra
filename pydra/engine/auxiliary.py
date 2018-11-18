@@ -398,17 +398,6 @@ def _add_name(mlist, name):
     return mlist
 
 
-def search_splitter(element, splitter):
-    """checking if an element is part of the splitter (used to check combiner elements)"""
-    if type(splitter) in [list, tuple]:
-        if any([search_splitter(element, splitter_el) for splitter_el in splitter]):
-            return True
-    elif element == splitter:
-        return True
-    else:
-        return False
-
-
 # want to use to access input as dot,
 # but it doesnt work since im using "." within names (using my old syntax with - also cant work)
 # https://stackoverflow.com/questions/2352181/how-to-use-a-dot-to-access-members-of-dictionary

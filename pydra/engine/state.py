@@ -80,7 +80,7 @@ class State(object):
         # else:
         self._combiner = combiner
         for el in self._combiner:
-            if not aux.search_splitter(el, self._splitter):
+            if el not in self._splitter_rpn:
                 raise Exception("element {} of combiner is not found in the splitter {}".format(
                     el, self._splitter))
 
