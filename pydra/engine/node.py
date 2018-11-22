@@ -587,14 +587,28 @@ class Workflow(NodeBase):
                             else:
                                 wf_inputs_dict = self.state.state_ind(ind)
                             dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_dict)
-                            self._output[out_wf_nm][dir_nm_el] = self.node_outputs[node_nm][i][
-                                out_nd_nm]
+                            output_el = self.node_outputs[node_nm][i][out_nd_nm]
+                            if not self.combiner: # splitter only
+                                self._output[out_wf_nm][dir_nm_el] = (wf_inputs_dict, output_el)
+                            else:
+                                self._combined_output(out_wf_nm, wf_inputs_dict, output_el)
                     else:
                         self._output[out_wf_nm] = self.node_outputs[node_nm][out_nd_nm]
                 else:
                     raise Exception(
                         "the key {} is already used in workflow.result".format(out_wf_nm))
         return self._output
+
+    #this is not exactly the same as the mothod in Node
+    def _combined_output(self, key_out, state_dict, output_el):
+        dir_nm_comb = "_".join(["{}:{}".format(i, j)
+                                for i, j in list(state_dict.items())
+                                if i not in self.state.comb_inp_to_remove])
+        if dir_nm_comb in self._output[key_out].keys():
+            self._output[key_out][dir_nm_comb].append((state_dict, output_el))
+        else:
+            self._output[key_out][dir_nm_comb] = [(state_dict, output_el)]
+
 
 
     # TODO: might merge with the function from Node
@@ -620,17 +634,12 @@ class Workflow(NodeBase):
                 key_out = out[2] if len(out) == 3 else out[1]
                 self._result[key_out] = []
                 if self.splitter:
-                    for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
-                        if self.write_state:
-                            wf_inputs_dict = self.state.state_values(ind)
-                        else:
-                            wf_inputs_dict = self.state.state_ind(ind)
-                        dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_dict)
-                        res_l = []
-                        val_l = self._dict_tuple2list(self.output[key_out][dir_nm_el])
-                        for val in val_l:
-                            res_l.append(val)
-                        self._result[key_out].append((wf_inputs_dict, res_l))
+                    if not self.combiner:
+                        val_l = self._dict_tuple2list(self._output[key_out])
+                        self._result[key_out] = val_l
+                    else:
+                        val_l = self._dict_tuple2list(self._output[key_out], key=True)
+                        self._result[key_out] = val_l
                 else:
                     val_l = self._dict_tuple2list(self.output[key_out])
                     for val in val_l:

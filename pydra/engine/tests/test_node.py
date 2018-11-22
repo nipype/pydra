@@ -236,7 +236,7 @@ def test_node_8(plugin, change_dir):
         assert nn.result["out"][i][0] == res[0]
         assert nn.result["out"][i][1] == res[1]
 
-#
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_node_9(plugin, change_dir):
@@ -273,7 +273,8 @@ def test_workflow_0(plugin="serial"):
 @python35_only
 def test_workflow_1(plugin, change_dir):
     """workflow with one node with a splitter"""
-    wf = Workflow(name="wf1", workingdir="test_wf1_{}".format(plugin))
+    wf = Workflow(name="wf1", workingdir="test_wf1_{}".format(plugin),
+                  wf_output_names=[("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
     na.split(splitter="a", inputs={"a": [3, 5]})
     wf.add_nodes([na])
@@ -289,6 +290,12 @@ def test_workflow_1(plugin, change_dir):
     for i, res in enumerate(expected):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
+
+    #output of the wf
+    wf.result["NA_out"].sort(key=lambda t: [t[0][key] for key in key_sort])
+    for i, res in enumerate(expected):
+        assert wf.result["NA_out"][i][0] == res[0]
+        assert wf.result["NA_out"][i][1] == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1170,11 +1177,11 @@ def test_workflow_13(plugin, change_dir):
     sub.close()
 
     assert wf.is_complete
-    expected = [({"wf13.wfa": 3}, [({}, 5)]), ({'wf13.wfa': 5}, [({}, 7)])]
+    expected = [({"wf13.wfa": 3}, ({}, 5)), ({'wf13.wfa': 5}, ({}, 7))]
     for i, res in enumerate(expected):
         assert wf.result["NA_out"][i][0] == res[0]
-        assert wf.result["NA_out"][i][1][0][0] == res[1][0][0]
-        assert wf.result["NA_out"][i][1][0][1] == res[1][0][1]
+        assert wf.result["NA_out"][i][1][0] == res[1][0]
+        assert wf.result["NA_out"][i][1][1] == res[1][1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1201,8 +1208,9 @@ def test_workflow_13a(plugin, change_dir):
     for i, res in enumerate(expected):
         assert wf.result["NA_out"][i][0] == res[0]
         for j in range(len(res[1])):
-            assert wf.result["NA_out"][i][1][j][0] == res[1][j][0]
-            assert wf.result["NA_out"][i][1][j][1] == res[1][j][1]
+            assert list(wf.result["NA_out"][i][1].values())[j][0] == res[1][j][0]
+            assert list(wf.result["NA_out"][i][1].values())[j][1] == res[1][j][1]
+
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
@@ -1221,13 +1229,12 @@ def test_workflow_13b(plugin, change_dir):
     sub.close()
 
     assert wf.is_complete
-    expected = [({"wf13b.wfa": 3}, [({}, 5)]),
-                ({'wf13b.wfa': 5}, [({}, 7)])]
+    expected = [({"wf13b.wfa": 3}, ({}, 5)),
+                ({'wf13b.wfa': 5}, ({}, 7))]
     for i, res in enumerate(expected):
         assert wf.result["NA_out"][i][0] == res[0]
-        assert wf.result["NA_out"][i][1][0][0] == res[1][0][0]
-        assert wf.result["NA_out"][i][1][0][1] == res[1][0][1]
-
+        assert wf.result["NA_out"][i][1][0] == res[1][0]
+        assert wf.result["NA_out"][i][1][1] == res[1][1]
 
 
 
@@ -1247,25 +1254,77 @@ def test_workflow_13c(plugin, change_dir):
     sub.close()
 
     assert wf.is_complete
-    expected = [({"wf13c.wfa": 3}, [({}, 5)]), ({'wf13c.wfa': 5}, [({}, 7)])]
+    expected = [({"wf13c.wfa": 3}, ({}, 5)), ({'wf13c.wfa': 5}, ({}, 7))]
     for i, res in enumerate(expected):
         assert wf.result["NA_out"][i][0] == res[0]
-        assert wf.result["NA_out"][i][1][0][0] == res[1][0][0]
-        assert wf.result["NA_out"][i][1][0][1] == res[1][0][1]
+        assert wf.result["NA_out"][i][1][0] == res[1][0]
+        assert wf.result["NA_out"][i][1][1] == res[1][1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_workflow_14(plugin, change_dir):
+    """using inputs for workflow and scalar splitter"""
+    wf = Workflow(name="wf14", inputs={"wfb": [3, 5], "wfc": [10, 20]},
+                  splitter=("wfb", "wfc"), workingdir="test_wf14_{}".format(plugin),
+                  wf_output_names=[("NA", "out", "NA_out")])
+    na = Node(name="NA", interface=interf_addvar, workingdir="na", output_names=["out"])
+    wf.add(na)
+    wf.connect_wf_input("wfb", "NA", "b")
+    wf.connect_wf_input("wfc", "NA", "c")
+
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    assert wf.is_complete
+    expected = [({"wf14.wfb": 3, "wf14.wfc": 10}, ({}, 13)),
+                ({'wf14.wfb': 5, "wf14.wfc": 20}, ({}, 25))]
+    for i, res in enumerate(expected):
+        assert wf.result["NA_out"][i][0] == res[0]
+        assert wf.result["NA_out"][i][1][0] == res[1][0]
+        assert wf.result["NA_out"][i][1][1] == res[1][1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_workflow_15(plugin, change_dir):
+    """using inputs for workflow and outer splitter"""
+    wf = Workflow(name="wf15", inputs={"wfb": [3, 5], "wfc": [10, 20]},
+                  splitter=["wfb", "wfc"], workingdir="test_wf15_{}".format(plugin),
+                  wf_output_names=[("NA", "out", "NA_out")])
+    na = Node(name="NA", interface=interf_addvar, workingdir="na", output_names=["out"])
+    wf.add(na)
+    wf.connect_wf_input("wfb", "NA", "b")
+    wf.connect_wf_input("wfc", "NA", "c")
+
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    assert wf.is_complete
+    expected = [({"wf15.wfb": 3, "wf15.wfc": 10}, ({}, 13)),
+                ({"wf15.wfb": 3, "wf15.wfc": 20}, ({}, 23)),
+                ({"wf15.wfb": 5, "wf15.wfc": 10}, ({}, 15)),
+                ({'wf15.wfb': 5, "wf15.wfc": 20}, ({}, 25))]
+    for i, res in enumerate(expected):
+        assert wf.result["NA_out"][i][0] == res[0]
+        assert wf.result["NA_out"][i][1][0] == res[1][0]
+        assert wf.result["NA_out"][i][1][1] == res[1][1]
 
 
 # workflow as a node
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
-def test_workflow_14(plugin, change_dir):
+def test_workflow_16(plugin, change_dir):
     """workflow with a workflow as a node (no splitter)"""
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", inputs={"a": 3},
               output_names=["out"])
     wfa = Workflow(name="wfa", workingdir="test_wfa", wf_output_names=[("NA", "out", "NA_out")])
     wfa.add(na)
 
-    wf = Workflow(name="wf14", workingdir="test_wf14_{}".format(plugin),
+    wf = Workflow(name="wf16", workingdir="test_wf16_{}".format(plugin),
             wf_output_names=[("wfa", "NA_out", "wfa_out")])
     wf.add(wfa)
 
@@ -1282,7 +1341,7 @@ def test_workflow_14(plugin, change_dir):
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
-def test_workflow_14a(plugin, change_dir):
+def test_workflow_16a(plugin, change_dir):
     """workflow with a workflow as a node (no splitter, using connect_wf_input in wfa)"""
     na = Node(name="NA", interface=interf_addtwo, workingdir="na",
               output_names=["out"])
@@ -1291,7 +1350,7 @@ def test_workflow_14a(plugin, change_dir):
     wfa.add(na)
     wfa.connect_wf_input("a", "NA", "a")
 
-    wf = Workflow(name="wf14a", workingdir="test_wf14a_{}".format(plugin),
+    wf = Workflow(name="wf16a", workingdir="test_wf16a_{}".format(plugin),
             wf_output_names=[("wfa", "NA_out", "wfa_out")])
     wf.add(wfa)
 
@@ -1308,14 +1367,14 @@ def test_workflow_14a(plugin, change_dir):
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
-def test_workflow_14b(plugin, change_dir):
+def test_workflow_16b(plugin, change_dir):
     """workflow with a workflow as a node (no splitter, using connect_wf_input in wfa and wf)"""
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
     wfa = Workflow(name="wfa", workingdir="test_wfa", wf_output_names=[("NA", "out", "NA_out")])
     wfa.add(na)
     wfa.connect_wf_input("a", "NA", "a")
 
-    wf = Workflow(name="wf14b", workingdir="test_wf14b_{}".format(plugin),
+    wf = Workflow(name="wf16b", workingdir="test_wf16b_{}".format(plugin),
             wf_output_names=[("wfa", "NA_out", "wfa_out")], inputs={"a": 3})
     wf.add(wfa)
     wf.connect_wf_input("a", "wfa", "a")
@@ -1333,14 +1392,14 @@ def test_workflow_14b(plugin, change_dir):
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
-def test_workflow_15(plugin, change_dir):
+def test_workflow_17(plugin, change_dir):
     """workflow with a workflow as a node with splitter (like 14 but with a splitter)"""
     na = Node(name="NA", interface=interf_addtwo, workingdir="na",
               inputs={"a": [3, 5]}, splitter="a", output_names=["out"])
     wfa = Workflow(name="wfa", workingdir="test_wfa", wf_output_names=[("NA", "out", "NA_out")])
     wfa.add(na)
 
-    wf = Workflow(name="wf15", workingdir="test_wf15_{}".format(plugin),
+    wf = Workflow(name="wf17", workingdir="test_wf17_{}".format(plugin),
             wf_output_names=[("wfa", "NA_out", "wfa_out")])
     wf.add(wfa)
 
@@ -1357,9 +1416,9 @@ def test_workflow_15(plugin, change_dir):
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
-def test_workflow_16(plugin, change_dir):
+def test_workflow_18(plugin, change_dir):
     """workflow with two nodes, and one is a workflow (no splitter)"""
-    wf = Workflow(name="wf16", workingdir="test_wf16_{}".format(plugin),
+    wf = Workflow(name="wf18", workingdir="test_wf18_{}".format(plugin),
             wf_output_names=[("wfb", "NB_out"), ("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na", inputs={"a": 3},
               output_names=["out"])
@@ -1381,6 +1440,7 @@ def test_workflow_16(plugin, change_dir):
     sub.run()
     sub.close()
 
+    # dj should I remember the wf input?
     assert wf.is_complete
     expected_A = [({}, 5)]
     for i, res in enumerate(expected_A):
@@ -1397,9 +1457,9 @@ def test_workflow_16(plugin, change_dir):
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
-def test_workflow_16a(plugin, change_dir):
+def test_workflow_19(plugin, change_dir):
     """workflow with two nodes, and one is a workflow (with splitter)"""
-    wf = Workflow(name="wf16a", workingdir="test_wf16a_{}".format(plugin),
+    wf = Workflow(name="wf19", workingdir="test_wf19_{}".format(plugin),
         wf_output_names=[("wfb", "NB_out"), ("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na",
               output_names=["out"])
@@ -1435,7 +1495,8 @@ def test_workflow_16a(plugin, change_dir):
     # TODO ...  : we dont have any state values here. probably should change it that wf can see wfb.b values
     #TODO (res): compare wf.result and wfb.rsult (wfb has to many var in state_Dict)
     # the naming should have names with workflows??
-    expected_B = [({}, 15), ({}, 17)]
+    expected_B = [({'NA.a': 3, 'wfb.c': 10}, ({}, 15)),
+                  ({'NA.a': 5, 'wfb.c': 10}, ({}, 17))]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     if wf.result["NB_out"][0][0]: #has some state valuse
@@ -1444,16 +1505,17 @@ def test_workflow_16a(plugin, change_dir):
         wf.result["NB_out"].sort()
     for i, res in enumerate(expected_B):
         assert wf.result["NB_out"][i][0] == res[0]
-        assert wf.result["NB_out"][i][1] == res[1]
+        assert wf.result["NB_out"][i][1][0] == res[1][0]
+        assert wf.result["NB_out"][i][1][1] == res[1][1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
-def test_workflow_16b(plugin, change_dir):
+def test_workflow_19a(plugin, change_dir):
     """workflow with two nodes, and one is a workflow (with splitter)
-        the sae as 16b, but using indices instead of values (write_state=False)
+        the sae as 19a, but using indices instead of values (write_state=False)
     """
-    wf = Workflow(name="wf16b", workingdir="test_wf16b_{}".format(plugin),
+    wf = Workflow(name="wf19a", workingdir="test_wf19a_{}".format(plugin),
         wf_output_names=[("wfb", "NB_out"), ("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_addtwo, workingdir="na",
               output_names=["out"], write_state=False)
@@ -1490,7 +1552,8 @@ def test_workflow_16b(plugin, change_dir):
     # TODO ...  : we dont have any state values here. probably should change it that wf can see wfb.b values
     #TODO (res): compare wf.result and wfb.rsult (wfb has to many var in state_Dict)
     # the naming should have names with workflows??
-    expected_B = [({}, 15), ({}, 17)]
+    expected_B = [({'NA.a': "0", 'wfb.c': None}, ({}, 15)),
+                  ({'NA.a': "1", 'wfb.c': None}, ({}, 17))]
     key_sort = list(expected_B[0][0].keys())
     expected_B.sort(key=lambda t: [t[0][key] for key in key_sort])
     if wf.result["NB_out"][0][0]: #has some state valuse
@@ -1499,8 +1562,8 @@ def test_workflow_16b(plugin, change_dir):
         wf.result["NB_out"].sort()
     for i, res in enumerate(expected_B):
         assert wf.result["NB_out"][i][0] == res[0]
-        assert wf.result["NB_out"][i][1] == res[1]
-
+        assert wf.result["NB_out"][i][1][0] == res[1][0]
+        assert wf.result["NB_out"][i][1][1] == res[1][1]
 
 
 # testing CurrentInterface that is a temporary wrapper for current interfaces
