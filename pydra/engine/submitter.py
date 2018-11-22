@@ -72,6 +72,9 @@ class Submitter(object):
             for (i, ind) in enumerate(workflow.state.index_generator):
                 new_workflow = deepcopy(workflow)
                 new_workflow.parent_wf = workflow
+                # adding all nodes to the parent workflow
+                for (i_n, node) in enumerate(new_workflow.graph_sorted):
+                    workflow.inner_nodes[node.name].append(node)
                 if ready:
                     self._run_workflow_el(new_workflow, i, ind)
                 else:
@@ -120,8 +123,6 @@ class Submitter(object):
     def _run_workflow_nd(self, workflow):
         """iterating over all nodes from a workflow and submitting them or adding to the node_line"""
         for (i_n, node) in enumerate(workflow.graph_sorted):
-            if workflow.parent_wf and workflow.parent_wf.splitter:  # for now if parent_wf, parent_wf has to have splitter
-                workflow.parent_wf.inner_nodes[node.name].append(node)
             node.prepare_state_input()
             self._to_finish.append(node)
             # submitting all the nodes who are self sufficient (self.workflow.graph is already sorted)
