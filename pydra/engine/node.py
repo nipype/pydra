@@ -589,9 +589,9 @@ class Workflow(NodeBase):
                             dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_dict)
                             output_el = self.node_outputs[node_nm][i][out_nd_nm]
                             if not self.combiner: # splitter only
-                                self._output[out_wf_nm][dir_nm_el] = (wf_inputs_dict, output_el)
+                                self._output[out_wf_nm][dir_nm_el] = (wf_inputs_dict, output_el[1])
                             else:
-                                self._combined_output(out_wf_nm, wf_inputs_dict, output_el)
+                                self._combined_output(out_wf_nm, wf_inputs_dict, output_el[1])
                     else:
                         self._output[out_wf_nm] = self.node_outputs[node_nm][out_nd_nm]
                 else:
