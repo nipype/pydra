@@ -307,6 +307,7 @@ class NodeBase(object):
         the splitter anymore (e.g. because of the combiner);
         create name of the dictionary
         """
+        # TODO should be self.state._splitter_rpn or self.state._splitter_rpn_comb
         state_surv_dict = dict((key, val) for (key, val) in state_dict.items()
                                if key in self.state._splitter_rpn)
         dir_nm_el = "_".join(["{}:{}".format(i, j)
@@ -335,7 +336,7 @@ class NodeBase(object):
     def _reading_results(self):
         raise NotImplementedError
 
-    def _dict_tuple2list(self, container, key=False):
+    def _dict_tuple2list(self, container, key=False, str2dict=False):
         if type(container) is dict:
             if key:
                 val_l = [(key, val) for (key, val) in container.items()]
@@ -345,6 +346,20 @@ class NodeBase(object):
             val_l = [container]
         else:
             raise Exception("{} has to be dict or tuple".format(container))
+        if str2dict and type(val_l[0][0]) is str:
+            val_dict_l = []
+            for val_el in val_l:
+                val_dict = {}
+                for val_str in val_el[0].split("_"):
+                    if val_str:
+                        key, val = val_str.split(":")
+                        try:
+                            val = float(val)
+                        except Exception:
+                            pass
+                        val_dict[key] = val
+                val_dict_l.append((val_dict, val_el[1]))
+            return val_dict_l
         return val_l
 
 
@@ -414,7 +429,7 @@ class Node(NodeBase):
                     output_el = (state_surv_dict, self._reading_ci_output(dir_nm_el,
                                                                      out_nm=key_out))
                     if not self.combiner: # only splitter
-                        self._output[key_out][dir_nm_el] = output_el
+                        self._output[key_out][dir_nm_el] = output_el[1]
                     else: #assuming that only combined output is saved
                         self._combined_output(key_out, state_dict, output_el)
                 else:
@@ -428,9 +443,9 @@ class Node(NodeBase):
                                 for i, j in list(state_dict.items())
                                 if i not in self.state.comb_inp_to_remove])
         if dir_nm_comb in self._output[key_out].keys():
-            self._output[key_out][dir_nm_comb].append(output_el)
+            self._output[key_out][dir_nm_comb].append(output_el[1])
         else:
-            self._output[key_out][dir_nm_comb] = [output_el]
+            self._output[key_out][dir_nm_comb] = [output_el[1]]
 
 
     def _check_all_results(self):
@@ -457,14 +472,12 @@ class Node(NodeBase):
             if self._state_inputs:
                 # TODO: should I remember state (both with ain w/o combiner)
                 if not self.combiner:
-                    val_l = self._dict_tuple2list(self._output[key_out])
+                    val_l = self._dict_tuple2list(self._output[key_out], key=True, str2dict=True)
                     #for (st_dict, out) in val_l:
                     self._result[key_out] = val_l
                 else:
-                    val_l = self._dict_tuple2list(self._output[key_out], key=True)
+                    val_l = self._dict_tuple2list(self._output[key_out], key=True, str2dict=True)
                     self._result[key_out] = val_l
-                    #for val in val_l:
-
             else:
                 # st_dict should be {}
                 # not sure if this is used (not tested)
@@ -589,7 +602,7 @@ class Workflow(NodeBase):
                             dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_dict)
                             output_el = self.node_outputs[node_nm][i][out_nd_nm]
                             if not self.combiner: # splitter only
-                                self._output[out_wf_nm][dir_nm_el] = (wf_inputs_dict, output_el[1])
+                                self._output[out_wf_nm][dir_nm_el] = output_el[1]#(wf_inputs_dict, output_el[1])
                             else:
                                 self._combined_output(out_wf_nm, wf_inputs_dict, output_el[1])
                     else:
@@ -605,10 +618,9 @@ class Workflow(NodeBase):
                                 for i, j in list(state_dict.items())
                                 if i not in self.state.comb_inp_to_remove])
         if dir_nm_comb in self._output[key_out].keys():
-            self._output[key_out][dir_nm_comb].append((state_dict, output_el))
+            self._output[key_out][dir_nm_comb].append(output_el)
         else:
-            self._output[key_out][dir_nm_comb] = [(state_dict, output_el)]
-
+            self._output[key_out][dir_nm_comb] = [output_el]
 
 
     # TODO: might merge with the function from Node
@@ -635,16 +647,13 @@ class Workflow(NodeBase):
                 self._result[key_out] = []
                 if self.splitter:
                     if not self.combiner:
-                        val_l = self._dict_tuple2list(self._output[key_out])
+                        val_l = self._dict_tuple2list(self._output[key_out], key=True, str2dict=True)
                         self._result[key_out] = val_l
                     else:
-                        val_l = self._dict_tuple2list(self._output[key_out], key=True)
+                        val_l = self._dict_tuple2list(self._output[key_out], key=True, str2dict=True)
                         self._result[key_out] = val_l
                 else:
-                    val_l = self._dict_tuple2list(self.output[key_out])
-                    for val in val_l:
-                        self._result[key_out].append(val)
-
+                    self._result[key_out] = self._dict_tuple2list(self.output[key_out], key=True, str2dict=True)
 
     # TODO: this should be probably using add method
     def add_nodes(self, nodes):

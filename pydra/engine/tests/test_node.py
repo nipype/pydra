@@ -1338,8 +1338,8 @@ def test_workflow_19(plugin, change_dir):
     # TODO ...  : we dont have any state values here. probably should change it that wf can see wfb.b values
     #TODO (res): compare wf.result and wfb.rsult (wfb has to many var in state_Dict)
     # the naming should have names with workflows??
-    expected_B = [({'NA.a': 3, 'wfb.c': 10}, 15),
-                  ({'NA.a': 5, 'wfb.c': 10}, 17)]
+    expected_B = [({'NA.a': 3}, 15),
+                  ({'NA.a': 5}, 17)]
     for i, res in enumerate(expected_B):
         assert wf.result["NB_out"][i][0] == res[0]
         assert wf.result["NB_out"][i][1] == res[1]
@@ -1378,7 +1378,7 @@ def test_workflow_19a(plugin, change_dir):
     # wf.result for NB_out doeant have state in results
     assert wf.is_complete
 
-    expected_A = [({"NA.a": "0"}, 5), ({"NA.a": "1"}, 7)]
+    expected_A = [({"NA.a": 0}, 5), ({"NA.a": 1}, 7)]
     for i, res in enumerate(expected_A):
         assert wf.result["NA_out"][i][0] == res[0]
         assert wf.result["NA_out"][i][1] == res[1]
@@ -1388,8 +1388,7 @@ def test_workflow_19a(plugin, change_dir):
     # TODO ...  : we dont have any state values here. probably should change it that wf can see wfb.b values
     #TODO (res): compare wf.result and wfb.rsult (wfb has to many var in state_Dict)
     # the naming should have names with workflows??
-    expected_B = [({'NA.a': "0", 'wfb.c': None}, 15),
-                  ({'NA.a': "1", 'wfb.c': None}, 17)]
+    expected_B = [({'NA.a': 0}, 15), ({'NA.a': 1}, 17)]
     for i, res in enumerate(expected_B):
         assert wf.result["NB_out"][i][0] == res[0]
         assert wf.result["NB_out"][i][1] == res[1]
