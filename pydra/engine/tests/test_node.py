@@ -141,10 +141,7 @@ def test_node_5(plugin, change_dir):
     sub.close()
 
     # checking the results
-    expected = [({}, 5)]
-    for i, res in enumerate(expected):
-        assert nn.result["out"][i][0] == res[0]
-        assert nn.result["out"][i][1] == res[1]
+    assert nn.result["out"] == ({}, 5)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1176,10 +1173,7 @@ def test_workflow_16(plugin, change_dir):
     sub.close()
 
     assert wf.is_complete
-    expected = [({}, 5)]
-    for i, res in enumerate(expected):
-        assert wf.result["wfa_out"][i][0] == res[0]
-        assert wf.result["wfa_out"][i][1] == res[1]
+    assert wf.result["wfa_out"] == ({}, 5)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1202,10 +1196,7 @@ def test_workflow_16a(plugin, change_dir):
     sub.close()
 
     assert wf.is_complete
-    expected = [({}, 5)]
-    for i, res in enumerate(expected):
-        assert wf.result["wfa_out"][i][0] == res[0]
-        assert wf.result["wfa_out"][i][1] == res[1]
+    assert wf.result["wfa_out"] == ({}, 5)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1227,10 +1218,7 @@ def test_workflow_16b(plugin, change_dir):
     sub.close()
 
     assert wf.is_complete
-    expected = [({}, 5)]
-    for i, res in enumerate(expected):
-        assert wf.result["wfa_out"][i][0] == res[0]
-        assert wf.result["wfa_out"][i][1] == res[1]
+    assert wf.result["wfa_out"] == ({}, 5)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1285,17 +1273,11 @@ def test_workflow_18(plugin, change_dir):
 
     # dj should I remember the wf input?
     assert wf.is_complete
-    expected_A = [({}, 5)]
-    for i, res in enumerate(expected_A):
-        assert wf.result["NA_out"][i][0] == res[0]
-        assert wf.result["NA_out"][i][1] == res[1]
+    assert wf.result["NA_out"] == ({}, 5)
 
     # TODO (res): the naming rememebrs only the node, doesnt remember that a came from NA...
     # the naming should have names with workflows??
-    expected_B = [({}, 15)]
-    for i, res in enumerate(expected_B):
-        assert wf.result["NB_out"][i][0] == res[0]
-        assert wf.result["NB_out"][i][1] == res[1]
+    assert wf.result["NB_out"] == ({}, 15)
 
 
 @pytest.mark.parametrize("plugin", Plugins)

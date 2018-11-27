@@ -301,13 +301,12 @@ class NodeBase(object):
         return False
 
 
-    # TODO: this is used now only for node, it probbably should be also for wf
     def _directory_name_state_surv(self, state_dict):
         """eliminating all inputs from state dictionary that are not in
-        the splitter anymore (e.g. because of the combiner);
-        create name of the dictionary
+        the splitter;
+        creating a directory name
         """
-        # TODO should be self.state._splitter_rpn or self.state._splitter_rpn_comb
+        # should I be using self.state._splitter_rpn_comb?
         state_surv_dict = dict((key, val) for (key, val) in state_dict.items()
                                if key in self.state._splitter_rpn)
         dir_nm_el = "_".join(["{}:{}".format(i, j)
@@ -336,31 +335,67 @@ class NodeBase(object):
     def _reading_results(self):
         raise NotImplementedError
 
-    def _dict_tuple2list(self, container, key=False, str2dict=False):
+    def _state_dict_to_list(self, container):
+        """creating a list of tuples from dictionary and changing key (state) from str to dict"""
         if type(container) is dict:
-            if key:
-                val_l = [(key, val) for (key, val) in container.items()]
-            else:
-                val_l = [val for (_, val) in container.items()]
-        elif type(container) is tuple:
-            val_l = [container]
+                val_l = list(container.items())
         else:
-            raise Exception("{} has to be dict or tuple".format(container))
-        if str2dict and type(val_l[0][0]) is str:
-            val_dict_l = []
-            for val_el in val_l:
-                val_dict = {}
-                for val_str in val_el[0].split("_"):
-                    if val_str:
-                        key, val = val_str.split(":")
-                        try:
-                            val = float(val)
-                        except Exception:
-                            pass
-                        val_dict[key] = val
-                val_dict_l.append((val_dict, val_el[1]))
-            return val_dict_l
-        return val_l
+            raise Exception("{} has to be dict".format(container))
+        val_dict_l = self._state_str_to_dict(val_l)
+        return val_dict_l
+
+
+    def _state_str_to_dict(self, values_list):
+        """taking a list of tuples (state, value)
+        and converting state from string to dictionary.
+        string has format "FirstInputName:Value_SecondInputName:Value"
+        """
+        values_dict_list = []
+        for val_el in values_list:
+            val_dict = {}
+            for val_str in val_el[0].split("_"):
+                if val_str:
+                    key, val = val_str.split(":")
+                    try:
+                        val = float(val)
+                        if val.is_integer():
+                            val = int(val)
+                    except Exception:
+                        pass
+                    val_dict[key] = val
+            values_dict_list.append((val_dict, val_el[1]))
+        return values_dict_list
+
+
+    def _combined_output(self, key_out, state_dict, output_el):
+        dir_nm_comb = "_".join(["{}:{}".format(i, j)
+                                for i, j in list(state_dict.items())
+                                if i not in self.state.comb_inp_to_remove])
+        if dir_nm_comb in self._output[key_out].keys():
+            self._output[key_out][dir_nm_comb].append(output_el)
+        else:
+            self._output[key_out][dir_nm_comb] = [output_el]
+
+
+    def _reading_results_one_output(self, key_out):
+        """reading results for one specifc output name"""
+        if not self.splitter:
+            if type(self.output[key_out]) is tuple:
+                result = self.output[key_out]
+            elif type(self.output[key_out]) is dict:
+                val_l = self._state_dict_to_list(self.output[key_out])
+                if len(val_l) == 1:
+                    result = val_l[0]
+                # this is used for wf (can be no splitter but multiple values from node splitter)
+                else:
+                    result = val_l
+        elif (self.combiner and not self.state._splitter_rpn_comb):
+            val_l = self._state_dict_to_list(self.output[key_out])
+            result = val_l[0]
+        elif self.splitter:
+            val_l = self._state_dict_to_list(self._output[key_out])
+            result = val_l
+        return result
 
 
 class Node(NodeBase):
@@ -380,23 +415,6 @@ class Node(NodeBase):
         if not self.output_names:
             self.output_names = []
 
-    # dj: not sure if I need it
-    # def __deepcopy__(self, memo): # memo is a dict of id's to copies
-    #     id_self = id(self)        # memoization avoids unnecesary recursion
-    #     _copy = memo.get(id_self)
-    #     if _copy is None:
-    #         # changing names of inputs and input_split, so it doesnt contain node.name
-    #         inputs_copy = dict((key[len(self.name)+1:], deepcopy(value))
-    #                            for (key, value) in self.inputs.items())
-    #         interface_copy = deepcopy(self.interface)
-    #         interface_copy.input_split = dict((key, val[len(self.name)+1:])
-    #                                         for (key, val) in interface_copy.input_split.items())
-    #         _copy = type(self)(
-    #             name=deepcopy(self.name), interface=interface_copy,
-    #             inputs=inputs_copy, splitter=deepcopy(self.splitter),
-    #             base_dir=deepcopy(self.nodedir), other_splitters=deepcopy(self._other_splitters))
-    #         memo[id_self] = _copy
-    #     return _copy
 
     def run_interface_el(self, i, ind):
         """ running interface one element generated from node_state."""
@@ -426,26 +444,15 @@ class Node(NodeBase):
                     state_dict = self.state.state_ind(ind)
                 dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
                 if self.splitter:
-                    output_el = (state_surv_dict, self._reading_ci_output(dir_nm_el,
-                                                                     out_nm=key_out))
+                    output_el = self._reading_ci_output(dir_nm_el, out_nm=key_out)
                     if not self.combiner: # only splitter
-                        self._output[key_out][dir_nm_el] = output_el[1]
-                    else: #assuming that only combined output is saved
+                        self._output[key_out][dir_nm_el] = output_el
+                    else:
                         self._combined_output(key_out, state_dict, output_el)
                 else:
                     self._output[key_out] = \
                         (state_surv_dict, self._reading_ci_output(dir_nm_el, out_nm=key_out))
         return self._output
-
-
-    def _combined_output(self, key_out, state_dict, output_el):
-        dir_nm_comb = "_".join(["{}:{}".format(i, j)
-                                for i, j in list(state_dict.items())
-                                if i not in self.state.comb_inp_to_remove])
-        if dir_nm_comb in self._output[key_out].keys():
-            self._output[key_out][dir_nm_comb].append(output_el[1])
-        else:
-            self._output[key_out][dir_nm_comb] = [output_el[1]]
 
 
     def _check_all_results(self):
@@ -464,34 +471,9 @@ class Node(NodeBase):
 
 
     def _reading_results(self):
-        """temporary: reading results from output files (that is now just txt)
-            should be probably just reading output for self.output_names
-        """
+        """ collecting all results for all output names"""
         for key_out in self.output_names:
-            #self._result[key_out] = []
-            if self._state_inputs:
-                # TODO: should I remember state (both with ain w/o combiner)
-                if not self.combiner:
-                    val_l = self._dict_tuple2list(self._output[key_out], key=True, str2dict=True)
-                    #for (st_dict, out) in val_l:
-                    self._result[key_out] = val_l
-                else:
-                    val_l = self._dict_tuple2list(self._output[key_out], key=True, str2dict=True)
-                    self._result[key_out] = val_l
-            else:
-                # st_dict should be {}
-                # not sure if this is used (not tested)
-                (st_dict, out) = self._output[key_out][None]
-                self._result[key_out].append(({}, out))
-
-    # dj: removing temp. from Node class
-    # def run(self, plugin="serial"):
-    #     """preparing the node to run and run the interface"""
-    #     self.prepare_state_input()
-    #     submitter = sub.SubmitterNode(plugin, node=self)
-    #     submitter.run_node()
-    #     submitter.close()
-    #     self.collecting_output()
+            self._result[key_out] = self._reading_results_one_output(key_out)
 
 
 class Workflow(NodeBase):
@@ -602,7 +584,7 @@ class Workflow(NodeBase):
                             dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_dict)
                             output_el = self.node_outputs[node_nm][i][out_nd_nm]
                             if not self.combiner: # splitter only
-                                self._output[out_wf_nm][dir_nm_el] = output_el[1]#(wf_inputs_dict, output_el[1])
+                                self._output[out_wf_nm][dir_nm_el] = output_el[1]
                             else:
                                 self._combined_output(out_wf_nm, wf_inputs_dict, output_el[1])
                     else:
@@ -611,16 +593,6 @@ class Workflow(NodeBase):
                     raise Exception(
                         "the key {} is already used in workflow.result".format(out_wf_nm))
         return self._output
-
-    #this is not exactly the same as the mothod in Node
-    def _combined_output(self, key_out, state_dict, output_el):
-        dir_nm_comb = "_".join(["{}:{}".format(i, j)
-                                for i, j in list(state_dict.items())
-                                if i not in self.state.comb_inp_to_remove])
-        if dir_nm_comb in self._output[key_out].keys():
-            self._output[key_out][dir_nm_comb].append(output_el)
-        else:
-            self._output[key_out][dir_nm_comb] = [output_el]
 
 
     # TODO: might merge with the function from Node
@@ -636,24 +608,16 @@ class Workflow(NodeBase):
         self._is_complete = True
         return True
 
-    # TODO: should try to merge with the function from Node
+
     def _reading_results(self):
-        """reading all results of the workflow
-           using temporary Node._reading_results that reads txt files
+        """reading all results for the workflow,
+        nodes/outputs names specified in self.wf_output_names
         """
         if self.wf_output_names:
             for out in self.wf_output_names:
-                key_out = out[2] if len(out) == 3 else out[1]
-                self._result[key_out] = []
-                if self.splitter:
-                    if not self.combiner:
-                        val_l = self._dict_tuple2list(self._output[key_out], key=True, str2dict=True)
-                        self._result[key_out] = val_l
-                    else:
-                        val_l = self._dict_tuple2list(self._output[key_out], key=True, str2dict=True)
-                        self._result[key_out] = val_l
-                else:
-                    self._result[key_out] = self._dict_tuple2list(self.output[key_out], key=True, str2dict=True)
+                key_out = out[-1]
+                self._result[key_out] = self._reading_results_one_output(key_out)
+
 
     # TODO: this should be probably using add method
     def add_nodes(self, nodes):
@@ -731,6 +695,7 @@ class Workflow(NodeBase):
                 self.connect_wf_input(source, node.name, inp)
         return self
 
+
     def connect(self, from_node_nm, from_socket, to_node_nm, to_socket):
         from_node = self._node_names[from_node_nm]
         to_node = self._node_names[to_node_nm]
@@ -741,8 +706,10 @@ class Workflow(NodeBase):
         # from_node.sending_output.append((from_socket, to_node, to_socket))
         logger.debug('connecting {} and {}'.format(from_node, to_node))
 
+
     def connect_wf_input(self, inp_wf, node_nm, inp_nd):
         self.needed_inp_wf.append((node_nm, inp_wf, inp_nd))
+
 
     def preparing(self, wf_inputs=None, wf_inputs_ind=None, st_inputs=None):
         """preparing nodes which are connected: setting the final splitter and state_inputs"""

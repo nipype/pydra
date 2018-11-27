@@ -260,10 +260,7 @@ def test_node_combine_10(plugin, change_dir):
     sub.close()
 
     # checking the results
-    expected = [({}, [5, 7])]
-    for i, res in enumerate(expected):
-        assert nn.result["out"][i][0] == res[0]
-        assert nn.result["out"][i][1] == res[1]
+    assert nn.result["out"] == ({}, [5, 7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -281,10 +278,7 @@ def test_node_combine_10a(plugin, change_dir):
     sub.close()
 
     # checking the results
-    expected = [({}, [5,7])]
-    for i, res in enumerate(expected):
-        assert nn.result["out"][i][0] == res[0]
-        assert nn.result["out"][i][1] == res[1]
+    assert nn.result["out"] == ({}, [5,7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -303,10 +297,7 @@ def test_node_combine_10b(plugin, change_dir):
     sub.close()
 
     # checking the results
-    expected = [({}, [5,7])]
-    for i, res in enumerate(expected):
-        assert nn.result["out"][i][0] == res[0]
-        assert nn.result["out"][i][1] == res[1]
+    assert nn.result["out"] == ({}, [5, 7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -325,10 +316,7 @@ def test_node_combine_11(plugin, change_dir):
     sub.close()
 
     # checking the results
-    expected = [({}, [5,6])]
-    for i, res in enumerate(expected):
-        assert nn.result["out"][i][0] == res[0]
-        assert nn.result["out"][i][1] == res[1]
+    assert nn.result["out"] == ({}, [5, 6])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -429,10 +417,7 @@ def test_node_combine_13b(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({}, [3, 4, 4, 5, 4, 5, 5, 6, 5, 6, 6, 7])]
-    for i, res in enumerate(expected):
-        assert nn.result["out"][i][0] == res[0]
-        assert nn.result["out"][i][1] == res[1]
+    assert nn.result["out"] == ({}, [3, 4, 4, 5, 4, 5, 5, 6, 5, 6, 6, 7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -473,10 +458,7 @@ def test_node_combine_14a(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({}, [3, 5, 4, 6, 5, 7])]
-    for i, res in enumerate(expected):
-        assert nn.result["out"][i][0] == res[0]
-        assert nn.result["out"][i][1] == res[1]
+    assert nn.result["out"] == ({}, [3, 5, 4, 6, 5, 7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -495,10 +477,7 @@ def test_node_combine_14b(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({}, [3, 5, 4, 6, 5, 7])]
-    for i, res in enumerate(expected):
-        assert nn.result["out"][i][0] == res[0]
-        assert nn.result["out"][i][1] == res[1]
+    assert nn.result["out"] == ({}, [3, 5, 4, 6, 5, 7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -562,10 +541,7 @@ def test_node_combine_15(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({}, [13, 15, 24, 26])]
-    for i, res in enumerate(expected):
-        assert nn.result["out"][i][0] == res[0]
-        assert nn.result["out"][i][1] == res[1]
+    assert nn.result["out"] == ({}, [13, 15, 24, 26])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -680,10 +656,7 @@ def test_node_combine_16a(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({}, [4, 6, 6, 8])]
-    for i, res in enumerate(expected):
-        assert nn.result["out"][i][0] == res[0]
-        assert nn.result["out"][i][1] == res[1]
+    assert nn.result["out"] == ({}, [4, 6, 6, 8])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -732,15 +705,9 @@ def test_workflow_combine_1(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [({}, [5, 7])]
-    for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1] == res[1]
-
+    assert wf.nodes[0].result["out"] == ({}, [5, 7])
     #output of the wf
-    for i, res in enumerate(expected):
-        assert wf.result["NA_out"][i][0] == res[0]
-        assert wf.result["NA_out"][i][1] == res[1]
+    assert wf.result["NA_out"] == ({}, [5, 7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -760,15 +727,9 @@ def test_workflow_combine_1a(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [({}, [5, 7])]
-    for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1] == res[1]
-
+    assert wf.nodes[0].result["out"] == ({}, [5, 7])
     #output of the wf
-    for i, res in enumerate(expected):
-        assert wf.result["NA_out"][i][0] == res[0]
-        assert wf.result["NA_out"][i][1] == res[1]
+    assert wf.result["NA_out"] == ({}, [5, 7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -794,20 +755,10 @@ def test_workflow_combine_2(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [({}, [5, 7])]
-    for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1] == res[1]
-
-    expectedB = [({}, 12)]
-    for i, res in enumerate(expectedB):
-        assert wf.nodes[1].result["out"][i][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1] == res[1]
-
+    assert wf.nodes[0].result["out"] == ({}, [5, 7])
+    assert wf.nodes[1].result["out"] == ({}, 12)
     #output of the wf
-    for i, res in enumerate(expectedB):
-        assert wf.result["out"][i][0] == res[0]
-        assert wf.result["out"][i][1] == res[1]
+    assert wf.result["out"] == ({}, 12)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -911,20 +862,10 @@ def test_workflow_combine_3b(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [({}, [13, 23, 15, 25, 17, 27])]
-    for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1] == res[1]
+    assert wf.nodes[0].result["out"] == ({}, [13, 23, 15, 25, 17, 27])
 
-    expectedB = [({}, 120)]
-    for i, res in enumerate(expectedB):
-        assert wf.nodes[1].result["out"][i][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1] == res[1]
-
-    #output of the wf
-    for i, res in enumerate(expectedB):
-        assert wf.result["out"][i][0] == res[0]
-        assert wf.result["out"][i][1] == res[1]
+    assert wf.nodes[1].result["out"] == ({}, 120)
+    assert wf.result["out"] == ({}, 120)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -955,11 +896,7 @@ def test_workflow_combine_4(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-    expected_B = [({}, [7, 8])]
-    for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1] == res[1]
-
+    assert wf.nodes[1].result["out"] == ({}, [7, 8])
 
 
 # # using split after add method
@@ -981,10 +918,7 @@ def test_workflow_combine_5(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [({}, [5, 7])]
-    for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1] == res[1]
+    assert wf.nodes[0].result["out"] == ({}, [5, 7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1000,10 +934,7 @@ def test_workflow_combine_5a(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [({}, [5, 7])]
-    for i, res in enumerate(expected):
-        assert wf.nodes[0].result["out"][i][0] == res[0]
-        assert wf.nodes[0].result["out"][i][1] == res[1]
+    assert wf.nodes[0].result["out"] == ({}, [5, 7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1030,10 +961,7 @@ def test_workflow_combine_6(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-    expected_B = [({}, [7, 8])]
-    for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1] == res[1]
+    assert wf.nodes[1].result["out"] == ({}, [7, 8])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1062,10 +990,7 @@ def test_workflow_combine_6a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-    expected_B = [({}, [7, 8])]
-    for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1] == res[1]
+    assert wf.nodes[1].result["out"] == ({}, [7, 8])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1093,10 +1018,7 @@ def test_workflow_combine_6b(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-    expected_B = [({}, [7, 8])]
-    for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1] == res[1]
+    assert wf.nodes[1].result["out"] == ({}, [7, 8])
 
 
 # combiner from previous node
@@ -1127,10 +1049,7 @@ def test_workflow_combine_7(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-    expected_B = [({}, [7, 8])]
-    for i, res in enumerate(expected_B):
-        assert wf.nodes[1].result["out"][i][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1] == res[1]
+    assert wf.nodes[1].result["out"] == ({}, [7, 8])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1325,21 +1244,12 @@ def test_workflow_combine_9b(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [({}, [14, 26, 38, 105, 207, 309])]
-    results = wf.nodes[0].result["out"]
-    for i, res in enumerate(expected):
-        assert results[i][0] == res[0]
-        assert results[i][1] == res[1]
+    wf.nodes[0].result["out"] == ({}, [14, 26, 38, 105, 207, 309])
 
-    expectedB = [({}, 699)]
-    for i, res in enumerate(expectedB):
-        assert wf.nodes[1].result["out"][i][0] == res[0]
-        assert wf.nodes[1].result["out"][i][1] == res[1]
-
+    assert wf.nodes[1].result["out"] == ({}, 699)
     #output of the wf
-    for i, res in enumerate(expectedB):
-        assert wf.result["out"][i][0] == res[0]
-        assert wf.result["out"][i][1] == res[1]
+    assert wf.result["out"] == ({}, 699)
+
 
 
 
@@ -1363,11 +1273,7 @@ def test_workflow_combine_10(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [({}, [5, 7])]
-    results = wf.nodes[0].result["out"]
-    for i, res in enumerate(expected):
-        assert results[i][0] == res[0]
-        assert results[i][1] == res[1]
+    assert wf.nodes[0].result["out"] == ({}, [5, 7])
 
 
 # # testing if _NA in splitter works, using interfaces in add
@@ -1396,11 +1302,7 @@ def test_workflow_combine_11(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-    expectedB = [({}, [7, 8])]
-    results = wf.nodes[1].result["out"]
-    for i, res in enumerate(expectedB):
-        assert results[i][0] == res[0]
-        assert results[i][1] == res[1]
+    assert wf.nodes[1].result["out"] == ({}, [7, 8])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1425,11 +1327,7 @@ def test_workflow_combine_12(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-    expectedB = [({}, [5, 16])]
-    results = wf.nodes[1].result["out"]
-    for i, res in enumerate(expectedB):
-        assert results[i][0] == res[0]
-        assert results[i][1] == res[1]
+    assert wf.nodes[1].result["out"] == ({}, [5, 16])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1519,12 +1417,7 @@ def test_workflow_combine_13a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-    expectedC = [({}, [7, 6, 19, 18])]
-    results = wf.nodes[2].result["out"]
-    for i, res in enumerate(expectedC):
-        assert results[i][0] == res[0]
-        assert results[i][1] == res[1]
-
+    assert wf.nodes[2].result["out"] == ({}, [7, 6, 19, 18])
 
 
 # # tests for a workflow that has its own input and splitter
@@ -1545,11 +1438,7 @@ def test_workflow_combine_14(plugin, change_dir):
     sub.close()
 
     assert wf.is_complete
-    expected = [({}, [5, 7])]
-    results = wf.result["NA_out"]
-    for i, res in enumerate(expected):
-        assert results[i][0] == res[0]
-        assert results[i][1] == res[1]
+    assert wf.result["NA_out"] == ({}, [5, 7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1569,11 +1458,7 @@ def test_workflow_combine_15(plugin, change_dir):
     sub.close()
 
     assert wf.is_complete
-    expected = [({}, [13, 25])]
-    results = wf.result["NA_out"]
-    for i, res in enumerate(expected):
-        assert results[i][0] == res[0]
-        assert results[i][1] == res[1]
+    assert wf.result["NA_out"] == ({}, [13, 25])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
