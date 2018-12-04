@@ -68,7 +68,7 @@ def test_node_1():
     nn = Node(name="NA", interface=interf_addtwo)
     assert nn.splitter is None
     assert nn.inputs == {}
-    assert nn.state._splitter is None
+    assert nn.splitter is None
 
 
 def test_node_2():
@@ -77,7 +77,7 @@ def test_node_2():
     assert nn.splitter is None
     # adding NA to the name of the variable
     assert nn.inputs == {"NA.a": 3}
-    assert nn.state._splitter is None
+    assert nn.splitter is None
 
 
 def test_node_3():
@@ -86,9 +86,8 @@ def test_node_3():
     assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
 
-    assert nn.state._splitter == "NA.a"
-
     nn.prepare_state_input()
+    assert nn.state._splitter == "NA.a"
     assert nn.state.state_values([0]) == {"NA.a": 3}
     assert nn.state.state_values([1]) == {"NA.a": 5}
 
@@ -113,8 +112,8 @@ def test_node_4a():
     assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
 
-    assert nn.state._splitter == "NA.a"
     nn.prepare_state_input()
+    assert nn.state._splitter == "NA.a"
     assert nn.state.state_values([0]) == {"NA.a": 3}
     assert nn.state.state_values([1]) == {"NA.a": 5}
 
@@ -1029,7 +1028,8 @@ def test_workflow_13(plugin, change_dir):
         assert wf.result["NA_out"][i][1] == res[1]
 
 
-@pytest.mark.skip("should raise an error")
+@pytest.mark.skip("should raise an error "
+                  "or should'n? (since there is latter no connection to the node)")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_13a(plugin, change_dir):

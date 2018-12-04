@@ -10,6 +10,8 @@ logger = logging.getLogger('nipype.workflow')
 # Function to change user provided splitter to "reverse polish notation" used in State
 def splitter2rpn(splitter, other_splitters=None):
     """ Functions that translate splitter to "reverse polish notation."""
+    if not splitter:
+        return []
     output_splitter = []
     _ordering(splitter, i=0, output_splitter=output_splitter, other_splitters=other_splitters)
     return output_splitter

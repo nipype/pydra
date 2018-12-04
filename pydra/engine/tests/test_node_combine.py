@@ -33,7 +33,7 @@ def change_dir(request):
 
 
 Plugins = ["serial"]
-Plugins = ["serial", "mp", "cf", "dask"]
+#Plugins = ["serial", "mp", "cf", "dask"]
 
 
 def fun_addtwo(a):
@@ -89,7 +89,7 @@ def test_node_combine_2():
     nn = Node(name="NA", interface=interf_addtwo, inputs={"a": [3, 5]}, splitter="a")
     assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
-    assert nn.state._splitter == "NA.a"
+    assert nn.splitter == "NA.a"
     assert nn.combiner is None
 
 
@@ -99,7 +99,7 @@ def test_node_combine_3():
               splitter="a", combiner="a")
     assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
-    assert nn.state._splitter == "NA.a"
+    assert nn.splitter == "NA.a"
     assert nn.combiner == ["NA.a"]
 
 
@@ -109,7 +109,7 @@ def test_node_combine_3a():
               splitter="a", combiner="NA.a")
     assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
-    assert nn.state._splitter == "NA.a"
+    assert nn.splitter == "NA.a"
     assert nn.combiner == ["NA.a"]
 
 
@@ -130,7 +130,7 @@ def test_node_combine_4():
     assert nn.splitter == ["NA.a", "NA.b"]
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
     assert (nn.inputs["NA.b"] == np.array([10, 20])).all()
-    assert nn.state._splitter == ["NA.a", "NA.b"]
+    assert nn.splitter == ["NA.a", "NA.b"]
     assert nn.combiner == ["NA.a", "NA.b"]
 
 
@@ -144,7 +144,7 @@ def test_node_combine_4a():
     assert nn.splitter == ["NA.a", "NA.b"]
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
     assert (nn.inputs["NA.b"] == np.array([10, 20])).all()
-    assert nn.state._splitter == ["NA.a", "NA.b"]
+    assert nn.splitter == ["NA.a", "NA.b"]
     assert nn.combiner == ["NA.b", "NA.a"]
 
 
@@ -210,11 +210,16 @@ def test_node_combine_6c():
            "splitter has to be set before setting combiner"
 
 
-def test_node_combine_7():
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_node_combine_7(plugin, change_dir):
     """Node with interface, inputs, combiner set by combine method (no splitter)"""
     nn = Node(name="NA", interface=interf_addtwo, inputs={"a": [3, 5]}, splitter="a")
     with pytest.raises(Exception) as excinfo:
         nn.combine(combiner="b")
+        sub = Submitter(plugin=plugin, runnable=nn)
+        sub.run()
+        sub.close()
     assert str(excinfo.value) ==\
            "element NA.b of combiner is not found in the splitter NA.a"
 
@@ -329,6 +334,9 @@ def test_node_combine_11a(plugin, change_dir):
         nn = Node(name="NA", interface=interf_addvar, workingdir="test_nd11a_{}".format(plugin),
                   output_names=["out"], splitter=("b", "c"), combiner=["b", "c"],
                   inputs={"b": [3, 5], "c": [2, 1]})
+        sub = Submitter(plugin=plugin, runnable=nn)
+        sub.run()
+        sub.close()
     assert "already removed" in str(excinfo.value)
 
 
@@ -488,6 +496,9 @@ def test_node_combine_14c(plugin, change_dir):
         nn = Node(name="NA", interface=interf_addvar3, workingdir="test_nd14c_{}".format(plugin),
                   output_names=["out"], splitter=["a", ("b", "c")], combiner=["a", "b", "c"],
                   inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+        sub = Submitter(plugin=plugin, runnable=nn)
+        sub.run()
+        sub.close()
     assert "already removed" in str(excinfo.value)
 
 
@@ -522,6 +533,9 @@ def test_node_combine_14e(plugin, change_dir):
                   workingdir="test_nd14e_{}".format(plugin),
                   splitter=["a", ("b", "c")], combiner=["b", "c"],
                   inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+        sub = Submitter(plugin=plugin, runnable=nn)
+        sub.run()
+        sub.close()
     assert "already removed" in str(excinfo.value)
 
 
@@ -553,6 +567,9 @@ def test_node_combine_15a(plugin, change_dir):
                   workingdir="test_nd15a_{}".format(plugin),
                   splitter=("a", ["b", "c"]), combiner=["a", "b"],
                   inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]})
+        sub = Submitter(plugin=plugin, runnable=nn)
+        sub.run()
+        sub.close()
     assert "already removed" in str(excinfo.value)
 
 
@@ -615,6 +632,9 @@ def test_node_combine_15d(plugin, change_dir):
                   workingdir="test_nd15d_{}".format(plugin),
                   splitter=("a", ["b", "c"]), combiner=["c", "a"],
                   inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]})
+        sub = Submitter(plugin=plugin, runnable=nn)
+        sub.run()
+        sub.close()
     assert "already removed" in str(excinfo.value)
 
 
@@ -668,6 +688,10 @@ def test_node_combine_16b(plugin, change_dir):
                   workingdir="test_nd16b_{}".format(plugin),
                   splitter=(["a", "b"], ["c", "d"]), combiner=["a", "c"],
                   inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1,2]})
+        sub = Submitter(plugin=plugin, runnable=nn)
+        sub.run()
+        sub.close()
+
     assert "already removed" in str(excinfo.value)
 
 

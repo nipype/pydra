@@ -59,8 +59,6 @@ class NodeBase(object):
         self._combiner = None
         if combiner:
             self.combiner = combiner
-        self._state = state.State(splitter=self._splitter, node_name=self.name, other_splitters=self._other_splitters,
-                                  combiner=self.combiner)
         self._output = {}
         self._result = {}
         # flag that says if the node/wf is ready to run (has all input)
@@ -86,9 +84,7 @@ class NodeBase(object):
         if self._splitter:
             raise Exception("splitter is already set")
         self._splitter = aux.change_splitter(splitter, self.name)
-        # updating state
-        self._state = state.State(splitter=self._splitter, node_name=self.name, combiner=self.combiner,
-                                  other_splitters=self._other_splitters)
+
 
     @property
     def combiner(self):
@@ -105,15 +101,11 @@ class NodeBase(object):
         elif type(combiner) is not list:
             raise Exception("combiner should be a string or a list")
         self._combiner = aux.change_splitter(combiner, self.name)
-        if hasattr(self, "state"):
-            self.state.combiner = self._combiner
-        # updating state
-        self._state = state.State(splitter=self._splitter, node_name=self.name, other_splitters=self._other_splitters,
-                                  combiner=self.combiner)
-        for el in self._combiner:
-            if el not in self.state._splitter_rpn:
-                raise Exception("element {} of combiner is not found in the splitter {}".format(
-                    el, self.splitter))
+        # TODO: this check should be moved somewhere
+        # for el in self._combiner:
+        #     if el not in self.state._splitter_rpn:
+        #         raise Exception("element {} of combiner is not found in the splitter {}".format(
+        #             el, self.splitter))
 
     @property
     def inputs(self):
@@ -148,6 +140,8 @@ class NodeBase(object):
         return self._result
 
     def prepare_state_input(self):
+        self._state = state.State(splitter=self._splitter, node_name=self.name, other_splitters=self._other_splitters,
+                                  combiner=self.combiner)
         self._state.prepare_state_input(state_inputs=self.state_inputs)
 
 
@@ -538,10 +532,7 @@ class Workflow(NodeBase):
         if node.splitter:
             raise Exception("Cannot assign two splitters to the same node")
         node.split(splitter=splitter, inputs=inputs)
-        if node.combiner:
-            self._node_splitters[node.name] = node.state.splitter_comb
-        else:
-            self._node_splitters[node.name] = node.splitter
+        self._node_splitters[node.name] = node.splitter
         return self
 
 
@@ -630,12 +621,13 @@ class Workflow(NodeBase):
             #self._inputs.update(nn.inputs)
             self.connected_var[nn] = {}
             self._node_names[nn.name] = nn
+            #TODO i think this is not needed at the end
             # when we have a combiner in a previous node, we have to pass the final splitter
-            if nn.combiner:
-                self._node_splitters[nn.name] = nn.state.splitter_comb
-            else:
-                self._node_splitters[nn.name] = nn.splitter
-            nn.other_splitters = self._node_splitters
+            # if nn.combiner: pdb.set_trace()
+            #     self._node_splitters[nn.name] = nn.state.splitter_comb
+            # else:
+            #     self._node_splitters[nn.name] = nn.splitter
+            # nn.other_splitters = self._node_splitters
 
 
     # TODO: workingir shouldn't have None
