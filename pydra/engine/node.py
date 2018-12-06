@@ -5,6 +5,7 @@ import pdb
 import networkx as nx
 import numpy as np
 from collections import OrderedDict
+from copy import deepcopy, copy
 
 from nipype.utils.filemanip import loadpkl
 from nipype import logging, Function
@@ -140,9 +141,8 @@ class NodeBase(object):
         return self._result
 
     def prepare_state_input(self):
-        self._state = state.State(splitter=self._splitter, node_name=self.name, other_splitters=self._other_splitters,
-                                  combiner=self.combiner)
-        self._state.prepare_state_input(state_inputs=self.state_inputs)
+        self._state = state.State(node=self)
+        self._state.prepare_state_input()
 
 
     def split(self, splitter, inputs=None):
@@ -302,11 +302,9 @@ class NodeBase(object):
         """
         # should I be using self.state._splitter_rpn_comb?
         state_surv_dict = dict((key, val) for (key, val) in state_dict.items()
-                               if key in self.state._splitter_rpn)
+                               if key in self.state._splitter_rpn + self.state._inner_splitter)
         dir_nm_el = "_".join(["{}:{}".format(i, j)
                               for i, j in list(state_surv_dict.items())])
-        if not self.splitter:
-            dir_nm_el = ""
         return dir_nm_el, state_surv_dict
 
 
@@ -362,9 +360,10 @@ class NodeBase(object):
 
 
     def _combined_output(self, key_out, state_dict, output_el):
+        comb_inp_to_remove = self.state.comb_inp_to_remove + self.state._inner_splitter
         dir_nm_comb = "_".join(["{}:{}".format(i, j)
                                 for i, j in list(state_dict.items())
-                                if i not in self.state.comb_inp_to_remove])
+                                if i not in comb_inp_to_remove])
         if dir_nm_comb in self._output[key_out].keys():
             self._output[key_out][dir_nm_comb].append(output_el)
         else:
@@ -403,6 +402,7 @@ class Node(NodeBase):
         # working directory for node, will be change if node is a part of a wf
         self.workingdir = workingdir
         self.interface = interface
+        self.interf_inp_nm = self.interface.nn.interface._input_names
 
         # list of  interf_key_out
         self.output_names = output_names
@@ -410,12 +410,16 @@ class Node(NodeBase):
             self.output_names = []
 
 
-    def run_interface_el(self, i, ind):
+    def run_interface_el(self, i, ind, ind_inner):
         """ running interface one element generated from node_state."""
         logger.debug("Run interface el, name={}, i={}, ind={}".format(self.name, i, ind))
         state_dict, inputs_dict = self.get_input_el(ind)
         if not self.write_state:
             state_dict = self.state.state_ind(ind)
+        if ind_inner is not None:
+            for inp in self.state._inner_splitter:
+                inputs_dict[inp] = inputs_dict[inp][ind_inner]
+                state_dict[inp] = inputs_dict[inp]
         dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
         print("Run interface el, dict={}".format(state_surv_dict))
         logger.debug("Run interface el, name={}, inputs_dict={}, state_dict={}".format(
@@ -436,16 +440,29 @@ class Node(NodeBase):
                     state_dict = self.state.state_values(ind)
                 else:
                     state_dict = self.state.state_ind(ind)
-                dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
-                if self.splitter:
-                    output_el = self._reading_ci_output(dir_nm_el, out_nm=key_out)
-                    if not self.combiner: # only splitter
-                        self._output[key_out][dir_nm_el] = output_el
-                    else:
-                        self._combined_output(key_out, state_dict, output_el)
+                # TODO what if splitter_Wo_inner
+                if self.state._inner_splitter:
+                    # TODO changes probably needed when self.write_state=Fals
+                    state_dict, inputs_dict = self.get_input_el(ind)
+                    inner_size = len(inputs_dict[self.state._inner_splitter[0]])
+                    for ind_inner in range(inner_size):
+                        state_dict_copy_inner = deepcopy(state_dict)
+                        for inp in self.state._inner_splitter:
+                            state_dict_copy_inner[inp] = inputs_dict[inp][ind_inner]
+                        dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict_copy_inner)
+                        output_el = self._reading_ci_output(dir_nm_el, out_nm=key_out)
+                        self._combined_output(key_out, state_surv_dict, output_el)
                 else:
-                    self._output[key_out] = \
-                        (state_surv_dict, self._reading_ci_output(dir_nm_el, out_nm=key_out))
+                    dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
+                    if self.splitter:
+                        output_el = self._reading_ci_output(dir_nm_el, out_nm=key_out)
+                        if not self.combiner: # only splitter
+                            self._output[key_out][dir_nm_el] = output_el
+                        else:
+                            self._combined_output(key_out, state_dict, output_el)
+                    else:
+                        self._output[key_out] = \
+                            (state_surv_dict, self._reading_ci_output(dir_nm_el, out_nm=key_out))
         return self._output
 
 
@@ -456,10 +473,22 @@ class Node(NodeBase):
                 state_dict = self.state.state_values(ind)
             else:
                 state_dict = self.state.state_ind(ind)
-            dir_nm_el, _ = self._directory_name_state_surv(state_dict)
-            for key_out in self.output_names:
-                if not self._reading_ci_output(dir_nm_el, key_out):
-                    return False
+            state_dict, inputs_dict = self.get_input_el(ind)
+            if self.state._inner_splitter:
+                inner_size = len(inputs_dict[self.state._inner_splitter[0]])
+                for ind_inner in range(inner_size):
+                    state_dict_copy_inner = deepcopy(state_dict)
+                    for inp in self.state._inner_splitter:
+                        state_dict_copy_inner[inp] = inputs_dict[inp][ind_inner]
+                    dir_nm_el, _ = self._directory_name_state_surv(state_dict_copy_inner)
+                    for key_out in self.output_names:
+                        if not self._reading_ci_output(dir_nm_el, key_out):
+                            return False
+            else:
+                dir_nm_el, _ = self._directory_name_state_surv(state_dict)
+                for key_out in self.output_names:
+                    if not self._reading_ci_output(dir_nm_el, key_out):
+                        return False
         self._is_complete = True
         return True
 

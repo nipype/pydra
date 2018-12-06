@@ -50,13 +50,14 @@ class Submitter(object):
     def _submit_node(self, node):
         """submitting nodes's interface for all states"""
         for (i, ind) in enumerate(node.state.index_generator):
-            self._submit_node_el(node, i, ind)
+            # this is run only for a single node or the first node in a wf, so no inner spl
+            self._submit_node_el(node, i, ind, ind_inner=None)
 
 
-    def _submit_node_el(self, node, i, ind):
+    def _submit_node_el(self, node, i, ind, ind_inner):
         """submitting node's interface for one element of states"""
-        logger.debug("SUBMIT WORKER, node: {}, ind: {}".format(node, ind))
-        self.worker.run_el(node.run_interface_el, (i, ind))
+        logger.debug("SUBMIT WORKER, node: {}, ind: {}, ind_inner: {}".format(node, ind, ind_inner))
+        self.worker.run_el(node.run_interface_el, (i, ind, ind_inner))
 
 
     def run_workflow(self, workflow=None, ready=True):
@@ -156,7 +157,12 @@ class Submitter(object):
             if hasattr(to_node, 'interface'):
                 print("_NODES_CHECK INPUT", to_node.name, to_node.checking_input_el(ind))
                 if to_node.checking_input_el(ind):
-                    self._submit_node_el(to_node, i, ind)
+                    if to_node.state._inner_splitter:
+                        inner_size = len(to_node.get_input_el(ind)[1][to_node.state._inner_splitter[0]])
+                        for i_inner in range(inner_size):
+                            self._submit_node_el(to_node, i, ind, ind_inner=i_inner)
+                    else:
+                        self._submit_node_el(to_node, i, ind, ind_inner=None)
                     _to_remove.append((to_node, i, ind))
                 else:
                     pass

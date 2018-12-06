@@ -7,31 +7,37 @@ from . import auxiliary as aux
 
 
 class State(object):
-    def __init__(self, node_name, splitter=None, other_splitters=None, combiner=None):
-        self._splitter = splitter
-        if other_splitters:
-            self._other_splitters = other_splitters
-        else:
-            self._other_splitters = {}
-        self.node_name = node_name
-        if self._splitter:
-            # changing splitter (as in rpn), so I can read from left to right
-            # e.g. if splitter=('d', ['e', 'r']), _splitter_rpn=['d', 'e', 'r', '*', '.']
-            self._splitter_rpn = aux.splitter2rpn(self._splitter, other_splitters=self._other_splitters)
-            self._input_names_splitter = [i for i in self._splitter_rpn if i not in ["*", "."]]
-        else:
-            self._splitter_rpn = []
-            self._input_names_splitter = []
+    def __init__(self, node):
+        self.node = node
+        self._splitter = node.splitter
+        self._other_splitters = node._other_splitters
+        self.node_name = node.name
+        self._inner_splitter = []
 
-        if combiner:
-            self.combiner = combiner
+        self.state_inputs = node.state_inputs
+        if hasattr(self.node, "interface"):
+            interf_inp_nm = ["{}.{}".format(self.node_name, inp) for inp in self.node.interf_inp_nm]
+            self._inner_inputs_names = list(set(interf_inp_nm) - set(self.state_inputs.keys()))
+            if self._splitter and node.combiner and self._inner_inputs_names:
+                self._inner_splitter_separation(combiner=node.combiner)
+        if not hasattr(self, "_splitter_wo_inner"):
+            self._splitter_wo_inner = self._splitter
+
+        # changing splitter (as in rpn), so I can read from left to right
+        # e.g. if splitter=('d', ['e', 'r']), _splitter_rpn=['d', 'e', 'r', '*', '.']
+        self._splitter_rpn = aux.splitter2rpn(self._splitter, other_splitters=self._other_splitters)
+        self._input_names_splitter = [i for i in self._splitter_rpn if i not in ["*", "."]]
+
+        self._splitter_rpn_wo_inner = aux.splitter2rpn(self._splitter_wo_inner, other_splitters=self._other_splitters)
+
+        if node.combiner:
+            self.combiner = node.combiner
         else:
-            self._combiner = combiner
+            self._combiner = node.combiner
 
 
-    def prepare_state_input(self, state_inputs):
+    def prepare_state_input(self):
         """prepare all inputs, should be called once all input is available"""
-        self.state_inputs = state_inputs
 
         # not all input field have to be use in the splitter, can be an extra scalar
         self._input_names = list(self.state_inputs.keys())
@@ -39,7 +45,7 @@ class State(object):
         # dictionary[key=input names] = list of axes related to
         # e.g. {'r': [1], 'e': [0], 'd': [0, 1]}
         # ndim - int, number of dimension for the "final array" (that is not created)
-        self._axis_for_input, self._ndim = aux.splitting_axis(self.state_inputs, self._splitter_rpn)
+        self._axis_for_input, self._ndim = aux.splitting_axis(self.state_inputs, self._splitter_rpn_wo_inner)
 
         # list of inputs variable for each axis
         # e.g. [['e', 'd'], ['r', 'd']]
@@ -56,7 +62,6 @@ class State(object):
 
         if self.combiner:
             self._prepare_axis_inputs_combine()
-
 
 
     def __getitem__(self, ind):
@@ -84,6 +89,7 @@ class State(object):
                 raise Exception("element {} of combiner is not found in the splitter {}".format(
                     el, self._splitter))
 
+        self._combiner_wo_inner = list(set(self._combiner) - set(self._inner_splitter))
         self._prepare_combine()
 
 
@@ -105,7 +111,7 @@ class State(object):
         axis_for_input_tmp, ndim_tmp = aux.matching_input_from_splitter(self._splitter_rpn)
         input_for_axis_tmp = aux.converting_axis2input(axis_for_input=axis_for_input_tmp,
                                                        ndim=ndim_tmp)
-        for comb_el in self.combiner:
+        for comb_el in self._combiner_wo_inner:
             self.comb_inp_to_remove.append(comb_el)
             axes = axis_for_input_tmp[comb_el]
             for ax in axes:
@@ -125,7 +131,7 @@ class State(object):
         self.partial_comb_input_comb_axes = {}
         for ax in self.comb_axes_to_remove:
             inputs = deepcopy(input_for_axis_tmp[ax])
-            for other_inp in set(inputs) - set(self.combiner):
+            for other_inp in set(inputs) - set(self._combiner_wo_inner):
                 self.comb_inp_to_remove.append(other_inp)
                 # saving remaining axes and position in a final splitter
                 remaining_axes = set(axis_for_input_tmp[other_inp])\
@@ -150,7 +156,7 @@ class State(object):
 
     # TODO: should I call it from splitter?
     def _prepare_splitter_combine(self):
-        self._splitter_rpn_comb = aux.remove_inp_from_splitter_rpn(self._splitter_rpn,
+        self._splitter_rpn_comb = aux.remove_inp_from_splitter_rpn(self._splitter_rpn_wo_inner,
                                                                    self.comb_inp_to_remove)
         self.splitter_comb = aux.rpn2splitter(self._splitter_rpn_comb)
 
@@ -165,6 +171,64 @@ class State(object):
         self._input_for_axis_comb, self._shape_comb = aux.converting_axis2input(
             state_inputs=self._state_inputs_comb, axis_for_input=self._axis_for_input_comb,
             ndim=self._ndim_comb)
+
+
+    def _inner_splitter_separation(self, combiner):
+        """
+        checking if splitter is ok, allowing for inner splitter,
+        assuming that inner splitter can be only in the most outer layer,
+        and that it has to be also in the combiner
+        """
+        if type(self._splitter) is str:
+            if self._splitter in self._inner_inputs_names:
+                if self._splitter in combiner:
+                    self._inner_splitter.append(self._splitter)
+                    self._splitter_wo_inner = None
+                else:
+                    raise Exception("inner input from splitter {} has to be also in the combiner".
+                                    format(self._splitter))
+        elif type(self._splitter) is tuple:
+            if all([x in self._inner_inputs_names for x in self._splitter]):
+                if any([x in combiner for x in self._splitter]):
+                    # TODO: still they might not gave the same shapes...
+                    self._inner_splitter += list(self._splitter)
+                    self._splitter_wo_inner = None
+                else:
+                    raise Exception("one of the inner input from scalar splitter {} "
+                                    "should be in the combiner".format(self._splitter))
+            elif any([x in self._inner_inputs_names for x in self._splitter]):
+                    raise Exception("the scalar splitter {} is not correct, either both or neither "
+                                    "od the elements should be inner inputs".format(self._splitter))
+        elif type(self._splitter) is list:
+            if all([x in self._inner_inputs_names for x in self._splitter]):
+                # TODO: should i allow it?
+                raise Exception("the outer splitter {} is not correct, both elements "
+                                "shouldn't be from inner inputs".format(self._splitter))
+            # checking if one of the element is an inner input
+            else:
+                for (i, spl) in enumerate(self._splitter):
+                    if spl in self._inner_inputs_names:
+                        if spl in combiner:
+                            self._inner_splitter.append(spl)
+                            self._splitter_wo_inner = self._splitter[(i+1)%2]
+                        else:
+                            raise Exception("inner input from splitter {} has to be also in the combiner".
+                                        format(self._splitter[0]))
+        self._combiner_wo_inner = list(set(combiner) - set(self._inner_splitter))
+        # pdb.set_trace()
+        # pass
+
+        # checking if there are no more inner inputs or not known inputs in the splitter
+        # _input_names_splitter_copy = copy(self._input_names_splitter)
+        # [_input_names_splitter_copy.remove(x) for x in self._inner_splitter]
+        # for inp in _input_names_splitter_copy:
+        #     if inp in self._input_names:
+        #         pass
+        #     elif inp in self._inner_inputs_names:
+        #         raise Exception("inner input {} can be only once in the splitter in the "
+        #                         "most outer part".format(inp))
+        #     else:
+        #         raise Exception("input name {} from splitter not known".format(inp))
 
 
     def state_values(self, ind, value=True):
