@@ -402,7 +402,8 @@ class Node(NodeBase):
         # working directory for node, will be change if node is a part of a wf
         self.workingdir = workingdir
         self.interface = interface
-        self.interf_inp_nm = self.interface.nn.interface._input_names
+        # if there is no connection, the list of inner inputs should be empty
+        self.inner_inputs_names = []
 
         # list of  interf_key_out
         self.output_names = output_names
@@ -780,6 +781,7 @@ class Workflow(NodeBase):
             except (KeyError):
                 # tmp: we don't care about nn that are not in self.connected_var
                 pass
+            nn.inner_inputs_names = [connected[2] for connected in nn.needed_outputs]
             nn.prepare_state_input()
 
     # removing temp. from Workflow

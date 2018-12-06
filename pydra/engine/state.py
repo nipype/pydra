@@ -16,8 +16,7 @@ class State(object):
 
         self.state_inputs = node.state_inputs
         if hasattr(self.node, "interface"):
-            interf_inp_nm = ["{}.{}".format(self.node_name, inp) for inp in self.node.interf_inp_nm]
-            self._inner_inputs_names = list(set(interf_inp_nm) - set(self.state_inputs.keys()))
+            self._inner_inputs_names = ["{}.{}".format(self.node_name, inp) for inp in self.node.inner_inputs_names]
             if self._splitter and node.combiner and self._inner_inputs_names:
                 self._inner_splitter_separation(combiner=node.combiner)
         if not hasattr(self, "_splitter_wo_inner"):
