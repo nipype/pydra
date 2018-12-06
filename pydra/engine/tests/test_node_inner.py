@@ -121,7 +121,7 @@ def test_inner_3(change_dir, plugin):
     sub.run()
     sub.close()
 
-    nn.result["out"] = ({}, [[0, 1, 2], [0, 1, 2, 3, 4]])
+    assert nn.result["out"] == ({}, [[0, 1, 2], [0, 1, 2, 3, 4]])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -138,16 +138,16 @@ def test_innerwf_1(change_dir, plugin):
     sub.run()
     sub.close()
 
-    wf.nodes[0].result["out"] = ({}, [0, 1, 2])
+    assert wf.nodes[0].result["out"] == ({}, [0, 1, 2])
     #output of the wf
-    wf.result["NA_out"] = ({}, [0, 1, 2])
+    assert wf.result["NA_out"] == ({}, [0, 1, 2])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_innerwf_2(change_dir, plugin):
     """wf with a single nd with an interface that returns a list, a simple splitter"""
-    wf = Workflow(name="wf1", workingdir="test_innerwf2_{}".format(plugin),
+    wf = Workflow(name="wf2", workingdir="test_innerwf2_{}".format(plugin),
                   wf_output_names=[("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
               inputs={"n": [3, 5]}, splitter="n")
@@ -174,7 +174,7 @@ def test_innerwf_3(change_dir, plugin):
     """wf with two nodes, the first one returns a list,
     the second takes entire list as an input
     """
-    wf = Workflow(name="wf1", workingdir="test_innerwf3_{}".format(plugin),
+    wf = Workflow(name="wf3", workingdir="test_innerwf3_{}".format(plugin),
                   wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out")])
     na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
               inputs={"n": 3})
@@ -186,11 +186,11 @@ def test_innerwf_3(change_dir, plugin):
     sub.run()
     sub.close()
 
-    wf.nodes[0].result["out"] = ({}, [0, 1, 2])
-    wf.nodes[1].result["out"] = ({}, 3)
+    assert wf.nodes[0].result["out"] == ({}, [0, 1, 2])
+    assert wf.nodes[1].result["out"] == ({}, 3)
     #output of the wf
-    wf.result["NA_out"] = ({}, [0, 1, 2])
-    wf.result["NB_out"] = ({}, 3)
+    assert wf.result["NA_out"] == ({}, [0, 1, 2])
+    assert wf.result["NB_out"] == ({}, 3)
 
 
 # tests that have wf with multiple nodes and inner splitter
@@ -201,7 +201,7 @@ def test_innerwf_4(change_dir, plugin):
     """wf with two nodes, the first one returns a list,
     the second takes elements of the list as an input - has a simple inner splitter and combiner
     """
-    wf = Workflow(name="wf1", workingdir="test_innerwf4_{}".format(plugin),
+    wf = Workflow(name="wf4", workingdir="test_innerwf4_{}".format(plugin),
                   wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out")])
     na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
               inputs={"n": 3})
@@ -214,11 +214,11 @@ def test_innerwf_4(change_dir, plugin):
     sub.run()
     sub.close()
 
-    wf.nodes[0].result["out"] = ({}, [0, 1, 2])
-    wf.nodes[1].result["out"] = ({}, [2, 3, 4])
+    assert wf.nodes[0].result["out"] == ({}, [0, 1, 2])
+    assert wf.nodes[1].result["out"] == ({}, [2, 3, 4])
     #output of the wf
-    wf.result["NA_out"] = ({}, [0, 1, 2])
-    wf.result["NB_out"] = ({}, [2, 3, 4])
+    assert wf.result["NA_out"] == ({}, [0, 1, 2])
+    assert wf.result["NB_out"] == ({}, [2, 3, 4])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -227,7 +227,7 @@ def test_innerwf_5(change_dir, plugin):
     """wf with two nodes, the first one has a splitter and each element returns a list,
     the second takes elements of the list as an input - has a simple inner splitter and combiner
     """
-    wf = Workflow(name="wf1", workingdir="test_innerwf5_{}".format(plugin),
+    wf = Workflow(name="wf5", workingdir="test_innerwf5_{}".format(plugin),
                   wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out")])
     na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
               inputs={"n": [3, 5]}, splitter="n")
@@ -240,23 +240,57 @@ def test_innerwf_5(change_dir, plugin):
     sub.run()
     sub.close()
 
-    wf.nodes[0].result["out"] = [({"NA.n": 3}, [0, 1, 2]), ({"NA.n": 5}, [0, 1, 2, 3, 4])]
-    wf.nodes[1].result["out"] = [({"NA.n": 3}, [2, 3, 4]), ({"NA.n": 5}, [2, 3, 4, 5, 6])]
+    assert wf.nodes[0].result["out"] == [({"NA.n": 3}, [0, 1, 2]), ({"NA.n": 5}, [0, 1, 2, 3, 4])]
+    assert wf.nodes[1].result["out"] == [({"NA.n": 3}, [2, 3, 4]), ({"NA.n": 5}, [2, 3, 4, 5, 6])]
     #output of the wf
-    wf.result["NA_out"] = [({"NA.n": 3}, [0, 1, 2]), ({"NA.n": 5}, [0, 1, 2, 3, 4])]
-    wf.result["NB_out"] = [({"NA.n": 3}, [2, 3, 4]), ({"NA.n": 5}, [2, 3, 4, 5, 6])]
+    assert wf.result["NA_out"] == [({"NA.n": 3}, [0, 1, 2]), ({"NA.n": 5}, [0, 1, 2, 3, 4])]
+    assert wf.result["NB_out"] == [({"NA.n": 3}, [2, 3, 4]), ({"NA.n": 5}, [2, 3, 4, 5, 6])]
 
 
-#
-# @pytest.mark.parametrize("plugin", Plugins)
-# @python35_only
-# def test_node_5(plugin, change_dir):
-#     """Node with interface and inputs, no mapper, running interface"""
-#     nn = Node(name="NA", inputs={"a": 3}, interface=interf_addtwo,
-#         workingdir="test_nd5_{}".format(plugin), output_names=["out"])
-#
-#     assert (nn.inputs["NA.a"] == np.array([3])).all()
-#
-#     sub = Submitter(plugin=plugin, runnable=nn)
-#     sub.run()
-#     sub.close()
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_innerwf_5a(change_dir, plugin):
+    """wf with two nodes, the first one has a splitter and each element returns a list,
+    the second takes elements of the list as an input - has a simple inner splitter
+    and combiner that includes inner splitter and state splitter
+    """
+    wf = Workflow(name="wf5a", workingdir="test_innerwf5a_{}".format(plugin),
+                  wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out")])
+    na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
+              inputs={"n": [3, 5]}, splitter="n")
+    nb = Node(name="NB", interface=interf_addtwo, workingdir="nb", output_names=["out"])
+    wf.add_nodes([na, nb])
+    wf.connect("NA", "out", "NB", "a")
+    nb.split(splitter=["a", "NA.n"]).combine(combiner=["a", "NA.n"])
+
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    assert wf.nodes[0].result["out"] == [({"NA.n": 3}, [0, 1, 2]), ({"NA.n": 5}, [0, 1, 2, 3, 4])]
+    assert wf.nodes[1].result["out"] == ({}, [2, 3, 4, 2, 3, 4, 5, 6])
+    #output of the wf
+    assert wf.result["NA_out"] == [({"NA.n": 3}, [0, 1, 2]), ({"NA.n": 5}, [0, 1, 2, 3, 4])]
+    assert wf.result["NB_out"] == ({}, [2, 3, 4, 2, 3, 4, 5, 6])
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_innerwf_5b(change_dir, plugin):
+    """wf with two nodes, the first one has a splitter and each element returns a list,
+    the second takes elements of the list as an input - has a simple inner splitter
+    and combiner that includes state splitter (and doesn't include inner splitter - Exception)
+    """
+    wf = Workflow(name="wf5b", workingdir="test_innerwf5b_{}".format(plugin),
+                  wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out")])
+    na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
+              inputs={"n": [3, 5]}, splitter="n")
+    nb = Node(name="NB", interface=interf_addtwo, workingdir="nb", output_names=["out"])
+    wf.add_nodes([na, nb])
+    wf.connect("NA", "out", "NB", "a")
+    nb.split(splitter=["a", "NA.n"]).combine(combiner=["NA.n"])
+
+    with pytest.raises(Exception):
+        sub = Submitter(runnable=wf, plugin=plugin)
+        sub.run()
+        sub.close()
