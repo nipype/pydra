@@ -71,10 +71,12 @@ _interf_list_generator = Function(function=fun_list_generator, input_names=["n"]
 interf_list_generator = CurrentInterface(interface=_interf_list_generator, name="list_generator")
 
 
+# tests with nodes (or workflows with the nodes) that returns a list (length depends on the input)
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_inner_1(change_dir, plugin):
-    """Node with interface and inputs. mapper set using map method"""
+    """Node with interface that returns a list"""
     nn = Node(name="NA", interface=interf_list_generator, inputs={"n": 3},
               workingdir="test_inner1_{}".format(plugin), output_names=["out"])
     assert nn.inputs["NA.n"] == 3
@@ -89,7 +91,7 @@ def test_inner_1(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_inner_2(change_dir, plugin):
-    """Node with interface and inputs. mapper set using map method"""
+    """Node with interface that returns a list, a simple splitter"""
     nn = Node(name="NA", interface=interf_list_generator, inputs={"n": [3, 5]},
               workingdir="test_inner2_{}".format(plugin), output_names=["out"])
     nn.split(splitter="n")
@@ -108,7 +110,7 @@ def test_inner_2(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_inner_3(change_dir, plugin):
-    """Node with interface and inputs. mapper set using map method"""
+    """Node with interface that returns a list, a simple splitter and combiner"""
     nn = Node(name="NA", interface=interf_list_generator, inputs={"n": [3, 5]},
               workingdir="test_inner2_{}".format(plugin), output_names=["out"])
     nn.split(splitter="n")
@@ -125,7 +127,7 @@ def test_inner_3(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_innerwf_1(change_dir, plugin):
-    """Node with interface and inputs. mapper set using map method"""
+    """wf with a single nd with an interface that returns a list"""
     wf = Workflow(name="wf1", workingdir="test_innerwf1_{}".format(plugin),
                   wf_output_names=[("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
@@ -144,7 +146,7 @@ def test_innerwf_1(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_innerwf_2(change_dir, plugin):
-    """Node with interface and inputs. mapper set using map method"""
+    """wf with a single nd with an interface that returns a list, a simple splitter"""
     wf = Workflow(name="wf1", workingdir="test_innerwf2_{}".format(plugin),
                   wf_output_names=[("NA", "out", "NA_out")])
     na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
@@ -169,7 +171,9 @@ def test_innerwf_2(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_innerwf_3(change_dir, plugin):
-    """Node with interface and inputs. mapper set using map method"""
+    """wf with two nodes, the first one returns a list,
+    the second takes entire list as an input
+    """
     wf = Workflow(name="wf1", workingdir="test_innerwf3_{}".format(plugin),
                   wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out")])
     na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
@@ -189,10 +193,14 @@ def test_innerwf_3(change_dir, plugin):
     wf.result["NB_out"] = ({}, 3)
 
 
+# tests that have wf with multiple nodes and inner splitter
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_innerwf_4(change_dir, plugin):
-    """Node with interface and inputs. mapper set using map method"""
+    """wf with two nodes, the first one returns a list,
+    the second takes elements of the list as an input - has a simple inner splitter and combiner
+    """
     wf = Workflow(name="wf1", workingdir="test_innerwf4_{}".format(plugin),
                   wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out")])
     na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
@@ -216,7 +224,9 @@ def test_innerwf_4(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_innerwf_5(change_dir, plugin):
-    """Node with interface and inputs. mapper set using map method"""
+    """wf with two nodes, the first one has a splitter and each element returns a list,
+    the second takes elements of the list as an input - has a simple inner splitter and combiner
+    """
     wf = Workflow(name="wf1", workingdir="test_innerwf5_{}".format(plugin),
                   wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out")])
     na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
