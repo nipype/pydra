@@ -207,7 +207,7 @@ class BaseTask:
 
     input_spec = BaseSpec  # See BaseSpec
     output_spec = BaseSpec  # See BaseSpec
-    audit_flags: ty.Optional[bool] = None  # What to audit. See audit flags for details
+    audit_flags: AuditFlag = AuditFlag.0  # What to audit. See audit flags for details
 
     _can_resume = False  # Does the task allow resuming from previous state
     _redirect_x = False  # Whether an X session should be created/directed
