@@ -39,10 +39,11 @@ Original file is located at
 import abc
 import dataclasses as dc
 import datetime as dt
+import enum
 from hashlib import sha256
 import json
 import os
-import pickle as cp
+import cloudpickle as cp
 from tempfile import mkdtemp
 import typing as ty
 import inspect
@@ -102,9 +103,9 @@ schema_context = "https://schema.org/docs/jsonldcontext.json"
 pydra_context = {"pydra": "https://uuid.pydra.org/"}
 
 # audit flags
-AUDIT_PROV = 0x01
-AUDIT_RESOURCE = 0x02
-
+class AuditFlag(enum.Flag):
+    PROV = enum.auto()  # 0x01
+    RESOURCE = enum.auto()  # 0x02
 
 def gen_uuid():
     import uuid
@@ -132,7 +133,9 @@ class FileMessenger(Messenger):
     def send(self, message, **kwargs):
         import json
         mid = gen_uuid()
-        with open(os.path.join(kwargs['message_dir'], 
+        if kwargs['message_dir']:
+            Path(kwargs['message_dir']).mkdir(parents=True, exist_ok=True)
+        with open(os.path.join(kwargs['message_dir'],
                                mid + '.jsonld'), 'wt') as fp:
             json.dump(message, fp, ensure_ascii=False, indent=2, 
                       sort_keys=False)
@@ -215,10 +218,9 @@ class BaseTask:
     _input_sets = None  # Dictionaries of predefined input settings
     _cache_dir = None  # Working directory in which to operate
     _references = None  # List of references for a task
-    
 
     def __init__(self, inputs: ty.Optional[ty.Text]=None,
-                 audit_flags: bool=False,
+                 audit_flags: ty.Optional[AuditFlag]=None,
                  messengers=None, messenger_args=None):
         """Initialize task with given args."""
         super().__init__()
@@ -315,7 +317,7 @@ class BaseTask:
         aid = gen_uuid()
         self.audit({"@id": "pydra:{}".format(aid),
                     "startedAtTime": now()},
-                   AUDIT_PROV)
+                   AuditFlag.PROV)
           
         # Not cached        
         if self._cache_dir is None:
@@ -340,7 +342,7 @@ class BaseTask:
         save_result(odir, result)
         self.audit({"@id": "pydra:{}".format(aid),
                     "endedAtTime": now()},
-                   AUDIT_PROV)
+                   AuditFlag.PROV)
         
         return result
 
@@ -359,7 +361,7 @@ class FunctionTask(BaseTask):
                   if val.default is not inspect.Signature.empty
                   else (val.name, val.annotation)
              for val in inspect.signature(func).parameters.values() 
-             ] + [('_func', ty.Callable, func)],
+             ] + [('_func', str, cp.dumps(func))],
             bases=(BaseSpec,))
         super(FunctionTask, self).__init__(inputs=kwargs, 
                                            audit_flags=audit_flags,
@@ -382,7 +384,7 @@ class FunctionTask(BaseTask):
     def _run_interface(self):
         inputs = dc.asdict(self.inputs)
         del inputs['_func']
-        result = (self.inputs._func(**inputs))
+        result = (cp.loads(self.inputs._func)(**inputs))
         if not isinstance(result, tuple):
             result = (result,)
         outputs = self.output_spec(**{f.name:None for f in 
@@ -408,36 +410,3 @@ class BashTask(ShellTask):
 
 class MATLABTask(ShellTask):
     pass
-
-
-if __name__ == '__main__':
-
-    @to_task
-    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple('Output',
-                                                          [('out', float)]):
-        return a + b
-
-
-    @to_task
-    def no_annots(c, d):
-        return c + d
-
-
-    funky = testfunc(a=1, audit_flags=AUDIT_PROV, messengers=PrintMessenger())
-    print(funky.inputs)
-    result = funky()
-    print(result)
-    print(funky.output_names)
-    print(funky.result())
-    print(funky.checksum)
-    funky.inputs.a = 2
-    print(funky.checksum)
-    print(funky.result())
-    print(funky())
-    print(funky.result())
-    natask = no_annots(c=17, d=3.2)
-    res = natask.run()
-    print(res)
-    print(res.output)
-    print(natask.inputs)
-
