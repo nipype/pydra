@@ -104,6 +104,7 @@ pydra_context = {"pydra": "https://uuid.pydra.org/"}
 
 # audit flags
 class AuditFlag(enum.Flag):
+    NONE = 0
     PROV = enum.auto()  # 0x01
     RESOURCE = enum.auto()  # 0x02
 
@@ -207,7 +208,7 @@ class BaseTask:
 
     input_spec = BaseSpec  # See BaseSpec
     output_spec = BaseSpec  # See BaseSpec
-    audit_flags: AuditFlag = AuditFlag.0  # What to audit. See audit flags for details
+    audit_flags: AuditFlag = AuditFlag.NONE  # What to audit. See audit flags for details
 
     _can_resume = False  # Does the task allow resuming from previous state
     _redirect_x = False  # Whether an X session should be created/directed
@@ -220,7 +221,7 @@ class BaseTask:
     _references = None  # List of references for a task
 
     def __init__(self, inputs: ty.Optional[ty.Text]=None,
-                 audit_flags: ty.Optional[AuditFlag]=None,
+                 audit_flags: ty.Optional[AuditFlag]=AuditFlag.NONE,
                  messengers=None, messenger_args=None):
         """Initialize task with given args."""
         super().__init__()
@@ -279,14 +280,14 @@ class BaseTask:
 
     @property
     def checksum(self):
-        return self.inputs.hash
+        return '_'.join((self.__class__.__name__, self.inputs.hash))
 
     @abc.abstractmethod
     async def _run_interface(self, **kwargs):
         pass
 
     def result(self, cache_locations=None):
-        result = load_result(self.checksum, 
+        result = load_result(self.checksum,
                              ensure_list(cache_locations) + 
                              ensure_list(self._cache_dir))
         if result is not None:
@@ -305,10 +306,10 @@ class BaseTask:
 
     def run(self, cache_locations=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
-        inputs_hash = self.inputs.hash
+        checksum = self.checksum
         
         # Eagerly retrieve cached
-        result = load_result(inputs_hash,
+        result = load_result(checksum,
                              ensure_list(cache_locations) + 
                              ensure_list(self._cache_dir))
         if result is not None:
@@ -322,7 +323,7 @@ class BaseTask:
         # Not cached        
         if self._cache_dir is None:
             self.cache_dir = mkdtemp()
-        odir = self.cache_dir / inputs_hash
+        odir = self.cache_dir / checksum
         odir.mkdir(parents=True, exist_ok=True)
         #check_runtime(self._runtime_requirements)
         #isolate inputs if files

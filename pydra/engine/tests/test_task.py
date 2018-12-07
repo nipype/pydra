@@ -22,7 +22,7 @@ def test_annotated_func():
     assert getattr(funky.inputs, '_func') is not None
     assert set(funky.output_names) == set(['out1'])
     #assert funky.inputs.hash == '17772c3aec9540a8dd3e187eecd2301a09c9a25c6e371ddd86e31e3a1ecfeefa'
-    assert funky.inputs.hash == funky.checksum
+    assert funky.__class__.__name__ + '_' + funky.inputs.hash == funky.checksum
 
     result = funky()
     assert hasattr(result, 'output')
