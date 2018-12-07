@@ -56,7 +56,8 @@ REQUIRES = [
     'nipype>=1.1.3',
     'networkx>=%s' % NETWORKX_MIN_VERSION,
     'pytest>=%s' % PYTEST_MIN_VERSION,
-] + (['dataclasses'] if sys.version_info < (3, 7))
+    'dataclasses; python_version < "3.7"'
+]
 
 SETUP_REQUIRES = ['setuptools>=27.0']
 TESTS_REQUIRES = ['pytest-cov', 'codecov', 'pytest-env', 'pytest-xdist']
