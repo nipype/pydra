@@ -52,6 +52,7 @@ from pathlib import Path
 File = ty.NewType('File', Path)
 Directory = ty.NewType('Directory', Path)
 
+
 def ensure_list(obj):
     if obj is None:
         return []
@@ -59,10 +60,12 @@ def ensure_list(obj):
         return obj
     return [obj]
 
+
 def print_help(obj):
     helpstr = 'help {}'.format(obj)
     print(helpstr)
     return helpstr
+
 
 def load_result(checksum, cache_locations):
     if not cache_locations:
@@ -74,9 +77,11 @@ def load_result(checksum, cache_locations):
                 (location / checksum / '_result.pklz').read_bytes())
     return None
 
+
 def save_result(result_path: Path, result):
     with (result_path / '_result.pklz').open('wb') as fp:
         return cp.dump(dc.asdict(result), fp)
+
 
 def task_hash(task_obj):
     """
@@ -87,8 +92,10 @@ def task_hash(task_obj):
     """
     return NotImplementedError
 
+
 def now():
     return dt.datetime.utcnow().isoformat(timespec='microseconds')
+
 
 prov_context = "https://openprovenance.org/prov.jsonld"
 schema_context = "https://schema.org/docs/jsonldcontext.json"
@@ -103,10 +110,12 @@ def gen_uuid():
     import uuid
     return uuid.uuid4().hex
 
+
 class Messenger:
     @abc.abstractmethod
     def send(self, message, **kwargs):
         pass
+
 
 class PrintMessenger(Messenger):
     
@@ -116,6 +125,7 @@ class PrintMessenger(Messenger):
         print('id: {0}\n{1}'.format(mid,
                                     json.dumps(message, ensure_ascii=False, 
                                                indent=2, sort_keys=False)))
+
 
 class FileMessenger(Messenger):
     
@@ -127,6 +137,7 @@ class FileMessenger(Messenger):
             json.dump(message, fp, ensure_ascii=False, indent=2, 
                       sort_keys=False)
 
+
 class RemoteRESTMessenger(Messenger):
 
     def send(self, message, **kwargs):
@@ -137,16 +148,19 @@ class RemoteRESTMessenger(Messenger):
                                                 else kwargs['auth'])
         return r.status_code
 
+
 def send_message(message, messengers=None, **kwargs):
     """Send nidm messages for logging provenance and auditing
     """
     for messenger in messengers:
         messenger.send(message, **kwargs)
 
+
 def make_message(obj, context="https://schema.pydra.org/context.jsonld"):
     message = {"@context": context}
     message.update(**obj)
     return message
+
 
 @dc.dataclass
 class RuntimeSpec:
@@ -167,15 +181,18 @@ class RuntimeSpec:
     InlineScriptRequirement
     """
 
+
 @dc.dataclass
 class BaseSpec:
     @property
     def hash(self):
         return sha256(str(self).encode()).hexdigest()
 
+
 @dc.dataclass
 class Result:
     output: ty.Optional[ty.Any] = None
+
 
 class BaseTask:
     """This is a base class for Task objects.
@@ -330,6 +347,7 @@ class BaseTask:
     def __call__(self, *args, cache_locations=None, **kwargs):
         return self.run(*args, cache_locations=cache_locations, **kwargs)
 
+
 class FunctionTask(BaseTask):
 
     def __init__(self, func: ty.Callable, output_spec: ty.Optional[BaseSpec]=None,
@@ -379,54 +397,47 @@ def to_task(func_to_decorate):
         return function_task
     return create_func
 
+
 class ShellTask(BaseTask):
     pass
+
 
 class BashTask(ShellTask):
     pass
 
+
 class MATLABTask(ShellTask):
     pass
 
-@to_task
-def testfunc(a:int, b:float=0.1) -> ty.NamedTuple('Output',  [('out', float)]):
-    return a + b
-
-@to_task
-def no_annots(c, d):
-    return c + d
 
 if __name__ == '__main__':
+
+    @to_task
+    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple('Output',
+                                                          [('out', float)]):
+        return a + b
+
+
+    @to_task
+    def no_annots(c, d):
+        return c + d
+
+
     funky = testfunc(a=1, audit_flags=AUDIT_PROV, messengers=PrintMessenger())
-
-    funky.inputs
-
+    print(funky.inputs)
     result = funky()
-    result
-
-    funky.output_names
-
-    funky.result()
-
-    funky.checksum
-
+    print(result)
+    print(funky.output_names)
+    print(funky.result())
+    print(funky.checksum)
     funky.inputs.a = 2
-
-    funky.checksum
-
-    funky.result()
-
-    funky()
-
-    funky.result()
-
+    print(funky.checksum)
+    print(funky.result())
+    print(funky())
+    print(funky.result())
     natask = no_annots(c=17, d=3.2)
-
     res = natask.run()
-
-    res
-
-    res.output
-
-    natask.inputs
+    print(res)
+    print(res.output)
+    print(natask.inputs)
 
