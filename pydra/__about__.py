@@ -3,6 +3,7 @@ settings in setup.py, the nipy top-level docstring, and for building the
 docs.  In setup.py in particular, we exec this file, so it cannot import nipy
 """
 
+import sys
 from ._version import get_versions
 __version__ = get_versions()['version']
 del get_versions
@@ -55,7 +56,7 @@ REQUIRES = [
     'nipype>=1.1.3',
     'networkx>=%s' % NETWORKX_MIN_VERSION,
     'pytest>=%s' % PYTEST_MIN_VERSION,
-]
+] + (['dataclasses'] if sys.version_info < (3, 7))
 
 SETUP_REQUIRES = ['setuptools>=27.0']
 TESTS_REQUIRES = ['pytest-cov', 'codecov', 'pytest-env', 'pytest-xdist']
