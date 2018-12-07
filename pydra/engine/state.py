@@ -13,11 +13,13 @@ class State(object):
         self._other_splitters = node._other_splitters
         self.node_name = node.name
         self._inner_splitter = []
+        self._inner_combiner = []
+        self.comb_inp_to_remove = []
 
         self.state_inputs = node.state_inputs
         if hasattr(self.node, "interface"):
             self._inner_inputs_names = ["{}.{}".format(self.node_name, inp) for inp in self.node.inner_inputs_names]
-            if self._splitter and node.combiner and self._inner_inputs_names:
+            if self._splitter and self._inner_inputs_names:
                 self._inner_splitter_separation(combiner=node.combiner)
         if not hasattr(self, "_splitter_wo_inner"):
             self._splitter_wo_inner = self._splitter
@@ -103,7 +105,6 @@ class State(object):
 
     def _prepare_combine(self):
         # input and axes that will be removed when combiner applied
-        self.comb_inp_to_remove = []
         self.comb_axes_to_remove = []
         # temporary axis_for_input (without knowing specific input)
         # need to know which inputs are bound together
@@ -180,12 +181,8 @@ class State(object):
         """
         if type(self._splitter) is str:
             if self._splitter in self._inner_inputs_names:
-                if self._splitter in combiner:
-                    self._inner_splitter.append(self._splitter)
-                    self._splitter_wo_inner = None
-                else:
-                    raise Exception("inner input from splitter {} has to be also in the combiner".
-                                    format(self._splitter))
+                self._inner_splitter.append(self._splitter)
+                self._splitter_wo_inner = None
         elif type(self._splitter) is tuple:
             if all([x in self._inner_inputs_names for x in self._splitter]):
                 if any([x in combiner for x in self._splitter]):
@@ -207,13 +204,11 @@ class State(object):
             else:
                 for (i, spl) in enumerate(self._splitter):
                     if spl in self._inner_inputs_names:
-                        if spl in combiner:
-                            self._inner_splitter.append(spl)
-                            self._splitter_wo_inner = self._splitter[(i+1)%2]
-                        else:
-                            raise Exception("inner input from splitter {} has to be also in the combiner".
-                                        format(self._splitter[0]))
-        self._combiner_wo_inner = list(set(combiner) - set(self._inner_splitter))
+                        self._inner_splitter.append(spl)
+                        self._splitter_wo_inner = self._splitter[(i+1)%2]
+
+        self._inner_combiner = [comb for comb in combiner if comb in self._inner_splitter]
+        self._combiner_wo_inner = list(set(combiner) - set(self._inner_combiner))
         # pdb.set_trace()
         # pass
 

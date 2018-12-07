@@ -81,7 +81,7 @@ def test_node_combine_1():
     """Node with mandatory arguments only"""
     nn = Node(name="NA", interface=interf_addtwo)
     assert nn.splitter is None
-    assert nn.combiner is None
+    assert nn.combiner == []
 
 
 def test_node_combine_2():
@@ -90,7 +90,7 @@ def test_node_combine_2():
     assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
     assert nn.splitter == "NA.a"
-    assert nn.combiner is None
+    assert nn.combiner == []
 
 
 def test_node_combine_3():

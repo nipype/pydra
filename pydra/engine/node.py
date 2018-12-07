@@ -57,7 +57,7 @@ class NodeBase(object):
             self._other_splitters = other_splitters
         else:
             self._other_splitters = {}
-        self._combiner = None
+        self._combiner = []
         if combiner:
             self.combiner = combiner
         self._output = {}
@@ -360,7 +360,7 @@ class NodeBase(object):
 
 
     def _combined_output(self, key_out, state_dict, output_el):
-        comb_inp_to_remove = self.state.comb_inp_to_remove + self.state._inner_splitter
+        comb_inp_to_remove = self.state.comb_inp_to_remove + self.state._inner_combiner
         dir_nm_comb = "_".join(["{}:{}".format(i, j)
                                 for i, j in list(state_dict.items())
                                 if i not in comb_inp_to_remove])
@@ -452,7 +452,10 @@ class Node(NodeBase):
                             state_dict_copy_inner[inp] = inputs_dict[inp][ind_inner]
                         dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict_copy_inner)
                         output_el = self._reading_ci_output(dir_nm_el, out_nm=key_out)
-                        self._combined_output(key_out, state_surv_dict, output_el)
+                        if not self.combiner:
+                            self._output[key_out][dir_nm_el] = output_el
+                        else:
+                            self._combined_output(key_out, state_surv_dict, output_el)
                 else:
                     dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
                     if self.splitter:

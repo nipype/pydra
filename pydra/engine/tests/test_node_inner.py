@@ -281,6 +281,7 @@ def test_innerwf_5a(change_dir, plugin):
     assert wf.result["NB_out"] == ({}, [2, 3, 4, 2, 3, 4, 5, 6])
 
 
+@pytest.mark.skip("no exception")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_innerwf_5b(change_dir, plugin):
@@ -384,3 +385,59 @@ def test_innerwf_7(change_dir, plugin):
     #output of the wf
     assert wf.result["NA_out"] == ({}, [0, 1, 2])
     assert wf.result["NC_out"] == ({}, [10, 12, 14])
+
+
+# inner splitter is not combined in the same node
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_innerwf_8(change_dir, plugin):
+    """wf with two nodes, the first one returns a list,
+    the second takes elements of the list as an input - has a simple inner splitter and combiner
+    """
+    wf = Workflow(name="wf8", workingdir="test_innerwf8_{}".format(plugin),
+                  wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out")])
+    na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
+              inputs={"n": 3})
+    nb = Node(name="NB", interface=interf_addtwo, workingdir="nb", output_names=["out"])
+    wf.add_nodes([na, nb])
+    wf.connect("NA", "out", "NB", "a")
+    nb.split(splitter="a")
+
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    assert wf.nodes[0].result["out"] == ({}, [0, 1, 2])
+    assert wf.nodes[1].result["out"] == [({"NB.a": 0}, 2), ({"NB.a": 1}, 3), ({"NB.a": 2}, 4)]
+    #output of the wf
+    assert wf.result["NA_out"] == ({}, [0, 1, 2])
+    assert wf.result["NB_out"] == [({"NB.a": 0}, 2), ({"NB.a": 1}, 3), ({"NB.a": 2}, 4)]
+
+@pytest.mark.skip()
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_innerwf_9(change_dir, plugin):
+    """wf with two nodes, the first one returns a list,
+    the second takes elements of the list as an input - has a simple inner splitter and combiner
+    """
+    wf = Workflow(name="wf8", workingdir="test_innerwf8_{}".format(plugin),
+                  wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out")])
+    na = Node(name="NA", interface=interf_list_generator, workingdir="na", output_names=["out"],
+              inputs={"n": 3})
+    nb = Node(name="NB", interface=interf_addtwo, workingdir="nb", output_names=["out"])
+    nc = Node(name="NC", interface=interf_addtwo, workingdir="nc", output_names=["out"])
+    wf.add_nodes([na, nb, nc])
+    wf.connect("NA", "out", "NB", "a")
+    wf.connect("NB", "out", "NC", "a")
+    nb.split(splitter="a").combine(combiner="a")
+
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    assert wf.nodes[0].result["out"] == ({}, [0, 1, 2])
+    assert wf.nodes[1].result["out"] == ({}, [2, 3, 4])
+    #output of the wf
+    assert wf.result["NA_out"] == ({}, [0, 1, 2])
+    assert wf.result["NB_out"] == ({}, [2, 3, 4])
