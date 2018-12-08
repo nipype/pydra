@@ -53,6 +53,8 @@ from pathlib import Path
 File = ty.NewType('File', Path)
 Directory = ty.NewType('Directory', Path)
 
+develop = True
+
 
 def ensure_list(obj):
     if obj is None:
@@ -162,7 +164,7 @@ def send_message(message, messengers=None, **kwargs):
 
 def make_message(obj, context=None):
     if context is None:
-        context = {"@context": "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld"}
+        context = {"@context": "https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld"}
     message = context.copy()
     message.update(**obj)
     return message
@@ -264,9 +266,12 @@ class BaseTask:
                 inputs = self._input_sets[inputs]
 
     def audit(self, message, flags=None):
-        with open(Path(os.path.dirname(__file__))
-                  / '..' / 'schema/context.jsonld', 'rt') as fp:
-            context = json.load(fp)
+        if develop:
+            with open(Path(os.path.dirname(__file__))
+                      / '..' / 'schema/context.jsonld', 'rt') as fp:
+                context = json.load(fp)
+        else:
+            context = {"@context": 'https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld'}
         if self.audit_flags and flags:
             if self.messenger_args:
                 send_message(make_message(message, context=context),
@@ -308,7 +313,7 @@ class BaseTask:
         return '_'.join((self.__class__.__name__, self.inputs.hash))
 
     @abc.abstractmethod
-    async def _run_interface(self, **kwargs):
+    def _run_task(self):
         pass
 
     def result(self, cache_locations=None):
@@ -328,6 +333,9 @@ class BaseTask:
     @cache_dir.setter
     def cache_dir(self, location):
         self._cache_dir = Path(location)
+
+    def __call__(self, cache_locations=None, **kwargs):
+        return self.run(cache_locations=cache_locations, **kwargs)
 
     def run(self, cache_locations=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
@@ -355,7 +363,8 @@ class BaseTask:
         #resources = start_monitor()
         result = Result(output=None)
         try:
-            result.output = self._run_interface(**kwargs)
+            self._run_task()
+            result.output = self._collect_outputs()
         except Exception as e:
             #record_error(self, e)
             raise
@@ -367,8 +376,17 @@ class BaseTask:
         self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)
         return result
 
-    def __call__(self, *args, cache_locations=None, **kwargs):
-        return self.run(*args, cache_locations=cache_locations, **kwargs)
+    # TODO: Decide if the following two functions should be separated
+    @abc.abstractmethod
+    def _list_outputs(self):
+        pass
+
+    def _collect_outputs(self):
+        run_output = self._list_outputs()
+        output = self.output_spec(**{f.name: None for f in
+                                            dc.fields(self.output_spec)})
+        return dc.replace(output, **dict(zip(self.output_names,
+                                             run_output)))
 
 
 class FunctionTask(BaseTask):
@@ -402,15 +420,17 @@ class FunctionTask(BaseTask):
             raise NotImplementedError('Branch not implemented')
         self.output_spec = output_spec
 
-    def _run_interface(self):
+    def _run_task(self):
         inputs = dc.asdict(self.inputs)
         del inputs['_func']
-        result = (cp.loads(self.inputs._func)(**inputs))
-        if not isinstance(result, tuple):
-            result = (result,)
-        outputs = self.output_spec(**{f.name:None for f in 
-                                      dc.fields(self.output_spec)})
-        return dc.replace(outputs, **dict(zip(self.output_names, list(result))))
+        self.output_ = None
+        output = cp.loads(self.inputs._func)(**inputs)
+        if not isinstance(output, tuple):
+            output = (output,)
+        self.output_ = output
+
+    def _list_outputs(self):
+        return self.output_
 
 
 def to_task(func_to_decorate):
