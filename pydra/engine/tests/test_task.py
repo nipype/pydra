@@ -2,10 +2,10 @@
 
 import typing as ty
 import os
-import pytest
 
 from ..task import (to_task, PrintMessenger, FileMessenger,
-                    AuditFlag, sha256)
+                    AuditFlag, collect_messages)
+
 
 def test_annotated_func():
     @to_task
@@ -74,3 +74,5 @@ def test_audit(tmpdir):
     funky()
     from glob import glob
     assert len(glob(str(message_path / '*.jsonld'))) == 2
+    collect_messages(message_path / '..', message_path, ld_op='expand')
+    assert (message_path / '..' / 'messages.jsonld').exists()

@@ -1,0 +1,12 @@
+{
+  "@context": [
+    "https://openprovenance.org/prov.jsonld",
+    {"pydra": "https://s.pydra.org/",
+      "uuid": "pydra:uuid/",
+      "task": {"@id": "prov:activity",
+        "@type": "@vocab"
+      },
+      "@version": 1.1
+    }
+  ]
+}

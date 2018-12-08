@@ -98,15 +98,12 @@ def now():
     return dt.datetime.utcnow().isoformat(timespec='microseconds')
 
 
-prov_context = "https://openprovenance.org/prov.jsonld"
-schema_context = "https://schema.org/docs/jsonldcontext.json"
-pydra_context = {"pydra": "https://uuid.pydra.org/"}
-
 # audit flags
 class AuditFlag(enum.Flag):
     NONE = 0
     PROV = enum.auto()  # 0x01
     RESOURCE = enum.auto()  # 0x02
+
 
 def gen_uuid():
     import uuid
@@ -134,12 +131,15 @@ class FileMessenger(Messenger):
     def send(self, message, **kwargs):
         import json
         mid = gen_uuid()
-        if kwargs['message_dir']:
-            Path(kwargs['message_dir']).mkdir(parents=True, exist_ok=True)
-        with open(os.path.join(kwargs['message_dir'],
-                               mid + '.jsonld'), 'wt') as fp:
+        if kwargs.get('message_dir'):
+            message_dir = Path(kwargs['message_dir'])
+        else:
+            message_dir = (Path(os.getcwd()) / 'messages')
+        message_dir.mkdir(parents=True, exist_ok=True)
+        with open(message_dir / (mid + '.jsonld'), 'wt') as fp:
             json.dump(message, fp, ensure_ascii=False, indent=2, 
                       sort_keys=False)
+        return mid
 
 
 class RemoteRESTMessenger(Messenger):
@@ -160,10 +160,30 @@ def send_message(message, messengers=None, **kwargs):
         messenger.send(message, **kwargs)
 
 
-def make_message(obj, context="https://schema.pydra.org/context.jsonld"):
-    message = {"@context": context}
+def make_message(obj, context=None):
+    if context is None:
+        context = {"@context": "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld"}
+    message = context.copy()
     message.update(**obj)
     return message
+
+
+def collect_messages(task_path, message_path, ld_op='compact'):
+    import pyld as pld
+    import json
+    from glob import glob
+    fl = glob(str(message_path / '*.jsonld'))
+    data = []
+    for f in fl:
+        with open(f, 'rt') as fp:
+            data.append(json.load(fp))
+    if data:
+        records = getattr(pld.jsonld, ld_op)(pld.jsonld.from_rdf(pld.jsonld.to_rdf(data,
+                                                                         {})),
+                                   data[0])
+        with open(task_path / 'messages.jsonld', 'wt') as fp:
+            json.dump(records, fp, ensure_ascii=False, indent=2,
+                      sort_keys=False)
 
 
 @dc.dataclass
@@ -244,12 +264,17 @@ class BaseTask:
                 inputs = self._input_sets[inputs]
 
     def audit(self, message, flags=None):
+        with open(Path(os.path.dirname(__file__))
+                  / '..' / 'schema/context.jsonld', 'rt') as fp:
+            context = json.load(fp)
         if self.audit_flags and flags:
             if self.messenger_args:
-                send_message(make_message(message), messengers=self.messengers, 
+                send_message(make_message(message, context=context),
+                             messengers=self.messengers,
                              **self.messenger_args)
             else:              
-                send_message(make_message(message), messengers=self.messengers)
+                send_message(make_message(message, context=context),
+                             messengers=self.messengers)
 
     @property
     def can_resume(self):
@@ -315,12 +340,10 @@ class BaseTask:
         if result is not None:
             return result
         # start recording provenance
-        aid = gen_uuid()
-        self.audit({"@id": "pydra:{}".format(aid),
-                    "startedAtTime": now()},
-                   AuditFlag.PROV)
-          
-        # Not cached        
+        aid = "uuid:{}".format(gen_uuid())
+        self.audit({"@id": aid, "@type": "task",
+                    "startedAtTime": now()}, AuditFlag.PROV)
+        # Not cached
         if self._cache_dir is None:
             self.cache_dir = mkdtemp()
         odir = self.cache_dir / checksum
@@ -341,10 +364,7 @@ class BaseTask:
             pass
         #update_provenance(id, outputs, resources)
         save_result(odir, result)
-        self.audit({"@id": "pydra:{}".format(aid),
-                    "endedAtTime": now()},
-                   AuditFlag.PROV)
-        
+        self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)
         return result
 
     def __call__(self, *args, cache_locations=None, **kwargs):
