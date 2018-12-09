@@ -84,7 +84,7 @@ def test_audit(tmpdir):
     funky()
     assert (tmpdir / funky.checksum / '_profile.log').exists()
     from glob import glob
-    assert len(glob(str(message_path / '*.jsonld'))) == 3
+    assert len(glob(str(message_path / '*.jsonld'))) == 6
 
     # commented out to speed up testing
     collect_messages(tmpdir / funky.checksum, message_path, ld_op='compact')

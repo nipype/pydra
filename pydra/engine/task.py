@@ -197,7 +197,7 @@ def collect_messages(task_path, message_path, ld_op='compact'):
         records = getattr(pld.jsonld, ld_op)(pld.jsonld.from_rdf(pld.jsonld.to_rdf(data,
                                                                          {})),
                                    data[0])
-        records["@id"] = 'uuid:{}'.format(gen_uuid())
+        records["@id"] = 'uid:{}'.format(gen_uuid())
         with open(task_path / 'messages.jsonld', 'wt') as fp:
             json.dump(records, fp, ensure_ascii=False, indent=2,
                       sort_keys=False)
@@ -372,7 +372,7 @@ class BaseTask:
         # start recording provenance, but don't send till directory is created
         # in case message directory is inside task output directory
         if self.audit_check(AuditFlag.PROV):
-            aid = "uuid:{}".format(gen_uuid())
+            aid = "uid:{}".format(gen_uuid())
             start_message = {"@id": aid, "@type": "task", "startedAtTime": now()}
         # Not cached
         if self._cache_dir is None:
@@ -394,6 +394,10 @@ class BaseTask:
         try:
             if self.audit_check(AuditFlag.RESOURCE):
                 resource_monitor.start()
+                if self.audit_check(AuditFlag.PROV):
+                    mid = "uid:{}".format(gen_uuid())
+                    self.audit({"@id": mid, "@type": "monitor",
+                                "startedAtTime": now()}, AuditFlag.PROV)
             self._run_task()
             result.output = self._collect_outputs()
         except Exception as e:
@@ -423,12 +427,16 @@ class BaseTask:
                     }
                     '''
                 if self.audit_check(AuditFlag.PROV):
+                    self.audit({"@id": mid, "endedAtTime": now()}, AuditFlag.PROV)
                     # audit resources/runtime information
-                    eid = "uuid:{}".format(gen_uuid())
+                    eid = "uid:{}".format(gen_uuid())
                     entity = dc.asdict(runtime)
                     entity.update(**{"@id": eid, "@type": "runtime",
                                      "prov:wasGeneratedBy": aid})
                     self.audit(entity, AuditFlag.PROV)
+                    self.audit({"@type": "prov:Generation",
+                                "entity_generated": eid,
+                                "hadActivity": mid}, AuditFlag.PROV)
             if self.audit_check(AuditFlag.PROV):
                 # audit outputs
                 self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)

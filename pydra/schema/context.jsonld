@@ -11,17 +11,17 @@
     "https://openprovenance.org/prov.jsonld",
     {
       "pydra": "https://s.pydra.org/",
-      "uuid": "pydra:uuid/",
+      "uid": "pydra:id/",
       "task": {
-        "@id": "prov:activity",
+        "@id": "pydra:task",
         "@type": "@vocab"
       },
       "monitor": {
-        "@id": "prov:activity",
+        "@id": "pydra:resourceMonitor",
         "@type": "@vocab"
       },
       "runtime": {
-        "@id": "prov:entity",
+        "@id": "pydra:runtimeInformation",
         "@type": "@vocab"
       },
       "prov:wasGeneratedBy": {
