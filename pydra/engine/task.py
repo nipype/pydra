@@ -37,18 +37,18 @@ Original file is located at
 
 
 import abc
+import cloudpickle as cp
 import dataclasses as dc
 import datetime as dt
 import enum
 from hashlib import sha256
 import json
 import os
-import cloudpickle as cp
+from pathlib import Path
 from tempfile import mkdtemp
+from time import sleep
 import typing as ty
 import inspect
-import asyncio
-from pathlib import Path
 
 File = ty.NewType('File', Path)
 Directory = ty.NewType('Directory', Path)
@@ -65,19 +65,32 @@ def ensure_list(obj):
 
 
 def print_help(obj):
-    helpstr = 'help {}'.format(obj)
-    print(helpstr)
-    return helpstr
+    help = ['Help for {}'.format(obj.__class__.__name__)]
+    if dc.fields(obj.input_spec):
+        help += ['Input Parameters:']
+    for f in dc.fields(obj.input_spec):
+        default = ''
+        if f.default is not dc.MISSING and not f.name.startswith('_'):
+            default = ' (default: {})'.format(f.default)
+        help += ['\t{}: {}{}'.format(f.name, f.type.__name__, default)]
+    if dc.fields(obj.input_spec):
+        help += ['Output Parameters:']
+    for f in dc.fields(obj.output_spec):
+        help += ['\t{}: {}'.format(f.name, f.type.__name__)]
+    print('\n'.join(help))
+    return help
 
 
 def load_result(checksum, cache_locations):
     if not cache_locations:
         return None
-      
     for location in cache_locations:
         if (location / checksum).exists():
-            return cp.loads(
-                (location / checksum / '_result.pklz').read_bytes())
+            result_file = (location / checksum / '_result.pklz')
+            if result_file.exists():
+                return cp.loads(result_file.read_bytes())
+            else:
+                return None
     return None
 
 
@@ -105,6 +118,7 @@ class AuditFlag(enum.Flag):
     NONE = 0
     PROV = enum.auto()  # 0x01
     RESOURCE = enum.auto()  # 0x02
+    ALL = PROV | RESOURCE
 
 
 def gen_uuid():
@@ -183,6 +197,7 @@ def collect_messages(task_path, message_path, ld_op='compact'):
         records = getattr(pld.jsonld, ld_op)(pld.jsonld.from_rdf(pld.jsonld.to_rdf(data,
                                                                          {})),
                                    data[0])
+        records["@id"] = 'uuid:{}'.format(gen_uuid())
         with open(task_path / 'messages.jsonld', 'wt') as fp:
             json.dump(records, fp, ensure_ascii=False, indent=2,
                       sort_keys=False)
@@ -219,6 +234,11 @@ class BaseSpec:
 class Result:
     output: ty.Optional[ty.Any] = None
 
+@dc.dataclass
+class Runtime:
+    rss_peak_gb: ty.Optional[float] = None
+    vms_peak_gb: ty.Optional[float] = None
+    cpu_peak_percent: ty.Optional[float] = None
 
 class BaseTask:
     """This is a base class for Task objects.
@@ -243,7 +263,7 @@ class BaseTask:
     _references = None  # List of references for a task
 
     def __init__(self, inputs: ty.Optional[ty.Text]=None,
-                 audit_flags: ty.Optional[AuditFlag]=AuditFlag.NONE,
+                 audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None):
         """Initialize task with given args."""
         super().__init__()
@@ -287,13 +307,12 @@ class BaseTask:
         """
         return self._can_resume
 
-    @classmethod
-    def help(cls, returnhelp=False):
+    def help(self, returnhelp=False):
         """ Prints class help
         """
-        helpstr = print_help(cls)
+        help_obj = print_help(self)
         if returnhelp:
-            return helpstr
+            return help_obj
 
     @property
     def output_names(self):
@@ -334,6 +353,9 @@ class BaseTask:
     def cache_dir(self, location):
         self._cache_dir = Path(location)
 
+    def audit_check(self, flag):
+        return self.audit_flags & flag
+
     def __call__(self, cache_locations=None, **kwargs):
         return self.run(cache_locations=cache_locations, **kwargs)
 
@@ -347,33 +369,69 @@ class BaseTask:
                              ensure_list(self._cache_dir))
         if result is not None:
             return result
-        # start recording provenance
-        aid = "uuid:{}".format(gen_uuid())
-        self.audit({"@id": aid, "@type": "task",
-                    "startedAtTime": now()}, AuditFlag.PROV)
+        # start recording provenance, but don't send till directory is created
+        # in case message directory is inside task output directory
+        if self.audit_check(AuditFlag.PROV):
+            aid = "uuid:{}".format(gen_uuid())
+            start_message = {"@id": aid, "@type": "task", "startedAtTime": now()}
         # Not cached
         if self._cache_dir is None:
             self.cache_dir = mkdtemp()
         odir = self.cache_dir / checksum
-        odir.mkdir(parents=True, exist_ok=True)
+        odir.mkdir(parents=True, exist_ok=True if self.can_resume else False)
+        if self.audit_check(AuditFlag.PROV):
+            self.audit(start_message, AuditFlag.PROV)
+            # audit inputs
+            #
         #check_runtime(self._runtime_requirements)
         #isolate inputs if files
         #cwd = os.getcwd()
-        #id = record_provenance(self, env)
-        #resources = start_monitor()
+        if self.audit_check(AuditFlag.RESOURCE):
+            from ..utils.profiler import ResourceMonitor
+            resource_monitor = ResourceMonitor(os.getpid(), freq=0.01,
+                                               fname=odir / '_profile.log')
         result = Result(output=None)
         try:
+            if self.audit_check(AuditFlag.RESOURCE):
+                resource_monitor.start()
             self._run_task()
             result.output = self._collect_outputs()
         except Exception as e:
             #record_error(self, e)
             raise
         finally:
-            #resources = stop_monitor()
-            pass
-        #update_provenance(id, outputs, resources)
-        save_result(odir, result)
-        self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)
+            save_result(odir, result)
+            if self.audit_check(AuditFlag.RESOURCE):
+                resource_monitor.stop()
+                runtime = Runtime(rss_peak_gb=None, vms_peak_gb=None,
+                                  cpu_peak_percent=None)
+
+                # Read .prof file in and set runtime values
+                with open(odir / '_profile.log', 'rt') as fp:
+                    data = [[float(el) for el  in val.strip().split(',')]
+                            for val in fp.readlines()]
+                    if data:
+                        runtime.rss_peak_gb = max([val[2] for val in data]) / 1024
+                        runtime.vms_peak_gb = max([val[3] for val in data]) / 1024
+                        runtime.cpu_peak_percent = max([val[1] for val in data])
+                    '''
+                    runtime.prof_dict = {
+                        'time': vals[:, 0].tolist(),
+                        'cpus': vals[:, 1].tolist(),
+                        'rss_GiB': (vals[:, 2] / 1024).tolist(),
+                        'vms_GiB': (vals[:, 3] / 1024).tolist(),
+                    }
+                    '''
+                if self.audit_check(AuditFlag.PROV):
+                    # audit resources/runtime information
+                    eid = "uuid:{}".format(gen_uuid())
+                    entity = dc.asdict(runtime)
+                    entity.update(**{"@id": eid, "@type": "runtime",
+                                     "prov:wasGeneratedBy": aid})
+                    self.audit(entity, AuditFlag.PROV)
+            if self.audit_check(AuditFlag.PROV):
+                # audit outputs
+                self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)
         return result
 
     # TODO: Decide if the following two functions should be separated
@@ -392,7 +450,7 @@ class BaseTask:
 class FunctionTask(BaseTask):
 
     def __init__(self, func: ty.Callable, output_spec: ty.Optional[BaseSpec]=None,
-                 audit_flags: bool=False,
+                 audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
         self.input_spec = dc.make_dataclass(
             'Inputs', 

@@ -40,6 +40,15 @@ def test_annotated_func():
     result = funky.result()
     assert result.output.out1 == 2.1
 
+    help = funky.help(returnhelp=True)
+    assert help == ['Help for FunctionTask',
+                    'Input Parameters:',
+                    '\ta: int',
+                    '\tb: float (default: 0.1)',
+                    '\t_func: str',
+                    'Output Parameters:',
+                    '\tout1: float']
+
 
 def test_notannotated_func():
     @to_task
@@ -65,16 +74,18 @@ def test_audit(tmpdir):
         return a + b
 
     funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky.cache_dir = tmpdir
     funky()
 
-    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    funky = testfunc(a=2, audit_flags=AuditFlag.ALL, messengers=FileMessenger())
     message_path = tmpdir / funky.checksum / 'messages'
     funky.cache_dir = tmpdir
-    funky.messenger_args=dict(message_dir=message_path)
+    funky.messenger_args = dict(message_dir=message_path)
     funky()
+    assert (tmpdir / funky.checksum / '_profile.log').exists()
     from glob import glob
-    assert len(glob(str(message_path / '*.jsonld'))) == 2
+    assert len(glob(str(message_path / '*.jsonld'))) == 3
 
     # commented out to speed up testing
-    #collect_messages(message_path / '..', message_path)
-    #assert (message_path / '..' / 'messages.jsonld').exists()
+    collect_messages(tmpdir / funky.checksum, message_path, ld_op='compact')
+    assert (tmpdir / funky.checksum / 'messages.jsonld').exists()
