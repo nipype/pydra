@@ -3,8 +3,8 @@
 import typing as ty
 import os
 
-from ..task import (to_task, PrintMessenger, FileMessenger,
-                    AuditFlag, collect_messages)
+from ..task import to_task, AuditFlag
+from ...utils.messenger import (PrintMessenger, FileMessenger, collect_messages)
 
 
 def test_annotated_func():
@@ -82,8 +82,8 @@ def test_audit(tmpdir):
     funky.cache_dir = tmpdir
     funky.messenger_args = dict(message_dir=message_path)
     funky()
-    assert (tmpdir / funky.checksum / '_profile.log').exists()
     from glob import glob
+    assert len(glob(str(tmpdir / funky.checksum / 'proc*.log'))) == 1
     assert len(glob(str(message_path / '*.jsonld'))) == 6
 
     # commented out to speed up testing

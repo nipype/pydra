@@ -39,19 +39,17 @@ Original file is located at
 import abc
 import cloudpickle as cp
 import dataclasses as dc
-import datetime as dt
-import enum
-from hashlib import sha256
 import json
 import os
 from pathlib import Path
 from tempfile import mkdtemp
-from time import sleep
 import typing as ty
 import inspect
 
-File = ty.NewType('File', Path)
-Directory = ty.NewType('Directory', Path)
+from ..utils.messenger import (send_message, make_message, gen_uuid, now,
+                               AuditFlag)
+from .specs import (BaseSpec, Runtime, Result, RuntimeSpec, File)
+
 
 develop = True
 
@@ -109,136 +107,28 @@ def task_hash(task_obj):
     return NotImplementedError
 
 
-def now():
-    return dt.datetime.utcnow().isoformat(timespec='microseconds')
+def gather_runtime_info(fname):
+    runtime = Runtime(rss_peak_gb=None, vms_peak_gb=None,
+                      cpu_peak_percent=None)
 
+    # Read .prof file in and set runtime values
+    with open(fname, 'rt') as fp:
+        data = [[float(el) for el in val.strip().split(',')]
+                for val in fp.readlines()]
+        if data:
+            runtime.rss_peak_gb = max([val[2] for val in data]) / 1024
+            runtime.vms_peak_gb = max([val[3] for val in data]) / 1024
+            runtime.cpu_peak_percent = max([val[1] for val in data])
+        '''
+        runtime.prof_dict = {
+            'time': vals[:, 0].tolist(),
+            'cpus': vals[:, 1].tolist(),
+            'rss_GiB': (vals[:, 2] / 1024).tolist(),
+            'vms_GiB': (vals[:, 3] / 1024).tolist(),
+        }
+        '''
+    return runtime
 
-# audit flags
-class AuditFlag(enum.Flag):
-    NONE = 0
-    PROV = enum.auto()  # 0x01
-    RESOURCE = enum.auto()  # 0x02
-    ALL = PROV | RESOURCE
-
-
-def gen_uuid():
-    import uuid
-    return uuid.uuid4().hex
-
-
-class Messenger:
-    @abc.abstractmethod
-    def send(self, message, **kwargs):
-        pass
-
-
-class PrintMessenger(Messenger):
-    
-    def send(self, message, **kwargs):
-        import json
-        mid = gen_uuid()
-        print('id: {0}\n{1}'.format(mid,
-                                    json.dumps(message, ensure_ascii=False, 
-                                               indent=2, sort_keys=False)))
-
-
-class FileMessenger(Messenger):
-    
-    def send(self, message, **kwargs):
-        import json
-        mid = gen_uuid()
-        if kwargs.get('message_dir'):
-            message_dir = Path(kwargs['message_dir'])
-        else:
-            message_dir = (Path(os.getcwd()) / 'messages')
-        message_dir.mkdir(parents=True, exist_ok=True)
-        with open(message_dir / (mid + '.jsonld'), 'wt') as fp:
-            json.dump(message, fp, ensure_ascii=False, indent=2, 
-                      sort_keys=False)
-        return mid
-
-
-class RemoteRESTMessenger(Messenger):
-
-    def send(self, message, **kwargs):
-        import requests
-        r = requests.post(kwargs['post_url'], json=message, 
-                          auth=kwargs['auth']() if getattr(kwargs['auth'], 
-                                                           '__call__', None) 
-                                                else kwargs['auth'])
-        return r.status_code
-
-
-def send_message(message, messengers=None, **kwargs):
-    """Send nidm messages for logging provenance and auditing
-    """
-    for messenger in messengers:
-        messenger.send(message, **kwargs)
-
-
-def make_message(obj, context=None):
-    if context is None:
-        context = {"@context": "https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld"}
-    message = context.copy()
-    message.update(**obj)
-    return message
-
-
-def collect_messages(task_path, message_path, ld_op='compact'):
-    import pyld as pld
-    import json
-    from glob import glob
-    fl = glob(str(message_path / '*.jsonld'))
-    data = []
-    for f in fl:
-        with open(f, 'rt') as fp:
-            data.append(json.load(fp))
-    if data:
-        records = getattr(pld.jsonld, ld_op)(pld.jsonld.from_rdf(pld.jsonld.to_rdf(data,
-                                                                         {})),
-                                   data[0])
-        records["@id"] = 'uid:{}'.format(gen_uuid())
-        with open(task_path / 'messages.jsonld', 'wt') as fp:
-            json.dump(records, fp, ensure_ascii=False, indent=2,
-                      sort_keys=False)
-
-
-@dc.dataclass
-class RuntimeSpec:
-    outdir: ty.Optional[str] = None
-    container: ty.Optional[str] = 'shell'
-    network: bool = False
-    """
-    from CWL:
-    InlineJavascriptRequirement
-    SchemaDefRequirement
-    DockerRequirement
-    SoftwareRequirement
-    InitialWorkDirRequirement
-    EnvVarRequirement
-    ShellCommandRequirement
-    ResourceRequirement
-    
-    InlineScriptRequirement
-    """
-
-
-@dc.dataclass
-class BaseSpec:
-    @property
-    def hash(self):
-        return sha256(str(self).encode()).hexdigest()
-
-
-@dc.dataclass
-class Result:
-    output: ty.Optional[ty.Any] = None
-
-@dc.dataclass
-class Runtime:
-    rss_peak_gb: ty.Optional[float] = None
-    vms_peak_gb: ty.Optional[float] = None
-    cpu_peak_percent: ty.Optional[float] = None
 
 class BaseTask:
     """This is a base class for Task objects.
@@ -262,7 +152,7 @@ class BaseTask:
     _cache_dir = None  # Working directory in which to operate
     _references = None  # List of references for a task
 
-    def __init__(self, inputs: ty.Optional[ty.Text]=None,
+    def __init__(self, inputs: ty.Union[ty.Text, File, ty.Dict, None]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None):
         """Initialize task with given args."""
@@ -282,7 +172,7 @@ class BaseTask:
                 self.inputs = dc.replace(self.inputs, **inputs)
             elif Path(inputs).is_file():
                 inputs = json.loads(Path(inputs).read_text())
-            elif isinstance(defaults, str):
+            elif isinstance(inputs, str):
                 inputs = self._input_sets[inputs]
 
     def audit(self, message, flags=None):
@@ -377,20 +267,21 @@ class BaseTask:
         # Not cached
         if self._cache_dir is None:
             self.cache_dir = mkdtemp()
+        cwd = os.getcwd()
         odir = self.cache_dir / checksum
         odir.mkdir(parents=True, exist_ok=True if self.can_resume else False)
+        os.chdir(odir)
         if self.audit_check(AuditFlag.PROV):
             self.audit(start_message, AuditFlag.PROV)
             # audit inputs
-            #
         #check_runtime(self._runtime_requirements)
         #isolate inputs if files
         #cwd = os.getcwd()
         if self.audit_check(AuditFlag.RESOURCE):
             from ..utils.profiler import ResourceMonitor
             resource_monitor = ResourceMonitor(os.getpid(), freq=0.01,
-                                               fname=odir / '_profile.log')
-        result = Result(output=None)
+                                               logdir=odir)
+        result = Result(output=None, runtime=None)
         try:
             if self.audit_check(AuditFlag.RESOURCE):
                 resource_monitor.start()
@@ -404,39 +295,22 @@ class BaseTask:
             #record_error(self, e)
             raise
         finally:
-            save_result(odir, result)
             if self.audit_check(AuditFlag.RESOURCE):
                 resource_monitor.stop()
-                runtime = Runtime(rss_peak_gb=None, vms_peak_gb=None,
-                                  cpu_peak_percent=None)
-
-                # Read .prof file in and set runtime values
-                with open(odir / '_profile.log', 'rt') as fp:
-                    data = [[float(el) for el  in val.strip().split(',')]
-                            for val in fp.readlines()]
-                    if data:
-                        runtime.rss_peak_gb = max([val[2] for val in data]) / 1024
-                        runtime.vms_peak_gb = max([val[3] for val in data]) / 1024
-                        runtime.cpu_peak_percent = max([val[1] for val in data])
-                    '''
-                    runtime.prof_dict = {
-                        'time': vals[:, 0].tolist(),
-                        'cpus': vals[:, 1].tolist(),
-                        'rss_GiB': (vals[:, 2] / 1024).tolist(),
-                        'vms_GiB': (vals[:, 3] / 1024).tolist(),
-                    }
-                    '''
+                result.runtime = gather_runtime_info(resource_monitor.fname)
                 if self.audit_check(AuditFlag.PROV):
                     self.audit({"@id": mid, "endedAtTime": now()}, AuditFlag.PROV)
                     # audit resources/runtime information
                     eid = "uid:{}".format(gen_uuid())
-                    entity = dc.asdict(runtime)
+                    entity = dc.asdict(result.runtime)
                     entity.update(**{"@id": eid, "@type": "runtime",
                                      "prov:wasGeneratedBy": aid})
                     self.audit(entity, AuditFlag.PROV)
                     self.audit({"@type": "prov:Generation",
                                 "entity_generated": eid,
                                 "hadActivity": mid}, AuditFlag.PROV)
+            save_result(odir, result)
+            os.chdir(cwd)
             if self.audit_check(AuditFlag.PROV):
                 # audit outputs
                 self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)

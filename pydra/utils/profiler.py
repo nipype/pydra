@@ -4,9 +4,11 @@
 """
 Utilities to keep track of performance
 """
+import os
+from pathlib import Path
+import psutil
 import threading
 from time import time
-import psutil
 
 # Init variables
 _MB = 1024.0**2
@@ -18,7 +20,7 @@ class ResourceMonitor(threading.Thread):
     to a file
     """
 
-    def __init__(self, pid, freq=5, fname=None, python=True):
+    def __init__(self, pid, freq=5, logdir=None, fname=None, python=True):
         '''
         if freq < 0.2:
             raise RuntimeError(
@@ -26,8 +28,10 @@ class ResourceMonitor(threading.Thread):
         '''
 
         if fname is None:
-            fname = '.proc-%d_time-%s_freq-%0.2f' % (pid, time(), freq)
-        self._fname = fname
+            fname = 'proc-%d_time-%s_freq-%0.2f.log' % (pid, time(), freq)
+        if logdir is None:
+            logdir = Path(os.getcwd())
+        self._fname = logdir / fname
         self._logfile = open(self._fname, 'w')
         self._freq = freq
         self._python = python
