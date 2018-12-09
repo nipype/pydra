@@ -2,7 +2,7 @@ import abc
 import datetime as dt
 import enum
 from pathlib import Path
-
+import os
 
 def gen_uuid():
     import uuid
@@ -85,13 +85,13 @@ def send_message(message, messengers=None, **kwargs):
 def make_message(obj, context=None):
     if context is None:
         context = {
-            "@context": "https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld"}
+            "@context": "https://raw.githubusercontent.com/nipype/pydra/enh/task/pydra/schema/context.jsonld"}
     message = context.copy()
     message.update(**obj)
     return message
 
 
-def collect_messages(task_path, message_path, ld_op='compact'):
+def collect_messages(collected_path, message_path, ld_op='compact'):
     import pyld as pld
     import json
     from glob import glob
@@ -106,6 +106,6 @@ def collect_messages(task_path, message_path, ld_op='compact'):
                                                   {})),
             data[0])
         records["@id"] = 'uid:{}'.format(gen_uuid())
-        with open(task_path / 'messages.jsonld', 'wt') as fp:
+        with open(collected_path / 'messages.jsonld', 'wt') as fp:
             json.dump(records, fp, ensure_ascii=False, indent=2,
                       sort_keys=False)
