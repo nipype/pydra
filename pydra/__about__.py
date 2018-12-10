@@ -3,7 +3,6 @@ settings in setup.py, the nipy top-level docstring, and for building the
 docs.  In setup.py in particular, we exec this file, so it cannot import nipy
 """
 
-import sys
 from ._version import get_versions
 __version__ = get_versions()['version']
 del get_versions
