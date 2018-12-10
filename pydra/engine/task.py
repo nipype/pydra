@@ -39,12 +39,13 @@ Original file is located at
 import abc
 import cloudpickle as cp
 import dataclasses as dc
+import inspect
 import json
 import os
 from pathlib import Path
+import shutil
 from tempfile import mkdtemp
 import typing as ty
-import inspect
 
 from ..utils.messenger import (send_message, make_message, gen_uuid, now,
                                AuditFlag)
@@ -273,6 +274,8 @@ class BaseTask:
             self.cache_dir = mkdtemp()
         cwd = os.getcwd()
         odir = self.cache_dir / checksum
+        if not self.can_resume and odir.exists():
+            shutil.rmtree(odir)
         odir.mkdir(parents=True, exist_ok=True if self.can_resume else False)
         os.chdir(odir)
         if self.audit_check(AuditFlag.PROV):
@@ -283,8 +286,7 @@ class BaseTask:
         #cwd = os.getcwd()
         if self.audit_check(AuditFlag.RESOURCE):
             from ..utils.profiler import ResourceMonitor
-            resource_monitor = ResourceMonitor(os.getpid(), freq=0.01,
-                                               logdir=odir)
+            resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
         result = Result(output=None, runtime=None)
         try:
             if self.audit_check(AuditFlag.RESOURCE):
@@ -385,13 +387,105 @@ def to_task(func_to_decorate):
     return create_func
 
 
-class ShellTask(BaseTask):
-    pass
+# https://stackoverflow.com/questions/17190221
+import asyncio
+import asyncio.subprocess as asp
+import sys
+
+@asyncio.coroutine
+def read_stream_and_display(stream, display):
+    """Read from stream line by line until EOF, display, and capture the lines.
+
+    """
+    output = []
+    while True:
+        line = yield from stream.readline()
+        if not line:
+            break
+        output.append(line)
+        display(line) # assume it doesn't block
+    return b''.join(output).decode()
 
 
-class BashTask(ShellTask):
-    pass
+@asyncio.coroutine
+def read_and_display(*cmd):
+    """Capture cmd's stdout, stderr while displaying them as they arrive
+    (line by line).
+
+    """
+    # start process
+    process = yield from asyncio.create_subprocess_exec(*cmd, stdout=asp.PIPE,
+                                                        stderr=asp.PIPE)
+
+    # read child's stdout/stderr concurrently (capture and display)
+    try:
+        stdout, stderr = yield from asyncio.gather(
+            read_stream_and_display(process.stdout, sys.stdout.buffer.write),
+            read_stream_and_display(process.stderr, sys.stderr.buffer.write))
+    except Exception:
+        process.kill()
+        raise
+    finally:
+        # wait for the process to exit
+        rc = yield from process.wait()
+    return rc, stdout, stderr
 
 
-class MATLABTask(ShellTask):
-    pass
+# run the event loop
+def execute(cmd):
+    if os.name == 'nt':
+        loop = asyncio.ProactorEventLoop() # for subprocess' pipes on Windows
+        asyncio.set_event_loop(loop)
+    else:
+        if asyncio.get_event_loop().is_closed():
+            asyncio.set_event_loop(asyncio.new_event_loop())
+        loop = asyncio.get_event_loop()
+    rc, stdout, stderr = loop.run_until_complete(read_and_display(*cmd))
+    loop.close()
+    return rc, stdout, stderr
+
+
+@dc.dataclass
+class ShellSpec(BaseSpec):
+    executable: ty.Union[File, str, None] = None
+
+@dc.dataclass
+class ShellOutSpec(BaseSpec):
+    return_code: int
+    stdout: ty.Union[File, str]
+    stderr: ty.Union[File, str]
+
+
+class ShellCommandTask(BaseTask):
+    def __init__(self, output_spec: ty.Optional[ShellOutSpec]=None,
+                 audit_flags: AuditFlag=AuditFlag.NONE,
+                 messengers=None, messenger_args=None, **kwargs):
+        self.input_spec = dc.make_dataclass(
+            'Inputs', fields, bases=(ShellSpec,))
+        super(ShellCommandTask, self).__init__(inputs=kwargs,
+                                               audit_flags=audit_flags,
+                                               messengers=messengers,
+                                               messenger_args=messenger_args)
+        if output_spec is None:
+            output_spec = dc.make_dataclass('Output',
+                                            [('out', ty.Any)],
+                                            bases=(ShellOutSpec,))
+        self.output_spec = output_spec
+
+    @property
+    def command_args(self):
+        return [f.value for f in dc.fields(self.inputs) if f]
+
+    @command_args.setter
+    def command_args(self, args):
+        self.inputs = dc.replace(self.inputs, **args)
+
+    @property
+    def cmdline(self):
+        return ' '.join(self.command_args)
+
+    def _run_task(self):
+        self.output_ = execute(self.command_args)
+
+    def _list_outputs(self):
+        return [None, self.output_]

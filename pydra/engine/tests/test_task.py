@@ -2,6 +2,7 @@
 
 import typing as ty
 import os
+import pytest
 
 from ..task import to_task, AuditFlag
 from ...utils.messenger import (PrintMessenger, FileMessenger, collect_messages)
@@ -65,6 +66,15 @@ def test_notannotated_func():
     assert hasattr(result, 'output')
     assert hasattr(result.output, 'out')
     assert result.output.out == 20.2
+
+
+def test_exception_func():
+    @to_task
+    def raise_exception(c, d):
+        raise Exception()
+
+    bad_funk = raise_exception(c=17, d=3.2)
+    assert pytest.raises(Exception, bad_funk)
 
 
 def test_audit(tmpdir):

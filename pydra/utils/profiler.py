@@ -28,12 +28,12 @@ class ResourceMonitor(threading.Thread):
         '''
 
         if fname is None:
-            fname = 'proc-%d_time-%s_freq-%0.2f.log' % (pid, time(), freq)
+            fname = 'proc-%d_time-%s_freq-%0.2f.log' % (pid, time(), interval)
         if logdir is None:
             logdir = Path.cwd()
         self._fname = logdir / fname
         self._logfile = open(self._fname, 'w')
-        self._freq = freq
+        self._interval = interval
         self._python = python
 
         # Leave process initialized and make first sample
@@ -98,7 +98,7 @@ class ResourceMonitor(threading.Thread):
         wait_til = start_time
         while not self._event.is_set():
             self._sample()
-            wait_til += self._freq
+            wait_til += self._interval
             self._event.wait(max(0, wait_til - time()))
 
 
