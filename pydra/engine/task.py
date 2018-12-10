@@ -173,6 +173,8 @@ class BaseTask:
             elif Path(inputs).is_file():
                 inputs = json.loads(Path(inputs).read_text())
             elif isinstance(inputs, str):
+                if self._input_sets is None or inputs not in self._input_sets:
+                    raise ValueError("Unknown input set {!r}".format(inputs))
                 inputs = self._input_sets[inputs]
 
     def audit(self, message, flags=None):
