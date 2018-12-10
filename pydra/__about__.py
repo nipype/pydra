@@ -56,11 +56,11 @@ REQUIRES = [
     'networkx>=%s' % NETWORKX_MIN_VERSION,
     'pytest>=%s' % PYTEST_MIN_VERSION,
     'dataclasses; python_version < "3.7"',
-    'pyld'
+    'cloudpickle'
 ]
 
 SETUP_REQUIRES = ['setuptools>=27.0']
-TESTS_REQUIRES = ['pytest-cov', 'codecov', 'pytest-env', 'pytest-xdist']
+TESTS_REQUIRES = ['pytest-cov', 'codecov', 'pytest-env', 'pytest-xdist', 'pyld']
 LINKS_REQUIRES = []
 
 EXTRA_REQUIRES = {
