@@ -184,7 +184,7 @@ class BaseTask:
                 context = json.load(fp)
         else:
             context = {"@context": 'https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld'}
-        if self.audit_flags and flags:
+        if self.audit_flags & flags:
             if self.messenger_args:
                 send_message(make_message(message, context=context),
                              messengers=self.messengers,
