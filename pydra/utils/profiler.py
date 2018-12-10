@@ -30,7 +30,7 @@ class ResourceMonitor(threading.Thread):
         if fname is None:
             fname = 'proc-%d_time-%s_freq-%0.2f.log' % (pid, time(), freq)
         if logdir is None:
-            logdir = Path(os.getcwd())
+            logdir = Path.cwd()
         self._fname = logdir / fname
         self._logfile = open(self._fname, 'w')
         self._freq = freq
