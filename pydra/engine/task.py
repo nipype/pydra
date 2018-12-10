@@ -49,7 +49,8 @@ import typing as ty
 
 from ..utils.messenger import (send_message, make_message, gen_uuid, now,
                                AuditFlag)
-from .specs import (BaseSpec, Runtime, Result, RuntimeSpec, File)
+from .specs import (BaseSpec, Runtime, Result, RuntimeSpec, File, ShellSpec,
+                    ShellOutSpec)
 
 
 develop = True
@@ -451,17 +452,6 @@ def execute(cmd):
     rc, stdout, stderr = loop.run_until_complete(read_and_display(*cmd))
     loop.close()
     return rc, stdout, stderr
-
-
-@dc.dataclass
-class ShellSpec(BaseSpec):
-    executable: ty.Union[str, ty.List[str]]
-
-@dc.dataclass
-class ShellOutSpec(BaseSpec):
-    return_code: int
-    stdout: ty.Union[File, str]
-    stderr: ty.Union[File, str]
 
 
 class ShellCommandTask(BaseTask):

@@ -1,5 +1,6 @@
-from ..specs import BaseSpec, RuntimeSpec, Runtime, Result
-
+from ..specs import (BaseSpec, RuntimeSpec, Runtime, Result, ShellSpec,
+                     ContainerSpec)
+import pytest
 
 def test_basespec():
     spec = BaseSpec()
@@ -17,3 +18,18 @@ def test_result():
     result = Result()
     assert hasattr(result, 'runtime')
     assert hasattr(result, 'output')
+
+
+def test_shellspec():
+    with pytest.raises(TypeError):
+        spec = ShellSpec()
+    spec = ShellSpec('ls')
+    assert hasattr(spec, 'executable')
+
+
+def test_container():
+    with pytest.raises(TypeError):
+        spec = ContainerSpec()
+    spec = ContainerSpec(None, None)
+    assert hasattr(spec, 'image')
+    assert hasattr(spec, 'bind_mounts')

@@ -48,3 +48,22 @@ class RuntimeSpec:
     InlineScriptRequirement
     """
 
+
+@dc.dataclass
+class ShellSpec(BaseSpec):
+    executable: ty.Union[str, ty.List[str]]
+
+
+@dc.dataclass
+class ShellOutSpec(BaseSpec):
+    return_code: int
+    stdout: ty.Union[File, str]
+    stderr: ty.Union[File, str]
+
+
+@dc.dataclass
+class ContainerSpec(BaseSpec):
+    image: ty.Union[File, str, None]
+    bind_mounts: ty.Optional[ty.Tuple[Path,  # local path
+                                      ty.Optional[Path],  # container path
+                                      ty.Optional[str]]]  # mount mode
