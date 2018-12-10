@@ -20,7 +20,7 @@ class ResourceMonitor(threading.Thread):
     to a file
     """
 
-    def __init__(self, pid, freq=5, logdir=None, fname=None, python=True):
+    def __init__(self, pid, interval=5, logdir=None, fname=None, python=True):
         '''
         if freq < 0.2:
             raise RuntimeError(
