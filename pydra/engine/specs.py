@@ -7,7 +7,7 @@ File = ty.NewType('File', Path)
 Directory = ty.NewType('Directory', Path)
 
 
-@dc.dataclass
+@dc.dataclass(order=True)
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs"""
     @property

@@ -44,11 +44,11 @@ def test_annotated_func():
     help = funky.help(returnhelp=True)
     assert help == ['Help for FunctionTask',
                     'Input Parameters:',
-                    '\ta: int',
-                    '\tb: float (default: 0.1)',
-                    '\t_func: str',
+                    '- a: int',
+                    '- b: float (default: 0.1)',
+                    '- _func: str',
                     'Output Parameters:',
-                    '\tout1: float']
+                    '- out1: float']
 
 
 def test_notannotated_func():

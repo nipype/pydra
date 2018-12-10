@@ -71,11 +71,19 @@ def print_help(obj):
         default = ''
         if f.default is not dc.MISSING and not f.name.startswith('_'):
             default = ' (default: {})'.format(f.default)
-        help += ['\t{}: {}{}'.format(f.name, f.type.__name__, default)]
+        try:
+            name = f.type.__name__
+        except AttributeError:
+            name = str(f.type)
+        help += ['- {}: {}{}'.format(f.name, name, default)]
     if dc.fields(obj.input_spec):
         help += ['Output Parameters:']
     for f in dc.fields(obj.output_spec):
-        help += ['\t{}: {}'.format(f.name, f.type.__name__)]
+        try:
+            name = f.type.__name__
+        except AttributeError:
+            name = str(f.type)
+        help += ['- {}: {}'.format(f.name, name)]
     print('\n'.join(help))
     return help
 
@@ -328,7 +336,7 @@ class BaseTask:
         pass
 
     def _collect_outputs(self):
-        run_output = self._list_outputs()
+        run_output = ensure_list(self._list_outputs())
         output = self.output_spec(**{f.name: None for f in
                                             dc.fields(self.output_spec)})
         return dc.replace(output, **dict(zip(self.output_names,
@@ -373,7 +381,7 @@ class FunctionTask(BaseTask):
         output = cp.loads(self.inputs._func)(**inputs)
         if not isinstance(output, tuple):
             output = (output,)
-        self.output_ = output
+        self.output_ = list(output)
 
     def _list_outputs(self):
         return self.output_
@@ -447,7 +455,7 @@ def execute(cmd):
 
 @dc.dataclass
 class ShellSpec(BaseSpec):
-    executable: ty.Union[File, str, None] = None
+    executable: ty.Union[str, ty.List[str]]
 
 @dc.dataclass
 class ShellOutSpec(BaseSpec):
@@ -457,27 +465,33 @@ class ShellOutSpec(BaseSpec):
 
 
 class ShellCommandTask(BaseTask):
-    def __init__(self, output_spec: ty.Optional[ShellOutSpec]=None,
+    def __init__(self, input_spec: ty.Optional[ShellSpec]=None,
+                 output_spec: ty.Optional[ShellOutSpec]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
-        self.input_spec = dc.make_dataclass(
-            'Inputs', fields, bases=(ShellSpec,))
+        if input_spec is None:
+            fields = [('args', ty.List[str], dc.field(default_factory=list))]
+            input_spec = dc.make_dataclass('Inputs', fields, bases=(ShellSpec,))
+        self.input_spec = input_spec
         super(ShellCommandTask, self).__init__(inputs=kwargs,
                                                audit_flags=audit_flags,
                                                messengers=messengers,
                                                messenger_args=messenger_args)
         if output_spec is None:
-            output_spec = dc.make_dataclass('Output',
-                                            [('out', ty.Any)],
-                                            bases=(ShellOutSpec,))
+            output_spec = ShellOutSpec
         self.output_spec = output_spec
 
     @property
     def command_args(self):
-        return [f.value for f in dc.fields(self.inputs) if f]
+        args = []
+        for f in dc.fields(self.inputs):
+            value = getattr(self.inputs, f.name)
+            if value is not None:
+                args.extend(ensure_list(value))
+        return args
 
     @command_args.setter
-    def command_args(self, args):
+    def command_args(self, args: ty.Dict):
         self.inputs = dc.replace(self.inputs, **args)
 
     @property
@@ -485,7 +499,10 @@ class ShellCommandTask(BaseTask):
         return ' '.join(self.command_args)
 
     def _run_task(self):
-        self.output_ = execute(self.command_args)
+        self.output_ = None
+        args = self.command_args
+        if args:
+            self.output_ = execute(args)
 
     def _list_outputs(self):
-        return [None, self.output_]
+        return list(self.output_)
