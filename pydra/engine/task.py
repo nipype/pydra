@@ -167,6 +167,8 @@ class BaseTask:
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
+        if self._input_sets is None:
+            self._input_sets = {}
         if inputs:
             if isinstance(inputs, dict):
                 self.inputs = dc.replace(self.inputs, **inputs)
