@@ -4,7 +4,7 @@ import typing as ty
 import os
 import pytest
 
-from ..task import to_task, AuditFlag
+from ..task import to_task, AuditFlag, ShellCommandTask
 from ...utils.messenger import (PrintMessenger, FileMessenger, collect_messages)
 
 
@@ -99,3 +99,21 @@ def test_audit(tmpdir):
     # commented out to speed up testing
     collect_messages(tmpdir / funky.checksum, message_path, ld_op='compact')
     assert (tmpdir / funky.checksum / 'messages.jsonld').exists()
+
+
+def test_shell_cmd(tmpdir):
+    cmd = ['echo', 'hail', 'pydra']
+
+    # all args given as executable
+    shelly = ShellCommandTask(executable=cmd)
+    assert shelly.cmdline == ' '.join(cmd)
+    res = shelly.run()
+    assert res.output.stdout == ' '.join(cmd[1:]) + '\n'
+
+    # separate command into exec + args
+    shelly = ShellCommandTask(executable=cmd[0], args=cmd[1:])
+    assert shelly.inputs.executable == 'echo'
+    assert shelly.cmdline == ' '.join(cmd)
+    res = shelly.run()
+    assert res.output.return_code == 0
+    assert res.output.stdout == ' '.join(cmd[1:]) + '\n'

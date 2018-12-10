@@ -109,9 +109,9 @@ def save_result(result_path: Path, result):
 def task_hash(task_obj):
     """
     input hash, output hash, environment hash
-    
-    :param task_obj: 
-    :return: 
+
+    :param task_obj:
+    :return:
     """
     return NotImplementedError
 
@@ -200,7 +200,7 @@ class BaseTask:
                 send_message(make_message(message, context=context),
                              messengers=self.messengers,
                              **self.messenger_args)
-            else:              
+            else:
                 send_message(make_message(message, context=context),
                              messengers=self.messengers)
 
@@ -224,7 +224,7 @@ class BaseTask:
     @property
     def version(self):
         return self._version
-    
+
     def save_set(self, name, inputs, force=False):
         if name in self._input_sets and not force:
             raise KeyError('Key {} already saved. Use force=True to override.')
@@ -240,7 +240,7 @@ class BaseTask:
 
     def result(self, cache_locations=None):
         result = load_result(self.checksum,
-                             ensure_list(cache_locations) + 
+                             ensure_list(cache_locations) +
                              ensure_list(self._cache_dir))
         if result is not None:
             if 'output' in result:
@@ -251,7 +251,7 @@ class BaseTask:
     @property
     def cache_dir(self):
         return self._cache_dir
-    
+
     @cache_dir.setter
     def cache_dir(self, location):
         self._cache_dir = Path(location)
@@ -265,10 +265,10 @@ class BaseTask:
     def run(self, cache_locations=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
-        
+
         # Eagerly retrieve cached
         result = load_result(checksum,
-                             ensure_list(cache_locations) + 
+                             ensure_list(cache_locations) +
                              ensure_list(self._cache_dir))
         if result is not None:
             return result
@@ -349,25 +349,25 @@ class FunctionTask(BaseTask):
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
         self.input_spec = dc.make_dataclass(
-            'Inputs', 
+            'Inputs',
             [(val.name, val.annotation, val.default)
                   if val.default is not inspect.Signature.empty
                   else (val.name, val.annotation)
-             for val in inspect.signature(func).parameters.values() 
+             for val in inspect.signature(func).parameters.values()
              ] + [('_func', str, cp.dumps(func))],
             bases=(BaseSpec,))
-        super(FunctionTask, self).__init__(inputs=kwargs, 
+        super(FunctionTask, self).__init__(inputs=kwargs,
                                            audit_flags=audit_flags,
                                            messengers=messengers,
                                            messenger_args=messenger_args)
         if output_spec is None:
             if 'return' not in func.__annotations__:
-                output_spec = dc.make_dataclass('Output', 
+                output_spec = dc.make_dataclass('Output',
                                                 [('out', ty.Any)],
-                                                bases=(BaseSpec,))            
+                                                bases=(BaseSpec,))
             else:
                 return_info = func.__annotations__['return']
-                output_spec = dc.make_dataclass(return_info.__name__, 
+                output_spec = dc.make_dataclass(return_info.__name__,
                                                 return_info.__annotations__.items(),
                                                 bases=(BaseSpec,))
         elif 'return' in func.__annotations__:
