@@ -64,7 +64,7 @@ class ShellOutSpec(BaseSpec):
 @dc.dataclass
 class ContainerSpec(ShellSpec):
     image: ty.Union[File, str]
-    container: ty.Union[File, str]
+    container: ty.Union[File, str, None]
     container_xargs: ty.Optional[ty.List[str]] = None
     bindings: ty.Optional[ty.List[ty.Tuple[
         Path,  # local path

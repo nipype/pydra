@@ -4,7 +4,7 @@ import typing as ty
 import os
 import pytest
 
-from ..task import to_task, AuditFlag, ShellCommandTask
+from ..task import to_task, AuditFlag, ShellCommandTask, ContainerTask, DockerTask
 from ...utils.messenger import (PrintMessenger, FileMessenger, collect_messages)
 
 
@@ -117,3 +117,27 @@ def test_shell_cmd(tmpdir):
     res = shelly.run()
     assert res.output.return_code == 0
     assert res.output.stdout == ' '.join(cmd[1:]) + '\n'
+
+
+def test_container_cmds(tmpdir):
+    containy = ContainerTask(executable='pwd')
+    with pytest.raises(AttributeError):
+        containy.cmdline
+    containy.inputs.container = 'docker'
+    with pytest.raises(AttributeError):
+        containy.cmdline
+    containy.inputs.image = 'busybox'
+    assert containy.cmdline
+
+
+def test_docker_cmd(tmpdir):
+    docky = DockerTask(executable='pwd', image='busybox')
+    assert docky.cmdline == 'docker run busybox pwd'
+    docky.inputs.container_xargs = ['--rm -it']
+    assert docky.cmdline == 'docker run --rm -it busybox pwd'
+    docky.inputs.bindings = [('/local/path', '/container/path', 'ro'),
+                             ('/local2', '/container2', None)]
+    assert docky.cmdline == (
+        'docker run --rm -it -v /local/path:/container/path:ro'
+        ' -v /local2:/container2:rw busybox pwd'
+    )
