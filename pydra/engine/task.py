@@ -46,7 +46,6 @@ from pathlib import Path
 import shutil
 from tempfile import mkdtemp
 import typing as ty
-import numpy as np
 
 from ..utils.messenger import (send_message, make_message, gen_uuid, now,
                                AuditFlag)
@@ -509,7 +508,7 @@ class ContainerTask(ShellCommandTask):
                  messengers=None, messenger_args=None, **kwargs):
 
         if input_spec is None:
-            input_spec = dc.make_dataclass('Inputs', [ARGS], bases=(ContainerSpec))
+            input_spec = dc.make_dataclass('Inputs', [ARGS], bases=(ContainerSpec,))
         super(ContainerTask, self).__init__(input_spec=input_spec,
                                             audit_flags=audit_flags,
                                             messengers=messengers,
@@ -523,10 +522,12 @@ class ContainerTask(ShellCommandTask):
     @property
     def container_args(self):
         if self.inputs.container is None:
-            raise AttributeException('Container software is not specified')
+            raise AttributeError('Container software is not specified')
         cargs = [self.inputs.container, 'run']
         if self.inputs.container_xargs is not None:
             cargs.extend(self.inputs.container_xargs)
+        if self.inputs.image is None:
+            raise AttributeError('Container image is not specified')
         cargs.append(self.inputs.image)
         return cargs
 
