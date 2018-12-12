@@ -62,8 +62,22 @@ class ShellOutSpec(BaseSpec):
 
 
 @dc.dataclass
-class ContainerSpec(BaseSpec):
-    image: ty.Union[File, str, None]
-    bind_mounts: ty.Optional[ty.Tuple[Path,  # local path
-                                      ty.Optional[Path],  # container path
-                                      ty.Optional[str]]]  # mount mode
+class ContainerSpec(ShellSpec):
+    image: ty.Union[File, str]
+    container: ty.Union[File, str]
+    container_xargs: ty.Optional[ty.List[str]] = None
+    bindings: ty.Optional[ty.List[ty.Tuple[
+        Path,  # local path
+        Path,  # container path
+        ty.Optional[str]  # mount mode
+    ]]] = None
+
+
+@dc.dataclass
+class DockerSpec(ContainerSpec):
+    container: str = 'docker'
+
+
+@dc.dataclass
+class SingularitySpec(ContainerSpec):
+    container: str = 'singularity'
