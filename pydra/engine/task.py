@@ -302,7 +302,8 @@ class BaseTask:
                 if self.audit_check(AuditFlag.PROV):
                     mid = "uid:{}".format(gen_uuid())
                     self.audit({"@id": mid, "@type": "monitor",
-                                "startedAtTime": now()}, AuditFlag.PROV)
+                                "startedAtTime": now(),
+                                "wasStartedBy": aid}, AuditFlag.PROV)
             self._run_task()
             result.output = self._collect_outputs()
         except Exception as e:
@@ -313,7 +314,8 @@ class BaseTask:
                 resource_monitor.stop()
                 result.runtime = gather_runtime_info(resource_monitor.fname)
                 if self.audit_check(AuditFlag.PROV):
-                    self.audit({"@id": mid, "endedAtTime": now()}, AuditFlag.PROV)
+                    self.audit({"@id": mid, "endedAtTime": now(),
+                                "wasEndedBy": aid}, AuditFlag.PROV)
                     # audit resources/runtime information
                     eid = "uid:{}".format(gen_uuid())
                     entity = dc.asdict(result.runtime)
