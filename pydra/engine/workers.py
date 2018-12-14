@@ -31,7 +31,7 @@ class MpWorker(Worker):
         logger.debug('Initialize MpWorker')
 
     def run_el(self, interface, inp):
-        self.pool.apply_async(interface, (inp[0], inp[1]))
+        self.pool.apply_async(interface, (inp[0], inp[1], inp[2]))
 
     def close(self):
         # added this method since I was having somtetimes problem with reading results from (existing) files
@@ -45,7 +45,7 @@ class SerialWorker(Worker):
         pass
 
     def run_el(self, interface, inp):
-        interface(inp[0], inp[1])
+        interface(inp[0], inp[1], inp[2])
 
     def close(self):
         pass
@@ -58,7 +58,7 @@ class ConcurrentFuturesWorker(Worker):
         logger.debug('Initialize ConcurrentFuture')
 
     def run_el(self, interface, inp):
-        x = self.pool.submit(interface, inp[0], inp[1])
+        x = self.pool.submit(interface, inp[0], inp[1], inp[2])
         #print("X, DONE", x.done())
         x.add_done_callback(lambda x: print("DONE ", interface, inp, x.done))
         #print("DIR", x.result())
@@ -78,7 +78,7 @@ class DaskWorker(Worker):
     def run_el(self, interface, inp):
         print("DASK, run_el: ", interface, inp, time.time())
         # dask  doesn't copy the node second time, so it doesn't see that I change input in the meantime (??)
-        x = self.client.submit(interface, inp[0], inp[1])
+        x = self.client.submit(interface, inp[0], inp[1], inp[2])
         print("DASK, status: ", x.status)
         # this important, otherwise dask will not finish the job
         x.add_done_callback(lambda x: print("DONE ", interface, inp))

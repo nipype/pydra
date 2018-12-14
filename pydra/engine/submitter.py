@@ -50,12 +50,15 @@ class Submitter(object):
     def _submit_node(self, node):
         """submitting nodes's interface for all states"""
         for (i, ind) in enumerate(node.state.index_generator):
-            self._submit_node_el(node, i, ind)
+            # this is run only for a single node or the first node in a wf, so no inner spl
+            self._submit_node_el(node, i, ind, ind_inner=None)
 
-    def _submit_node_el(self, node, i, ind):
+
+    def _submit_node_el(self, node, i, ind, ind_inner):
         """submitting node's interface for one element of states"""
-        logger.debug("SUBMIT WORKER, node: {}, ind: {}".format(node, ind))
-        self.worker.run_el(node.run_interface_el, (i, ind))
+        logger.debug("SUBMIT WORKER, node: {}, ind: {}, ind_inner: {}".format(node, ind, ind_inner))
+        self.worker.run_el(node.run_interface_el, (i, ind, ind_inner))
+
 
     def run_workflow(self, workflow=None, ready=True):
         """the main function to run Workflow"""
@@ -63,13 +66,16 @@ class Submitter(object):
             workflow = self.workflow
         workflow.prepare_state_input()
 
-        # TODO: should I have inner_nodes for all workflow (to avoid if wf.mapper)??
-        if workflow.mapper:
+        # TODO: should I have inner_nodes for all workflow (to avoid if wf.splitter)??
+        if workflow.splitter:
             for key in workflow._node_names.keys():
                 workflow.inner_nodes[key] = []
             for (i, ind) in enumerate(workflow.state.index_generator):
                 new_workflow = deepcopy(workflow)
                 new_workflow.parent_wf = workflow
+                # adding all nodes to the parent workflow
+                for (i_n, node) in enumerate(new_workflow.graph_sorted):
+                    workflow.inner_nodes[node.name].append(node)
                 if ready:
                     self._run_workflow_el(new_workflow, i, ind)
                 else:
@@ -101,14 +107,15 @@ class Submitter(object):
             workflow.get_output()
 
     def _run_workflow_el(self, workflow, i, ind, collect_inp=False):
-        """running one internal workflow (if workflow has a mapper)"""
+        """running one internal workflow (if workflow has a splitter)"""
         # TODO: can I simplify and remove collect inp? where should it be?
         if collect_inp:
             st_inputs, wf_inputs = workflow.get_input_el(ind)
         else:
             wf_inputs = workflow.state.state_values(ind)
+            st_inputs = wf_inputs
         if workflow.write_state:
-            workflow.preparing(wf_inputs=wf_inputs)
+            workflow.preparing(wf_inputs=wf_inputs, st_inputs=st_inputs)
         else:
             wf_inputs_ind = workflow.state.state_ind(ind)
             workflow.preparing(wf_inputs=wf_inputs, wf_inputs_ind=wf_inputs_ind)
@@ -117,8 +124,6 @@ class Submitter(object):
     def _run_workflow_nd(self, workflow):
         """iterating over all nodes from a workflow and submitting them or adding to the node_line"""
         for (i_n, node) in enumerate(workflow.graph_sorted):
-            if workflow.parent_wf and workflow.parent_wf.mapper:  # for now if parent_wf, parent_wf has to have mapper
-                workflow.parent_wf.inner_nodes[node.name].append(node)
             node.prepare_state_input()
             self._to_finish.append(node)
             # submitting all the nodes who are self sufficient (self.workflow.graph is already sorted)
@@ -152,7 +157,12 @@ class Submitter(object):
             if hasattr(to_node, 'interface'):
                 print("_NODES_CHECK INPUT", to_node.name, to_node.checking_input_el(ind))
                 if to_node.checking_input_el(ind):
-                    self._submit_node_el(to_node, i, ind)
+                    if to_node.state._inner_splitter:
+                        inner_size = len(to_node.get_input_el(ind)[1][to_node.state._inner_splitter[0]])
+                        for i_inner in range(inner_size):
+                            self._submit_node_el(to_node, i, ind, ind_inner=i_inner)
+                    else:
+                        self._submit_node_el(to_node, i, ind, ind_inner=None)
                     _to_remove.append((to_node, i, ind))
                 else:
                     pass
