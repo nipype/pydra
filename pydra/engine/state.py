@@ -19,10 +19,13 @@ class State(object):
         self.state_inputs = node.state_inputs
         if hasattr(self.node, "interface"):
             self._inner_inputs_names = ["{}.{}".format(self.node_name, inp) for inp in self.node.inner_inputs_names]
+            # adding inner splitters from other nodes
+            self._inner_inputs_names = self._inner_inputs_names + self.node.wf_inner_splitters
             if self._splitter and self._inner_inputs_names:
                 self._inner_splitter_separation(combiner=node.combiner)
         if not hasattr(self, "_splitter_wo_inner"):
             self._splitter_wo_inner = self._splitter
+            self._combiner_wo_inner = node.combiner
 
         # changing splitter (as in rpn), so I can read from left to right
         # e.g. if splitter=('d', ['e', 'r']), _splitter_rpn=['d', 'e', 'r', '*', '.']
@@ -31,11 +34,17 @@ class State(object):
 
         self._splitter_rpn_wo_inner = aux.splitter2rpn(self._splitter_wo_inner, other_splitters=self._other_splitters)
 
+        # TODO: should try to change the order and move it higher
         if node.combiner:
             self.combiner = node.combiner
         else:
             self._combiner = node.combiner
 
+        for spl in self._inner_splitter:
+            if spl not in self.node.wf_inner_splitters:
+                self.node.wf_inner_splitters.append(spl)
+
+        self._inner_splitter_comb = list(set(self._inner_splitter) - set(self._inner_combiner))
 
     def prepare_state_input(self):
         """prepare all inputs, should be called once all input is available"""
@@ -90,7 +99,7 @@ class State(object):
                 raise Exception("element {} of combiner is not found in the splitter {}".format(
                     el, self._splitter))
 
-        self._combiner_wo_inner = list(set(self._combiner) - set(self._inner_splitter))
+        #self._combiner_wo_inner = list(set(self._combiner) - set(self._inner_splitter))
         self._prepare_combine()
 
 
@@ -185,13 +194,9 @@ class State(object):
                 self._splitter_wo_inner = None
         elif type(self._splitter) is tuple:
             if all([x in self._inner_inputs_names for x in self._splitter]):
-                if any([x in combiner for x in self._splitter]):
-                    # TODO: still they might not gave the same shapes...
-                    self._inner_splitter += list(self._splitter)
-                    self._splitter_wo_inner = None
-                else:
-                    raise Exception("one of the inner input from scalar splitter {} "
-                                    "should be in the combiner".format(self._splitter))
+                # TODO: still they might not gave the same shapes...
+                self._inner_splitter += list(self._splitter)
+                self._splitter_wo_inner = None
             elif any([x in self._inner_inputs_names for x in self._splitter]):
                     raise Exception("the scalar splitter {} is not correct, either both or neither "
                                     "od the elements should be inner inputs".format(self._splitter))
@@ -199,7 +204,7 @@ class State(object):
             if all([x in self._inner_inputs_names for x in self._splitter]):
                 # TODO: should i allow it?
                 raise Exception("the outer splitter {} is not correct, both elements "
-                                "shouldn't be from inner inputs".format(self._splitter))
+                                "can't be from inner inputs".format(self._splitter))
             # checking if one of the element is an inner input
             else:
                 for (i, spl) in enumerate(self._splitter):

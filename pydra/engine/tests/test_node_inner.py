@@ -29,14 +29,15 @@ def change_dir(request):
 
 
 Plugins = ["serial"]
-Plugins = ["serial", "mp", "cf", "dask"]
+#Plugins = ["serial", "mp", "cf", "dask"]
 
 
 def fun_addtwo(a):
-    import time
+    import time, pdb
     time.sleep(1)
     if a == 3:
         time.sleep(2)
+    #pdb.set_trace()
     return a + 2
 
 _interf_addtwo = Function(function=fun_addtwo, input_names=["a"], output_names=["out"])
@@ -393,7 +394,7 @@ def test_innerwf_7(change_dir, plugin):
 @python35_only
 def test_innerwf_8(change_dir, plugin):
     """wf with two nodes, the first one returns a list,
-    the second takes elements of the list as an input - has a simple inner splitter and combiner
+    the second takes elements of the list as an input - has a simple inner splitter (NO combiner)
     """
     wf = Workflow(name="wf8", workingdir="test_innerwf8_{}".format(plugin),
                   wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out")])
@@ -414,7 +415,7 @@ def test_innerwf_8(change_dir, plugin):
     assert wf.result["NA_out"] == ({}, [0, 1, 2])
     assert wf.result["NB_out"] == [({"NB.a": 0}, 2), ({"NB.a": 1}, 3), ({"NB.a": 2}, 4)]
 
-@pytest.mark.skip()
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_innerwf_9(change_dir, plugin):
@@ -430,14 +431,16 @@ def test_innerwf_9(change_dir, plugin):
     wf.add_nodes([na, nb, nc])
     wf.connect("NA", "out", "NB", "a")
     wf.connect("NB", "out", "NC", "a")
-    nb.split(splitter="a").combine(combiner="a")
+    nb.split(splitter="a")
+    nc.split(splitter="NB.a").combine(combiner="NB.a")
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
     sub.close()
 
     assert wf.nodes[0].result["out"] == ({}, [0, 1, 2])
-    assert wf.nodes[1].result["out"] == ({}, [2, 3, 4])
+    assert wf.nodes[1].result["out"] == [({"NB.a": 0}, 2), ({"NB.a": 1}, 3), ({"NB.a": 2}, 4)]
+    assert wf.nodes[2].result["out"] == ({}, [4, 5, 6])
     #output of the wf
     assert wf.result["NA_out"] == ({}, [0, 1, 2])
-    assert wf.result["NB_out"] == ({}, [2, 3, 4])
+    assert wf.result["NB_out"] == [({"NB.a": 0}, 2), ({"NB.a": 1}, 3), ({"NB.a": 2}, 4)]
