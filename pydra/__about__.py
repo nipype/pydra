@@ -56,7 +56,8 @@ REQUIRES = [
     'networkx>=%s' % NETWORKX_MIN_VERSION,
     'pytest>=%s' % PYTEST_MIN_VERSION,
     'dataclasses; python_version < "3.7"',
-    'cloudpickle'
+    'cloudpickle',
+    'filelock'
 ]
 
 SETUP_REQUIRES = ['setuptools>=27.0']
