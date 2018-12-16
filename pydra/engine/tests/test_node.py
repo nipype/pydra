@@ -388,7 +388,7 @@ def test_workflow_2b(plugin):
 
 
 # using add method to add nodes
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_3(plugin, change_dir):
@@ -410,7 +410,7 @@ def test_workflow_3(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_3a(plugin, change_dir):
@@ -431,7 +431,7 @@ def test_workflow_3a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_3b(plugin, change_dir):
@@ -452,7 +452,7 @@ def test_workflow_3b(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4(plugin, change_dir):
@@ -485,7 +485,7 @@ def test_workflow_4(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4a(plugin, change_dir):
@@ -516,7 +516,7 @@ def test_workflow_4a(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4b(plugin, change_dir):
@@ -546,7 +546,7 @@ def test_workflow_4b(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4c(plugin, change_dir):
@@ -577,7 +577,7 @@ def test_workflow_4c(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4d(plugin, change_dir):
@@ -612,7 +612,7 @@ def test_workflow_4d(plugin, change_dir):
 
 # using split after add method
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_5(plugin, change_dir):
@@ -633,7 +633,7 @@ def test_workflow_5(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_5a(plugin, change_dir):
@@ -652,7 +652,7 @@ def test_workflow_5a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_6(plugin, change_dir):
@@ -682,7 +682,7 @@ def test_workflow_6(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_6a(plugin, change_dir):
@@ -713,7 +713,7 @@ def test_workflow_6a(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_6b(plugin, change_dir):
@@ -744,7 +744,7 @@ def test_workflow_6b(plugin, change_dir):
 
 # tests for a workflow that have its own input
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_7(plugin, change_dir):
@@ -767,7 +767,7 @@ def test_workflow_7(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_7a(plugin, change_dir):
@@ -787,7 +787,7 @@ def test_workflow_7a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_8(plugin, change_dir):
@@ -819,7 +819,7 @@ def test_workflow_8(plugin, change_dir):
 
 # testing if _NA in splitter works, using interfaces in add
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_9(plugin, change_dir):
@@ -845,7 +845,7 @@ def test_workflow_9(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_10(plugin, change_dir):
@@ -872,7 +872,7 @@ def test_workflow_10(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_10a(plugin, change_dir):
@@ -906,6 +906,7 @@ def test_workflow_10a(plugin, change_dir):
 
 
 # TODO: this test started sometimes failing for mp and cf
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_11(plugin, change_dir):
@@ -940,7 +941,7 @@ def test_workflow_11(plugin, change_dir):
 
 # checking workflow.result
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_12(plugin, change_dir):
@@ -976,7 +977,7 @@ def test_workflow_12(plugin, change_dir):
         assert wf.result["out"][i][0] == res[0]
         assert wf.result["out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_12a(plugin, change_dir):
@@ -1000,7 +1001,7 @@ def test_workflow_12a(plugin, change_dir):
 
 
 # tests for a workflow that have its own input and splitter
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_13(plugin, change_dir):
@@ -1052,7 +1053,7 @@ def test_workflow_13a(plugin, change_dir):
             assert list(wf.result["NA_out"][i][1].values())[j][0] == res[1][j][0]
             assert list(wf.result["NA_out"][i][1].values())[j][1] == res[1][j][1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_13b(plugin, change_dir):
@@ -1075,7 +1076,7 @@ def test_workflow_13b(plugin, change_dir):
         assert wf.result["NA_out"][i][0] == res[0]
         assert wf.result["NA_out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_13c(plugin, change_dir):
@@ -1097,7 +1098,7 @@ def test_workflow_13c(plugin, change_dir):
         assert wf.result["NA_out"][i][0] == res[0]
         assert wf.result["NA_out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_14(plugin, change_dir):
@@ -1121,7 +1122,7 @@ def test_workflow_14(plugin, change_dir):
         assert wf.result["NA_out"][i][0] == res[0]
         assert wf.result["NA_out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_15(plugin, change_dir):
@@ -1149,7 +1150,7 @@ def test_workflow_15(plugin, change_dir):
 
 
 # workflow as a node
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_16(plugin, change_dir):
@@ -1170,7 +1171,7 @@ def test_workflow_16(plugin, change_dir):
     assert wf.is_complete
     assert wf.result["wfa_out"] == ({}, 5)
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_16a(plugin, change_dir):
@@ -1193,7 +1194,7 @@ def test_workflow_16a(plugin, change_dir):
     assert wf.is_complete
     assert wf.result["wfa_out"] == ({}, 5)
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_16b(plugin, change_dir):
@@ -1215,7 +1216,7 @@ def test_workflow_16b(plugin, change_dir):
     assert wf.is_complete
     assert wf.result["wfa_out"] == ({}, 5)
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_17(plugin, change_dir):
@@ -1239,7 +1240,7 @@ def test_workflow_17(plugin, change_dir):
         assert wf.result["wfa_out"][i][0] == res[0]
         assert wf.result["wfa_out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_18(plugin, change_dir):
@@ -1274,7 +1275,7 @@ def test_workflow_18(plugin, change_dir):
     # the naming should have names with workflows??
     assert wf.result["NB_out"] == ({}, 15)
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_19(plugin, change_dir):
@@ -1321,7 +1322,7 @@ def test_workflow_19(plugin, change_dir):
         assert wf.result["NB_out"][i][0] == res[0]
         assert wf.result["NB_out"][i][1] == res[1]
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_19a(plugin, change_dir):
@@ -1377,7 +1378,7 @@ T1_file_list = [
     "/Users/dorota/nipype_workshop/data/ds000114/sub-01/ses-test/anat/sub-01_ses-test_T1w.nii.gz",
     "/Users/dorota/nipype_workshop/data/ds000114/sub-02/ses-test/anat/sub-02_ses-test_T1w.nii.gz"
     ]
-
+@pytest.mark.skip("WIP")
 @pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
@@ -1397,7 +1398,7 @@ def test_current_node_1(change_dir, plugin):
     # TODO (res): nodes only returns relative path
     assert "out_file" in nn.output.keys()
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
@@ -1426,7 +1427,7 @@ def test_current_node_2(change_dir, plugin):
     assert "NA.in_file:0" in nn.output["out_file"].keys()
     assert "NA.in_file:1" in nn.output["out_file"].keys()
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
@@ -1455,7 +1456,7 @@ def test_current_wf_1(change_dir, plugin):
 
     assert "fsl_out" in wf.output.keys()
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
@@ -1484,7 +1485,7 @@ def test_current_wf_1a(change_dir, plugin):
 
     assert "fsl_out" in wf.output.keys()
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
@@ -1511,7 +1512,7 @@ def test_current_wf_1b(change_dir, plugin):
 
     assert "fsl_out" in wf.output.keys()
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
@@ -1537,7 +1538,7 @@ def test_current_wf_1c(change_dir, plugin):
 
     assert "fsl_out" in wf.output.keys()
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
@@ -1575,7 +1576,7 @@ def test_current_wf_2(change_dir, plugin):
     assert 'cw2.in_file:0' in wf.output["fsl_out"].keys()
     assert 'cw2.in_file:1' in wf.output["fsl_out"].keys()
 
-
+@pytest.mark.skip("WIP")
 @pytest.mark.skipif(not DS114_DIR.exists(), reason="Missing $PYDRA_TEST_DATA/ds000114")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only

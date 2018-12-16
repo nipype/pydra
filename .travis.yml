@@ -23,7 +23,7 @@ before_script:
   - bash tools/get_test_data.sh
 
 script:
-  - py.test -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+  - py.test -vsx --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
 
 after_script:
 - codecov --file cov.xml --flags unittests -e TRAVIS_JOB_NUMBER
