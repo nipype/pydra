@@ -256,14 +256,20 @@ class BaseTask:
     def cache_dir(self, location):
         self._cache_dir = Path(location)
 
+    @property
+    def output_dir(self):
+        return self._cache_dir / self.checksum
+
     def audit_check(self, flag):
         return self.audit_flags & flag
 
     def __call__(self, cache_locations=None, **kwargs):
         return self.run(cache_locations=cache_locations, **kwargs)
 
-    def run(self, cache_locations=None, **kwargs):
+    def run(self, cache_locations=None, environment=None, cache_dir=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
+        if cache_dir:
+            self.cache_dir = cache_dir
         checksum = self.checksum
 
         # Eagerly retrieve cached
@@ -281,7 +287,7 @@ class BaseTask:
         if self._cache_dir is None:
             self.cache_dir = mkdtemp()
         cwd = os.getcwd()
-        odir = self.cache_dir / checksum
+        odir = self.output_dir
         if not self.can_resume and odir.exists():
             shutil.rmtree(odir)
         odir.mkdir(parents=True, exist_ok=True if self.can_resume else False)
