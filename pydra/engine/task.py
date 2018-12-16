@@ -39,6 +39,7 @@ Original file is located at
 import abc
 import cloudpickle as cp
 import dataclasses as dc
+from filelock import FileLock
 import inspect
 import json
 import os
@@ -96,14 +97,13 @@ def load_result(checksum, cache_locations):
             result_file = (location / checksum / '_result.pklz')
             if result_file.exists():
                 return cp.loads(result_file.read_bytes())
-            else:
-                return None
+            return None
     return None
 
 
 def save_result(result_path: Path, result):
     with (result_path / '_result.pklz').open('wb') as fp:
-        return cp.dump(dc.asdict(result), fp)
+        cp.dump(dc.asdict(result), fp)
 
 
 def task_hash(task_obj):
@@ -243,6 +243,7 @@ class BaseTask:
                              ensure_list(cache_locations) +
                              ensure_list(self._cache_dir))
         if result is not None:
+            output = None
             if 'output' in result:
                 output = self.output_spec(**result['output'])
             return Result(output=output)
@@ -266,77 +267,89 @@ class BaseTask:
     def __call__(self, cache_locations=None, **kwargs):
         return self.run(cache_locations=cache_locations, **kwargs)
 
-    def run(self, cache_locations=None, environment=None, cache_dir=None, **kwargs):
+    def run(self, cache_locations=None, cache_dir=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
-        if cache_dir:
-            self.cache_dir = cache_dir
-        checksum = self.checksum
-
-        # Eagerly retrieve cached
-        result = load_result(checksum,
-                             ensure_list(cache_locations) +
-                             ensure_list(self._cache_dir))
-        if result is not None:
-            return result
-        # start recording provenance, but don't send till directory is created
-        # in case message directory is inside task output directory
-        if self.audit_check(AuditFlag.PROV):
-            aid = "uid:{}".format(gen_uuid())
-            start_message = {"@id": aid, "@type": "task", "startedAtTime": now()}
-        # Not cached
-        if self._cache_dir is None:
+        if cache_dir is not None:
+            self.cache_dir = Path(cache_dir)
+        if self.cache_dir is None:
             self.cache_dir = mkdtemp()
-        cwd = os.getcwd()
-        odir = self.output_dir
-        if not self.can_resume and odir.exists():
-            shutil.rmtree(odir)
-        odir.mkdir(parents=True, exist_ok=True if self.can_resume else False)
-        os.chdir(odir)
-        if self.audit_check(AuditFlag.PROV):
-            self.audit(start_message, AuditFlag.PROV)
-            # audit inputs
-        #check_runtime(self._runtime_requirements)
-        #isolate inputs if files
-        #cwd = os.getcwd()
-        if self.audit_check(AuditFlag.RESOURCE):
-            from ..utils.profiler import ResourceMonitor
-            resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
-        result = Result(output=None, runtime=None)
-        try:
-            if self.audit_check(AuditFlag.RESOURCE):
-                resource_monitor.start()
-                if self.audit_check(AuditFlag.PROV):
-                    mid = "uid:{}".format(gen_uuid())
-                    self.audit({"@id": mid, "@type": "monitor",
-                                "startedAtTime": now(),
-                                "wasStartedBy": aid}, AuditFlag.PROV)
-            self._run_task()
-            result.output = self._collect_outputs()
-        except Exception as e:
-            #record_error(self, e)
-            raise
-        finally:
-            if self.audit_check(AuditFlag.RESOURCE):
-                resource_monitor.stop()
-                result.runtime = gather_runtime_info(resource_monitor.fname)
-                if self.audit_check(AuditFlag.PROV):
-                    self.audit({"@id": mid, "endedAtTime": now(),
-                                "wasEndedBy": aid}, AuditFlag.PROV)
-                    # audit resources/runtime information
-                    eid = "uid:{}".format(gen_uuid())
-                    entity = dc.asdict(result.runtime)
-                    entity.update(**{"@id": eid, "@type": "runtime",
-                                     "prov:wasGeneratedBy": aid})
-                    self.audit(entity, AuditFlag.PROV)
-                    self.audit({"@type": "prov:Generation",
-                                "entity_generated": eid,
-                                "hadActivity": mid}, AuditFlag.PROV)
-            save_result(odir, result)
-            os.chdir(cwd)
+        checksum = self.checksum
+        lockfile = self.cache_dir / (checksum + '.lock')
+        """
+        Concurrent execution scenarios        
+
+        1. prior cache exists -> return result
+        2. other process running -> wait
+           a. finishes (with or without exception) -> return result
+           b. gets killed -> restart
+        3. no cache or other process -> start
+        4. two or more concurrent new processes get to start
+        """
+        # TODO add signal handler for processes killed after lock acquisition
+        with FileLock(lockfile):
+            # Let only one equivalent process run
+
+            # Eagerly retrieve cached
+            result = self.result(cache_locations=cache_locations)
+            if result is not None:
+                return result
+            odir = self.output_dir
+            if not self.can_resume and odir.exists():
+                shutil.rmtree(odir)
+            cwd = os.getcwd()
+            odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
+
+            # start recording provenance, but don't send till directory is created
+            # in case message directory is inside task output directory
             if self.audit_check(AuditFlag.PROV):
-                # audit outputs
-                self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)
-        return result
+                aid = "uid:{}".format(gen_uuid())
+                start_message = {"@id": aid, "@type": "task", "startedAtTime": now()}
+            os.chdir(odir)
+            if self.audit_check(AuditFlag.PROV):
+                self.audit(start_message, AuditFlag.PROV)
+                # audit inputs
+            #check_runtime(self._runtime_requirements)
+            #isolate inputs if files
+            #cwd = os.getcwd()
+            if self.audit_check(AuditFlag.RESOURCE):
+                from ..utils.profiler import ResourceMonitor
+                resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
+            result = Result(output=None, runtime=None)
+            try:
+                if self.audit_check(AuditFlag.RESOURCE):
+                    resource_monitor.start()
+                    if self.audit_check(AuditFlag.PROV):
+                        mid = "uid:{}".format(gen_uuid())
+                        self.audit({"@id": mid, "@type": "monitor",
+                                    "startedAtTime": now(),
+                                    "wasStartedBy": aid}, AuditFlag.PROV)
+                self._run_task()
+                result.output = self._collect_outputs()
+            except Exception as e:
+                #record_error(self, e)
+                raise
+            finally:
+                if self.audit_check(AuditFlag.RESOURCE):
+                    resource_monitor.stop()
+                    result.runtime = gather_runtime_info(resource_monitor.fname)
+                    if self.audit_check(AuditFlag.PROV):
+                        self.audit({"@id": mid, "endedAtTime": now(),
+                                    "wasEndedBy": aid}, AuditFlag.PROV)
+                        # audit resources/runtime information
+                        eid = "uid:{}".format(gen_uuid())
+                        entity = dc.asdict(result.runtime)
+                        entity.update(**{"@id": eid, "@type": "runtime",
+                                         "prov:wasGeneratedBy": aid})
+                        self.audit(entity, AuditFlag.PROV)
+                        self.audit({"@type": "prov:Generation",
+                                    "entity_generated": eid,
+                                    "hadActivity": mid}, AuditFlag.PROV)
+                save_result(odir, result)
+                os.chdir(cwd)
+                if self.audit_check(AuditFlag.PROV):
+                    # audit outputs
+                    self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)
+            return result
 
     # TODO: Decide if the following two functions should be separated
     @abc.abstractmethod
