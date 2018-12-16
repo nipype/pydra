@@ -286,9 +286,7 @@ class BaseTask:
             # Let only one equivalent process run
 
             # Eagerly retrieve cached
-            result = load_result(checksum,
-                                 ensure_list(cache_locations) +
-                                 ensure_list(self.cache_dir))
+            result = self.result(cache_locations=cache_locations)
             if result is not None:
                 return result
             odir = self.cache_dir / checksum
