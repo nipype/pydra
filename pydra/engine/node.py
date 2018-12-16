@@ -187,14 +187,16 @@ class NodeBase(object):
                     self._get_input_comb(from_node, from_socket, state_dict)
             else:
                 dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
-                # TODO: do I need this if, what if this is wf?
-                if is_node(from_node):
-                    out_from = self._reading_ci_output(
-                        node=from_node, dir_nm_el=dir_nm_el_from, out_nm=from_socket)
-                    if out_from:
-                        inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
-                    else:
-                        raise Exception("output from {} doesnt exist".format(from_node))
+                inputs_dict["{}.{}".format(self.name, to_socket)] =\
+                    from_node.results_dict[dir_nm_el_from]["output"][from_socket]
+                # should I read from files or just save results in node.results_dict
+                # if is_node(from_node):
+                #     out_from = self._reading_ci_output(
+                #         node=from_node, dir_nm_el=dir_nm_el_from, out_nm=from_socket)
+                #     if out_from:
+                #         inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
+                #     else:
+                #         raise Exception("output from {} doesnt exist".format(from_node))
         return state_dict, inputs_dict
 
 
@@ -285,11 +287,9 @@ class NodeBase(object):
         """used for current interfaces: checking if the output exists and returns the path if it does"""
         if not node:
             node = self
-        result_pklfile = os.path.join(os.getcwd(), node.workingdir, dir_nm_el,
-                                      node.interface.nn.name, "result_{}.pklz".format(
-                                          node.interface.nn.name))
+        result_pklfile = os.path.join(self.tasks_dict[dir_nm_el].output_dir, "_result.pklz")
         if os.path.exists(result_pklfile) and os.stat(result_pklfile).st_size > 0:
-            out = getattr(loadpkl(result_pklfile).outputs, out_nm)
+            out = getattr(self.tasks_dict[dir_nm_el].result().output, out_nm)
             if out:
                 return out
         return False
@@ -410,6 +410,12 @@ class Node(NodeBase):
         if not self.output_names:
             self.output_names = []
 
+        # TODO! should be in submitter?
+        # dictionary of copies of the task with specific inputs
+        self.tasks_dict = {}
+        # dictionary of results from tasks
+        self.results_dict = {}
+
 
     def run_interface_el(self, i, ind, ind_inner):
         """ running interface one element generated from node_state."""
@@ -425,10 +431,11 @@ class Node(NodeBase):
         print("Run interface el, dict={}".format(state_surv_dict))
         logger.debug("Run interface el, name={}, inputs_dict={}, state_dict={}".format(
             self.name, inputs_dict, state_surv_dict))
-        res = self.interface.run(
-            inputs=inputs_dict,
-            base_dir=os.path.join(os.getcwd(), self.workingdir),
-            dir_nm_el=dir_nm_el)
+        self.interface.cache_dir = os.path.join(os.getcwd(), self.workingdir)
+        interf_inputs = dict((k.split(".")[1], v) for k,v in inputs_dict.items())
+        res = self.interface.run(**interf_inputs)
+        self.tasks_dict[dir_nm_el] = copy(self.interface)
+        self.results_dict[dir_nm_el] = res
         return res
 
 

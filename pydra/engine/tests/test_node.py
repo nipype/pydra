@@ -11,6 +11,7 @@ from nipype import Function
 from ..node import Node, Workflow
 from ..auxiliary import CurrentInterface
 from ..submitter import Submitter
+from ..task import to_task
 
 import pytest
 import pdb
@@ -35,9 +36,9 @@ def change_dir(request):
 
 
 Plugins = ["serial"]
-Plugins = ["serial", "mp", "cf", "dask"]
+#Plugins = ["serial", "mp", "cf", "dask"]
 
-
+@to_task
 def fun_addtwo(a):
     import time
     time.sleep(1)
@@ -45,27 +46,21 @@ def fun_addtwo(a):
         time.sleep(2)
     return a + 2
 
-_interf_addtwo = Function(function=fun_addtwo, input_names=["a"], output_names=["out"])
-interf_addtwo = CurrentInterface(interface=_interf_addtwo, name="addtwo")
 
-
+@to_task
 def fun_addvar(b, c):
     return b + c
 
-_interf_addvar = Function(function=fun_addvar, input_names=["b", "c"], output_names=["out"])
-interf_addvar = CurrentInterface(interface=_interf_addvar, name="addvar")
 
-
+@to_task
 def fun_addvar4(a, b, c, d):
     return a + b + c + d
 
-_interf_addvar4 = Function(function=fun_addvar4, input_names=["a", "b", "c", "d"], output_names=["out"])
-interf_addvar4 = CurrentInterface(interface=_interf_addvar4, name="addvar4")
 
 
 def test_node_1():
     """Node with mandatory arguments only"""
-    nn = Node(name="NA", interface=interf_addtwo)
+    nn = Node(name="NA", interface=fun_addtwo())
     assert nn.splitter is None
     assert nn.inputs == {}
     assert nn.splitter is None
@@ -73,7 +68,7 @@ def test_node_1():
 
 def test_node_2():
     """Node with interface and inputs"""
-    nn = Node(name="NA", interface=interf_addtwo, inputs={"a": 3})
+    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": 3})
     assert nn.splitter is None
     # adding NA to the name of the variable
     assert nn.inputs == {"NA.a": 3}
@@ -82,7 +77,7 @@ def test_node_2():
 
 def test_node_3():
     """Node with interface, inputs and splitter"""
-    nn = Node(name="NA", interface=interf_addtwo, inputs={"a": [3, 5]}, splitter="a")
+    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]}, splitter="a")
     assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
 
@@ -94,7 +89,7 @@ def test_node_3():
 
 def test_node_4():
     """Node with interface and inputs. splitter set using split method"""
-    nn = Node(name="NA", interface=interf_addtwo, inputs={"a": [3, 5]})
+    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]})
     nn.split(splitter="a")
     assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
@@ -107,7 +102,7 @@ def test_node_4():
 
 def test_node_4a():
     """Node with interface, splitter and inputs set with the split method"""
-    nn = Node(name="NA", interface=interf_addtwo)
+    nn = Node(name="NA", interface=fun_addtwo())
     nn.split(splitter="a", inputs={"a": [3, 5]})
     assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
@@ -120,7 +115,7 @@ def test_node_4a():
 
 def test_node_4b():
     """Node with interface and inputs. trying to set splitter twice"""
-    nn = Node(name="NA", splitter="a", interface=interf_addtwo, inputs={"a": [3, 5]})
+    nn = Node(name="NA", splitter="a", interface=fun_addtwo(), inputs={"a": [3, 5]})
     with pytest.raises(Exception) as excinfo:
         nn.split(splitter="a")
     assert str(excinfo.value) == "splitter is already set"
@@ -130,7 +125,7 @@ def test_node_4b():
 @python35_only
 def test_node_5(plugin, change_dir):
     """Node with interface and inputs, no splitter, running interface"""
-    nn = Node(name="NA", inputs={"a": 3}, interface=interf_addtwo,
+    nn = Node(name="NA", inputs={"a": 3}, interface=fun_addtwo(),
         workingdir="test_nd5_{}".format(plugin), output_names=["out"])
 
     assert (nn.inputs["NA.a"] == np.array([3])).all()
@@ -147,7 +142,7 @@ def test_node_5(plugin, change_dir):
 @python35_only
 def test_node_6(plugin, change_dir):
     """Node with interface, inputs and the simplest splitter, running interface"""
-    nn = Node(name="NA", interface=interf_addtwo, workingdir="test_nd6_{}".format(plugin),
+    nn = Node(name="NA", interface=fun_addtwo(), workingdir="test_nd6_{}".format(plugin),
               output_names=["out"])
     nn.split(splitter="a", inputs={"a": [3, 5]})
 
@@ -169,7 +164,7 @@ def test_node_6(plugin, change_dir):
 @python35_only
 def test_node_7(plugin, change_dir):
     """Node with interface, inputs and scalar splitter, running interface"""
-    nn = Node(name="NA", interface=interf_addvar, workingdir="test_nd7_{}".format(plugin),
+    nn = Node(name="NA", interface=fun_addvar(), workingdir="test_nd7_{}".format(plugin),
               output_names=["out"])
     # scalar splitter
     nn.split(splitter=("b", "c"), inputs={"b": [3, 5], "c": [2, 1]})
@@ -193,7 +188,7 @@ def test_node_7(plugin, change_dir):
 @python35_only
 def test_node_8(plugin, change_dir):
     """Node with interface, inputs and vector splitter, running interface"""
-    nn = Node(name="NA", interface=interf_addvar, workingdir="test_nd8_{}".format(plugin),
+    nn = Node(name="NA", interface=fun_addvar(), workingdir="test_nd8_{}".format(plugin),
               output_names=["out"])
     # [] for outer product
     nn.split(splitter=["b", "c"], inputs={"b": [3, 5], "c": [2, 1]})
@@ -218,7 +213,7 @@ def test_node_8(plugin, change_dir):
 @python35_only
 def test_node_9(plugin, change_dir):
     """scalar and outer splitter, one combiner (from scalar part)"""
-    nn = Node(name="NA", interface=interf_addvar4, workingdir="test_nd16_{}".format(plugin),
+    nn = Node(name="NA", interface=fun_addvar4(), workingdir="test_nd16_{}".format(plugin),
               output_names=["out"], splitter=(["a", "b"], ["c", "d"]),
               inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1,2]})
 
@@ -237,7 +232,7 @@ def test_workflow_0(plugin="serial"):
     """workflow (without run) with one node with a splitter"""
     wf = Workflow(name="wf0", workingdir="test_wf0_{}".format(plugin))
     # defining a node with splitter and inputs first
-    na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["a"])
+    na = Node(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["a"])
     na.split(splitter="a", inputs={"a": [3, 5]})
     # one of the way of adding nodes to the workflow
     wf.add_nodes([na])
@@ -252,7 +247,7 @@ def test_workflow_1(plugin, change_dir):
     """workflow with one node with a splitter"""
     wf = Workflow(name="wf1", workingdir="test_wf1_{}".format(plugin),
                   wf_output_names=[("NA", "out", "NA_out")])
-    na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
+    na = Node(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
     na.split(splitter="a", inputs={"a": [3, 5]})
     wf.add_nodes([na])
 
@@ -277,11 +272,11 @@ def test_workflow_2(plugin, change_dir):
     """workflow with two nodes, second node without splitter"""
     wf = Workflow(name="wf2", workingdir="test_wf2_{}".format(plugin),
                   wf_output_names=[("NB", "out")])
-    na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
+    na = Node(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
     na.split(splitter="a", inputs={"a": [3, 5]})
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
-    nb = Node(name="NB", interface=interf_addvar, inputs={"c": 10}, workingdir="nb",
+    nb = Node(name="NB", interface=fun_addvar(), inputs={"c": 10}, workingdir="nb",
               output_names=["out"])
 
     # adding 2 nodes and create a connection (as it is now)
@@ -318,10 +313,10 @@ def test_workflow_2a(plugin, change_dir):
     """workflow with two nodes, second node with a scalar splitter"""
     wf = Workflow(name="wf2", workingdir="test_wf2a_{}".format(plugin),
                   wf_output_names=[("NB", "out")])
-    na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
+    na = Node(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
     na.split(splitter="a", inputs={"a": [3, 5]})
 
-    nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
+    nb = Node(name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"])
     # explicit scalar splitter between "a" from NA and b
     nb.split(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
 
@@ -358,9 +353,9 @@ def test_workflow_2b(plugin):
     """workflow with two nodes, second node with a vector splitter"""
     wf = Workflow(name="wf2", workingdir="test_wf2b_{}".format(plugin),
                   wf_output_names=[("NB", "out")])
-    na = Node(name="NA", interface=interf_addtwo, workingdir="na", output_names=["out"])
+    na = Node(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
     na.split(splitter="a", inputs={"a": [3, 5]})
-    nb = Node(name="NB", interface=interf_addvar, workingdir="nb", output_names=["out"])
+    nb = Node(name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"])
     # outer splitter
     nb.split(splitter=["NA.a", "c"], inputs={"c": [2, 1]})
 
