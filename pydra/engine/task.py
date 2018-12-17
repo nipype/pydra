@@ -260,6 +260,10 @@ class BaseTask:
     def cache_dir(self, location):
         self._cache_dir = Path(location)
 
+    @property
+    def output_dir(self):
+        return self._cache_dir / self.checksum
+
     def audit_check(self, flag):
         return self.audit_flags & flag
 
@@ -292,7 +296,7 @@ class BaseTask:
             result = self.result(cache_locations=cache_locations)
             if result is not None:
                 return result
-            odir = self.cache_dir / checksum
+            odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
             cwd = os.getcwd()
