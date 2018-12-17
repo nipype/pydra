@@ -188,7 +188,7 @@ class NodeBase(object):
             else:
                 dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
                 inputs_dict["{}.{}".format(self.name, to_socket)] =\
-                    from_node.results_dict[dir_nm_el_from]["output"][from_socket]
+                    getattr(from_node.results_dict[dir_nm_el_from].output, from_socket)
                 # should I read from files or just save results in node.results_dict
                 # if is_node(from_node):
                 #     out_from = self._reading_ci_output(
@@ -431,6 +431,7 @@ class Node(NodeBase):
         print("Run interface el, dict={}".format(state_surv_dict))
         logger.debug("Run interface el, name={}, inputs_dict={}, state_dict={}".format(
             self.name, inputs_dict, state_surv_dict))
+        os.makedirs(os.path.join(os.getcwd(), self.workingdir), exist_ok=True)
         self.interface.cache_dir = os.path.join(os.getcwd(), self.workingdir)
         interf_inputs = dict((k.split(".")[1], v) for k,v in inputs_dict.items())
         res = self.interface.run(**interf_inputs)
