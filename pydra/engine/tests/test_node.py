@@ -9,7 +9,6 @@ from nipype.interfaces import fsl
 from nipype import Function
 
 from ..node import Node, Workflow
-from ..auxiliary import CurrentInterface
 from ..submitter import Submitter
 from ..task import to_task
 
@@ -388,7 +387,7 @@ def test_workflow_2b(plugin):
 
 
 # using add method to add nodes
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_3(plugin, change_dir):
@@ -410,7 +409,7 @@ def test_workflow_3(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_3a(plugin, change_dir):
@@ -431,14 +430,14 @@ def test_workflow_3a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_3b(plugin, change_dir):
     """using add (function) method"""
     wf = Workflow(name="wf3b", workingdir="test_wf3b_{}".format(plugin))
     # using the add method with a function
-    wf.add(fun_addtwo(), input_names=["a"], workingdir="na", splitter="a",
+    wf.add(fun_addtwo(), workingdir="na", splitter="a",
            inputs={"a": [3, 5]}, name="NA", output_names=["out"])
 
     assert wf.nodes[0].splitter == "NA.a"
@@ -452,7 +451,7 @@ def test_workflow_3b(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4(plugin, change_dir):
@@ -485,7 +484,7 @@ def test_workflow_4(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4a(plugin, change_dir):
@@ -516,7 +515,7 @@ def test_workflow_4a(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4b(plugin, change_dir):
@@ -546,7 +545,7 @@ def test_workflow_4b(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4c(plugin, change_dir):
@@ -577,7 +576,7 @@ def test_workflow_4c(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_4d(plugin, change_dir):
@@ -612,7 +611,7 @@ def test_workflow_4d(plugin, change_dir):
 
 # using split after add method
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_5(plugin, change_dir):
@@ -633,7 +632,7 @@ def test_workflow_5(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_5a(plugin, change_dir):
@@ -652,7 +651,7 @@ def test_workflow_5a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_6(plugin, change_dir):
@@ -682,7 +681,7 @@ def test_workflow_6(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_6a(plugin, change_dir):
@@ -713,7 +712,7 @@ def test_workflow_6a(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_6b(plugin, change_dir):
@@ -744,7 +743,7 @@ def test_workflow_6b(plugin, change_dir):
 
 # tests for a workflow that have its own input
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_7(plugin, change_dir):
@@ -767,7 +766,7 @@ def test_workflow_7(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_7a(plugin, change_dir):
@@ -787,7 +786,7 @@ def test_workflow_7a(plugin, change_dir):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_8(plugin, change_dir):
@@ -819,7 +818,7 @@ def test_workflow_8(plugin, change_dir):
 
 # testing if _NA in splitter works, using interfaces in add
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_9(plugin, change_dir):
@@ -845,7 +844,7 @@ def test_workflow_9(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_10(plugin, change_dir):
@@ -872,7 +871,7 @@ def test_workflow_10(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_10a(plugin, change_dir):
@@ -906,7 +905,6 @@ def test_workflow_10a(plugin, change_dir):
 
 
 # TODO: this test started sometimes failing for mp and cf
-@pytest.mark.skip("WIP")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_11(plugin, change_dir):
@@ -941,7 +939,7 @@ def test_workflow_11(plugin, change_dir):
 
 # checking workflow.result
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_12(plugin, change_dir):
@@ -977,7 +975,7 @@ def test_workflow_12(plugin, change_dir):
         assert wf.result["out"][i][0] == res[0]
         assert wf.result["out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_12a(plugin, change_dir):
@@ -1001,7 +999,7 @@ def test_workflow_12a(plugin, change_dir):
 
 
 # tests for a workflow that have its own input and splitter
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_13(plugin, change_dir):
@@ -1053,7 +1051,7 @@ def test_workflow_13a(plugin, change_dir):
             assert list(wf.result["NA_out"][i][1].values())[j][0] == res[1][j][0]
             assert list(wf.result["NA_out"][i][1].values())[j][1] == res[1][j][1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_13b(plugin, change_dir):
@@ -1076,7 +1074,7 @@ def test_workflow_13b(plugin, change_dir):
         assert wf.result["NA_out"][i][0] == res[0]
         assert wf.result["NA_out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_13c(plugin, change_dir):
@@ -1098,7 +1096,7 @@ def test_workflow_13c(plugin, change_dir):
         assert wf.result["NA_out"][i][0] == res[0]
         assert wf.result["NA_out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_14(plugin, change_dir):
@@ -1122,7 +1120,7 @@ def test_workflow_14(plugin, change_dir):
         assert wf.result["NA_out"][i][0] == res[0]
         assert wf.result["NA_out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_15(plugin, change_dir):
@@ -1150,7 +1148,7 @@ def test_workflow_15(plugin, change_dir):
 
 
 # workflow as a node
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_16(plugin, change_dir):
@@ -1171,7 +1169,7 @@ def test_workflow_16(plugin, change_dir):
     assert wf.is_complete
     assert wf.result["wfa_out"] == ({}, 5)
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_16a(plugin, change_dir):
@@ -1194,7 +1192,7 @@ def test_workflow_16a(plugin, change_dir):
     assert wf.is_complete
     assert wf.result["wfa_out"] == ({}, 5)
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_16b(plugin, change_dir):
@@ -1216,7 +1214,7 @@ def test_workflow_16b(plugin, change_dir):
     assert wf.is_complete
     assert wf.result["wfa_out"] == ({}, 5)
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_17(plugin, change_dir):
@@ -1240,7 +1238,7 @@ def test_workflow_17(plugin, change_dir):
         assert wf.result["wfa_out"][i][0] == res[0]
         assert wf.result["wfa_out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_18(plugin, change_dir):
@@ -1275,7 +1273,7 @@ def test_workflow_18(plugin, change_dir):
     # the naming should have names with workflows??
     assert wf.result["NB_out"] == ({}, 15)
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_19(plugin, change_dir):
@@ -1322,7 +1320,7 @@ def test_workflow_19(plugin, change_dir):
         assert wf.result["NB_out"][i][0] == res[0]
         assert wf.result["NB_out"][i][1] == res[1]
 
-@pytest.mark.skip("WIP")
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_19a(plugin, change_dir):
