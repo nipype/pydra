@@ -244,9 +244,12 @@ class BaseTask:
                              ensure_list(self._cache_dir))
         if result is not None:
             output = None
-            if 'output' in result:
+            runtime = None
+            if 'output' in result and result['output']:
                 output = self.output_spec(**result['output'])
-            return Result(output=output)
+            if 'runtime' in result and result['runtime']:
+                runtime = dc.replace(Runtime(), **result['runtime'])
+            return Result(output=output, runtime=runtime)
         return None
 
     @property
@@ -341,6 +344,8 @@ class BaseTask:
                                     "entity_generated": eid,
                                     "hadActivity": mid}, AuditFlag.PROV)
                 save_result(odir, result)
+                with open(odir / '_node.pklz', 'wb') as fp:
+                    cp.dump(self, fp)
                 os.chdir(cwd)
                 if self.audit_check(AuditFlag.PROV):
                     # audit outputs
