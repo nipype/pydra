@@ -7,11 +7,12 @@ import numpy as np
 from collections import OrderedDict
 from copy import deepcopy, copy
 
-from nipype.utils.filemanip import loadpkl
-from nipype import logging, Function
+from nipype import logging
 
 from . import state
 from . import auxiliary as aux
+from .task import FunctionTask
+
 logger = logging.getLogger('nipype.workflow')
 
 
@@ -187,14 +188,8 @@ class NodeBase(object):
                     self._get_input_comb(from_node, from_socket, state_dict)
             else:
                 dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
-                # TODO: do I need this if, what if this is wf?
-                if is_node(from_node):
-                    out_from = self._reading_ci_output(
-                        node=from_node, dir_nm_el=dir_nm_el_from, out_nm=from_socket)
-                    if out_from:
-                        inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
-                    else:
-                        raise Exception("output from {} doesnt exist".format(from_node))
+                inputs_dict["{}.{}".format(self.name, to_socket)] =\
+                    getattr(from_node.results_dict[dir_nm_el_from].output, from_socket)
         return state_dict, inputs_dict
 
 
@@ -206,8 +201,7 @@ class NodeBase(object):
             dir_nm_el_from = "_".join([
                 "{}:{}".format(i, j) for i, j in list(state.items())])
             if is_node(from_node):
-                out_from = self._reading_ci_output(
-                    node=from_node, dir_nm_el=dir_nm_el_from, out_nm=from_socket)
+                out_from = getattr(from_node.results_dict[dir_nm_el_from].output, from_socket)
                 if out_from:
                     inputs_all.append(out_from)
                 else:
@@ -280,19 +274,17 @@ class NodeBase(object):
         # in py3.7 we can skip OrderedDict
         return OrderedDict(sorted(state_dict_el.items(), key=lambda t: t[0]))
 
-
-    def _reading_ci_output(self, dir_nm_el, out_nm, node=None):
-        """used for current interfaces: checking if the output exists and returns the path if it does"""
-        if not node:
-            node = self
-        result_pklfile = os.path.join(os.getcwd(), node.workingdir, dir_nm_el,
-                                      node.interface.nn.name, "result_{}.pklz".format(
-                                          node.interface.nn.name))
-        if os.path.exists(result_pklfile) and os.stat(result_pklfile).st_size > 0:
-            out = getattr(loadpkl(result_pklfile).outputs, out_nm)
-            if out:
-                return out
-        return False
+    # TODO!: this might be not needed anymore when using FunctionTask
+    # def _reading_ci_output(self, dir_nm_el, out_nm, node=None):
+    #     """used for current interfaces: checking if the output exists and returns the path if it does"""
+    #     if not node:
+    #         node = self
+    #     result_pklfile = os.path.join(self.tasks_dict[dir_nm_el].output_dir, "_result.pklz")
+    #     if os.path.exists(result_pklfile) and os.stat(result_pklfile).st_size > 0:
+    #         out = getattr(self.tasks_dict[dir_nm_el].result().output, out_nm)
+    #         if out:
+    #             return out
+    #     return False
 
 
     def _directory_name_state_surv(self, state_dict):
@@ -410,6 +402,12 @@ class Node(NodeBase):
         if not self.output_names:
             self.output_names = []
 
+        # TODO! should be in submitter?
+        # dictionary of copies of the task with specific inputs
+        self.tasks_dict = {}
+        # dictionary of results from tasks
+        self.results_dict = {}
+
 
     def run_interface_el(self, i, ind, ind_inner):
         """ running interface one element generated from node_state."""
@@ -425,10 +423,12 @@ class Node(NodeBase):
         print("Run interface el, dict={}".format(state_surv_dict))
         logger.debug("Run interface el, name={}, inputs_dict={}, state_dict={}".format(
             self.name, inputs_dict, state_surv_dict))
-        res = self.interface.run(
-            inputs=inputs_dict,
-            base_dir=os.path.join(os.getcwd(), self.workingdir),
-            dir_nm_el=dir_nm_el)
+        os.makedirs(os.path.join(os.getcwd(), self.workingdir), exist_ok=True)
+        self.interface.cache_dir = os.path.join(os.getcwd(), self.workingdir)
+        interf_inputs = dict((k.split(".")[1], v) for k,v in inputs_dict.items())
+        res = self.interface.run(**interf_inputs)
+        self.tasks_dict[dir_nm_el] = copy(self.interface)
+        self.results_dict[dir_nm_el] = res
         return res
 
 
@@ -451,7 +451,7 @@ class Node(NodeBase):
                         for inp in self.state._inner_splitter:
                             state_dict_copy_inner[inp] = inputs_dict[inp][ind_inner]
                         dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict_copy_inner)
-                        output_el = self._reading_ci_output(dir_nm_el, out_nm=key_out)
+                        output_el = getattr(self.results_dict[dir_nm_el].output, key_out)
                         if not self.combiner:
                             self._output[key_out][dir_nm_el] = output_el
                         else:
@@ -459,14 +459,14 @@ class Node(NodeBase):
                 else:
                     dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
                     if self.splitter:
-                        output_el = self._reading_ci_output(dir_nm_el, out_nm=key_out)
+                        output_el =  getattr(self.results_dict[dir_nm_el].output, key_out)
                         if not self.combiner: # only splitter
                             self._output[key_out][dir_nm_el] = output_el
                         else:
                             self._combined_output(key_out, state_dict, output_el)
                     else:
                         self._output[key_out] = \
-                            (state_surv_dict, self._reading_ci_output(dir_nm_el, out_nm=key_out))
+                            (state_surv_dict, getattr(self.results_dict[dir_nm_el].output, key_out))
         return self._output
 
 
@@ -486,12 +486,12 @@ class Node(NodeBase):
                         state_dict_copy_inner[inp] = inputs_dict[inp][ind_inner]
                     dir_nm_el, _ = self._directory_name_state_surv(state_dict_copy_inner)
                     for key_out in self.output_names:
-                        if not self._reading_ci_output(dir_nm_el, key_out):
+                        if not getattr(self.results_dict[dir_nm_el].output, key_out):
                             return False
             else:
                 dir_nm_el, _ = self._directory_name_state_surv(state_dict)
                 for key_out in self.output_names:
-                    if not self._reading_ci_output(dir_nm_el, key_out):
+                    if not getattr(self.results_dict[dir_nm_el].output, key_out):
                         return False
         self._is_complete = True
         return True
@@ -664,41 +664,18 @@ class Workflow(NodeBase):
 
 
     # TODO: workingir shouldn't have None
-    def add(self, runnable, name=None, workingdir=None, inputs=None, input_names=None,
+    def add(self, runnable, name=None, workingdir=None, inputs=None,
             output_names=None, splitter=None, combiner=None, write_state=True, **kwargs):
-        if is_function(runnable):
+        # TODO: should I also accept normal function?
+        if is_function_task(runnable):
             if not output_names:
                 output_names = ["out"]
-            if input_names is None:
-                raise Exception("you need to specify input_names")
-            if not name:
-                raise Exception("you have to specify name for the node")
-            nipype1_interf = Function(function=runnable, input_names=input_names,
-                                      output_names=output_names)
-            interface = aux.CurrentInterface(interface=nipype1_interf, name="addtwo")
-            if not workingdir:
-                workingdir = name
-            node = Node(interface=interface, workingdir=workingdir, name=name,
-                        inputs=inputs, splitter=splitter, other_splitters=self._node_splitters,
-                        combiner=combiner, output_names=output_names,
-                        write_state=write_state)
-        elif is_current_interface(runnable):
             if not name:
                 raise Exception("you have to specify name for the node")
             if not workingdir:
                 workingdir = name
             node = Node(interface=runnable, workingdir=workingdir, name=name,
                         inputs=inputs, splitter=splitter, other_splitters=self._node_splitters,
-                        combiner=combiner, output_names=output_names,
-                        write_state=write_state)
-        elif is_nipype_interface(runnable):
-            ci = aux.CurrentInterface(interface=runnable, name=name)
-            if not name:
-                raise Exception("you have to specify name for the node")
-            if not workingdir:
-                workingdir = name
-            node = Node(interface=ci, workingdir=workingdir, name=name, inputs=inputs,
-                        splitter=splitter, other_splitters=self._node_splitters,
                         combiner=combiner, output_names=output_names,
                         write_state=write_state)
         elif is_node(runnable):
@@ -801,14 +778,8 @@ class Workflow(NodeBase):
 def is_function(obj):
     return hasattr(obj, '__call__')
 
-
-def is_current_interface(obj):
-    return type(obj) is aux.CurrentInterface
-
-
-def is_nipype_interface(obj):
-    return hasattr(obj, "_run_interface")
-
+def is_function_task(obj):
+    return type(obj) is FunctionTask
 
 def is_node(obj):
     return type(obj) is Node

@@ -3,13 +3,15 @@ import numpy as np
 
 from ..state import State
 from ..node import Node, Workflow
-from ..auxiliary import CurrentInterface
+from ..task import to_task
 
 from nipype import Function
 
 import pytest, pdb
 python35_only = pytest.mark.skipif(sys.version_info < (3, 5), reason="requires Python>3.4")
 
+
+@to_task
 def fun_addtwo(a):
     import time
     time.sleep(1)
@@ -17,26 +19,20 @@ def fun_addtwo(a):
         time.sleep(2)
     return a + 2
 
-_interf_addtwo = Function(function=fun_addtwo, input_names=["a"], output_names=["out"])
-interf_addtwo = CurrentInterface(interface=_interf_addtwo, name="addtwo")
 
-
+@to_task
 def fun_addvar(b, c):
     return b + c
 
-_interf_addvar = Function(function=fun_addvar, input_names=["b", "c"], output_names=["out"])
-interf_addvar = CurrentInterface(interface=_interf_addvar, name="addvar")
 
-
+@to_task
 def fun_addvar3(a, b, c):
     return a + b + c
 
-_interf_addvar3 = Function(function=fun_addvar3, input_names=["a", "b", "c"], output_names=["out"])
-interf_addvar3 = CurrentInterface(interface=_interf_addvar3, name="addvar3")
 
 
 def test_state_1():
-    nd = Node(name="NA", interface=interf_addtwo, splitter="a", combiner="a",
+    nd = Node(name="NA", interface=fun_addtwo(), splitter="a", combiner="a",
               inputs={"a": np.array([3, 5])})
     st = State(node=nd)
 
@@ -88,7 +84,7 @@ def test_state_1a():
 
 
 def test_state_2():
-    nd = Node(name="NA", interface=interf_addvar, splitter=("a", "b"), combiner="a",
+    nd = Node(name="NA", interface=fun_addvar(), splitter=("a", "b"), combiner="a",
               inputs={"a": np.array([3, 5]), "b": np.array([3, 5])})
     st = State(node=nd)
 
@@ -140,7 +136,7 @@ def test_state_2a():
 
 
 def test_state_3():
-    nd = Node(name="NA", interface=interf_addvar, splitter=["a", "b"], combiner="a",
+    nd = Node(name="NA", interface=fun_addvar(), splitter=["a", "b"], combiner="a",
               inputs={"a": np.array([3, 5]), "b": np.array([3, 5])})
     st = State(node=nd)
 
@@ -166,7 +162,7 @@ def test_state_3():
 
 
 def test_state_4():
-    nd = Node(name="NA", interface=_interf_addvar3, splitter=["a", ("b", "c")], combiner="b",
+    nd = Node(name="NA", interface=fun_addvar3(), splitter=["a", ("b", "c")], combiner="b",
               inputs={"a": np.array([3, 5]), "b": np.array([3, 5]), "c": np.array([3, 5])})
     st = State(node=nd)
 
@@ -192,7 +188,7 @@ def test_state_4():
 
 
 def test_state_5():
-    nd = Node(name="NA", interface=_interf_addvar3, splitter=("a", ["b", "c"]), combiner="b",
+    nd = Node(name="NA", interface=fun_addvar3(), splitter=("a", ["b", "c"]), combiner="b",
               inputs={"a": np.array([[3, 5], [3, 5]]), "b": np.array([3, 5]),
                       "c": np.array([3, 5])})
     st = State(node=nd)
