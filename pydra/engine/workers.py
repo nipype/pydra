@@ -31,7 +31,9 @@ class MpWorker(Worker):
         logger.debug('Initialize MpWorker')
 
     def run_el(self, interface, inp):
-        self.pool.apply_async(interface, (inp[0], inp[1], inp[2]))
+        x = self.pool.apply_async(interface, (inp[0], inp[1], inp[2]))
+        # returning dir_nm_el and Result object for the specific element
+        return x.get()
 
     def close(self):
         # added this method since I was having somtetimes problem with reading results from (existing) files
@@ -45,7 +47,9 @@ class SerialWorker(Worker):
         pass
 
     def run_el(self, interface, inp):
-        interface(inp[0], inp[1], inp[2])
+        res = interface(inp[0], inp[1], inp[2])
+        # returning dir_nm_el and Result object for the specific element
+        return res
 
     def close(self):
         pass
@@ -62,6 +66,8 @@ class ConcurrentFuturesWorker(Worker):
         #print("X, DONE", x.done())
         x.add_done_callback(lambda x: print("DONE ", interface, inp, x.done))
         #print("DIR", x.result())
+        # returning dir_nm_el and Result object for the specific element
+        return x.result()
 
     def close(self):
         self.pool.shutdown()
@@ -83,6 +89,8 @@ class DaskWorker(Worker):
         # this important, otherwise dask will not finish the job
         x.add_done_callback(lambda x: print("DONE ", interface, inp))
         print("res", x.result())
+        # returning dir_nm_el and Result object for the specific element
+        return x.result()
 
     def close(self):
         #self.cluster.close()

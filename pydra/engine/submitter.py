@@ -57,7 +57,9 @@ class Submitter(object):
     def _submit_node_el(self, node, i, ind, ind_inner):
         """submitting node's interface for one element of states"""
         logger.debug("SUBMIT WORKER, node: {}, ind: {}, ind_inner: {}".format(node, ind, ind_inner))
-        self.worker.run_el(node.run_interface_el, (i, ind, ind_inner))
+        res = self.worker.run_el(node.run_interface_el, (i, ind, ind_inner))
+        # saving results in a node dictionary
+        node.results_dict[res[0]] = res[1]
 
 
     def run_workflow(self, workflow=None, ready=True):

@@ -404,6 +404,7 @@ class Node(NodeBase):
 
         # TODO! should be in submitter?
         # dictionary of copies of the task with specific inputs
+        # dj: i might not need tasks_dict
         self.tasks_dict = {}
         # dictionary of results from tasks
         self.results_dict = {}
@@ -427,9 +428,7 @@ class Node(NodeBase):
         self.interface.cache_dir = os.path.join(os.getcwd(), self.workingdir)
         interf_inputs = dict((k.split(".")[1], v) for k,v in inputs_dict.items())
         res = self.interface.run(**interf_inputs)
-        self.tasks_dict[dir_nm_el] = copy(self.interface)
-        self.results_dict[dir_nm_el] = res
-        return res
+        return dir_nm_el, res
 
 
     def get_output(self):
