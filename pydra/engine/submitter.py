@@ -100,9 +100,10 @@ class Submitter(object):
             time.sleep(3)
 
         # this part simply waiting for all "last nodes" to finish
-        while self._output_check():
-            logger.debug("Submitter, in while, to_finish: {}".format(self._to_finish))
-            time.sleep(3)
+        # TODO!! this is temporary
+        # while self._output_check():
+        #     logger.debug("Submitter, in while, to_finish: {}".format(self._to_finish))
+        #     time.sleep(3)
 
         # calling only for the main wf (other wf will be called inside the function)
         if workflow is self.workflow:
@@ -157,17 +158,32 @@ class Submitter(object):
         _to_remove = []
         for (to_node, i, ind) in self.node_line:
             if hasattr(to_node, 'interface'):
-                print("_NODES_CHECK INPUT", to_node.name, to_node.checking_input_el(ind))
-                if to_node.checking_input_el(ind):
-                    if to_node.state._inner_splitter:
-                        inner_size = len(to_node.get_input_el(ind)[1][to_node.state._inner_splitter[0]])
+                #if to_node.name == "NC": pdb.set_trace()
+                if to_node.state._inner_splitter:
+                    print("_NODES_CHECK INPUT (ind_inner=0)", to_node.name,
+                          to_node.checking_input_el(ind, ind_inner=0))
+                    # for now I'm assuming that if more than one inner inputs/splitters,
+                    # all have the same shape and can only be connected via scalar splitter
+                    # change it? TODO
+                    #if to_node.name == "NC": pdb.set_trace()
+                    for spl_nm in to_node.state._inner_splitter:
+                        if spl_nm not in self.workflow.all_inner_splitters_size.keys():
+                            self.workflow.all_inner_splitters_size[spl_nm] = {}
+                        if ind in self.workflow.all_inner_splitters_size[spl_nm].keys():
+                            inner_size = self.workflow.all_inner_splitters_size[spl_nm][ind]
+                        else:
+                            inner_size = len(to_node.get_input_el(ind)[1][spl_nm])
+                            self.workflow.all_inner_splitters_size[spl_nm][ind] = inner_size
+                    #if to_node.name == "NC": pdb.set_trace()
+                    if all([to_node.checking_input_el(ind, ind_inner=i_inner) for i_inner in range(inner_size)]):
                         for i_inner in range(inner_size):
                             self._submit_node_el(to_node, i, ind, ind_inner=i_inner)
-                    else:
-                        self._submit_node_el(to_node, i, ind, ind_inner=None)
-                    _to_remove.append((to_node, i, ind))
+                        _to_remove.append((to_node, i, ind))
                 else:
-                    pass
+                    print("_NODES_CHECK INPUT", to_node.name, to_node.checking_input_el(ind))
+                    if to_node.checking_input_el(ind, ind_inner=None):
+                        self._submit_node_el(to_node, i, ind, ind_inner=None)
+                        _to_remove.append((to_node, i, ind))
             else:  #wf
                 if to_node.checking_input_el(ind):
                     self._run_workflow_el(workflow=to_node, i=i, ind=ind, collect_inp=True)
