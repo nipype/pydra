@@ -54,6 +54,29 @@ class Result:
     output: ty.Optional[ty.Any] = None
     runtime: ty.Optional[Runtime] = None
 
+    def __getstate__(self):
+        # Copy the object's state from self.__dict__ which contains
+        # all our instance attributes. Always use the dict.copy()
+        # method to avoid modifying the original state.
+        state = self.__dict__.copy()
+        print(state)
+        # Remove the unpicklable entries.
+        fields = tuple(state['output'].__annotations__.items())
+        state['output_spec'] = (state['output'].__class__.__name__,
+                                fields)
+        state['output'] = dc.asdict(state['output'])
+        return state
+
+    def __setstate__(self, state):
+        # Restore instance attributes (i.e., filename and lineno).
+        spec = list(state['output_spec'])
+        del state['output_spec']
+        # Restore the previously opened file's state. To do so, we need to
+        # reopen it and read from it until the line count is restored.
+        klass = dc.make_dataclass(spec[0], list(spec[1]))
+        state['output'] = klass(**state['output'])
+        self.__dict__.update(state)
+
 
 @dc.dataclass
 class RuntimeSpec:

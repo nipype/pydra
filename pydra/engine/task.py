@@ -106,7 +106,7 @@ def load_result(checksum, cache_locations):
 
 def save_result(result_path: Path, result):
     with (result_path / '_result.pklz').open('wb') as fp:
-        cp.dump(dc.asdict(result), fp)
+        cp.dump(result, fp)
 
 
 def task_hash(task_obj):
@@ -253,19 +253,9 @@ class BaseTask:
         pass
 
     def result(self, cache_locations=None):
-        result = load_result(self.checksum,
+        return load_result(self.checksum,
                              ensure_list(cache_locations) +
                              ensure_list(self._cache_dir))
-        if result is not None:
-            output = None
-            runtime = None
-            if 'output' in result and result['output']:
-                klass = make_klass(self.output_spec)
-                output = klass(syncdict=None, **result['output'])
-            if 'runtime' in result and result['runtime']:
-                runtime = Runtime(**result['runtime'])
-            return Result(output=output, runtime=runtime)
-        return None
 
     @property
     def cache_dir(self):
