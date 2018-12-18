@@ -44,6 +44,7 @@ import inspect
 import json
 import os
 from pathlib import Path
+import pickle as pk
 import shutil
 from tempfile import mkdtemp
 import typing as ty
@@ -179,8 +180,8 @@ class BaseTask:
             raise Exception(
                 'No input_spec in class: %s' % self.__class__.__name__)
         klass = make_klass(self.input_spec)
-        self._in_dict = {f.name: (None if f.default is dc.MISSING
-                                  else f.default) for f in dc.fields(klass)}
+        self.inputs = klass(**{f.name: (None if f.default is dc.MISSING
+                                  else f.default) for f in dc.fields(klass)})
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
@@ -195,7 +196,20 @@ class BaseTask:
                 if self._input_sets is None or inputs not in self._input_sets:
                     raise ValueError("Unknown input set {!r}".format(inputs))
                 inputs = self._input_sets[inputs]
-            self._in_dict.update(**inputs)
+            self.inputs = dc.replace(self.inputs, **inputs)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state['input_spec'] = pk.dumps(state['input_spec'])
+        state['output_spec'] = pk.dumps(state['output_spec'])
+        state['inputs'] = dc.asdict(state['inputs'])
+        return state
+
+    def __setstate__(self, state):
+        state['input_spec'] = pk.loads(state['input_spec'])
+        state['output_spec'] = pk.loads(state['output_spec'])
+        state['inputs'] = make_klass(state['input_spec'])(**state['inputs'])
+        self.__dict__.update(state)
 
     def audit(self, message, flags=None):
         if develop:
@@ -225,11 +239,6 @@ class BaseTask:
         help_obj = print_help(self)
         if returnhelp:
             return help_obj
-
-    @property
-    def inputs(self):
-        klass = make_klass(self.input_spec)
-        return klass(syncdict=self._in_dict, **self._in_dict)
 
     @property
     def output_names(self):
@@ -276,9 +285,7 @@ class BaseTask:
         return self.run(cache_locations=cache_locations, **kwargs)
 
     def run(self, cache_locations=None, cache_dir=None, **kwargs):
-        if set(kwargs) - set(self._in_dict):
-            raise ValueError('unacceptable keywords passed')
-        self._in_dict.update(**kwargs)
+        self.inputs = dc.replace(self.inputs, **kwargs)
         if cache_dir is not None:
             self.cache_dir = Path(cache_dir)
         if self.cache_dir is None:
@@ -336,6 +343,7 @@ class BaseTask:
                 self._run_task()
                 result.output = self._collect_outputs()
             except Exception as e:
+                print(e)
                 #record_error(self, e)
                 raise
             finally:
@@ -371,11 +379,9 @@ class BaseTask:
     def _collect_outputs(self):
         run_output = ensure_list(self._list_outputs())
         output_klass = make_klass(self.output_spec)
-        output = output_klass(syncdict=None,
-                              **{f.name: None for f in
+        output = output_klass(**{f.name: None for f in
                                  dc.fields(output_klass)})
-        return dc.replace(output, syncdict=None, **dict(zip(self.output_names,
-                                                            run_output)))
+        return dc.replace(output, **dict(zip(self.output_names, run_output)))
 
 
 class FunctionTask(BaseTask):
@@ -413,7 +419,7 @@ class FunctionTask(BaseTask):
         inputs = dc.asdict(self.inputs)
         del inputs['_func']
         self.output_ = None
-        output = cp.loads(self._in_dict['_func'])(**inputs)
+        output = cp.loads(self.inputs._func)(**inputs)
         if not isinstance(output, tuple):
             output = (output,)
         self.output_ = list(output)
@@ -533,7 +539,7 @@ class ShellCommandTask(BaseTask):
 
     @command_args.setter
     def command_args(self, args: ty.Dict):
-        self._in_dict.update(**args)
+        self.inputs = dc.replace(self.inputs, **args)
 
     @property
     def cmdline(self):
