@@ -44,13 +44,15 @@ import inspect
 import json
 import os
 from pathlib import Path
+import pickle as pk
 import shutil
 from tempfile import mkdtemp
 import typing as ty
 
 from ..utils.messenger import (send_message, make_message, gen_uuid, now,
                                AuditFlag)
-from .specs import (BaseSpec, Runtime, Result, RuntimeSpec, File)
+from .specs import (BaseSpec, Runtime, Result, RuntimeSpec, File,
+                    SpecInfo)
 
 
 develop = True
@@ -66,9 +68,10 @@ def ensure_list(obj):
 
 def print_help(obj):
     help = ['Help for {}'.format(obj.__class__.__name__)]
-    if dc.fields(obj.input_spec):
+    input_klass = make_klass(obj.input_spec)
+    if dc.fields(input_klass):
         help += ['Input Parameters:']
-    for f in dc.fields(obj.input_spec):
+    for f in dc.fields(input_klass):
         default = ''
         if f.default is not dc.MISSING and not f.name.startswith('_'):
             default = ' (default: {})'.format(f.default)
@@ -77,9 +80,10 @@ def print_help(obj):
         except AttributeError:
             name = str(f.type)
         help += ['- {}: {}{}'.format(f.name, name, default)]
-    if dc.fields(obj.input_spec):
+    output_klass = make_klass(obj.output_spec)
+    if dc.fields(output_klass):
         help += ['Output Parameters:']
-    for f in dc.fields(obj.output_spec):
+    for f in dc.fields(output_klass):
         try:
             name = f.type.__name__
         except AttributeError:
@@ -96,14 +100,14 @@ def load_result(checksum, cache_locations):
         if (location / checksum).exists():
             result_file = (location / checksum / '_result.pklz')
             if result_file.exists():
-                return cp.loads(result_file.read_bytes())
+                return pk.loads(result_file.read_bytes())
             return None
     return None
 
 
 def save_result(result_path: Path, result):
     with (result_path / '_result.pklz').open('wb') as fp:
-        cp.dump(dc.asdict(result), fp)
+        pk.dump(dc.asdict(result), fp)
 
 
 def task_hash(task_obj):
@@ -139,6 +143,12 @@ def gather_runtime_info(fname):
     return runtime
 
 
+def make_klass(spec):
+    if spec is None:
+        return None
+    return dc.make_dataclass(spec.name, spec.fields, bases=spec.bases)
+
+
 class BaseTask:
     """This is a base class for Task objects.
     """
@@ -169,10 +179,9 @@ class BaseTask:
         if not self.input_spec:
             raise Exception(
                 'No input_spec in class: %s' % self.__class__.__name__)
-        self.inputs = self.input_spec(
-            **{f.name:None
-               for f in dc.fields(self.input_spec)
-               if f.default is dc.MISSING})
+        klass = make_klass(self.input_spec)
+        self._in_dict = {f.name: (None if f.default is dc.MISSING
+                                  else f.default) for f in dc.fields(klass)}
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
@@ -180,13 +189,14 @@ class BaseTask:
             self._input_sets = {}
         if inputs:
             if isinstance(inputs, dict):
-                self.inputs = dc.replace(self.inputs, **inputs)
+                pass
             elif Path(inputs).is_file():
                 inputs = json.loads(Path(inputs).read_text())
             elif isinstance(inputs, str):
                 if self._input_sets is None or inputs not in self._input_sets:
                     raise ValueError("Unknown input set {!r}".format(inputs))
                 inputs = self._input_sets[inputs]
+            self._in_dict.update(**inputs)
 
     def audit(self, message, flags=None):
         if develop:
@@ -218,8 +228,13 @@ class BaseTask:
             return help_obj
 
     @property
+    def inputs(self):
+        klass = make_klass(self.input_spec)
+        return klass(syncdict=self._in_dict, **self._in_dict)
+
+    @property
     def output_names(self):
-        return [f.name for f in dc.fields(self.output_spec)]
+        return [f.name for f in dc.fields(make_klass(self.output_spec))]
 
     @property
     def version(self):
@@ -246,9 +261,10 @@ class BaseTask:
             output = None
             runtime = None
             if 'output' in result and result['output']:
-                output = self.output_spec(**result['output'])
+                klass = make_klass(self.output_spec)
+                output = klass(syncdict=None, **result['output'])
             if 'runtime' in result and result['runtime']:
-                runtime = dc.replace(Runtime(), **result['runtime'])
+                runtime = Runtime(**result['runtime'])
             return Result(output=output, runtime=runtime)
         return None
 
@@ -271,7 +287,9 @@ class BaseTask:
         return self.run(cache_locations=cache_locations, **kwargs)
 
     def run(self, cache_locations=None, cache_dir=None, **kwargs):
-        self.inputs = dc.replace(self.inputs, **kwargs)
+        if set(kwargs) - set(self._in_dict):
+            raise ValueError('unacceptable keywords passed')
+        self._in_dict.update(**kwargs)
         if cache_dir is not None:
             self.cache_dir = Path(cache_dir)
         if self.cache_dir is None:
@@ -349,7 +367,7 @@ class BaseTask:
                                     "hadActivity": mid}, AuditFlag.PROV)
                 save_result(odir, result)
                 with open(odir / '_node.pklz', 'wb') as fp:
-                    cp.dump(self, fp)
+                    pk.dump(self, fp)
                 os.chdir(cwd)
                 if self.audit_check(AuditFlag.PROV):
                     # audit outputs
@@ -363,10 +381,12 @@ class BaseTask:
 
     def _collect_outputs(self):
         run_output = ensure_list(self._list_outputs())
-        output = self.output_spec(**{f.name: None for f in
-                                            dc.fields(self.output_spec)})
-        return dc.replace(output, **dict(zip(self.output_names,
-                                             run_output)))
+        output_klass = make_klass(self.output_spec)
+        output = output_klass(syncdict=None,
+                              **{f.name: None for f in
+                                 dc.fields(output_klass)})
+        return dc.replace(output, syncdict=None, **dict(zip(self.output_names,
+                                                            run_output)))
 
 
 class FunctionTask(BaseTask):
@@ -374,28 +394,28 @@ class FunctionTask(BaseTask):
     def __init__(self, func: ty.Callable, output_spec: ty.Optional[BaseSpec]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
-        self.input_spec = dc.make_dataclass(
-            'Inputs',
+        self.input_spec = SpecInfo(name='Inputs',
+                                   fields=
             [(val.name, val.annotation, val.default)
                   if val.default is not inspect.Signature.empty
                   else (val.name, val.annotation)
              for val in inspect.signature(func).parameters.values()
              ] + [('_func', str, cp.dumps(func))],
-            bases=(BaseSpec,))
+                                   bases=(BaseSpec,))
         super(FunctionTask, self).__init__(inputs=kwargs,
                                            audit_flags=audit_flags,
                                            messengers=messengers,
                                            messenger_args=messenger_args)
         if output_spec is None:
             if 'return' not in func.__annotations__:
-                output_spec = dc.make_dataclass('Output',
-                                                [('out', ty.Any)],
-                                                bases=(BaseSpec,))
+                output_spec = SpecInfo(name='Output',
+                                       fields=[('out', ty.Any)],
+                                       bases=(BaseSpec,))
             else:
                 return_info = func.__annotations__['return']
-                output_spec = dc.make_dataclass(return_info.__name__,
-                                                return_info.__annotations__.items(),
-                                                bases=(BaseSpec,))
+                output_spec = SpecInfo(name=return_info.__name__,
+                                       fields=list(return_info.__annotations__.items()),
+                                       bases=(BaseSpec,))
         elif 'return' in func.__annotations__:
             raise NotImplementedError('Branch not implemented')
         self.output_spec = output_spec
@@ -404,7 +424,7 @@ class FunctionTask(BaseTask):
         inputs = dc.asdict(self.inputs)
         del inputs['_func']
         self.output_ = None
-        output = cp.loads(self.inputs._func)(**inputs)
+        output = cp.loads(self._in_dict['_func'])(**inputs)
         if not isinstance(output, tuple):
             output = (output,)
         self.output_ = list(output)
@@ -483,6 +503,7 @@ def execute(cmd):
 class ShellSpec(BaseSpec):
     executable: ty.Union[str, ty.List[str]]
 
+
 @dc.dataclass
 class ShellOutSpec(BaseSpec):
     return_code: int
@@ -491,20 +512,25 @@ class ShellOutSpec(BaseSpec):
 
 
 class ShellCommandTask(BaseTask):
-    def __init__(self, input_spec: ty.Optional[ShellSpec]=None,
-                 output_spec: ty.Optional[ShellOutSpec]=None,
+    def __init__(self, input_spec: ty.Optional[SpecInfo]=None,
+                 output_spec: ty.Optional[SpecInfo]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
         if input_spec is None:
-            fields = [('args', ty.List[str], dc.field(default_factory=list))]
-            input_spec = dc.make_dataclass('Inputs', fields, bases=(ShellSpec,))
+            field = dc.field(default_factory=list)
+            field.metadata = {}
+            fields = [('args', ty.List[str], field)]
+            input_spec = SpecInfo(name='Inputs', fields=fields,
+                                  bases=(ShellSpec,))
         self.input_spec = input_spec
         super(ShellCommandTask, self).__init__(inputs=kwargs,
                                                audit_flags=audit_flags,
                                                messengers=messengers,
                                                messenger_args=messenger_args)
         if output_spec is None:
-            output_spec = ShellOutSpec
+            output_spec = SpecInfo(name='Output',
+                                   fields=[],
+                                   bases=(ShellOutSpec,))
         self.output_spec = output_spec
 
     @property
@@ -518,7 +544,7 @@ class ShellCommandTask(BaseTask):
 
     @command_args.setter
     def command_args(self, args: ty.Dict):
-        self.inputs = dc.replace(self.inputs, **args)
+        self._in_dict.update(**args)
 
     @property
     def cmdline(self):
