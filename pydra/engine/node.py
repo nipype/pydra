@@ -511,14 +511,11 @@ class Node(NodeBase):
                 state_dict = self.state.state_values(ind)
             else:
                 state_dict = self.state.state_ind(ind)
-            state_dict, inputs_dict = self.get_input_el(ind)
             if self.state._inner_splitter:
-                inner_size = len(inputs_dict[self.state._inner_splitter[0]])
+                inner_size = self.wf_inner_splitters_size[self.state._inner_splitter[0]][ind]
                 for ind_inner in range(inner_size):
-                    state_dict_copy_inner = deepcopy(state_dict)
-                    for inp in self.state._inner_splitter:
-                        state_dict_copy_inner[inp] = inputs_dict[inp][ind_inner]
-                    dir_nm_el, _ = self._directory_name_state_surv(state_dict_copy_inner)
+                    state_dict, inputs_dict = self.get_input_el(ind, ind_inner)
+                    dir_nm_el, _ = self._directory_name_state_surv(state_dict)
                     for key_out in self.output_names:
                         if not getattr(self.results_dict[dir_nm_el].output, key_out):
                             return False
