@@ -59,7 +59,6 @@ class Result:
         # all our instance attributes. Always use the dict.copy()
         # method to avoid modifying the original state.
         state = self.__dict__.copy()
-        print(state)
         # Remove the unpicklable entries.
         fields = tuple(state['output'].__annotations__.items())
         state['output_spec'] = (state['output'].__class__.__name__,
