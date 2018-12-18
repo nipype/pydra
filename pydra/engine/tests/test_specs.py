@@ -1,5 +1,6 @@
-from ..specs import BaseSpec, RuntimeSpec, Runtime, Result
-
+from ..specs import (BaseSpec, RuntimeSpec, Runtime, Result, ShellSpec,
+                     ContainerSpec, DockerSpec, SingularitySpec)
+import pytest
 
 def test_basespec():
     spec = BaseSpec()
@@ -17,3 +18,36 @@ def test_result():
     result = Result()
     assert hasattr(result, 'runtime')
     assert hasattr(result, 'output')
+
+
+def test_shellspec():
+    with pytest.raises(TypeError):
+        spec = ShellSpec()
+    spec = ShellSpec('ls')
+    assert hasattr(spec, 'executable')
+
+
+container_attrs = ['image', 'container', 'container_xargs', 'bindings']
+
+def test_container():
+    with pytest.raises(TypeError):
+        spec = ContainerSpec()
+    spec = ContainerSpec('ls', 'busybox', None)
+    assert all([hasattr(spec, attr) for attr in container_attrs])
+    assert hasattr(spec, 'executable')
+
+
+def test_docker():
+    with pytest.raises(TypeError):
+        spec = DockerSpec('ls')
+    spec = DockerSpec('ls', 'busybox')
+    assert all(hasattr(spec, attr) for attr in container_attrs)
+    assert getattr(spec, 'container') == 'docker'
+
+
+def test_singularity():
+    with pytest.raises(TypeError):
+        spec = SingularitySpec()
+    spec = SingularitySpec('ls', 'busybox')
+    assert all(hasattr(spec, attr) for attr in container_attrs)
+    assert getattr(spec, 'container') == 'singularity'
