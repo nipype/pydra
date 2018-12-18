@@ -70,3 +70,36 @@ class RuntimeSpec:
     InlineScriptRequirement
     """
 
+
+@dc.dataclass
+class ShellSpec(BaseSpec):
+    executable: ty.Union[str, ty.List[str]]
+
+
+@dc.dataclass
+class ShellOutSpec(BaseSpec):
+    return_code: int
+    stdout: ty.Union[File, str]
+    stderr: ty.Union[File, str]
+
+
+@dc.dataclass
+class ContainerSpec(ShellSpec):
+    image: ty.Union[File, str]
+    container: ty.Union[File, str, None]
+    container_xargs: ty.Optional[ty.List[str]] = None
+    bindings: ty.Optional[ty.List[ty.Tuple[
+        Path,  # local path
+        Path,  # container path
+        ty.Optional[str]  # mount mode
+    ]]] = None
+
+
+@dc.dataclass
+class DockerSpec(ContainerSpec):
+    container: str = 'docker'
+
+
+@dc.dataclass
+class SingularitySpec(ContainerSpec):
+    container: str = 'singularity'

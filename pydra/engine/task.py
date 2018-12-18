@@ -51,8 +51,9 @@ import typing as ty
 
 from ..utils.messenger import (send_message, make_message, gen_uuid, now,
                                AuditFlag)
-from .specs import (BaseSpec, Runtime, Result, RuntimeSpec, File,
-                    SpecInfo)
+from .specs import (BaseSpec, Runtime, Result, RuntimeSpec, File, SpecInfo,
+                    ShellSpec, ShellOutSpec, ContainerSpec, DockerSpec,
+                    SingularitySpec)
 
 
 develop = True
@@ -494,18 +495,6 @@ def execute(cmd):
     return rc, stdout, stderr
 
 
-@dc.dataclass
-class ShellSpec(BaseSpec):
-    executable: ty.Union[str, ty.List[str]]
-
-
-@dc.dataclass
-class ShellOutSpec(BaseSpec):
-    return_code: int
-    stdout: ty.Union[File, str]
-    stderr: ty.Union[File, str]
-
-
 class ShellCommandTask(BaseTask):
     def __init__(self, input_spec: ty.Optional[SpecInfo]=None,
                  output_spec: ty.Optional[SpecInfo]=None,
@@ -532,6 +521,8 @@ class ShellCommandTask(BaseTask):
     def command_args(self):
         args = []
         for f in dc.fields(self.inputs):
+            if f.name not in ['executable', 'args']:
+                continue
             value = getattr(self.inputs, f.name)
             if value is not None:
                 args.extend(ensure_list(value))
@@ -553,3 +544,114 @@ class ShellCommandTask(BaseTask):
 
     def _list_outputs(self):
         return list(self.output_)
+
+
+class ContainerTask(ShellCommandTask):
+
+    def __init__(self, input_spec: ty.Optional[ContainerSpec]=None,
+                 output_spec: ty.Optional[ShellOutSpec]=None,
+                 audit_flags: AuditFlag=AuditFlag.NONE,
+                 messengers=None, messenger_args=None, **kwargs):
+
+        if input_spec is None:
+            field = dc.field(default_factory=list)
+            field.metadata = {}
+            fields = [('args', ty.List[str], field)]
+            input_spec = SpecInfo(name='Inputs', fields=fields,
+                                  bases=(ContainerSpec,))
+        super(ContainerTask, self).__init__(input_spec=input_spec,
+                                            audit_flags=audit_flags,
+                                            messengers=messengers,
+                                            messenger_args=messenger_args,
+                                            **kwargs)
+
+    @property
+    def cmdline(self):
+        return ' '.join(self.container_args + self.command_args)
+
+    @property
+    def container_args(self):
+        if self.inputs.container is None:
+            raise AttributeError('Container software is not specified')
+        cargs = [self.inputs.container, 'run']
+        if self.inputs.container_xargs is not None:
+            cargs.extend(self.inputs.container_xargs)
+        if self.inputs.image is None:
+            raise AttributeError('Container image is not specified')
+        cargs.append(self.inputs.image)
+        return cargs
+
+    def binds(self, opt):
+        """Specify mounts to bind from local filesystems to container
+
+        `bindings` are tuples of (local path, container path, bind mode)
+        """
+        bargs = []
+        for binding in self.inputs.bindings:
+            lpath, cpath, mode = binding
+            if mode is None:
+                mode = 'rw'  # default
+            bargs.extend([opt, '{0}:{1}:{2}'.format(lpath, cpath, mode)])
+        return bargs
+
+    def _run_task(self):
+        self.output_ = None
+        args = self.container_args + self.command_args
+        if args:
+            self.output_ = execute(args)
+
+
+class DockerTask(ContainerTask):
+    def __init__(self, input_spec: ty.Optional[ContainerSpec]=None,
+                 output_spec: ty.Optional[ShellOutSpec]=None,
+                 audit_flags: AuditFlag=AuditFlag.NONE,
+                 messengers=None, messenger_args=None, **kwargs):
+        if input_spec is None:
+            field = dc.field(default_factory=list)
+            field.metadata = {}
+            fields = [('args', ty.List[str], field)]
+            input_spec = SpecInfo(name='Inputs', fields=fields,
+                                  bases=(DockerSpec,))
+        super(ContainerTask, self).__init__(input_spec=input_spec,
+                                            audit_flags=audit_flags,
+                                            messengers=messengers,
+                                            messenger_args=messenger_args,
+                                            **kwargs)
+
+    @property
+    def container_args(self):
+        cargs = super().container_args
+        assert self.inputs.container == 'docker'
+        if self.inputs.bindings:
+            # insert bindings before image
+            idx = len(cargs) - 1
+            cargs[idx:-1] = self.binds('-v')
+        return cargs
+
+
+class SingularityTask(ContainerTask):
+    def __init__(self, input_spec: ty.Optional[ContainerSpec]=None,
+                 output_spec: ty.Optional[ShellOutSpec]=None,
+                 audit_flags: AuditFlag=AuditFlag.NONE,
+                 messengers=None, messenger_args=None, **kwargs):
+        if input_spec is None:
+            field = dc.field(default_factory=list)
+            field.metadata = {}
+            fields = [('args', ty.List[str], field)]
+            input_spec = SpecInfo(name='Inputs', fields=fields,
+                                  bases=(SingularitySpec,))
+        super(ContainerTask, self).__init__(input_spec=input_spec,
+                                            audit_flags=audit_flags,
+                                            messengers=messengers,
+                                            messenger_args=messenger_args,
+                                            **kwargs)
+
+    @property
+    def container_args(self):
+        cargs = super().container_args
+        assert self.inputs.container == 'singularity'
+        if self.inputs.bindings:
+            # insert bindings before image
+            idx = len(cargs) - 1
+            cargs[idx:-1] = self.binds('-B')
+        return cargs
