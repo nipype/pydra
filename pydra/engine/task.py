@@ -44,7 +44,6 @@ import inspect
 import json
 import os
 from pathlib import Path
-import pickle as pk
 import shutil
 from tempfile import mkdtemp
 import typing as ty
@@ -100,14 +99,14 @@ def load_result(checksum, cache_locations):
         if (location / checksum).exists():
             result_file = (location / checksum / '_result.pklz')
             if result_file.exists():
-                return pk.loads(result_file.read_bytes())
+                return cp.loads(result_file.read_bytes())
             return None
     return None
 
 
 def save_result(result_path: Path, result):
     with (result_path / '_result.pklz').open('wb') as fp:
-        pk.dump(dc.asdict(result), fp)
+        cp.dump(dc.asdict(result), fp)
 
 
 def task_hash(task_obj):
@@ -367,7 +366,7 @@ class BaseTask:
                                     "hadActivity": mid}, AuditFlag.PROV)
                 save_result(odir, result)
                 with open(odir / '_node.pklz', 'wb') as fp:
-                    pk.dump(self, fp)
+                    cp.dump(self, fp)
                 os.chdir(cwd)
                 if self.audit_check(AuditFlag.PROV):
                     # audit outputs
