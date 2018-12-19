@@ -1,4 +1,4 @@
-import os, pdb, time
+import os, time, pdb
 from copy import deepcopy
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
@@ -49,15 +49,17 @@ class Submitter(object):
 
     def _submit_node(self, node):
         """submitting nodes's interface for all states"""
-        for (i, ind) in enumerate(node.state.index_generator):
+        for ind in node.state.index_generator:
             # this is run only for a single node or the first node in a wf, so no inner spl
-            self._submit_node_el(node, i, ind, ind_inner=None)
+            self._submit_node_el(node, ind, ind_inner=None)
 
 
-    def _submit_node_el(self, node, i, ind, ind_inner):
+    def _submit_node_el(self, node, ind, ind_inner):
         """submitting node's interface for one element of states"""
         logger.debug("SUBMIT WORKER, node: {}, ind: {}, ind_inner: {}".format(node, ind, ind_inner))
-        self.worker.run_el(node.run_interface_el, (i, ind, ind_inner))
+        res = self.worker.run_el(node.run_interface_el, (ind, ind_inner))
+        # saving results in a node dictionary
+        node.results_dict[res[0]] = res[1]
 
 
     def run_workflow(self, workflow=None, ready=True):
@@ -70,16 +72,16 @@ class Submitter(object):
         if workflow.splitter:
             for key in workflow._node_names.keys():
                 workflow.inner_nodes[key] = []
-            for (i, ind) in enumerate(workflow.state.index_generator):
+            for ind in workflow.state.index_generator:
                 new_workflow = deepcopy(workflow)
                 new_workflow.parent_wf = workflow
                 # adding all nodes to the parent workflow
                 for (i_n, node) in enumerate(new_workflow.graph_sorted):
                     workflow.inner_nodes[node.name].append(node)
                 if ready:
-                    self._run_workflow_el(new_workflow, i, ind)
+                    self._run_workflow_el(new_workflow, ind)
                 else:
-                    self.node_line.append((new_workflow, i, ind))
+                    self.node_line.append((new_workflow, ind))
         else:
             if ready:
                 if workflow.write_state:
@@ -89,7 +91,7 @@ class Submitter(object):
                     workflow.preparing(wf_inputs=workflow.inputs, wf_inputs_ind=inputs_ind)
                 self._run_workflow_nd(workflow=workflow)
             else:
-                self.node_line.append((workflow, 0, ()))
+                self.node_line.append((workflow, ()))
 
         # this parts submits nodes that are waiting to be run
         # it should stop when nothing is waiting
@@ -106,7 +108,7 @@ class Submitter(object):
         if workflow is self.workflow:
             workflow.get_output()
 
-    def _run_workflow_el(self, workflow, i, ind, collect_inp=False):
+    def _run_workflow_el(self, workflow, ind, collect_inp=False):
         """running one internal workflow (if workflow has a splitter)"""
         # TODO: can I simplify and remove collect inp? where should it be?
         if collect_inp:
@@ -120,6 +122,7 @@ class Submitter(object):
             wf_inputs_ind = workflow.state.state_ind(ind)
             workflow.preparing(wf_inputs=wf_inputs, wf_inputs_ind=wf_inputs_ind)
         self._run_workflow_nd(workflow=workflow)
+
 
     def _run_workflow_nd(self, workflow):
         """iterating over all nodes from a workflow and submitting them or adding to the node_line"""
@@ -144,32 +147,47 @@ class Submitter(object):
         # iterating over all elements
         for nn in list(workflow.graph_sorted)[i_n:]:
             if hasattr(nn, 'interface'):
-                for (i, ind) in enumerate(nn.state.index_generator):
+                for ind in nn.state.index_generator:
                     self._to_finish.append(nn)
-                    self.node_line.append((nn, i, ind))
+                    self.node_line.append((nn, ind))
             else:  #wf
                 self.run_workflow(workflow=nn, ready=False)
 
     def _nodes_check(self):
         """checking which nodes-states are ready to run and running the ones that are ready"""
         _to_remove = []
-        for (to_node, i, ind) in self.node_line:
+        for (to_node, ind) in self.node_line:
             if hasattr(to_node, 'interface'):
-                print("_NODES_CHECK INPUT", to_node.name, to_node.checking_input_el(ind))
-                if to_node.checking_input_el(ind):
-                    if to_node.state._inner_splitter:
-                        inner_size = len(to_node.get_input_el(ind)[1][to_node.state._inner_splitter[0]])
+                #if to_node.name == "NC": pdb.set_trace()
+                if to_node.state._inner_splitter:
+                    print("_NODES_CHECK INPUT (ind_inner=0)", to_node.name,
+                          to_node.checking_input_el(ind, ind_inner=0))
+                    # for now I'm assuming that if more than one inner inputs/splitters,
+                    # all have the same shape and can only be connected via scalar splitter
+                    # change it? TODO
+                    #if to_node.name == "NC": pdb.set_trace()
+                    for spl_nm in to_node.state._inner_splitter:
+                        if spl_nm not in self.workflow.all_inner_splitters_size.keys():
+                            self.workflow.all_inner_splitters_size[spl_nm] = {}
+                        if ind in self.workflow.all_inner_splitters_size[spl_nm].keys():
+                            inner_size = self.workflow.all_inner_splitters_size[spl_nm][ind]
+                        else:
+                            inner_size = len(to_node.get_input_el(ind)[1][spl_nm])
+                            self.workflow.all_inner_splitters_size[spl_nm][ind] = inner_size
+                    #if to_node.name == "NC": pdb.set_trace()
+                    if all([to_node.checking_input_el(ind, ind_inner=i_inner) for i_inner in range(inner_size)]):
                         for i_inner in range(inner_size):
-                            self._submit_node_el(to_node, i, ind, ind_inner=i_inner)
-                    else:
-                        self._submit_node_el(to_node, i, ind, ind_inner=None)
-                    _to_remove.append((to_node, i, ind))
+                            self._submit_node_el(to_node, ind, ind_inner=i_inner)
+                        _to_remove.append((to_node, ind))
                 else:
-                    pass
+                    print("_NODES_CHECK INPUT", to_node.name, to_node.checking_input_el(ind))
+                    if to_node.checking_input_el(ind, ind_inner=None):
+                        self._submit_node_el(to_node, ind, ind_inner=None)
+                        _to_remove.append((to_node, ind))
             else:  #wf
                 if to_node.checking_input_el(ind):
-                    self._run_workflow_el(workflow=to_node, i=i, ind=ind, collect_inp=True)
-                    _to_remove.append((to_node, i, ind))
+                    self._run_workflow_el(workflow=to_node, ind=ind, collect_inp=True)
+                    _to_remove.append((to_node, ind))
                 else:
                     pass
 

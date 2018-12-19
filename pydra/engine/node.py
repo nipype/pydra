@@ -83,7 +83,7 @@ class NodeBase(object):
 
     @splitter.setter
     def splitter(self, splitter):
-        if self._splitter:
+        if self._splitter and self._splitter != splitter:
             raise Exception("splitter is already set")
         self._splitter = aux.change_splitter(splitter, self.name)
 
@@ -159,16 +159,16 @@ class NodeBase(object):
         return self
 
 
-    def checking_input_el(self, ind):
+    def checking_input_el(self, ind, ind_inner=None):
         """checking if all inputs are available (for specific state element)"""
         try:
-            self.get_input_el(ind)
+            self.get_input_el(ind, ind_inner)
             return True
         except:  #TODO specify
             return False
 
-    # dj: this is not used for a single node
-    def get_input_el(self, ind):
+
+    def get_input_el(self, ind, ind_inner=None):
         """collecting all inputs required to run the node (for specific state element)"""
         state_dict = self.state.state_values(ind)
         if hasattr(self, "partial_split_input"):
@@ -180,16 +180,54 @@ class NodeBase(object):
         if not self.write_state:
             state_dict = self.state.state_ind(ind)
 
-         # reading extra inputs that come from previous nodes
+        # reading extra inputs that come from previous nodes
         for (from_node, from_socket, to_socket) in self.needed_outputs:
-            # if the previous node has combiner I have to collect all elements
-            if from_node.state.combiner:
-                inputs_dict["{}.{}".format(self.name, to_socket)] =\
-                    self._get_input_comb(from_node, from_socket, state_dict)
+            # if the from_node doesn't have any inner splitters that are left (not combined)
+            if not from_node.state._inner_splitter_comb:
+                if from_node.state.combiner:
+                    inputs_dict["{}.{}".format(self.name, to_socket)] =\
+                        self._get_input_comb(from_node, from_socket, state_dict)
+                else:
+                    # TODO!! should i have state_inner_input?
+                    dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
+                    # TODO: do I need this if, what if this is wf?
+                    if is_node(from_node):
+                        out_from = getattr(from_node.results_dict[dir_nm_el_from].output, from_socket)
+                        if out_from:
+                            inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
+                        else:
+                            raise Exception("output from {} doesnt exist".format(from_node))
+                # self is the first node if the inner splitter
+                if ind_inner is not None:
+                    inner_nm = "{}.{}".format(self.name, to_socket)
+                    if inner_nm in self.state._inner_splitter:
+                        state_dict[inner_nm] = inputs_dict[inner_nm][ind_inner]
+                        inputs_dict[inner_nm] = inputs_dict[inner_nm][ind_inner]
+
+
+            # from node has some inner splitters that were not combined
             else:
-                dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
-                inputs_dict["{}.{}".format(self.name, to_socket)] =\
-                    getattr(from_node.results_dict[dir_nm_el_from].output, from_socket)
+                for inner_nm in from_node.state._inner_splitter_comb:
+                    # TODO: should I use to state_inner?
+                    state_dict[inner_nm] = from_node.inner_states[inner_nm][ind][ind_inner]
+                    dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
+                    out_from = getattr(from_node.results_dict[dir_nm_el_from].output, from_socket)
+                    if out_from:
+                        inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
+                    else:
+                        raise Exception("output from {} doesnt exist".format(from_node))
+
+            # adding to_socket var to inner_states if it is part of _inner_splitter_comb
+            # (i.e. inner splitter that won't be combined)
+            if self.state._inner_splitter_comb:
+                inner_nm = "{}.{}".format(self.name, to_socket)
+                if inner_nm in self.state._inner_splitter_comb:
+                    if inner_nm not in self.inner_states.keys():
+                        self.inner_states[inner_nm] = {}
+                    if ind not in self.inner_states[inner_nm].keys():
+                        self.inner_states[inner_nm][ind] = {}
+                    self.inner_states[inner_nm][ind][ind_inner] = inputs_dict[inner_nm]
+
         return state_dict, inputs_dict
 
 
@@ -274,22 +312,10 @@ class NodeBase(object):
         # in py3.7 we can skip OrderedDict
         return OrderedDict(sorted(state_dict_el.items(), key=lambda t: t[0]))
 
-    # TODO!: this might be not needed anymore when using FunctionTask
-    # def _reading_ci_output(self, dir_nm_el, out_nm, node=None):
-    #     """used for current interfaces: checking if the output exists and returns the path if it does"""
-    #     if not node:
-    #         node = self
-    #     result_pklfile = os.path.join(self.tasks_dict[dir_nm_el].output_dir, "_result.pklz")
-    #     if os.path.exists(result_pklfile) and os.stat(result_pklfile).st_size > 0:
-    #         out = getattr(self.tasks_dict[dir_nm_el].result().output, out_nm)
-    #         if out:
-    #             return out
-    #     return False
-
 
     def _directory_name_state_surv(self, state_dict):
         """eliminating all inputs from state dictionary that are not in
-        the splitter;
+        the splitter of the node;
         creating a directory name
         """
         # should I be using self.state._splitter_rpn_comb?
@@ -363,7 +389,7 @@ class NodeBase(object):
 
 
     def _reading_results_one_output(self, key_out):
-        """reading results for one specifc output name"""
+        """reading results for one specific output name"""
         if not self.splitter:
             if type(self.output[key_out]) is tuple:
                 result = self.output[key_out]
@@ -396,29 +422,23 @@ class Node(NodeBase):
         self.interface = interface
         # if there is no connection, the list of inner inputs should be empty
         self.inner_inputs_names = []
-
         # list of  interf_key_out
         self.output_names = output_names
         if not self.output_names:
             self.output_names = []
-
-        # TODO! should be in submitter?
-        # dictionary of copies of the task with specific inputs
-        self.tasks_dict = {}
+        #for inner states/splitters
+        self.inner_states = {}
+        self.wf_inner_splitters = []
         # dictionary of results from tasks
         self.results_dict = {}
 
 
-    def run_interface_el(self, i, ind, ind_inner):
+    def run_interface_el(self, ind, ind_inner):
         """ running interface one element generated from node_state."""
-        logger.debug("Run interface el, name={}, i={}, ind={}".format(self.name, i, ind))
-        state_dict, inputs_dict = self.get_input_el(ind)
+        logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
+        state_dict, inputs_dict = self.get_input_el(ind, ind_inner)
         if not self.write_state:
             state_dict = self.state.state_ind(ind)
-        if ind_inner is not None:
-            for inp in self.state._inner_splitter:
-                inputs_dict[inp] = inputs_dict[inp][ind_inner]
-                state_dict[inp] = inputs_dict[inp]
         dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
         print("Run interface el, dict={}".format(state_surv_dict))
         logger.debug("Run interface el, name={}, inputs_dict={}, state_dict={}".format(
@@ -427,13 +447,13 @@ class Node(NodeBase):
         self.interface.cache_dir = os.path.join(os.getcwd(), self.workingdir)
         interf_inputs = dict((k.split(".")[1], v) for k,v in inputs_dict.items())
         res = self.interface.run(**interf_inputs)
-        self.tasks_dict[dir_nm_el] = copy(self.interface)
-        self.results_dict[dir_nm_el] = res
-        return res
+        return dir_nm_el, res
 
 
     def get_output(self):
-        """collecting all outputs and updating self._output"""
+        """collecting all outputs and updating self._output
+        (assuming that file already exist and this was checked)
+        """
         for key_out in self.output_names:
             self._output[key_out] = {}
             for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
@@ -441,53 +461,53 @@ class Node(NodeBase):
                     state_dict = self.state.state_values(ind)
                 else:
                     state_dict = self.state.state_ind(ind)
-                # TODO what if splitter_Wo_inner
+                # TODO: this part will not work for multiple different inner splitters
                 if self.state._inner_splitter:
-                    # TODO changes probably needed when self.write_state=Fals
-                    state_dict, inputs_dict = self.get_input_el(ind)
-                    inner_size = len(inputs_dict[self.state._inner_splitter[0]])
+                    # TODO changes needed when self.write_state=Fals
+                    inner_size = self.wf_inner_splitters_size[self.state._inner_splitter[0]][ind]
                     for ind_inner in range(inner_size):
-                        state_dict_copy_inner = deepcopy(state_dict)
-                        for inp in self.state._inner_splitter:
-                            state_dict_copy_inner[inp] = inputs_dict[inp][ind_inner]
-                        dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict_copy_inner)
+                        state_dict, inputs_dict = self.get_input_el(ind, ind_inner=ind_inner)
+                        dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
                         output_el = getattr(self.results_dict[dir_nm_el].output, key_out)
                         if not self.combiner:
                             self._output[key_out][dir_nm_el] = output_el
                         else:
                             self._combined_output(key_out, state_surv_dict, output_el)
+                elif self.splitter: # splitter but without inner splitters
+                    dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
+                    output_el = getattr(self.results_dict[dir_nm_el].output, key_out)
+                    if not self.combiner: # only splitter
+                        self._output[key_out][dir_nm_el] = output_el
+                    else:
+                        self._combined_output(key_out, state_dict, output_el)
                 else:
                     dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
-                    if self.splitter:
-                        output_el =  getattr(self.results_dict[dir_nm_el].output, key_out)
-                        if not self.combiner: # only splitter
-                            self._output[key_out][dir_nm_el] = output_el
-                        else:
-                            self._combined_output(key_out, state_dict, output_el)
-                    else:
-                        self._output[key_out] = \
-                            (state_surv_dict, getattr(self.results_dict[dir_nm_el].output, key_out))
+                    self._output[key_out] = \
+                        (state_surv_dict, getattr(self.results_dict[dir_nm_el].output, key_out))
         return self._output
 
 
+    # dj: should I combine with get_output?
     def _check_all_results(self):
-        """checking if all files that should be created are present"""
+        """checking if all files that should be created are present
+        if all files and outputs are present, self._is_complete is changed to True
+        (the method does not collect the output)
+        """
         for ind in itertools.product(*self.state.all_elements):
             if self.write_state:
                 state_dict = self.state.state_values(ind)
             else:
                 state_dict = self.state.state_ind(ind)
-            state_dict, inputs_dict = self.get_input_el(ind)
+            # if the node has an inner splitter, have to check for all elements
             if self.state._inner_splitter:
-                inner_size = len(inputs_dict[self.state._inner_splitter[0]])
+                inner_size = self.wf_inner_splitters_size[self.state._inner_splitter[0]][ind]
                 for ind_inner in range(inner_size):
-                    state_dict_copy_inner = deepcopy(state_dict)
-                    for inp in self.state._inner_splitter:
-                        state_dict_copy_inner[inp] = inputs_dict[inp][ind_inner]
-                    dir_nm_el, _ = self._directory_name_state_surv(state_dict_copy_inner)
+                    state_dict, _ = self.get_input_el(ind, ind_inner)
+                    dir_nm_el, _ = self._directory_name_state_surv(state_dict)
                     for key_out in self.output_names:
                         if not getattr(self.results_dict[dir_nm_el].output, key_out):
                             return False
+            # no inner splitter
             else:
                 dir_nm_el, _ = self._directory_name_state_surv(state_dict)
                 for key_out in self.output_names:
@@ -534,17 +554,9 @@ class Workflow(NodeBase):
         self.inner_nodes = {}
         # in case of inner workflow this points to the main/parent workflow
         self.parent_wf = None
-        # dj not sure what was the motivation, wf_klasses gives an empty list
-        #mro = self.__class__.mro()
-        #wf_klasses = mro[:mro.index(Workflow)][::-1]
-        #items = {}
-        #for klass in wf_klasses:
-        #    items.update(klass.__dict__)
-        #for name, runnable in items.items():
-        #    if name in ('__module__', '__doc__'):
-        #        continue
+        # for inner splitters
+        self.all_inner_splitters_size = {}
 
-        #    self.add(name, value)
 
     @property
     def nodes(self):
@@ -582,7 +594,7 @@ class Workflow(NodeBase):
 
 
     def get_output(self):
-        # not sure, if I should collecto output of all nodes or only the ones that are used in wf.output
+        # not sure, if I should collect output of all nodes or only the ones that are used in wf.output
         self.node_outputs = {}
         for nn in self.graph:
             if self.splitter:
@@ -643,7 +655,7 @@ class Workflow(NodeBase):
                 self._result[key_out] = self._reading_results_one_output(key_out)
 
 
-    # TODO: this should be probably using add method
+    # TODO: this should be probably using add method, but might be also removed completely
     def add_nodes(self, nodes):
         """adding nodes without defining connections
             most likely it will be removed at the end
@@ -651,16 +663,8 @@ class Workflow(NodeBase):
         self.graph.add_nodes_from(nodes)
         for nn in nodes:
             self._nodes.append(nn)
-            #self._inputs.update(nn.inputs)
             self.connected_var[nn] = {}
             self._node_names[nn.name] = nn
-            #TODO i think this is not needed at the end
-            # when we have a combiner in a previous node, we have to pass the final splitter
-            # if nn.combiner: pdb.set_trace()
-            #     self._node_splitters[nn.name] = nn.state.splitter_comb
-            # else:
-            #     self._node_splitters[nn.name] = nn.splitter
-            # nn.other_splitters = self._node_splitters
 
 
     # TODO: workingir shouldn't have None
@@ -687,7 +691,8 @@ class Workflow(NodeBase):
             raise ValueError("Unknown workflow element: {!r}".format(runnable))
         self.add_nodes([node])
         self._last_added = node
-        # connecting inputs to other nodes outputs
+        # connecting inputs from other nodes outputs
+        # (assuming that all kwargs provide connections)
         for (inp, source) in kwargs.items():
             try:
                 from_node_nm, from_socket = source.split(".")
@@ -715,7 +720,7 @@ class Workflow(NodeBase):
 
     def preparing(self, wf_inputs=None, wf_inputs_ind=None, st_inputs=None):
         """preparing nodes which are connected: setting the final splitter and state_inputs"""
-        #pdb.set_trace()
+        self.all_inner_splitters = []
         for node_nm, inp_wf, inp_nd in self.needed_inp_wf:
             node = self._node_names[node_nm]
             if "{}.{}".format(self.name, inp_wf) in wf_inputs:
@@ -761,8 +766,12 @@ class Workflow(NodeBase):
             except (KeyError):
                 # tmp: we don't care about nn that are not in self.connected_var
                 pass
+            # inner splitters
             nn.inner_inputs_names = [connected[2] for connected in nn.needed_outputs]
+            nn.wf_inner_splitters = self.all_inner_splitters
+            nn.wf_inner_splitters_size = self.all_inner_splitters_size
             nn.prepare_state_input()
+
 
     # removing temp. from Workflow
     # def run(self, plugin="serial"):
