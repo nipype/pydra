@@ -312,18 +312,6 @@ class NodeBase(object):
         # in py3.7 we can skip OrderedDict
         return OrderedDict(sorted(state_dict_el.items(), key=lambda t: t[0]))
 
-    # TODO!: this might be not needed anymore when using FunctionTask
-    # def _reading_ci_output(self, dir_nm_el, out_nm, node=None):
-    #     """used for current interfaces: checking if the output exists and returns the path if it does"""
-    #     if not node:
-    #         node = self
-    #     result_pklfile = os.path.join(self.tasks_dict[dir_nm_el].output_dir, "_result.pklz")
-    #     if os.path.exists(result_pklfile) and os.stat(result_pklfile).st_size > 0:
-    #         out = getattr(self.tasks_dict[dir_nm_el].result().output, out_nm)
-    #         if out:
-    #             return out
-    #     return False
-
 
     def _directory_name_state_surv(self, state_dict):
         """eliminating all inputs from state dictionary that are not in
@@ -401,7 +389,7 @@ class NodeBase(object):
 
 
     def _reading_results_one_output(self, key_out):
-        """reading results for one specifc output name"""
+        """reading results for one specific output name"""
         if not self.splitter:
             if type(self.output[key_out]) is tuple:
                 result = self.output[key_out]
@@ -434,7 +422,6 @@ class Node(NodeBase):
         self.interface = interface
         # if there is no connection, the list of inner inputs should be empty
         self.inner_inputs_names = []
-
         # list of  interf_key_out
         self.output_names = output_names
         if not self.output_names:
@@ -442,11 +429,6 @@ class Node(NodeBase):
         #for inner states/splitters
         self.inner_states = {}
         self.wf_inner_splitters = []
-
-        # TODO! should be in submitter?
-        # dictionary of copies of the task with specific inputs
-        # dj: i might not need tasks_dict
-        #self.tasks_dict = {}
         # dictionary of results from tasks
         self.results_dict = {}
 
@@ -469,7 +451,9 @@ class Node(NodeBase):
 
 
     def get_output(self):
-        """collecting all outputs and updating self._output"""
+        """collecting all outputs and updating self._output
+        (assuming that file already exist and this was checked)
+        """
         for key_out in self.output_names:
             self._output[key_out] = {}
             for (i, ind) in enumerate(itertools.product(*self.state.all_elements)):
@@ -503,22 +487,27 @@ class Node(NodeBase):
         return self._output
 
 
-    # TODO!!! compare with get_output
+    # dj: should I combine with get_output?
     def _check_all_results(self):
-        """checking if all files that should be created are present"""
+        """checking if all files that should be created are present
+        if all files and outputs are present, self._is_complete is changed to True
+        (the method does not collect the output)
+        """
         for ind in itertools.product(*self.state.all_elements):
             if self.write_state:
                 state_dict = self.state.state_values(ind)
             else:
                 state_dict = self.state.state_ind(ind)
+            # if the node has an inner splitter, have to check for all elements
             if self.state._inner_splitter:
                 inner_size = self.wf_inner_splitters_size[self.state._inner_splitter[0]][ind]
                 for ind_inner in range(inner_size):
-                    state_dict, inputs_dict = self.get_input_el(ind, ind_inner)
+                    state_dict, _ = self.get_input_el(ind, ind_inner)
                     dir_nm_el, _ = self._directory_name_state_surv(state_dict)
                     for key_out in self.output_names:
                         if not getattr(self.results_dict[dir_nm_el].output, key_out):
                             return False
+            # no inner splitter
             else:
                 dir_nm_el, _ = self._directory_name_state_surv(state_dict)
                 for key_out in self.output_names:
@@ -565,17 +554,7 @@ class Workflow(NodeBase):
         self.inner_nodes = {}
         # in case of inner workflow this points to the main/parent workflow
         self.parent_wf = None
-        # dj not sure what was the motivation, wf_klasses gives an empty list
-        #mro = self.__class__.mro()
-        #wf_klasses = mro[:mro.index(Workflow)][::-1]
-        #items = {}
-        #for klass in wf_klasses:
-        #    items.update(klass.__dict__)
-        #for name, runnable in items.items():
-        #    if name in ('__module__', '__doc__'):
-        #        continue
-
-        #    self.add(name, value)
+        # for inner splitters
         self.all_inner_splitters_size = {}
 
 
@@ -615,7 +594,7 @@ class Workflow(NodeBase):
 
 
     def get_output(self):
-        # not sure, if I should collecto output of all nodes or only the ones that are used in wf.output
+        # not sure, if I should collect output of all nodes or only the ones that are used in wf.output
         self.node_outputs = {}
         for nn in self.graph:
             if self.splitter:
@@ -676,7 +655,7 @@ class Workflow(NodeBase):
                 self._result[key_out] = self._reading_results_one_output(key_out)
 
 
-    # TODO: this should be probably using add method
+    # TODO: this should be probably using add method, but might be also removed completely
     def add_nodes(self, nodes):
         """adding nodes without defining connections
             most likely it will be removed at the end
@@ -684,16 +663,8 @@ class Workflow(NodeBase):
         self.graph.add_nodes_from(nodes)
         for nn in nodes:
             self._nodes.append(nn)
-            #self._inputs.update(nn.inputs)
             self.connected_var[nn] = {}
             self._node_names[nn.name] = nn
-            #TODO i think this is not needed at the end
-            # when we have a combiner in a previous node, we have to pass the final splitter
-            # if nn.combiner: pdb.set_trace()
-            #     self._node_splitters[nn.name] = nn.state.splitter_comb
-            # else:
-            #     self._node_splitters[nn.name] = nn.splitter
-            # nn.other_splitters = self._node_splitters
 
 
     # TODO: workingir shouldn't have None
@@ -720,7 +691,8 @@ class Workflow(NodeBase):
             raise ValueError("Unknown workflow element: {!r}".format(runnable))
         self.add_nodes([node])
         self._last_added = node
-        # connecting inputs to other nodes outputs
+        # connecting inputs from other nodes outputs
+        # (assuming that all kwargs provide connections)
         for (inp, source) in kwargs.items():
             try:
                 from_node_nm, from_socket = source.split(".")
