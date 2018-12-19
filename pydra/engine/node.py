@@ -433,9 +433,9 @@ class Node(NodeBase):
         self.results_dict = {}
 
 
-    def run_interface_el(self, i, ind, ind_inner):
+    def run_interface_el(self, ind, ind_inner):
         """ running interface one element generated from node_state."""
-        logger.debug("Run interface el, name={}, i={}, ind={}".format(self.name, i, ind))
+        logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
         state_dict, inputs_dict = self.get_input_el(ind, ind_inner)
         if not self.write_state:
             state_dict = self.state.state_ind(ind)

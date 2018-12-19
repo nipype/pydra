@@ -34,11 +34,10 @@ Plugins = ["serial", "mp", "cf", "dask"]
 
 @to_task
 def fun_addtwo(a):
-    import time, pdb
+    import time
     time.sleep(1)
     if a == 3:
         time.sleep(2)
-    #pdb.set_trace()
     return a + 2
 
 @to_task

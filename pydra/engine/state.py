@@ -13,17 +13,21 @@ class State(object):
         self._other_splitters = node._other_splitters
         self.node_name = node.name
         self._inner_splitter = []
+
         self._inner_combiner = []
         self.comb_inp_to_remove = []
 
         self.state_inputs = node.state_inputs
+        # checking if self.node is actually a node (not a wf)
         if hasattr(self.node, "interface"):
+            # inputs that are taken from other nodes
             self._inner_inputs_names = ["{}.{}".format(self.node_name, inp) for inp in self.node.inner_inputs_names]
             # adding inner splitters from other nodes
             self._inner_inputs_names = self._inner_inputs_names + self.node.wf_inner_splitters
             if self._splitter and self._inner_inputs_names:
                 self._inner_splitter_separation(combiner=node.combiner)
-        if not hasattr(self, "_splitter_wo_inner"):
+        # not sure if we should allow for wf (wouldn't work for now anyway)
+        if not self._inner_splitter:
             self._splitter_wo_inner = self._splitter
             self._combiner_wo_inner = node.combiner
 
@@ -40,49 +44,19 @@ class State(object):
         else:
             self._combiner = node.combiner
 
+        # adding inner splitters to the combined inner splitters from wf
         for spl in self._inner_splitter:
             if spl not in self.node.wf_inner_splitters:
                 self.node.wf_inner_splitters.append(spl)
-
+        # inner splitters that will stay after combining
         self._inner_splitter_comb = list(set(self._inner_splitter) - set(self._inner_combiner))
 
-    def prepare_state_input(self):
-        """prepare all inputs, should be called once all input is available"""
 
-        # not all input field have to be use in the splitter, can be an extra scalar
-        self._input_names = list(self.state_inputs.keys())
-
-        # dictionary[key=input names] = list of axes related to
-        # e.g. {'r': [1], 'e': [0], 'd': [0, 1]}
-        # ndim - int, number of dimension for the "final array" (that is not created)
-        self._axis_for_input, self._ndim = aux.splitting_axis(self.state_inputs, self._splitter_rpn_wo_inner)
-
-        # list of inputs variable for each axis
-        # e.g. [['e', 'd'], ['r', 'd']]
-        # shape - list, e.g. [2,3]
-        # TODO: do I need it?
-        self._input_for_axis, self._shape = aux.converting_axis2input(
-            state_inputs=self.state_inputs, axis_for_input=self._axis_for_input,
-            ndim=self._ndim)
-
-        # list of all possible indexes in each dim, will be use to iterate
-        # e.g. [[0, 1], [0, 1, 2]]
-        self.all_elements = [range(i) for i in self._shape]
-        self.index_generator = itertools.product(*self.all_elements)
-
-        if self.combiner:
-            self._prepare_axis_inputs_combine()
-
-
+    # do I use it?
     def __getitem__(self, ind):
         if type(ind) is int:
-            ind = (ind, )
+            ind = (ind,)
         return self.state_values(ind)
-
-    # not used?
-    #@property
-    #def splitter(self):
-    #    return self._splitter
 
     @property
     def combiner(self):
@@ -98,10 +72,7 @@ class State(object):
             if el not in self._splitter_rpn:
                 raise Exception("element {} of combiner is not found in the splitter {}".format(
                     el, self._splitter))
-
-        #self._combiner_wo_inner = list(set(self._combiner) - set(self._inner_splitter))
         self._prepare_combine()
-
 
     @property
     def ndim(self):
@@ -182,6 +153,7 @@ class State(object):
             ndim=self._ndim_comb)
 
 
+    # TODO: this hast be review (the idea itself)
     def _inner_splitter_separation(self, combiner):
         """
         checking if splitter is ok, allowing for inner splitter,
@@ -212,22 +184,37 @@ class State(object):
                         self._inner_splitter.append(spl)
                         self._splitter_wo_inner = self._splitter[(i+1)%2]
 
+
         self._inner_combiner = [comb for comb in combiner if comb in self._inner_splitter]
         self._combiner_wo_inner = list(set(combiner) - set(self._inner_combiner))
-        # pdb.set_trace()
-        # pass
 
-        # checking if there are no more inner inputs or not known inputs in the splitter
-        # _input_names_splitter_copy = copy(self._input_names_splitter)
-        # [_input_names_splitter_copy.remove(x) for x in self._inner_splitter]
-        # for inp in _input_names_splitter_copy:
-        #     if inp in self._input_names:
-        #         pass
-        #     elif inp in self._inner_inputs_names:
-        #         raise Exception("inner input {} can be only once in the splitter in the "
-        #                         "most outer part".format(inp))
-        #     else:
-        #         raise Exception("input name {} from splitter not known".format(inp))
+
+    def prepare_state_input(self):
+        """prepare all inputs, should be called once all input is available"""
+
+        # not all input field have to be use in the splitter, can be an extra scalar
+        self._input_names = list(self.state_inputs.keys())
+
+        # dictionary[key=input names] = list of axes related to
+        # e.g. {'r': [1], 'e': [0], 'd': [0, 1]}
+        # ndim - int, number of dimension for the "final array" (that is not created)
+        self._axis_for_input, self._ndim = aux.splitting_axis(self.state_inputs, self._splitter_rpn_wo_inner)
+
+        # list of inputs variable for each axis
+        # e.g. [['e', 'd'], ['r', 'd']]
+        # shape - list, e.g. [2,3]
+        # TODO: do I need it?
+        self._input_for_axis, self._shape = aux.converting_axis2input(
+            state_inputs=self.state_inputs, axis_for_input=self._axis_for_input,
+            ndim=self._ndim)
+
+        # list of all possible indexes in each dim, will be use to iterate
+        # e.g. [[0, 1], [0, 1, 2]]
+        self.all_elements = [range(i) for i in self._shape]
+        self.index_generator = itertools.product(*self.all_elements)
+
+        if self.combiner:
+            self._prepare_axis_inputs_combine()
 
 
     def state_values(self, ind, value=True):
