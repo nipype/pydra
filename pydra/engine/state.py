@@ -50,6 +50,10 @@ class State(object):
                 self.node.wf_inner_splitters.append(spl)
         # inner splitters that will stay after combining
         self._inner_splitter_comb = list(set(self._inner_splitter) - set(self._inner_combiner))
+        if self._inner_splitter_comb and self._combiner_wo_inner:
+            raise Exception("You can't combine {} before combining all inner splitters: {}".format(
+                self._combiner_wo_inner, self._inner_splitter_comb
+            ))
 
 
     # do I use it?

@@ -512,7 +512,6 @@ def test_innerwf_10a(change_dir, plugin):
     assert wf.result["NC_out"] == ({}, [4, 5, 6, 4, 5, 6, 7, 8])
 
 
-@pytest.mark.xfail(reason="have to debug")
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_innerwf_10b(change_dir, plugin):
