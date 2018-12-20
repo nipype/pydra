@@ -392,6 +392,13 @@ def test_innerwf_8(change_dir, plugin):
     sub.run()
     sub.close()
 
+    #checking splitters/combiners
+    assert wf.nodes[0].splitter is None
+    assert wf.nodes[1].splitter == "NB.a"
+    assert wf.nodes[1].state._inner_splitter == ["NB.a"]
+    assert wf.nodes[1].state._splitter_wo_inner is None
+
+    # checking results
     assert wf.nodes[0].result["out"] == ({}, [0, 1, 2])
     assert wf.nodes[1].result["out"] == [({"NB.a": 0}, 2), ({"NB.a": 1}, 3), ({"NB.a": 2}, 4)]
     #output of the wf
@@ -422,6 +429,24 @@ def test_innerwf_9(change_dir, plugin):
     sub.run()
     sub.close()
 
+    #checking splitters/combiners
+    assert wf.nodes[0].splitter is None
+
+    assert wf.nodes[1].splitter == "NB.a"
+    assert wf.nodes[1].state._inner_splitter == ["NB.a"]
+    assert wf.nodes[1].state._splitter_wo_inner is None
+    assert wf.nodes[1].state._inner_splitter_comb == ["NB.a"]
+
+    assert wf.nodes[2].splitter == "NB.a"
+    assert wf.nodes[2].state._inner_splitter == ["NB.a"]
+    assert wf.nodes[2].state._splitter_wo_inner is None
+    assert wf.nodes[2].state._inner_splitter_comb == []
+    assert wf.nodes[2].combiner == ["NB.a"]
+    assert wf.nodes[2].state._inner_splitter == ["NB.a"]
+    assert wf.nodes[2].state._combiner_wo_inner == []
+
+
+    # checking results
     assert wf.nodes[0].result["out"] == ({}, [0, 1, 2])
     assert wf.nodes[1].result["out"] == [({"NB.a": 0}, 2), ({"NB.a": 1}, 3), ({"NB.a": 2}, 4)]
     assert wf.nodes[2].result["out"] == ({}, [4, 5, 6])
@@ -433,7 +458,7 @@ def test_innerwf_9(change_dir, plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_innerwf_10(change_dir, plugin):
-    """wf with three nodes, the first one has a splitter and returns a list for each elemnt,
+    """wf with three nodes, the first one has a splitter and returns a list for each element,
     the second takes elements of the list as an input - has a simple inner splitter,
      inner combiner is in the third node
     """
@@ -454,6 +479,23 @@ def test_innerwf_10(change_dir, plugin):
     sub.run()
     sub.close()
 
+    #checking splitters/combiners
+    assert wf.nodes[0].splitter == "NA.n"
+
+    assert wf.nodes[1].splitter == ["NA.n", "NB.a"]
+    assert wf.nodes[1].state._inner_splitter == ["NB.a"]
+    assert wf.nodes[1].state._splitter_wo_inner == "NA.n"
+    assert wf.nodes[1].state._inner_splitter_comb == ["NB.a"]
+
+    assert wf.nodes[2].splitter == ["NA.n", "NB.a"]
+    assert wf.nodes[2].state._inner_splitter == ["NB.a"]
+    assert wf.nodes[2].state._splitter_wo_inner == "NA.n"
+    assert wf.nodes[2].state._inner_splitter_comb == []
+    assert wf.nodes[2].combiner == ["NB.a"]
+    assert wf.nodes[2].state._inner_splitter == ["NB.a"]
+    assert wf.nodes[2].state._combiner_wo_inner == []
+
+    # checking results
     assert wf.nodes[0].result["out"] == [({"NA.n": 3}, [0, 1, 2]), ({"NA.n": 5}, [0, 1, 2, 3, 4])]
     assert wf.nodes[1].result["out"] == [({"NA.n": 3, "NB.a": 0}, 2), ({"NA.n": 3, "NB.a": 1}, 3),
                                          ({"NA.n": 3, "NB.a": 2}, 4),
@@ -495,6 +537,23 @@ def test_innerwf_10a(change_dir, plugin):
     sub.run()
     sub.close()
 
+    #checking splitters/combiners
+    assert wf.nodes[0].splitter == "NA.n"
+
+    assert wf.nodes[1].splitter == ["NA.n", "NB.a"]
+    assert wf.nodes[1].state._inner_splitter == ["NB.a"]
+    assert wf.nodes[1].state._splitter_wo_inner == "NA.n"
+    assert wf.nodes[1].state._inner_splitter_comb == ["NB.a"]
+
+    assert wf.nodes[2].splitter == ["NA.n", "NB.a"]
+    assert wf.nodes[2].state._inner_splitter == ["NB.a"]
+    assert wf.nodes[2].state._splitter_wo_inner == "NA.n"
+    assert wf.nodes[2].state._inner_splitter_comb == []
+    assert wf.nodes[2].combiner == ["NB.a", "NA.n"]
+    assert wf.nodes[2].state._inner_splitter == ["NB.a"]
+    assert wf.nodes[2].state._combiner_wo_inner == ["NA.n"]
+
+    # checking results
     assert wf.nodes[0].result["out"] == [({"NA.n": 3}, [0, 1, 2]), ({"NA.n": 5}, [0, 1, 2, 3, 4])]
     assert wf.nodes[1].result["out"] == [({"NA.n": 3, "NB.a": 0}, 2), ({"NA.n": 3, "NB.a": 1}, 3),
                                          ({"NA.n": 3, "NB.a": 2}, 4),
@@ -517,9 +576,51 @@ def test_innerwf_10a(change_dir, plugin):
 def test_innerwf_10b(change_dir, plugin):
     """wf with three nodes, the first one has a splitter and returns a list for each elemnt,
     the second takes elements of the list as an input - has a simple inner splitter,
+     inner combiner and normal combiner are in the third node
+     the same as 10a, just with different order of combiner
+    """
+    wf = Workflow(name="wf10b", workingdir="test_innerwf10b_{}".format(plugin),
+                  wf_output_names=[("NA", "out", "NA_out"), ("NB", "out", "NB_out"),
+                                   ("NC", "out", "NC_out")])
+    na = Node(name="NA", interface=fun_list_generator(), workingdir="na", output_names=["out"],
+              inputs={"n": [3, 5]}, splitter="n")
+    nb = Node(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
+    nc = Node(name="NC", interface=fun_addtwo(), workingdir="nc", output_names=["out"])
+    wf.add_nodes([na, nb, nc])
+    wf.connect("NA", "out", "NB", "a")
+    wf.connect("NB", "out", "NC", "a")
+    nb.split(splitter=["NA.n", "a"])
+    nc.split(splitter=["NA.n", "NB.a"]).combine(combiner=["NA.n", "NB.a"])
+
+    sub = Submitter(runnable=wf, plugin=plugin)
+    sub.run()
+    sub.close()
+
+    assert wf.nodes[0].result["out"] == [({"NA.n": 3}, [0, 1, 2]), ({"NA.n": 5}, [0, 1, 2, 3, 4])]
+    assert wf.nodes[1].result["out"] == [({"NA.n": 3, "NB.a": 0}, 2), ({"NA.n": 3, "NB.a": 1}, 3),
+                                         ({"NA.n": 3, "NB.a": 2}, 4),
+                                         ({"NA.n": 5, "NB.a": 0}, 2), ({"NA.n": 5, "NB.a": 1}, 3),
+                                         ({"NA.n": 5, "NB.a": 2}, 4), ({"NA.n": 5, "NB.a": 3}, 5),
+                                         ({"NA.n": 5, "NB.a": 4}, 6)]
+    assert wf.nodes[2].result["out"] == ({}, [4, 5, 6, 4, 5, 6, 7, 8])
+    #output of the wf
+    assert wf.result["NA_out"] == [({"NA.n": 3}, [0, 1, 2]), ({"NA.n": 5}, [0, 1, 2, 3, 4])]
+    assert wf.result["NB_out"] == [({"NA.n": 3, "NB.a": 0}, 2), ({"NA.n": 3, "NB.a": 1}, 3),
+                                   ({"NA.n": 3, "NB.a": 2}, 4),
+                                   ({"NA.n": 5, "NB.a": 0}, 2), ({"NA.n": 5, "NB.a": 1}, 3),
+                                   ({"NA.n": 5, "NB.a": 2}, 4), ({"NA.n": 5, "NB.a": 3}, 5),
+                                   ({"NA.n": 5, "NB.a": 4}, 6)]
+    assert wf.result["NC_out"] == ({}, [4, 5, 6, 4, 5, 6, 7, 8])
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_innerwf_10c(change_dir, plugin):
+    """wf with three nodes, the first one has a splitter and returns a list for each elemnt,
+    the second takes elements of the list as an input - has a simple inner splitter,
     normal combiner is in the third node (should raise an error since inner splitter is not combined)
     """
-    wf = Workflow(name="wf10b", workingdir="test_innerwf10b_{}".format(plugin))
+    wf = Workflow(name="wf10c", workingdir="test_innerwf10c_{}".format(plugin))
     na = Node(name="NA", interface=fun_list_generator(), workingdir="na", output_names=["out"],
               inputs={"n": [3, 5]}, splitter="n")
     nb = Node(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
