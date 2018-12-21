@@ -51,6 +51,46 @@ def test_annotated_func():
                     '- out1: float']
 
 
+def test_halfannotated_func():
+    @to_task
+    def testfunc(a, b) -> (int, int):
+        return a+1, b+1
+
+    funky = testfunc(a=10, b=20)
+    assert hasattr(funky.inputs, 'a')
+    assert hasattr(funky.inputs, 'b')
+    assert hasattr(funky.inputs, '_func')
+    assert getattr(funky.inputs, 'a') == 10
+    assert getattr(funky.inputs, 'b') == 20
+    assert getattr(funky.inputs, '_func') is not None
+    assert set(funky.output_names) == set(['out1', 'out2'])
+    assert funky.__class__.__name__ + '_' + funky.inputs.hash == funky.checksum
+
+    result = funky()
+    assert hasattr(result, 'output')
+    assert hasattr(result.output, 'out1')
+    assert result.output.out1 == 11
+
+    assert os.path.exists(funky.cache_dir / funky.checksum / '_result.pklz')
+
+    funky.result()  # should not recompute
+    funky.inputs.a = 11
+    assert funky.result() is None
+    funky()
+    result = funky.result()
+    assert result.output.out1 == 12
+    help = funky.help(returnhelp=True)
+
+    assert help == ['Help for FunctionTask',
+                    'Input Parameters:',
+                    '- a: _empty',
+                    '- b: _empty',
+                    '- _func: str',
+                    'Output Parameters:',
+                    '- out1: int',
+                    '- out2: int']
+
+
 def test_notannotated_func():
     @to_task
     def no_annots(c, d):

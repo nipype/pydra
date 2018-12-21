@@ -294,7 +294,7 @@ class BaseTask:
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + '.lock')
         """
-        Concurrent execution scenarios        
+        Concurrent execution scenarios
 
         1. prior cache exists -> return result
         2. other process running -> wait
@@ -409,9 +409,20 @@ class FunctionTask(BaseTask):
                                        bases=(BaseSpec,))
             else:
                 return_info = func.__annotations__['return']
-                output_spec = SpecInfo(name=return_info.__name__,
-                                       fields=list(return_info.__annotations__.items()),
-                                       bases=(BaseSpec,))
+                if hasattr(return_info, '__name__'):
+                    output_spec = SpecInfo(name=return_info.__name__,
+                                        fields=list(return_info.__annotations__.items()),
+                                        bases=(BaseSpec,))
+                # Objects like int, float, list, tuple, and dict do not have __name__ attribute.
+                else:
+                    if hasattr(return_info, '__annotations__'):
+                        output_spec = SpecInfo(name='Output',
+                                            fields=list(return_info.__annotations__.items()),
+                                            bases=(BaseSpec,))
+                    else:
+                        output_spec = SpecInfo(name='Output',
+                                            fields=[('out{}'.format(n+1), t) for n, t in enumerate(return_info)],
+                                            bases=(BaseSpec,))
         elif 'return' in func.__annotations__:
             raise NotImplementedError('Branch not implemented')
         self.output_spec = output_spec
