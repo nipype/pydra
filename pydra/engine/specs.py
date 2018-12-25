@@ -103,3 +103,11 @@ class DockerSpec(ContainerSpec):
 @dc.dataclass
 class SingularitySpec(ContainerSpec):
     container: str = 'singularity'
+
+'''
+@dc.dataclass
+class OutputLink:
+    input: str
+    cache_location: Path
+    output: str
+'''

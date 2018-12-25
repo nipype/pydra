@@ -1,6 +1,9 @@
 import pdb
+import itertools
 import logging
-logger = logging.getLogger('nipype.workflow')
+from .helpers import ensure_list
+
+logger = logging.getLogger('pydra')
 
 # dj: might create a new class or move to State
 
@@ -363,7 +366,6 @@ def rpn2splitter(splitter_rpn):
     return rpn2splitter(splitter_modified)
 
 
-
 # used in the Node to change names in a splitter
 
 
@@ -395,3 +397,93 @@ def _add_name(mlist, name):
             mlist[i] = _add_name(mlist[i], name)
             mlist[i] = tuple(mlist[i])
     return mlist
+
+
+op = {'.': zip,
+      '*': itertools.product}
+
+
+def flatten(vals):
+    return itertools.chain.from_iterable([[val] if not isinstance(val, (tuple, list)) else flatten(val) for val in vals])
+
+
+def iter_splits(iterable, keys):
+    for iter in list(iterable):
+        yield dict(zip(keys, list(flatten(iter))))
+
+
+def _splits1d(splitter, inputs):
+    stack = []
+    keys = []
+    for token in splitter2rpn(splitter):
+        if token in ['.', '*']:
+            op1 = stack.pop()
+            op1val = ensure_list(inputs[op1]) if isinstance(op1, str) else op1
+            op2 = stack.pop()
+            op2val = ensure_list(inputs[op2]) if isinstance(op2, str) else op2
+            if token == '.':
+                if len(op1val) != len(op2val):
+                    raise ValueError('operands not of equal length {} and {}'.format(op1, op2))
+            stack.append(list(op[token](op2val, op1val)))
+            if isinstance(op2, str):
+                keys.insert(0, op2)
+            if isinstance(op1, str):
+                keys.append(op1)
+        else:
+            stack.append(token)
+    return stack.pop(), keys
+
+
+def splits(splitter, inputs):
+        return iter_splits(*_splits1d(splitter, inputs))
+
+
+'''
+def _splits2d(splitter, inputs):
+    stack = []
+    keys = []
+    for token in splitter2rpn(splitter):
+        if token in ['.', '*']:
+            op1 = stack.pop()
+            op1val = ensure_list(inputs[op1]) if isinstance(op1, str) else op1
+            op1val = list2array(op1val)
+            op2 = stack.pop()
+            op2val = ensure_list(inputs[op2]) if isinstance(op2, str) else op2
+            op2val = list2array(op2val)
+            shape = op1val.shape
+            if token == '.':
+                try:
+                    if op1val.shape != op2val.shape:
+                        raise ValueError('operands not of equal length {} and {}'.format(op1, op2))
+                except TypeError:
+                    pass
+            op_result = list(op[token](op2val.flatten().tolist(),
+                                       op1val.flatten().tolist()))
+            stack.append(list2array(op_result, shape).tolist())
+            if isinstance(op2, str):
+                keys.insert(0, op2)
+            if isinstance(op1, str):
+                keys.append(op1)
+        else:
+            stack.append(token)
+    return stack.pop(), keys
+
+def list_shape(inlist):
+    outlist = [len(inlist)]
+    if isinstance(inlist[0], list):
+        outlist.extend(list_shape(inlist[0]))
+    return tuple(outlist)
+
+
+def list2array(inlist, shape=None):
+    import numpy as np
+    inshape = list_shape(ensure_list(inlist))
+    if shape is None:
+        shape = inshape
+    new_array = np.array(inlist)
+    if new_array.shape == shape:
+        return new_array
+    new_array = np.empty(inshape, dtype=object)
+    new_array[:] = inlist
+    return new_array.reshape(shape)
+'''

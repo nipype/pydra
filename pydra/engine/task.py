@@ -49,117 +49,24 @@ import shutil
 from tempfile import mkdtemp
 import typing as ty
 
+from .node import Node
 from ..utils.messenger import (send_message, make_message, gen_uuid, now,
                                AuditFlag)
-from .specs import (BaseSpec, Runtime, Result, RuntimeSpec, File, SpecInfo,
+from .specs import (BaseSpec, Result, RuntimeSpec, File, SpecInfo,
                     ShellSpec, ShellOutSpec, ContainerSpec, DockerSpec,
                     SingularitySpec)
-
+from .helpers import (make_klass, print_help, ensure_list, gather_runtime_info,
+                      save_result, load_result)
 
 develop = True
 
 
-def ensure_list(obj):
-    if obj is None:
-        return []
-    if isinstance(obj, list):
-        return obj
-    return [obj]
-
-
-def print_help(obj):
-    help = ['Help for {}'.format(obj.__class__.__name__)]
-    input_klass = make_klass(obj.input_spec)
-    if dc.fields(input_klass):
-        help += ['Input Parameters:']
-    for f in dc.fields(input_klass):
-        default = ''
-        if f.default is not dc.MISSING and not f.name.startswith('_'):
-            default = ' (default: {})'.format(f.default)
-        try:
-            name = f.type.__name__
-        except AttributeError:
-            name = str(f.type)
-        help += ['- {}: {}{}'.format(f.name, name, default)]
-    output_klass = make_klass(obj.output_spec)
-    if dc.fields(output_klass):
-        help += ['Output Parameters:']
-    for f in dc.fields(output_klass):
-        try:
-            name = f.type.__name__
-        except AttributeError:
-            name = str(f.type)
-        help += ['- {}: {}'.format(f.name, name)]
-    print('\n'.join(help))
-    return help
-
-
-def load_result(checksum, cache_locations):
-    if not cache_locations:
-        return None
-    for location in cache_locations:
-        if (location / checksum).exists():
-            result_file = (location / checksum / '_result.pklz')
-            if result_file.exists():
-                return cp.loads(result_file.read_bytes())
-            return None
-    return None
-
-
-def save_result(result_path: Path, result):
-    with (result_path / '_result.pklz').open('wb') as fp:
-        cp.dump(result, fp)
-
-
-def task_hash(task_obj):
-    """
-    input hash, output hash, environment hash
-
-    :param task_obj:
-    :return:
-    """
-    return NotImplementedError
-
-
-def gather_runtime_info(fname):
-    runtime = Runtime(rss_peak_gb=None, vms_peak_gb=None,
-                      cpu_peak_percent=None)
-
-    # Read .prof file in and set runtime values
-    with open(fname, 'rt') as fp:
-        data = [[float(el) for el in val.strip().split(',')]
-                for val in fp.readlines()]
-        if data:
-            runtime.rss_peak_gb = max([val[2] for val in data]) / 1024
-            runtime.vms_peak_gb = max([val[3] for val in data]) / 1024
-            runtime.cpu_peak_percent = max([val[1] for val in data])
-        '''
-        runtime.prof_dict = {
-            'time': vals[:, 0].tolist(),
-            'cpus': vals[:, 1].tolist(),
-            'rss_GiB': (vals[:, 2] / 1024).tolist(),
-            'vms_GiB': (vals[:, 3] / 1024).tolist(),
-        }
-        '''
-    return runtime
-
-
-def make_klass(spec):
-    if spec is None:
-        return None
-    return dc.make_dataclass(spec.name, spec.fields, bases=spec.bases)
-
-
-class BaseTask:
+class BaseTask(Node):
     """This is a base class for Task objects.
     """
 
-    _api_version: str = "0.0.1"  # Should generally not be touched by subclasses
     _task_version: ty.Optional[str] = None  # Task writers encouraged to define and increment when implementation changes sufficiently
-    _version: str  # Version of tool being wrapped
 
-    input_spec = BaseSpec  # See BaseSpec
-    output_spec = BaseSpec  # See BaseSpec
     audit_flags: AuditFlag = AuditFlag.NONE  # What to audit. See audit flags for details
 
     _can_resume = False  # Does the task allow resuming from previous state
@@ -168,49 +75,23 @@ class BaseTask:
     _runtime_requirements = RuntimeSpec()
     _runtime_hints = None
 
-    _input_sets = None  # Dictionaries of predefined input settings
     _cache_dir = None  # Working directory in which to operate
     _references = None  # List of references for a task
 
-    def __init__(self, inputs: ty.Union[ty.Text, File, ty.Dict, None]=None,
+    def __init__(self,
+                 name, splitter=None, combiner=None,
+                 other_splitters=None, write_state=True,
+                 inputs: ty.Union[ty.Text, File, ty.Dict, None]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None):
         """Initialize task with given args."""
-        super().__init__()
-        if not self.input_spec:
-            raise Exception(
-                'No input_spec in class: %s' % self.__class__.__name__)
-        klass = make_klass(self.input_spec)
-        self.inputs = klass(**{f.name: (None if f.default is dc.MISSING
-                                  else f.default) for f in dc.fields(klass)})
+        super(BaseTask, self).__init__(name, splitter=splitter,
+                                       combiner=combiner,
+                                       other_splitters=other_splitters,
+                                       write_state=write_state, inputs=inputs)
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
-        if self._input_sets is None:
-            self._input_sets = {}
-        if inputs:
-            if isinstance(inputs, dict):
-                pass
-            elif Path(inputs).is_file():
-                inputs = json.loads(Path(inputs).read_text())
-            elif isinstance(inputs, str):
-                if self._input_sets is None or inputs not in self._input_sets:
-                    raise ValueError("Unknown input set {!r}".format(inputs))
-                inputs = self._input_sets[inputs]
-            self.inputs = dc.replace(self.inputs, **inputs)
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state['input_spec'] = pk.dumps(state['input_spec'])
-        state['output_spec'] = pk.dumps(state['output_spec'])
-        state['inputs'] = dc.asdict(state['inputs'])
-        return state
-
-    def __setstate__(self, state):
-        state['input_spec'] = pk.loads(state['input_spec'])
-        state['output_spec'] = pk.loads(state['output_spec'])
-        state['inputs'] = make_klass(state['input_spec'])(**state['inputs'])
-        self.__dict__.update(state)
 
     def audit(self, message, flags=None):
         if develop:
@@ -234,38 +115,9 @@ class BaseTask:
         """
         return self._can_resume
 
-    def help(self, returnhelp=False):
-        """ Prints class help
-        """
-        help_obj = print_help(self)
-        if returnhelp:
-            return help_obj
-
-    @property
-    def output_names(self):
-        return [f.name for f in dc.fields(make_klass(self.output_spec))]
-
-    @property
-    def version(self):
-        return self._version
-
-    def save_set(self, name, inputs, force=False):
-        if name in self._input_sets and not force:
-            raise KeyError('Key {} already saved. Use force=True to override.')
-        self._input_sets[name] = inputs
-
-    @property
-    def checksum(self):
-        return '_'.join((self.__class__.__name__, self.inputs.hash))
-
     @abc.abstractmethod
     def _run_task(self):
         pass
-
-    def result(self, cache_locations=None):
-        return load_result(self.checksum,
-                             ensure_list(cache_locations) +
-                             ensure_list(self._cache_dir))
 
     @property
     def cache_dir(self):
@@ -387,7 +239,10 @@ class BaseTask:
 
 class FunctionTask(BaseTask):
 
-    def __init__(self, func: ty.Callable, output_spec: ty.Optional[BaseSpec]=None,
+    def __init__(self, func: ty.Callable,
+                 output_spec: ty.Optional[BaseSpec]=None,
+                 name=None, splitter=None, combiner=None,
+                 other_splitters=None, write_state=True,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
         self.input_spec = SpecInfo(name='Inputs',
@@ -398,7 +253,13 @@ class FunctionTask(BaseTask):
              for val in inspect.signature(func).parameters.values()
              ] + [('_func', str, cp.dumps(func))],
                                    bases=(BaseSpec,))
-        super(FunctionTask, self).__init__(inputs=kwargs,
+        if name is None:
+            name = func.__name__
+        super(FunctionTask, self).__init__(name, splitter=splitter,
+                                           combiner=combiner,
+                                           other_splitters=other_splitters,
+                                           write_state=write_state,
+                                           inputs=kwargs,
                                            audit_flags=audit_flags,
                                            messengers=messengers,
                                            messenger_args=messenger_args)
@@ -446,64 +307,6 @@ def to_task(func_to_decorate):
                                      **original_kwargs)
         return function_task
     return create_func
-
-
-# https://stackoverflow.com/questions/17190221
-import asyncio
-import asyncio.subprocess as asp
-import sys
-
-@asyncio.coroutine
-def read_stream_and_display(stream, display):
-    """Read from stream line by line until EOF, display, and capture the lines.
-
-    """
-    output = []
-    while True:
-        line = yield from stream.readline()
-        if not line:
-            break
-        output.append(line)
-        display(line) # assume it doesn't block
-    return b''.join(output).decode()
-
-
-@asyncio.coroutine
-def read_and_display(*cmd):
-    """Capture cmd's stdout, stderr while displaying them as they arrive
-    (line by line).
-
-    """
-    # start process
-    process = yield from asyncio.create_subprocess_exec(*cmd, stdout=asp.PIPE,
-                                                        stderr=asp.PIPE)
-
-    # read child's stdout/stderr concurrently (capture and display)
-    try:
-        stdout, stderr = yield from asyncio.gather(
-            read_stream_and_display(process.stdout, sys.stdout.buffer.write),
-            read_stream_and_display(process.stderr, sys.stderr.buffer.write))
-    except Exception:
-        process.kill()
-        raise
-    finally:
-        # wait for the process to exit
-        rc = yield from process.wait()
-    return rc, stdout, stderr
-
-
-# run the event loop
-def execute(cmd):
-    if os.name == 'nt':
-        loop = asyncio.ProactorEventLoop() # for subprocess' pipes on Windows
-        asyncio.set_event_loop(loop)
-    else:
-        if asyncio.get_event_loop().is_closed():
-            asyncio.set_event_loop(asyncio.new_event_loop())
-        loop = asyncio.get_event_loop()
-    rc, stdout, stderr = loop.run_until_complete(read_and_display(*cmd))
-    loop.close()
-    return rc, stdout, stderr
 
 
 class ShellCommandTask(BaseTask):

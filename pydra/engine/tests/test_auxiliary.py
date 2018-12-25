@@ -4,6 +4,36 @@ import numpy as np
 import pytest
 
 
+def test_splits_1():
+    splitter = ("a", "v", "c")
+    inputs = {"a": [1, 2], "v": ['a', 'b', 'c'], "c":[3, 4]}
+    with pytest.raises(ValueError,
+                       message='operands not of equal length v and a'):
+        aux.splits(splitter, inputs)
+
+
+@pytest.mark.parametrize("splitter, splits", [
+    (("a", "v", "c"), [{'c': 3, 'v': 'a', 'a': 1},
+                      {'c': 4, 'v': 'b', 'a': 2}]),
+    (["a", "v", "c"], [{'a': 1, 'v': 'a', 'c': 3},
+                      {'a': 1, 'v': 'a', 'c': 4},
+                      {'a': 1, 'v': 'b', 'c': 3},
+                      {'a': 1, 'v': 'b', 'c': 4},
+                      {'a': 2, 'v': 'a', 'c': 3},
+                      {'a': 2, 'v': 'a', 'c': 4},
+                      {'a': 2, 'v': 'b', 'c': 3},
+                      {'a': 2, 'v': 'b', 'c': 4}]),
+    (["a", ("v", "c")], [{'a': 1, 'v': 'a', 'c': 3},
+                      {'a': 1, 'v': 'b', 'c': 4},
+                      {'a': 2, 'v': 'a', 'c': 3},
+                      {'a': 2, 'v': 'b', 'c': 4}])])
+def test_splits_2(splitter, splits):
+    inputs = {"a": [1, 2], "v": ['a', 'b'], "c":[3, 4]}
+    splits_out = list(aux.splits(splitter, inputs))
+    assert list(splits_out[0].keys()) == ["a", "v", "c"]
+    assert splits_out == splits
+
+
 @pytest.mark.parametrize("splitter, rpn", [
     ("a", ["a"]),
     (("a", "b"), ["a", "b", "."]),

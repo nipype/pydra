@@ -1,24 +1,36 @@
 """Basic compute graph elements"""
-import os
+from collections import OrderedDict
+import dataclasses as dc
 import itertools
-import pdb
+import json
+import logging
 import networkx as nx
 import numpy as np
-from collections import OrderedDict
-from copy import deepcopy, copy
+import os
+from pathlib import Path
+import typing as ty
 
-from nipype import logging
 
 from . import state
 from . import auxiliary as aux
-from .task import FunctionTask
+from .specs import File, BaseSpec
+from .helpers import (make_klass, create_checksum, print_help, load_result,
+                      ensure_list, get_inputs)
 
-logger = logging.getLogger('nipype.workflow')
+logger = logging.getLogger('pydra')
 
 
-class NodeBase(object):
-    def __init__(self, name, splitter=None, combiner=None, inputs=None,
-                 other_splitters=None, write_state=True, *args, **kwargs):
+class NodeBase:
+    _api_version: str = "0.0.1"  # Should generally not be touched by subclasses
+    _version: str  # Version of tool being wrapped
+    _input_sets = None  # Dictionaries of predefined input settings
+
+    input_spec = BaseSpec
+    output_spec = BaseSpec
+
+    def __init__(self, name, splitter=None, combiner=None,
+                 inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
+                 write_state=True):
         """A base structure for nodes in the computational graph (i.e. both
         ``Node`` and ``Workflow``).
 
@@ -33,48 +45,110 @@ class NodeBase(object):
             variables that should be used to combine results together
         inputs : dictionary (input name, input value or list of values)
             States this node's input names
-        other_splitters : dictionary (name of a node, splitter of the node)
-            information about other nodes' splitters from workflow (in case the splitter
-            from previous node is used)
         write_state : True
             flag that says if value of state input should be written out to output
             and directories (otherwise indices are used)
-
-
-
         """
         self.name = name
-        self._inputs = {}
-        self._state_inputs = {}
-
-        if inputs:
-            self.inputs = inputs
+        if not self.input_spec:
+            raise Exception(
+                'No input_spec in class: %s' % self.__class__.__name__)
+        klass = make_klass(self.input_spec)
+        self.inputs = klass(**{f.name: (None if f.default is dc.MISSING
+                                  else f.default) for f in dc.fields(klass)})
+        self._state = None
 
         if splitter:
             # adding name of the node to the input name within the splitter
             splitter = aux.change_splitter(splitter, self.name)
         self._splitter = splitter
-        if other_splitters:
-            self._other_splitters = other_splitters
-        else:
-            self._other_splitters = {}
         self._combiner = []
         if combiner:
             self.combiner = combiner
-        self._output = {}
-        self._result = {}
-        # flag that says if the node/wf is ready to run (has all input)
-        self.ready2run = True
-        # needed outputs from other nodes if the node part of a wf
-        self.needed_outputs = []
+
         # flag that says if node finished all jobs
         self._is_complete = False
+        self._needed_outputs = []
         self.write_state = write_state
 
+        if self._input_sets is None:
+            self._input_sets = {}
+        if inputs:
+            if isinstance(inputs, dict):
+                pass
+            elif Path(inputs).is_file():
+                inputs = json.loads(Path(inputs).read_text())
+            elif isinstance(inputs, str):
+                if self._input_sets is None or inputs not in self._input_sets:
+                    raise ValueError("Unknown input set {!r}".format(inputs))
+                inputs = self._input_sets[inputs]
+            self.inputs = dc.replace(self.inputs, **inputs)
+            self.state_inputs = inputs
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state['input_spec'] = pk.dumps(state['input_spec'])
+        state['output_spec'] = pk.dumps(state['output_spec'])
+        state['inputs'] = dc.asdict(state['inputs'])
+        return state
+
+    def __setstate__(self, state):
+        state['input_spec'] = pk.loads(state['input_spec'])
+        state['output_spec'] = pk.loads(state['output_spec'])
+        state['inputs'] = make_klass(state['input_spec'])(**state['inputs'])
+        self.__dict__.update(state)
+
+    def help(self, returnhelp=False):
+        """ Prints class help
+        """
+        help_obj = print_help(self)
+        if returnhelp:
+            return help_obj
+
+    @property
+    def version(self):
+        return self._version
+
+    def save_set(self, name, inputs, force=False):
+        if name in self._input_sets and not force:
+            raise KeyError('Key {} already saved. Use force=True to override.')
+        self._input_sets[name] = inputs
+
+    @property
+    def checksum(self):
+        return create_checksum(self.__class__.__name__, self.inputs.hash)
+
+    def ready2run(self, index=None):
+        # flag that says if the node/wf is ready to run (has all input)
+        for node, _, _ in self.needed_outputs:
+            if not node.is_finished(index=index):
+                return False
+        return True
+
+    def is_finished(self, index=None):
+        # TODO: check
+        return False
+
+    @property
+    def needed_outputs(self):
+        return self._needed_outputs
+
+    @needed_outputs.setter
+    def needed_outputs(self, requires):
+        self._needed_outputs = ensure_list(requires)
 
     @property
     def state(self):
+        incoming_states = []
+        for node, _, _ in self.needed_outputs:
+            if node.state is not None:
+                incoming_states.append(node.state)
+        if self.splitter is not None or incoming_states:
+            if self._state is None:
+                self._state = state.State(name=self.name,
+                                          incoming_states=incoming_states)
+        else:
+            self._state = None
         return self._state
 
     @property
@@ -86,7 +160,6 @@ class NodeBase(object):
         if self._splitter and self._splitter != splitter:
             raise Exception("splitter is already set")
         self._splitter = aux.change_splitter(splitter, self.name)
-
 
     @property
     def combiner(self):
@@ -110,54 +183,32 @@ class NodeBase(object):
         #             el, self.splitter))
 
     @property
-    def inputs(self):
-        return self._inputs
-
-    @inputs.setter
-    def inputs(self, inputs):
-        # Massage inputs dict
-        inputs = {
-            ".".join((self.name, key)): value if not isinstance(value, list) else np.array(value)
-            for key, value in inputs.items()
-        }
-        self._inputs.update(inputs)
-        self._state_inputs.update(inputs)
-
-    @property
-    def state_inputs(self):
-        return self._state_inputs
-
-    @state_inputs.setter
-    def state_inputs(self, state_inputs):
-        self._state_inputs.update(state_inputs)
+    def output_names(self):
+        return [f.name for f in dc.fields(make_klass(self.output_spec))]
 
     @property
     def output(self):
         return self._output
 
-    @property
-    def result(self):
-        if not self._result:
-            self._reading_results()
-        return self._result
+    def result(self, cache_locations=None,
+               return_state=False):
+        return self._reading_results(cache_locations=cache_locations,
+                                     return_state=return_state)
 
     def prepare_state_input(self):
         self._state = state.State(node=self)
         self._state.prepare_state_input()
 
-
-    def split(self, splitter, inputs=None):
+    def split(self, splitter, **kwargs):
         self.splitter = splitter
-        if inputs:
-            self.inputs = inputs
-            self._state_inputs.update(self.inputs)
+        if kwargs:
+            self.inputs = dc.replace(self.inputs, **kwargs)
+            self.state_inputs = kwargs
         return self
-
 
     def combine(self, combiner):
         self.combiner = combiner
         return self
-
 
     def checking_input_el(self, ind, ind_inner=None):
         """checking if all inputs are available (for specific state element)"""
@@ -166,7 +217,6 @@ class NodeBase(object):
             return True
         except:  #TODO specify
             return False
-
 
     def get_input_el(self, ind, ind_inner=None):
         """collecting all inputs required to run the node (for specific state element)"""
@@ -230,7 +280,6 @@ class NodeBase(object):
 
         return state_dict, inputs_dict
 
-
     def _get_input_comb(self, from_node, from_socket, state_dict):
         """collecting all outputs from previous node that has combiner"""
         state_dict_all = self._state_dict_all_comb(from_node, state_dict)
@@ -245,8 +294,6 @@ class NodeBase(object):
                 else:
                     raise Exception("output from {} doesnt exist".format(from_node))
         return inputs_all
-
-
 
     def _state_dict_all_comb(self, from_node, state_dict):
         """collecting state dictionary for all elements that were combined together"""
@@ -410,23 +457,17 @@ class NodeBase(object):
 
 
 class Node(NodeBase):
-    def __init__(self, name, interface, inputs=None, splitter=None, workingdir=None,
-                 other_splitters=None, output_names=None, write_state=True,
-                 combiner=None, *args, **kwargs):
+    def __init__(self, name, inputs=None, splitter=None, workingdir=None,
+                 other_splitters=None, write_state=True,
+                 combiner=None):
         super(Node, self).__init__(name=name, splitter=splitter, inputs=inputs,
-                                   other_splitters=other_splitters, write_state=write_state,
-                                   combiner=combiner, *args, **kwargs)
+                                   other_splitters=other_splitters,
+                                   write_state=write_state, combiner=combiner)
 
         # working directory for node, will be change if node is a part of a wf
         self.workingdir = workingdir
-        self.interface = interface
         # if there is no connection, the list of inner inputs should be empty
         self.inner_inputs_names = []
-        # list of  interf_key_out
-        self.output_names = output_names
-        if not self.output_names:
-            self.output_names = []
-        #for inner states/splitters
         self.inner_states = {}
         self.wf_inner_splitters = []
         # dictionary of results from tasks
@@ -444,9 +485,9 @@ class Node(NodeBase):
         logger.debug("Run interface el, name={}, inputs_dict={}, state_dict={}".format(
             self.name, inputs_dict, state_surv_dict))
         os.makedirs(os.path.join(os.getcwd(), self.workingdir), exist_ok=True)
-        self.interface.cache_dir = os.path.join(os.getcwd(), self.workingdir)
+        self.cache_dir = os.path.join(os.getcwd(), self.workingdir)
         interf_inputs = dict((k.split(".")[1], v) for k,v in inputs_dict.items())
-        res = self.interface.run(**interf_inputs)
+        res = self.run(**interf_inputs)
         return dir_nm_el, res
 
 
@@ -516,9 +557,14 @@ class Node(NodeBase):
         self._is_complete = True
         return True
 
-
-    def _reading_results(self):
+    def _reading_results(self, ):
         """ collecting all results for all output names"""
+        """
+        return load_result(self.checksum,
+                             ensure_list(cache_locations) +
+                             ensure_list(self._cache_dir))
+
+        """
         for key_out in self.output_names:
             self._result[key_out] = self._reading_results_one_output(key_out)
 
@@ -671,22 +717,25 @@ class Workflow(NodeBase):
     def add(self, runnable, name=None, workingdir=None, inputs=None,
             output_names=None, splitter=None, combiner=None, write_state=True, **kwargs):
         # TODO: should I also accept normal function?
-        if is_function_task(runnable):
+        if is_node(runnable):
+            node = runnable
+            node.other_splitters = self._node_splitters
+        elif is_workflow(runnable):
+            node = runnable
+        elif is_function(runnable):
             if not output_names:
                 output_names = ["out"]
             if not name:
                 raise Exception("you have to specify name for the node")
             if not workingdir:
                 workingdir = name
-            node = Node(interface=runnable, workingdir=workingdir, name=name,
-                        inputs=inputs, splitter=splitter, other_splitters=self._node_splitters,
+            from .task import to_task
+            node = to_task(runnable, workingdir=workingdir,
+                        name=name,
+                        inputs=inputs, splitter=splitter,
+                        other_splitters=self._node_splitters,
                         combiner=combiner, output_names=output_names,
                         write_state=write_state)
-        elif is_node(runnable):
-            node = runnable
-            node.other_splitters = self._node_splitters
-        elif is_workflow(runnable):
-            node = runnable
         else:
             raise ValueError("Unknown workflow element: {!r}".format(runnable))
         self.add_nodes([node])
@@ -787,12 +836,10 @@ class Workflow(NodeBase):
 def is_function(obj):
     return hasattr(obj, '__call__')
 
-def is_function_task(obj):
-    return type(obj) is FunctionTask
 
 def is_node(obj):
-    return type(obj) is Node
+    return isinstance(obj, Node)
 
 
 def is_workflow(obj):
-    return type(obj) is Workflow
+    return isinstance(obj, Workflow)

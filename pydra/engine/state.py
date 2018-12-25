@@ -1,9 +1,36 @@
+import dataclasses as dc
 from collections import OrderedDict
 import itertools
 from copy import deepcopy
 import pdb
 
+from functools import lru_cache
+
 from . import auxiliary as aux
+
+
+class State:
+    def __init__(self, name, incoming_states=None):
+        self.name = name
+        self.ndim = None
+        self._states = None
+        self.states = lru_cache(maxsize=1, typed=True)(self.states)
+        self.incoming_states_ = incoming_states
+
+    def states(self, splitter, inputs):
+        self.ndim = len([1 for val in aux.splitter2rpn(splitter) if val == '*'])
+        self._states = list(aux.splits(splitter, inputs))
+        return self._states
+
+    def named_states(self, splitter, inputs):
+        self.ndim = len([1 for val in aux.splitter2rpn(splitter) if val == '*'])
+        return [{"{}.{}".format(self.name, key):value
+                 for key, value in item.items()}
+                for item in self.states(splitter, inputs)]
+
+'''    
+    def cross_combine(self, other):
+        self.ndim += other.ndim
 
 
 class State(object):
@@ -256,3 +283,4 @@ class State(object):
     def state_ind(self, ind):
         """state_values, but returning indices instead of values"""
         return self.state_values(ind, value=False)
+'''

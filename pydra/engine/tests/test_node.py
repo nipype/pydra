@@ -6,9 +6,8 @@ from pathlib import Path
 
 from nipype.utils.filemanip import save_json, makedirs, to_str
 from nipype.interfaces import fsl
-from nipype import Function
 
-from ..node import Node, Workflow
+from ..node import Node, Workflow, is_node
 from ..submitter import Submitter
 from ..task import to_task
 
@@ -34,8 +33,8 @@ def change_dir(request):
     request.addfinalizer(move2orig)
 
 
-Plugins = ["serial"]
 Plugins = ["serial", "mp", "cf", "dask"]
+Plugins = ["serial", "cf"]
 
 
 @to_task
@@ -57,29 +56,38 @@ def fun_addvar4(a, b, c, d):
     return a + b + c + d
 
 
-
 def test_node_1():
     """Node with mandatory arguments only"""
-    nn = Node(name="NA", interface=fun_addtwo())
+    nn = fun_addtwo()
+    assert isinstance(nn, Node)
+    assert nn.name == "fun_addtwo"
+    assert hasattr(nn, "__call__")
+
+    with pytest.raises(TypeError):
+        fun_addtwo("NA")
+
+    nn = fun_addtwo(name="NA")
+    assert nn.name == "NA"
     assert nn.splitter is None
-    assert nn.inputs == {}
+    assert hasattr(nn.inputs, 'a')
+    assert hasattr(nn.inputs, '_func')
     assert nn.splitter is None
 
 
 def test_node_2():
     """Node with interface and inputs"""
-    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": 3})
+    nn = fun_addtwo(name="NA", a=3)
     assert nn.splitter is None
     # adding NA to the name of the variable
-    assert nn.inputs == {"NA.a": 3}
+    assert getattr(nn.inputs, 'a') == 3
     assert nn.splitter is None
 
 
 def test_node_3():
     """Node with interface, inputs and splitter"""
-    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]}, splitter="a")
+    nn = fun_addtwo(name="NA", a=[3, 5], splitter="a")
     assert nn.splitter == "NA.a"
-    assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
+    assert np.allclose(nn.inputs.a, [3, 5])
 
     nn.prepare_state_input()
     assert nn.state._splitter == "NA.a"
@@ -89,10 +97,10 @@ def test_node_3():
 
 def test_node_4():
     """Node with interface and inputs. splitter set using split method"""
-    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]})
+    nn = fun_addtwo(name="NA", a=[3, 5])
     nn.split(splitter="a")
     assert nn.splitter == "NA.a"
-    assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
+    assert np.allclose(nn.inputs.a, [3, 5])
 
     nn.prepare_state_input()
     assert nn.state._splitter == "NA.a"
@@ -102,10 +110,10 @@ def test_node_4():
 
 def test_node_4a():
     """Node with interface, splitter and inputs set with the split method"""
-    nn = Node(name="NA", interface=fun_addtwo())
-    nn.split(splitter="a", inputs={"a": [3, 5]})
+    nn = fun_addtwo(name="NA")
+    nn.split(splitter="a", a=[3, 5])
     assert nn.splitter == "NA.a"
-    assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
+    assert np.allclose(nn.inputs.a, [3, 5])
 
     nn.prepare_state_input()
     assert nn.state._splitter == "NA.a"
@@ -115,27 +123,24 @@ def test_node_4a():
 
 def test_node_4b():
     """Node with interface and inputs. trying to set splitter twice"""
-    nn = Node(name="NA", splitter="a", interface=fun_addtwo(), inputs={"a": [3, 5]})
-    with pytest.raises(Exception) as excinfo:
+    nn = fun_addtwo(name="NA", splitter="a", a=[3, 5])
+    with pytest.raises(Exception, message="splitter is already set"):
         nn.split(splitter="a")
-    assert str(excinfo.value) == "splitter is already set"
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-@python35_only
-def test_node_5(plugin, change_dir):
+def test_node_5(tmpdir, plugin, change_dir):
     """Node with interface and inputs, no splitter, running interface"""
-    nn = Node(name="NA", inputs={"a": 3}, interface=fun_addtwo(),
-        workingdir="test_nd5_{}".format(plugin), output_names=["out"])
+    nn = fun_addtwo(name="NA", a=3, workingdir=tmpdir / plugin)
 
-    assert (nn.inputs["NA.a"] == np.array([3])).all()
+    assert np.allclose(nn.inputs.a, [3])
 
     sub = Submitter(plugin=plugin, runnable=nn)
     sub.run()
     sub.close()
 
     # checking the results
-    assert nn.result["out"] == ({}, 5)
+    assert nn.result.output.out == ({}, 5)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
