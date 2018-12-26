@@ -126,7 +126,7 @@ class NodeBase:
         return True
 
     def is_finished(self, index=None):
-        # TODO: check
+        # TODO: check local procs
         return False
 
     @property
@@ -143,7 +143,15 @@ class NodeBase:
         for node, _, _ in self.needed_outputs:
             if node.state is not None:
                 incoming_states.append(node.state)
-        if self.splitter is not None or incoming_states:
+        if self.splitter is None:
+            self._splitter = [state.name for state in incoming_states] or None
+        elif len(incoming_states):
+            rpn = aux.splitter2rpn(self.splitter)
+            # TODO: check for keys instead of just names
+            left_out = [state.name for state in incoming_states
+                        if state.name not in rpn]
+
+        if self.splitter is not None:
             if self._state is None:
                 self._state = state.State(name=self.name,
                                           incoming_states=incoming_states)

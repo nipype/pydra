@@ -404,7 +404,9 @@ op = {'.': zip,
 
 
 def flatten(vals):
-    return itertools.chain.from_iterable([[val] if not isinstance(val, (tuple, list)) else flatten(val) for val in vals])
+    return itertools.chain.from_iterable([[val] if not isinstance(val,
+                                                                  (tuple, list))
+                                          else flatten(val) for val in vals])
 
 
 def iter_splits(iterable, keys):
@@ -418,24 +420,40 @@ def _splits1d(splitter, inputs):
     for token in splitter2rpn(splitter):
         if token in ['.', '*']:
             op1 = stack.pop()
-            op1val = ensure_list(inputs[op1]) if isinstance(op1, str) else op1
+            if isinstance(op1, str):
+                N1 = len(ensure_list(inputs[op1]))
+                op1val = range(N1)
+            else:
+                op1val, N1 = op1
             op2 = stack.pop()
-            op2val = ensure_list(inputs[op2]) if isinstance(op2, str) else op2
+            if isinstance(op2, str):
+                N2 = len(ensure_list(inputs[op2]))
+                op2val = range(N2)
+            else:
+                op2val, N2 = op2
             if token == '.':
-                if len(op1val) != len(op2val):
+                if N1 != N2:
                     raise ValueError('operands not of equal length {} and {}'.format(op1, op2))
-            stack.append(list(op[token](op2val, op1val)))
+            stack.append((op[token](op2val, op1val), N1))
             if isinstance(op2, str):
                 keys.insert(0, op2)
             if isinstance(op1, str):
                 keys.append(op1)
         else:
             stack.append(token)
-    return stack.pop(), keys
+    val = stack.pop()
+    if isinstance(val, tuple):
+        val = val[0]
+    return val, keys
 
 
 def splits(splitter, inputs):
         return iter_splits(*_splits1d(splitter, inputs))
+
+
+def map_splits(split_iter, inputs):
+    for split in split_iter:
+        yield {k: ensure_list(inputs[k])[v] for k,v in split.items()}
 
 
 '''

@@ -29,7 +29,8 @@ def test_splits_1():
                       {'a': 2, 'v': 'b', 'c': 4}])])
 def test_splits_2(splitter, splits):
     inputs = {"a": [1, 2], "v": ['a', 'b'], "c":[3, 4]}
-    splits_out = list(aux.splits(splitter, inputs))
+    splits_out = list(aux.map_splits(aux.splits(splitter, inputs),
+                                     inputs))
     assert list(splits_out[0].keys()) == ["a", "v", "c"]
     assert splits_out == splits
 
