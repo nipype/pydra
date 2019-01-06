@@ -403,57 +403,128 @@ op = {'.': zip,
       '*': itertools.product}
 
 
-def flatten(vals):
-    return itertools.chain.from_iterable([[val] if not isinstance(val,
-                                                                  (tuple, list))
-                                          else flatten(val) for val in vals])
+def flatten(vals, cur_depth=0, max_depth=None):
+    if max_depth is None:
+        max_depth = len(list(input_shape(vals)))
+    values = []
+    if cur_depth >= max_depth:
+        values.append([vals])
+    else:
+        for val in vals:
+            if isinstance(val, (list, tuple)):
+                values.append(flatten(val, cur_depth + 1, max_depth))
+            else:
+                values.append([val])
+    print(vals, values, cur_depth, max_depth)
+    return itertools.chain.from_iterable(values)
 
 
 def iter_splits(iterable, keys):
     for iter in list(iterable):
-        yield dict(zip(keys, list(flatten(iter))))
+        yield dict(zip(keys, list(flatten(iter, max_depth=1000))))
 
 
-def _splits1d(splitter, inputs):
+def next_key(new_key):
+    return '_' + chr(ord(new_key[1:]) + 1) if new_key else '_a'
+
+
+def input_shape(in1):
+    shape = [len(in1)]
+    last_shape = None
+    for value in in1:
+        if isinstance(value, list):
+            cur_shape = input_shape(value)
+            if last_shape is None:
+                last_shape = cur_shape
+            elif last_shape != cur_shape:
+                last_shape = None
+                break
+        else:
+            last_shape = None
+            break
+    if last_shape is not None:
+        shape.extend(last_shape)
+    return tuple(shape)
+
+
+def _splits(splitter, inputs):
+    import numpy as np
     stack = []
     keys = []
+    groups = {}
+    group_count = 0
     for token in splitter2rpn(splitter):
         if token in ['.', '*']:
             op1 = stack.pop()
-            if isinstance(op1, str):
-                N1 = len(ensure_list(inputs[op1]))
-                op1val = range(N1)
-            else:
-                op1val, N1 = op1
             op2 = stack.pop()
+            op1str = op2str = False
             if isinstance(op2, str):
-                N2 = len(ensure_list(inputs[op2]))
-                op2val = range(N2)
+                shape2 = input_shape(inputs[op2])
+                op2val = range(np.prod(shape2))
+                op2str = True
             else:
-                op2val, N2 = op2
+                op2val, shape2, oldgroup2 = op2
+            if isinstance(op1, str):
+                shape1 = input_shape(inputs[op1])
+                op1val = range(np.prod(shape1))
+                op1str = True
+            else:
+                op1val, shape1, oldgroup1 = op1
             if token == '.':
-                if N1 != N2:
-                    raise ValueError('operands not of equal length {} and {}'.format(op1, op2))
-            stack.append((op[token](op2val, op1val), N1))
+                if shape2 != shape1:
+                    raise ValueError('Operands {} and {} do not have same shape.'.format(op1, op2))
+            if token == '.':
+                if all([op1str, op2str]):
+                    groups[op2] = group_count
+                    groups[op1] = group_count
+                    oldgroup = group_count
+                elif op1str:
+                    groups[op1] = oldgroup2
+                    oldgroup = oldgroup2
+                elif op2str:
+                    groups[op2] = oldgroup1
+                    oldgroup = oldgroup1
+                newshape = shape1
+            if token == '*':
+                if all([op1str, op2str]):
+                    groups[op2] = group_count
+                    group_count += 1
+                    groups[op1] = group_count
+                    oldgroup = [groups[op2], groups[op1]]
+                elif op1str:
+                    group_count += 1
+                    groups[op1] = group_count
+                    if isinstance(oldgroup2, list):
+                        oldgroup = oldgroup2 + [groups[op1]]
+                elif op2str:
+                    group_count += 1
+                    groups[op2] = group_count
+                    if isinstance(oldgroup1, list):
+                        oldgroup = [groups[op2]] + oldgroup1
+                newshape = tuple(list(shape2) + list(shape1))
             if isinstance(op2, str):
                 keys.insert(0, op2)
             if isinstance(op1, str):
                 keys.append(op1)
+            pushval = (op[token](op2val, op1val), newshape, oldgroup)
+            stack.append(pushval)
         else:
             stack.append(token)
     val = stack.pop()
     if isinstance(val, tuple):
         val = val[0]
-    return val, keys
+    return val, keys, groups
 
 
 def splits(splitter, inputs):
-        return iter_splits(*_splits1d(splitter, inputs))
+    values, keys, _ = _splits(splitter, inputs)
+    return iter_splits(values, keys)
 
 
 def map_splits(split_iter, inputs):
     for split in split_iter:
-        yield {k: ensure_list(inputs[k])[v] for k,v in split.items()}
+        yield {k: list(flatten(ensure_list(inputs[k])))[v] for k,v in split.items()}
+
 
 
 '''
@@ -485,12 +556,6 @@ def _splits2d(splitter, inputs):
         else:
             stack.append(token)
     return stack.pop(), keys
-
-def list_shape(inlist):
-    outlist = [len(inlist)]
-    if isinstance(inlist[0], list):
-        outlist.extend(list_shape(inlist[0]))
-    return tuple(outlist)
 
 
 def list2array(inlist, shape=None):

@@ -11,6 +11,124 @@ def test_splits_1():
                        message='operands not of equal length v and a'):
         aux.splits(splitter, inputs)
 
+@pytest.mark.parametrize("splitter, values, keys, groups, splits", [
+    (("a", "v"), [(0, 0), (1, 1)], ['a', 'v'], {'a': 0, 'v': 0},
+     [{'a': 1, 'v': 'a'}, {'a': 2, 'v': 'b'}]),
+    (["a", "v"], [(0, 0), (0, 1), (1, 0), (1, 1)], ['a', 'v'],
+     {'a': 0, 'v': 1},
+     [{'a': 1, 'v': 'a'}, {'a': 1, 'v': 'b'}, {'a': 2, 'v': 'a'},
+      {'a': 2, 'v': 'b'}]),
+    (("a", "v", "c"), [((0, 0), 0), ((1, 1), 1)], ['a', 'v', 'c'],
+     {'a': 0, 'v': 0, 'c': 0},
+     [{'a': 1, 'c': 3, 'v': 'a'}, {'a': 2, 'c': 4, 'v': 'b'}]),
+    ((("a", "v"), "c"), [((0, 0), 0), ((1, 1), 1)], ['a', 'v', 'c'],
+     {'a': 0, 'v': 0, 'c': 0},
+     [{'a': 1, 'c': 3, 'v': 'a'}, {'a': 2, 'c': 4, 'v': 'b'}]),
+    (("a", ("v", "c")), [(0, (0, 0)), (1, (1, 1))], ['a', 'v', 'c'],
+     {'a': 0, 'v': 0, 'c': 0},
+     [{'a': 1, 'c': 3, 'v': 'a'}, {'a': 2, 'c': 4, 'v': 'b'}]),
+    (["a", "v", "c"],
+     [((0, 0), 0), ((0, 0), 1), ((0, 1), 0), ((0, 1), 1),
+      ((1, 0), 0), ((1, 0), 1), ((1, 1), 0), ((1, 1), 1)],
+     ['a', 'v', 'c'], {'a': 0, 'v': 1, 'c': 2},
+     [{'a': 1, 'v': 'a', 'c': 3}, {'a': 1, 'v': 'a', 'c': 4},
+      {'a': 1, 'v': 'b', 'c': 3}, {'a': 1, 'v': 'b', 'c': 4},
+      {'a': 2, 'v': 'a', 'c': 3}, {'a': 2, 'v': 'a', 'c': 4},
+      {'a': 2, 'v': 'b', 'c': 3}, {'a': 2, 'v': 'b', 'c': 4}]),
+    ([["a", "v"], "c"],
+     [((0, 0), 0), ((0, 0), 1), ((0, 1), 0), ((0, 1), 1),
+      ((1, 0), 0), ((1, 0), 1), ((1, 1), 0), ((1, 1), 1)],
+     ['a', 'v', 'c'], {'a': 0, 'v': 1, 'c': 2},
+     [{'a': 1, 'v': 'a', 'c': 3}, {'a': 1, 'v': 'a', 'c': 4},
+      {'a': 1, 'v': 'b', 'c': 3}, {'a': 1, 'v': 'b', 'c': 4},
+      {'a': 2, 'v': 'a', 'c': 3}, {'a': 2, 'v': 'a', 'c': 4},
+      {'a': 2, 'v': 'b', 'c': 3}, {'a': 2, 'v': 'b', 'c': 4}]),
+    (["a", ["v", "c"]],
+     [(0, (0, 0)), (0, (0, 1)), (0, (1, 0)), (0, (1, 1)),
+      (1, (0, 0)), (1, (0, 1)), (1, (1, 0)), (1, (1, 1))],
+     ['a', 'v', 'c'], {'a': 2, 'c': 1, 'v': 0},
+     [{'a': 1, 'v': 'a', 'c': 3}, {'a': 1, 'v': 'a', 'c': 4},
+      {'a': 1, 'v': 'b', 'c': 3}, {'a': 1, 'v': 'b', 'c': 4},
+      {'a': 2, 'v': 'a', 'c': 3}, {'a': 2, 'v': 'a', 'c': 4},
+      {'a': 2, 'v': 'b', 'c': 3}, {'a': 2, 'v': 'b', 'c': 4}]),
+    ([("a", "v"), "c"],
+     [((0, 0), 0), ((0, 0), 1), ((1, 1), 0), ((1, 1), 1)],
+     ['a', 'v', 'c'], {'a': 0, 'v': 0, 'c': 1},
+     [{'a': 1, 'v': 'a', 'c': 3}, {'a': 1, 'v': 'a', 'c': 4},
+      {'a': 2, 'v': 'b', 'c': 3}, {'a': 2, 'v': 'b', 'c': 4}]),
+    (["a", ("v", "c")],
+     [(0, (0, 0)), (0, (1, 1)), (1, (0, 0)), (1, (1, 1))],
+     ['a', 'v', 'c'], {'v': 0, 'c': 0, 'a': 1},
+     [{'a': 1, 'v': 'a', 'c': 3}, {'a': 1, 'v': 'b', 'c': 4},
+      {'a': 2, 'v': 'a', 'c': 3}, {'a': 2, 'v': 'b', 'c': 4}]),
+    ])
+def test_splits_1b(splitter, values, keys, groups, splits):
+    inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [3, 4]}
+    values_out, keys_out, groups_out = aux._splits(splitter, inputs)
+    value_list = list(values_out)
+    assert keys == keys_out
+    assert values == value_list
+    assert groups == groups_out
+    splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out),
+                                     inputs))
+    assert splits_out == splits
+
+
+@pytest.mark.parametrize("splitter, inputs, mismatch", [
+    ((["a", "v"], "c"), {"a": [1, 2], "v": ['a', 'b'], "c": [3, 4]}, True),
+    ((["a", "v"], "c"), {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], [5, 6]]},
+     False),
+    ((["a", "v"], "c"), {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], [5]]},
+     True),
+    ])
+def test_splits_1c(splitter, inputs, mismatch):
+    if mismatch:
+        with pytest.raises(ValueError):
+            aux._splits(splitter, inputs)
+    else:
+        aux._splits(splitter, inputs)
+
+
+@pytest.mark.parametrize("splitter, values, keys, groups, splits", [
+    ((["a", "v"], "c"),
+     [((0, 0), 0), ((0, 1), 1), ((1, 0), 2), ((1, 1), 3)],
+     ['a', 'v', 'c'], {'a': 0, 'v': 1, 'c': [0, 1]},
+     [{'a': 1, 'v': 'a', 'c': 3}, {'a': 1, 'v': 'b', 'c': 4},
+      {'a': 2, 'v': 'a', 'c': 5}, {'a': 2, 'v': 'b', 'c': 6}]),
+    ])
+def test_splits_1d(splitter, values, keys, groups, splits):
+    inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], [5, 6]]}
+    values_out, keys_out, groups_out = aux._splits(splitter, inputs)
+    value_list = list(values_out)
+    assert keys == keys_out
+    assert values == value_list
+    assert groups == groups_out
+    splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out),
+                                     inputs))
+    assert splits_out == splits
+
+@pytest.mark.parametrize("splitter, values, keys, groups, splits", [
+    ((("a", "v"), "c"),
+     [((0, 0), 0), ((1, 1), 1)],
+     ['a', 'v', 'c'], {'a': 0, 'v': 0, 'c': 0},
+     [{'a': 1, 'v': 'a', 'c': [3, 4]}, {'a': 2, 'v': 'b', 'c': 5}]),
+    ([("a", "v"), "c"],
+     [((0, 0), 0), ((0, 0), 1), ((1, 1), 0), ((1, 1), 1)],
+     ['a', 'v', 'c'], {'a': 0, 'v': 0, 'c': 1},
+     [{'a': 1, 'v': 'a', 'c': [3, 4]}, {'a': 1, 'v': 'a', 'c': 5},
+      {'a': 2, 'v': 'b', 'c': [3, 4]}, {'a': 2, 'v': 'b', 'c': 5}]),
+    ])
+def test_splits_1e(splitter, values, keys, groups, splits):
+    inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], 5]}
+    values_out, keys_out, groups_out = aux._splits(splitter, inputs)
+    value_list = list(values_out)
+    assert keys == keys_out
+    assert values == value_list
+    assert groups == groups_out
+    splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out),
+                                     inputs))
+    assert splits_out == splits
+
 
 @pytest.mark.parametrize("splitter, splits", [
     (("a", "v", "c"), [{'c': 3, 'v': 'a', 'a': 1},
