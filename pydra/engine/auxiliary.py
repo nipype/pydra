@@ -448,6 +448,8 @@ def input_shape(in1):
 
 
 def _splits(splitter, inputs):
+    """ Process splitter rpn from left to right
+    """
     import numpy as np
     stack = []
     keys = []
@@ -492,8 +494,8 @@ def _splits(splitter, inputs):
                 else:
                     oldgroup = oldgroup2
                     for k,v in groups.items():
-                        if v == oldgroup1:
-                            groups[k] = oldgroup2
+                        if v in ensure_list(oldgroup1):
+                            groups[k] = ensure_list(oldgroup2)[ensure_list(oldgroup1).index(v)]
                 newshape = shape1
             if token == '*':
                 if all([op1str, op2str]):
@@ -536,56 +538,10 @@ def _splits(splitter, inputs):
 
 
 def splits(splitter, inputs):
-    values, keys, _ = _splits(splitter, inputs)
+    values, keys, _, _ = _splits(splitter, inputs)
     return iter_splits(values, keys)
 
 
 def map_splits(split_iter, inputs):
     for split in split_iter:
         yield {k: list(flatten(ensure_list(inputs[k])))[v] for k,v in split.items()}
-
-
-
-'''
-def _splits2d(splitter, inputs):
-    stack = []
-    keys = []
-    for token in splitter2rpn(splitter):
-        if token in ['.', '*']:
-            op1 = stack.pop()
-            op1val = ensure_list(inputs[op1]) if isinstance(op1, str) else op1
-            op1val = list2array(op1val)
-            op2 = stack.pop()
-            op2val = ensure_list(inputs[op2]) if isinstance(op2, str) else op2
-            op2val = list2array(op2val)
-            shape = op1val.shape
-            if token == '.':
-                try:
-                    if op1val.shape != op2val.shape:
-                        raise ValueError('operands not of equal length {} and {}'.format(op1, op2))
-                except TypeError:
-                    pass
-            op_result = list(op[token](op2val.flatten().tolist(),
-                                       op1val.flatten().tolist()))
-            stack.append(list2array(op_result, shape).tolist())
-            if isinstance(op2, str):
-                keys.insert(0, op2)
-            if isinstance(op1, str):
-                keys.append(op1)
-        else:
-            stack.append(token)
-    return stack.pop(), keys
-
-
-def list2array(inlist, shape=None):
-    import numpy as np
-    inshape = list_shape(ensure_list(inlist))
-    if shape is None:
-        shape = inshape
-    new_array = np.array(inlist)
-    if new_array.shape == shape:
-        return new_array
-    new_array = np.empty(inshape, dtype=object)
-    new_array[:] = inlist
-    return new_array.reshape(shape)
-'''

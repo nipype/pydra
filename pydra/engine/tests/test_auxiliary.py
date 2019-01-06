@@ -57,13 +57,13 @@ import pytest
       {'a': 2, 'v': 'a', 'c': 3}, {'a': 2, 'v': 'b', 'c': 4}]),
     ((("a", "v"), ("c", "z")),
      [((0, 0), (0, 0)), ((1, 1), (1, 1))],
-     ['a', 'v', 'c', 'z'], {'v': 0, 'c': 0, 'a': 0, 'z': 0}, 0,
+     ['a', 'v', 'c', 'z'], {'a': 0, 'v': 0, 'c': 0, 'z': 0}, 0,
      [{'a': 1, 'v': 'a', 'c': 3, 'z': 7},
       {'a': 2, 'v': 'b', 'c': 4, 'z': 8}]),
     ((["a", "v"], ["c", "z"]),
      [((0, 0), (0, 0)), ((0, 1), (0, 1)),
       ((1, 0), (1, 0)), ((1, 1), (1, 1))],
-     ['a', 'v', 'c', 'z'], {'a': 0, 'v': 1, 'c': 2, 'z': 3}, [0, 1],
+     ['a', 'v', 'c', 'z'], {'a': 0, 'v': 1, 'c': 0, 'z': 1}, [0, 1],
      [{'a': 1, 'v': 'a', 'c': 3, 'z': 7},
       {'a': 1, 'v': 'b', 'c': 3, 'z': 8},
       {'a': 2, 'v': 'a', 'c': 4, 'z': 7},
@@ -105,67 +105,45 @@ def test_splits_1c(splitter, inputs, mismatch):
         aux._splits(splitter, inputs)
 
 
-@pytest.mark.parametrize("splitter, values, keys, groups, splits", [
+@pytest.mark.parametrize("splitter, values, keys, groups, fgroup, splits", [
     ((["a", "v"], "c"),
      [((0, 0), 0), ((0, 1), 1), ((1, 0), 2), ((1, 1), 3)],
-     ['a', 'v', 'c'], {'a': 0, 'v': 1, 'c': [0, 1]},
+     ['a', 'v', 'c'], {'a': 0, 'v': 1, 'c': [0, 1]}, [0, 1],
      [{'a': 1, 'v': 'a', 'c': 3}, {'a': 1, 'v': 'b', 'c': 4},
       {'a': 2, 'v': 'a', 'c': 5}, {'a': 2, 'v': 'b', 'c': 6}]),
     ])
-def test_splits_1d(splitter, values, keys, groups, splits):
+def test_splits_1d(splitter, values, keys, groups, fgroup, splits):
     inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], [5, 6]]}
-    values_out, keys_out, groups_out = aux._splits(splitter, inputs)
+    values_out, keys_out, groups_out, finalgrp_out = aux._splits(splitter, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
     assert groups == groups_out
+    assert fgroup == finalgrp_out
     splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out),
                                      inputs))
     assert splits_out == splits
 
-@pytest.mark.parametrize("splitter, values, keys, groups, splits", [
+@pytest.mark.parametrize("splitter, values, keys, groups, fgroup, splits", [
     ((("a", "v"), "c"),
      [((0, 0), 0), ((1, 1), 1)],
-     ['a', 'v', 'c'], {'a': 0, 'v': 0, 'c': 0},
+     ['a', 'v', 'c'], {'a': 0, 'v': 0, 'c': 0}, 0,
      [{'a': 1, 'v': 'a', 'c': [3, 4]}, {'a': 2, 'v': 'b', 'c': 5}]),
     ([("a", "v"), "c"],
      [((0, 0), 0), ((0, 0), 1), ((1, 1), 0), ((1, 1), 1)],
-     ['a', 'v', 'c'], {'a': 0, 'v': 0, 'c': 1},
+     ['a', 'v', 'c'], {'a': 0, 'v': 0, 'c': 1}, [0, 1],
      [{'a': 1, 'v': 'a', 'c': [3, 4]}, {'a': 1, 'v': 'a', 'c': 5},
       {'a': 2, 'v': 'b', 'c': [3, 4]}, {'a': 2, 'v': 'b', 'c': 5}]),
     ])
-def test_splits_1e(splitter, values, keys, groups, splits):
+def test_splits_1e(splitter, values, keys, groups, fgroup, splits):
     inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], 5]}
-    values_out, keys_out, groups_out = aux._splits(splitter, inputs)
+    values_out, keys_out, groups_out, finalgrp_out = aux._splits(splitter, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
     assert groups == groups_out
     splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out),
                                      inputs))
-    assert splits_out == splits
-
-
-@pytest.mark.parametrize("splitter, splits", [
-    (("a", "v", "c"), [{'c': 3, 'v': 'a', 'a': 1},
-                      {'c': 4, 'v': 'b', 'a': 2}]),
-    (["a", "v", "c"], [{'a': 1, 'v': 'a', 'c': 3},
-                      {'a': 1, 'v': 'a', 'c': 4},
-                      {'a': 1, 'v': 'b', 'c': 3},
-                      {'a': 1, 'v': 'b', 'c': 4},
-                      {'a': 2, 'v': 'a', 'c': 3},
-                      {'a': 2, 'v': 'a', 'c': 4},
-                      {'a': 2, 'v': 'b', 'c': 3},
-                      {'a': 2, 'v': 'b', 'c': 4}]),
-    (["a", ("v", "c")], [{'a': 1, 'v': 'a', 'c': 3},
-                      {'a': 1, 'v': 'b', 'c': 4},
-                      {'a': 2, 'v': 'a', 'c': 3},
-                      {'a': 2, 'v': 'b', 'c': 4}])])
-def test_splits_2(splitter, splits):
-    inputs = {"a": [1, 2], "v": ['a', 'b'], "c":[3, 4]}
-    splits_out = list(aux.map_splits(aux.splits(splitter, inputs),
-                                     inputs))
-    assert list(splits_out[0].keys()) == ["a", "v", "c"]
     assert splits_out == splits
 
 
