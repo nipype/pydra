@@ -452,7 +452,8 @@ def _splits(splitter, inputs):
     stack = []
     keys = []
     groups = {}
-    group_count = 0
+    group_count = None
+    finalgroup = None
     for token in splitter2rpn(splitter):
         if token in ['.', '*']:
             op1 = stack.pop()
@@ -475,6 +476,10 @@ def _splits(splitter, inputs):
                     raise ValueError('Operands {} and {} do not have same shape.'.format(op1, op2))
             if token == '.':
                 if all([op1str, op2str]):
+                    if group_count is None:
+                        group_count = 0
+                    else:
+                        group_count += 1
                     groups[op2] = group_count
                     groups[op1] = group_count
                     oldgroup = group_count
@@ -484,9 +489,18 @@ def _splits(splitter, inputs):
                 elif op2str:
                     groups[op2] = oldgroup1
                     oldgroup = oldgroup1
+                else:
+                    oldgroup = oldgroup2
+                    for k,v in groups.items():
+                        if v == oldgroup1:
+                            groups[k] = oldgroup2
                 newshape = shape1
             if token == '*':
                 if all([op1str, op2str]):
+                    if group_count is None:
+                        group_count = 0
+                    else:
+                        group_count += 1
                     groups[op2] = group_count
                     group_count += 1
                     groups[op1] = group_count
@@ -494,26 +508,31 @@ def _splits(splitter, inputs):
                 elif op1str:
                     group_count += 1
                     groups[op1] = group_count
-                    if isinstance(oldgroup2, list):
-                        oldgroup = oldgroup2 + [groups[op1]]
+                    oldgroup = ensure_list(oldgroup2) + [groups[op1]]
                 elif op2str:
                     group_count += 1
                     groups[op2] = group_count
-                    if isinstance(oldgroup1, list):
-                        oldgroup = [groups[op2]] + oldgroup1
+                    oldgroup = [groups[op2]] + ensure_list(oldgroup1)
+                else:
+                    oldgroup = ensure_list(oldgroup2) + \
+                               ensure_list(oldgroup1)
                 newshape = tuple(list(shape2) + list(shape1))
-            if isinstance(op2, str):
-                keys.insert(0, op2)
-            if isinstance(op1, str):
-                keys.append(op1)
+            if all([op1str, op2str]):
+                keys.extend([op2, op1])
+            else:
+                if op2str:
+                    keys.insert(0, op2)
+                if op1str:
+                    keys.append(op1)
             pushval = (op[token](op2val, op1val), newshape, oldgroup)
             stack.append(pushval)
         else:
             stack.append(token)
     val = stack.pop()
     if isinstance(val, tuple):
+        finalgroup = val[-1]
         val = val[0]
-    return val, keys, groups
+    return val, keys, groups, finalgroup
 
 
 def splits(splitter, inputs):
