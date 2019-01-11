@@ -415,7 +415,6 @@ def flatten(vals, cur_depth=0, max_depth=None):
                 values.append(flatten(val, cur_depth + 1, max_depth))
             else:
                 values.append([val])
-    print(vals, values, cur_depth, max_depth)
     return itertools.chain.from_iterable(values)
 
 
@@ -454,6 +453,7 @@ def _splits(splitter, inputs):
     stack = []
     keys = []
     groups = {}
+    shapes = {}
     group_count = None
     finalgroup = None
     for token in splitter2rpn(splitter):
@@ -465,12 +465,14 @@ def _splits(splitter, inputs):
                 shape2 = input_shape(inputs[op2])
                 op2val = range(np.prod(shape2))
                 op2str = True
+                shapes[op2] = shape2
             else:
                 op2val, shape2, oldgroup2 = op2
             if isinstance(op1, str):
                 shape1 = input_shape(inputs[op1])
                 op1val = range(np.prod(shape1))
                 op1str = True
+                shapes[op1] = shape1
             else:
                 op1val, shape1, oldgroup1 = op1
             if token == '.':
@@ -534,14 +536,28 @@ def _splits(splitter, inputs):
     if isinstance(val, tuple):
         finalgroup = val[-1]
         val = val[0]
-    return val, keys, groups, finalgroup
+    return val, keys, groups, finalgroup, shapes
 
 
 def splits(splitter, inputs):
-    values, keys, _, _ = _splits(splitter, inputs)
+    values, keys, _, _, _ = _splits(splitter, inputs)
     return iter_splits(values, keys)
 
 
 def map_splits(split_iter, inputs):
     for split in split_iter:
         yield {k: list(flatten(ensure_list(inputs[k])))[v] for k,v in split.items()}
+
+
+'''
+def combine(combiner, groups, finalgroup, shapes, outputs):
+    combine_keys = set([groups[val] for val in splitter2rpn(combiner)
+                        if val not in ['*', '.']])
+    if combine_keys != set(ensure_list(finalgroup)):
+        raise ValueError('Combiner has keys not in final group')
+    groups
+    finalgroup
+    splits
+    outputs
+'''
+

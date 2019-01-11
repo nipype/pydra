@@ -79,7 +79,7 @@ import pytest
     ])
 def test_splits_1b(splitter, values, keys, groups, fgroup, splits):
     inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [3, 4], "z": [7, 8]}
-    values_out, keys_out, groups_out, finalgrp_out = aux._splits(splitter, inputs)
+    values_out, keys_out, groups_out, finalgrp_out, _ = aux._splits(splitter, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
@@ -105,21 +105,23 @@ def test_splits_1c(splitter, inputs, mismatch):
         aux._splits(splitter, inputs)
 
 
-@pytest.mark.parametrize("splitter, values, keys, groups, fgroup, splits", [
+@pytest.mark.parametrize("splitter, values, keys, groups, fgroup, shapes, splits", [
     ((["a", "v"], "c"),
      [((0, 0), 0), ((0, 1), 1), ((1, 0), 2), ((1, 1), 3)],
      ['a', 'v', 'c'], {'a': 0, 'v': 1, 'c': [0, 1]}, [0, 1],
+     {'a': (2,), 'v': (2,), 'c': (2, 2)},
      [{'a': 1, 'v': 'a', 'c': 3}, {'a': 1, 'v': 'b', 'c': 4},
       {'a': 2, 'v': 'a', 'c': 5}, {'a': 2, 'v': 'b', 'c': 6}]),
     ])
-def test_splits_1d(splitter, values, keys, groups, fgroup, splits):
+def test_splits_1d(splitter, values, keys, groups, fgroup, shapes, splits):
     inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], [5, 6]]}
-    values_out, keys_out, groups_out, finalgrp_out = aux._splits(splitter, inputs)
+    values_out, keys_out, groups_out, finalgrp_out, shapes_out = aux._splits(splitter, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
     assert groups == groups_out
     assert fgroup == finalgrp_out
+    assert shapes == shapes_out
     splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out),
                                      inputs))
     assert splits_out == splits
@@ -137,7 +139,7 @@ def test_splits_1d(splitter, values, keys, groups, fgroup, splits):
     ])
 def test_splits_1e(splitter, values, keys, groups, fgroup, splits):
     inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], 5]}
-    values_out, keys_out, groups_out, finalgrp_out = aux._splits(splitter, inputs)
+    values_out, keys_out, groups_out, finalgrp_out, _ = aux._splits(splitter, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
