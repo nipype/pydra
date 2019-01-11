@@ -34,7 +34,7 @@ def main():
         EXTRA_REQUIRES,
     )
 
-    pkg_data = {'pydra': []}
+    pkg_data = {'pydra': ['schema/context.jsonld']}
     root_dir = os.path.dirname(os.path.abspath(getfile(currentframe())))
 
     version = None
@@ -71,6 +71,7 @@ def main():
         extras_require=EXTRA_REQUIRES,
         dependency_links=LINKS_REQUIRES,
         packages=find_packages(),
+        package_data=pkg_data,
         zip_safe=False,
     )
 

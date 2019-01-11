@@ -77,28 +77,28 @@ def test_neuro(change_dir, plugin):
     #     return subject_id if space == 'fsnative' else space
 
     # wf.add('targets', select_target(subject_id=wf.inputs.subject_id))
-    #   .map('space', space=[space for space in wf.inputs.output_spaces
+    #   .split('space', space=[space for space in wf.inputs.output_spaces
     #                        if space.startswith('fs')])
 
-    #dj: don't have option in map to connect with wf input
+    #dj: don't have option in split to connect with wf input
 
     wf.add(runnable=select_target, name="targets", subject_id="subject_id",
            input_names=["subject_id", "space"], output_names=["out"],
-           out_read=True, write_state=False)\
-        .map_node(mapper="space", inputs={"space": [space for space in Inputs["output_spaces"]
+           write_state=False)\
+        .split_node(splitter="space", inputs={"space": [space for space in Inputs["output_spaces"]
                                                if space.startswith("fs")]})
 
     # wf.add('rename_src', Rename(format_string='%(subject)s',
     #                             keep_ext=True,
     #                             in_file=wf.inputs.source_file))
-    #   .map('subject')
+    #   .split('subject')
 
     wf.add(name='rename_src',
            runnable=Rename(format_string='%(subject)s', keep_ext=True),
                                 in_file="source_file",
                                 output_names=["out_file"],
            write_state=False)\
-        .map_node('subject', inputs={"subject": [space for space in Inputs["output_spaces"]
+        .split_node('subject', inputs={"subject": [space for space in Inputs["output_spaces"]
                                                if space.startswith("fs")]}) #TODO: now it's only one subject
 
     # wf.add('resampling_xfm',
@@ -130,7 +130,7 @@ def test_neuro(change_dir, plugin):
     #                           target_subject=wf.targets.out,
     #                           source_file=wf.rename_src.out_file),
     #         mem_gb=mem_gb * 3)
-    #        .map([('source_file', 'target_subject'), 'hemi'], hemi=['lh', 'rh'])
+    #        .split([('source_file', 'target_subject'), 'hemi'], hemi=['lh', 'rh'])
 
 
     wf.add(name='sampler',
@@ -140,7 +140,10 @@ def test_neuro(change_dir, plugin):
                                   out_type='gii'), write_state=False,
            subjects_dir="subjects_dir", subject_id="subject_id", reg_file="set_xfm_source.out_file",
            target_subject="targets.out", source_file="rename_src.out_file", output_names=["out_file"])\
-        .map_node(mapper=[('_targets', "_rename_src"), 'hemi'], inputs={"hemi": ['lh', 'rh']})
+        .split_node(splitter=[('_targets', "_rename_src"), 'hemi'], inputs={"hemi": ['lh', 'rh']})
+
+    #dj: adding combiner to the last node
+    wf.combine_node(combiner="hemi")
 
     sub = Submitter(plugin=plugin, runnable=wf)
     sub.run()
@@ -148,11 +151,18 @@ def test_neuro(change_dir, plugin):
 
     assert "target_out" in wf.output.keys()
     assert len(list(wf.output["target_out"].keys())) == 2
+    assert "targets.space" in list(wf.output["target_out"].keys())[0]
 
     assert "sampler_out" in wf.output.keys()
-    assert len(list(wf.output["sampler_out"].keys())) == 4
+    # length is 2 because of the combiner
+    assert len(list(wf.output["sampler_out"].keys())) == 2
+    assert "rename_src.subject" in list(wf.output["sampler_out"].keys())[0]
+    assert "targets.space" in list(wf.output["sampler_out"].keys())[0]
+    # hemi is eliminated from the state inputs after combiner
+    assert "sampler.hemi" not in list(wf.output["sampler_out"].keys())[0]
+
+
     # dj: no conditions
-    # dj: no join for now
 
     # wf.add_cond('cond1',
     #             condition=wf.inputs.medial_surface_nan,
