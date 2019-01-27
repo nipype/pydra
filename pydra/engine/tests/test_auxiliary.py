@@ -1,10 +1,11 @@
 from .. import auxiliary as aux
 
 import numpy as np
-import pytest
+import pytest, pdb
 
 
 @pytest.mark.parametrize("splitter, values, keys, groups, fgroup, splits", [
+   ("a", [(0,), (1,)], ['a'], {'a': 0}, 0, [{'a': 1}, {'a': 2}]),
     (("a", "v"), [(0, 0), (1, 1)], ['a', 'v'], {'a': 0, 'v': 0},
      0,
      [{'a': 1, 'v': 'a'}, {'a': 2, 'v': 'b'}]),
@@ -112,7 +113,13 @@ def test_splits_1c(splitter, inputs, mismatch):
      {'a': (2,), 'v': (2,), 'c': (2, 2)},
      [{'a': 1, 'v': 'a', 'c': 3}, {'a': 1, 'v': 'b', 'c': 4},
       {'a': 2, 'v': 'a', 'c': 5}, {'a': 2, 'v': 'b', 'c': 6}]),
-    ])
+    (("c", ["a", "v"]),
+     [(0, (0, 0)), (1, (0, 1)), (2, (1, 0)), (3, (1, 1))],
+     ['c', 'a', 'v'], {'a': 0, 'v': 1, 'c': [0, 1]}, [0, 1],
+     {'a': (2,), 'v': (2,), 'c': (2, 2)},
+     [{'a': 1, 'v': 'a', 'c': 3}, {'a': 1, 'v': 'b', 'c': 4},
+      {'a': 2, 'v': 'a', 'c': 5}, {'a': 2, 'v': 'b', 'c': 6}]),
+])
 def test_splits_1d(splitter, values, keys, groups, fgroup, shapes, splits):
     inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], [5, 6]]}
     values_out, keys_out, groups_out, finalgrp_out, shapes_out = aux._splits(splitter, inputs)
@@ -138,12 +145,14 @@ def test_splits_1d(splitter, values, keys, groups, fgroup, shapes, splits):
       {'a': 2, 'v': 'b', 'c': [3, 4]}, {'a': 2, 'v': 'b', 'c': 5}]),
     ])
 def test_splits_1e(splitter, values, keys, groups, fgroup, splits):
+    # dj?: not sure if I like that this example works
     inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], 5]}
     values_out, keys_out, groups_out, finalgrp_out, _ = aux._splits(splitter, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
     assert groups == groups_out
+    assert fgroup == finalgrp_out
     splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out),
                                      inputs))
     assert splits_out == splits
@@ -180,7 +189,10 @@ def test_splitter2rpn(splitter, rpn):
 def test_rpn2splitter(splitter, rpn):
     assert aux.rpn2splitter(rpn) == splitter
 
-@pytest.mark.xfail
+
+# dj: which tests should be working (for now all work)
+
+#@pytest.mark.xfail
 @pytest.mark.parametrize("splitter, other_splitters, rpn",[
     (["a", "_NA"], {"NA": ("b", "c")}, ["a", "NA.b", "NA.c", ".", "*"]),
     (["_NA", "c"], {"NA": ("a", "b")}, ["NA.a", "NA.b", ".", "c", "*"]),
@@ -190,7 +202,7 @@ def test_splitter2rpn_wf_splitter(splitter, other_splitters, rpn):
     assert aux.splitter2rpn(splitter, other_splitters=other_splitters) == rpn
 
 
-@pytest.mark.xfail
+#@pytest.mark.xfail
 @pytest.mark.parametrize("splitter, splitter_changed",[
     ("a", "Node.a"),
     (["a", ("b", "c")], ["Node.a", ("Node.b", "Node.c")]),
@@ -200,7 +212,7 @@ def test_change_splitter(splitter, splitter_changed):
     assert aux.change_splitter(splitter, "Node") == splitter_changed
 
 
-@pytest.mark.xfail
+#@pytest.mark.xfail
 @pytest.mark.parametrize("inputs, rpn, expected", [
     ({"a": np.array([1, 2])}, ["a"], {"a": [0]}),
     ({"a": np.array([1, 2]), "b": np.array([3, 4])},
@@ -233,13 +245,13 @@ def test_splitting_axis(inputs, rpn, expected):
         assert res[key] == expected[key]
 
 
-@pytest.mark.xfail
+#@pytest.mark.xfail
 def test_splitting_axis_error():
     with pytest.raises(Exception):
         aux.splitting_axis({"a": np.array([1, 2]), "b": np.array([3, 4, 5])}, ["a", "b", "."])
 
 
-@pytest.mark.xfail
+#@pytest.mark.xfail
 @pytest.mark.parametrize("inputs, axis_inputs, ndim, expected", [
     ({"a": np.array([1, 2])}, {"a": [0]}, 1, [["a"]]),
     ({"a": np.array([1, 2]), "b": np.array([3, 4])},
@@ -262,7 +274,7 @@ def test_converting_axis2input(inputs, axis_inputs, ndim, expected):
                                      ndim=ndim)[0] == expected
 
 
-@pytest.mark.xfail
+#@pytest.mark.xfail
 @pytest.mark.parametrize("rpn, expected, ndim", [
     (["a"], {"a": [0]}, 1),
     (["a", "b", "."], {"a": [0],"b": [0]}, 1),

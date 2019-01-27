@@ -452,17 +452,33 @@ def _splits(splitter, inputs):
     import numpy as np
     stack = []
     keys = []
+    # dj: like axis_for_input in the State
     groups = {}
     shapes = {}
     group_count = None
+    # dj: all axes
     finalgroup = None
+
+    # when splitter is a single element (no operators)
+    if len(splitter2rpn(splitter)) == 1:
+        op_single = splitter2rpn(splitter)[0]
+        shape = input_shape(inputs[op_single])
+        shapes[op_single] = shape
+        opval = range(np.prod(shape))
+        val = op["*"](opval)
+        keys = splitter2rpn(splitter)
+        groups[op_single], finalgroup = 0, 0
+        return val, keys, groups, finalgroup, shapes
+
     for token in splitter2rpn(splitter):
         if token in ['.', '*']:
+            # dj: op1 is Right, op2 is Left
             op1 = stack.pop()
             op2 = stack.pop()
             op1str = op2str = False
             if isinstance(op2, str):
                 shape2 = input_shape(inputs[op2])
+                # dj: number of all elements (i don't think we have to flatten 2d inputs...)
                 op2val = range(np.prod(shape2))
                 op2str = True
                 shapes[op2] = shape2
@@ -494,7 +510,12 @@ def _splits(splitter, inputs):
                     groups[op2] = oldgroup1
                     oldgroup = oldgroup1
                 else:
+                    if len(ensure_list(oldgroup2)) != len(ensure_list(oldgroup1)):
+                        raise ValueError('Operands do not have same shape '
+                                         '(left one is {}d and right one is {}d.'.format(
+                            len(ensure_list(oldgroup2)), len(ensure_list(oldgroup1))))
                     oldgroup = oldgroup2
+                    # dj: changing axes for Right part of the scalar op.
                     for k,v in groups.items():
                         if v in ensure_list(oldgroup1):
                             groups[k] = ensure_list(oldgroup2)[ensure_list(oldgroup1).index(v)]
@@ -530,17 +551,19 @@ def _splits(splitter, inputs):
                     keys.append(op1)
             pushval = (op[token](op2val, op1val), newshape, oldgroup)
             stack.append(pushval)
-        else:
+        else: # name of one of the inputs
             stack.append(token)
     val = stack.pop()
     if isinstance(val, tuple):
         finalgroup = val[-1]
         val = val[0]
+    # dj: val is similar to State.state_ind, but gives indices with brackets etc.
     return val, keys, groups, finalgroup, shapes
 
 
 def splits(splitter, inputs):
     values, keys, _, _, _ = _splits(splitter, inputs)
+    # dj: i'm not sure why you need iter_splits, _splits gives groups with all axes per input
     return iter_splits(values, keys)
 
 
