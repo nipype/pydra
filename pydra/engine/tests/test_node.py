@@ -124,8 +124,9 @@ def test_node_4a():
 def test_node_4b():
     """Node with interface and inputs. trying to set splitter twice"""
     nn = fun_addtwo(name="NA", splitter="a", a=[3, 5])
-    with pytest.raises(Exception, message="splitter is already set"):
+    with pytest.raises(Exception) as excinfo:
         nn.split(splitter="a")
+    assert str(excinfo.value) == "splitter is already set"
 
 
 @pytest.mark.parametrize("plugin", Plugins)
