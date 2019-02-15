@@ -207,21 +207,12 @@ def test_splitter2rpn_wf_splitter_1(splitter, other_splitters, rpn):
 
 
 @pytest.mark.parametrize("splitter, other_splitters, rpn",[
-    (["a", "_NA"], {"NA": {"spl": ("b", "c"), "con": "d"}}, ["a", "d", "*"]),
-    (["_NA", "c"], {"NA": {"spl": ("a", "b"), "con": "d"}}, ["d", "c", "*"]),
-    (["a", ("b", "_NA")], {"NA": {"spl": ["c", "d"], "con": "d"}}, ["a", "b", "d", ".", "*"])
-])
-def test_splitter2rpn_wf_splitter_2(splitter, other_splitters, rpn):
-    assert aux.splitter2rpn(splitter, other_splitters=other_splitters, others_replace="local") == rpn
-
-
-@pytest.mark.parametrize("splitter, other_splitters, rpn",[
     (["a", "_NA"], {"NA": {"spl": ("b", "c"), "con": "d"}}, ["a", "_NA", "*"]),
     (["_NA", "c"], {"NA": {"spl": ("a", "b"), "con": "d"}}, ["_NA", "c", "*"]),
     (["a", ("b", "_NA")], {"NA": {"spl": ["c", "d"], "con": "d"}}, ["a", "b", "_NA", ".", "*"])
 ])
 def test_splitter2rpn_wf_splitter_3(splitter, other_splitters, rpn):
-    assert aux.splitter2rpn(splitter, other_splitters=other_splitters, others_replace="nothing") == rpn
+    assert aux.splitter2rpn(splitter, other_splitters=other_splitters, state_fields=False) == rpn
 
 
 #@pytest.mark.xfail

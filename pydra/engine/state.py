@@ -31,7 +31,6 @@ class State:
         else:
             self._splitter = None
             self.splitter_rpn = []
-            self.splitter_rpn_local =[]
             self.splitter_rpn_nochange = []
         # dj: I added +1, but it still doesn't take into account when input 2d
         # TODO: ndim should be stack (it's not dim)
@@ -57,52 +56,33 @@ class State:
     def splitter(self):
         return self._splitter
 
+
     @splitter.setter
     def splitter(self, splitter):
         self._splitter = aux.change_splitter(splitter, self.name)
         self.splitter_rpn = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters)
         self.inner_splitters = set(self.splitter_rpn) & set(self.inner_inputs)
-        self.splitter_rpn_local = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters,
-                                             others_replace="local")
         self.splitter_rpn_nochange = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters,
-                                                      others_replace="nothing")
+                                                      state_fields=False)
 
     # dj: should this be just states property?
     def prepare_states_ind(self):
         self.states_ind = list(aux.splits(self.splitter_rpn, self.inputs))
         return self.states_ind
 
-    def prepare_values_ind(self):
-        self.values_ind = list(aux.splits(self.splitter_rpn_local, self.inputs))
-        return self.values_ind
-
-
-    def _prepare_values(self, splitter_type):
-        # TODO: aux._splits or aux.splits
-        values_out, keys_out, _, _, _ = aux._splits(getattr(self, splitter_type), self.inputs)
-        value_list = list(values_out)
-        return list(aux.map_splits(aux.iter_splits(value_list, keys_out), self.inputs))
-
 
     # dj: should this be just values property?
     def prepare_states_val(self):
-        self.states_val = self._prepare_values(splitter_type="splitter_rpn")
+        # TODO: aux._splits or aux.splits
+        values_out, keys_out, _, _, _ = aux._splits(self.splitter_rpn, self.inputs)
+        value_list = list(values_out)
+        self.states_val = list(aux.map_splits(aux.iter_splits(value_list, keys_out), self.inputs))
         return self.states_val
-
-
-    def prepare_values_val(self):
-        self.values = self._prepare_values(splitter_type="splitter_rpn_local")
-        return self.values
 
 
     def prepare_states(self):
         self.prepare_states_ind()
         self.prepare_states_val()
-
-    def prepare_values(self):
-        self.prepare_values_ind()
-        self.prepare_values_val()
-
 
 
     def merge(self):
