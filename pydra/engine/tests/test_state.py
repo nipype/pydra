@@ -31,188 +31,389 @@ def fun_addvar3(a, b, c):
 
 
 
-def test_state_1():
-    nd = Node(name="NA", interface=fun_addtwo(), splitter="a", combiner="a",
-              inputs={"a": np.array([3, 5])})
-    st = State(node=nd)
-
-    assert st._splitter == "NA.a"
-    assert st._splitter_rpn == ["NA.a"]
-    assert st.splitter_comb is None
-    assert st._splitter_rpn_comb == []
-
-    st.prepare_state_input()
-
-    expected_axis_for_input = {"NA.a": [0]}
-    for key, val in expected_axis_for_input.items():
-        assert st._axis_for_input[key] == val
-    assert st._ndim == 1
-    assert st._input_for_axis == [["NA.a"]]
-
-
-    expected_axis_for_input_comb = {}
-    for key, val in expected_axis_for_input_comb.items():
-        assert st._axis_for_input_comb[key] == val
-    assert st._ndim_comb == 0
-    assert st._input_for_axis_comb == []
-
-
-def test_state_1a():
-    wf = Workflow(name="wf", workingdir="wf_test", splitter="a", combiner="a",
-                  inputs={"a": np.array([3, 5])})
-    st = State(node=wf)
-
-    assert st._splitter == "wf.a"
-    assert st._splitter_rpn == ["wf.a"]
-    assert st.splitter_comb is None
-    assert st._splitter_rpn_comb == []
-
-    st.prepare_state_input()
-
-    expected_axis_for_input = {"wf.a": [0]}
-    for key, val in expected_axis_for_input.items():
-        assert st._axis_for_input[key] == val
-    assert st._ndim == 1
-    assert st._input_for_axis == [["wf.a"]]
+@pytest.mark.parametrize("inputs, splitter, ndim, states_ind, states_val, values", [
+    ({"a": [3, 5]}, "a", 1, [{'NA.a': 0}, {'NA.a': 1}],
+     [{'NA.a': 3}, {'NA.a': 5}], [{'NA.a': 3}, {'NA.a': 5}]),
+    ({"a": [3, 5], "b": ["str1", "str2"]}, ("a", "b"), 1,
+     [{'NA.a': 0, 'NA.b': 0}, {'NA.a': 1, 'NA.b': 1}],
+     [{'NA.a': 3, 'NA.b': "str1"}, {'NA.a': 5, 'NA.b': "str2"}],
+     [{'NA.a': 3, 'NA.b': "str1"}, {'NA.a': 5, 'NA.b': "str2"}]),
+    ({"a": [3, 5], "b": ["str1", "str2"]}, ["a", "b"], 2,
+     [{'NA.a': 0, 'NA.b': 0}, {'NA.a': 0, 'NA.b': 1},
+      {'NA.a': 1, 'NA.b': 0}, {'NA.a': 1, 'NA.b': 1}],
+     [{'NA.a': 3, 'NA.b': "str1"}, {'NA.a': 3, 'NA.b': "str2"},
+      {'NA.a': 5, 'NA.b': "str1"}, {'NA.a': 5, 'NA.b': "str2"}],
+     [{'NA.a': 3, 'NA.b': "str1"}, {'NA.a': 3, 'NA.b': "str2"},
+      {'NA.a': 5, 'NA.b': "str1"}, {'NA.a': 5, 'NA.b': "str2"}]),
+    ({"a": [3, 5], "b": ["str1", "str2"], "c": [10, 20]}, [("a", "c"), "b"], 2,
+     [{'NA.a': 0, 'NA.b': 0, "NA.c": 0}, {'NA.a': 0, 'NA.b': 1, "NA.c": 0},
+      {'NA.a': 1, 'NA.b': 0, "NA.c": 1}, {'NA.a': 1, 'NA.b': 1, "NA.c": 1}],
+     [{'NA.a': 3, 'NA.b': "str1", "NA.c": 10}, {'NA.a': 3, 'NA.b': "str2", "NA.c": 10},
+      {'NA.a': 5, 'NA.b': "str1", "NA.c": 20}, {'NA.a': 5, 'NA.b': "str2", "NA.c": 20}],
+     [{'NA.a': 3, 'NA.b': "str1", "NA.c": 10}, {'NA.a': 3, 'NA.b': "str2", "NA.c": 10},
+      {'NA.a': 5, 'NA.b': "str1", "NA.c": 20}, {'NA.a': 5, 'NA.b': "str2", "NA.c": 20}]),
+])
+def test_state_1(inputs, splitter, ndim, states_ind, states_val, values):
+    st = State(name="NA", splitter=splitter, inputs=inputs)
+    #assert st.ndim == ndim
+    st.prepare_states_ind()
+    assert st.states_ind == states_ind
+    st.prepare_states_val()
+    assert st.states_val == states_val
+    st.prepare_values()
+    assert st.values == values
 
 
-    expected_axis_for_input_comb = {}
-    for key, val in expected_axis_for_input_comb.items():
-        assert st._axis_for_input_comb[key] == val
-    assert st._ndim_comb == 0
-    assert st._input_for_axis_comb == []
+def test_state_merge_1():
+    st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
+    st2 = State(name="NB", others={st1: "b"})
+    assert st2.splitter == "_NA"
+    assert st2.splitter_rpn == ["NA.a"]
+    assert st2.splitter_rpn_local == ["NB.b"]
+
+    st2.prepare_states()
+    st2.inputs.update({"NB.b": [30, 50]})
+    st2.prepare_values()
+    assert st2.states_ind == [{'NA.a': 0}, {'NA.a': 1}]
+    assert st2.states_val == [{'NA.a': 3}, {'NA.a': 5}]
+    assert st2.values_ind == [{'NB.b': 0}, {'NB.b': 1}]
+    assert st2.values == [{'NB.b': 30}, {'NB.b': 50}]
 
 
-def test_state_2():
-    nd = Node(name="NA", interface=fun_addvar(), splitter=("a", "b"), combiner="a",
-              inputs={"a": np.array([3, 5]), "b": np.array([3, 5])})
-    st = State(node=nd)
+def test_state_merge_1a():
+    st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
+    st2 = State(name="NB", splitter="_NA", others={st1: "b"})
+    assert st2.splitter == "_NA"
+    assert st2.splitter_rpn == ["NA.a"]
+    assert st2.splitter_rpn_local == ["NB.b"]
 
-    assert st._splitter == ("NA.a", "NA.b")
-    assert st._splitter_rpn == ["NA.a", "NA.b", "."]
-    assert st.splitter_comb is None
-    assert st._splitter_rpn_comb == []
-
-    st.prepare_state_input()
-
-    expected_axis_for_input = {"NA.a": [0], "NA.b": [0]}
-    for key, val in expected_axis_for_input.items():
-        assert st._axis_for_input[key] == val
-    assert st._ndim == 1
-    assert st._input_for_axis == [["NA.a", "NA.b"]]
+    st2.prepare_states()
+    st2.inputs.update({"NB.b": [30, 50]})
+    st2.prepare_values()
+    assert st2.states_ind == [{'NA.a': 0}, {'NA.a': 1}]
+    assert st2.states_val == [{'NA.a': 3}, {'NA.a': 5}]
+    assert st2.values_ind == [{'NB.b': 0}, {'NB.b': 1}]
+    assert st2.values == [{'NB.b': 30}, {'NB.b': 50}]
 
 
-    expected_axis_for_input_comb = {}
-    for key, val in expected_axis_for_input_comb.items():
-        assert st._axis_for_input_comb[key] == val
-    assert st._ndim_comb == 0
-    assert st._input_for_axis_comb == []
+@pytest.mark.xfail(reason="should check if I;m not using partial splitter from previous node")
+def test_state_merge_1b():
+    st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
+    with pytest.raises(Exception):
+        st2 = State(name="NB", splitter="NA.a", others={st1: "b"})
 
 
-def test_state_2a():
-    wf = Workflow(name="wf", workingdir="wf_test", splitter=("a", "b"), combiner="a",
-              inputs={"a": np.array([3, 5]), "b": np.array([3, 5])})
-    st = State(node=wf)
 
-    assert st._splitter == ("wf.a", "wf.b")
-    assert st._splitter_rpn == ["wf.a", "wf.b", "."]
-    assert st.splitter_comb is None
-    assert st._splitter_rpn_comb == []
+def test_state_merge_2():
+    st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
+    st2 = State(name="NB", splitter=["_NA", "a"], inputs={"a": [1, 2]},
+                others={st1: "b"})
+    st1.prepare_states()
+    st1.prepare_values()
 
-    st.prepare_state_input()
+    assert st2.splitter == ["_NA", "NB.a"]
+    assert st2.splitter_rpn == ["NA.a", "NB.a", "*"]
+    assert st2.splitter_rpn_local == ["NB.b", "NB.a", "*"]
+    assert st2.splitter_rpn_nochange == ["_NA", "NB.a", "*"]
 
-    expected_axis_for_input = {"wf.a": [0], "wf.b": [0]}
-    for key, val in expected_axis_for_input.items():
-        assert st._axis_for_input[key] == val
-    assert st._ndim == 1
-    assert st._input_for_axis == [["wf.a", "wf.b"]]
+    st2.inputs.update({"NB.b": [30, 50]})
+    st2.prepare_states()
+    assert st2.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 0, "NB.a": 1},
+                              {'NA.a': 1, "NB.a": 0}, {'NA.a': 1, "NB.a": 1}]
+    assert st2.states_val == [{'NA.a': 3, "NB.a": 1}, {'NA.a': 3, "NB.a": 2},
+                              {'NA.a': 5, "NB.a": 1}, {'NA.a': 5, "NB.a": 2}]
 
+    st2.prepare_values()
+    assert st2.values_ind == [{'NB.a': 0, 'NB.b': 0}, {'NB.a': 1, 'NB.b': 0},
+                              {'NB.a': 0, 'NB.b': 1}, {'NB.a': 1, 'NB.b': 1}]
+    assert st2.values == [{'NB.a': 1, 'NB.b': 30}, {'NB.a': 2, 'NB.b': 30},
+                          {'NB.a': 1, 'NB.b': 50}, {'NB.a': 2, 'NB.b': 50}]
 
-    expected_axis_for_input_comb = {}
-    for key, val in expected_axis_for_input_comb.items():
-        assert st._axis_for_input_comb[key] == val
-    assert st._ndim_comb == 0
-    assert st._input_for_axis_comb == []
+def test_state_merge_3():
+    st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
+    st2 = State(name="NB", splitter="a", inputs={"a": [30, 50]})
+    st3 = State(name="NC", others={st1: "b", st2: "c"})
 
+    assert st3.splitter == ["_NB", "_NA"]
+    assert st3.splitter_rpn == ["NB.a", "NA.a", "*"]
+    assert st3.splitter_rpn_local == ["NC.c", "NC.b", "*"]
+    assert st3.splitter_rpn_nochange == ["_NB", "_NA", "*"]
 
-def test_state_3():
-    nd = Node(name="NA", interface=fun_addvar(), splitter=["a", "b"], combiner="a",
-              inputs={"a": np.array([3, 5]), "b": np.array([3, 5])})
-    st = State(node=nd)
+    st3.prepare_states()
+    assert st3.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 1, "NB.a": 0},
+                              {'NA.a': 0, "NB.a": 1}, {'NA.a': 1, "NB.a": 1}]
+    assert st3.states_val == [{'NA.a': 3, "NB.a": 30}, {'NA.a': 5, "NB.a": 30},
+                              {'NA.a': 3, "NB.a": 50}, {'NA.a': 5, "NB.a": 50}]
 
-    assert st._splitter == ["NA.a", "NA.b"]
-    assert st._splitter_rpn == ["NA.a", "NA.b", "*"]
-    assert st.splitter_comb == "NA.b"
-    assert st._splitter_rpn_comb == ["NA.b"]
-
-    st.prepare_state_input()
-
-    expected_axis_for_input = {"NA.a": [0], "NA.b": [1]}
-    for key, val in expected_axis_for_input.items():
-        assert st._axis_for_input[key] == val
-    assert st._ndim == 2
-    assert st._input_for_axis == [["NA.a"], ["NA.b"]]
-
-
-    expected_axis_for_input_comb = {"NA.b": [0]}
-    for key, val in expected_axis_for_input_comb.items():
-        assert st._axis_for_input_comb[key] == val
-    assert st._ndim_comb == 1
-    assert st._input_for_axis_comb == [["NA.b"]]
+    st3.inputs.update({"NC.c": [130, 150], "NC.b": [103, 105]})
+    st3.prepare_values()
+    assert st3.values_ind == [{'NC.b': 0, 'NC.c': 0}, {'NC.b': 1, 'NC.c': 0},
+                              {'NC.b': 0, 'NC.c': 1}, {'NC.b': 1, 'NC.c': 1}]
+    assert st3.values == [{'NC.b': 103, 'NC.c': 130}, {'NC.b': 105, 'NC.c': 130},
+                          {'NC.b': 103, 'NC.c': 150}, {'NC.b': 105, 'NC.c': 150}]
 
 
-def test_state_4():
-    nd = Node(name="NA", interface=fun_addvar3(), splitter=["a", ("b", "c")], combiner="b",
-              inputs={"a": np.array([3, 5]), "b": np.array([3, 5]), "c": np.array([3, 5])})
-    st = State(node=nd)
+def test_state_merge_4():
+    st1 = State(name="NA", splitter=["a", "b"], inputs={"a": [3, 5], "b": [10, 20]})
+    st2 = State(name="NB", others={st1: "a"})
+    assert st2.splitter == "_NA"
+    assert st2.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert st2.splitter_rpn_local == ["NB.a"]
 
-    assert st._splitter == ["NA.a", ("NA.b", "NA.c")]
-    assert st._splitter_rpn == ["NA.a", "NA.b", "NA.c", ".", "*"]
-    assert st.splitter_comb == "NA.a"
-    assert st._splitter_rpn_comb == ["NA.a"]
+    st2.prepare_states()
+    assert st2.states_ind == [{'NA.a': 0, "NA.b": 0}, {'NA.a': 0, "NA.b": 1},
+                              {'NA.a': 1, "NA.b": 0}, {'NA.a': 1, "NA.b": 1}]
+    assert st2.states_val == [{'NA.a': 3, "NA.b": 10}, {'NA.a': 3, "NA.b": 20},
+                              {'NA.a': 5, "NA.b": 10}, {'NA.a': 5, "NA.b": 20}]
 
-    st.prepare_state_input()
-
-    expected_axis_for_input = {"NA.a": [0], "NA.b": [1], "NA.c": [1]}
-    for key, val in expected_axis_for_input.items():
-        assert st._axis_for_input[key] == val
-    assert st._ndim == 2
-    assert st._input_for_axis == [["NA.a"], ["NA.b", "NA.c"]]
-
-
-    expected_axis_for_input_comb = {"NA.a": [0]}
-    for key, val in expected_axis_for_input_comb.items():
-        assert st._axis_for_input_comb[key] == val
-    assert st._ndim_comb == 1
-    assert st._input_for_axis_comb == [["NA.a"]]
+    st2.inputs.update({"NB.a": [[13, 15], [23, 25]]})
+    st2.prepare_values()
+    assert st2.values_ind == [{'NB.a': 0}, {'NB.a': 1}, {'NB.a': 2}, {'NB.a': 3}]
+    assert st2.values == [{'NB.a': 13}, {'NB.a': 15}, {'NB.a': 23}, {'NB.a': 25}]
 
 
-def test_state_5():
-    nd = Node(name="NA", interface=fun_addvar3(), splitter=("a", ["b", "c"]), combiner="b",
-              inputs={"a": np.array([[3, 5], [3, 5]]), "b": np.array([3, 5]),
-                      "c": np.array([3, 5])})
-    st = State(node=nd)
 
-    assert st._splitter == ("NA.a", ["NA.b", "NA.c"])
-    assert st._splitter_rpn == ["NA.a", "NA.b", "NA.c", "*", "."]
-    assert st.splitter_comb == "NA.c"
-    assert st._splitter_rpn_comb == ["NA.c"]
+def test_state_merge_5():
+    st1 = State(name="NA", splitter=["a", "b"], inputs={"a": [3, 5], "b": [10, 20]})
+    st2 = State(name="NB", splitter="a", inputs={"a": [600, 700]})
+    st3 = State(name="NC", others={st1: "a", st2: "b"})
+    assert st3.splitter == ["_NB", "_NA"]
+    assert st3.splitter_rpn == ["NB.a", "NA.a", "NA.b", "*", "*"]
+    assert st3.splitter_rpn_local == ["NC.b", "NC.a", "*"]
 
-    st.prepare_state_input()
-
-    expected_axis_for_input = {"NA.a": [0, 1], "NA.b": [0], "NA.c": [1]}
-    for key, val in expected_axis_for_input.items():
-        assert st._axis_for_input[key] == val
-    assert st._ndim == 2
-    expected_input_for_axis = [["NA.a", "NA.b"], ["NA.a", "NA.c"]]
-    for (i, exp_l) in enumerate(expected_input_for_axis):
-        exp_l.sort()
-        st._input_for_axis[i].sort()
-    assert st._input_for_axis[i] == exp_l
+    st3.prepare_states()
+    assert st3.states_ind == [{'NB.a': 0, 'NA.a': 0, "NA.b": 0}, {'NB.a': 0, 'NA.a': 0, "NA.b": 1},
+                              {'NB.a': 0, 'NA.a': 1, "NA.b": 0}, {'NB.a': 0, 'NA.a': 1, "NA.b": 1},
+                              {'NB.a': 1, 'NA.a': 0, "NA.b": 0}, {'NB.a': 1, 'NA.a': 0, "NA.b": 1},
+                              {'NB.a': 1, 'NA.a': 1, "NA.b": 0}, {'NB.a': 1, 'NA.a': 1, "NA.b": 1}]
+    assert st3.states_val == [{'NB.a': 600, 'NA.a': 3, "NA.b": 10}, {'NB.a': 600, 'NA.a': 3, "NA.b": 20},
+                              {'NB.a': 600, 'NA.a': 5, "NA.b": 10}, {'NB.a': 600, 'NA.a': 5, "NA.b": 20},
+                              {'NB.a': 700, 'NA.a': 3, "NA.b": 10}, {'NB.a': 700, 'NA.a': 3, "NA.b": 20},
+                              {'NB.a': 700, 'NA.a': 5, "NA.b": 10}, {'NB.a': 700, 'NA.a': 5, "NA.b": 20}]
 
 
-    expected_axis_for_input_comb = {"NA.c": [0]}
-    for key, val in expected_axis_for_input_comb.items():
-        assert st._axis_for_input_comb[key] == val
-    assert st._ndim_comb == 1
-    assert st._input_for_axis_comb == [["NA.c"]]
+    st3.inputs.update({"NC.a": [[13, 23], [15, 25]], "NC.b": [600, 700]})
+    st3.prepare_values()
+    assert st3.values_ind == [{'NC.b': 0, 'NC.a': 0}, {'NC.b': 0, 'NC.a': 1}, {'NC.b': 0, 'NC.a': 2},
+                              {'NC.b': 0, 'NC.a': 3},
+                              {'NC.b': 1, 'NC.a': 0}, {'NC.b': 1, 'NC.a': 1}, {'NC.b': 1, 'NC.a': 2},
+                              {'NC.b': 1, 'NC.a': 3}]
+    assert st3.values == [{'NC.b': 600, 'NC.a': 13}, {'NC.b': 600, 'NC.a': 23},
+                          {'NC.b': 600, 'NC.a': 15}, {'NC.b': 600, 'NC.a': 25},
+                          {'NC.b': 700, 'NC.a': 13}, {'NC.b': 700, 'NC.a': 23},
+                          {'NC.b': 700, 'NC.a': 15}, {'NC.b': 700, 'NC.a': 25}]
+
+
+# def test_state_merge_inner_1():
+#     st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
+#     st2 = State(name="NB", others=[{"state": st1, "in_field": "b"}])
+#     assert st2.splitter == "NA.a"
+#     st2.prepare_states_ind()
+
+
+        # assert st._splitter_rpn == ["NA.a"]
+    # assert st.splitter_comb is None
+    # assert st._splitter_rpn_comb == []
+    #
+    # st.prepare_state_input()
+    #
+    # expected_axis_for_input = {"NA.a": [0]}
+    # for key, val in expected_axis_for_input.items():
+    #     assert st._axis_for_input[key] == val
+    # assert st._ndim == 1
+    # assert st._input_for_axis == [["NA.a"]]
+    #
+    #
+    # expected_axis_for_input_comb = {}
+    # for key, val in expected_axis_for_input_comb.items():
+    #     assert st._axis_for_input_comb[key] == val
+    # assert st._ndim_comb == 0
+    # assert st._input_for_axis_comb == []
+
+
+
+# def test_state_1():
+#     nd = Node(name="NA", interface=fun_addtwo(), splitter="a", combiner="a",
+#               inputs={"a": np.array([3, 5])})
+#     st = State(node=nd)
+#
+#     assert st._splitter == "NA.a"
+#     assert st._splitter_rpn == ["NA.a"]
+#     assert st.splitter_comb is None
+#     assert st._splitter_rpn_comb == []
+#
+#     st.prepare_state_input()
+#
+#     expected_axis_for_input = {"NA.a": [0]}
+#     for key, val in expected_axis_for_input.items():
+#         assert st._axis_for_input[key] == val
+#     assert st._ndim == 1
+#     assert st._input_for_axis == [["NA.a"]]
+#
+#
+#     expected_axis_for_input_comb = {}
+#     for key, val in expected_axis_for_input_comb.items():
+#         assert st._axis_for_input_comb[key] == val
+#     assert st._ndim_comb == 0
+#     assert st._input_for_axis_comb == []
+#
+#
+# def test_state_1a():
+#     wf = Workflow(name="wf", workingdir="wf_test", splitter="a", combiner="a",
+#                   inputs={"a": np.array([3, 5])})
+#     st = State(node=wf)
+#
+#     assert st._splitter == "wf.a"
+#     assert st._splitter_rpn == ["wf.a"]
+#     assert st.splitter_comb is None
+#     assert st._splitter_rpn_comb == []
+#
+#     st.prepare_state_input()
+#
+#     expected_axis_for_input = {"wf.a": [0]}
+#     for key, val in expected_axis_for_input.items():
+#         assert st._axis_for_input[key] == val
+#     assert st._ndim == 1
+#     assert st._input_for_axis == [["wf.a"]]
+#
+#
+#     expected_axis_for_input_comb = {}
+#     for key, val in expected_axis_for_input_comb.items():
+#         assert st._axis_for_input_comb[key] == val
+#     assert st._ndim_comb == 0
+#     assert st._input_for_axis_comb == []
+#
+#
+# def test_state_2():
+#     nd = Node(name="NA", interface=fun_addvar(), splitter=("a", "b"), combiner="a",
+#               inputs={"a": np.array([3, 5]), "b": np.array([3, 5])})
+#     st = State(node=nd)
+#
+#     assert st._splitter == ("NA.a", "NA.b")
+#     assert st._splitter_rpn == ["NA.a", "NA.b", "."]
+#     assert st.splitter_comb is None
+#     assert st._splitter_rpn_comb == []
+#
+#     st.prepare_state_input()
+#
+#     expected_axis_for_input = {"NA.a": [0], "NA.b": [0]}
+#     for key, val in expected_axis_for_input.items():
+#         assert st._axis_for_input[key] == val
+#     assert st._ndim == 1
+#     assert st._input_for_axis == [["NA.a", "NA.b"]]
+#
+#
+#     expected_axis_for_input_comb = {}
+#     for key, val in expected_axis_for_input_comb.items():
+#         assert st._axis_for_input_comb[key] == val
+#     assert st._ndim_comb == 0
+#     assert st._input_for_axis_comb == []
+#
+#
+# def test_state_2a():
+#     wf = Workflow(name="wf", workingdir="wf_test", splitter=("a", "b"), combiner="a",
+#               inputs={"a": np.array([3, 5]), "b": np.array([3, 5])})
+#     st = State(node=wf)
+#
+#     assert st._splitter == ("wf.a", "wf.b")
+#     assert st._splitter_rpn == ["wf.a", "wf.b", "."]
+#     assert st.splitter_comb is None
+#     assert st._splitter_rpn_comb == []
+#
+#     st.prepare_state_input()
+#
+#     expected_axis_for_input = {"wf.a": [0], "wf.b": [0]}
+#     for key, val in expected_axis_for_input.items():
+#         assert st._axis_for_input[key] == val
+#     assert st._ndim == 1
+#     assert st._input_for_axis == [["wf.a", "wf.b"]]
+#
+#
+#     expected_axis_for_input_comb = {}
+#     for key, val in expected_axis_for_input_comb.items():
+#         assert st._axis_for_input_comb[key] == val
+#     assert st._ndim_comb == 0
+#     assert st._input_for_axis_comb == []
+#
+#
+# def test_state_3():
+#     nd = Node(name="NA", interface=fun_addvar(), splitter=["a", "b"], combiner="a",
+#               inputs={"a": np.array([3, 5]), "b": np.array([3, 5])})
+#     st = State(node=nd)
+#
+#     assert st._splitter == ["NA.a", "NA.b"]
+#     assert st._splitter_rpn == ["NA.a", "NA.b", "*"]
+#     assert st.splitter_comb == "NA.b"
+#     assert st._splitter_rpn_comb == ["NA.b"]
+#
+#     st.prepare_state_input()
+#
+#     expected_axis_for_input = {"NA.a": [0], "NA.b": [1]}
+#     for key, val in expected_axis_for_input.items():
+#         assert st._axis_for_input[key] == val
+#     assert st._ndim == 2
+#     assert st._input_for_axis == [["NA.a"], ["NA.b"]]
+#
+#
+#     expected_axis_for_input_comb = {"NA.b": [0]}
+#     for key, val in expected_axis_for_input_comb.items():
+#         assert st._axis_for_input_comb[key] == val
+#     assert st._ndim_comb == 1
+#     assert st._input_for_axis_comb == [["NA.b"]]
+#
+#
+# def test_state_4():
+#     nd = Node(name="NA", interface=fun_addvar3(), splitter=["a", ("b", "c")], combiner="b",
+#               inputs={"a": np.array([3, 5]), "b": np.array([3, 5]), "c": np.array([3, 5])})
+#     st = State(node=nd)
+#
+#     assert st._splitter == ["NA.a", ("NA.b", "NA.c")]
+#     assert st._splitter_rpn == ["NA.a", "NA.b", "NA.c", ".", "*"]
+#     assert st.splitter_comb == "NA.a"
+#     assert st._splitter_rpn_comb == ["NA.a"]
+#
+#     st.prepare_state_input()
+#
+#     expected_axis_for_input = {"NA.a": [0], "NA.b": [1], "NA.c": [1]}
+#     for key, val in expected_axis_for_input.items():
+#         assert st._axis_for_input[key] == val
+#     assert st._ndim == 2
+#     assert st._input_for_axis == [["NA.a"], ["NA.b", "NA.c"]]
+#
+#
+#     expected_axis_for_input_comb = {"NA.a": [0]}
+#     for key, val in expected_axis_for_input_comb.items():
+#         assert st._axis_for_input_comb[key] == val
+#     assert st._ndim_comb == 1
+#     assert st._input_for_axis_comb == [["NA.a"]]
+#
+#
+# def test_state_5():
+#     nd = Node(name="NA", interface=fun_addvar3(), splitter=("a", ["b", "c"]), combiner="b",
+#               inputs={"a": np.array([[3, 5], [3, 5]]), "b": np.array([3, 5]),
+#                       "c": np.array([3, 5])})
+#     st = State(node=nd)
+#
+#     assert st._splitter == ("NA.a", ["NA.b", "NA.c"])
+#     assert st._splitter_rpn == ["NA.a", "NA.b", "NA.c", "*", "."]
+#     assert st.splitter_comb == "NA.c"
+#     assert st._splitter_rpn_comb == ["NA.c"]
+#
+#     st.prepare_state_input()
+#
+#     expected_axis_for_input = {"NA.a": [0, 1], "NA.b": [0], "NA.c": [1]}
+#     for key, val in expected_axis_for_input.items():
+#         assert st._axis_for_input[key] == val
+#     assert st._ndim == 2
+#     expected_input_for_axis = [["NA.a", "NA.b"], ["NA.a", "NA.c"]]
+#     for (i, exp_l) in enumerate(expected_input_for_axis):
+#         exp_l.sort()
+#         st._input_for_axis[i].sort()
+#     assert st._input_for_axis[i] == exp_l
+#
+#
+#     expected_axis_for_input_comb = {"NA.c": [0]}
+#     for key, val in expected_axis_for_input_comb.items():
+#         assert st._axis_for_input_comb[key] == val
+#     assert st._ndim_comb == 1
+#     assert st._input_for_axis_comb == [["NA.c"]]

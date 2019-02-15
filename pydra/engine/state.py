@@ -10,23 +10,120 @@ from . import auxiliary as aux
 
 
 class State:
-    def __init__(self, name, incoming_states=None):
+    # dj: not sure what is incoming_states
+    def __init__(self, name, inputs=None, splitter=None, others=None):
         self.name = name
-        self.ndim = None
-        self._states = None
-        self.states = lru_cache(maxsize=1, typed=True)(self.states)
-        self.incoming_states_ = incoming_states
+        #self.ndim = None
+        # dj: moved inputs and splitter to init
+        if inputs:
+            self.inputs = inputs
+        else:
+            self._inputs = {}
+        self.others = others
+        self.other_splitters = {}
+        self.inner_inputs = []
+        if self.others:
+            for st, inp in self.others.items():
+                self.other_splitters[st.name] = {"spl": st.splitter, "con": "{}.{}".format(self.name, inp)}
+                self.inner_inputs.append("{}.{}".format(self.name, inp))
+        if splitter:
+            self.splitter = splitter
+        else:
+            self._splitter = None
+            self.splitter_rpn = []
+            self.splitter_rpn_local =[]
+            self.splitter_rpn_nochange = []
+        # dj: I added +1, but it still doesn't take into account when input 2d
+        # TODO: ndim should be stack (it's not dim)
+        #self.ndim = len([1 for val in aux.splitter2rpn(self.splitter) if val == '*']) + 1
+        if self.others:
+            self.connected_inputs = ["{}.{}".format(self.name, inp) for (_, inp) in self.others.items()]
+            self.merge()
+        else:
+            self.connected_inputs = []
+        # pdb.set_trace()
+        # pass
 
-    def states(self, splitter, inputs):
-        self.ndim = len([1 for val in aux.splitter2rpn(splitter) if val == '*'])
-        self._states = list(aux.splits(splitter, inputs))
-        return self._states
 
-    def named_states(self, splitter, inputs):
-        self.ndim = len([1 for val in aux.splitter2rpn(splitter) if val == '*'])
-        return [{"{}.{}".format(self.name, key):value
-                 for key, value in item.items()}
-                for item in self.states(splitter, inputs)]
+    @property
+    def inputs(self):
+        return self._inputs
+
+    @inputs.setter
+    def inputs(self, inputs):
+        self._inputs = {"{}.{}".format(self.name, key): val for key, val in inputs.items()}
+
+    @property
+    def splitter(self):
+        return self._splitter
+
+    @splitter.setter
+    def splitter(self, splitter):
+        self._splitter = aux.change_splitter(splitter, self.name)
+        self.splitter_rpn = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters)
+        self.inner_splitters = set(self.splitter_rpn) & set(self.inner_inputs)
+        self.splitter_rpn_local = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters,
+                                             others_replace="local")
+        self.splitter_rpn_nochange = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters,
+                                                      others_replace="nothing")
+
+    # dj: should this be just states property?
+    def prepare_states_ind(self):
+        self.states_ind = list(aux.splits(self.splitter_rpn, self.inputs))
+        return self.states_ind
+
+    def prepare_values_ind(self):
+        self.values_ind = list(aux.splits(self.splitter_rpn_local, self.inputs))
+        return self.values_ind
+
+
+    def _prepare_values(self, splitter_type):
+        # TODO: aux._splits or aux.splits
+        values_out, keys_out, _, _, _ = aux._splits(getattr(self, splitter_type), self.inputs)
+        value_list = list(values_out)
+        return list(aux.map_splits(aux.iter_splits(value_list, keys_out), self.inputs))
+
+
+    # dj: should this be just values property?
+    def prepare_states_val(self):
+        self.states_val = self._prepare_values(splitter_type="splitter_rpn")
+        return self.states_val
+
+
+    def prepare_values_val(self):
+        self.values = self._prepare_values(splitter_type="splitter_rpn_local")
+        return self.values
+
+
+    def prepare_states(self):
+        self.prepare_states_ind()
+        self.prepare_states_val()
+
+    def prepare_values(self):
+        self.prepare_values_ind()
+        self.prepare_values_val()
+
+
+
+    def merge(self):
+        if self.splitter:
+            # checking if splitter contains other splitters
+            others_in_splitter = [el[1:] for el in self.splitter_rpn_nochange if el.startswith("_")]
+            others_names = [k.name for k,v in self.others.items()]
+            if set(others_in_splitter) - set(others_names):
+                raise Exception("these elements, {}, cant be in the splitter".format(
+                    set(others_in_splitter) - set(others_names)))
+        else:
+            others_in_splitter = []
+
+        for st, inp in self.others.items():
+            self._inputs.update(st.inputs)
+            if st.name not in others_in_splitter and st.splitter:
+                if self._splitter:
+                    self.splitter = ["_{}".format(st.name), self._splitter]
+                else:
+                    self.splitter = "_{}".format(st.name)
+
 
 '''    
     def cross_combine(self, other):

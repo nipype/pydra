@@ -9,48 +9,98 @@ logger = logging.getLogger('pydra')
 
 
 # Function to change user provided splitter to "reverse polish notation" used in State
-def splitter2rpn(splitter, other_splitters=None):
+def splitter2rpn(splitter, other_splitters=None, others_replace="state"):
     """ Functions that translate splitter to "reverse polish notation."""
     if not splitter:
         return []
     output_splitter = []
-    _ordering(splitter, i=0, output_splitter=output_splitter, other_splitters=other_splitters)
+    _ordering(splitter, i=0, output_splitter=output_splitter, other_splitters=other_splitters,
+              others_replace=others_replace)
     return output_splitter
 
 
-def _ordering(el, i, output_splitter, current_sign=None, other_splitters=None):
+def _ordering(el, i, output_splitter, current_sign=None, other_splitters=None, others_replace="state"):
     """ Used in the splitter2rpn to get a proper order of fields and signs. """
+    #pdb.set_trace()
     if type(el) is tuple:
         # checking if the splitter dont contain splitter from previous nodes, i.e. has str "_NA", etc.
         if type(el[0]) is str and el[0].startswith("_"):
             node_nm = el[0][1:]
             if node_nm not in other_splitters:
                 raise Exception("can't ask for splitter from {}".format(node_nm))
-            splitter_mod = change_splitter(splitter=other_splitters[node_nm], name=node_nm)
-            el = (splitter_mod, el[1])
+            splitter_mod = change_splitter(splitter=other_splitters[node_nm]["spl"], name=node_nm)
+            if others_replace == "state":
+                el = (splitter_mod, el[1])
+            elif others_replace == "local":
+                el = (other_splitters[node_nm]["con"], el[1])
+            elif others_replace == "nothing":
+                pass
+            else:
+                raise Exception("others_replace has to be: state, local or nothing")
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_splitters:
                 raise Exception("can't ask for splitter from {}".format(node_nm))
-            splitter_mod = change_splitter(splitter=other_splitters[node_nm], name=node_nm)
-            el = (el[0], splitter_mod)
-        _iterate_list(el, ".", other_splitters, output_splitter=output_splitter)
+            splitter_mod = change_splitter(splitter=other_splitters[node_nm]["spl"], name=node_nm)
+            if others_replace == "state":
+                el = (el[0], splitter_mod)
+            elif others_replace == "local":
+                el = (el[0], other_splitters[node_nm]["con"])
+            elif others_replace == "nothing":
+                pass
+            else:
+                raise Exception("others_replace has to be: state, local or nothing")
+        _iterate_list(el, ".", other_splitters, output_splitter=output_splitter, others_replace=others_replace)
     elif type(el) is list:
         if type(el[0]) is str and el[0].startswith("_"):
             node_nm = el[0][1:]
             if node_nm not in other_splitters:
                 raise Exception("can't ask for splitter from {}".format(node_nm))
-            splitter_mod = change_splitter(splitter=other_splitters[node_nm], name=node_nm)
-            el[0] = splitter_mod
+            splitter_mod = change_splitter(splitter=other_splitters[node_nm]["spl"], name=node_nm)
+            if others_replace == "state":
+                el[0] = splitter_mod
+            elif others_replace == "local":
+                el[0] = other_splitters[node_nm]["con"]
+            elif others_replace == "nothing":
+                pass
+            else:
+                raise Exception("others_replace has to be: state, local or nothing")
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_splitters:
                 raise Exception("can't ask for splitter from {}".format(node_nm))
-            splitter_mod = change_splitter(splitter=other_splitters[node_nm], name=node_nm)
-            el[1] = splitter_mod
-        _iterate_list(el, "*", other_splitters, output_splitter=output_splitter)
+            splitter_mod = change_splitter(splitter=other_splitters[node_nm]["spl"], name=node_nm)
+            if others_replace == "state":
+                el[1] = splitter_mod
+            elif others_replace == "local":
+                el[1] = other_splitters[node_nm]["con"]
+            elif others_replace == "nothing":
+                pass
+            else:
+                raise Exception("others_replace has to be: state, local or nothing")
+        _iterate_list(el, "*", other_splitters, output_splitter=output_splitter, others_replace=others_replace)
     elif type(el) is str:
-        output_splitter.append(el)
+        if el.startswith("_"):
+            node_nm = el[1:]
+            if node_nm not in other_splitters:
+                raise Exception("can't ask for splitter from {}".format(node_nm))
+            splitter_mod = change_splitter(splitter=other_splitters[node_nm]["spl"], name=node_nm)
+            if others_replace == "state":
+                el = splitter_mod
+            elif others_replace == "local":
+                el = other_splitters[node_nm]["con"]
+            elif others_replace == "nothing":
+                pass
+            else:
+                raise Exception("others_replace has to be: state, local or nothing")
+
+        #pdb.set_trace()
+        if type(el) is str:
+            output_splitter.append(el)
+        elif type(el) is tuple:
+            _iterate_list(el, ".", other_splitters, output_splitter=output_splitter, others_replace=others_replace)
+        elif type(el) is list:
+            _iterate_list(el, "*", other_splitters, output_splitter=output_splitter, others_replace=others_replace)
     else:
         raise Exception("splitter has to be a string, a tuple or a list")
 
@@ -58,11 +108,12 @@ def _ordering(el, i, output_splitter, current_sign=None, other_splitters=None):
         output_splitter.append(current_sign)
 
 
-def _iterate_list(element, sign, other_splitters, output_splitter):
+def _iterate_list(element, sign, other_splitters, output_splitter, others_replace):
     """ Used in the splitter2rpn to get recursion. """
     for i, el in enumerate(element):
         _ordering(
-            el, i, current_sign=sign, other_splitters=other_splitters, output_splitter=output_splitter)
+            el, i, current_sign=sign, other_splitters=other_splitters, output_splitter=output_splitter,
+            others_replace=others_replace)
 
 
 # functions used in State to know which element should be used for a specific axis
@@ -328,7 +379,7 @@ def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
     # creating the final splitter_rpn after combining
     remaining_elements = stack_sgn + stack_inp
     remaining_elements.sort(reverse=True)
-    splitter_rpn_combined = [el for (i,el) in remaining_elements]
+    splitter_rpn_combined = [el for (i, el) in remaining_elements]
     return splitter_rpn_combined
 
 
@@ -377,6 +428,7 @@ def change_splitter(splitter, name):
         else:
             return "{}.{}".format(name, splitter)
     elif isinstance(splitter, list):
+        #pdb.set_trace()
         return _add_name(splitter, name)
     elif isinstance(splitter, tuple):
         splitter_l = list(splitter)
@@ -446,7 +498,9 @@ def input_shape(in1):
     return tuple(shape)
 
 
-def _splits(splitter, inputs):
+# TODO NOW: skad to ma wiedziec, ze to jest inner splitter, jak to zrobic aby fgroup byl stackiem
+# dj: changing the function so it takes splitter_rpn
+def _splits(splitter_rpn, inputs, inner_splitters=[]):
     """ Process splitter rpn from left to right
     """
     import numpy as np
@@ -460,17 +514,17 @@ def _splits(splitter, inputs):
     finalgroup = None
 
     # when splitter is a single element (no operators)
-    if len(splitter2rpn(splitter)) == 1:
-        op_single = splitter2rpn(splitter)[0]
+    if len(splitter_rpn) == 1:
+        op_single = splitter_rpn[0]
         shape = input_shape(inputs[op_single])
         shapes[op_single] = shape
         opval = range(np.prod(shape))
         val = op["*"](opval)
-        keys = splitter2rpn(splitter)
-        groups[op_single], finalgroup = 0, 0
+        keys = splitter_rpn
+        groups[op_single], finalgroup = 0, [0]
         return val, keys, groups, finalgroup, shapes
 
-    for token in splitter2rpn(splitter):
+    for token in splitter_rpn:
         if token in ['.', '*']:
             # dj: op1 is Right, op2 is Left
             op1 = stack.pop()
@@ -556,13 +610,16 @@ def _splits(splitter, inputs):
     val = stack.pop()
     if isinstance(val, tuple):
         finalgroup = val[-1]
+        if isinstance(finalgroup, int):
+            finalgroup = [finalgroup]
         val = val[0]
     # dj: val is similar to State.state_ind, but gives indices with brackets etc.
+    #pdb.set_trace()
     return val, keys, groups, finalgroup, shapes
 
 
-def splits(splitter, inputs):
-    values, keys, _, _, _ = _splits(splitter, inputs)
+def splits(splitter, inputs, inner_splitters=[]):
+    values, keys, _, _, _ = _splits(splitter, inputs, inner_splitters=inner_splitters)
     # dj: i'm not sure why you need iter_splits, _splits gives groups with all axes per input
     return iter_splits(values, keys)
 
