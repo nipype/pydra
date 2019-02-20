@@ -2,7 +2,7 @@ import os, time, pdb
 from copy import deepcopy
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
-from .node import Node
+from .node import NodeBase
 
 import logging
 logger = logging.getLogger('nipype.workflow')
@@ -25,7 +25,7 @@ class Submitter(object):
         else:
             raise Exception("plugin {} not available".format(self.plugin))
 
-        if isinstance(runnable, Node):  # a node/task
+        if isinstance(runnable, NodeBase):  # a node/task
             self.node = runnable
         elif hasattr(runnable, "graph"):  # a workflow
             self.workflow = runnable
