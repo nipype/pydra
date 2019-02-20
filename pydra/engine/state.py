@@ -10,13 +10,19 @@ from . import auxiliary as aux
 
 
 class State:
-    # dj: not sure what is incoming_states
-    def __init__(self, name, inputs=None, splitter=None, others=None):
+    # dj: not sure if we will use input_names
+    def __init__(self, name, inputs=None, input_names=None, splitter=None, others=None):
         self.name = name
         #self.ndim = None
         # dj: moved inputs and splitter to init
+        # TODO: will change
         if inputs:
-            self.inputs = inputs
+            if isinstance(inputs, dict):
+                self.inputs = inputs
+            else:
+                self._inputs = {}
+                for field in input_names:
+                    self._inputs["{}.{}".format(self.name, field)] = getattr(inputs, field)
         else:
             self._inputs = {}
         self.others = others
