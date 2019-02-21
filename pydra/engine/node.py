@@ -153,8 +153,7 @@ class NodeBase:
 
         if self.splitter is not None:
             if self._state is None:
-                self._state = state.State(name=self.name, splitter=self.splitter, others=None,
-                                          inputs=self.inputs, input_names=self.input_names)
+                self._state = state.State(name=self.name, splitter=self.splitter, others=None)
 
         else:
             self._state = None

@@ -7,24 +7,13 @@ import pdb
 from functools import lru_cache
 
 from . import auxiliary as aux
+from .specs import BaseSpec
 
 
 class State:
-    # dj: not sure if we will use input_names
-    def __init__(self, name, inputs=None, input_names=None, splitter=None, others=None):
+    def __init__(self, name, splitter=None, others=None):
         self.name = name
         #self.ndim = None
-        # dj: moved inputs and splitter to init
-        # TODO: will change
-        if inputs:
-            if isinstance(inputs, dict):
-                self.inputs = inputs
-            else:
-                self._inputs = {}
-                for field in input_names:
-                    self._inputs["{}.{}".format(self.name, field)] = getattr(inputs, field)
-        else:
-            self._inputs = {}
         self.others = others
         self.other_splitters = {}
         self.inner_inputs = []
@@ -46,17 +35,7 @@ class State:
             self.merge()
         else:
             self.connected_inputs = []
-        # pdb.set_trace()
-        # pass
 
-
-    @property
-    def inputs(self):
-        return self._inputs
-
-    @inputs.setter
-    def inputs(self, inputs):
-        self._inputs = {"{}.{}".format(self.name, key): val for key, val in inputs.items()}
 
     @property
     def splitter(self):
@@ -67,28 +46,30 @@ class State:
     def splitter(self, splitter):
         self._splitter = aux.change_splitter(splitter, self.name)
         self.splitter_rpn = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters)
-        self.inner_splitters = set(self.splitter_rpn) & set(self.inner_inputs)
         self.splitter_rpn_nochange = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters,
                                                       state_fields=False)
 
     # dj: should this be just states property?
-    def prepare_states_ind(self):
-        self.states_ind = list(aux.splits(self.splitter_rpn, self.inputs))
+    def prepare_states_ind(self, inputs):
+        if isinstance(inputs, BaseSpec):
+            inputs = self._inputs_types_to_dict(inputs)
+        self.states_ind = list(aux.splits(self.splitter_rpn, inputs))
         return self.states_ind
 
 
-    # dj: should this be just values property?
-    def prepare_states_val(self):
+    def prepare_states_val(self, inputs):
+        if isinstance(inputs, BaseSpec):
+            inputs = self._inputs_types_to_dict(inputs)
         # TODO: aux._splits or aux.splits
-        values_out, keys_out, _, _, _ = aux._splits(self.splitter_rpn, self.inputs)
+        values_out, keys_out, _, _, _ = aux._splits(self.splitter_rpn, inputs)
         value_list = list(values_out)
-        self.states_val = list(aux.map_splits(aux.iter_splits(value_list, keys_out), self.inputs))
+        self.states_val = list(aux.map_splits(aux.iter_splits(value_list, keys_out), inputs))
         return self.states_val
 
 
-    def prepare_states(self):
-        self.prepare_states_ind()
-        self.prepare_states_val()
+    def prepare_states(self, inputs):
+        self.prepare_states_ind(inputs)
+        self.prepare_states_val(inputs)
 
 
     def merge(self):
@@ -103,12 +84,21 @@ class State:
             others_in_splitter = []
 
         for st, inp in self.others.items():
-            self._inputs.update(st.inputs)
             if st.name not in others_in_splitter and st.splitter:
                 if self._splitter:
                     self.splitter = ["_{}".format(st.name), self._splitter]
                 else:
                     self.splitter = "_{}".format(st.name)
+
+
+    def _inputs_types_to_dict(self, inputs):
+        """converting type.Inputs to dictionary"""
+        #dj: any better option?
+        input_names = [nm for nm in inputs.__dataclass_fields__.keys() if nm != "_func"]
+        inputs_dict = {}
+        for field in input_names:
+            inputs_dict["{}.{}".format(self.name, field)] = getattr(inputs, field)
+        return inputs_dict
 
 
 '''    

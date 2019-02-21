@@ -32,71 +32,70 @@ def fun_addvar3(a, b, c):
 
 
 @pytest.mark.parametrize("inputs, splitter, ndim, states_ind, states_val", [
-    ({"a": [3, 5]}, "a", 1, [{'NA.a': 0}, {'NA.a': 1}],
+    ({"NA.a": [3, 5]}, "a", 1, [{'NA.a': 0}, {'NA.a': 1}],
      [{'NA.a': 3}, {'NA.a': 5}]),
-    ({"a": [3, 5], "b": ["str1", "str2"]}, ("a", "b"), 1,
+    ({"NA.a": [3, 5], "NA.b": ["str1", "str2"]}, ("a", "b"), 1,
      [{'NA.a': 0, 'NA.b': 0}, {'NA.a': 1, 'NA.b': 1}],
      [{'NA.a': 3, 'NA.b': "str1"}, {'NA.a': 5, 'NA.b': "str2"}]),
-    ({"a": [3, 5], "b": ["str1", "str2"]}, ["a", "b"], 2,
+    ({"NA.a": [3, 5], "NA.b": ["str1", "str2"]}, ["a", "b"], 2,
      [{'NA.a': 0, 'NA.b': 0}, {'NA.a': 0, 'NA.b': 1},
       {'NA.a': 1, 'NA.b': 0}, {'NA.a': 1, 'NA.b': 1}],
      [{'NA.a': 3, 'NA.b': "str1"}, {'NA.a': 3, 'NA.b': "str2"},
       {'NA.a': 5, 'NA.b': "str1"}, {'NA.a': 5, 'NA.b': "str2"}]),
-    ({"a": [3, 5], "b": ["str1", "str2"], "c": [10, 20]}, [("a", "c"), "b"], 2,
+    ({"NA.a": [3, 5], "NA.b": ["str1", "str2"], "NA.c": [10, 20]}, [("a", "c"), "b"], 2,
      [{'NA.a': 0, 'NA.b': 0, "NA.c": 0}, {'NA.a': 0, 'NA.b': 1, "NA.c": 0},
       {'NA.a': 1, 'NA.b': 0, "NA.c": 1}, {'NA.a': 1, 'NA.b': 1, "NA.c": 1}],
      [{'NA.a': 3, 'NA.b': "str1", "NA.c": 10}, {'NA.a': 3, 'NA.b': "str2", "NA.c": 10},
       {'NA.a': 5, 'NA.b': "str1", "NA.c": 20}, {'NA.a': 5, 'NA.b': "str2", "NA.c": 20}])
 ])
 def test_state_1(inputs, splitter, ndim, states_ind, states_val):
-    st = State(name="NA", splitter=splitter, inputs=inputs)
+    st = State(name="NA", splitter=splitter)
     #assert st.ndim == ndim
-    st.prepare_states_ind()
+    st.prepare_states_ind(inputs)
     assert st.states_ind == states_ind
-    st.prepare_states_val()
+    st.prepare_states_val(inputs)
     assert st.states_val == states_val
 
 
 def test_state_merge_1():
-    st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
+    st1 = State(name="NA", splitter="a")#, inputs={"a": [3, 5]})
     st2 = State(name="NB", others={st1: "b"})
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a"]
 
-    st2.prepare_states()
+    st2.prepare_states(inputs={"NA.a": [3, 5]})
     assert st2.states_ind == [{'NA.a': 0}, {'NA.a': 1}]
     assert st2.states_val == [{'NA.a': 3}, {'NA.a': 5}]
 
 
 def test_state_merge_1a():
-    st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
+    st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="_NA", others={st1: "b"})
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a"]
 
-    st2.prepare_states()
+    st2.prepare_states(inputs={"NA.a": [3, 5]})
     assert st2.states_ind == [{'NA.a': 0}, {'NA.a': 1}]
     assert st2.states_val == [{'NA.a': 3}, {'NA.a': 5}]
 
 
-@pytest.mark.xfail(reason="should check if I;m not using partial splitter from previous node")
+@pytest.mark.xfail(reason="should check if I'm not using partial splitter from previous node")
 def test_state_merge_1b():
-    st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
+    st1 = State(name="NA", splitter="a")
     with pytest.raises(Exception):
         st2 = State(name="NB", splitter="NA.a", others={st1: "b"})
 
 
 
 def test_state_merge_2():
-    st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
-    st2 = State(name="NB", splitter=["_NA", "a"], inputs={"a": [1, 2]},
-                others={st1: "b"})
-    st1.prepare_states()
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter=["_NA", "a"], others={st1: "b"})
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
 
     assert st2.splitter == ["_NA", "NB.a"]
     assert st2.splitter_rpn == ["NA.a", "NB.a", "*"]
 
-    st2.prepare_states()
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [1, 2]})
     assert st2.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 0, "NB.a": 1},
                               {'NA.a': 1, "NB.a": 0}, {'NA.a': 1, "NB.a": 1}]
     assert st2.states_val == [{'NA.a': 3, "NB.a": 1}, {'NA.a': 3, "NB.a": 2},
@@ -104,15 +103,14 @@ def test_state_merge_2():
 
 
 def test_state_merge_2a():
-    st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
-    st2 = State(name="NB", splitter=["_NA", "a"], inputs={"a": [1, 2], "s": 1},
-                others={st1: "b"})
-    st1.prepare_states()
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter=["_NA", "a"], others={st1: "b"})
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
 
     assert st2.splitter == ["_NA", "NB.a"]
     assert st2.splitter_rpn == ["NA.a", "NB.a", "*"]
 
-    st2.prepare_states()
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [1, 2], "NB.s": 1})
     assert st2.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 0, "NB.a": 1},
                               {'NA.a': 1, "NB.a": 0}, {'NA.a': 1, "NB.a": 1}]
     assert st2.states_val == [{'NA.a': 3, "NB.a": 1}, {'NA.a': 3, "NB.a": 2},
@@ -121,14 +119,14 @@ def test_state_merge_2a():
 
 
 def test_state_merge_3():
-    st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
-    st2 = State(name="NB", splitter="a", inputs={"a": [30, 50]})
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter="a")
     st3 = State(name="NC", others={st1: "b", st2: "c"})
 
     assert st3.splitter == ["_NB", "_NA"]
     assert st3.splitter_rpn == ["NB.a", "NA.a", "*"]
 
-    st3.prepare_states()
+    st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
     assert st3.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 1, "NB.a": 0},
                               {'NA.a': 0, "NB.a": 1}, {'NA.a': 1, "NB.a": 1}]
     assert st3.states_val == [{'NA.a': 3, "NB.a": 30}, {'NA.a': 5, "NB.a": 30},
@@ -136,12 +134,12 @@ def test_state_merge_3():
 
 
 def test_state_merge_4():
-    st1 = State(name="NA", splitter=["a", "b"], inputs={"a": [3, 5], "b": [10, 20]})
+    st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(name="NB", others={st1: "a"})
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a", "NA.b", "*"]
 
-    st2.prepare_states()
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
     assert st2.states_ind == [{'NA.a': 0, "NA.b": 0}, {'NA.a': 0, "NA.b": 1},
                               {'NA.a': 1, "NA.b": 0}, {'NA.a': 1, "NA.b": 1}]
     assert st2.states_val == [{'NA.a': 3, "NA.b": 10}, {'NA.a': 3, "NA.b": 20},
@@ -149,13 +147,13 @@ def test_state_merge_4():
 
 
 def test_state_merge_5():
-    st1 = State(name="NA", splitter=["a", "b"], inputs={"a": [3, 5], "b": [10, 20]})
-    st2 = State(name="NB", splitter="a", inputs={"a": [600, 700]})
+    st1 = State(name="NA", splitter=["a", "b"])
+    st2 = State(name="NB", splitter="a")
     st3 = State(name="NC", others={st1: "a", st2: "b"})
     assert st3.splitter == ["_NB", "_NA"]
     assert st3.splitter_rpn == ["NB.a", "NA.a", "NA.b", "*", "*"]
 
-    st3.prepare_states()
+    st3.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.a": [600, 700]})
     assert st3.states_ind == [{'NB.a': 0, 'NA.a': 0, "NA.b": 0}, {'NB.a': 0, 'NA.a': 0, "NA.b": 1},
                               {'NB.a': 0, 'NA.a': 1, "NA.b": 0}, {'NB.a': 0, 'NA.a': 1, "NA.b": 1},
                               {'NB.a': 1, 'NA.a': 0, "NA.b": 0}, {'NB.a': 1, 'NA.a': 0, "NA.b": 1},

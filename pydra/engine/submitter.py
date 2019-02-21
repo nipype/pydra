@@ -41,7 +41,7 @@ class Submitter(object):
 
     def run_node(self):
         """the main method to run a Node"""
-        self.node.state.prepare_states()
+        self.node.state.prepare_states(self.node.inputs)
         self._submit_node(self.node)
         while not self.node.is_complete:
             logger.debug("Submitter, in while, to_finish: {}".format(self.node))

@@ -87,7 +87,7 @@ def test_node_3():
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
 
-    nn.state.prepare_states()
+    nn.state.prepare_states(nn.inputs)
     nn.state.states_ind = [{"NA.a": 0}, {"NA.a": 1}]
     nn.state.states_val = [{"NA.a": 3}, {"NA.a": 5}]
 
@@ -102,7 +102,7 @@ def test_node_4():
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
 
-    nn.state.prepare_states()
+    nn.state.prepare_states(nn.inputs)
     nn.state.states_ind = [{"NA.a": 0}, {"NA.a": 1}]
     nn.state.states_val = [{"NA.a": 3}, {"NA.a": 5}]
 
@@ -117,7 +117,7 @@ def test_node_4a():
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
 
-    nn.state.prepare_states()
+    nn.state.prepare_states(nn.inputs)
     nn.state.states_ind = [{"NA.a": 0}, {"NA.a": 1}]
     nn.state.states_val = [{"NA.a": 3}, {"NA.a": 5}]
 
