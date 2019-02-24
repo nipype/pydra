@@ -34,7 +34,7 @@ def change_dir(request):
 
 
 Plugins = ["serial", "mp", "cf", "dask"]
-Plugins = ["serial", "cf"]
+Plugins = ["serial"]
 
 
 @to_task
@@ -164,6 +164,33 @@ def test_node_6(plugin, change_dir):
     for i, res in enumerate(expected):
         assert results["out"][i][0] == res[0]
         assert results["out"][i][1] == res[1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_node_split_combine_1(plugin, change_dir):
+    """Node with interface, inputs and the simplest splitter, running interface"""
+    nn = fun_addtwo(name="NA", workingdir="test_nd6_{}".format(plugin),
+                    splitter="a", combiner="a", a=[3, 5])
+    #nn.split(splitter="a", inputs={"a": [3, 5]})
+    assert nn.splitter == "NA.a"
+    assert nn.combiner == ["NA.a"]
+    assert (nn.inputs.a == np.array([3, 5])).all()
+
+    assert nn.state.splitter == "NA.a"
+    assert nn.state.combiner == ["NA.a"]
+
+    sub = Submitter(plugin=plugin, runnable=nn)
+    sub.run()
+    sub.close()
+
+    # checking the results
+    results = nn.result()
+    expected = [({}, [5, 7])]
+    for i, res in enumerate(expected):
+        assert results["out"][i][0] == res[0]
+        assert results["out"][i][1] == res[1]
+
 
 @pytest.mark.xfail(reason="need updates [wip]")
 @pytest.mark.parametrize("plugin", Plugins)

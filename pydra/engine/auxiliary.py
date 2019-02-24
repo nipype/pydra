@@ -210,6 +210,20 @@ def splitting_axis(state_inputs, splitter_rpn):
     return axis_for_input, ndim
 
 
+def converter_groups_to_input(group_for_inputs):
+    """ Having axes for all the input fields, the function returns fields for each axis. """
+    input_for_axis = {}
+    ndim = 0
+    for inp, gr in group_for_inputs.items():
+        if gr in input_for_axis.keys():
+            input_for_axis[gr].append(inp)
+        else:
+            ndim += 1
+            input_for_axis[gr] = [inp]
+    return input_for_axis, ndim
+
+
+
 def converting_axis2input(axis_for_input, ndim, state_inputs=None):
     """ Having axes for all the input fields, the function returns fields for each axis. """
     input_for_axis = []
@@ -465,9 +479,9 @@ def input_shape(in1):
     return tuple(shape)
 
 
-# TODO NOW: skad to ma wiedziec, ze to jest inner splitter, jak to zrobic aby fgroup byl stackiem
+# TODO NOW: adding inner splitters
 # dj: changing the function so it takes splitter_rpn
-def _splits(splitter_rpn, inputs, inner_splitters=[]):
+def _splits(splitter_rpn, inputs, inner_splitters=None):
     """ Process splitter rpn from left to right
     """
     import numpy as np
@@ -478,7 +492,7 @@ def _splits(splitter_rpn, inputs, inner_splitters=[]):
     shapes = {}
     group_count = None
     # dj: all axes
-    finalgroup = None
+    finalgroup = []
 
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
@@ -488,7 +502,7 @@ def _splits(splitter_rpn, inputs, inner_splitters=[]):
         opval = range(np.prod(shape))
         val = op["*"](opval)
         keys = splitter_rpn
-        groups[op_single], finalgroup = 0, [0]
+        groups[op_single], finalgroup = 0, [[0]]
         return val, keys, groups, finalgroup, shapes
 
     for token in splitter_rpn:
@@ -576,9 +590,10 @@ def _splits(splitter_rpn, inputs, inner_splitters=[]):
             stack.append(token)
     val = stack.pop()
     if isinstance(val, tuple):
-        finalgroup = val[-1]
-        if isinstance(finalgroup, int):
-            finalgroup = [finalgroup]
+        if isinstance(val[-1], int):
+            finalgroup = [[val[-1]]]
+        else:
+            finalgroup = [val[-1]]
         val = val[0]
     # dj: val is similar to State.state_ind, but gives indices with brackets etc.
     #pdb.set_trace()

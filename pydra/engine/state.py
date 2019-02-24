@@ -11,7 +11,7 @@ from .specs import BaseSpec
 
 
 class State:
-    def __init__(self, name, splitter=None, others=None):
+    def __init__(self, name, splitter=None, combiner=None, others=None):
         self.name = name
         #self.ndim = None
         self.others = others
@@ -27,6 +27,16 @@ class State:
             self._splitter = None
             self.splitter_rpn = []
             self.splitter_rpn_nochange = []
+        if combiner:
+            if not splitter:
+                raise Exception("can't set combiner without splitter")
+            else:
+                self.combiner = combiner
+            if set(self.combiner) - set(self.splitter_rpn):
+                raise Exception("all combiners should be in the splitter")
+        else:
+            self.combiner = []
+
         # dj: I added +1, but it still doesn't take into account when input 2d
         # TODO: ndim should be stack (it's not dim)
         #self.ndim = len([1 for val in aux.splitter2rpn(self.splitter) if val == '*']) + 1
@@ -61,9 +71,21 @@ class State:
         if isinstance(inputs, BaseSpec):
             inputs = self._inputs_types_to_dict(inputs)
         # TODO: aux._splits or aux.splits
-        values_out, keys_out, _, _, _ = aux._splits(self.splitter_rpn, inputs)
+        values_out, keys_out, group_for_inputs, groups_stack, _ = aux._splits(self.splitter_rpn, inputs)
         value_list = list(values_out)
+        # dj: not sure if this shouldn't be already in the init
+        self.group_for_inputs = group_for_inputs
+        self.input_for_groups, self.ndim = aux.converter_groups_to_input(self.group_for_inputs)
+        self.groups_stack = groups_stack
+        for comb in self.combiner:
+            # dj TODO: what if group_for_inputs[comb] is a list
+            if self.group_for_inputs[comb] not in self.groups_stack[-1]:
+                raise Exception("input {} not ready to combine, you have to combine {} "
+                                "first".format(comb, self.groups_stack[-1]))
         self.states_val = list(aux.map_splits(aux.iter_splits(value_list, keys_out), inputs))
+        #TODO: change splitter when combiner?
+        #TODO: update self.group_for_inputs, self.input_for_groups,  self.groups_stack?
+        self.keys_out_final = [key for key in keys_out if key not in self.combiner]
         return self.states_val
 
 

@@ -153,7 +153,8 @@ class NodeBase:
 
         if self.splitter is not None:
             if self._state is None:
-                self._state = state.State(name=self.name, splitter=self.splitter, others=None)
+                self._state = state.State(name=self.name, splitter=self.splitter, combiner=self.combiner,
+                                          others=None)
 
         else:
             self._state = None
@@ -238,6 +239,7 @@ class NodeBase:
 
         # reading extra inputs that come from previous nodes
         for (from_node, from_socket, to_socket) in self.needed_outputs:
+            # TODO update
             if from_node.state.combiner:
                 inputs_dict["{}.{}".format(self.name, to_socket)] =\
                     self._get_input_comb(from_node, from_socket, state_dict)
@@ -253,6 +255,7 @@ class NodeBase:
 
         return state_dict, inputs_dict
 
+    # TODO: update
     def _get_input_comb(self, from_node, from_socket, state_dict):
         """collecting all outputs from previous node that has combiner"""
         state_dict_all = self._state_dict_all_comb(from_node, state_dict)
@@ -371,41 +374,18 @@ class NodeBase:
                 val_l = list(container.items())
         else:
             raise Exception("{} has to be dict".format(container))
-        val_dict_l = self._state_str_to_dict(val_l)
+        val_dict_l = [(self.state.states_val[i[0]], i[1]) for i in val_l]
         return val_dict_l
 
 
-    def _state_str_to_dict(self, values_list):
-        """taking a list of tuples (state, value)
-        and converting state from string to dictionary.
-        string has format "FirstInputName:Value_SecondInputName:Value"
-        """
-        values_dict_list = []
-        for val_el in values_list:
-            val_dict = {}
-            for val_str in val_el[0].split("_"):
-                if val_str:
-                    key, val = val_str.split(":")
-                    try:
-                        val = float(val)
-                        if val.is_integer():
-                            val = int(val)
-                    except Exception:
-                        pass
-                    val_dict[key] = val
-            values_dict_list.append((val_dict, val_el[1]))
-        return values_dict_list
-
-
     def _combined_output(self, key_out, state_dict, output_el):
-        comb_inp_to_remove = self.state.comb_inp_to_remove
-        dir_nm_comb = "_".join(["{}:{}".format(i, j)
-                                for i, j in list(state_dict.items())
-                                if i not in comb_inp_to_remove])
-        if dir_nm_comb in self._output[key_out].keys():
-            self._output[key_out][dir_nm_comb].append(output_el)
+        for inp in self.combiner:
+            state_dict.pop(inp)
+        state_tuple = tuple(state_dict.items())
+        if state_tuple in self._output[key_out].keys():
+            self._output[key_out][state_tuple].append(output_el)
         else:
-            self._output[key_out][dir_nm_comb] = [output_el]
+            self._output[key_out][state_tuple] = [output_el]
 
 
     def _reading_results_one_output(self, key_out):
@@ -429,6 +409,7 @@ class NodeBase:
         return result
 
 
+
 class Node(NodeBase):
     def __init__(self, name, inputs=None, splitter=None, workingdir=None,
                  other_splitters=None, combiner=None):
@@ -444,17 +425,14 @@ class Node(NodeBase):
 
     def run_interface_el(self, ind):
         """ running interface one element generated from node_state."""
-        logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
-        state_dict, inputs_dict = self.get_input_el(ind)
-        dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
-        print("Run interface el, dict={}".format(state_surv_dict))
-        logger.debug("Run interface el, name={}, inputs_dict={}, state_dict={}".format(
-            self.name, inputs_dict, state_surv_dict))
-        os.makedirs(os.path.join(os.getcwd(), self.workingdir), exist_ok=True)
-        self.cache_dir = os.path.join(os.getcwd(), self.workingdir)
-        interf_inputs = dict((k.split(".")[1], v) for k,v in inputs_dict.items())
-        res = self.run(**interf_inputs)
-        return dir_nm_el, res
+        if ind is not None:
+            logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
+            state_dict, inputs_dict = self.get_input_el(ind)
+            os.makedirs(os.path.join(os.getcwd(), self.workingdir), exist_ok=True)
+            self.cache_dir = os.path.join(os.getcwd(), self.workingdir)
+            interf_inputs = dict((k.split(".")[1], v) for k,v in inputs_dict.items())
+            res = self.run(**interf_inputs)
+            return ind, res #TODO NOW: don't have to return
 
 
     def get_output(self):
@@ -466,16 +444,13 @@ class Node(NodeBase):
             for (ii, val) in enumerate(self.state.states_val):
                 state_dict = val
                 if self.splitter:
-                    dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
-                    output_el = getattr(self.results_dict[dir_nm_el].output, key_out)
+                    output_el = getattr(self.results_dict[ii].output, key_out)
                     if not self.combiner: # only splitter
-                        self._output[key_out][dir_nm_el] = output_el
+                        self._output[key_out][tuple(self.state.states_val[ii].items())] = output_el
                     else:
                         self._combined_output(key_out, state_dict, output_el)
                 else:
-                    dir_nm_el, state_surv_dict = self._directory_name_state_surv(state_dict)
-                    self._output[key_out] = \
-                        (state_surv_dict, getattr(self.results_dict[dir_nm_el].output, key_out))
+                    raise Exception("not implemented, TODO")
         return self._output
 
 
@@ -486,10 +461,8 @@ class Node(NodeBase):
         (the method does not collect the output)
         """
         for ii, val in enumerate(self.state.states_val):
-            state_dict = val
-            dir_nm_el, _ = self._directory_name_state_surv(state_dict)
             for key_out in self.output_names:
-                if not getattr(self.results_dict[dir_nm_el].output, key_out):
+                if not getattr(self.results_dict[ii].output, key_out):
                     return False
         self._is_complete = True
         return True
@@ -503,7 +476,9 @@ class Node(NodeBase):
 
         """
         for key_out in self.output_names:
-            self._result[key_out] = self._reading_results_one_output(key_out)
+            output = self.output[key_out]
+            self._result[key_out] = [(dict(k), v) for k,v in output.items()]
+
 
 
 class Workflow(NodeBase):

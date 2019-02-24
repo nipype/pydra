@@ -31,30 +31,36 @@ def fun_addvar3(a, b, c):
 
 
 
-@pytest.mark.parametrize("inputs, splitter, ndim, states_ind, states_val", [
+@pytest.mark.parametrize("inputs, splitter, ndim, states_ind, states_val, input_for_groups, "
+                         "groups_stack", [
     ({"NA.a": [3, 5]}, "a", 1, [{'NA.a': 0}, {'NA.a': 1}],
-     [{'NA.a': 3}, {'NA.a': 5}]),
+     [{'NA.a': 3}, {'NA.a': 5}], {0: ["NA.a"]}, [[0]]),
     ({"NA.a": [3, 5], "NA.b": ["str1", "str2"]}, ("a", "b"), 1,
      [{'NA.a': 0, 'NA.b': 0}, {'NA.a': 1, 'NA.b': 1}],
-     [{'NA.a': 3, 'NA.b': "str1"}, {'NA.a': 5, 'NA.b': "str2"}]),
+     [{'NA.a': 3, 'NA.b': "str1"}, {'NA.a': 5, 'NA.b': "str2"}],
+     {0: ["NA.a", "NA.b"]}, [[0]]),
     ({"NA.a": [3, 5], "NA.b": ["str1", "str2"]}, ["a", "b"], 2,
      [{'NA.a': 0, 'NA.b': 0}, {'NA.a': 0, 'NA.b': 1},
       {'NA.a': 1, 'NA.b': 0}, {'NA.a': 1, 'NA.b': 1}],
      [{'NA.a': 3, 'NA.b': "str1"}, {'NA.a': 3, 'NA.b': "str2"},
-      {'NA.a': 5, 'NA.b': "str1"}, {'NA.a': 5, 'NA.b': "str2"}]),
+      {'NA.a': 5, 'NA.b': "str1"}, {'NA.a': 5, 'NA.b': "str2"}],
+     {0: ["NA.a"], 1: ["NA.b"]}, [[0, 1]]),
     ({"NA.a": [3, 5], "NA.b": ["str1", "str2"], "NA.c": [10, 20]}, [("a", "c"), "b"], 2,
      [{'NA.a': 0, 'NA.b': 0, "NA.c": 0}, {'NA.a': 0, 'NA.b': 1, "NA.c": 0},
       {'NA.a': 1, 'NA.b': 0, "NA.c": 1}, {'NA.a': 1, 'NA.b': 1, "NA.c": 1}],
      [{'NA.a': 3, 'NA.b': "str1", "NA.c": 10}, {'NA.a': 3, 'NA.b': "str2", "NA.c": 10},
-      {'NA.a': 5, 'NA.b': "str1", "NA.c": 20}, {'NA.a': 5, 'NA.b': "str2", "NA.c": 20}])
+      {'NA.a': 5, 'NA.b': "str1", "NA.c": 20}, {'NA.a': 5, 'NA.b': "str2", "NA.c": 20}],
+      {0: ["NA.a", "NA.c"], 1: ["NA.b"]}, [[0, 1]])
 ])
-def test_state_1(inputs, splitter, ndim, states_ind, states_val):
+def test_state_1(inputs, splitter, ndim, states_ind, states_val, input_for_groups, groups_stack):
     st = State(name="NA", splitter=splitter)
-    #assert st.ndim == ndim
     st.prepare_states_ind(inputs)
     assert st.states_ind == states_ind
     st.prepare_states_val(inputs)
     assert st.states_val == states_val
+    assert st.input_for_groups == input_for_groups
+    assert st.ndim == ndim
+    assert st.groups_stack == groups_stack
 
 
 def test_state_merge_1():
@@ -84,7 +90,6 @@ def test_state_merge_1b():
     st1 = State(name="NA", splitter="a")
     with pytest.raises(Exception):
         st2 = State(name="NB", splitter="NA.a", others={st1: "b"})
-
 
 
 def test_state_merge_2():
@@ -162,6 +167,19 @@ def test_state_merge_5():
                               {'NB.a': 600, 'NA.a': 5, "NA.b": 10}, {'NB.a': 600, 'NA.a': 5, "NA.b": 20},
                               {'NB.a': 700, 'NA.a': 3, "NA.b": 10}, {'NB.a': 700, 'NA.a': 3, "NA.b": 20},
                               {'NB.a': 700, 'NA.a': 5, "NA.b": 10}, {'NB.a': 700, 'NA.a': 5, "NA.b": 20}]
+
+
+@pytest.mark.xfail(reason="wip")
+def test_state_combine_1():
+    st = State(name="NA", splitter="a", combiner="a")
+    assert st.splitter == "NA.a"
+    assert st.splitter_rpn == ["NA.a"]
+    #pdb.set_trace()
+
+    # st2.prepare_states(inputs={"NA.a": [3, 5]})
+    # assert st2.states_ind == [{'NA.a': 0}, {'NA.a': 1}]
+    # assert st2.states_val == [{'NA.a': 3}, {'NA.a': 5}]
+
 
 
 # def test_state_merge_inner_1():

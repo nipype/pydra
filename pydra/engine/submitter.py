@@ -41,7 +41,8 @@ class Submitter(object):
 
     def run_node(self):
         """the main method to run a Node"""
-        self.node.state.prepare_states(self.node.inputs)
+        if self.node.state:
+            self.node.state.prepare_states(self.node.inputs)
         self._submit_node(self.node)
         while not self.node.is_complete:
             logger.debug("Submitter, in while, to_finish: {}".format(self.node))
@@ -50,10 +51,12 @@ class Submitter(object):
 
     def _submit_node(self, node):
         """submitting nodes's interface for all states"""
-        for ii, ind in enumerate(node.state.states_val):#node.state.index_generator:
-            # this is run only for a single node or the first node in a wf
-            self._submit_node_el(node, ii)
-
+        if node.state:
+            for ii, ind in enumerate(node.state.states_val):
+                # this is run only for a single node or the first node in a wf
+                self._submit_node_el(node, ii)
+        else:
+            self._submit_node_el(node, ind=None)
 
     def _submit_node_el(self, node, ind):
         """submitting node's interface for one element of states"""
