@@ -21,22 +21,8 @@ class State:
             for st, inp in self.others.items():
                 self.other_splitters[st.name] = {"spl": st.splitter, "con": "{}.{}".format(self.name, inp)}
                 self.inner_inputs.append("{}.{}".format(self.name, inp))
-        if splitter:
-            self.splitter = splitter
-        else:
-            self._splitter = None
-            self.splitter_rpn = []
-            self.splitter_rpn_nochange = []
-        if combiner:
-            if not splitter:
-                raise Exception("can't set combiner without splitter")
-            else:
-                self.combiner = combiner
-            if set(self.combiner) - set(self.splitter_rpn):
-                raise Exception("all combiners should be in the splitter")
-        else:
-            self.combiner = []
-
+        self.splitter = splitter
+        self.combiner = combiner
         # dj: I added +1, but it still doesn't take into account when input 2d
         # TODO: ndim should be stack (it's not dim)
         #self.ndim = len([1 for val in aux.splitter2rpn(self.splitter) if val == '*']) + 1
@@ -54,10 +40,36 @@ class State:
 
     @splitter.setter
     def splitter(self, splitter):
-        self._splitter = aux.change_splitter(splitter, self.name)
-        self.splitter_rpn = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters)
-        self.splitter_rpn_nochange = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters,
-                                                      state_fields=False)
+        if splitter:
+            self._splitter = aux.change_splitter(splitter, self.name)
+            self.splitter_rpn = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters)
+            self.splitter_rpn_nochange = aux.splitter2rpn(deepcopy(self._splitter),
+                                                          other_splitters=self.other_splitters, state_fields=False)
+        else:
+            self._splitter = None
+            self.splitter_rpn = []
+            self.splitter_rpn_nochange = []
+
+
+    @property
+    def combiner(self):
+        return self._combiner
+
+    @combiner.setter
+    def combiner(self, combiner):
+        if combiner:
+            if not self.splitter:
+                raise Exception("splitter has to be set before setting combiner")
+            if type(combiner) is str:
+                combiner = [combiner]
+            elif type(combiner) is not list:
+                raise Exception("combiner should be a string or a list")
+            self._combiner = aux.change_splitter(combiner, self.name)
+            if set(self._combiner) - set(self.splitter_rpn):
+                raise Exception("all combiners should be in the splitter")
+        else:
+            self._combiner = []
+
 
     # dj: should this be just states property?
     def prepare_states_ind(self, inputs):

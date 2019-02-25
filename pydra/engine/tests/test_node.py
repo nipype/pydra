@@ -72,16 +72,14 @@ def test_node_1a():
 def test_node_2():
     """Node with interface and inputs"""
     nn = fun_addtwo(name="NA", a=3)
-    assert nn.splitter is None
     # adding NA to the name of the variable
     assert getattr(nn.inputs, 'a') == 3
-    assert nn.splitter is None
+    assert nn.state is None
 
 
 def test_node_3():
     """Node with interface, inputs and splitter"""
     nn = fun_addtwo(name="NA", a=[3, 5], splitter="a")
-    assert nn.splitter == "NA.a"
     assert np.allclose(nn.inputs.a, [3, 5])
 
     assert nn.state.splitter == "NA.a"
@@ -96,7 +94,6 @@ def test_node_4():
     """Node with interface and inputs. splitter set using split method"""
     nn = fun_addtwo(name="NA", a=[3, 5])
     nn.split(splitter="a")
-    assert nn.splitter == "NA.a"
     assert np.allclose(nn.inputs.a, [3, 5])
 
     assert nn.state.splitter == "NA.a"
@@ -111,7 +108,6 @@ def test_node_4a():
     """Node with interface, splitter and inputs set with the split method"""
     nn = fun_addtwo(name="NA")
     nn.split(splitter="a", a=[3, 5])
-    assert nn.splitter == "NA.a"
     assert np.allclose(nn.inputs.a, [3, 5])
 
     assert nn.state.splitter == "NA.a"
@@ -127,7 +123,7 @@ def test_node_4b():
     nn = fun_addtwo(name="NA", splitter="a", a=[3, 5])
     with pytest.raises(Exception) as excinfo:
         nn.split(splitter="a")
-    assert str(excinfo.value) == "splitter is already set"
+    assert str(excinfo.value) == "splitter has been already set"
 
 @pytest.mark.xfail(reason="doesn't have splitter and state - have to fix it")
 @pytest.mark.parametrize("plugin", Plugins)
@@ -151,7 +147,7 @@ def test_node_6(plugin, change_dir):
     nn = fun_addtwo(name="NA", workingdir="test_nd6_{}".format(plugin),
                     splitter="a", a=[3, 5])
     #nn.split(splitter="a", inputs={"a": [3, 5]})
-    assert nn.splitter == "NA.a"
+    assert nn.state.splitter == "NA.a"
     assert (nn.inputs.a == np.array([3, 5])).all()
 
     sub = Submitter(plugin=plugin, runnable=nn)
@@ -173,8 +169,6 @@ def test_node_split_combine_1(plugin, change_dir):
     nn = fun_addtwo(name="NA", workingdir="test_nd6_{}".format(plugin),
                     splitter="a", combiner="a", a=[3, 5])
     #nn.split(splitter="a", inputs={"a": [3, 5]})
-    assert nn.splitter == "NA.a"
-    assert nn.combiner == ["NA.a"]
     assert (nn.inputs.a == np.array([3, 5])).all()
 
     assert nn.state.splitter == "NA.a"
@@ -259,19 +253,20 @@ def test_node_9(plugin, change_dir):
 
 # tests for workflows
 
-@pytest.mark.xfail(reason="need updates [wip]")
+@pytest.mark.xfail(reason="need updates [wip]"
+                          ":how should we treat WF? should we created input_spec, etc?")
 @python35_only
 def test_workflow_0(plugin="serial"):
     """workflow (without run) with one node with a splitter"""
+
     wf = Workflow(name="wf0", workingdir="test_wf0_{}".format(plugin))
     # defining a node with splitter and inputs first
-    na = Node(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["a"])
-    na.split(splitter="a", inputs={"a": [3, 5]})
+    na = fun_addtwo(name="NA", a=[3, 5], splitter="a")
     # one of the way of adding nodes to the workflow
     wf.add_nodes([na])
-    assert wf.nodes[0].splitter == "NA.a"
-    assert (wf.nodes[0].inputs['NA.a'] == np.array([3, 5])).all()
-    assert len(wf.graph.nodes) == 1
+    # assert wf.nodes[0].splitter == "NA.a"
+    # assert (wf.nodes[0].inputs['NA.a'] == np.array([3, 5])).all()
+    # assert len(wf.graph.nodes) == 1
 
 @pytest.mark.xfail(reason="need updates [wip]")
 @pytest.mark.parametrize("plugin", Plugins)

@@ -56,20 +56,16 @@ class NodeBase:
                                   else f.default) for f in dc.fields(klass)})
         self.input_names = [field.name for field in dc.fields(klass)
                             if field.name not in ["_func"]]
-        self._state = None
 
+        self._needed_outputs = []
         if splitter:
             # adding name of the node to the input name within the splitter
             splitter = aux.change_splitter(splitter, self.name)
-        self._splitter = splitter
-        self._combiner = []
-        if combiner:
-            self.combiner = combiner
+        self.state = self.set_state(splitter, combiner)
         self._output = {}
         self._result = {}
         # flag that says if node finished all jobs
         self._is_complete = False
-        self._needed_outputs = []
 
         if self._input_sets is None:
             self._input_sets = {}
@@ -137,59 +133,25 @@ class NodeBase:
     def needed_outputs(self, requires):
         self._needed_outputs = ensure_list(requires)
 
-    @property
-    def state(self):
+
+    def set_state(self, splitter, combiner=None):
         incoming_states = []
         for node, _, _ in self.needed_outputs:
             if node.state is not None:
                 incoming_states.append(node.state)
-        if self.splitter is None:
-            self._splitter = [state.name for state in incoming_states] or None
+        if splitter is None:
+            splitter = [state.name for state in incoming_states] or None
         elif len(incoming_states):
-            rpn = aux.splitter2rpn(self.splitter)
+            rpn = aux.splitter2rpn(splitter)
             # TODO: check for keys instead of just names
             left_out = [state.name for state in incoming_states
                         if state.name not in rpn]
 
-        if self.splitter is not None:
-            if self._state is None:
-                self._state = state.State(name=self.name, splitter=self.splitter, combiner=self.combiner,
-                                          others=None)
-
+        if splitter is not None:
+            self.state = state.State(name=self.name, splitter=splitter, combiner=combiner, others=None)
         else:
-            self._state = None
-        return self._state
-
-    @property
-    def splitter(self):
-        return self._splitter
-
-    @splitter.setter
-    def splitter(self, splitter):
-        if self._splitter and self._splitter != splitter:
-            raise Exception("splitter is already set")
-        self._splitter = aux.change_splitter(splitter, self.name)
-
-    @property
-    def combiner(self):
-        return self._combiner
-
-    @combiner.setter
-    def combiner(self, combiner):
-        if self._combiner:
-            raise Exception("combiner is already set")
-        if not self.splitter:
-            raise Exception("splitter has to be set before setting combiner")
-        if type(combiner) is str:
-            combiner = [combiner]
-        elif type(combiner) is not list:
-            raise Exception("combiner should be a string or a list")
-        self._combiner = aux.change_splitter(combiner, self.name)
-        # TODO: this check should be moved somewhere
-        # for el in self._combiner:
-        #     if el not in self.state._splitter_rpn:
-        #         raise Exception("element {} of combiner is not found in the splitter {}".format(
-        #             el, self.splitter))
+            self.state = None
+        return self.state
 
     @property
     def output_names(self):
@@ -207,16 +169,28 @@ class NodeBase:
         #                              return_state=return_state)
 
 
+    # TODO: should change state!
     def split(self, splitter, **kwargs):
-        self.splitter = splitter
         if kwargs:
             self.inputs = dc.replace(self.inputs, **kwargs)
+            #dj:??, check if I need it
             self.state_inputs = kwargs
+        splitter = aux.change_splitter(splitter, self.name)
+        if self.state:
+            raise Exception("splitter has been already set")
+            # TODOD: should I allow?
+            # if splitter != self.state.splitter:
+            #     combiner = self.state.combiner
+            #     self.set_state(splitter,combiner)
+            # else: # if the same splitter do nothing
+            #     pass
+        else:
+            self.set_state(splitter)
         return self
-
-    def combine(self, combiner):
-        self.combiner = combiner
-        return self
+    #
+    # def combine(self, combiner):
+    #     self.combiner = combiner
+    #     return self
 
     def checking_input_el(self, ind):
         """checking if all inputs are available (for specific state element)"""
@@ -379,7 +353,7 @@ class NodeBase:
 
 
     def _combined_output(self, key_out, state_dict, output_el):
-        for inp in self.combiner:
+        for inp in self.state.combiner:
             state_dict.pop(inp)
         state_tuple = tuple(state_dict.items())
         if state_tuple in self._output[key_out].keys():
@@ -390,7 +364,7 @@ class NodeBase:
 
     def _reading_results_one_output(self, key_out):
         """reading results for one specific output name"""
-        if not self.splitter:
+        if not self.state.splitter:
             if type(self.output[key_out]) is tuple:
                 result = self.output[key_out]
             elif type(self.output[key_out]) is dict:
@@ -400,10 +374,10 @@ class NodeBase:
                 # this is used for wf (can be no splitter but multiple values from node splitter)
                 else:
                     result = val_l
-        elif (self.combiner and not self.state._splitter_rpn_comb):
+        elif (self.state.combiner and not self.state._splitter_rpn_comb):
             val_l = self._state_dict_to_list(self.output[key_out])
             result = val_l[0]
-        elif self.splitter:
+        elif self.state.splitter:
             val_l = self._state_dict_to_list(self._output[key_out])
             result = val_l
         return result
@@ -443,9 +417,9 @@ class Node(NodeBase):
             self._output[key_out] = {}
             for (ii, val) in enumerate(self.state.states_val):
                 state_dict = val
-                if self.splitter:
+                if self.state.splitter:
                     output_el = getattr(self.results_dict[ii].output, key_out)
-                    if not self.combiner: # only splitter
+                    if not self.state.combiner: # only splitter
                         self._output[key_out][tuple(self.state.states_val[ii].items())] = output_el
                     else:
                         self._combined_output(key_out, state_dict, output_el)
