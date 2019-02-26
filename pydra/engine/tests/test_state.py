@@ -11,24 +11,23 @@ import pytest, pdb
 python35_only = pytest.mark.skipif(sys.version_info < (3, 5), reason="requires Python>3.4")
 
 
-@to_task
-def fun_addtwo(a):
-    import time
-    time.sleep(1)
-    if a == 3:
-        time.sleep(2)
-    return a + 2
-
-
-@to_task
-def fun_addvar(b, c):
-    return b + c
-
-
-@to_task
-def fun_addvar3(a, b, c):
-    return a + b + c
-
+# @to_task
+# def fun_addtwo(a):
+#     import time
+#     time.sleep(1)
+#     if a == 3:
+#         time.sleep(2)
+#     return a + 2
+#
+#
+# @to_task
+# def fun_addvar(b, c):
+#     return b + c
+#
+#
+# @to_task
+# def fun_addvar3(a, b, c):
+#     return a + b + c
 
 
 @pytest.mark.parametrize("inputs, splitter, ndim, states_ind, states_val, input_for_groups, "
@@ -122,6 +121,20 @@ def test_state_merge_2a():
                               {'NA.a': 5, "NB.a": 1}, {'NA.a': 5, "NB.a": 2}]
 
 
+def test_state_merge_2b():
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter="a", others={st1: "b"})
+
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
+    assert st2.splitter == ["_NA", "NB.a"]
+    assert st2.splitter_rpn == ["NA.a", "NB.a", "*"]
+
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [1, 2]})
+    assert st2.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 0, "NB.a": 1},
+                              {'NA.a': 1, "NB.a": 0}, {'NA.a': 1, "NB.a": 1}]
+    assert st2.states_val == [{'NA.a': 3, "NB.a": 1}, {'NA.a': 3, "NB.a": 2},
+                              {'NA.a': 5, "NB.a": 1}, {'NA.a': 5, "NB.a": 2}]
+
 
 def test_state_merge_3():
     st1 = State(name="NA", splitter="a")
@@ -167,6 +180,25 @@ def test_state_merge_5():
                               {'NB.a': 600, 'NA.a': 5, "NA.b": 10}, {'NB.a': 600, 'NA.a': 5, "NA.b": 20},
                               {'NB.a': 700, 'NA.a': 3, "NA.b": 10}, {'NB.a': 700, 'NA.a': 3, "NA.b": 20},
                               {'NB.a': 700, 'NA.a': 5, "NA.b": 10}, {'NB.a': 700, 'NA.a': 5, "NA.b": 20}]
+
+
+
+
+def test_state_merge_innerspl_1():
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter="b", others={st1: "b"})
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
+
+    assert st2.splitter == ["_NA", "NB.b"]
+    assert st2.splitter_rpn == ["NA.a", "NB.b", "*"]
+    assert st2.other_splitters["NA"] == {'spl': 'NA.a', 'con': 'NB.b'}
+
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]})
+
+    assert st2.states_ind == [{'NA.a': 0, "NB.b": 0}, {'NA.a': 0, "NB.b": 1}, {'NA.a': 0, "NB.b": 2},
+                              {'NA.a': 1, "NB.b": 3}, {'NA.a': 1, "NB.b": 4}, {'NA.a': 1, "NB.b": 5}]
+    assert st2.states_val == [{'NA.a': 3, "NB.b": 1}, {'NA.a': 3, "NB.b": 10}, {'NA.a': 3, "NB.b": 100},
+                              {'NA.a': 5, "NB.b": 2}, {'NA.a': 5, "NB.b": 20}, {'NA.a': 5, "NB.b": 200},]
 
 
 @pytest.mark.xfail(reason="wip")

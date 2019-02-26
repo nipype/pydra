@@ -461,6 +461,7 @@ def next_key(new_key):
 
 
 def input_shape(in1):
+    # TODO: have to be changed for inner splitter (sometimes different length)
     shape = [len(in1)]
     last_shape = None
     for value in in1:
@@ -493,6 +494,10 @@ def _splits(splitter_rpn, inputs, inner_splitters=None):
     group_count = None
     # dj: all axes
     finalgroup = []
+    if inner_splitters:
+        inner_splitters = list(set(splitter_rpn).intersection(inner_splitters))
+    else:
+        inner_splitters = []
 
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
@@ -521,6 +526,7 @@ def _splits(splitter_rpn, inputs, inner_splitters=None):
                 op2val, shape2, oldgroup2 = op2
             if isinstance(op1, str):
                 shape1 = input_shape(inputs[op1])
+                # TODO! works only for inner splits that have the same length
                 op1val = range(np.prod(shape1))
                 op1str = True
                 shapes[op1] = shape1
@@ -529,7 +535,6 @@ def _splits(splitter_rpn, inputs, inner_splitters=None):
             if token == '.':
                 if shape2 != shape1:
                     raise ValueError('Operands {} and {} do not have same shape.'.format(op1, op2))
-            if token == '.':
                 if all([op1str, op2str]):
                     if group_count is None:
                         group_count = 0
@@ -561,14 +566,27 @@ def _splits(splitter_rpn, inputs, inner_splitters=None):
                         group_count = 0
                     else:
                         group_count += 1
-                    groups[op2] = group_count
-                    group_count += 1
-                    groups[op1] = group_count
-                    oldgroup = [groups[op2], groups[op1]]
+                    #TODO should add for op2 too (??)
+                    if op1 in inner_splitters:
+                        groups[op2] = group_count
+                        group_count += 1
+                        groups[op1] = group_count
+                        oldgroup = [groups[op2], group_count]
+                    else:
+                        groups[op2] = group_count
+                        group_count += 1
+                        groups[op1] = group_count
+                        oldgroup = [groups[op2], groups[op1]]
                 elif op1str:
-                    group_count += 1
-                    groups[op1] = group_count
-                    oldgroup = ensure_list(oldgroup2) + [groups[op1]]
+                    # TODO should add for op2 too (??)
+                    if op1 in inner_splitters:
+                        group_count += 1
+                        groups[op1] = group_count
+                        oldgroup = ensure_list(oldgroup2) + ensure_list(group_count)
+                    else:
+                        group_count += 1
+                        groups[op1] = group_count
+                        oldgroup = ensure_list(oldgroup2) + [groups[op1]]
                 elif op2str:
                     group_count += 1
                     groups[op2] = group_count
@@ -576,6 +594,7 @@ def _splits(splitter_rpn, inputs, inner_splitters=None):
                 else:
                     oldgroup = ensure_list(oldgroup2) + \
                                ensure_list(oldgroup1)
+                # TODO: should I change when inner?
                 newshape = tuple(list(shape2) + list(shape1))
             if all([op1str, op2str]):
                 keys.extend([op2, op1])
@@ -584,10 +603,19 @@ def _splits(splitter_rpn, inputs, inner_splitters=None):
                     keys.insert(0, op2)
                 if op1str:
                     keys.append(op1)
-            pushval = (op[token](op2val, op1val), newshape, oldgroup)
+
+            if op1 in inner_splitters:
+                #TODO: have to be changed if differ length
+                op2val_new = []
+                for i in op2val:
+                    op2val_new += [i] * shape1[-1]
+                pushval = (op["."](op2val_new, op1val), newshape, oldgroup)
+            else:
+                pushval = (op[token](op2val, op1val), newshape, oldgroup)
             stack.append(pushval)
         else: # name of one of the inputs
             stack.append(token)
+
     val = stack.pop()
     if isinstance(val, tuple):
         if isinstance(val[-1], int):
@@ -595,12 +623,23 @@ def _splits(splitter_rpn, inputs, inner_splitters=None):
         else:
             finalgroup = [val[-1]]
         val = val[0]
-    # dj: val is similar to State.state_ind, but gives indices with brackets etc.
-    #pdb.set_trace()
+
+    # TODO NOW: move it somewhere
+    # adjusting finalgroup, so the inner splitters are moved to a new element
+    inner_group = []
+    if inner_splitters:
+        for inner in inner_splitters:
+            if groups[inner] not in inner_group:
+                inner_group.append(groups[inner])
+            if groups[inner] in finalgroup[-1]:
+                finalgroup[-1].remove(groups[inner])
+        if inner_splitters:
+            finalgroup.append(inner_group)
+
     return val, keys, groups, finalgroup, shapes
 
 
-def splits(splitter, inputs, inner_splitters=[]):
+def splits(splitter, inputs, inner_splitters=None):
     values, keys, _, _, _ = _splits(splitter, inputs, inner_splitters=inner_splitters)
     # dj: i'm not sure why you need iter_splits, _splits gives groups with all axes per input
     return iter_splits(values, keys)

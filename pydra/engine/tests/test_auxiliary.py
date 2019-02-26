@@ -77,9 +77,17 @@ import pytest, pdb
       {'a': 1, 'v': 'a', 'c': 4, 'z': 8},
       {'a': 2, 'v': 'b', 'c': 3, 'z': 7},
       {'a': 2, 'v': 'b', 'c': 4, 'z': 8}]),
-    ])
+    ((["a", "v"], "x"),
+     [((0, 0), 0), ((0, 1), 1),
+      ((1, 0), 2), ((1, 1), 3)],
+     ['a', 'v', 'x'], {'a': 0, 'v': 1, 'x': [0, 1]}, [[0, 1]],
+     [{'a': 1, 'v': 'a', 'x': 10},
+      {'a': 1, 'v': 'b', 'x': 100},
+      {'a': 2, 'v': 'a', 'x': 20},
+      {'a': 2, 'v': 'b', 'x': 200}]),
+])
 def test_splits_1b(splitter, values, keys, groups, fgroup, splits):
-    inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [3, 4], "z": [7, 8]}
+    inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [3, 4], "z": [7, 8], "x": [[10, 100], [20, 200]]}
     splitter_rpn = aux.splitter2rpn(splitter)
     values_out, keys_out, groups_out, finalgrp_out, _ = aux._splits(splitter_rpn, inputs)
     value_list = list(values_out)
@@ -152,6 +160,41 @@ def test_splits_1e(splitter, values, keys, groups, fgroup, splits):
     inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], 5]}
     splitter_rpn = aux.splitter2rpn(splitter)
     values_out, keys_out, groups_out, finalgrp_out, _ = aux._splits(splitter_rpn, inputs)
+    value_list = list(values_out)
+    assert keys == keys_out
+    assert values == value_list
+    assert groups == groups_out
+    assert fgroup == finalgrp_out
+    splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out),
+                                     inputs))
+    assert splits_out == splits
+
+
+@pytest.mark.parametrize("splitter_rpn, inner_splitter, values, keys, groups, fgroup, splits", [
+    (["a", "b", "*"], ["b"], [(0, 0), (0, 1), (1, 2), (1, 3)],
+     ["a", "b"], {"a": 0, "b": 1}, [[0], [1]],
+     [{"a": "a1", "b": "b11"}, {"a": "a1", "b": "b12"},
+      {"a": "a2", "b": "b21"}, {"a": "a2", "b": "b22"}]),
+    (["c", "a", ".", "b", "*"], ["b"], [((0, 0), 0), ((0, 0), 1), ((1, 1), 2), ((1, 1), 3)],
+     ["c", "a", "b"], {"a": 0, "b": 1, "c": 0}, [[0], [1]],
+     [{"a": "a1", "b": "b11", "c": "c1"}, {"a": "a1", "b": "b12", "c": "c1"},
+      {"a": "a2", "b": "b21", "c": "c2"}, {"a": "a2", "b": "b22", "c": "c2"}]),
+    (["c", "a", "*", "d", "*"], ["d"],
+     [((0, 0), 0), ((0, 0), 1), ((0, 1), 2), ((0, 1), 3),
+      ((1, 0), 4), ((1, 0), 5), ((1, 1), 6), ((1, 1), 7)],
+     ["c", "a", "d"], {"a": 1, "c": 0, "d": 2}, [[0, 1], [2]],
+     [{"a": "a1", "c": "c1", "d": "d111"}, {"a": "a1", "c": "c1", "d": "d112"},
+      {"a": "a2", "c": "c1", "d": "d121"}, {"a": "a2", "c": "c1", "d": "d122"},
+      {"a": "a1", "c": "c2", "d": "d211"}, {"a": "a1", "c": "c2", "d": "d212"},
+      {"a": "a2", "c": "c2", "d": "d221"}, {"a": "a2", "c": "c2", "d": "d222"}])
+    # no idea how this should work TODO!
+    #(["a", "b", "*", "c", "*"], ["b"])
+    ])
+def test_splits_2(splitter_rpn, inner_splitter, values, keys, groups, fgroup, splits):
+    inputs = {"a": ["a1", "a2"], "b": [["b11", "b12"], ["b21", "b22"]], "c": ["c1", "c2"],
+              "d": [[["d111", "d112"], ["d121", "d122"]], [["d211", "d212"], ["d221", "d222"]]]}
+    values_out, keys_out, groups_out, finalgrp_out, _ = aux._splits(splitter_rpn, inputs,
+                                                                    inner_splitters=inner_splitter)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
