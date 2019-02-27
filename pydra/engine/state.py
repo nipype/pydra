@@ -89,6 +89,13 @@ class State:
         # dj: not sure if this shouldn't be already in the init
         self.group_for_inputs = group_for_inputs
         self.input_for_groups, self.ndim = aux.converter_groups_to_input(self.group_for_inputs)
+        # including in combiner_all inputs that have the same group as fields in the combiner
+        # TODO: think if I should change self.combiner instead of creating a new var
+        self.combiner_all = []
+        for comb in self.combiner:
+            for gr in aux.ensure_list(self.group_for_inputs[comb]):
+                self.combiner_all += self.input_for_groups[gr]
+        self.combiner_all = list(set(self.combiner_all))
         self.groups_stack = groups_stack
         for comb in self.combiner:
             # dj TODO: what if group_for_inputs[comb] is a list

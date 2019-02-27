@@ -354,7 +354,7 @@ class NodeBase:
 
 
     def _combined_output(self, key_out, state_dict, output_el):
-        for inp in self.state.combiner:
+        for inp in self.state.combiner_all:
             state_dict.pop(inp)
         state_tuple = tuple(state_dict.items())
         if state_tuple in self._output[key_out].keys():
