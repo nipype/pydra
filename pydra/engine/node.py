@@ -10,6 +10,7 @@ import os, pdb
 from pathlib import Path
 import typing as ty
 import pickle as pk
+from copy import copy, deepcopy
 
 from . import state
 from . import auxiliary as aux
@@ -422,7 +423,7 @@ class Node(NodeBase):
                     if not self.state.combiner: # only splitter
                         self._output[key_out][tuple(self.state.states_val[ii].items())] = output_el
                     else:
-                        self._combined_output(key_out, state_dict, output_el)
+                        self._combined_output(key_out, deepcopy(state_dict), output_el)
                 else:
                     raise Exception("not implemented, TODO")
         return self._output

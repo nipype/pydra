@@ -167,7 +167,7 @@ def test_node_6(plugin, change_dir):
 def test_node_split_combine_1(plugin, change_dir):
     """Node with interface, inputs and the simplest splitter, running interface"""
     nn = fun_addtwo(name="NA", workingdir="test_nd6_{}".format(plugin),
-                    splitter="a", combiner="a", a=[3, 5])
+                    a=[3,5], splitter="a", combiner="a")
     #nn.split(splitter="a", inputs={"a": [3, 5]})
     assert (nn.inputs.a == np.array([3, 5])).all()
 
@@ -177,6 +177,9 @@ def test_node_split_combine_1(plugin, change_dir):
     sub = Submitter(plugin=plugin, runnable=nn)
     sub.run()
     sub.close()
+
+    assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert nn.state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
 
     # checking the results
     results = nn.result()

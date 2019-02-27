@@ -49,6 +49,7 @@ class Submitter(object):
             time.sleep(3)
         self.node.get_output()
 
+
     def _submit_node(self, node):
         """submitting nodes's interface for all states"""
         if node.state:
