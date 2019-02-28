@@ -34,7 +34,7 @@ def change_dir(request):
 
 
 Plugins = ["serial", "mp", "cf", "dask"]
-Plugins = ["serial"]
+Plugins = ["serial", "cf"]
 
 
 @to_task

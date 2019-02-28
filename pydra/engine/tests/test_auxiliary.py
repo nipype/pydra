@@ -157,6 +157,7 @@ def test_splits_1d(splitter, values, keys, groups, fgroup, shapes, splits):
     ])
 def test_splits_1e(splitter, values, keys, groups, fgroup, splits):
     # dj?: not sure if I like that this example works
+    # c - is like an inner splitter
     inputs = {"a": [1, 2], "v": ['a', 'b'], "c": [[3, 4], 5]}
     splitter_rpn = aux.splitter2rpn(splitter)
     values_out, keys_out, groups_out, finalgrp_out, _ = aux._splits(splitter_rpn, inputs)
