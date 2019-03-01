@@ -149,7 +149,7 @@ class NodeBase:
                         if state.name not in rpn]
 
         if splitter is not None:
-            self.state = state.State(name=self.name, splitter=splitter, combiner=combiner, others=None)
+            self.state = state.State(name=self.name, splitter=splitter, combiner=combiner)
         else:
             self.state = None
         return self.state

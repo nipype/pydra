@@ -11,26 +11,27 @@ from .specs import BaseSpec
 
 
 class State:
-    def __init__(self, name, splitter=None, combiner=None, others=None):
+    def __init__(self, name, splitter=None, combiner=None, other_splitters=None):
         self.name = name
         #self.ndim = None
-        self.others = others
-        self.other_splitters = {}
+        self.other_splitters = other_splitters
         self.inner_inputs = []
-        if self.others:
-            for st, inp in self.others.items():
-                self.other_splitters[st.name] = {"spl": st.splitter, "con": "{}.{}".format(self.name, inp)}
+        if self.other_splitters:
+            for name, (st, inp) in self.other_splitters.items():
                 self.inner_inputs.append("{}.{}".format(self.name, inp))
         self.splitter = splitter
         self.combiner = combiner
         # dj: I added +1, but it still doesn't take into account when input 2d
         # TODO: ndim should be stack (it's not dim)
         #self.ndim = len([1 for val in aux.splitter2rpn(self.splitter) if val == '*']) + 1
-        if self.others:
-            self.connected_inputs = ["{}.{}".format(self.name, inp) for (_, inp) in self.others.items()]
-            self.merge()
+        if self.other_splitters:
+            self.connect()
         else:
-            self.connected_inputs = []
+            _splitter_previous_node = [el for el in self.splitter_rpn if el.startswith("_")]
+            # TODO TOTEST
+            if _splitter_previous_node:
+                raise Exception("there are no previous nodes, so elelemnts {} shouldn't be in "
+                                "the splitter".format(_splitter_previous_node))
 
 
     @property
@@ -75,7 +76,8 @@ class State:
     def prepare_states_ind(self, inputs):
         if isinstance(inputs, BaseSpec):
             inputs = self._inputs_types_to_dict(inputs)
-        self.states_ind = list(aux.splits(self.splitter_rpn, inputs, inner_splitters=self.inner_inputs))
+        # might not need self.inner_inputs
+        self.states_ind = list(aux.splits(self.splitter_rpn, inputs, inner_names=self.inner_inputs))
         return self.states_ind
 
 
@@ -84,7 +86,7 @@ class State:
             inputs = self._inputs_types_to_dict(inputs)
         # TODO: aux._splits or aux.splits
         values_out, keys_out, group_for_inputs, groups_stack, _ = aux._splits(self.splitter_rpn, inputs,
-                                                                              inner_splitters=self.inner_inputs)
+                                                                              inner_names=self.inner_inputs)
         value_list = list(values_out)
         # dj: not sure if this shouldn't be already in the init
         self.group_for_inputs = group_for_inputs
@@ -114,44 +116,9 @@ class State:
         self.prepare_states_val(inputs)
 
 
-    def merge(self):
-        if self.splitter:
-            updated_splitter_rpn = []
-            # checking if splitter contains other splitters and inner splitters
-            others_names = [k.name for k, v in self.others.items()]
-            others_inners_names = {"{}.{}".format(self.name, v):k.name for k, v in self.others.items()}
-            others_in_splitter = []#[el[1:] for el in self.splitter_rpn_nochange if el.startswith("_")]
-            for ii, el in enumerate(self.splitter_rpn_nochange):
-                if el in others_inners_names:
-                    if ii == 0 or self.splitter_rpn_nochange[ii-1] != others_inners_names[el]:
-                        updated_splitter_rpn += ["_{}".format(others_inners_names[el]), el, "*"]
-                        others_in_splitter.append(others_inners_names[el])
-                    else:
-                        updated_splitter_rpn += [el]
-                elif el.startswith("_"):
-                    if el in updated_splitter_rpn:
-                        raise Exception ("element {} is already in splitter".format(el))
-                    else:
-                        updated_splitter_rpn += [el]
-                        others_in_splitter.append(el[1:])
-                else:
-                    updated_splitter_rpn += [el]
-
-            if set(others_in_splitter) - set(others_names):
-                raise Exception("these elements, {}, cant be in the splitter".format(
-                    set(others_in_splitter) - set(others_names)))
-            self._splitter = aux.rpn2splitter(updated_splitter_rpn)
-        else:
-            others_in_splitter = []
-
-        for st, inp in self.others.items():
-            if st.name not in others_in_splitter and st.splitter:
-                if self._splitter:
-                    self._splitter = ["_{}".format(st.name), self._splitter]
-                else:
-                    self._splitter = "_{}".format(st.name)
-
-        self.splitter_rpn = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters)
+    def connect(self):
+        self.splitter = aux.connect_splitters(splitter=self.splitter, other_splitters=self.other_splitters)
+        #self.splitter_rpn = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters)
 
 
     def _inputs_types_to_dict(self, inputs):
