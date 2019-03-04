@@ -49,6 +49,7 @@ def test_state_merge_1():
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a"]
 
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
     st2.prepare_states(inputs={"NA.a": [3, 5]})
     assert st2.states_ind == [{'NA.a': 0}, {'NA.a': 1}]
     assert st2.states_val == [{'NA.a': 3}, {'NA.a': 5}]
@@ -60,12 +61,12 @@ def test_state_merge_1a():
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a"]
 
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
     st2.prepare_states(inputs={"NA.a": [3, 5]})
     assert st2.states_ind == [{'NA.a': 0}, {'NA.a': 1}]
     assert st2.states_val == [{'NA.a': 3}, {'NA.a': 5}]
 
 
-@pytest.mark.xfail(reason="should check if I'm not using partial splitter from previous node")
 def test_state_merge_1b():
     st1 = State(name="NA", splitter="a")
     with pytest.raises(Exception):
@@ -114,6 +115,8 @@ def test_state_merge_2b():
     assert st2.splitter_rpn == ["NA.a", "NB.a", "*"]
 
     st2.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [1, 2]})
+    assert st2._right_splitter == "NB.a"
+    assert st2._left_splitter == "_NA"
     assert st2.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 0, "NB.a": 1},
                               {'NA.a': 1, "NB.a": 0}, {'NA.a': 1, "NB.a": 1}]
     assert st2.states_val == [{'NA.a': 3, "NB.a": 1}, {'NA.a': 3, "NB.a": 2},
@@ -136,6 +139,8 @@ def test_state_merge_3():
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NB.a", "*"]
 
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
+    st2.prepare_states(inputs={"NB.a": [30, 50]})
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
     assert st3.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 0, "NB.a": 1},
                               {'NA.a': 1, "NB.a": 0}, {'NA.a': 1, "NB.a": 1}]
@@ -152,6 +157,8 @@ def test_state_merge_3a():
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NB.a", "*"]
 
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
+    st2.prepare_states(inputs={"NB.a": [30, 50]})
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
     assert st3.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 0, "NB.a": 1},
                               {'NA.a': 1, "NB.a": 0}, {'NA.a': 1, "NB.a": 1}]
@@ -168,6 +175,8 @@ def test_state_merge_3b():
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NB.a", "*"]
 
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
+    st2.prepare_states(inputs={"NB.a": [30, 50]})
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
     assert st3.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 0, "NB.a": 1},
                               {'NA.a': 1, "NB.a": 0}, {'NA.a': 1, "NB.a": 1}]
@@ -184,6 +193,8 @@ def test_state_merge_3c():
     assert st3.splitter == ("_NA", "_NB")
     assert st3.splitter_rpn == ["NA.a", "NB.a", "."]
 
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
+    st2.prepare_states(inputs={"NB.a": [30, 50]})
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
     assert st3.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 1, "NB.a": 1}]
     assert st3.states_val == [{'NA.a': 3, "NB.a": 30}, {'NA.a': 5, "NB.a": 50}]
@@ -196,6 +207,7 @@ def test_state_merge_4():
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a", "NA.b", "*"]
 
+    st1.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
     st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
     assert st2.states_ind == [{'NA.a': 0, "NA.b": 0}, {'NA.a': 0, "NA.b": 1},
                               {'NA.a': 1, "NA.b": 0}, {'NA.a': 1, "NA.b": 1}]
@@ -217,7 +229,10 @@ def test_state_merge_5():
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NA.b", "*", "NB.a", "*"]
 
+    st1.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
+    st2.prepare_states(inputs={"NB.a": [600, 700]})
     st3.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.a": [600, 700]})
+
     assert st3.states_ind == [{'NA.a': 0, 'NA.b': 0, "NB.a": 0}, {'NA.a': 0, 'NA.b': 0, "NB.a": 1},
                               {'NA.a': 0, 'NA.b': 1, "NB.a": 0}, {'NA.a': 0, 'NA.b': 1, "NB.a": 1},
                               {'NA.a': 1, 'NA.b': 0, "NB.a": 0}, {'NA.a': 1, 'NA.b': 0, "NB.a": 1},
@@ -236,6 +251,8 @@ def test_state_merge_5a():
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NA.b", "*", "NB.a", "*"]
 
+    st1.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
+    st2.prepare_states(inputs={"NB.a": [600, 700]})
     st3.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.a": [600, 700]})
     assert st3.states_ind == [{'NA.a': 0, 'NA.b': 0, "NB.a": 0}, {'NA.a': 0, 'NA.b': 0, "NB.a": 1},
                               {'NA.a': 0, 'NA.b': 1, "NB.a": 0}, {'NA.a': 0, 'NA.b': 1, "NB.a": 1},
@@ -291,12 +308,176 @@ def test_state_merge_innerspl_1b():
         st2 = State(name="NB", splitter=("_NA", "b"), other_splitters={"NA": (st1, "b")})
 
 
+def test_state_merge_innerspl_2():
+    """one previous node and one inner splitter; full splitter provided"""
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter="a", other_splitters={"NA": (st1, "b")})
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
+
+    assert st2.splitter == ["_NA", "NB.a"]
+    assert st2.splitter_rpn == ["NA.a", "NB.a", "*"]
+    assert st2.other_splitters["NA"][1] == "b"
+
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.b": [100,  200], "NB.a": [40, 50]})
+
+    assert st2.states_ind == [{'NA.a': 0, "NB.a": 0}, {'NA.a': 0, "NB.a": 1},
+                              {'NA.a': 1, "NB.a": 0}, {'NA.a': 1, "NB.a": 1}]
+    assert st2.states_val == [{'NA.a': 3, "NB.a": 40}, {'NA.a': 3, "NB.a": 50},
+                              {'NA.a': 5, "NB.a": 40}, {'NA.a': 5, "NB.a": 50}]
+
+
+def test_state_merge_innerspl_3():
+    """one previous node and one inner splitter; only Right part provided - Left had to be added"""
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter=["c", "b"], other_splitters={"NA": (st1, "b")})
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
+
+    assert st2.splitter == ["_NA", ["NB.c", "NB.b"]]
+    assert st2.splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*"]
+    assert st2.other_splitters["NA"][1] == "b"
+
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]})
+    assert st2.states_ind == [
+        {'NB.c': 0, 'NA.a': 0, "NB.b": 0}, {'NB.c': 0, 'NA.a': 0, "NB.b": 1}, {'NB.c': 0, 'NA.a': 0, "NB.b": 2},
+        {'NB.c': 0, 'NA.a': 1, "NB.b": 3}, {'NB.c': 0, 'NA.a': 1, "NB.b": 4}, {'NB.c': 0, 'NA.a': 1, "NB.b": 5},
+        {'NB.c': 1, 'NA.a': 0, "NB.b": 0}, {'NB.c': 1, 'NA.a': 0, "NB.b": 1}, {'NB.c': 1, 'NA.a': 0, "NB.b": 2},
+        {'NB.c': 1, 'NA.a': 1, "NB.b": 3}, {'NB.c': 1, 'NA.a': 1, "NB.b": 4}, {'NB.c': 1, 'NA.a': 1, "NB.b": 5}
+    ]
+    assert st2.states_val == [
+        {'NB.c': 13, 'NA.a': 3, "NB.b": 1}, {'NB.c': 13, 'NA.a': 3, "NB.b": 10}, {'NB.c': 13, 'NA.a': 3, "NB.b": 100},
+        {'NB.c': 13, 'NA.a': 5, "NB.b": 2}, {'NB.c': 13, 'NA.a': 5, "NB.b": 20}, {'NB.c': 13, 'NA.a': 5, "NB.b": 200},
+        {'NB.c': 17, 'NA.a': 3, "NB.b": 1}, {'NB.c': 17, 'NA.a': 3, "NB.b": 10}, {'NB.c': 17, 'NA.a': 3, "NB.b": 100},
+        {'NB.c': 17, 'NA.a': 5, "NB.b": 2}, {'NB.c': 17, 'NA.a': 5, "NB.b": 20}, {'NB.c': 17, 'NA.a': 5, "NB.b": 200}
+    ]
+
+
+def test_state_merge_innerspl_3a():
+    """one previous node and one inner splitter; only Right part provided - Left had to be added"""
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter=["b", "c"], other_splitters={"NA": (st1, "b")})
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
+
+    assert st2.splitter == ["_NA", ["NB.b", "NB.c"]]
+    assert st2.splitter_rpn == ["NA.a", "NB.b", "NB.c", "*", "*"]
+    assert st2.other_splitters["NA"][1] == "b"
+
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]})
+
+    assert st2.states_ind == [
+        {'NB.c': 0, 'NA.a': 0, "NB.b": 0}, {'NB.c': 1, 'NA.a': 0, "NB.b": 0}, {'NB.c': 0, 'NA.a': 0, "NB.b": 1},
+        {'NB.c': 1, 'NA.a': 0, "NB.b": 1}, {'NB.c': 0, 'NA.a': 0, "NB.b": 2}, {'NB.c': 1, 'NA.a': 0, "NB.b": 2},
+        {'NB.c': 0, 'NA.a': 1, "NB.b": 3}, {'NB.c': 1, 'NA.a': 1, "NB.b": 3}, {'NB.c': 0, 'NA.a': 1, "NB.b": 4},
+        {'NB.c': 1, 'NA.a': 1, "NB.b": 4}, {'NB.c': 0, 'NA.a': 1, "NB.b": 5},{'NB.c': 1, 'NA.a': 1, "NB.b": 5}
+    ]
+
+    assert st2.states_val == [
+        {'NB.c': 13, 'NA.a': 3, "NB.b": 1}, {'NB.c': 17, 'NA.a': 3, "NB.b": 1}, {'NB.c': 13, 'NA.a': 3, "NB.b": 10},
+        {'NB.c': 17, 'NA.a': 3, "NB.b": 10}, {'NB.c': 13, 'NA.a': 3, "NB.b": 100}, {'NB.c': 17, 'NA.a': 3, "NB.b": 100},
+        {'NB.c': 13, 'NA.a': 5, "NB.b": 2}, {'NB.c': 17, 'NA.a': 5, "NB.b": 2}, {'NB.c': 13, 'NA.a': 5, "NB.b": 20},
+        {'NB.c': 17, 'NA.a': 5, "NB.b": 20}, {'NB.c': 13, 'NA.a': 5, "NB.b": 200}, {'NB.c': 17, 'NA.a': 5, "NB.b": 200}
+    ]
+
+
+
+def test_state_merge_innerspl_4():
+    """one previous node and one inner splitter; only Right part provided - Left had to be added"""
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter=["c", "b"], other_splitters={"NA": (st1, "b")})
+    st3 = State(name="NC", splitter="d", other_splitters={"NB": (st2, "a")})
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]})
+
+    assert st2.states_ind == [
+        {'NB.c': 0, 'NA.a': 0, "NB.b": 0}, {'NB.c': 0, 'NA.a': 0, "NB.b": 1}, {'NB.c': 0, 'NA.a': 0, "NB.b": 2},
+        {'NB.c': 0, 'NA.a': 1, "NB.b": 3}, {'NB.c': 0, 'NA.a': 1, "NB.b": 4}, {'NB.c': 0, 'NA.a': 1, "NB.b": 5},
+        {'NB.c': 1, 'NA.a': 0, "NB.b": 0}, {'NB.c': 1, 'NA.a': 0, "NB.b": 1}, {'NB.c': 1, 'NA.a': 0, "NB.b": 2},
+        {'NB.c': 1, 'NA.a': 1, "NB.b": 3}, {'NB.c': 1, 'NA.a': 1, "NB.b": 4}, {'NB.c': 1, 'NA.a': 1, "NB.b": 5}
+    ]
+    assert st2.states_val == [
+        {'NB.c': 13, 'NA.a': 3, "NB.b": 1}, {'NB.c': 13, 'NA.a': 3, "NB.b": 10}, {'NB.c': 13, 'NA.a': 3, "NB.b": 100},
+        {'NB.c': 13, 'NA.a': 5, "NB.b": 2}, {'NB.c': 13, 'NA.a': 5, "NB.b": 20}, {'NB.c': 13, 'NA.a': 5, "NB.b": 200},
+        {'NB.c': 17, 'NA.a': 3, "NB.b": 1}, {'NB.c': 17, 'NA.a': 3, "NB.b": 10}, {'NB.c': 17, 'NA.a': 3, "NB.b": 100},
+        {'NB.c': 17, 'NA.a': 5, "NB.b": 2}, {'NB.c': 17, 'NA.a': 5, "NB.b": 20}, {'NB.c': 17, 'NA.a': 5, "NB.b": 200}
+    ]
+
+    assert st3.splitter == ["_NB", "NC.d"]
+    assert st3.splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*", "NC.d", "*"]
+
+    st3.prepare_states(inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17], "NC.d": [33,77]})
+    assert st3.states_ind == [
+        {'NB.c': 0, 'NA.a': 0, "NB.b": 0, "NC.d": 0}, {'NB.c': 0, 'NA.a': 0, "NB.b": 0, "NC.d": 1},
+        {'NB.c': 0, 'NA.a': 0, "NB.b": 1, "NC.d": 0}, {'NB.c': 0, 'NA.a': 0, "NB.b": 1, "NC.d": 1},
+        {'NB.c': 0, 'NA.a': 0, "NB.b": 2, "NC.d": 0}, {'NB.c': 0, 'NA.a': 0, "NB.b": 2, "NC.d": 1},
+        {'NB.c': 0, 'NA.a': 1, "NB.b": 3, "NC.d": 0}, {'NB.c': 0, 'NA.a': 1, "NB.b": 3, "NC.d": 1},
+        {'NB.c': 0, 'NA.a': 1, "NB.b": 4, "NC.d": 0}, {'NB.c': 0, 'NA.a': 1, "NB.b": 4, "NC.d": 1},
+        {'NB.c': 0, 'NA.a': 1, "NB.b": 5, "NC.d": 0}, {'NB.c': 0, 'NA.a': 1, "NB.b": 5, "NC.d": 1},
+        {'NB.c': 1, 'NA.a': 0, "NB.b": 0, "NC.d": 0}, {'NB.c': 1, 'NA.a': 0, "NB.b": 0, "NC.d": 1},
+        {'NB.c': 1, 'NA.a': 0, "NB.b": 1, "NC.d": 0}, {'NB.c': 1, 'NA.a': 0, "NB.b": 1, "NC.d": 1},
+        {'NB.c': 1, 'NA.a': 0, "NB.b": 2, "NC.d": 0}, {'NB.c': 1, 'NA.a': 0, "NB.b": 2, "NC.d": 1},
+        {'NB.c': 1, 'NA.a': 1, "NB.b": 3, "NC.d": 0}, {'NB.c': 1, 'NA.a': 1, "NB.b": 3, "NC.d": 1},
+        {'NB.c': 1, 'NA.a': 1, "NB.b": 4, "NC.d": 0}, {'NB.c': 1, 'NA.a': 1, "NB.b": 4, "NC.d": 1},
+        {'NB.c': 1, 'NA.a': 1, "NB.b": 5, "NC.d": 0}, {'NB.c': 1, 'NA.a': 1, "NB.b": 5, "NC.d": 1}
+    ]
+    assert st3.states_val == [
+        {'NB.c': 13, 'NA.a': 3, "NB.b": 1, "NC.d": 33}, {'NB.c': 13, 'NA.a': 3, "NB.b": 1, "NC.d": 77},
+        {'NB.c': 13, 'NA.a': 3, "NB.b": 10, "NC.d": 33}, {'NB.c': 13, 'NA.a': 3, "NB.b": 10, "NC.d": 77},
+        {'NB.c': 13, 'NA.a': 3, "NB.b": 100, "NC.d": 33}, {'NB.c': 13, 'NA.a': 3, "NB.b": 100, "NC.d": 77},
+        {'NB.c': 13, 'NA.a': 5, "NB.b": 2, "NC.d": 33}, {'NB.c': 13, 'NA.a': 5, "NB.b": 2, "NC.d": 77},
+        {'NB.c': 13, 'NA.a': 5, "NB.b": 20, "NC.d": 33}, {'NB.c': 13, 'NA.a': 5, "NB.b": 20, "NC.d": 77},
+        {'NB.c': 13, 'NA.a': 5, "NB.b": 200, "NC.d": 33}, {'NB.c': 13, 'NA.a': 5, "NB.b": 200, "NC.d":77},
+        {'NB.c': 17, 'NA.a': 3, "NB.b": 1, "NC.d": 33}, {'NB.c': 17, 'NA.a': 3, "NB.b": 1, "NC.d": 77},
+        {'NB.c': 17, 'NA.a': 3, "NB.b": 10, "NC.d": 33}, {'NB.c': 17, 'NA.a': 3, "NB.b": 10, "NC.d": 77},
+        {'NB.c': 17, 'NA.a': 3, "NB.b": 100, "NC.d": 33}, {'NB.c': 17, 'NA.a': 3, "NB.b": 100, "NC.d": 77},
+        {'NB.c': 17, 'NA.a': 5, "NB.b": 2, "NC.d": 33}, {'NB.c': 17, 'NA.a': 5, "NB.b": 2, "NC.d": 77},
+        {'NB.c': 17, 'NA.a': 5, "NB.b": 20, "NC.d": 33}, {'NB.c': 17, 'NA.a': 5, "NB.b": 20, "NC.d": 77},
+        {'NB.c': 17, 'NA.a': 5, "NB.b": 200, "NC.d": 33}, {'NB.c': 17, 'NA.a': 5, "NB.b": 200, "NC.d": 77}
+    ]
+
+
+def test_state_merge_innerspl_5():
+    """one previous node and one inner splitter; only Right part provided - Left had to be added"""
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter=["b", "c"])
+    st3 = State(name="NC", splitter="d", other_splitters={"NA": (st1, "e"), "NB": (st2, "f")})
+    st1.prepare_states(inputs={"NA.a": [3, 5]})
+    st2.prepare_states(inputs={"NB.b": [10, 20], "NB.c": [13, 17]})
+
+    assert st3.splitter == [["_NA", "_NB"], "NC.d"]
+    assert st3.splitter_rpn == ["NA.a", "NB.b", "NB.c", "*", "*", "NC.d", "*"]
+    assert st3.other_splitters["NA"][1] == "e"
+    assert st3.other_splitters["NB"][1] == "f"
+
+    st3.prepare_states(inputs={"NA.a": [3, 5], "NB.b": [10, 20], "NB.c": [13, 17],
+                               "NC.e": [30, 50], "NC.f": [[23, 27], [33, 37]], "NC.d": [1, 2]})
+    assert st3.states_ind == [
+        {"NA.a": 0, "NB.b": 0, "NB.c": 0, "NC.d": 0}, {"NA.a": 0, "NB.b": 0, "NB.c": 0, "NC.d": 1},
+        {"NA.a": 0, "NB.b": 0, "NB.c": 1, "NC.d": 0}, {"NA.a": 0, "NB.b": 0, "NB.c": 1, "NC.d": 1},
+        {"NA.a": 0, "NB.b": 1, "NB.c": 0, "NC.d": 0}, {"NA.a": 0, "NB.b": 1, "NB.c": 0, "NC.d": 1},
+        {"NA.a": 0, "NB.b": 1, "NB.c": 1, "NC.d": 0}, {"NA.a": 0, "NB.b": 1, "NB.c": 1, "NC.d": 1},
+        {"NA.a": 1, "NB.b": 0, "NB.c": 0, "NC.d": 0}, {"NA.a": 1, "NB.b": 0, "NB.c": 0, "NC.d": 1},
+        {"NA.a": 1, "NB.b": 0, "NB.c": 1, "NC.d": 0}, {"NA.a": 1, "NB.b": 0, "NB.c": 1, "NC.d": 1},
+        {"NA.a": 1, "NB.b": 1, "NB.c": 0, "NC.d": 0}, {"NA.a": 1, "NB.b": 1, "NB.c": 0, "NC.d": 1},
+        {"NA.a": 1, "NB.b": 1, "NB.c": 1, "NC.d": 0}, {"NA.a": 1, "NB.b": 1, "NB.c": 1, "NC.d": 1},
+    ]
+
+    assert st3.states_val == [
+        {"NA.a": 3, "NB.b": 10, "NB.c": 13, "NC.d": 1}, {"NA.a": 3, "NB.b": 10, "NB.c": 13, "NC.d": 2},
+        {"NA.a": 3, "NB.b": 10, "NB.c": 17, "NC.d": 1}, {"NA.a": 3, "NB.b": 10, "NB.c": 17, "NC.d": 2},
+        {"NA.a": 3, "NB.b": 20, "NB.c": 13, "NC.d": 1}, {"NA.a": 3, "NB.b": 20, "NB.c": 13, "NC.d": 2},
+        {"NA.a": 3, "NB.b": 20, "NB.c": 17, "NC.d": 1}, {"NA.a": 3, "NB.b": 20, "NB.c": 17, "NC.d": 2},
+        {"NA.a": 5, "NB.b": 10, "NB.c": 13, "NC.d": 1}, {"NA.a": 5, "NB.b": 10, "NB.c": 13, "NC.d": 2},
+        {"NA.a": 5, "NB.b": 10, "NB.c": 17, "NC.d": 1}, {"NA.a": 5, "NB.b": 10, "NB.c": 17, "NC.d": 2},
+        {"NA.a": 5, "NB.b": 20, "NB.c": 13, "NC.d": 1}, {"NA.a": 5, "NB.b": 20, "NB.c": 13, "NC.d": 2},
+        {"NA.a": 5, "NB.b": 20, "NB.c": 17, "NC.d": 1}, {"NA.a": 5, "NB.b": 20, "NB.c": 17, "NC.d": 2},
+    ]
+
+
 @pytest.mark.xfail(reason="wip")
 def test_state_combine_1():
     st = State(name="NA", splitter="a", combiner="a")
     assert st.splitter == "NA.a"
     assert st.splitter_rpn == ["NA.a"]
-    #pdb.set_trace()
+    pdb.set_trace()
 
     # st2.prepare_states(inputs={"NA.a": [3, 5]})
     # assert st2.states_ind == [{'NA.a': 0}, {'NA.a': 1}]
