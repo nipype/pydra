@@ -28,7 +28,7 @@ def _ordering(el, i, output_splitter, current_sign=None, other_splitters=None, s
             node_nm = el[0][1:]
             if node_nm not in other_splitters:
                 raise Exception("can't ask for splitter from {}".format(node_nm))
-            splitter_mod = change_splitter(splitter=other_splitters[node_nm][0].splitter, name=node_nm)
+            splitter_mod = change_splitter(splitter=other_splitters[node_nm][0].splitter_final, name=node_nm)
             if state_fields:
                 el = (splitter_mod, el[1])
             if other_splitters[node_nm][0].other_splitters:
@@ -37,7 +37,7 @@ def _ordering(el, i, output_splitter, current_sign=None, other_splitters=None, s
             node_nm = el[1][1:]
             if node_nm not in other_splitters:
                 raise Exception("can't ask for splitter from {}".format(node_nm))
-            splitter_mod = change_splitter(splitter=other_splitters[node_nm][0].splitter, name=node_nm)
+            splitter_mod = change_splitter(splitter=other_splitters[node_nm][0].splitter_final, name=node_nm)
             if state_fields:
                 el = (el[0], splitter_mod)
             if other_splitters[node_nm][0].other_splitters:
@@ -48,7 +48,7 @@ def _ordering(el, i, output_splitter, current_sign=None, other_splitters=None, s
             node_nm = el[0][1:]
             if node_nm not in other_splitters:
                 raise Exception("can't ask for splitter from {}".format(node_nm))
-            splitter_mod = change_splitter(splitter=other_splitters[node_nm][0].splitter, name=node_nm)
+            splitter_mod = change_splitter(splitter=other_splitters[node_nm][0].splitter_final, name=node_nm)
             if state_fields:
                 el[0] = splitter_mod
             if other_splitters[node_nm][0].other_splitters:
@@ -57,7 +57,7 @@ def _ordering(el, i, output_splitter, current_sign=None, other_splitters=None, s
             node_nm = el[1][1:]
             if node_nm not in other_splitters:
                 raise Exception("can't ask for splitter from {}".format(node_nm))
-            splitter_mod = change_splitter(splitter=other_splitters[node_nm][0].splitter, name=node_nm)
+            splitter_mod = change_splitter(splitter=other_splitters[node_nm][0].splitter_final, name=node_nm)
             if state_fields:
                 el[1] = splitter_mod
             if other_splitters[node_nm][0].other_splitters:
@@ -68,7 +68,7 @@ def _ordering(el, i, output_splitter, current_sign=None, other_splitters=None, s
             node_nm = el[1:]
             if node_nm not in other_splitters:
                 raise Exception("can't ask for splitter from {}".format(node_nm))
-            splitter_mod = change_splitter(splitter=other_splitters[node_nm][0].splitter, name=node_nm)
+            splitter_mod = change_splitter(splitter=other_splitters[node_nm][0].splitter_final, name=node_nm)
             if state_fields:
                 el = splitter_mod
             if other_splitters[node_nm][0].other_splitters:
@@ -506,7 +506,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
     # dj: all axes
     finalgroup = []
     if inner_inputs:
-        previous_states_ind = {"_{}".format(v.name): (v._ind_l, v.keys) for _,v in inner_inputs.items()}
+        previous_states_ind = {"_{}".format(v.name): (v.ind_l_final, v.keys_final) for _,v in inner_inputs.items()}
         inner_inputs = {k: v for k,v in inner_inputs.items() if k in splitter_rpn}
         keys_fromL = ["_{}".format(st.name) for _, st in inner_inputs.items()]
     else:
@@ -527,7 +527,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
             # TODO: have to be changed if differ length
             inner_len = [shape[-1]] * np.prod(shape[:-1])
             # this come from the previous node
-            outer_ind = inner_inputs[op_single]._ind_l
+            outer_ind = inner_inputs[op_single].ind_l
             op_out = itertools.chain.from_iterable(itertools.repeat(x, n)
                                                    for x, n in zip(outer_ind, inner_len))
             op_new = op["."](op_out, opval)
@@ -642,7 +642,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
                 #TODO: have to be changed if differ length
                 inner_len = [shape1[-1]]*np.prod(shape1[:-1])
                 # this come from the previous node
-                outer_ind = inner_inputs[op1]._ind_l
+                outer_ind = inner_inputs[op1].ind_l
                 op1val_out = itertools.chain.from_iterable(itertools.repeat(x, n)
                                                            for x, n in zip(outer_ind, inner_len))
                 op1val_new = op["."](op1val_out, op1val)
@@ -653,7 +653,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
                 # TODO: have to be changed if differ length
                 inner_len = [shape2[-1]] * np.prod(shape2[:-1])
                 # this come from the previous node
-                outer_ind = inner_inputs[op2]._ind_l
+                outer_ind = inner_inputs[op2].ind_l
                 op2val_out = itertools.chain.from_iterable(itertools.repeat(x, n)
                                                            for x, n in zip(outer_ind, inner_len))
                 op2val_new = op["."](op2val_out, op2val)
@@ -714,7 +714,7 @@ def connect_splitters(splitter, other_splitters):
                 right_part = None
             else:  # this is Right part
                 left_part = _complete_left(other_splitters=other_splitters)
-                right_part  = splitter
+                right_part = splitter
         # if splitter is tuple, it has to be either Left or Right part, you can't have (Left, Right)
         elif isinstance(splitter, tuple):
             lr_flag = _left_right_check(splitter, other_splitters=other_splitters)
@@ -759,7 +759,7 @@ def _complete_left(other_splitters, left=None):
     if left:
         rpn_left = splitter2rpn(left, other_splitters=other_splitters, state_fields=False)
         for name, (st, inp) in list(other_splitters.items())[::-1]:
-            if "_{}".format(name) not in rpn_left and st.splitter:
+            if "_{}".format(name) not in rpn_left and st.splitter_final:
                 left = ["_{}".format(name), left]
     else:
         left = ["_{}".format(name) for name in other_splitters]

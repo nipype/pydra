@@ -50,11 +50,14 @@ class State:
         if splitter:
             self._splitter = aux.change_splitter(splitter, self.name)
             self.splitter_rpn = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters)
-            self.splitter_final = aux.rpn2splitter(self.splitter_rpn)
+            self.splitter_rpn_nost = aux.splitter2rpn(deepcopy(self._splitter), other_splitters=self.other_splitters,
+                                                      state_fields=False)
+            self.splitter_final = self._splitter
         else:
             self._splitter = None
             self.splitter_final = None
             self.splitter_rpn = []
+            self.splitter_rpn_nost = []
 
     @property
     def combiner(self):
@@ -83,49 +86,49 @@ class State:
         if self._right_splitter and self._left_splitter:
             val_r, key_r, _, _, _, keys_fromL = aux._splits(self._right_splitter_rpn, inputs,
                                                              inner_inputs=self.inner_inputs)
-
+            val_r = list(val_r)
             updated_left_rpn = deepcopy(self._left_splitter_rpn_nost)
             updated_left_rpn = aux.remove_inp_from_splitter_rpn(updated_left_rpn, keys_fromL)
 
             if updated_left_rpn:
                 val_l, key_l, _, _, _, _ = aux._splits(updated_left_rpn, inputs, inner_inputs=self.inner_inputs,
                                                      used_keys=key_r)
+                val_l = list(val_l)
             else:
                 val_l = []
                 key_l = []
 
-            val_l = list(val_l)
-            val_r = list(val_r)
             if val_l and val_r:
                 values = list(aux.op["*"](val_l, val_r))
             elif val_l:
                 values = val_l
             elif val_r:
                 values = val_r
-            self.keys = key_l + key_r
-            #TODO: decide where thiis should be
-            self._ind_l = values
-            self.states_ind = list(aux.iter_splits(values, self.keys))
+            keys_out = key_l + key_r
+            self.val_l = val_l
+            self.key_l = key_l
         else:
             values_out, keys_out, group_for_inputs, groups_stack, _, _ = aux._splits(self.splitter_rpn, inputs,
                                                                                   inner_inputs=self.inner_inputs)
-            value_list = list(values_out)
-            self._ind_l = value_list
-            self.keys = keys_out
+            values = list(values_out)
             # dj: not sure if this shouldn't be already in the init
             self.group_for_inputs = group_for_inputs
             self.input_for_groups, self.ndim = aux.converter_groups_to_input(self.group_for_inputs)
             self.groups_stack = groups_stack
-            self.states_ind = list(aux.iter_splits(value_list, self.keys))
+            self.key_l =[]
+            self.val_l = []
 
+        self.ind_l = values
+        self.keys = keys_out
+        self.states_ind = list(aux.iter_splits(values, self.keys))
+        self.states_ind_final = deepcopy(self.states_ind)
+        self.ind_l_final = deepcopy(self.ind_l)
+        self.keys_final = self.keys
+        self.prepare_states_combined_ind(inputs=inputs)
         return self.states_ind
 
 
-    def prepare_states_val(self, inputs):
-        if isinstance(inputs, BaseSpec):
-            inputs = self._inputs_types_to_dict(inputs)
-        self.states_val = list(aux.map_splits(self.states_ind, inputs))
-
+    def prepare_states_combined_ind(self, inputs):
         # # TODO: change/remove combiner_all
         self.combiner_all = []
         for comb in self.combiner:
@@ -140,6 +143,47 @@ class State:
         #TODO: change splitter when combiner?
         #TODO: update self.group_for_inputs, self.input_for_groups,  self.groups_stack?
         self.keys_out_final = [key for key in self.keys if key not in self.combiner]
+
+        self.splitter_rpn_final = aux.remove_inp_from_splitter_rpn(deepcopy(self.splitter_rpn_nost),
+                                                                   self.combiner_all)
+        self.splitter_final = aux.rpn2splitter(self.splitter_rpn_final)
+
+        # assuming for now that the combiner is only in the right part TODO
+
+        if self._right_splitter and self._left_splitter:
+            combined_right_rpn = aux.remove_inp_from_splitter_rpn(deepcopy(self._right_splitter_rpn), self.combiner_all)
+        else:
+            combined_right_rpn = aux.remove_inp_from_splitter_rpn(deepcopy(self.splitter_rpn), self.combiner_all)
+
+        # TODO: create a function for this!!
+        if combined_right_rpn:
+            val_r, key_r, _, _, _, _ = aux._splits(combined_right_rpn, inputs,
+                                                    inner_inputs=self.inner_inputs)
+            val_r = list(val_r)
+        else:
+            val_r = []
+            key_r = []
+
+        if self.val_l and val_r:
+            values = list(aux.op["*"](self.val_l, val_r))
+        elif self.val_l:
+            values = self.val_l
+        elif val_r:
+            values = val_r
+        else:
+            values = []
+        keys_out = self.key_l + key_r
+
+        if values:
+            self.states_ind_final = list(aux.iter_splits(values, keys_out))
+            self.ind_l_final = values
+            self.keys_final = keys_out
+
+
+    def prepare_states_val(self, inputs):
+        if isinstance(inputs, BaseSpec):
+            inputs = self._inputs_types_to_dict(inputs)
+        self.states_val = list(aux.map_splits(self.states_ind, inputs))
         return self.states_val
 
 
@@ -153,6 +197,7 @@ class State:
     def connect(self):
         self.splitter, self._left_splitter, self._right_splitter = \
             aux.connect_splitters(splitter=self.splitter, other_splitters=self.other_splitters)
+        #pdb.set_trace()
         self._right_splitter_rpn = aux.splitter2rpn(deepcopy(self._right_splitter),
                                                     other_splitters=self.other_splitters)
         self._left_splitter_rpn = aux.splitter2rpn(deepcopy(self._left_splitter),

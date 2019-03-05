@@ -472,14 +472,59 @@ def test_state_merge_innerspl_5():
     ]
 
 
-@pytest.mark.xfail(reason="wip")
 def test_state_combine_1():
     st = State(name="NA", splitter="a", combiner="a")
     assert st.splitter == "NA.a"
     assert st.splitter_rpn == ["NA.a"]
-    pdb.set_trace()
+    assert st.combiner == ["NA.a"]
+    st.prepare_states(inputs={"NA.a": [3, 5]})
 
-    # st2.prepare_states(inputs={"NA.a": [3, 5]})
+
+def test_state_combine_2():
+    st1 = State(name="NA", splitter=["a", "b"], combiner="a")
+    st1.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
+    assert st1.splitter == ["NA.a", "NA.b"]
+    assert st1.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert st1.combiner == ["NA.a"]
+    st1.states_ind = [{"NA.a": 0, "NA.b": 0}, {"NA.a": 0, "NA.b": 1}, {"NA.a": 1, "NA.b": 0}, {"NA.a": 1, "NA.b": 1}]
+    st1.states_ind = [{"NA.a": 3, "NA.b": 10}, {"NA.a": 3, "NA.b": 20},
+                      {"NA.a": 5, "NA.b": 10}, {"NA.a": 5, "NA.b": 20}]
+
+
+    st2 = State(name="NB", other_splitters={"NA": (st1, "c")})
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.c": [90, 150]})
+    assert st2.splitter == "_NA"
+    assert st2.splitter_rpn == ["NA.b"]
+
+    st2.states_ind = [{"NA.b": 0}, {"NA.b": 1}]
+    st2.states_ind = [{"NA.b": 90}, {"NA.b": 150}]
+
+
+def test_state_combine_3():
+    st1 = State(name="NA", splitter=["a", "b"], combiner="a")
+    st1.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
+    assert st1.splitter == ["NA.a", "NA.b"]
+    assert st1.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert st1.combiner == ["NA.a"]
+    st1.states_ind = [{"NA.a": 0, "NA.b": 0}, {"NA.a": 0, "NA.b": 1}, {"NA.a": 1, "NA.b": 0},
+                      {"NA.a": 1, "NA.b": 1}]
+    st1.states_ind = [{"NA.a": 3, "NA.b": 10}, {"NA.a": 3, "NA.b": 20},
+                      {"NA.a": 5, "NA.b": 10}, {"NA.a": 5, "NA.b": 20}]
+
+    st2 = State(name="NB", splitter="d", other_splitters={"NA": (st1, "c")})
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.c": [90, 150], "NB.d": [0, 1]})
+    assert st2.splitter == ["_NA", "NB.d"]
+    assert st2.splitter_rpn == ["NA.b", "NB.d", "*"]
+
+    st2.states_ind = [{"NA.b": 0, "NB.d": 0}, {"NA.b": 0, "NB.d": 1},
+                      {"NA.b": 1, "NB.d": 0}, {"NA.b": 1, "NB.d": 1}]
+    st2.states_ind = [{"NA.b": 90, "NB.d": 0}, {"NA.b": 90, "NB.d": 1},
+                      {"NA.b": 150, "NB.d": 0},{"NA.b": 150, "NB.d": 1}]
+
+
+
+
+        # st2.prepare_states(inputs={"NA.a": [3, 5]})
     # assert st2.states_ind == [{'NA.a': 0}, {'NA.a': 1}]
     # assert st2.states_val == [{'NA.a': 3}, {'NA.a': 5}]
 
