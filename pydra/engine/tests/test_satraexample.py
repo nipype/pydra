@@ -33,8 +33,6 @@ Plugins = ["serial", "cf"]
 # print(doubled_x.done())
 
 
-# TODO: for some reason node doesn't work when result is 0 (in this function if x=0)
-# TODO: need more debugging...
 @to_task
 def double(x):
     return x*2
@@ -43,7 +41,7 @@ def double(x):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_1(plugin, change_dir):
     doubled_x = double(name="double", workingdir="test_1_{}".format(plugin))\
-            .split("x", x=[1, 2, 3])
+            .split("x", x=list(range(3)))
 
     assert doubled_x.state.splitter == "double.x"
 
@@ -54,7 +52,7 @@ def test_1(plugin, change_dir):
 
     # checking the results
     results = doubled_x.result()
-    expected = [({"double.x": 1}, 2), ({"double.x": 2}, 4), ({"double.x": 3}, 6)]
+    expected = [({"double.x": 0}, 0), ({"double.x": 1}, 2), ({"double.x": 2}, 4)]
     for i, res in enumerate(expected):
         assert results["out"][i][0] == res[0]
         assert results["out"][i][1] == res[1]
@@ -63,7 +61,7 @@ def test_1(plugin, change_dir):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_1a(plugin, change_dir):
     doubled_x = double(name="double", workingdir="test_1a_{}".format(plugin),
-                       splitter="x", x=[1, 2, 3])
+                       splitter="x", x=list(range(3)))
 
     assert doubled_x.state.splitter == "double.x"
 
@@ -74,7 +72,7 @@ def test_1a(plugin, change_dir):
 
     # checking the results
     results = doubled_x.result()
-    expected = [({"double.x": 1}, 2), ({"double.x": 2}, 4), ({"double.x": 3}, 6)]
+    expected = [({"double.x": 0}, 0), ({"double.x": 1}, 2), ({"double.x": 2}, 4)]
     for i, res in enumerate(expected):
         assert results["out"][i][0] == res[0]
         assert results["out"][i][1] == res[1]

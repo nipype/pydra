@@ -436,7 +436,7 @@ class Node(NodeBase):
         """
         for ii, val in enumerate(self.state.states_val):
             for key_out in self.output_names:
-                if not getattr(self.results_dict[ii].output, key_out):
+                if getattr(self.results_dict[ii].output, key_out) is None:
                     return False
         self._done = True
         return True
