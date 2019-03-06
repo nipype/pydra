@@ -66,7 +66,7 @@ class NodeBase:
         self._output = {}
         self._result = {}
         # flag that says if node finished all jobs
-        self._is_complete = False
+        self._done = False
 
         if self._input_sets is None:
             self._input_sets = {}
@@ -179,19 +179,18 @@ class NodeBase:
         splitter = aux.change_splitter(splitter, self.name)
         if self.state:
             raise Exception("splitter has been already set")
-            # TODOD: should I allow?
-            # if splitter != self.state.splitter:
-            #     combiner = self.state.combiner
-            #     self.set_state(splitter,combiner)
-            # else: # if the same splitter do nothing
-            #     pass
         else:
             self.set_state(splitter)
         return self
-    #
-    # def combine(self, combiner):
-    #     self.combiner = combiner
-    #     return self
+
+    def combine(self, combiner):
+        if not self.state:
+            raise Exception("splitter has to be set first")
+        elif self.state.combiner:
+            raise Exception("combiner has been already set")
+        self.combiner = combiner
+        self.set_state(splitter=self.state.splitter, combiner=self.combiner)
+        return self
 
     def checking_input_el(self, ind):
         """checking if all inputs are available (for specific state element)"""
@@ -326,11 +325,11 @@ class NodeBase:
 
     # checking if all outputs are saved
     @property
-    def is_complete(self):
-        # once _is_complete os True, this should not change
-        logger.debug('is_complete {}'.format(self._is_complete))
-        if self._is_complete:
-            return self._is_complete
+    def done(self):
+        # once _done os True, this should not change
+        logger.debug('done {}'.format(self._done))
+        if self._done:
+            return self._done
         else:
             return self._check_all_results()
 
@@ -432,14 +431,14 @@ class Node(NodeBase):
     # dj: should I combine with get_output?
     def _check_all_results(self):
         """checking if all files that should be created are present
-        if all files and outputs are present, self._is_complete is changed to True
+        if all files and outputs are present, self._done is changed to True
         (the method does not collect the output)
         """
         for ii, val in enumerate(self.state.states_val):
             for key_out in self.output_names:
                 if not getattr(self.results_dict[ii].output, key_out):
                     return False
-        self._is_complete = True
+        self._done = True
         return True
 
     def _reading_results(self, ):
@@ -564,12 +563,12 @@ class Workflow(NodeBase):
         """checking if all files that should be created are present"""
         for nn in self.graph_sorted:
             if nn.name in self.inner_nodes.keys():
-                if not all([ni.is_complete for ni in self.inner_nodes[nn.name]]):
+                if not all([ni.done for ni in self.inner_nodes[nn.name]]):
                     return False
             else:
-                if not nn.is_complete:
+                if not nn.done:
                     return False
-        self._is_complete = True
+        self._done = True
         return True
 
 
@@ -670,7 +669,7 @@ class Workflow(NodeBase):
             if not self.splitter:
                 dir_nm_el = ""
             nn.workingdir = os.path.join(self.workingdir, dir_nm_el, nn.name)
-            nn._is_complete = False  # helps when mp is used
+            nn._done = False  # helps when mp is used
             try:
                 for inp, (out_node, out_var) in self.connected_var[nn].items():
                     nn.ready2run = False  #it has some history (doesnt have to be in the loop)

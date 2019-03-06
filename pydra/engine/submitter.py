@@ -44,7 +44,7 @@ class Submitter(object):
         if self.node.state:
             self.node.state.prepare_states(self.node.inputs)
         self._submit_node(self.node)
-        while not self.node.is_complete:
+        while not self.node.done:
             logger.debug("Submitter, in while, to_finish: {}".format(self.node))
             time.sleep(3)
         self.node.get_output()
@@ -175,8 +175,8 @@ class Submitter(object):
         """"checking if all nodes are done"""
         _to_remove = []
         for node in self._to_finish:
-            print("_output check node", node, node.name, node.is_complete)
-            if node.is_complete:
+            print("_output check node", node, node.name, node.done)
+            if node.done:
                 _to_remove.append(node)
         for rn in _to_remove:
             self._to_finish.remove(rn)
