@@ -288,6 +288,7 @@ class FunctionTask(BaseTask):
         elif 'return' in func.__annotations__:
             raise NotImplementedError('Branch not implemented')
         self.output_spec = output_spec
+        self.set_output_keys()
 
     def _run_task(self):
         inputs = dc.asdict(self.inputs)
@@ -311,7 +312,7 @@ def to_task(func_to_decorate):
 
 
 class ShellCommandTask(BaseTask):
-    def __init__(self, input_spec: ty.Optional[SpecInfo]=None,
+    def __init__(self, name, input_spec: ty.Optional[SpecInfo]=None,
                  output_spec: ty.Optional[SpecInfo]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
@@ -322,7 +323,8 @@ class ShellCommandTask(BaseTask):
             input_spec = SpecInfo(name='Inputs', fields=fields,
                                   bases=(ShellSpec,))
         self.input_spec = input_spec
-        super(ShellCommandTask, self).__init__(inputs=kwargs,
+        super(ShellCommandTask, self).__init__(name=name,
+                                               inputs=kwargs,
                                                audit_flags=audit_flags,
                                                messengers=messengers,
                                                messenger_args=messenger_args)
@@ -363,7 +365,7 @@ class ShellCommandTask(BaseTask):
 
 class ContainerTask(ShellCommandTask):
 
-    def __init__(self, input_spec: ty.Optional[ContainerSpec]=None,
+    def __init__(self, name, input_spec: ty.Optional[ContainerSpec]=None,
                  output_spec: ty.Optional[ShellOutSpec]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
@@ -374,7 +376,8 @@ class ContainerTask(ShellCommandTask):
             fields = [('args', ty.List[str], field)]
             input_spec = SpecInfo(name='Inputs', fields=fields,
                                   bases=(ContainerSpec,))
-        super(ContainerTask, self).__init__(input_spec=input_spec,
+        super(ContainerTask, self).__init__(name=name,
+                                            input_spec=input_spec,
                                             audit_flags=audit_flags,
                                             messengers=messengers,
                                             messenger_args=messenger_args,
@@ -417,7 +420,7 @@ class ContainerTask(ShellCommandTask):
 
 
 class DockerTask(ContainerTask):
-    def __init__(self, input_spec: ty.Optional[ContainerSpec]=None,
+    def __init__(self, name, input_spec: ty.Optional[ContainerSpec]=None,
                  output_spec: ty.Optional[ShellOutSpec]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
@@ -427,7 +430,8 @@ class DockerTask(ContainerTask):
             fields = [('args', ty.List[str], field)]
             input_spec = SpecInfo(name='Inputs', fields=fields,
                                   bases=(DockerSpec,))
-        super(ContainerTask, self).__init__(input_spec=input_spec,
+        super(ContainerTask, self).__init__(name=name,
+                                            input_spec=input_spec,
                                             audit_flags=audit_flags,
                                             messengers=messengers,
                                             messenger_args=messenger_args,

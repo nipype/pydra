@@ -158,6 +158,10 @@ class NodeBase:
     def output_names(self):
         return [f.name for f in dc.fields(make_klass(self.output_spec))]
 
+    def set_output_keys(self):
+        for out in self.output_names:
+            self._output[out] = None
+
     @property
     def output(self):
         return self._output
