@@ -781,6 +781,16 @@ def _left_right_check(splitter_part, other_splitters):
         return "Right"
 
 
+def inputs_types_to_dict(name, inputs):
+    """converting type.Inputs to dictionary"""
+    #dj: any better option?
+    input_names = [nm for nm in inputs.__dataclass_fields__.keys() if nm != "_func"]
+    inputs_dict = {}
+    for field in input_names:
+        inputs_dict["{}.{}".format(name, field)] = getattr(inputs, field)
+    return inputs_dict
+
+
 def removing_inputs_rpn(rpn, keys_remove):
     #TODO: similar to remove_inp_from_splitter_rpn, for now using removing_inputs_rpn
     # TODO: removing_inputs_rpn doesn't raise exceptions for scalar

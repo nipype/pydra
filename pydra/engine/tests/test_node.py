@@ -56,7 +56,12 @@ def fun_addvar4(a, b, c, d):
     return a + b + c + d
 
 
-def test_task_1():
+@to_task
+def moment(lst, n):
+    return sum([i**n for i in lst]) / len(lst)
+
+
+def test_task_init_1():
     """Node with mandatory arguments only"""
     nn = fun_addtwo()
     assert isinstance(nn, Node)
@@ -64,12 +69,12 @@ def test_task_1():
     assert hasattr(nn, "__call__")
 
 
-def test_task_1a():
+def test_task_init_1a():
     with pytest.raises(TypeError):
         fun_addtwo("NA")
 
 
-def test_task_2():
+def test_task_init_2():
     """Node with interface and inputs"""
     nn = fun_addtwo(name="NA", a=3)
     # adding NA to the name of the variable
@@ -80,7 +85,7 @@ def test_task_2():
 @pytest.mark.parametrize("splitter, state_splitter, state_rpn, states_ind, states_val", [
     ("a", "NA.a", ["NA.a"], [{"NA.a": 0}, {"NA.a": 1}], [{"NA.a": 3}, {"NA.a": 5}]),
 ])
-def test_task_3(splitter, state_splitter, state_rpn, states_ind, states_val):
+def test_task_init_3(splitter, state_splitter, state_rpn, states_ind, states_val):
     """Node with interface, inputs and splitter"""
     nn = fun_addtwo(name="NA", a=[3, 5], splitter=splitter)
 
@@ -100,7 +105,7 @@ def test_task_3(splitter, state_splitter, state_rpn, states_ind, states_val):
      [{"NA.a": 0, "NA.b": 0}, {"NA.a": 0, "NA.b": 1}, {"NA.a": 1, "NA.b": 0}, {"NA.a": 1, "NA.b": 1}],
      [{"NA.a": 3, "NA.b": 10}, {"NA.a": 3, "NA.b": 20}, {"NA.a": 5, "NA.b": 10}, {"NA.a": 5, "NA.b": 20}])
 ])
-def test_task_3a(splitter, state_splitter, state_rpn, states_ind, states_val):
+def test_task_init_3a(splitter, state_splitter, state_rpn, states_ind, states_val):
     """Node with interface, inputs and splitter"""
     nn = fun_addvar(name="NA", a=[3, 5], b=[10, 20], splitter=splitter)
 
@@ -114,7 +119,7 @@ def test_task_3a(splitter, state_splitter, state_rpn, states_ind, states_val):
     assert nn.state.states_val == states_val
 
 
-def test_task_4():
+def test_task_init_4():
     """Node with interface and inputs. splitter set using split method"""
     nn = fun_addtwo(name="NA", a=[3, 5])
     nn.split(splitter="a")
@@ -128,7 +133,7 @@ def test_task_4():
     nn.state.states_val = [{"NA.a": 3}, {"NA.a": 5}]
 
 
-def test_task_4a():
+def test_task_init_4a():
     """Node with interface, splitter and inputs set with the split method"""
     nn = fun_addtwo(name="NA")
     nn.split(splitter="a", a=[3, 5])
@@ -142,7 +147,7 @@ def test_task_4a():
     nn.state.states_val = [{"NA.a": 3}, {"NA.a": 5}]
 
 
-def test_task_4b():
+def test_task_init_4b():
     """Node with interface and inputs. trying to set splitter twice"""
     nn = fun_addtwo(name="NA", splitter="a", a=[3, 5])
     with pytest.raises(Exception) as excinfo:
@@ -150,24 +155,42 @@ def test_task_4b():
     assert str(excinfo.value) == "splitter has been already set"
 
 
-@pytest.mark.xfail(reason="doesn't have splitter and state - have to fix it")
 @pytest.mark.parametrize("plugin", Plugins)
-def test_task_5(tmpdir, plugin, change_dir):
+def test_task_nostate_1(tmpdir, plugin, change_dir):
     """Node with interface and inputs, no splitter, running interface"""
     nn = fun_addtwo(name="NA", a=3, workingdir=tmpdir / plugin)
     assert np.allclose(nn.inputs.a, [3])
+    assert nn.state is None
 
     sub = Submitter(plugin=plugin, runnable=nn)
     sub.run()
     sub.close()
 
     # checking the results
-    assert nn.result.output.out == ({}, 5)
+    results = nn.result()
+    assert results["out"] == (None, 5)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_2(tmpdir, plugin, change_dir):
+    """Node with interface and inputs, no splitter, running interface"""
+    nn = moment(name="NA", n=3, lst=[2, 3, 4],  workingdir=tmpdir / plugin)
+    assert np.allclose(nn.inputs.n, [3])
+    assert np.allclose(nn.inputs.lst, [2, 3, 4])
+    assert nn.state is None
+
+    sub = Submitter(plugin=plugin, runnable=nn)
+    sub.run()
+    sub.close()
+
+    # checking the results
+    results = nn.result()
+    assert results["out"] == (None, 33)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
-def test_task_6(plugin, change_dir):
+def test_task_spl_1(plugin, change_dir):
     """Node with interface, inputs and the simplest splitter, running interface"""
     nn = fun_addtwo(name="NA", workingdir="test_nd6_{}".format(plugin),
                     splitter="a", a=[3, 5])
@@ -196,7 +219,7 @@ def test_task_6(plugin, change_dir):
 ])
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
-def test_task_7(plugin, change_dir, splitter, state_splitter, state_rpn, expected):
+def test_task_spl_2(plugin, change_dir, splitter, state_splitter, state_rpn, expected):
     """Node with interface, inputs and the simplest splitter, running interface"""
     nn = fun_addvar(name="NA", workingdir="test_nd7_{}".format(plugin),
                     splitter=splitter, a=[3, 5], b=[10, 20])
@@ -219,7 +242,7 @@ def test_task_7(plugin, change_dir, splitter, state_splitter, state_rpn, expecte
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
-def test_task_split_combine_1(plugin, change_dir):
+def test_task_spl_comb_1(plugin, change_dir):
     """Node with interface, inputs and the simplest splitter, running interface"""
     nn = fun_addtwo(name="NA", workingdir="test_nd6_{}".format(plugin),
                     a=[3,5], splitter="a", combiner="a")
@@ -259,7 +282,7 @@ def test_task_split_combine_1(plugin, change_dir):
 ])
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
-def test_task_split_combine_2(plugin, splitter, combiner, state_splitter, state_rpn,
+def test_task_spl_comb_2(plugin, splitter, combiner, state_splitter, state_rpn,
                               state_combiner, state_combiner_all, expected):
     """Node with interface, inputs and the simplest splitter, running interface"""
     nn = fun_addvar(name="NA", workingdir="test_nd6_{}".format(plugin),

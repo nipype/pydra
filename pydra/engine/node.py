@@ -202,32 +202,36 @@ class NodeBase:
 
     def get_input_el(self, ind):
         """collecting all inputs required to run the node (for specific state element)"""
-        state_dict = self.state.states_val[ind]
-        if hasattr(self, "partial_split_input"):
-            for inp, ax_shift in self.partial_split_input.items():
-                ax_shift.sort(reverse=True)
-                for (orig_ax, new_ax) in ax_shift:
-                    state_dict[inp] = np.take(state_dict[inp], indices=ind[new_ax], axis=orig_ax)
-        inputs_dict = {"{}.{}".format(self.name, k): state_dict["{}.{}".format(self.name, k)]
-                        for k in self.input_names}
+        if ind is not None:
+            # TODO: check if the current version requires both state_dict and inputs_dict
+            state_dict = self.state.states_val[ind]
+            inputs_dict = {"{}.{}".format(self.name, k): state_dict["{}.{}".format(self.name, k)]
+                            for k in self.input_names}
 
-        # reading extra inputs that come from previous nodes
-        for (from_node, from_socket, to_socket) in self.needed_outputs:
-            # TODO update
-            if from_node.state.combiner:
-                inputs_dict["{}.{}".format(self.name, to_socket)] =\
-                    self._get_input_comb(from_node, from_socket, state_dict)
-            else:
-                dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
-                # TODO: do I need this if, what if this is wf?
-                if is_node(from_node):
-                    out_from = getattr(from_node.results_dict[dir_nm_el_from].output, from_socket)
-                    if out_from:
-                        inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
-                    else:
-                        raise Exception("output from {} doesnt exist".format(from_node))
+            # reading extra inputs that come from previous nodes
+            for (from_node, from_socket, to_socket) in self.needed_outputs:
+                # TODO update to new version: if previous has state, it would have to be combined
+                # if the current node has no state
+                if from_node.state.combiner:
+                    pdb.set_trace()
+                    inputs_dict["{}.{}".format(self.name, to_socket)] =\
+                        self._get_input_comb(from_node, from_socket, state_dict)
+                else:
+                    dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
+                    # TODO: do I need this if, what if this is wf?
+                    if is_node(from_node):
+                        out_from = getattr(from_node.results_dict[dir_nm_el_from].output, from_socket)
+                        if out_from:
+                            inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
+                        else:
+                            raise Exception("output from {} doesnt exist".format(from_node))
+            return state_dict, inputs_dict
 
-        return state_dict, inputs_dict
+        else:
+            inputs_dict = {"{}.{}".format(self.name, inp): getattr(self.inputs, inp)
+                            for inp in self.input_names}
+            # TODO: adding parts from self.needed_outputs
+            return None, inputs_dict
 
     # TODO: update
     def _get_input_comb(self, from_node, from_socket, state_dict):
@@ -287,21 +291,8 @@ class NodeBase:
             else:  # using index instead of value
                 ind_inp_str = "x".join([str(el) for el in ind_inp])
                 state_dict_el[input] = ind_inp_str
-
-        if hasattr(self, "partial_comb_input"):
-            for input, ax_shift in self.partial_comb_input.items():
-                ind_inp = []
-                partial_input = state_inputs[input]
-                for (inp_ax, comb_ax) in ax_shift:
-                    ind_inp.append(ind[comb_ax])
-                    partial_input = np.take(partial_input, indices=ind[comb_ax], axis=inp_ax)
-                if value:
-                    state_dict_el[input] = partial_input
-                else:  # using index instead of value
-                    ind_inp_str = "x".join([str(el) for el in ind_inp])
-                    state_dict_el[input] = ind_inp_str
         # adding values from input that are not used in the splitter
-        for input in set(state_inputs) - set(axis_for_input) - set(self.partial_comb_input):
+        for input in set(state_inputs) - set(axis_for_input):
             if value:
                 state_dict_el[input] = state_inputs[input]
             else:
@@ -399,14 +390,17 @@ class Node(NodeBase):
 
     def run_interface_el(self, ind):
         """ running interface one element generated from node_state."""
+        logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
         if ind is not None:
-            logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
             state_dict, inputs_dict = self.get_input_el(ind)
-            os.makedirs(os.path.join(os.getcwd(), self.workingdir), exist_ok=True)
-            self.cache_dir = os.path.join(os.getcwd(), self.workingdir)
-            interf_inputs = dict((k.split(".")[1], v) for k,v in inputs_dict.items())
-            res = self.run(**interf_inputs)
-            return ind, res #TODO NOW: don't have to return
+        else:
+            _, inputs_dict = self.get_input_el(ind)
+        os.makedirs(os.path.join(os.getcwd(), self.workingdir), exist_ok=True)
+        self.cache_dir = os.path.join(os.getcwd(), self.workingdir)
+        interf_inputs = dict((k.split(".")[1], v) for k,v in inputs_dict.items())
+        res = self.run(**interf_inputs)
+        return ind, res #TODO NOW: don't have to return
+
 
 
     def get_output(self):
@@ -415,16 +409,21 @@ class Node(NodeBase):
         """
         for key_out in self.output_names:
             self._output[key_out] = {}
-            for (ii, val) in enumerate(self.state.states_val):
-                state_dict = val
-                if self.state.splitter:
-                    output_el = getattr(self.results_dict[ii].output, key_out)
-                    if not self.state.combiner: # only splitter
-                        self._output[key_out][tuple(self.state.states_val[ii].items())] = output_el
+            if self.state:
+                for (ii, val) in enumerate(self.state.states_val):
+                    state_dict = val
+                    if self.state.splitter:
+                        output_el = getattr(self.results_dict[ii].output, key_out)
+                        if not self.state.combiner: # only splitter
+                            self._output[key_out][tuple(self.state.states_val[ii].items())] = output_el
+                        else:
+                            self._combined_output(key_out, deepcopy(state_dict), output_el)
                     else:
-                        self._combined_output(key_out, deepcopy(state_dict), output_el)
-                else:
-                    raise Exception("not implemented, TODO")
+                        raise Exception("not implemented, TODO")
+            else:
+                output_el = getattr(self.results_dict[None].output, key_out)
+                # TODO should I have: self._output[key_out][None] or self._output[key_out]?
+                self._output[key_out][None] = output_el
         return self._output
 
 
@@ -434,12 +433,17 @@ class Node(NodeBase):
         if all files and outputs are present, self._done is changed to True
         (the method does not collect the output)
         """
-        for ii, val in enumerate(self.state.states_val):
-            for key_out in self.output_names:
-                if getattr(self.results_dict[ii].output, key_out) is None:
+        for key_out in self.output_names:
+            if self.state:
+                for ii, _ in enumerate(self.state.states_val):
+                    if getattr(self.results_dict[ii].output, key_out) is None:
+                        return False
+            else:
+                if getattr(self.results_dict[None].output, key_out) is None:
                     return False
         self._done = True
         return True
+
 
     def _reading_results(self, ):
         """ collecting all results for all output names"""
@@ -449,10 +453,14 @@ class Node(NodeBase):
                              ensure_list(self._cache_dir))
 
         """
+        if not self.output:
+            self.get_output()
         for key_out in self.output_names:
             output = self.output[key_out]
-            self._result[key_out] = [(dict(k), v) for k,v in output.items()]
-
+            if self.state:
+                self._result[key_out] = [(dict(k), v) for k,v in output.items()]
+            else:
+                self._result[key_out] = (None, output[None])
 
 
 class Workflow(NodeBase):
@@ -680,9 +688,6 @@ class Workflow(NodeBase):
                         # TODO!!: what if I have more connections, not only from one node
                         if out_node.combiner:
                             nn.splitter = out_node.state.splitter_comb
-                            # adding information about partially combined input from previous nodes
-                            nn.partial_split_input = out_node.state.partial_comb_input_rem_axes
-                            nn.partial_comb_input = out_node.state.partial_comb_input_comb_axes
                         else:
                             nn.splitter = out_node.splitter
                     else:

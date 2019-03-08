@@ -82,7 +82,7 @@ class State:
     # dj: should this be just states property?
     def prepare_states_ind(self, inputs):
         if isinstance(inputs, BaseSpec):
-            inputs = self._inputs_types_to_dict(inputs)
+            inputs = aux.inputs_types_to_dict(self.name, inputs)
         if self._right_splitter and self._left_splitter:
             val_r, key_r, _, _, _, keys_fromL = aux._splits(self._right_splitter_rpn, inputs,
                                                              inner_inputs=self.inner_inputs)
@@ -182,7 +182,7 @@ class State:
 
     def prepare_states_val(self, inputs):
         if isinstance(inputs, BaseSpec):
-            inputs = self._inputs_types_to_dict(inputs)
+            inputs = aux.inputs_types_to_dict(self.name, inputs)
         self.states_val = list(aux.map_splits(self.states_ind, inputs))
         return self.states_val
 
@@ -256,16 +256,6 @@ class State:
             self.group_for_inputs[inp] = self.last_gr
             self.groups_stack[-1].append(self.last_gr)
             self.last_gr += 1
-
-
-    def _inputs_types_to_dict(self, inputs):
-        """converting type.Inputs to dictionary"""
-        #dj: any better option?
-        input_names = [nm for nm in inputs.__dataclass_fields__.keys() if nm != "_func"]
-        inputs_dict = {}
-        for field in input_names:
-            inputs_dict["{}.{}".format(self.name, field)] = getattr(inputs, field)
-        return inputs_dict
 
 
 '''    
