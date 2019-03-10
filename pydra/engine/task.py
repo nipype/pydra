@@ -80,15 +80,15 @@ class BaseTask(Node):
 
     def __init__(self,
                  name, splitter=None, combiner=None,
-                 other_splitters=None, write_state=True,
+                 other_splitters=None,
                  inputs: ty.Union[ty.Text, File, ty.Dict, None]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
-                 messengers=None, messenger_args=None):
+                 messengers=None, messenger_args=None, workingdir=None):
         """Initialize task with given args."""
         super(BaseTask, self).__init__(name, splitter=splitter,
                                        combiner=combiner,
                                        other_splitters=other_splitters,
-                                       write_state=write_state, inputs=inputs)
+                                       inputs=inputs, workingdir=workingdir)
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
@@ -158,11 +158,11 @@ class BaseTask(Node):
         # TODO add signal handler for processes killed after lock acquisition
         with FileLock(lockfile):
             # Let only one equivalent process run
-
+            #dj: for now not using cache
             # Eagerly retrieve cached
-            result = self.result(cache_locations=cache_locations)
-            if result is not None:
-                return result
+            # result = self.result(cache_locations=cache_locations)
+            # if result is not None:
+            #     return result
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
@@ -242,9 +242,10 @@ class FunctionTask(BaseTask):
     def __init__(self, func: ty.Callable,
                  output_spec: ty.Optional[BaseSpec]=None,
                  name=None, splitter=None, combiner=None,
-                 other_splitters=None, write_state=True,
+                 other_splitters=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
-                 messengers=None, messenger_args=None, **kwargs):
+                 messengers=None, messenger_args=None,
+                 workingdir=None, **kwargs):
         self.input_spec = SpecInfo(name='Inputs',
                                    fields=
             [(val.name, val.annotation, val.default)
@@ -258,11 +259,11 @@ class FunctionTask(BaseTask):
         super(FunctionTask, self).__init__(name, splitter=splitter,
                                            combiner=combiner,
                                            other_splitters=other_splitters,
-                                           write_state=write_state,
                                            inputs=kwargs,
                                            audit_flags=audit_flags,
                                            messengers=messengers,
-                                           messenger_args=messenger_args)
+                                           messenger_args=messenger_args,
+                                           workingdir=workingdir)
         if output_spec is None:
             if 'return' not in func.__annotations__:
                 output_spec = SpecInfo(name='Output',
@@ -287,6 +288,7 @@ class FunctionTask(BaseTask):
         elif 'return' in func.__annotations__:
             raise NotImplementedError('Branch not implemented')
         self.output_spec = output_spec
+        self.set_output_keys()
 
     def _run_task(self):
         inputs = dc.asdict(self.inputs)
@@ -310,7 +312,7 @@ def to_task(func_to_decorate):
 
 
 class ShellCommandTask(BaseTask):
-    def __init__(self, input_spec: ty.Optional[SpecInfo]=None,
+    def __init__(self, name, input_spec: ty.Optional[SpecInfo]=None,
                  output_spec: ty.Optional[SpecInfo]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
@@ -321,7 +323,8 @@ class ShellCommandTask(BaseTask):
             input_spec = SpecInfo(name='Inputs', fields=fields,
                                   bases=(ShellSpec,))
         self.input_spec = input_spec
-        super(ShellCommandTask, self).__init__(inputs=kwargs,
+        super(ShellCommandTask, self).__init__(name=name,
+                                               inputs=kwargs,
                                                audit_flags=audit_flags,
                                                messengers=messengers,
                                                messenger_args=messenger_args)
@@ -362,7 +365,7 @@ class ShellCommandTask(BaseTask):
 
 class ContainerTask(ShellCommandTask):
 
-    def __init__(self, input_spec: ty.Optional[ContainerSpec]=None,
+    def __init__(self, name, input_spec: ty.Optional[ContainerSpec]=None,
                  output_spec: ty.Optional[ShellOutSpec]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
@@ -373,7 +376,8 @@ class ContainerTask(ShellCommandTask):
             fields = [('args', ty.List[str], field)]
             input_spec = SpecInfo(name='Inputs', fields=fields,
                                   bases=(ContainerSpec,))
-        super(ContainerTask, self).__init__(input_spec=input_spec,
+        super(ContainerTask, self).__init__(name=name,
+                                            input_spec=input_spec,
                                             audit_flags=audit_flags,
                                             messengers=messengers,
                                             messenger_args=messenger_args,
@@ -416,7 +420,7 @@ class ContainerTask(ShellCommandTask):
 
 
 class DockerTask(ContainerTask):
-    def __init__(self, input_spec: ty.Optional[ContainerSpec]=None,
+    def __init__(self, name, input_spec: ty.Optional[ContainerSpec]=None,
                  output_spec: ty.Optional[ShellOutSpec]=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None, **kwargs):
@@ -426,7 +430,8 @@ class DockerTask(ContainerTask):
             fields = [('args', ty.List[str], field)]
             input_spec = SpecInfo(name='Inputs', fields=fields,
                                   bases=(DockerSpec,))
-        super(ContainerTask, self).__init__(input_spec=input_spec,
+        super(ContainerTask, self).__init__(name=name,
+                                            input_spec=input_spec,
                                             audit_flags=audit_flags,
                                             messengers=messengers,
                                             messenger_args=messenger_args,
