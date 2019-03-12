@@ -11,37 +11,27 @@ from .specs import BaseSpec
 
 
 class State:
-    def __init__(self, name, splitter=None, combiner=None, other_splitters=None):
+    def __init__(self, name, splitter=None, combiner=None, other_states=None):
         self.name = name
-        # self.ndim = None
-        self.other_splitters = other_splitters
-        self.inner_inputs = {}
-        if self.other_splitters:
-            for name, (st, inp) in self.other_splitters.items():
-                self.inner_inputs["{}.{}".format(self.name, inp)] = st
+        self.other_states = other_states
         self.splitter = splitter
         self.combiner = combiner
-        # dj: I added +1, but it still doesn't take into account when input 2d
-        # TODO: ndim should be stack (it's not dim)
-        # self.ndim = len([1 for val in aux.splitter2rpn(self.splitter) if val == '*']) + 1
-        # perhaps it shouldn't be in the init
-
-        self._left_splitter = None
-        self._right_splitter = None
-        self._left_splitter_rpn = []
-        self._right_splitter_rpn = []
-        if self.other_splitters:
+        self.inner_inputs = {}
+        if self.other_states:
+            for name, (st, inp) in self.other_states.items():
+                self.inner_inputs["{}.{}".format(self.name, inp)] = st
             self.connect()
         else:
-            _splitter_previous_node = [
-                el for el in self.splitter_rpn if el.startswith("_")
-            ]
-            # TODO TOTEST
-            if _splitter_previous_node:
-                raise Exception(
-                    "there are no previous nodes, so elelemnts {} shouldn't be in "
-                    "the splitter".format(_splitter_previous_node)
-                )
+            self.other_states = {}
+            self._left_splitter = None
+            self._right_splitter = None
+
+        _splitter_previous_node = [el for el in self.splitter_rpn
+                                   if (el.startswith("_") and el in self.other_states)]
+        if _splitter_previous_node:
+            raise Exception("there are no previous nodes, so elements {} shouldn't be in "
+                            "the splitter".format(_splitter_previous_node))
+
 
     @property
     def splitter(self):
@@ -51,14 +41,9 @@ class State:
     def splitter(self, splitter):
         if splitter:
             self._splitter = aux.change_splitter(splitter, self.name)
-            self.splitter_rpn = aux.splitter2rpn(
-                deepcopy(self._splitter), other_splitters=self.other_splitters
-            )
-            self.splitter_rpn_nost = aux.splitter2rpn(
-                deepcopy(self._splitter),
-                other_splitters=self.other_splitters,
-                state_fields=False,
-            )
+            self.splitter_rpn = aux.splitter2rpn(deepcopy(self._splitter), other_states=self.other_states)
+            self.splitter_rpn_nost = aux.splitter2rpn(deepcopy(self._splitter), other_states=self.other_states,
+                                                      state_fields=False)
             self.splitter_final = self._splitter
         else:
             self._splitter = None
@@ -144,7 +129,6 @@ class State:
         return self.states_ind
 
     def prepare_states_combined_ind(self, inputs):
-        # # TODO: change/remove combiner_all
         self.combiner_all = []
         for comb in self.combiner:
             for gr in aux.ensure_list(self.group_for_inputs[comb]):
@@ -209,12 +193,13 @@ class State:
         return self.states_val
 
     def prepare_states(self, inputs):
-        if self.other_splitters:
+        if self.other_states:
             self.connect_states()
         self.prepare_states_ind(inputs)
         self.prepare_states_val(inputs)
 
     def connect(self):
+<<<<<<< HEAD
         self.splitter, self._left_splitter, self._right_splitter = aux.connect_splitters(
             splitter=self.splitter, other_splitters=self.other_splitters
         )
@@ -235,6 +220,16 @@ class State:
             other_splitters=self.other_splitters,
             state_fields=False,
         )
+=======
+        self.splitter, self._left_splitter, self._right_splitter = \
+            aux.connect_splitters(splitter=self.splitter, other_states=self.other_states)
+        self._right_splitter_rpn = aux.splitter2rpn(deepcopy(self._right_splitter),
+                                                    other_states=self.other_states)
+        self._left_splitter_rpn_nost = aux.splitter2rpn(deepcopy(self._left_splitter),
+                                                    other_states=self.other_states,
+                                                        state_fields=False)
+
+>>>>>>> some cleaning in State - removing some unused variables, changing from other_splitters to other_states; cleaning in test
 
     def connect_states(self):
         if self._left_splitter:
@@ -246,7 +241,7 @@ class State:
         self.last_gr = 0
         merged_groupstack = []
         merged_groups = {}
-        for nm, (st, inp) in self.other_splitters.items():
+        for nm, (st, inp) in self.other_states.items():
             if not hasattr(st, "group_for_inputs"):
                 raise Exception("previous state has to run first")
             group_for_inputs = st.group_for_inputs
@@ -270,9 +265,13 @@ class State:
         self.group_for_inputs = merged_groups
 
     def _push_new_states(self):
+<<<<<<< HEAD
         right_rpn = aux.splitter2rpn(
             deepcopy(self._right_splitter), other_splitters=self.other_splitters
         )
+=======
+        right_rpn = aux.splitter2rpn(deepcopy(self._right_splitter), other_states=self.other_states)
+>>>>>>> some cleaning in State - removing some unused variables, changing from other_splitters to other_states; cleaning in test
         inner_splitters = set(self.inner_inputs).intersection(right_rpn)
         inputs_in_right = [i for i in right_rpn if i not in ["*", "."]]
         # if there is any inner splitter in the right part, new list is added to stack

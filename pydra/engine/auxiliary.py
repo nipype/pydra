@@ -10,7 +10,7 @@ logger = logging.getLogger("pydra")
 
 
 # Function to change user provided splitter to "reverse polish notation" used in State
-def splitter2rpn(splitter, other_splitters=None, state_fields=True):
+def splitter2rpn(splitter, other_states=None, state_fields=True):
     """ Functions that translate splitter to "reverse polish notation."""
     if not splitter:
         return []
@@ -40,8 +40,8 @@ def _ordering(
             )
             if state_fields:
                 el = (splitter_mod, el[1])
-            if other_splitters[node_nm][0].other_splitters:
-                other_splitters.update(other_splitters[node_nm][0].other_splitters)
+            if other_states[node_nm][0].other_states:
+                other_states.update(other_states[node_nm][0].other_states)
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_splitters:
@@ -70,8 +70,8 @@ def _ordering(
             )
             if state_fields:
                 el[0] = splitter_mod
-            if other_splitters[node_nm][0].other_splitters:
-                other_splitters.update(other_splitters[node_nm][0].other_splitters)
+            if other_states[node_nm][0].other_states:
+                other_states.update(other_states[node_nm][0].other_states)
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_splitters:
@@ -100,8 +100,8 @@ def _ordering(
             )
             if state_fields:
                 el = splitter_mod
-            if other_splitters[node_nm][0].other_splitters:
-                other_splitters.update(other_splitters[node_nm][0].other_splitters)
+            if other_states[node_nm][0].other_states:
+                other_states.update(other_states[node_nm][0].other_states)
         if type(el) is str:
             output_splitter.append(el)
         elif type(el) is tuple:
@@ -126,7 +126,7 @@ def _ordering(
         output_splitter.append(current_sign)
 
 
-def _iterate_list(element, sign, other_splitters, output_splitter, state_fields=True):
+def _iterate_list(element, sign, other_states, output_splitter, state_fields=True):
     """ Used in the splitter2rpn to get recursion. """
     for i, el in enumerate(element):
         _ordering(
@@ -807,52 +807,39 @@ def combine(combiner, groups, finalgroup, shapes, outputs):
  Used only in State, could be moved to that class
 """
 
-
-def connect_splitters(splitter, other_splitters):
+def connect_splitters(splitter, other_states):
     if splitter:
         # if splitter is string, have to check if this is Left or Right part (Left is required)
         if isinstance(splitter, str):
             # so this is the Left part
             if splitter.startswith("_"):
-                left_part = _complete_left(
-                    left=splitter, other_splitters=other_splitters
-                )
+                left_part = _complete_left(left=splitter, other_states=other_states)
                 right_part = None
             else:  # this is Right part
-                left_part = _complete_left(other_splitters=other_splitters)
+                left_part = _complete_left(other_states=other_states)
                 right_part = splitter
         # if splitter is tuple, it has to be either Left or Right part, you can't have (Left, Right)
         elif isinstance(splitter, tuple):
-            lr_flag = _left_right_check(splitter, other_splitters=other_splitters)
+            lr_flag = _left_right_check(splitter, other_states=other_states)
             if lr_flag == "Left":
-                left_part = _complete_left(
-                    left=splitter, other_splitters=other_splitters
-                )
+                left_part = _complete_left(left=splitter, other_states=other_states)
                 right_part = None
             elif lr_flag == "Right":
-                left_part = _complete_left(other_splitters=other_splitters)
+                left_part = _complete_left(other_states=other_states)
                 right_part = splitter
             else:
                 raise Exception("splitter mix Left and Right parts in scalar splitter")
         elif isinstance(splitter, list):
-            lr_flag = _left_right_check(splitter, other_splitters=other_splitters)
+            lr_flag = _left_right_check(splitter, other_states=other_states)
             if lr_flag == "Left":
-                left_part = _complete_left(
-                    left=splitter, other_splitters=other_splitters
-                )
+                left_part = _complete_left(left=splitter, other_states=other_states)
                 right_part = None
             elif lr_flag == "Right":
-                left_part = _complete_left(other_splitters=other_splitters)
+                left_part = _complete_left(other_states=other_states)
                 right_part = splitter
-            elif (
-                _left_right_check(splitter[0], other_splitters=other_splitters)
-                == "Left"
-                and _left_right_check(splitter[1], other_splitters=other_splitters)
-                == "Right"
-            ):
-                left_part = _complete_left(
-                    left=splitter[0], other_splitters=other_splitters
-                )
+            elif (_left_right_check(splitter[0], other_states=other_states) == "Left"
+                  and _left_right_check(splitter[1], other_states=other_states) == "Right"):
+                left_part = _complete_left(left=splitter[0], other_states=other_states)
                 right_part = splitter[1]
             else:
                 raise Exception("splitter doesn't have separated Left and Right parts")
@@ -863,7 +850,7 @@ def connect_splitters(splitter, other_splitters):
             )
     else:
         # if there is no splitter, I create the Left part
-        left_part = _complete_left(other_splitters=other_splitters)
+        left_part = _complete_left(other_states=other_states)
         right_part = None
     if right_part:
         splitter = [deepcopy(left_part), deepcopy(right_part)]
@@ -872,29 +859,25 @@ def connect_splitters(splitter, other_splitters):
     return splitter, left_part, right_part
 
 
-def _complete_left(other_splitters, left=None):
+def _complete_left(other_states, left=None):
     """completing Left part: adding all splitters from previous nodes"""
     if left:
-        rpn_left = splitter2rpn(
-            left, other_splitters=other_splitters, state_fields=False
-        )
-        for name, (st, inp) in list(other_splitters.items())[::-1]:
+        rpn_left = splitter2rpn(left, other_states=other_states, state_fields=False)
+        for name, (st, inp) in list(other_states.items())[::-1]:
             if "_{}".format(name) not in rpn_left and st.splitter_final:
                 left = ["_{}".format(name), left]
     else:
-        left = ["_{}".format(name) for name in other_splitters]
+        left = ["_{}".format(name) for name in other_states]
         if len(left) == 1:
             left = left[0]
     return left
 
 
-def _left_right_check(splitter_part, other_splitters):
+def _left_right_check(splitter_part, other_states):
     """checking if splitter_part is purely Left or Right - string is returned.
     If the splitter_part is mixed None is returned.
     """
-    rpn_part = splitter2rpn(
-        splitter_part, other_splitters=other_splitters, state_fields=False
-    )
+    rpn_part = splitter2rpn(splitter_part, other_states=other_states, state_fields=False)
     inputs_in_splitter = [i for i in rpn_part if i not in ["*", "."]]
     others_in_splitter = [
         True if el.startswith("_") else False for el in inputs_in_splitter
