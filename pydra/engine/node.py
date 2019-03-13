@@ -1,24 +1,34 @@
 """Basic compute graph elements"""
+import abc
 from collections import OrderedDict
 import dataclasses as dc
 import itertools
 import json
 import logging
 import networkx as nx
-import numpy as np
-import os, pdb
+import os
+import pdb
 from pathlib import Path
 import typing as ty
 import pickle as pk
-from copy import copy, deepcopy
+from copy import deepcopy
+
+import cloudpickle as cp
+from filelock import FileLock
+import shutil
+from tempfile import mkdtemp
 
 from . import state
 from . import auxiliary as aux
-from .specs import File, BaseSpec
+from .specs import File, BaseSpec, RuntimeSpec, Result
 from .helpers import (make_klass, create_checksum, print_help, load_result,
-                      ensure_list, get_inputs)
+                      gather_runtime_info, save_result, ensure_list, get_inputs)
+from ..utils.messenger import (send_message, make_message, gen_uuid, now,
+                               AuditFlag)
 
 logger = logging.getLogger('pydra')
+
+develop = True
 
 
 class NodeBase:
@@ -26,13 +36,26 @@ class NodeBase:
     _version: str  # Version of tool being wrapped
     _input_sets = None  # Dictionaries of predefined input settings
 
+    audit_flags: AuditFlag = AuditFlag.NONE  # What to audit. See audit flags for details
+
+    _can_resume = False  # Does the task allow resuming from previous state
+    _redirect_x = False  # Whether an X session should be created/directed
+
+    _runtime_requirements = RuntimeSpec()
+    _runtime_hints = None
+
+    _cache_dir = None  # Working directory in which to operate
+    _references = None  # List of references for a task
+
     # dj: do we need it??
     input_spec = BaseSpec
     output_spec = BaseSpec
 
     # TODO: write state should be removed
     def __init__(self, name, splitter=None, combiner=None,
-                 inputs: ty.Union[ty.Text, File, ty.Dict, None] = None):
+                 inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
+                 audit_flags: AuditFlag=AuditFlag.NONE,
+                 messengers=None, messenger_args=None, workingdir=None):
         """A base structure for nodes in the computational graph (i.e. both
         ``Node`` and ``Workflow``).
 
@@ -81,6 +104,10 @@ class NodeBase:
                 inputs = self._input_sets[inputs]
             self.inputs = dc.replace(self.inputs, **inputs)
             self.state_inputs = inputs
+
+        self.audit_flags = audit_flags
+        self.messengers = ensure_list(messengers)
+        self.messenger_args = messenger_args
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -173,6 +200,148 @@ class NodeBase:
         # return self._reading_results(cache_locations=cache_locations,
         #                              return_state=return_state)
 
+    def audit(self, message, flags=None):
+        if develop:
+            with open(Path(os.path.dirname(__file__))
+                      / '..' / 'schema/context.jsonld', 'rt') as fp:
+                context = json.load(fp)
+        else:
+            context = {"@context": 'https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld'}
+        if self.audit_flags & flags:
+            if self.messenger_args:
+                send_message(make_message(message, context=context),
+                             messengers=self.messengers,
+                             **self.messenger_args)
+            else:
+                send_message(make_message(message, context=context),
+                             messengers=self.messengers)
+
+    @property
+    def can_resume(self):
+        """Task can reuse partial results after interruption
+        """
+        return self._can_resume
+
+    @abc.abstractmethod
+    def _run_task(self):
+        pass
+
+    @property
+    def cache_dir(self):
+        return self._cache_dir
+
+    @cache_dir.setter
+    def cache_dir(self, location):
+        self._cache_dir = Path(location)
+
+    @property
+    def output_dir(self):
+        return self._cache_dir / self.checksum
+
+    def audit_check(self, flag):
+        return self.audit_flags & flag
+
+    def __call__(self, cache_locations=None, **kwargs):
+        return self.run(cache_locations=cache_locations, **kwargs)
+
+    def run(self, cache_locations=None, cache_dir=None, **kwargs):
+        self.inputs = dc.replace(self.inputs, **kwargs)
+        if cache_dir is not None:
+            self.cache_dir = Path(cache_dir)
+        if self.cache_dir is None:
+            self.cache_dir = mkdtemp()
+        checksum = self.checksum
+        lockfile = self.cache_dir / (checksum + '.lock')
+        """
+        Concurrent execution scenarios
+
+        1. prior cache exists -> return result
+        2. other process running -> wait
+           a. finishes (with or without exception) -> return result
+           b. gets killed -> restart
+        3. no cache or other process -> start
+        4. two or more concurrent new processes get to start
+        """
+        # TODO add signal handler for processes killed after lock acquisition
+        with FileLock(lockfile):
+            # Let only one equivalent process run
+            #dj: for now not using cache
+            # Eagerly retrieve cached
+            # result = self.result(cache_locations=cache_locations)
+            # if result is not None:
+            #     return result
+            odir = self.output_dir
+            if not self.can_resume and odir.exists():
+                shutil.rmtree(odir)
+            cwd = os.getcwd()
+            odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
+
+            # start recording provenance, but don't send till directory is created
+            # in case message directory is inside task output directory
+            if self.audit_check(AuditFlag.PROV):
+                aid = "uid:{}".format(gen_uuid())
+                start_message = {"@id": aid, "@type": "task", "startedAtTime": now()}
+            os.chdir(odir)
+            if self.audit_check(AuditFlag.PROV):
+                self.audit(start_message, AuditFlag.PROV)
+                # audit inputs
+            #check_runtime(self._runtime_requirements)
+            #isolate inputs if files
+            #cwd = os.getcwd()
+            if self.audit_check(AuditFlag.RESOURCE):
+                from ..utils.profiler import ResourceMonitor
+                resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
+            result = Result(output=None, runtime=None)
+            try:
+                if self.audit_check(AuditFlag.RESOURCE):
+                    resource_monitor.start()
+                    if self.audit_check(AuditFlag.PROV):
+                        mid = "uid:{}".format(gen_uuid())
+                        self.audit({"@id": mid, "@type": "monitor",
+                                    "startedAtTime": now(),
+                                    "wasStartedBy": aid}, AuditFlag.PROV)
+                self._run_task()
+                result.output = self._collect_outputs()
+            except Exception as e:
+                print(e)
+                #record_error(self, e)
+                raise
+            finally:
+                if self.audit_check(AuditFlag.RESOURCE):
+                    resource_monitor.stop()
+                    result.runtime = gather_runtime_info(resource_monitor.fname)
+                    if self.audit_check(AuditFlag.PROV):
+                        self.audit({"@id": mid, "endedAtTime": now(),
+                                    "wasEndedBy": aid}, AuditFlag.PROV)
+                        # audit resources/runtime information
+                        eid = "uid:{}".format(gen_uuid())
+                        entity = dc.asdict(result.runtime)
+                        entity.update(**{"@id": eid, "@type": "runtime",
+                                         "prov:wasGeneratedBy": aid})
+                        self.audit(entity, AuditFlag.PROV)
+                        self.audit({"@type": "prov:Generation",
+                                    "entity_generated": eid,
+                                    "hadActivity": mid}, AuditFlag.PROV)
+                save_result(odir, result)
+                with open(odir / '_node.pklz', 'wb') as fp:
+                    cp.dump(self, fp)
+                os.chdir(cwd)
+                if self.audit_check(AuditFlag.PROV):
+                    # audit outputs
+                    self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)
+            return result
+
+    # TODO: Decide if the following two functions should be separated
+    @abc.abstractmethod
+    def _list_outputs(self):
+        pass
+
+    def _collect_outputs(self):
+        run_output = ensure_list(self._list_outputs())
+        output_klass = make_klass(self.output_spec)
+        output = output_klass(**{f.name: None for f in
+                                 dc.fields(output_klass)})
+        return dc.replace(output, **dict(zip(self.output_names, run_output)))
 
     # TODO: should change state!
     def split(self, splitter, **kwargs):
@@ -378,13 +547,18 @@ class NodeBase:
         return result
 
 
-
 class Node(NodeBase):
-    def __init__(self, name, inputs=None, splitter=None, workingdir=None,
+    def __init__(self, name, splitter=None,
+                 inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
+                 audit_flags: AuditFlag=AuditFlag.NONE,
+                 messengers=None, messenger_args=None, workingdir=None,
                  other_splitters=None, combiner=None):
-        super(Node, self).__init__(name=name, splitter=splitter, inputs=inputs,
-                                   #other_splitters=other_splitters,
-                                   combiner=combiner)
+        super(Node, self).__init__(name=name, splitter=splitter,
+                                   inputs=inputs,
+                                   combiner=combiner,
+                                   audit_flags=audit_flags,
+                                   messengers=messengers,
+                                   messenger_args=messenger_args)
 
         # working directory for node, will be change if node is a part of a wf
         self.workingdir = workingdir

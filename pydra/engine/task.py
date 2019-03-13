@@ -36,29 +36,17 @@ Original file is located at
 """
 
 
-import abc
 import cloudpickle as cp
 import dataclasses as dc
-from filelock import FileLock
 import inspect
-import json
-import os
-from pathlib import Path
-import pickle as pk
-import shutil
-from tempfile import mkdtemp
 import typing as ty
 
 from .node import Node
-from ..utils.messenger import (send_message, make_message, gen_uuid, now,
-                               AuditFlag)
-from .specs import (BaseSpec, Result, RuntimeSpec, File, SpecInfo,
+from ..utils.messenger import (AuditFlag)
+from .specs import (BaseSpec, SpecInfo,
                     ShellSpec, ShellOutSpec, ContainerSpec, DockerSpec,
                     SingularitySpec)
-from .helpers import (make_klass, print_help, ensure_list, gather_runtime_info,
-                      save_result, load_result)
-
-develop = True
+from .helpers import ensure_list
 
 
 class BaseTask(Node):
@@ -67,182 +55,13 @@ class BaseTask(Node):
 
     _task_version: ty.Optional[str] = None  # Task writers encouraged to define and increment when implementation changes sufficiently
 
-    audit_flags: AuditFlag = AuditFlag.NONE  # What to audit. See audit flags for details
-
-    _can_resume = False  # Does the task allow resuming from previous state
-    _redirect_x = False  # Whether an X session should be created/directed
-
-    _runtime_requirements = RuntimeSpec()
-    _runtime_hints = None
-
-    _cache_dir = None  # Working directory in which to operate
-    _references = None  # List of references for a task
-
-    def __init__(self,
-                 name, splitter=None, combiner=None,
-                 other_splitters=None,
-                 inputs: ty.Union[ty.Text, File, ty.Dict, None]=None,
-                 audit_flags: AuditFlag=AuditFlag.NONE,
-                 messengers=None, messenger_args=None, workingdir=None):
-        """Initialize task with given args."""
-        super(BaseTask, self).__init__(name, splitter=splitter,
-                                       combiner=combiner,
-                                       other_splitters=other_splitters,
-                                       inputs=inputs, workingdir=workingdir)
-        self.audit_flags = audit_flags
-        self.messengers = ensure_list(messengers)
-        self.messenger_args = messenger_args
-
-    def audit(self, message, flags=None):
-        if develop:
-            with open(Path(os.path.dirname(__file__))
-                      / '..' / 'schema/context.jsonld', 'rt') as fp:
-                context = json.load(fp)
-        else:
-            context = {"@context": 'https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld'}
-        if self.audit_flags & flags:
-            if self.messenger_args:
-                send_message(make_message(message, context=context),
-                             messengers=self.messengers,
-                             **self.messenger_args)
-            else:
-                send_message(make_message(message, context=context),
-                             messengers=self.messengers)
-
-    @property
-    def can_resume(self):
-        """Task can reuse partial results after interruption
-        """
-        return self._can_resume
-
-    @abc.abstractmethod
-    def _run_task(self):
-        pass
-
-    @property
-    def cache_dir(self):
-        return self._cache_dir
-
-    @cache_dir.setter
-    def cache_dir(self, location):
-        self._cache_dir = Path(location)
-
-    @property
-    def output_dir(self):
-        return self._cache_dir / self.checksum
-
-    def audit_check(self, flag):
-        return self.audit_flags & flag
-
-    def __call__(self, cache_locations=None, **kwargs):
-        return self.run(cache_locations=cache_locations, **kwargs)
-
-    def run(self, cache_locations=None, cache_dir=None, **kwargs):
-        self.inputs = dc.replace(self.inputs, **kwargs)
-        if cache_dir is not None:
-            self.cache_dir = Path(cache_dir)
-        if self.cache_dir is None:
-            self.cache_dir = mkdtemp()
-        checksum = self.checksum
-        lockfile = self.cache_dir / (checksum + '.lock')
-        """
-        Concurrent execution scenarios
-
-        1. prior cache exists -> return result
-        2. other process running -> wait
-           a. finishes (with or without exception) -> return result
-           b. gets killed -> restart
-        3. no cache or other process -> start
-        4. two or more concurrent new processes get to start
-        """
-        # TODO add signal handler for processes killed after lock acquisition
-        with FileLock(lockfile):
-            # Let only one equivalent process run
-            #dj: for now not using cache
-            # Eagerly retrieve cached
-            # result = self.result(cache_locations=cache_locations)
-            # if result is not None:
-            #     return result
-            odir = self.output_dir
-            if not self.can_resume and odir.exists():
-                shutil.rmtree(odir)
-            cwd = os.getcwd()
-            odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-
-            # start recording provenance, but don't send till directory is created
-            # in case message directory is inside task output directory
-            if self.audit_check(AuditFlag.PROV):
-                aid = "uid:{}".format(gen_uuid())
-                start_message = {"@id": aid, "@type": "task", "startedAtTime": now()}
-            os.chdir(odir)
-            if self.audit_check(AuditFlag.PROV):
-                self.audit(start_message, AuditFlag.PROV)
-                # audit inputs
-            #check_runtime(self._runtime_requirements)
-            #isolate inputs if files
-            #cwd = os.getcwd()
-            if self.audit_check(AuditFlag.RESOURCE):
-                from ..utils.profiler import ResourceMonitor
-                resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
-            result = Result(output=None, runtime=None)
-            try:
-                if self.audit_check(AuditFlag.RESOURCE):
-                    resource_monitor.start()
-                    if self.audit_check(AuditFlag.PROV):
-                        mid = "uid:{}".format(gen_uuid())
-                        self.audit({"@id": mid, "@type": "monitor",
-                                    "startedAtTime": now(),
-                                    "wasStartedBy": aid}, AuditFlag.PROV)
-                self._run_task()
-                result.output = self._collect_outputs()
-            except Exception as e:
-                print(e)
-                #record_error(self, e)
-                raise
-            finally:
-                if self.audit_check(AuditFlag.RESOURCE):
-                    resource_monitor.stop()
-                    result.runtime = gather_runtime_info(resource_monitor.fname)
-                    if self.audit_check(AuditFlag.PROV):
-                        self.audit({"@id": mid, "endedAtTime": now(),
-                                    "wasEndedBy": aid}, AuditFlag.PROV)
-                        # audit resources/runtime information
-                        eid = "uid:{}".format(gen_uuid())
-                        entity = dc.asdict(result.runtime)
-                        entity.update(**{"@id": eid, "@type": "runtime",
-                                         "prov:wasGeneratedBy": aid})
-                        self.audit(entity, AuditFlag.PROV)
-                        self.audit({"@type": "prov:Generation",
-                                    "entity_generated": eid,
-                                    "hadActivity": mid}, AuditFlag.PROV)
-                save_result(odir, result)
-                with open(odir / '_node.pklz', 'wb') as fp:
-                    cp.dump(self, fp)
-                os.chdir(cwd)
-                if self.audit_check(AuditFlag.PROV):
-                    # audit outputs
-                    self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)
-            return result
-
-    # TODO: Decide if the following two functions should be separated
-    @abc.abstractmethod
-    def _list_outputs(self):
-        pass
-
-    def _collect_outputs(self):
-        run_output = ensure_list(self._list_outputs())
-        output_klass = make_klass(self.output_spec)
-        output = output_klass(**{f.name: None for f in
-                                 dc.fields(output_klass)})
-        return dc.replace(output, **dict(zip(self.output_names, run_output)))
-
 
 class FunctionTask(BaseTask):
 
     def __init__(self, func: ty.Callable,
                  output_spec: ty.Optional[BaseSpec]=None,
-                 name=None, splitter=None, combiner=None,
-                 other_splitters=None,
+                 name=None,
+                 splitter=None, combiner=None,
                  audit_flags: AuditFlag=AuditFlag.NONE,
                  messengers=None, messenger_args=None,
                  workingdir=None, **kwargs):
@@ -256,10 +75,10 @@ class FunctionTask(BaseTask):
                                    bases=(BaseSpec,))
         if name is None:
             name = func.__name__
-        super(FunctionTask, self).__init__(name, splitter=splitter,
-                                           combiner=combiner,
-                                           other_splitters=other_splitters,
+        super(FunctionTask, self).__init__(name,
                                            inputs=kwargs,
+                                           splitter=splitter,
+                                           combiner=combiner,
                                            audit_flags=audit_flags,
                                            messengers=messengers,
                                            messenger_args=messenger_args,
