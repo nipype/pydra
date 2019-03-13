@@ -39,29 +39,8 @@ def double(x):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_1(plugin, change_dir):
-    doubled_x = double(name="double", workingdir="test_1_{}".format(plugin))\
-            .split("x", x=list(range(3)))
-
-    assert doubled_x.state.splitter == "double.x"
-
-    sub = Submitter(plugin=plugin, runnable=doubled_x)
-    sub.run()
-    sub.close()
-    print(doubled_x.done)
-
-    # checking the results
-    results = doubled_x.result()
-    expected = [({"double.x": 0}, 0), ({"double.x": 1}, 2), ({"double.x": 2}, 4)]
-    for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
-
-
-@pytest.mark.parametrize("plugin", Plugins)
-def test_1a(plugin, change_dir):
-    doubled_x = double(name="double", workingdir="test_1a_{}".format(plugin),
-                       splitter="x", x=list(range(3)))
+def test_1(plugin):
+    doubled_x = double(name="double").split("x", x=list(range(3)))
 
     assert doubled_x.state.splitter == "double.x"
 
@@ -94,9 +73,9 @@ def multiply(x, y):
       return x*y
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_2(plugin, change_dir):
+def test_2(plugin):
     # multiply_x is an AppFuture
-    multiple_x = multiply(name="mult", workingdir="test_2_{}".format(plugin))\
+    multiple_x = multiply(name="mult")\
         .split(['x', 'y'], x=[1, 2], y=[1, 2])
 
     assert multiple_x.state.splitter == ["mult.x", "mult.y"]
@@ -119,8 +98,8 @@ def test_2(plugin, change_dir):
 # multiple_x = multiply().split(['x', 'y'], x=range(10), y=range(10)).combine('x')
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_3(plugin, change_dir):
-    multiple_x = multiply(name="mult", workingdir="test_3_{}".format(plugin))\
+def test_3(plugin):
+    multiple_x = multiply(name="mult")\
         .split(['x', 'y'], x=[1, 2], y=[1, 2])\
         .combine("x")
 
@@ -140,36 +119,13 @@ def test_3(plugin, change_dir):
         assert results["out"][i][1] == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_3a(plugin, change_dir):
-    multiple_x = multiply(name="mult", workingdir="test_3a_{}".format(plugin),
-                          splitter=['x', 'y'], x=[1, 2], y=[1, 2],
-                          combiner="x")
-
-    assert multiple_x.state.splitter == ["mult.x", "mult.y"]
-    assert multiple_x.state.combiner == ["mult.x"]
-
-    sub = Submitter(plugin=plugin, runnable=multiple_x)
-    sub.run()
-    sub.close()
-
-    # checking the results
-    results = multiple_x.result()
-    expected = [({"mult.y": 1}, [1, 2]), ({"mult.y": 2}, [2, 4])]
-
-    for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
-
-
-
 # # multiply_x is an AppFuture
 # multiple_x = multiply().split(['x', 'y'], x=range(10), y=range(10)).combine(['y', 'x'])
 # this would return a nested list of lists as a result.
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_4(plugin, change_dir):
-    multiple_x = multiply(name="mult", workingdir="test_4_{}".format(plugin))\
+def test_4(plugin):
+    multiple_x = multiply(name="mult")\
         .split(['x', 'y'], x=[1, 2], y=[1, 2])\
         .combine(["y", "x"])
 
@@ -196,8 +152,8 @@ def test_4(plugin, change_dir):
 # this will return 0 * 0, 1 * 1, and so on. and we can have any combination thereof.
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_5(plugin, change_dir):
-    multiple_x = multiply(name="mult", workingdir="test_5_{}".format(plugin))\
+def test_5(plugin):
+    multiple_x = multiply(name="mult")\
         .split(('x', 'y'), x=[1, 2], y=[1, 2])
 
     assert multiple_x.state.splitter == ("mult.x", "mult.y")
@@ -216,8 +172,8 @@ def test_5(plugin, change_dir):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_6(plugin, change_dir):
-    multiple_x = multiply(name="mult", workingdir="test_6_{}".format(plugin))\
+def test_6(plugin):
+    multiple_x = multiply(name="mult")\
         .split(('x', 'y'), x=[1, 2], y=[1, 2])\
         .combine(["x"])
 
@@ -245,8 +201,8 @@ def test_6(plugin, change_dir):
 
 @pytest.mark.parametrize("plugin", Plugins)
 @pytest.mark.xfail(reason="wip: Workflow")
-def test_7(plugin, change_dir):
-    multiple_x = multiply(name="mult", workingdir="test_7_{}".format(plugin))\
+def test_7(plugin):
+    multiple_x = multiply(name="mult")\
         .split(('x', 'y'), x=[1, 2], y=[1, 2])
 
     add_x = add2(x='multiply.out').combine('multiply.x')

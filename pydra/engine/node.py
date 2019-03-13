@@ -21,12 +21,19 @@ from tempfile import mkdtemp
 from . import state
 from . import auxiliary as aux
 from .specs import File, BaseSpec, RuntimeSpec, Result
-from .helpers import (make_klass, create_checksum, print_help, load_result,
-                      gather_runtime_info, save_result, ensure_list, get_inputs)
-from ..utils.messenger import (send_message, make_message, gen_uuid, now,
-                               AuditFlag)
+from .helpers import (
+    make_klass,
+    create_checksum,
+    print_help,
+    load_result,
+    gather_runtime_info,
+    save_result,
+    ensure_list,
+    get_inputs,
+)
+from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 
-logger = logging.getLogger('pydra')
+logger = logging.getLogger("pydra")
 
 develop = True
 
@@ -52,10 +59,17 @@ class NodeBase:
     output_spec = BaseSpec
 
     # TODO: write state should be removed
-    def __init__(self, name, splitter=None, combiner=None,
-                 inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
-                 audit_flags: AuditFlag=AuditFlag.NONE,
-                 messengers=None, messenger_args=None, workingdir=None):
+    def __init__(
+        self,
+        name,
+        splitter=None,
+        combiner=None,
+        inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
+        audit_flags: AuditFlag = AuditFlag.NONE,
+        messengers=None,
+        messenger_args=None,
+        cache_dir=None,
+    ):
         """A base structure for nodes in the computational graph (i.e. both
         ``Node`` and ``Workflow``).
 
@@ -73,13 +87,17 @@ class NodeBase:
         """
         self.name = name
         if not self.input_spec:
-            raise Exception(
-                'No input_spec in class: %s' % self.__class__.__name__)
+            raise Exception("No input_spec in class: %s" % self.__class__.__name__)
         klass = make_klass(self.input_spec)
-        self.inputs = klass(**{f.name: (None if f.default is dc.MISSING
-                                  else f.default) for f in dc.fields(klass)})
-        self.input_names = [field.name for field in dc.fields(klass)
-                            if field.name not in ["_func"]]
+        self.inputs = klass(
+            **{
+                f.name: (None if f.default is dc.MISSING else f.default)
+                for f in dc.fields(klass)
+            }
+        )
+        self.input_names = [
+            field.name for field in dc.fields(klass) if field.name not in ["_func"]
+        ]
 
         self._needed_outputs = []
         if splitter:
@@ -95,7 +113,7 @@ class NodeBase:
             self._input_sets = {}
         if inputs:
             if isinstance(inputs, dict):
-                inputs = {k:v for k,v in inputs.items() if k in self.input_names}
+                inputs = {k: v for k, v in inputs.items() if k in self.input_names}
             elif Path(inputs).is_file():
                 inputs = json.loads(Path(inputs).read_text())
             elif isinstance(inputs, str):
@@ -108,18 +126,19 @@ class NodeBase:
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
+        self.cache_dir = cache_dir
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state['input_spec'] = pk.dumps(state['input_spec'])
-        state['output_spec'] = pk.dumps(state['output_spec'])
-        state['inputs'] = dc.asdict(state['inputs'])
+        state["input_spec"] = pk.dumps(state["input_spec"])
+        state["output_spec"] = pk.dumps(state["output_spec"])
+        state["inputs"] = dc.asdict(state["inputs"])
         return state
 
     def __setstate__(self, state):
-        state['input_spec'] = pk.loads(state['input_spec'])
-        state['output_spec'] = pk.loads(state['output_spec'])
-        state['inputs'] = make_klass(state['input_spec'])(**state['inputs'])
+        state["input_spec"] = pk.loads(state["input_spec"])
+        state["output_spec"] = pk.loads(state["output_spec"])
+        state["inputs"] = make_klass(state["input_spec"])(**state["inputs"])
         self.__dict__.update(state)
 
     def help(self, returnhelp=False):
@@ -135,7 +154,7 @@ class NodeBase:
 
     def save_set(self, name, inputs, force=False):
         if name in self._input_sets and not force:
-            raise KeyError('Key {} already saved. Use force=True to override.')
+            raise KeyError("Key {} already saved. Use force=True to override.")
         self._input_sets[name] = inputs
 
     @property
@@ -161,7 +180,6 @@ class NodeBase:
     def needed_outputs(self, requires):
         self._needed_outputs = ensure_list(requires)
 
-
     def set_state(self, splitter, combiner=None):
         incoming_states = []
         for node, _, _ in self.needed_outputs:
@@ -172,11 +190,14 @@ class NodeBase:
         elif len(incoming_states):
             rpn = aux.splitter2rpn(splitter)
             # TODO: check for keys instead of just names
-            left_out = [state.name for state in incoming_states
-                        if state.name not in rpn]
+            left_out = [
+                state.name for state in incoming_states if state.name not in rpn
+            ]
 
         if splitter is not None:
-            self.state = state.State(name=self.name, splitter=splitter, combiner=combiner)
+            self.state = state.State(
+                name=self.name, splitter=splitter, combiner=combiner
+            )
         else:
             self.state = None
         return self.state
@@ -193,8 +214,7 @@ class NodeBase:
     def output(self):
         return self._output
 
-    def result(self, cache_locations=None,
-               return_state=False):
+    def result(self, cache_locations=None, return_state=False):
         self._reading_results()
         return self._result
         # return self._reading_results(cache_locations=cache_locations,
@@ -202,19 +222,25 @@ class NodeBase:
 
     def audit(self, message, flags=None):
         if develop:
-            with open(Path(os.path.dirname(__file__))
-                      / '..' / 'schema/context.jsonld', 'rt') as fp:
+            with open(
+                Path(os.path.dirname(__file__)) / ".." / "schema/context.jsonld", "rt"
+            ) as fp:
                 context = json.load(fp)
         else:
-            context = {"@context": 'https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld'}
+            context = {
+                "@context": "https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld"
+            }
         if self.audit_flags & flags:
             if self.messenger_args:
-                send_message(make_message(message, context=context),
-                             messengers=self.messengers,
-                             **self.messenger_args)
+                send_message(
+                    make_message(message, context=context),
+                    messengers=self.messengers,
+                    **self.messenger_args
+                )
             else:
-                send_message(make_message(message, context=context),
-                             messengers=self.messengers)
+                send_message(
+                    make_message(message, context=context), messengers=self.messengers
+                )
 
     @property
     def can_resume(self):
@@ -251,7 +277,7 @@ class NodeBase:
         if self.cache_dir is None:
             self.cache_dir = mkdtemp()
         checksum = self.checksum
-        lockfile = self.cache_dir / (checksum + '.lock')
+        lockfile = self.cache_dir / (checksum + ".lock")
         """
         Concurrent execution scenarios
 
@@ -265,11 +291,10 @@ class NodeBase:
         # TODO add signal handler for processes killed after lock acquisition
         with FileLock(lockfile):
             # Let only one equivalent process run
-            #dj: for now not using cache
             # Eagerly retrieve cached
-            # result = self.result(cache_locations=cache_locations)
-            # if result is not None:
-            #     return result
+            result = self.result(cache_locations=cache_locations)
+            if result is not None:
+                return result
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
@@ -285,11 +310,12 @@ class NodeBase:
             if self.audit_check(AuditFlag.PROV):
                 self.audit(start_message, AuditFlag.PROV)
                 # audit inputs
-            #check_runtime(self._runtime_requirements)
-            #isolate inputs if files
-            #cwd = os.getcwd()
+            # check_runtime(self._runtime_requirements)
+            # isolate inputs if files
+            # cwd = os.getcwd()
             if self.audit_check(AuditFlag.RESOURCE):
                 from ..utils.profiler import ResourceMonitor
+
                 resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
             result = Result(output=None, runtime=None)
             try:
@@ -297,33 +323,51 @@ class NodeBase:
                     resource_monitor.start()
                     if self.audit_check(AuditFlag.PROV):
                         mid = "uid:{}".format(gen_uuid())
-                        self.audit({"@id": mid, "@type": "monitor",
-                                    "startedAtTime": now(),
-                                    "wasStartedBy": aid}, AuditFlag.PROV)
+                        self.audit(
+                            {
+                                "@id": mid,
+                                "@type": "monitor",
+                                "startedAtTime": now(),
+                                "wasStartedBy": aid,
+                            },
+                            AuditFlag.PROV,
+                        )
                 self._run_task()
                 result.output = self._collect_outputs()
             except Exception as e:
                 print(e)
-                #record_error(self, e)
+                # record_error(self, e)
                 raise
             finally:
                 if self.audit_check(AuditFlag.RESOURCE):
                     resource_monitor.stop()
                     result.runtime = gather_runtime_info(resource_monitor.fname)
                     if self.audit_check(AuditFlag.PROV):
-                        self.audit({"@id": mid, "endedAtTime": now(),
-                                    "wasEndedBy": aid}, AuditFlag.PROV)
+                        self.audit(
+                            {"@id": mid, "endedAtTime": now(), "wasEndedBy": aid},
+                            AuditFlag.PROV,
+                        )
                         # audit resources/runtime information
                         eid = "uid:{}".format(gen_uuid())
                         entity = dc.asdict(result.runtime)
-                        entity.update(**{"@id": eid, "@type": "runtime",
-                                         "prov:wasGeneratedBy": aid})
+                        entity.update(
+                            **{
+                                "@id": eid,
+                                "@type": "runtime",
+                                "prov:wasGeneratedBy": aid,
+                            }
+                        )
                         self.audit(entity, AuditFlag.PROV)
-                        self.audit({"@type": "prov:Generation",
-                                    "entity_generated": eid,
-                                    "hadActivity": mid}, AuditFlag.PROV)
+                        self.audit(
+                            {
+                                "@type": "prov:Generation",
+                                "entity_generated": eid,
+                                "hadActivity": mid,
+                            },
+                            AuditFlag.PROV,
+                        )
                 save_result(odir, result)
-                with open(odir / '_node.pklz', 'wb') as fp:
+                with open(odir / "_node.pklz", "wb") as fp:
                     cp.dump(self, fp)
                 os.chdir(cwd)
                 if self.audit_check(AuditFlag.PROV):
@@ -339,15 +383,14 @@ class NodeBase:
     def _collect_outputs(self):
         run_output = ensure_list(self._list_outputs())
         output_klass = make_klass(self.output_spec)
-        output = output_klass(**{f.name: None for f in
-                                 dc.fields(output_klass)})
+        output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
         return dc.replace(output, **dict(zip(self.output_names, run_output)))
 
     # TODO: should change state!
     def split(self, splitter, **kwargs):
         if kwargs:
             self.inputs = dc.replace(self.inputs, **kwargs)
-            #dj:??, check if I need it
+            # dj:??, check if I need it
             self.state_inputs = kwargs
         splitter = aux.change_splitter(splitter, self.name)
         if self.state:
@@ -370,7 +413,7 @@ class NodeBase:
         try:
             self.get_input_el(ind)
             return True
-        except:  #TODO specify
+        except:  # TODO specify
             return False
 
     def get_input_el(self, ind):
@@ -378,8 +421,10 @@ class NodeBase:
         if ind is not None:
             # TODO: check if the current version requires both state_dict and inputs_dict
             state_dict = self.state.states_val[ind]
-            inputs_dict = {"{}.{}".format(self.name, k): state_dict["{}.{}".format(self.name, k)]
-                            for k in self.input_names}
+            inputs_dict = {
+                "{}.{}".format(self.name, k): state_dict["{}.{}".format(self.name, k)]
+                for k in self.input_names
+            }
 
             # reading extra inputs that come from previous nodes
             for (from_node, from_socket, to_socket) in self.needed_outputs:
@@ -387,22 +432,29 @@ class NodeBase:
                 # if the current node has no state
                 if from_node.state.combiner:
                     pdb.set_trace()
-                    inputs_dict["{}.{}".format(self.name, to_socket)] =\
-                        self._get_input_comb(from_node, from_socket, state_dict)
+                    inputs_dict[
+                        "{}.{}".format(self.name, to_socket)
+                    ] = self._get_input_comb(from_node, from_socket, state_dict)
                 else:
                     dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
                     # TODO: do I need this if, what if this is wf?
                     if is_node(from_node):
-                        out_from = getattr(from_node.results_dict[dir_nm_el_from].output, from_socket)
+                        out_from = getattr(
+                            from_node.results_dict[dir_nm_el_from].output, from_socket
+                        )
                         if out_from:
                             inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
                         else:
-                            raise Exception("output from {} doesnt exist".format(from_node))
+                            raise Exception(
+                                "output from {} doesnt exist".format(from_node)
+                            )
             return state_dict, inputs_dict
 
         else:
-            inputs_dict = {"{}.{}".format(self.name, inp): getattr(self.inputs, inp)
-                            for inp in self.input_names}
+            inputs_dict = {
+                "{}.{}".format(self.name, inp): getattr(self.inputs, inp)
+                for inp in self.input_names
+            }
             # TODO: adding parts from self.needed_outputs
             return None, inputs_dict
 
@@ -412,10 +464,13 @@ class NodeBase:
         state_dict_all = self._state_dict_all_comb(from_node, state_dict)
         inputs_all = []
         for state in state_dict_all:
-            dir_nm_el_from = "_".join([
-                "{}:{}".format(i, j) for i, j in list(state.items())])
+            dir_nm_el_from = "_".join(
+                ["{}:{}".format(i, j) for i, j in list(state.items())]
+            )
             if is_node(from_node):
-                out_from = getattr(from_node.results_dict[dir_nm_el_from].output, from_socket)
+                out_from = getattr(
+                    from_node.results_dict[dir_nm_el_from].output, from_socket
+                )
                 if out_from:
                     inputs_all.append(out_from)
                 else:
@@ -445,10 +500,10 @@ class NodeBase:
         index_generator = itertools.product(*all_elements)
         state_dict_all = []
         for ind in index_generator:
-            state_dict_all.append(self._state_dict_el_for_comb(ind, state_dict,
-                                                               axis_for_input))
+            state_dict_all.append(
+                self._state_dict_el_for_comb(ind, state_dict, axis_for_input)
+            )
         return state_dict_all
-
 
     # similar to State.state_value (could be combined?)
     def _state_dict_el_for_comb(self, ind, state_inputs, axis_for_input, value=True):
@@ -473,25 +528,27 @@ class NodeBase:
         # in py3.7 we can skip OrderedDict
         return OrderedDict(sorted(state_dict_el.items(), key=lambda t: t[0]))
 
-
     def _directory_name_state_surv(self, state_dict):
         """eliminating all inputs from state dictionary that are not in
         the splitter of the node;
         creating a directory name
         """
         # should I be using self.state._splitter_rpn_comb?
-        state_surv_dict = dict((key, val) for (key, val) in state_dict.items()
-                               if key in self.state.splitter_rpn)
-        dir_nm_el = "_".join(["{}:{}".format(i, j)
-                              for i, j in list(state_surv_dict.items())])
+        state_surv_dict = dict(
+            (key, val)
+            for (key, val) in state_dict.items()
+            if key in self.state.splitter_rpn
+        )
+        dir_nm_el = "_".join(
+            ["{}:{}".format(i, j) for i, j in list(state_surv_dict.items())]
+        )
         return dir_nm_el, state_surv_dict
-
 
     # checking if all outputs are saved
     @property
     def done(self):
         # once _done os True, this should not change
-        logger.debug('done {}'.format(self._done))
+        logger.debug("done {}".format(self._done))
         if self._done:
             return self._done
         else:
@@ -509,12 +566,11 @@ class NodeBase:
     def _state_dict_to_list(self, container):
         """creating a list of tuples from dictionary and changing key (state) from str to dict"""
         if type(container) is dict:
-                val_l = list(container.items())
+            val_l = list(container.items())
         else:
             raise Exception("{} has to be dict".format(container))
         val_dict_l = [(self.state.states_val[i[0]], i[1]) for i in val_l]
         return val_dict_l
-
 
     def _combined_output(self, key_out, state_dict, output_el):
         for inp in self.state.combiner_all:
@@ -524,7 +580,6 @@ class NodeBase:
             self._output[key_out][state_tuple].append(output_el)
         else:
             self._output[key_out][state_tuple] = [output_el]
-
 
     def _reading_results_one_output(self, key_out):
         """reading results for one specific output name"""
@@ -538,7 +593,7 @@ class NodeBase:
                 # this is used for wf (can be no splitter but multiple values from node splitter)
                 else:
                     result = val_l
-        elif (self.state.combiner and not self.state._splitter_rpn_comb):
+        elif self.state.combiner and not self.state._splitter_rpn_comb:
             val_l = self._state_dict_to_list(self.output[key_out])
             result = val_l[0]
         elif self.state.splitter:
@@ -548,23 +603,30 @@ class NodeBase:
 
 
 class Node(NodeBase):
-    def __init__(self, name, splitter=None,
-                 inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
-                 audit_flags: AuditFlag=AuditFlag.NONE,
-                 messengers=None, messenger_args=None, workingdir=None,
-                 other_splitters=None, combiner=None):
-        super(Node, self).__init__(name=name, splitter=splitter,
-                                   inputs=inputs,
-                                   combiner=combiner,
-                                   audit_flags=audit_flags,
-                                   messengers=messengers,
-                                   messenger_args=messenger_args)
+    def __init__(
+        self,
+        name,
+        splitter=None,
+        inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
+        audit_flags: AuditFlag = AuditFlag.NONE,
+        messengers=None,
+        messenger_args=None,
+        cache_dir=None,
+        combiner=None,
+    ):
+        super(Node, self).__init__(
+            name=name,
+            splitter=splitter,
+            inputs=inputs,
+            combiner=combiner,
+            audit_flags=audit_flags,
+            messengers=messengers,
+            messenger_args=messenger_args,
+            cache_dir=cache_dir
+        )
 
-        # working directory for node, will be change if node is a part of a wf
-        self.workingdir = workingdir
         # dictionary of results from tasks
         self.results_dict = {}
-
 
     def run_interface_el(self, ind):
         """ running interface one element generated from node_state."""
@@ -573,13 +635,9 @@ class Node(NodeBase):
             state_dict, inputs_dict = self.get_input_el(ind)
         else:
             _, inputs_dict = self.get_input_el(ind)
-        os.makedirs(os.path.join(os.getcwd(), self.workingdir), exist_ok=True)
-        self.cache_dir = os.path.join(os.getcwd(), self.workingdir)
-        interf_inputs = dict((k.split(".")[1], v) for k,v in inputs_dict.items())
+        interf_inputs = dict((k.split(".")[1], v) for k, v in inputs_dict.items())
         res = self.run(**interf_inputs)
-        return ind, res #TODO NOW: don't have to return
-
-
+        return ind, res  # TODO NOW: don't have to return
 
     def get_output(self):
         """collecting all outputs and updating self._output
@@ -592,10 +650,14 @@ class Node(NodeBase):
                     state_dict = val
                     if self.state.splitter:
                         output_el = getattr(self.results_dict[ii].output, key_out)
-                        if not self.state.combiner: # only splitter
-                            self._output[key_out][tuple(self.state.states_val[ii].items())] = output_el
+                        if not self.state.combiner:  # only splitter
+                            self._output[key_out][
+                                tuple(self.state.states_val[ii].items())
+                            ] = output_el
                         else:
-                            self._combined_output(key_out, deepcopy(state_dict), output_el)
+                            self._combined_output(
+                                key_out, deepcopy(state_dict), output_el
+                            )
                     else:
                         raise Exception("not implemented, TODO")
             else:
@@ -603,7 +665,6 @@ class Node(NodeBase):
                 # TODO should I have: self._output[key_out][None] or self._output[key_out]?
                 self._output[key_out][None] = output_el
         return self._output
-
 
     # dj: should I combine with get_output?
     def _check_all_results(self):
@@ -622,8 +683,7 @@ class Node(NodeBase):
         self._done = True
         return True
 
-
-    def _reading_results(self, ):
+    def _reading_results(self,):
         """ collecting all results for all output names"""
         """
         return load_result(self.checksum,
@@ -636,16 +696,24 @@ class Node(NodeBase):
         for key_out in self.output_names:
             output = self.output[key_out]
             if self.state:
-                self._result[key_out] = [(dict(k), v) for k,v in output.items()]
+                self._result[key_out] = [(dict(k), v) for k, v in output.items()]
             else:
                 self._result[key_out] = (None, output[None])
 
 
 class Workflow(NodeBase):
-    def __init__(self, name, inputs=None, wf_output_names=None, splitter=None,
-                 nodes=None, workingdir=None, *args, **kwargs):
-        super(Workflow, self).__init__(name=name, splitter=splitter, inputs=inputs,
-                                       *args, **kwargs)
+    def __init__(
+        self,
+        name,
+        inputs=None,
+        wf_output_names=None,
+        splitter=None,
+        nodes=None,
+        cache_dir=None,
+    ):
+        super(Workflow, self).__init__(
+            name=name, splitter=splitter, inputs=inputs, cache_dir=cache_dir
+        )
 
         self.graph = nx.DiGraph()
         # all nodes in the workflow (probably will be removed)
@@ -662,8 +730,6 @@ class Workflow(NodeBase):
         self._node_names = {}
         # key: name of a node, value: splitter of the node
         self._node_splitters = {}
-        # dj: not sure if this should be different than base_dir
-        self.workingdir = os.path.join(os.getcwd(), workingdir)
         # list of (nodename, output name in the name, output name in wf) or (nodename, output name in the name)
         # dj: using different name than for node, since this one it is defined by a user
         self.wf_output_names = wf_output_names
@@ -673,7 +739,6 @@ class Workflow(NodeBase):
         # in case of inner workflow this points to the main/parent workflow
         self.parent_wf = None
 
-
     @property
     def nodes(self):
         return self._nodes
@@ -682,7 +747,6 @@ class Workflow(NodeBase):
     def graph_sorted(self):
         # TODO: should I always update the graph?
         return list(nx.topological_sort(self.graph))
-
 
     def split_node(self, splitter, node=None, inputs=None):
         """this is setting a splitter to the wf's nodes (not to the wf)"""
@@ -696,7 +760,6 @@ class Workflow(NodeBase):
         self._node_splitters[node.name] = node.splitter
         return self
 
-
     def combine_node(self, combiner, node=None):
         """this is setting a combiner to the wf's nodes (not to the wf)"""
         if type(node) is str:
@@ -708,13 +771,14 @@ class Workflow(NodeBase):
         node.combine(combiner=combiner)
         return self
 
-
     def get_output(self):
         # not sure, if I should collect output of all nodes or only the ones that are used in wf.output
         self.node_outputs = {}
         for nn in self.graph:
             if self.splitter:
-                self.node_outputs[nn.name] = [ni.get_output() for ni in self.inner_nodes[nn.name]]
+                self.node_outputs[nn.name] = [
+                    ni.get_output() for ni in self.inner_nodes[nn.name]
+                ]
             else:
                 self.node_outputs[nn.name] = nn.get_output()
         if self.wf_output_names:
@@ -730,19 +794,25 @@ class Workflow(NodeBase):
                         self._output[out_wf_nm] = {}
                         for (i, val) in enumerate(self.state.states_val):
                             wf_inputs_dict = val
-                            dir_nm_el, _ = self._directory_name_state_surv(wf_inputs_dict)
+                            dir_nm_el, _ = self._directory_name_state_surv(
+                                wf_inputs_dict
+                            )
                             output_el = self.node_outputs[node_nm][i][out_nd_nm]
-                            if not self.combiner: # splitter only
+                            if not self.combiner:  # splitter only
                                 self._output[out_wf_nm][dir_nm_el] = output_el[1]
                             else:
-                                self._combined_output(out_wf_nm, wf_inputs_dict, output_el[1])
+                                self._combined_output(
+                                    out_wf_nm, wf_inputs_dict, output_el[1]
+                                )
                     else:
                         self._output[out_wf_nm] = self.node_outputs[node_nm][out_nd_nm]
                 else:
                     raise Exception(
-                        "the key {} is already used in workflow.result".format(out_wf_nm))
+                        "the key {} is already used in workflow.result".format(
+                            out_wf_nm
+                        )
+                    )
         return self._output
-
 
     # TODO: might merge with the function from Node
     def _check_all_results(self):
@@ -757,7 +827,6 @@ class Workflow(NodeBase):
         self._done = True
         return True
 
-
     def _reading_results(self):
         """reading all results for the workflow,
         nodes/outputs names specified in self.wf_output_names
@@ -766,7 +835,6 @@ class Workflow(NodeBase):
             for out in self.wf_output_names:
                 key_out = out[-1]
                 self._result[key_out] = self._reading_results_one_output(key_out)
-
 
     # TODO: this should be probably using add method, but might be also removed completely
     def add_nodes(self, nodes):
@@ -779,10 +847,18 @@ class Workflow(NodeBase):
             self.connected_var[nn] = {}
             self._node_names[nn.name] = nn
 
-
     # TODO: workingir shouldn't have None
-    def add(self, runnable, name=None, workingdir=None, inputs=None,
-            output_names=None, splitter=None, combiner=None, **kwargs):
+    def add(
+        self,
+        runnable,
+        name=None,
+        inputs=None,
+        output_names=None,
+        splitter=None,
+        combiner=None,
+            cache_dir=None,
+        **kwargs
+    ):
         # TODO: should I also accept normal function?
         if is_node(runnable):
             node = runnable
@@ -794,14 +870,19 @@ class Workflow(NodeBase):
                 output_names = ["out"]
             if not name:
                 raise Exception("you have to specify name for the node")
-            if not workingdir:
-                workingdir = name
             from .task import to_task
-            node = to_task(runnable, workingdir=workingdir,
-                        name=name,
-                        inputs=inputs, splitter=splitter,
-                        other_splitters=self._node_splitters,
-                        combiner=combiner, output_names=output_names)
+
+            node = to_task(
+                runnable,
+                cache_dir = cache_dir or self.cache_dir,
+                # TODO: pass on as many self defaults as needed
+                name=name,
+                inputs=inputs,
+                splitter=splitter,
+                other_splitters=self._node_splitters,
+                combiner=combiner,
+                output_names=output_names,
+            )
         else:
             raise ValueError("Unknown workflow element: {!r}".format(runnable))
         self.add_nodes([node])
@@ -817,7 +898,6 @@ class Workflow(NodeBase):
                 self.connect_wf_input(source, node.name, inp)
         return self
 
-
     def connect(self, from_node_nm, from_socket, to_node_nm, to_socket):
         from_node = self._node_names[from_node_nm]
         to_node = self._node_names[to_node_nm]
@@ -826,43 +906,52 @@ class Workflow(NodeBase):
             self.add_nodes(to_node)
         self.connected_var[to_node][to_socket] = (from_node, from_socket)
         # from_node.sending_output.append((from_socket, to_node, to_socket))
-        logger.debug('connecting {} and {}'.format(from_node, to_node))
-
+        logger.debug("connecting {} and {}".format(from_node, to_node))
 
     def connect_wf_input(self, inp_wf, node_nm, inp_nd):
         self.needed_inp_wf.append((node_nm, inp_wf, inp_nd))
-
 
     def preparing(self, wf_inputs=None, wf_inputs_ind=None, st_inputs=None):
         """preparing nodes which are connected: setting the final splitter and state_inputs"""
         for node_nm, inp_wf, inp_nd in self.needed_inp_wf:
             node = self._node_names[node_nm]
             if "{}.{}".format(self.name, inp_wf) in wf_inputs:
-                node.state_inputs.update({
-                    "{}.{}".format(node_nm, inp_nd):
-                    wf_inputs["{}.{}".format(self.name, inp_wf)]
-                })
-                node.inputs.update({
-                    "{}.{}".format(node_nm, inp_nd):
-                    wf_inputs["{}.{}".format(self.name, inp_wf)]
-                })
+                node.state_inputs.update(
+                    {
+                        "{}.{}".format(node_nm, inp_nd): wf_inputs[
+                            "{}.{}".format(self.name, inp_wf)
+                        ]
+                    }
+                )
+                node.inputs.update(
+                    {
+                        "{}.{}".format(node_nm, inp_nd): wf_inputs[
+                            "{}.{}".format(self.name, inp_wf)
+                        ]
+                    }
+                )
             else:
-                raise Exception("{}.{} not in the workflow inputs".format(self.name, inp_wf))
+                raise Exception(
+                    "{}.{} not in the workflow inputs".format(self.name, inp_wf)
+                )
         for nn in self.graph_sorted:
             if not st_inputs:
-                st_inputs=wf_inputs
+                st_inputs = wf_inputs
             dir_nm_el, _ = self._directory_name_state_surv(st_inputs)
             if not self.splitter:
                 dir_nm_el = ""
-            nn.workingdir = os.path.join(self.workingdir, dir_nm_el, nn.name)
             nn._done = False  # helps when mp is used
             try:
                 for inp, (out_node, out_var) in self.connected_var[nn].items():
-                    nn.ready2run = False  #it has some history (doesnt have to be in the loop)
+                    nn.ready2run = (
+                        False
+                    )  # it has some history (doesnt have to be in the loop)
                     nn.state_inputs.update(out_node.state_inputs)
                     nn.needed_outputs.append((out_node, out_var, inp))
-                    #if there is no splitter provided, i'm assuming that splitter is taken from the previous node
-                    if (not nn.splitter or nn.splitter == out_node.splitter) and out_node.splitter:
+                    # if there is no splitter provided, i'm assuming that splitter is taken from the previous node
+                    if (
+                        not nn.splitter or nn.splitter == out_node.splitter
+                    ) and out_node.splitter:
                         # TODO!!: what if I have more connections, not only from one node
                         if out_node.combiner:
                             nn.splitter = out_node.state.splitter_comb
@@ -874,7 +963,6 @@ class Workflow(NodeBase):
                 # tmp: we don't care about nn that are not in self.connected_var
                 pass
             nn.prepare_state_input()
-
 
     # removing temp. from Workflow
     # def run(self, plugin="serial"):
@@ -888,7 +976,7 @@ class Workflow(NodeBase):
 
 
 def is_function(obj):
-    return hasattr(obj, '__call__')
+    return hasattr(obj, "__call__")
 
 
 def is_node(obj):

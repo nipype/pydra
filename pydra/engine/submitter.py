@@ -5,7 +5,8 @@ from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
 from .node import NodeBase
 
 import logging
-logger = logging.getLogger('nipype.workflow')
+
+logger = logging.getLogger("nipype.workflow")
 
 
 class Submitter(object):
@@ -49,7 +50,6 @@ class Submitter(object):
             time.sleep(3)
         self.node.get_output()
 
-
     def _submit_node(self, node):
         """submitting nodes's interface for all states"""
         if node.state:
@@ -65,7 +65,6 @@ class Submitter(object):
         res = self.worker.run_el(node.run_interface_el, ind)
         # saving results in a node dictionary
         node.results_dict[res[0]] = res[1]
-
 
     def run_workflow(self, workflow=None, ready=True):
         """the main function to run Workflow"""
@@ -120,7 +119,6 @@ class Submitter(object):
         workflow.preparing(wf_inputs=wf_inputs, st_inputs=st_inputs)
         self._run_workflow_nd(workflow=workflow)
 
-
     def _run_workflow_nd(self, workflow):
         """iterating over all nodes from a workflow and submitting them or adding to the node_line"""
         for (i_n, node) in enumerate(workflow.graph_sorted):
@@ -128,7 +126,7 @@ class Submitter(object):
             self._to_finish.append(node)
             # submitting all the nodes who are self sufficient (self.workflow.graph is already sorted)
             if node.ready2run:
-                if hasattr(node, 'interface'):
+                if hasattr(node, "interface"):
                     self._submit_node(node)
                 else:  # it's workflow
                     self.run_workflow(workflow=node)
@@ -143,23 +141,25 @@ class Submitter(object):
         # all nodes that are not self sufficient (not ready to run) will go to the line
         # iterating over all elements
         for nn in list(workflow.graph_sorted)[i_n:]:
-            if hasattr(nn, 'interface'):
+            if hasattr(nn, "interface"):
                 for ind in nn.state.index_generator:
                     self._to_finish.append(nn)
                     self.node_line.append((nn, ind))
-            else:  #wf
+            else:  # wf
                 self.run_workflow(workflow=nn, ready=False)
 
     def _nodes_check(self):
         """checking which nodes-states are ready to run and running the ones that are ready"""
         _to_remove = []
         for (to_node, ind) in self.node_line:
-            if hasattr(to_node, 'interface'):
-                print("_NODES_CHECK INPUT", to_node.name, to_node.checking_input_el(ind))
+            if hasattr(to_node, "interface"):
+                print(
+                    "_NODES_CHECK INPUT", to_node.name, to_node.checking_input_el(ind)
+                )
                 if to_node.checking_input_el(ind):
                     self._submit_node_el(to_node, ind)
                     _to_remove.append((to_node, ind))
-            else:  #wf
+            else:  # wf
                 if to_node.checking_input_el(ind):
                     self._run_workflow_el(workflow=to_node, ind=ind, collect_inp=True)
                     _to_remove.append((to_node, ind))
