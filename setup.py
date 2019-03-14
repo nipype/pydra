@@ -34,18 +34,19 @@ def main():
         EXTRA_REQUIRES,
     )
 
-    pkg_data = {'pydra': ['schema/context.jsonld']}
+    pkg_data = {"pydra": ["schema/context.jsonld"]}
     root_dir = os.path.dirname(os.path.abspath(getfile(currentframe())))
 
     version = None
     cmdclass = {}
-    if os.path.isfile(os.path.join(root_dir, 'pydra', 'VERSION')):
-        with open(os.path.join(root_dir, 'pydra', 'VERSION')) as vfile:
+    if os.path.isfile(os.path.join(root_dir, "pydra", "VERSION")):
+        with open(os.path.join(root_dir, "pydra", "VERSION")) as vfile:
             version = vfile.readline().strip()
-        pkg_data['pydra'].insert(0, 'VERSION')
+        pkg_data["pydra"].insert(0, "VERSION")
 
     if version is None:
         import versioneer
+
         version = versioneer.get_version()
         cmdclass = versioneer.get_cmdclass()
 

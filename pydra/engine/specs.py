@@ -3,8 +3,8 @@ from hashlib import sha256
 from pathlib import Path
 import typing as ty
 
-File = ty.NewType('File', Path)
-Directory = ty.NewType('Directory', Path)
+File = ty.NewType("File", Path)
+Directory = ty.NewType("Directory", Path)
 
 
 @dc.dataclass
@@ -17,6 +17,7 @@ class SpecInfo:
 @dc.dataclass(order=True)
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs"""
+
     @property
     def hash(self):
         """Compute a basic hash for any given set of fields"""
@@ -37,24 +38,23 @@ class Result:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        fields = tuple(state['output'].__annotations__.items())
-        state['output_spec'] = (state['output'].__class__.__name__,
-                                fields)
-        state['output'] = dc.asdict(state['output'])
+        fields = tuple(state["output"].__annotations__.items())
+        state["output_spec"] = (state["output"].__class__.__name__, fields)
+        state["output"] = dc.asdict(state["output"])
         return state
 
     def __setstate__(self, state):
-        spec = list(state['output_spec'])
-        del state['output_spec']
+        spec = list(state["output_spec"])
+        del state["output_spec"]
         klass = dc.make_dataclass(spec[0], list(spec[1]))
-        state['output'] = klass(**state['output'])
+        state["output"] = klass(**state["output"])
         self.__dict__.update(state)
 
 
 @dc.dataclass
 class RuntimeSpec:
     outdir: ty.Optional[str] = None
-    container: ty.Optional[str] = 'shell'
+    container: ty.Optional[str] = "shell"
     network: bool = False
     """
     from CWL:
@@ -88,18 +88,31 @@ class ContainerSpec(ShellSpec):
     image: ty.Union[File, str]
     container: ty.Union[File, str, None]
     container_xargs: ty.Optional[ty.List[str]] = None
-    bindings: ty.Optional[ty.List[ty.Tuple[
-        Path,  # local path
-        Path,  # container path
-        ty.Optional[str]  # mount mode
-    ]]] = None
+    bindings: ty.Optional[
+        ty.List[
+            ty.Tuple[
+                Path,  # local path
+                Path,  # container path
+                ty.Optional[str],  # mount mode
+            ]
+        ]
+    ] = None
 
 
 @dc.dataclass
 class DockerSpec(ContainerSpec):
-    container: str = 'docker'
+    container: str = "docker"
 
 
 @dc.dataclass
 class SingularitySpec(ContainerSpec):
-    container: str = 'singularity'
+    container: str = "singularity"
+
+
+"""
+@dc.dataclass
+class OutputLink:
+    input: str
+    cache_location: Path
+    output: str
+"""
