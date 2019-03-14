@@ -99,7 +99,7 @@ class FunctionTask(BaseTask):
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
-            cache_dir=cache_dir
+            cache_dir=cache_dir,
         )
         if output_spec is None:
             if "return" not in func.__annotations__:

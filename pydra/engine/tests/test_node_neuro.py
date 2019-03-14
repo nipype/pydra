@@ -4,7 +4,7 @@ import pytest
 from ..node import Node, Workflow
 from ..submitter import Submitter
 
-#dj niworkflows vs ...??
+# dj niworkflows vs ...??
 from nipype.interfaces.utility import Rename
 import nipype.interfaces.freesurfer as fs
 
@@ -36,14 +36,10 @@ DEFAULT_MEMORY_MIN_GB = None
 Inputs = {
     "subject_id": "sub-01",
     "output_spaces": ["fsaverage", "fsaverage5"],
-    "source_file":
-    "/fmriprep_test/workdir1/fmriprep_wf/single_subject_01_wf/func_preproc_ses_test_task_fingerfootlips_wf/bold_t1_trans_wf/merge/vol0000_xform-00000_merged.nii",
-    "t1_preproc":
-    "/fmriprep_test/output1/fmriprep/sub-01/anat/sub-01_T1w_preproc.nii.gz",
-    "t1_2_fsnative_forward_transform":
-    "/fmriprep_test/workdir1/fmriprep_wf/single_subject_01_wf/anat_preproc_wf/surface_recon_wf/t1_2_fsnative_xfm/out.lta",
-    "subjects_dir":
-    "/fmriprep_test/output1/freesurfer/"
+    "source_file": "/fmriprep_test/workdir1/fmriprep_wf/single_subject_01_wf/func_preproc_ses_test_task_fingerfootlips_wf/bold_t1_trans_wf/merge/vol0000_xform-00000_merged.nii",
+    "t1_preproc": "/fmriprep_test/output1/fmriprep/sub-01/anat/sub-01_T1w_preproc.nii.gz",
+    "t1_2_fsnative_forward_transform": "/fmriprep_test/workdir1/fmriprep_wf/single_subject_01_wf/anat_preproc_wf/surface_recon_wf/t1_2_fsnative_xfm/out.lta",
+    "subjects_dir": "/fmriprep_test/output1/freesurfer/",
 }
 
 Plugins = ["serial"]
@@ -52,7 +48,7 @@ Plugins = ["serial", "mp", "cf", "dask"]
 
 def select_target(subject_id, space):
     """ Given a source subject ID and a target space, get the target subject ID """
-    return subject_id if space == 'fsnative' else space
+    return subject_id if space == "fsnative" else space
 
 
 @pytest.mark.skipif(no_fmriprep, reason="No fmriprep")
@@ -65,11 +61,18 @@ def test_neuro(change_dir, plugin):
     #                       'mem_gb', 'output_spaces', 'medial_surface_nan'],
     #               outputs='surfaces')
     #
-    #dj: why do I need outputs?
+    # dj: why do I need outputs?
 
-    wf = Workflow(name=Name, inputs=Inputs,
-                  workingdir="test_neuro_{}".format(plugin), write_state=False,
-        wf_output_names=[("sampler", "out_file", "sampler_out"), ("targets", "out", "target_out")])
+    wf = Workflow(
+        name=Name,
+        inputs=Inputs,
+        workingdir="test_neuro_{}".format(plugin),
+        write_state=False,
+        wf_output_names=[
+            ("sampler", "out_file", "sampler_out"),
+            ("targets", "out", "target_out"),
+        ],
+    )
 
     # @interface
     # def select_target(subject_id, space):
@@ -80,26 +83,43 @@ def test_neuro(change_dir, plugin):
     #   .split('space', space=[space for space in wf.inputs.output_spaces
     #                        if space.startswith('fs')])
 
-    #dj: don't have option in split to connect with wf input
+    # dj: don't have option in split to connect with wf input
 
-    wf.add(runnable=select_target, name="targets", subject_id="subject_id",
-           input_names=["subject_id", "space"], output_names=["out"],
-           write_state=False)\
-        .split_node(splitter="space", inputs={"space": [space for space in Inputs["output_spaces"]
-                                               if space.startswith("fs")]})
+    wf.add(
+        runnable=select_target,
+        name="targets",
+        subject_id="subject_id",
+        input_names=["subject_id", "space"],
+        output_names=["out"],
+        write_state=False,
+    ).split_node(
+        splitter="space",
+        inputs={
+            "space": [
+                space for space in Inputs["output_spaces"] if space.startswith("fs")
+            ]
+        },
+    )
 
     # wf.add('rename_src', Rename(format_string='%(subject)s',
     #                             keep_ext=True,
     #                             in_file=wf.inputs.source_file))
     #   .split('subject')
 
-    wf.add(name='rename_src',
-           runnable=Rename(format_string='%(subject)s', keep_ext=True),
-                                in_file="source_file",
-                                output_names=["out_file"],
-           write_state=False)\
-        .split_node('subject', inputs={"subject": [space for space in Inputs["output_spaces"]
-                                               if space.startswith("fs")]}) #TODO: now it's only one subject
+    wf.add(
+        name="rename_src",
+        runnable=Rename(format_string="%(subject)s", keep_ext=True),
+        in_file="source_file",
+        output_names=["out_file"],
+        write_state=False,
+    ).split_node(
+        "subject",
+        inputs={
+            "subject": [
+                space for space in Inputs["output_spaces"] if space.startswith("fs")
+            ]
+        },
+    )  # TODO: now it's only one subject
 
     # wf.add('resampling_xfm',
     #        fs.utils.LTAConvert(in_lta='identity.nofile',
@@ -110,14 +130,21 @@ def test_neuro(change_dir, plugin):
     #                                         in_lta2=wf.inputs.t1_2_fsnative_forward_transform,
     #                                         in_lta1=wf.resampling_xfm.out_lta))
 
-
-    wf.add(name='resampling_xfm',
-           runnable=fs.utils.LTAConvert(in_lta='identity.nofile', out_lta=True),
-           source_file="source_file", target_file="t1_preproc",
-           output_names=["out_lta"], write_state=False)\
-        .add(name='set_xfm_source', runnable=ConcatenateLTA(out_type='RAS2RAS'),
-            in_lta2="t1_2_fsnative_forward_transform", in_lta1="resampling_xfm.out_lta",
-            output_names=["out_file"], write_state=False)
+    wf.add(
+        name="resampling_xfm",
+        runnable=fs.utils.LTAConvert(in_lta="identity.nofile", out_lta=True),
+        source_file="source_file",
+        target_file="t1_preproc",
+        output_names=["out_lta"],
+        write_state=False,
+    ).add(
+        name="set_xfm_source",
+        runnable=ConcatenateLTA(out_type="RAS2RAS"),
+        in_lta2="t1_2_fsnative_forward_transform",
+        in_lta1="resampling_xfm.out_lta",
+        output_names=["out_file"],
+        write_state=False,
+    )
 
     # wf.add('sampler',
     #        fs.SampleToSurface(sampling_method='average', sampling_range=(0, 1, 0.2),
@@ -132,17 +159,29 @@ def test_neuro(change_dir, plugin):
     #         mem_gb=mem_gb * 3)
     #        .split([('source_file', 'target_subject'), 'hemi'], hemi=['lh', 'rh'])
 
+    wf.add(
+        name="sampler",
+        runnable=fs.SampleToSurface(
+            sampling_method="average",
+            sampling_range=(0, 1, 0.2),
+            sampling_units="frac",
+            interp_method="trilinear",
+            cortex_mask=True,
+            override_reg_subj=True,
+            out_type="gii",
+        ),
+        write_state=False,
+        subjects_dir="subjects_dir",
+        subject_id="subject_id",
+        reg_file="set_xfm_source.out_file",
+        target_subject="targets.out",
+        source_file="rename_src.out_file",
+        output_names=["out_file"],
+    ).split_node(
+        splitter=[("_targets", "_rename_src"), "hemi"], inputs={"hemi": ["lh", "rh"]}
+    )
 
-    wf.add(name='sampler',
-           runnable=fs.SampleToSurface(sampling_method='average', sampling_range=(0, 1, 0.2),
-                                  sampling_units='frac', interp_method='trilinear',
-                                  cortex_mask=True, override_reg_subj=True,
-                                  out_type='gii'), write_state=False,
-           subjects_dir="subjects_dir", subject_id="subject_id", reg_file="set_xfm_source.out_file",
-           target_subject="targets.out", source_file="rename_src.out_file", output_names=["out_file"])\
-        .split_node(splitter=[('_targets', "_rename_src"), 'hemi'], inputs={"hemi": ['lh', 'rh']})
-
-    #dj: adding combiner to the last node
+    # dj: adding combiner to the last node
     wf.combine_node(combiner="hemi")
 
     sub = Submitter(plugin=plugin, runnable=wf)
@@ -160,7 +199,6 @@ def test_neuro(change_dir, plugin):
     assert "targets.space" in list(wf.output["sampler_out"].keys())[0]
     # hemi is eliminated from the state inputs after combiner
     assert "sampler.hemi" not in list(wf.output["sampler_out"].keys())[0]
-
 
     # dj: no conditions
 

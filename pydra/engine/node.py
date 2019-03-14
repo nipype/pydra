@@ -258,7 +258,8 @@ class NodeBase:
 
     @cache_dir.setter
     def cache_dir(self, location):
-        self._cache_dir = Path(location)
+        if location is not None:
+            self._cache_dir = Path(location)
 
     @property
     def output_dir(self):
@@ -292,9 +293,11 @@ class NodeBase:
         with FileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
+            """
             result = self.result(cache_locations=cache_locations)
             if result is not None:
                 return result
+            """
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
@@ -622,7 +625,7 @@ class Node(NodeBase):
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
-            cache_dir=cache_dir
+            cache_dir=cache_dir,
         )
 
         # dictionary of results from tasks
@@ -856,7 +859,7 @@ class Workflow(NodeBase):
         output_names=None,
         splitter=None,
         combiner=None,
-            cache_dir=None,
+        cache_dir=None,
         **kwargs
     ):
         # TODO: should I also accept normal function?
@@ -874,7 +877,7 @@ class Workflow(NodeBase):
 
             node = to_task(
                 runnable,
-                cache_dir = cache_dir or self.cache_dir,
+                cache_dir=cache_dir or self.cache_dir,
                 # TODO: pass on as many self defaults as needed
                 name=name,
                 inputs=inputs,

@@ -11,7 +11,7 @@ import threading
 from time import time
 
 # Init variables
-_MB = 1024.0**2
+_MB = 1024.0 ** 2
 
 
 class ResourceMonitor(threading.Thread):
@@ -21,18 +21,18 @@ class ResourceMonitor(threading.Thread):
     """
 
     def __init__(self, pid, interval=5, logdir=None, fname=None, python=True):
-        '''
+        """
         if freq < 0.2:
             raise RuntimeError(
                 'Frequency (%0.2fs) cannot be lower than 0.2s' % freq)
-        '''
+        """
 
         if fname is None:
-            fname = 'proc-%d_time-%s_freq-%0.2f.log' % (pid, time(), interval)
+            fname = "proc-%d_time-%s_freq-%0.2f.log" % (pid, time(), interval)
         if logdir is None:
             logdir = Path.cwd()
         self._fname = logdir / fname
-        self._logfile = open(self._fname, 'w')
+        self._logfile = open(self._fname, "w")
         self._interval = interval
         self._python = python
 
@@ -87,9 +87,7 @@ class ResourceMonitor(threading.Thread):
             except psutil.NoSuchProcess:
                 pass
 
-        print(
-            '%f,%f,%f,%f' % (time(), cpu, rss / _MB, vms / _MB),
-            file=self._logfile)
+        print("%f,%f,%f,%f" % (time(), cpu, rss / _MB, vms / _MB), file=self._logfile)
         self._logfile.flush()
 
     def run(self):
@@ -122,7 +120,7 @@ def log_nodes_cb(node, status):
         status info to the callback logger
     """
 
-    if status != 'end':
+    if status != "end":
         return
 
     # Import packages
@@ -130,23 +128,22 @@ def log_nodes_cb(node, status):
     import json
 
     status_dict = {
-        'name': node.name,
-        'id': node._id,
-        'start': getattr(node.result.runtime, 'startTime'),
-        'finish': getattr(node.result.runtime, 'endTime'),
-        'duration': getattr(node.result.runtime, 'duration'),
-        'runtime_threads': getattr(node.result.runtime, 'cpu_percent', 'N/A'),
-        'runtime_memory_gb': getattr(node.result.runtime, 'mem_peak_gb',
-                                     'N/A'),
-        'estimated_memory_gb': node.mem_gb,
-        'num_threads': node.n_procs,
+        "name": node.name,
+        "id": node._id,
+        "start": getattr(node.result.runtime, "startTime"),
+        "finish": getattr(node.result.runtime, "endTime"),
+        "duration": getattr(node.result.runtime, "duration"),
+        "runtime_threads": getattr(node.result.runtime, "cpu_percent", "N/A"),
+        "runtime_memory_gb": getattr(node.result.runtime, "mem_peak_gb", "N/A"),
+        "estimated_memory_gb": node.mem_gb,
+        "num_threads": node.n_procs,
     }
 
-    if status_dict['start'] is None or status_dict['finish'] is None:
-        status_dict['error'] = True
+    if status_dict["start"] is None or status_dict["finish"] is None:
+        status_dict["error"] = True
 
     # Dump string to log
-    logging.getLogger('callback').debug(json.dumps(status_dict))
+    logging.getLogger("callback").debug(json.dumps(status_dict))
 
 
 # Get total system RAM
@@ -160,19 +157,17 @@ def get_system_total_memory_gb():
     import sys
 
     # Get memory
-    if 'linux' in sys.platform:
-        with open('/proc/meminfo', 'r') as f_in:
+    if "linux" in sys.platform:
+        with open("/proc/meminfo", "r") as f_in:
             meminfo_lines = f_in.readlines()
-            mem_total_line = [
-                line for line in meminfo_lines if 'MemTotal' in line
-            ][0]
+            mem_total_line = [line for line in meminfo_lines if "MemTotal" in line][0]
             mem_total = float(mem_total_line.split()[1])
-            memory_gb = mem_total / (1024.0**2)
-    elif 'darwin' in sys.platform:
-        mem_str = os.popen('sysctl hw.memsize').read().strip().split(' ')[-1]
-        memory_gb = float(mem_str) / (1024.0**3)
+            memory_gb = mem_total / (1024.0 ** 2)
+    elif "darwin" in sys.platform:
+        mem_str = os.popen("sysctl hw.memsize").read().strip().split(" ")[-1]
+        memory_gb = float(mem_str) / (1024.0 ** 3)
     else:
-        err_msg = 'System platform: %s is not supported'
+        err_msg = "System platform: %s is not supported"
         raise Exception(err_msg)
 
     # Return memory
@@ -205,7 +200,7 @@ def get_max_resources_used(pid, mem_mb, num_threads, pyfunc=False):
         mem_mb = max(mem_mb, _get_ram_mb(pid, pyfunc=pyfunc))
         num_threads = max(num_threads, _get_num_threads(pid))
     except Exception as exc:
-        print('Could not get resources used by process.\n%s', exc)
+        print("Could not get resources used by process.\n%s", exc)
 
     return mem_mb, num_threads
 
@@ -235,8 +230,7 @@ def _get_num_threads(pid):
         elif proc.num_threads() > 1:
             tprocs = [psutil.Process(thr.id) for thr in proc.threads()]
             alive_tprocs = [
-                tproc for tproc in tprocs
-                if tproc.status() == psutil.STATUS_RUNNING
+                tproc for tproc in tprocs if tproc.status() == psutil.STATUS_RUNNING
             ]
             num_threads = len(alive_tprocs)
         else:
@@ -253,11 +247,10 @@ def _get_num_threads(pid):
                 # If its not necessarily running, but still multi-threaded
                 elif child.num_threads() > 1:
                     # Cast each thread as a process and check for only running
-                    tprocs = [
-                        psutil.Process(thr.id) for thr in child.threads()
-                    ]
+                    tprocs = [psutil.Process(thr.id) for thr in child.threads()]
                     alive_tprocs = [
-                        tproc for tproc in tprocs
+                        tproc
+                        for tproc in tprocs
                         if tproc.status() == psutil.STATUS_RUNNING
                     ]
                     child_thr = len(alive_tprocs)

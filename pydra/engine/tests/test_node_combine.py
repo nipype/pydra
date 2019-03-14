@@ -13,12 +13,15 @@ from ..task import to_task
 import pytest
 import pdb
 
-TEST_DATA_DIR = Path(os.getenv('PYDRA_TEST_DATA', '/nonexistent/path'))
-DS114_DIR = TEST_DATA_DIR / 'ds000114'
+TEST_DATA_DIR = Path(os.getenv("PYDRA_TEST_DATA", "/nonexistent/path"))
+DS114_DIR = TEST_DATA_DIR / "ds000114"
 
-python35_only = pytest.mark.skipif(sys.version_info < (3, 5), reason="requires Python>3.4")
+python35_only = pytest.mark.skipif(
+    sys.version_info < (3, 5), reason="requires Python>3.4"
+)
 
 pytestmark = pytest.mark.xfail(reason="wip")
+
 
 @pytest.fixture(scope="module")
 def change_dir(request):
@@ -40,6 +43,7 @@ Plugins = ["serial", "mp", "cf", "dask"]
 @to_task
 def fun_addtwo(a):
     import time
+
     time.sleep(1)
     if a == 3:
         time.sleep(2)
@@ -68,6 +72,7 @@ def fun_sumlist(a):
 
 # initializing nodes, setting containers
 
+
 def test_node_combine_1():
     """Node with mandatory arguments only"""
     nn = Node(name="NA", interface=fun_addtwo())
@@ -86,8 +91,13 @@ def test_node_combine_2():
 
 def test_node_combine_3():
     """Node with interface, inputs, splitter and combiner"""
-    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]},
-              splitter="a", combiner="a")
+    nn = Node(
+        name="NA",
+        interface=fun_addtwo(),
+        inputs={"a": [3, 5]},
+        splitter="a",
+        combiner="a",
+    )
     assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
     assert nn.splitter == "NA.a"
@@ -96,8 +106,13 @@ def test_node_combine_3():
 
 def test_node_combine_3a():
     """Node with interface, inputs, splitter and combiner (with node name)"""
-    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]},
-              splitter="a", combiner="NA.a")
+    nn = Node(
+        name="NA",
+        interface=fun_addtwo(),
+        inputs={"a": [3, 5]},
+        splitter="a",
+        combiner="NA.a",
+    )
     assert nn.splitter == "NA.a"
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
     assert nn.splitter == "NA.a"
@@ -107,17 +122,19 @@ def test_node_combine_3a():
 def test_node_combine_3b():
     """Node with interface, inputs and combiner (without splitter)"""
     with pytest.raises(Exception) as excinfo:
-        nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": 3},
-                  combiner="a")
-    assert str(excinfo.value) ==\
-           "splitter has to be set before setting combiner"
+        nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": 3}, combiner="a")
+    assert str(excinfo.value) == "splitter has to be set before setting combiner"
 
 
 def test_node_combine_4():
     """Node with interface,  two inputs, splitter and combiner"""
-    nn = Node(name="NA", interface=fun_addvar(),
-              inputs={"a": [3, 5], "b": [10, 20]},
-              splitter=["a", "b"], combiner=["a", "b"])
+    nn = Node(
+        name="NA",
+        interface=fun_addvar(),
+        inputs={"a": [3, 5], "b": [10, 20]},
+        splitter=["a", "b"],
+        combiner=["a", "b"],
+    )
     assert nn.splitter == ["NA.a", "NA.b"]
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
     assert (nn.inputs["NA.b"] == np.array([10, 20])).all()
@@ -129,9 +146,13 @@ def test_node_combine_4a():
     """Node with interface,  two inputs, splitter and combiner
         (different order for combiner)
     """
-    nn = Node(name="NA", interface=fun_addvar(),
-              inputs={"a": [3, 5], "b": [10, 20]},
-              splitter=["a", "b"], combiner=["b", "a"])
+    nn = Node(
+        name="NA",
+        interface=fun_addvar(),
+        inputs={"a": [3, 5], "b": [10, 20]},
+        splitter=["a", "b"],
+        combiner=["b", "a"],
+    )
     assert nn.splitter == ["NA.a", "NA.b"]
     assert (nn.inputs["NA.a"] == np.array([3, 5])).all()
     assert (nn.inputs["NA.b"] == np.array([10, 20])).all()
@@ -141,8 +162,7 @@ def test_node_combine_4a():
 
 def test_node_combine_5():
     """Node with interface, inputs, splitter, combiner set later"""
-    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]},
-              splitter="a")
+    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]}, splitter="a")
     nn.combiner = "a"
     assert nn.splitter == "NA.a"
     assert nn.combiner == ["NA.a"]
@@ -150,8 +170,7 @@ def test_node_combine_5():
 
 def test_node_combine_5a():
     """Node with interface, inputs, splitter, combiner set later (using node name)"""
-    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]},
-              splitter="a")
+    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]}, splitter="a")
     nn.combiner = "NA.a"
     assert nn.splitter == "NA.a"
     assert nn.combiner == ["NA.a"]
@@ -159,8 +178,13 @@ def test_node_combine_5a():
 
 def test_node_combine_5b():
     """Node with interface, inputs, splitter, setting combiner twice"""
-    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]},
-              splitter="a", combiner="a")
+    nn = Node(
+        name="NA",
+        interface=fun_addtwo(),
+        inputs={"a": [3, 5]},
+        splitter="a",
+        combiner="a",
+    )
     with pytest.raises(Exception) as excinfo:
         nn.combiner = "a"
     assert str(excinfo.value) == "combiner is already set"
@@ -168,8 +192,7 @@ def test_node_combine_5b():
 
 def test_node_combine_6():
     """Node with interface, inputs, splitter, combiner set by combine method"""
-    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]},
-              splitter="a")
+    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]}, splitter="a")
     nn.combine(combiner="a")
     assert nn.splitter == "NA.a"
     assert nn.combiner == ["NA.a"]
@@ -185,8 +208,13 @@ def test_node_combine_6a():
 
 def test_node_combine_6b():
     """Node with interface, inputs, splitter, setting combiner twice"""
-    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]},
-              splitter="a", combiner="a")
+    nn = Node(
+        name="NA",
+        interface=fun_addtwo(),
+        inputs={"a": [3, 5]},
+        splitter="a",
+        combiner="a",
+    )
     with pytest.raises(Exception) as excinfo:
         nn.combine(combiner="a")
     assert str(excinfo.value) == "combiner is already set"
@@ -197,8 +225,7 @@ def test_node_combine_6c():
     nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]})
     with pytest.raises(Exception) as excinfo:
         nn.combine(combiner="a")
-    assert str(excinfo.value) ==\
-           "splitter has to be set before setting combiner"
+    assert str(excinfo.value) == "splitter has to be set before setting combiner"
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -217,10 +244,16 @@ def test_node_combine_7(plugin, change_dir):
 
 # testing prepare state inputs
 
+
 def test_node_combine_8():
     """Node with interface, inputs, splitter and combiner"""
-    nn = Node(name="NA", interface=fun_addtwo(), inputs={"a": [3, 5]},
-              splitter="a", combiner="a")
+    nn = Node(
+        name="NA",
+        interface=fun_addtwo(),
+        inputs={"a": [3, 5]},
+        splitter="a",
+        combiner="a",
+    )
     assert nn.splitter == "NA.a"
     assert nn.combiner == ["NA.a"]
 
@@ -230,23 +263,36 @@ def test_node_combine_8():
 
 def test_node_combine_9():
     """Node with interface,  two inputs, splitter and combiner"""
-    nn = Node(name="NA", interface=fun_addvar(),
-              inputs={"a": [3, 5], "b": [10, 20]},
-              splitter=["a", "b"], combiner=["a", "b"])
+    nn = Node(
+        name="NA",
+        interface=fun_addvar(),
+        inputs={"a": [3, 5], "b": [10, 20]},
+        splitter=["a", "b"],
+        combiner=["a", "b"],
+    )
     assert nn.splitter == ["NA.a", "NA.b"]
     assert nn.combiner == ["NA.a", "NA.b"]
 
     nn.prepare_state_input()
     assert nn.state._input_for_axis == [["NA.a"], ["NA.b"]]
 
+
 # running nodes with combiner
+
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_node_combine_10(plugin, change_dir):
     """simplest combiner in init, running the node"""
-    nn = Node(name="NA", interface=fun_addtwo(), workingdir="test_nd10_{}".format(plugin),
-              output_names=["out"], splitter="a", combiner="a", inputs={"a": [3, 5]})
+    nn = Node(
+        name="NA",
+        interface=fun_addtwo(),
+        workingdir="test_nd10_{}".format(plugin),
+        output_names=["out"],
+        splitter="a",
+        combiner="a",
+        inputs={"a": [3, 5]},
+    )
 
     assert nn.splitter == "NA.a"
     assert nn.combiner == ["NA.a"]
@@ -263,8 +309,13 @@ def test_node_combine_10(plugin, change_dir):
 @python35_only
 def test_node_combine_10a(plugin, change_dir):
     """simplest combiner by combine, running the node"""
-    nn = Node(name="NA", interface=fun_addtwo(), workingdir="test_nd10a_{}".format(plugin),
-              output_names=["out"], inputs={"a": [3, 5]})
+    nn = Node(
+        name="NA",
+        interface=fun_addtwo(),
+        workingdir="test_nd10a_{}".format(plugin),
+        output_names=["out"],
+        inputs={"a": [3, 5]},
+    )
     nn.split(splitter="a").combine(combiner="a")
     assert nn.splitter == "NA.a"
     assert nn.combiner == ["NA.a"]
@@ -274,15 +325,21 @@ def test_node_combine_10a(plugin, change_dir):
     sub.close()
 
     # checking the results
-    assert nn.result["out"] == ({}, [5,7])
+    assert nn.result["out"] == ({}, [5, 7])
 
 
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_node_combine_10b(plugin, change_dir):
     """simplest combiner in init, running the node"""
-    nn = Node(name="NA", interface=fun_addtwo(), workingdir="test_nd10b_{}".format(plugin),
-              output_names=["out"], splitter="a", inputs={"a": [3, 5]})
+    nn = Node(
+        name="NA",
+        interface=fun_addtwo(),
+        workingdir="test_nd10b_{}".format(plugin),
+        output_names=["out"],
+        splitter="a",
+        inputs={"a": [3, 5]},
+    )
     nn.combiner = "a"
 
     assert nn.splitter == "NA.a"
@@ -300,9 +357,15 @@ def test_node_combine_10b(plugin, change_dir):
 @python35_only
 def test_node_combine_11(plugin, change_dir):
     """Node with interface, inputs and scalar splitter, running interface"""
-    nn = Node(name="NA", interface=fun_addvar(), workingdir="test_nd11_{}".format(plugin),
-              output_names=["out"], splitter=("b", "c"), combiner="b",
-              inputs={"b": [3, 5], "c": [2, 1]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar(),
+        workingdir="test_nd11_{}".format(plugin),
+        output_names=["out"],
+        splitter=("b", "c"),
+        combiner="b",
+        inputs={"b": [3, 5], "c": [2, 1]},
+    )
 
     assert nn.splitter == ("NA.b", "NA.c")
     assert nn.combiner == ["NA.b"]
@@ -322,9 +385,15 @@ def test_node_combine_11a(plugin, change_dir):
     trying to combine with both elements of scalar splitter
     """
     with pytest.raises(Exception) as excinfo:
-        nn = Node(name="NA", interface=fun_addvar(), workingdir="test_nd11a_{}".format(plugin),
-                  output_names=["out"], splitter=("b", "c"), combiner=["b", "c"],
-                  inputs={"b": [3, 5], "c": [2, 1]})
+        nn = Node(
+            name="NA",
+            interface=fun_addvar(),
+            workingdir="test_nd11a_{}".format(plugin),
+            output_names=["out"],
+            splitter=("b", "c"),
+            combiner=["b", "c"],
+            inputs={"b": [3, 5], "c": [2, 1]},
+        )
         sub = Submitter(plugin=plugin, runnable=nn)
         sub.run()
         sub.close()
@@ -335,9 +404,15 @@ def test_node_combine_11a(plugin, change_dir):
 @python35_only
 def test_node_combine_12(plugin, change_dir):
     """Node with interface, inputs and vector splitter, running interface"""
-    nn = Node(name="NA", interface=fun_addvar(), workingdir="test_nd12_{}".format(plugin),
-              output_names=["out"], splitter=["b", "c"], combiner="b",
-              inputs={"b": [3, 5], "c": [2, 1]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar(),
+        workingdir="test_nd12_{}".format(plugin),
+        output_names=["out"],
+        splitter=["b", "c"],
+        combiner="b",
+        inputs={"b": [3, 5], "c": [2, 1]},
+    )
 
     assert nn.splitter == ["NA.b", "NA.c"]
     assert nn.combiner == ["NA.b"]
@@ -355,13 +430,20 @@ def test_node_combine_12(plugin, change_dir):
 
 # run node with combiner (more complicated splitter)
 
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_node_combine_13(plugin, change_dir):
     """two outer splitters, one combiner"""
-    nn = Node(name="NA", interface=fun_addvar3(), workingdir="test_nd13_{}".format(plugin),
-              output_names=["out"], splitter=["a", ["b", "c"]], combiner="a",
-              inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar3(),
+        workingdir="test_nd13_{}".format(plugin),
+        output_names=["out"],
+        splitter=["a", ["b", "c"]],
+        combiner="a",
+        inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]},
+    )
 
     assert nn.splitter == ["NA.a", ["NA.b", "NA.c"]]
     assert nn.combiner == ["NA.a"]
@@ -371,8 +453,12 @@ def test_node_combine_13(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({'NA.b': 1, 'NA.c': 1}, [3, 4, 5]), ({'NA.b': 1, 'NA.c': 2}, [4, 5, 6]),
-                ({'NA.b': 2, 'NA.c': 1}, [4, 5, 6]), ({'NA.b': 2,'NA.c': 2}, [5, 6, 7])]
+    expected = [
+        ({"NA.b": 1, "NA.c": 1}, [3, 4, 5]),
+        ({"NA.b": 1, "NA.c": 2}, [4, 5, 6]),
+        ({"NA.b": 2, "NA.c": 1}, [4, 5, 6]),
+        ({"NA.b": 2, "NA.c": 2}, [5, 6, 7]),
+    ]
     for i, res in enumerate(expected):
         assert nn.result["out"][i][0] == res[0]
         assert nn.result["out"][i][1] == res[1]
@@ -382,9 +468,15 @@ def test_node_combine_13(plugin, change_dir):
 @python35_only
 def test_node_combine_13a(plugin, change_dir):
     """two outer splitters, two combiners"""
-    nn = Node(name="NA", interface=fun_addvar3(), workingdir="test_nd13a_{}".format(plugin),
-              output_names=["out"], splitter=["a", ["b", "c"]], combiner=["a", "b"],
-              inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar3(),
+        workingdir="test_nd13a_{}".format(plugin),
+        output_names=["out"],
+        splitter=["a", ["b", "c"]],
+        combiner=["a", "b"],
+        inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]},
+    )
 
     assert nn.splitter == ["NA.a", ["NA.b", "NA.c"]]
     assert nn.combiner == ["NA.a", "NA.b"]
@@ -394,7 +486,7 @@ def test_node_combine_13a(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({'NA.c': 1}, [3, 4, 4, 5, 5, 6]), ({'NA.c': 2}, [4, 5, 5, 6, 6, 7])]
+    expected = [({"NA.c": 1}, [3, 4, 4, 5, 5, 6]), ({"NA.c": 2}, [4, 5, 5, 6, 6, 7])]
     for i, res in enumerate(expected):
         assert nn.result["out"][i][0] == res[0]
         assert nn.result["out"][i][1] == res[1]
@@ -404,9 +496,15 @@ def test_node_combine_13a(plugin, change_dir):
 @python35_only
 def test_node_combine_13b(plugin, change_dir):
     """two outer splitters, three combiners"""
-    nn = Node(name="NA", interface=fun_addvar3(), workingdir="test_nd13b_{}".format(plugin),
-              output_names=["out"], splitter=["a", ["b", "c"]], combiner=["a", "b", "c"],
-              inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar3(),
+        workingdir="test_nd13b_{}".format(plugin),
+        output_names=["out"],
+        splitter=["a", ["b", "c"]],
+        combiner=["a", "b", "c"],
+        inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]},
+    )
 
     assert nn.splitter == ["NA.a", ["NA.b", "NA.c"]]
     assert nn.combiner == ["NA.a", "NA.b", "NA.c"]
@@ -423,9 +521,15 @@ def test_node_combine_13b(plugin, change_dir):
 @python35_only
 def test_node_combine_14(plugin, change_dir):
     """outer and scalar splitter, one combiner (from outer part)"""
-    nn = Node(name="NA", interface=fun_addvar3(), workingdir="test_nd14_{}".format(plugin),
-              output_names=["out"], splitter=["a", ("b", "c")], combiner="a",
-              inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar3(),
+        workingdir="test_nd14_{}".format(plugin),
+        output_names=["out"],
+        splitter=["a", ("b", "c")],
+        combiner="a",
+        inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]},
+    )
 
     assert nn.splitter == ["NA.a", ("NA.b", "NA.c")]
     assert nn.combiner == ["NA.a"]
@@ -435,7 +539,10 @@ def test_node_combine_14(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({'NA.b': 1, 'NA.c': 1}, [3, 4, 5]), ({'NA.b': 2, 'NA.c': 2}, [5, 6, 7])]
+    expected = [
+        ({"NA.b": 1, "NA.c": 1}, [3, 4, 5]),
+        ({"NA.b": 2, "NA.c": 2}, [5, 6, 7]),
+    ]
     for i, res in enumerate(expected):
         assert nn.result["out"][i][0] == res[0]
         assert nn.result["out"][i][1] == res[1]
@@ -445,9 +552,15 @@ def test_node_combine_14(plugin, change_dir):
 @python35_only
 def test_node_combine_14a(plugin, change_dir):
     """outer and scalar splitter, two combiners (one from outer and one from scalar part)"""
-    nn = Node(name="NA", interface=fun_addvar3(), workingdir="test_nd14a_{}".format(plugin),
-              output_names=["out"], splitter=["a", ("b", "c")], combiner=["a", "b"],
-              inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar3(),
+        workingdir="test_nd14a_{}".format(plugin),
+        output_names=["out"],
+        splitter=["a", ("b", "c")],
+        combiner=["a", "b"],
+        inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]},
+    )
 
     assert nn.splitter == ["NA.a", ("NA.b", "NA.c")]
     assert nn.combiner == ["NA.a", "NA.b"]
@@ -464,9 +577,15 @@ def test_node_combine_14a(plugin, change_dir):
 @python35_only
 def test_node_combine_14b(plugin, change_dir):
     """outer and scalar splitter, two combiners (second one from scalar part - should be the same)"""
-    nn = Node(name="NA", interface=fun_addvar3(), workingdir="test_nd14b_{}".format(plugin),
-              output_names=["out"], splitter=["a", ("b", "c")], combiner=["a", "c"],
-              inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar3(),
+        workingdir="test_nd14b_{}".format(plugin),
+        output_names=["out"],
+        splitter=["a", ("b", "c")],
+        combiner=["a", "c"],
+        inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]},
+    )
 
     assert nn.splitter == ["NA.a", ("NA.b", "NA.c")]
     assert nn.combiner == ["NA.a", "NA.c"]
@@ -484,9 +603,15 @@ def test_node_combine_14b(plugin, change_dir):
 def test_node_combine_14c(plugin, change_dir):
     """outer and scalar splitter, two combiners (second one from scalar part - should be the same)"""
     with pytest.raises(Exception) as excinfo:
-        nn = Node(name="NA", interface=fun_addvar3(), workingdir="test_nd14c_{}".format(plugin),
-                  output_names=["out"], splitter=["a", ("b", "c")], combiner=["a", "b", "c"],
-                  inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+        nn = Node(
+            name="NA",
+            interface=fun_addvar3(),
+            workingdir="test_nd14c_{}".format(plugin),
+            output_names=["out"],
+            splitter=["a", ("b", "c")],
+            combiner=["a", "b", "c"],
+            inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]},
+        )
         sub = Submitter(plugin=plugin, runnable=nn)
         sub.run()
         sub.close()
@@ -497,9 +622,15 @@ def test_node_combine_14c(plugin, change_dir):
 @python35_only
 def test_node_combine_14d(plugin, change_dir):
     """outer and scalar splitter, one combiner (from outer part)"""
-    nn = Node(name="NA", interface=fun_addvar3(), workingdir="test_nd14d_{}".format(plugin),
-              output_names=["out"], splitter=["a", ("b", "c")], combiner="b",
-              inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar3(),
+        workingdir="test_nd14d_{}".format(plugin),
+        output_names=["out"],
+        splitter=["a", ("b", "c")],
+        combiner="b",
+        inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]},
+    )
 
     assert nn.splitter == ["NA.a", ("NA.b", "NA.c")]
     assert nn.combiner == ["NA.b"]
@@ -509,7 +640,7 @@ def test_node_combine_14d(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({'NA.a': 1}, [3, 5]), ({'NA.a': 2}, [4, 6]), ({'NA.a': 3}, [5, 7])]
+    expected = [({"NA.a": 1}, [3, 5]), ({"NA.a": 2}, [4, 6]), ({"NA.a": 3}, [5, 7])]
     for i, res in enumerate(expected):
         assert nn.result["out"][i][0] == res[0]
         assert nn.result["out"][i][1] == res[1]
@@ -520,10 +651,15 @@ def test_node_combine_14d(plugin, change_dir):
 def test_node_combine_14e(plugin, change_dir):
     """outer and scalar splitter, two combiners (second one from scalar part - should be the same)"""
     with pytest.raises(Exception) as excinfo:
-        nn = Node(name="NA", interface=fun_addvar3(), output_names=["out"],
-                  workingdir="test_nd14e_{}".format(plugin),
-                  splitter=["a", ("b", "c")], combiner=["b", "c"],
-                  inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]})
+        nn = Node(
+            name="NA",
+            interface=fun_addvar3(),
+            output_names=["out"],
+            workingdir="test_nd14e_{}".format(plugin),
+            splitter=["a", ("b", "c")],
+            combiner=["b", "c"],
+            inputs={"a": [1, 2, 3], "b": [1, 2], "c": [1, 2]},
+        )
         sub = Submitter(plugin=plugin, runnable=nn)
         sub.run()
         sub.close()
@@ -534,9 +670,15 @@ def test_node_combine_14e(plugin, change_dir):
 @python35_only
 def test_node_combine_15(plugin, change_dir):
     """scalar and outer splitter, one combiner (from scalar part)"""
-    nn = Node(name="NA", interface=fun_addvar3(), workingdir="test_nd15_{}".format(plugin),
-              output_names=["out"], splitter=("a", ["b", "c"]), combiner="a",
-              inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar3(),
+        workingdir="test_nd15_{}".format(plugin),
+        output_names=["out"],
+        splitter=("a", ["b", "c"]),
+        combiner="a",
+        inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]},
+    )
 
     assert nn.splitter == ("NA.a", ["NA.b", "NA.c"])
     assert nn.combiner == ["NA.a"]
@@ -554,10 +696,15 @@ def test_node_combine_15(plugin, change_dir):
 def test_node_combine_15a(plugin, change_dir):
     """scalar and outer splitter, two combiners (from scalar and outer parts)"""
     with pytest.raises(Exception) as excinfo:
-        nn = Node(name="NA", interface=fun_addvar3(), output_names=["out"],
-                  workingdir="test_nd15a_{}".format(plugin),
-                  splitter=("a", ["b", "c"]), combiner=["a", "b"],
-                  inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]})
+        nn = Node(
+            name="NA",
+            interface=fun_addvar3(),
+            output_names=["out"],
+            workingdir="test_nd15a_{}".format(plugin),
+            splitter=("a", ["b", "c"]),
+            combiner=["a", "b"],
+            inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]},
+        )
         sub = Submitter(plugin=plugin, runnable=nn)
         sub.run()
         sub.close()
@@ -570,9 +717,15 @@ def test_node_combine_15b(plugin, change_dir):
     """scalar and outer splitter, one combiner (from outer part)
     We assumed that this is OK, but will eliminate also a
     """
-    nn = Node(name="NA", interface=fun_addvar3(), workingdir="test_nd15b_{}".format(plugin),
-              output_names=["out"], splitter=("a", ["b", "c"]), combiner="b",
-              inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar3(),
+        workingdir="test_nd15b_{}".format(plugin),
+        output_names=["out"],
+        splitter=("a", ["b", "c"]),
+        combiner="b",
+        inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]},
+    )
 
     assert nn.splitter == ("NA.a", ["NA.b", "NA.c"])
     assert nn.combiner == ["NA.b"]
@@ -582,7 +735,7 @@ def test_node_combine_15b(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({'NA.c': 1}, [13, 24]), ({'NA.c': 2}, [15, 26])]
+    expected = [({"NA.c": 1}, [13, 24]), ({"NA.c": 2}, [15, 26])]
     for i, res in enumerate(expected):
         assert nn.result["out"][i][0] == res[0]
         assert nn.result["out"][i][1] == res[1]
@@ -594,9 +747,15 @@ def test_node_combine_15c(plugin, change_dir):
     """scalar and outer splitter, one combiner (from outer part)
     We assumed that this is OK, but will eliminate also a
     """
-    nn = Node(name="NA", interface=fun_addvar3(), workingdir="test_nd15c_{}".format(plugin),
-              output_names=["out"], splitter=("a", ["b", "c"]), combiner="c",
-              inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar3(),
+        workingdir="test_nd15c_{}".format(plugin),
+        output_names=["out"],
+        splitter=("a", ["b", "c"]),
+        combiner="c",
+        inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]},
+    )
 
     assert nn.splitter == ("NA.a", ["NA.b", "NA.c"])
     assert nn.combiner == ["NA.c"]
@@ -606,7 +765,7 @@ def test_node_combine_15c(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({'NA.b': 1}, [13, 15]), ({'NA.b': 2}, [24, 26])]
+    expected = [({"NA.b": 1}, [13, 15]), ({"NA.b": 2}, [24, 26])]
     for i, res in enumerate(expected):
         assert nn.result["out"][i][0] == res[0]
         assert nn.result["out"][i][1] == res[1]
@@ -619,10 +778,15 @@ def test_node_combine_15d(plugin, change_dir):
     We assumed that this is OK, but will eliminate also a
     """
     with pytest.raises(Exception) as excinfo:
-        nn = Node(name="NA", interface=fun_addvar3(), output_names=["out"],
-                  workingdir="test_nd15d_{}".format(plugin),
-                  splitter=("a", ["b", "c"]), combiner=["c", "a"],
-                  inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]})
+        nn = Node(
+            name="NA",
+            interface=fun_addvar3(),
+            output_names=["out"],
+            workingdir="test_nd15d_{}".format(plugin),
+            splitter=("a", ["b", "c"]),
+            combiner=["c", "a"],
+            inputs={"a": [[11, 12], [21, 22]], "b": [1, 2], "c": [1, 2]},
+        )
         sub = Submitter(plugin=plugin, runnable=nn)
         sub.run()
         sub.close()
@@ -633,9 +797,15 @@ def test_node_combine_15d(plugin, change_dir):
 @python35_only
 def test_node_combine_16(plugin, change_dir):
     """scalar and outer splitter, one combiner"""
-    nn = Node(name="NA", interface=fun_addvar4(), workingdir="test_nd16_{}".format(plugin),
-              output_names=["out"], splitter=(["a", "b"], ["c", "d"]), combiner="a",
-              inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar4(),
+        workingdir="test_nd16_{}".format(plugin),
+        output_names=["out"],
+        splitter=(["a", "b"], ["c", "d"]),
+        combiner="a",
+        inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1, 2]},
+    )
 
     assert nn.splitter == (["NA.a", "NA.b"], ["NA.c", "NA.d"])
     assert nn.combiner == ["NA.a"]
@@ -645,7 +815,7 @@ def test_node_combine_16(plugin, change_dir):
     sub.close()
 
     # checking teh results
-    expected = [({'NA.b': 1, 'NA.d': 1}, [4, 6]), ({'NA.b': 2, 'NA.d': 2}, [6, 8])]
+    expected = [({"NA.b": 1, "NA.d": 1}, [4, 6]), ({"NA.b": 2, "NA.d": 2}, [6, 8])]
     for i, res in enumerate(expected):
         assert nn.result["out"][i][0] == res[0]
         assert nn.result["out"][i][1] == res[1]
@@ -655,9 +825,15 @@ def test_node_combine_16(plugin, change_dir):
 @python35_only
 def test_node_combine_16a(plugin, change_dir):
     """scalar and outer splitter, two combiners"""
-    nn = Node(name="NA", interface=fun_addvar4(), workingdir="test_nd16a_{}".format(plugin),
-              output_names=["out"], splitter=(["a", "b"], ["c", "d"]), combiner=["a", "b"],
-              inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1, 2]})
+    nn = Node(
+        name="NA",
+        interface=fun_addvar4(),
+        workingdir="test_nd16a_{}".format(plugin),
+        output_names=["out"],
+        splitter=(["a", "b"], ["c", "d"]),
+        combiner=["a", "b"],
+        inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1, 2]},
+    )
 
     assert nn.splitter == (["NA.a", "NA.b"], ["NA.c", "NA.d"])
     assert nn.combiner == ["NA.a", "NA.b"]
@@ -675,10 +851,15 @@ def test_node_combine_16a(plugin, change_dir):
 def test_node_combine_16b(plugin, change_dir):
     """scalar and outer splitter, two combiner from the same axis (exception)"""
     with pytest.raises(Exception) as excinfo:
-        nn = Node(name="NA", interface=fun_addvar4(), output_names=["out"],
-                  workingdir="test_nd16b_{}".format(plugin),
-                  splitter=(["a", "b"], ["c", "d"]), combiner=["a", "c"],
-                  inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1,2]})
+        nn = Node(
+            name="NA",
+            interface=fun_addvar4(),
+            output_names=["out"],
+            workingdir="test_nd16b_{}".format(plugin),
+            splitter=(["a", "b"], ["c", "d"]),
+            combiner=["a", "c"],
+            inputs={"a": [1, 2], "b": [1, 2], "c": [1, 2], "d": [1, 2]},
+        )
         sub = Submitter(plugin=plugin, runnable=nn)
         sub.run()
         sub.close()
@@ -687,6 +868,7 @@ def test_node_combine_16b(plugin, change_dir):
 
 
 # # tests for workflows
+
 
 @python35_only
 def test_workflow_combine_0(plugin="serial"):
@@ -699,7 +881,7 @@ def test_workflow_combine_0(plugin="serial"):
     wf.add_nodes([na])
     assert wf.nodes[0].splitter == "NA.a"
     assert wf.nodes[0].combiner == ["NA.a"]
-    assert (wf.nodes[0].inputs['NA.a'] == np.array([3, 5])).all()
+    assert (wf.nodes[0].inputs["NA.a"] == np.array([3, 5])).all()
     assert len(wf.graph.nodes) == 1
 
 
@@ -707,10 +889,20 @@ def test_workflow_combine_0(plugin="serial"):
 @python35_only
 def test_workflow_combine_1(plugin, change_dir):
     """workflow with one node with a splitter and a combiner"""
-    wf = Workflow(name="wf1", workingdir="test_wf1_{}".format(plugin),
-                  wf_output_names=[("NA", "out", "NA_out")])
-    na = Node(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"],
-              splitter="a", combiner="a", inputs={"a": [3, 5]})
+    wf = Workflow(
+        name="wf1",
+        workingdir="test_wf1_{}".format(plugin),
+        wf_output_names=[("NA", "out", "NA_out")],
+    )
+    na = Node(
+        name="NA",
+        interface=fun_addtwo(),
+        workingdir="na",
+        output_names=["out"],
+        splitter="a",
+        combiner="a",
+        inputs={"a": [3, 5]},
+    )
     wf.add_nodes([na])
 
     assert wf.nodes[0].splitter == "NA.a"
@@ -721,7 +913,7 @@ def test_workflow_combine_1(plugin, change_dir):
     sub.close()
 
     assert wf.nodes[0].result["out"] == ({}, [5, 7])
-    #output of the wf
+    # output of the wf
     assert wf.result["NA_out"] == ({}, [5, 7])
 
 
@@ -729,8 +921,11 @@ def test_workflow_combine_1(plugin, change_dir):
 @python35_only
 def test_workflow_combine_1a(plugin, change_dir):
     """workflow with one node with a splitter and a combiner (checking results of the wf)"""
-    wf = Workflow(name="wf1", workingdir="test_wf1a_{}".format(plugin),
-                  wf_output_names=[("NA", "out", "NA_out")])
+    wf = Workflow(
+        name="wf1",
+        workingdir="test_wf1a_{}".format(plugin),
+        wf_output_names=[("NA", "out", "NA_out")],
+    )
     na = Node(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
     na.split(splitter="a", inputs={"a": [3, 5]}).combine(combiner="a")
     wf.add_nodes([na])
@@ -743,7 +938,7 @@ def test_workflow_combine_1a(plugin, change_dir):
     sub.close()
 
     assert wf.nodes[0].result["out"] == ({}, [5, 7])
-    #output of the wf
+    # output of the wf
     assert wf.result["NA_out"] == ({}, [5, 7])
 
 
@@ -751,8 +946,11 @@ def test_workflow_combine_1a(plugin, change_dir):
 @python35_only
 def test_workflow_combine_2(plugin, change_dir):
     """workflow with two nodes, first one with splitter and combiner"""
-    wf = Workflow(name="wf2", workingdir="test_wf2_{}".format(plugin),
-                  wf_output_names=[("NB", "out")])
+    wf = Workflow(
+        name="wf2",
+        workingdir="test_wf2_{}".format(plugin),
+        wf_output_names=[("NB", "out")],
+    )
     na = Node(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
     na.split(splitter="a", inputs={"a": [3, 5]}).combine(combiner="a")
 
@@ -772,7 +970,7 @@ def test_workflow_combine_2(plugin, change_dir):
 
     assert wf.nodes[0].result["out"] == ({}, [5, 7])
     assert wf.nodes[1].result["out"] == ({}, 12)
-    #output of the wf
+    # output of the wf
     assert wf.result["out"] == ({}, 12)
 
 
@@ -780,10 +978,15 @@ def test_workflow_combine_2(plugin, change_dir):
 @python35_only
 def test_workflow_combine_3(plugin, change_dir):
     """workflow with two nodes, first one with splitter and combiner (different than splitter)"""
-    wf = Workflow(name="wf3", workingdir="test_wf3_{}".format(plugin),
-                  wf_output_names=[("NB", "out"), ("NA", "out", "NA_out")])
+    wf = Workflow(
+        name="wf3",
+        workingdir="test_wf3_{}".format(plugin),
+        wf_output_names=[("NB", "out"), ("NA", "out", "NA_out")],
+    )
     na = Node(name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"])
-    na.split(splitter=["b", "c"], inputs={"b": [3, 5, 7], "c": [10, 20]}).combine(combiner="b")
+    na.split(splitter=["b", "c"], inputs={"b": [3, 5, 7], "c": [10, 20]}).combine(
+        combiner="b"
+    )
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
@@ -809,7 +1012,7 @@ def test_workflow_combine_3(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-    #output of the wf
+    # output of the wf
     for i, res in enumerate(expectedB):
         assert wf.result["out"][i][0] == res[0]
         assert wf.result["out"][i][1] == res[1]
@@ -819,10 +1022,15 @@ def test_workflow_combine_3(plugin, change_dir):
 @python35_only
 def test_workflow_combine_3a(plugin, change_dir):
     """workflow with two nodes, first one with splitter and combiner (different than splitter)"""
-    wf = Workflow(name="wf3a", workingdir="test_wf3a_{}".format(plugin),
-                  wf_output_names=[("NB", "out")])
+    wf = Workflow(
+        name="wf3a",
+        workingdir="test_wf3a_{}".format(plugin),
+        wf_output_names=[("NB", "out")],
+    )
     na = Node(name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"])
-    na.split(splitter=["b", "c"], inputs={"b": [3, 5, 7], "c": [10, 20]}).combine(combiner="c")
+    na.split(splitter=["b", "c"], inputs={"b": [3, 5, 7], "c": [10, 20]}).combine(
+        combiner="c"
+    )
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
@@ -838,7 +1046,11 @@ def test_workflow_combine_3a(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [({"NA.b": 3}, [13, 23]), ({"NA.b": 5}, [15, 25]), ({"NA.b": 7}, [17, 27])]
+    expected = [
+        ({"NA.b": 3}, [13, 23]),
+        ({"NA.b": 5}, [15, 25]),
+        ({"NA.b": 7}, [17, 27]),
+    ]
     for i, res in enumerate(expected):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
@@ -848,7 +1060,7 @@ def test_workflow_combine_3a(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-    #output of the wf
+    # output of the wf
     for i, res in enumerate(expectedB):
         assert wf.result["out"][i][0] == res[0]
         assert wf.result["out"][i][1] == res[1]
@@ -858,10 +1070,15 @@ def test_workflow_combine_3a(plugin, change_dir):
 @python35_only
 def test_workflow_combine_3b(plugin, change_dir):
     """workflow with two nodes, first one with splitter and combiner (both axes)"""
-    wf = Workflow(name="wf3b", workingdir="test_wf3b_{}".format(plugin),
-                  wf_output_names=[("NB", "out")])
+    wf = Workflow(
+        name="wf3b",
+        workingdir="test_wf3b_{}".format(plugin),
+        wf_output_names=[("NB", "out")],
+    )
     na = Node(name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"])
-    na.split(splitter=["b", "c"], inputs={"b": [3, 5, 7], "c": [10, 20]}).combine(combiner=["b", "c"])
+    na.split(splitter=["b", "c"], inputs={"b": [3, 5, 7], "c": [10, 20]}).combine(
+        combiner=["b", "c"]
+    )
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
@@ -964,7 +1181,9 @@ def test_workflow_combine_6(plugin, change_dir):
     wf.add(na)
     wf.split_node(splitter="a", inputs={"a": [3, 5]})
     wf.add(nb)
-    wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]}).combine_node(combiner="c")
+    wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]}).combine_node(
+        combiner="c"
+    )
     wf.connect("NA", "out", "NB", "b")
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -1038,6 +1257,7 @@ def test_workflow_combine_6b(plugin, change_dir):
 
 # combiner from previous node
 
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_combine_7(plugin, change_dir):
@@ -1052,7 +1272,9 @@ def test_workflow_combine_7(plugin, change_dir):
     wf.add(na)
     wf.split_node(splitter="a", inputs={"a": [3, 5]})
     wf.add(nb)
-    wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]}).combine_node(combiner="NA.a")
+    wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]}).combine_node(
+        combiner="NA.a"
+    )
     wf.connect("NA", "out", "NB", "b")
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -1081,7 +1303,9 @@ def test_workflow_combine_7a(plugin, change_dir):
     wf.add(na)
     wf.split_node(splitter="a", inputs={"a": [3, 5]})
     wf.add(nb)
-    wf.split_node(splitter=["NA.a", "c"], inputs={"c": [2, 1]}).combine_node(combiner="NA.a")
+    wf.split_node(splitter=["NA.a", "c"], inputs={"c": [2, 1]}).combine_node(
+        combiner="NA.a"
+    )
     wf.connect("NA", "out", "NB", "b")
 
     sub = Submitter(runnable=wf, plugin=plugin)
@@ -1101,15 +1325,20 @@ def test_workflow_combine_7a(plugin, change_dir):
 
 # splitters with three input
 
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_combine_8(plugin, change_dir):
     """workflow with two nodes, first one with splitter and combiner (different than splitter)"""
-    wf = Workflow(name="wf8", workingdir="test_wf8_{}".format(plugin),
-                  wf_output_names=[("NB", "out")])
+    wf = Workflow(
+        name="wf8",
+        workingdir="test_wf8_{}".format(plugin),
+        wf_output_names=[("NB", "out")],
+    )
     na = Node(name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"])
-    na.split(splitter=[("a", "b"), "c"], inputs={"a": [1, 2], "b": [3, 5], "c": [10, 20, 30]})\
-        .combine(combiner="b")
+    na.split(
+        splitter=[("a", "b"), "c"], inputs={"a": [1, 2], "b": [3, 5], "c": [10, 20, 30]}
+    ).combine(combiner="b")
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
@@ -1125,7 +1354,11 @@ def test_workflow_combine_8(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [({"NA.c": 10}, [14, 17]), ({"NA.c": 20}, [24, 27]), ({"NA.c": 30}, [34, 37])]
+    expected = [
+        ({"NA.c": 10}, [14, 17]),
+        ({"NA.c": 20}, [24, 27]),
+        ({"NA.c": 30}, [34, 37]),
+    ]
     results = wf.nodes[0].result["out"]
     for i, res in enumerate(expected):
         assert results[i][0] == res[0]
@@ -1136,7 +1369,7 @@ def test_workflow_combine_8(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-    #output of the wf
+    # output of the wf
     for i, res in enumerate(expectedB):
         assert wf.result["out"][i][0] == res[0]
         assert wf.result["out"][i][1] == res[1]
@@ -1148,12 +1381,16 @@ def test_workflow_combine_9(plugin, change_dir):
     """workflow with two nodes, first one with splitter and combiner,
         having a "partial combined" input from a scalar splitter
     """
-    wf = Workflow(name="wf9", workingdir="test_wf9_{}".format(plugin),
-                  wf_output_names=[("NB", "out"), ("NA", "out", "NA_out")])
+    wf = Workflow(
+        name="wf9",
+        workingdir="test_wf9_{}".format(plugin),
+        wf_output_names=[("NB", "out"), ("NA", "out", "NA_out")],
+    )
     na = Node(name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"])
-    na.split(splitter=(["a", "b"], "c"), inputs={"a": [1, 2], "b": [3, 5, 7],
-                                                 "c": [[10, 20, 30], [100, 200, 300]]})\
-        .combine(combiner="a")
+    na.split(
+        splitter=(["a", "b"], "c"),
+        inputs={"a": [1, 2], "b": [3, 5, 7], "c": [[10, 20, 30], [100, 200, 300]]},
+    ).combine(combiner="a")
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
@@ -1169,7 +1406,11 @@ def test_workflow_combine_9(plugin, change_dir):
     sub.run()
     sub.close()
 
-    expected = [({"NA.b": 3}, [14, 105]), ({"NA.b": 5}, [26, 207]), ({"NA.b": 7}, [38, 309])]
+    expected = [
+        ({"NA.b": 3}, [14, 105]),
+        ({"NA.b": 5}, [26, 207]),
+        ({"NA.b": 7}, [38, 309]),
+    ]
     results = wf.nodes[0].result["out"]
     for i, res in enumerate(expected):
         assert results[i][0] == res[0]
@@ -1180,7 +1421,7 @@ def test_workflow_combine_9(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-    #output of the wf
+    # output of the wf
     for i, res in enumerate(expectedB):
         assert wf.result["out"][i][0] == res[0]
         assert wf.result["out"][i][1] == res[1]
@@ -1193,12 +1434,16 @@ def test_workflow_combine_9a(plugin, change_dir):
         having a "partial combined" input from a scalar splitter
         (different combiner)
     """
-    wf = Workflow(name="wf9a", workingdir="test_wf9a_{}".format(plugin),
-                  wf_output_names=[("NB", "out")])
+    wf = Workflow(
+        name="wf9a",
+        workingdir="test_wf9a_{}".format(plugin),
+        wf_output_names=[("NB", "out")],
+    )
     na = Node(name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"])
-    na.split(splitter=(["a", "b"], "c"), inputs={"a": [1, 2], "b": [3, 5, 7],
-                                                 "c": [[10, 20, 30], [100, 200, 300]]})\
-        .combine(combiner="b")
+    na.split(
+        splitter=(["a", "b"], "c"),
+        inputs={"a": [1, 2], "b": [3, 5, 7], "c": [[10, 20, 30], [100, 200, 300]]},
+    ).combine(combiner="b")
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
@@ -1225,7 +1470,7 @@ def test_workflow_combine_9a(plugin, change_dir):
         assert wf.nodes[1].result["out"][i][0] == res[0]
         assert wf.nodes[1].result["out"][i][1] == res[1]
 
-    #output of the wf
+    # output of the wf
     for i, res in enumerate(expectedB):
         assert wf.result["out"][i][0] == res[0]
         assert wf.result["out"][i][1] == res[1]
@@ -1238,12 +1483,16 @@ def test_workflow_combine_9b(plugin, change_dir):
         having a "partial combined" input from a scalar splitter
         (different combiner)
     """
-    wf = Workflow(name="wf9b", workingdir="test_wf9b_{}".format(plugin),
-                  wf_output_names=[("NB", "out")])
+    wf = Workflow(
+        name="wf9b",
+        workingdir="test_wf9b_{}".format(plugin),
+        wf_output_names=[("NB", "out")],
+    )
     na = Node(name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"])
-    na.split(splitter=(["a", "b"], "c"), inputs={"a": [1, 2], "b": [3, 5, 7],
-                                                 "c": [[10, 20, 30], [100, 200, 300]]})\
-        .combine(combiner="c")
+    na.split(
+        splitter=(["a", "b"], "c"),
+        inputs={"a": [1, 2], "b": [3, 5, 7], "c": [[10, 20, 30], [100, 200, 300]]},
+    ).combine(combiner="c")
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
     nb = Node(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
@@ -1262,10 +1511,8 @@ def test_workflow_combine_9b(plugin, change_dir):
     wf.nodes[0].result["out"] == ({}, [14, 26, 38, 105, 207, 309])
 
     assert wf.nodes[1].result["out"] == ({}, 699)
-    #output of the wf
+    # output of the wf
     assert wf.result["out"] == ({}, 699)
-
-
 
 
 # tests for a workflow that have its own input
@@ -1276,7 +1523,9 @@ def test_workflow_combine_9b(plugin, change_dir):
 def test_workflow_combine_10(plugin, change_dir):
     """using inputs for workflow and connect_workflow"""
     # adding inputs to the workflow directly
-    wf = Workflow(name="wf10", inputs={"wfa": [3, 5]}, workingdir="test_wf10_{}".format(plugin))
+    wf = Workflow(
+        name="wf10", inputs={"wfa": [3, 5]}, workingdir="test_wf10_{}".format(plugin)
+    )
     na = Node(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
 
     wf.add(na)
@@ -1301,12 +1550,17 @@ def test_workflow_combine_11(plugin, change_dir):
         combiner in the second node
     """
     wf = Workflow(name="wf11", workingdir="test_wf11_{}".format(plugin))
-    wf.add(name="NA", runnable=fun_addtwo(), workingdir="na",
-           output_names=["out"]).split_node(splitter="a", inputs={"a": [3, 5]})
+    wf.add(
+        name="NA", runnable=fun_addtwo(), workingdir="na", output_names=["out"]
+    ).split_node(splitter="a", inputs={"a": [3, 5]})
     # _NA means that I'm using splitter from the NA node, it's the same as ("NA.a", "b")
-    wf.add(name="NB", runnable=fun_addvar(), workingdir="nb", b="NA.out",
-           output_names=["out"]).split_node(splitter=("_NA", "c"), inputs={"c": [2, 1]})\
-        .combine_node(combiner="c")
+    wf.add(
+        name="NB",
+        runnable=fun_addvar(),
+        workingdir="nb",
+        b="NA.out",
+        output_names=["out"],
+    ).split_node(splitter=("_NA", "c"), inputs={"c": [2, 1]}).combine_node(combiner="c")
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -1325,13 +1579,17 @@ def test_workflow_combine_11(plugin, change_dir):
 def test_workflow_combine_12(plugin, change_dir):
     """scalar splitter from previous nodes and combiner field from previous node"""
     wf = Workflow(name="wf12", workingdir="test_wf12_{}".format(plugin))
-    wf.add(name="NA", runnable=fun_addvar(), workingdir="na",
-           output_names=["out"]).split_node(
-        splitter=("b", "c"), inputs={"b": [3, 5], "c": [0, 10]})
+    wf.add(
+        name="NA", runnable=fun_addvar(), workingdir="na", output_names=["out"]
+    ).split_node(splitter=("b", "c"), inputs={"b": [3, 5], "c": [0, 10]})
     # _NA means that I'm using splitter from the NA node, it's the same as (("NA.a", NA.b), "b")
-    wf.add(name="NB", runnable=fun_addvar(), workingdir="nb", b="NA.out",
-           output_names=["out"]).split_node(splitter=("_NA", "c"), inputs={"c": [2, 1]})\
-        .combine_node("NA.b")
+    wf.add(
+        name="NB",
+        runnable=fun_addvar(),
+        workingdir="nb",
+        b="NA.out",
+        output_names=["out"],
+    ).split_node(splitter=("_NA", "c"), inputs={"c": [2, 1]}).combine_node("NA.b")
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -1351,21 +1609,30 @@ def test_workflow_combine_12(plugin, change_dir):
 def test_workflow_combine_12a(plugin, change_dir):
     """vector splitter from previous nodes and combiner field from previous node"""
     wf = Workflow(name="wf12a", workingdir="test_wf12a_{}".format(plugin))
-    wf.add(name="NA", runnable=fun_addvar(), workingdir="na",
-           output_names=["out"]).split_node(
-            splitter=["b", "c"], inputs={"b": [3, 5], "c": [0, 10]})
+    wf.add(
+        name="NA", runnable=fun_addvar(), workingdir="na", output_names=["out"]
+    ).split_node(splitter=["b", "c"], inputs={"b": [3, 5], "c": [0, 10]})
     # _NA means that I'm using splitter from the NA node, it's the same as (["NA.a", NA.b], "b")
-    wf.add(name="NB", runnable=fun_addvar(), workingdir="nb", b="NA.out",
-           output_names=["out"]).split_node(
-            splitter=("_NA", "c"), inputs={"c": [[2, 1], [0, 0]]})\
-        .combine_node(combiner="NA.b")
+    wf.add(
+        name="NB",
+        runnable=fun_addvar(),
+        workingdir="nb",
+        b="NA.out",
+        output_names=["out"],
+    ).split_node(splitter=("_NA", "c"), inputs={"c": [[2, 1], [0, 0]]}).combine_node(
+        combiner="NA.b"
+    )
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
     sub.close()
 
-    expected = [({"NA.b": 3, "NA.c": 0}, 3), ({"NA.b": 3, "NA.c": 10}, 13),
-                ({"NA.b": 5, "NA.c": 0}, 5), ({"NA.b": 5, "NA.c": 10}, 15)]
+    expected = [
+        ({"NA.b": 3, "NA.c": 0}, 3),
+        ({"NA.b": 3, "NA.c": 10}, 13),
+        ({"NA.b": 5, "NA.c": 0}, 5),
+        ({"NA.b": 5, "NA.c": 10}, 15),
+    ]
     for i, res in enumerate(expected):
         assert wf.nodes[0].result["out"][i][0] == res[0]
         assert wf.nodes[0].result["out"][i][1] == res[1]
@@ -1382,14 +1649,21 @@ def test_workflow_combine_12a(plugin, change_dir):
 def test_workflow_combine_13(plugin, change_dir):
     """vector splitter from previous two nodes and combiner from one of the nodes"""
     wf = Workflow(name="wf13", workingdir="test_wf13_{}".format(plugin))
-    wf.add(name="NA", runnable=fun_addvar(), workingdir="na",
-           output_names=["out"]).split_node(
-            splitter=("b", "c"), inputs={"b": [3, 5],"c": [0, 10]})
-    wf.add(name="NB", runnable=fun_addtwo(), workingdir="nb",
-           output_names=["out"]).split_node(splitter="a", inputs={"a": [2, 1]})
+    wf.add(
+        name="NA", runnable=fun_addvar(), workingdir="na", output_names=["out"]
+    ).split_node(splitter=("b", "c"), inputs={"b": [3, 5], "c": [0, 10]})
+    wf.add(
+        name="NB", runnable=fun_addtwo(), workingdir="nb", output_names=["out"]
+    ).split_node(splitter="a", inputs={"a": [2, 1]})
     # _NA, _NB means that I'm using splitters from the NA/NB nodes, it's the same as [("NA.a", NA.b), "NB.a"]
-    wf.add(name="NC", runnable=fun_addvar(), workingdir="nc", b="NA.out", c="NB.out",
-           output_names=["out"]).split_node(splitter=["_NA", "_NB"]).combine_node(combiner=["NA.b"])
+    wf.add(
+        name="NC",
+        runnable=fun_addvar(),
+        workingdir="nc",
+        b="NA.out",
+        c="NB.out",
+        output_names=["out"],
+    ).split_node(splitter=["_NA", "_NB"]).combine_node(combiner=["NA.b"])
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -1415,14 +1689,21 @@ def test_workflow_combine_13(plugin, change_dir):
 def test_workflow_combine_13a(plugin, change_dir):
     """vector splitter from previous two nodes and combiner from one of the nodes"""
     wf = Workflow(name="wf13a", workingdir="test_wf13a_{}".format(plugin))
-    wf.add(name="NA", runnable=fun_addvar(), workingdir="na",
-           output_names=["out"]).split_node(
-            splitter=("b", "c"), inputs={"b": [3, 5],"c": [0, 10]})
-    wf.add(name="NB", runnable=fun_addtwo(), workingdir="nb",
-           output_names=["out"]).split_node(splitter="a", inputs={"a": [2, 1]})
+    wf.add(
+        name="NA", runnable=fun_addvar(), workingdir="na", output_names=["out"]
+    ).split_node(splitter=("b", "c"), inputs={"b": [3, 5], "c": [0, 10]})
+    wf.add(
+        name="NB", runnable=fun_addtwo(), workingdir="nb", output_names=["out"]
+    ).split_node(splitter="a", inputs={"a": [2, 1]})
     # _NA, _NB means that I'm using splitters from the NA/NB nodes, it's the same as [("NA.a", NA.b), "NB.a"]
-    wf.add(name="NC", runnable=fun_addvar(), workingdir="nc", b="NA.out", c="NB.out",
-           output_names=["out"]).split_node(splitter=["_NA", "_NB"]).combine_node(combiner=["NA.b", "NB.a"])
+    wf.add(
+        name="NC",
+        runnable=fun_addvar(),
+        workingdir="nc",
+        b="NA.out",
+        c="NB.out",
+        output_names=["out"],
+    ).split_node(splitter=["_NA", "_NB"]).combine_node(combiner=["NA.b", "NB.a"])
 
     sub = Submitter(runnable=wf, plugin=plugin)
     sub.run()
@@ -1438,13 +1719,19 @@ def test_workflow_combine_13a(plugin, change_dir):
 
 # # tests for a workflow that has its own input and splitter
 
+
 @pytest.mark.parametrize("plugin", Plugins)
 @python35_only
 def test_workflow_combine_14(plugin, change_dir):
     """using inputs for workflow and connect_wf_input, wf has a simple splitter nad combiner"""
-    wf = Workflow(name="wf14", inputs={"wfa": [3, 5]}, splitter="wfa",
-        workingdir="test_wf14_{}".format(plugin), combiner="wfa",
-        wf_output_names=[("NA", "out", "NA_out")])
+    wf = Workflow(
+        name="wf14",
+        inputs={"wfa": [3, 5]},
+        splitter="wfa",
+        workingdir="test_wf14_{}".format(plugin),
+        combiner="wfa",
+        wf_output_names=[("NA", "out", "NA_out")],
+    )
     na = Node(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
     wf.add(na)
     wf.connect_wf_input("wfa", "NA", "a")
@@ -1461,9 +1748,14 @@ def test_workflow_combine_14(plugin, change_dir):
 @python35_only
 def test_workflow_combine_15(plugin, change_dir):
     """using inputs for workflow, scalar splitter and a simple combiner"""
-    wf = Workflow(name="wf15", inputs={"wfb": [3, 5], "wfc": [10, 20]},
-                  splitter=("wfb", "wfc"), workingdir="test_wf15_{}".format(plugin),
-                  wf_output_names=[("NA", "out", "NA_out")], combiner="wfb")
+    wf = Workflow(
+        name="wf15",
+        inputs={"wfb": [3, 5], "wfc": [10, 20]},
+        splitter=("wfb", "wfc"),
+        workingdir="test_wf15_{}".format(plugin),
+        wf_output_names=[("NA", "out", "NA_out")],
+        combiner="wfb",
+    )
     na = Node(name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"])
     wf.add(na)
     wf.connect_wf_input("wfb", "NA", "b")
@@ -1481,9 +1773,14 @@ def test_workflow_combine_15(plugin, change_dir):
 @python35_only
 def test_workflow_combine_16(plugin, change_dir):
     """using inputs for workflow, outer splitter and a simple combiner"""
-    wf = Workflow(name="wf16", inputs={"wfb": [3, 5], "wfc": [10, 20]},
-                  splitter=["wfb", "wfc"], workingdir="test_wf16_{}".format(plugin),
-                  wf_output_names=[("NA", "out", "NA_out")], combiner="wfb")
+    wf = Workflow(
+        name="wf16",
+        inputs={"wfb": [3, 5], "wfc": [10, 20]},
+        splitter=["wfb", "wfc"],
+        workingdir="test_wf16_{}".format(plugin),
+        wf_output_names=[("NA", "out", "NA_out")],
+        combiner="wfb",
+    )
     na = Node(name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"])
     wf.add(na)
     wf.connect_wf_input("wfb", "NA", "b")

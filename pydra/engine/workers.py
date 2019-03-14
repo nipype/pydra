@@ -62,7 +62,7 @@ class ConcurrentFuturesWorker(Worker):
     def run_el(self, interface, inp):
         x = self.pool.submit(interface, inp)
         # print("X, DONE", x.done())
-        x.add_done_callback(lambda x: print("DONE ", interface, inp, x.done))
+        # x.add_done_callback(lambda x: print("DONE ", interface, inp, x.done))
         # print("DIR", x.result())
         # returning dir_nm_el and Result object for the specific element
         return x.result()
