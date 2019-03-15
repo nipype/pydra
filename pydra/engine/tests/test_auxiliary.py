@@ -214,6 +214,39 @@ def test_splits_1b(splitter, values, keys, groups, fgroup, splits):
     splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out), inputs))
     assert splits_out == splits
 
+@pytest.mark.parametrize("splitter, keys_exp, groups_exp, grstack_exp", [
+    ("a", ['a'], {"a": 0}, [[0]]),
+    (("a", "b"), ['a', "b"], {"a": 0, "b": 0}, [[0]]),
+    (["a", "b"], ['a', "b"], {"a": 0, "b": 1}, [[0, 1]]),
+    ((["a", "b"], "c"), ['a', "b", "c"], {"a": 0, "b": 1, "c": [0, 1]}, [[0, 1]]),
+    ([("a", "b"), "c"], ['a', "b", "c"], {"a": 0, "b": 0, "c": 1}, [[0, 1]])
+])
+def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
+    splitter_rpn = aux.splitter2rpn(splitter)
+    keys, groups, grstack = aux._splits_groups(splitter_rpn)
+    assert keys == keys_exp
+    assert groups == groups_exp
+    assert grstack == grstack_exp
+
+
+@pytest.mark.parametrize("splitter, combiner, keys_exp, groups_exp, grstack_exp, "
+                         "keys_final_exp, groups_final_exp, grstack_final_exp", [
+    ("a", ["a"], ['a'], {"a": 0}, [[0]]),
+    (("a", "b"), ['a', "b"], {"a": 0, "b": 0}, [[0]]),
+    (["a", "b"], ['a', "b"], {"a": 0, "b": 1}, [[0, 1]]),
+    ((["a", "b"], "c"), ['a', "b", "c"], {"a": 0, "b": 1, "c": [0, 1]}, [[0, 1]]),
+    ([("a", "b"), "c"], ['a', "b", "c"], {"a": 0, "b": 0, "c": 1}, [[0, 1]])
+])
+def test_splits_comb_groups(splitter, combiner, keys_exp, groups_exp, grstack_exp,
+                            keys_final_exp, groups_final_exp, grstack_final_exp):
+    splitter_rpn = aux.splitter2rpn(splitter)
+    keys, groups, grstack, keys_final, groups_final, grstack_final \
+        = aux._splits_groups(splitter_rpn, combiner)
+    assert keys == keys_exp
+    assert groups == groups_exp
+    assert grstack == grstack_exp
+
+
 
 @pytest.mark.parametrize(
     "splitter, inputs, mismatch",

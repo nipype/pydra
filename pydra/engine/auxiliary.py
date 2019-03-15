@@ -576,11 +576,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
 
     stack = []
     keys = []
-    groups = {}
     shapes = {}
-    group_count = None
-    # dj: all axes
-    finalgroup = []
     if inner_inputs:
         previous_states_ind = {
             "_{}".format(v.name): (v.ind_l_final, v.keys_final)
@@ -598,14 +594,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
         if op_single.startswith("_"):
-            return (
-                previous_states_ind[op_single][0],
-                previous_states_ind[op_single][1],
-                None,
-                None,
-                None,
-                keys_fromL,
-            )
+            return previous_states_ind[op_single][0], previous_states_ind[op_single][1], None, keys_fromL
         shape = input_shape(inputs[op_single])
         shapes[op_single] = shape
         opval = range(np.prod(shape))
@@ -620,12 +609,11 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
             op_new = op["."](op_out, opval)
             val = op_new
             keys = inner_inputs[op_single].keys_out_final + [op_single]
-            return val, keys, groups, finalgroup, shapes, keys_fromL
+            return val, keys, shapes, keys_fromL
         else:
             val = op["*"](opval)
             keys = splitter_rpn
-            groups[op_single], finalgroup = 0, [[0]]
-            return val, keys, groups, finalgroup, shapes, keys_fromL
+            return val, keys, shapes, keys_fromL
 
     for token in splitter_rpn:
         if token in [".", "*"]:
@@ -645,7 +633,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
                     op2str = True
                     shapes[op2] = shape2
             else:
-                op2val, shape2, oldgroup2 = op2
+                op2val, shape2 = op2
             if isinstance(op1, str):
                 if op1.startswith("_"):
                     op1val = previous_states_ind[op1][0]
@@ -658,13 +646,112 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
                     op1str = True
                     shapes[op1] = shape1
             else:
-                op1val, shape1, oldgroup1 = op1
+                op1val, shape1 = op1
 
             if token == ".":
                 if shape2 != shape1:
-                    raise ValueError(
-                        "Operands {} and {} do not have same shape.".format(op1, op2)
-                    )
+                    raise ValueError('Operands {} and {} do not have same shape.'.format(op1, op2))
+                newshape = shape1
+            if token == '*':
+                newshape = tuple(list(shape2) + list(shape1))
+
+            #TODO: do I have to insert? not enough that op2 is before op1?
+            if op2str:
+                if op2.startswith("_"):
+                    keys = previous_states_ind[op2][1] + keys
+                else:
+                    keys.insert(0, op2)
+            if op1str:
+                if op1.startswith("_"):
+                    keys += previous_states_ind[op1][1]
+                else:
+                    keys.append(op1)
+
+            # TODO: rewrite once I have more tests
+            if isinstance(op1, str) and op1 in inner_inputs:
+                #TODO: have to be changed if differ length
+                inner_len = [shape1[-1]]*np.prod(shape1[:-1])
+                # this come from the previous node
+                outer_ind = inner_inputs[op1].ind_l
+                op1val_out = itertools.chain.from_iterable(itertools.repeat(x, n)
+                                                           for x, n in zip(outer_ind, inner_len))
+                op1val_new = op["."](op1val_out, op1val)
+                keys = keys[:keys.index(op1)] + inner_inputs[op1].keys_out_final + keys[keys.index(op1):]
+            else:
+                op1val_new = op1val
+            if isinstance(op2, str) and op2 in inner_inputs:
+                # TODO: have to be changed if differ length
+                inner_len = [shape2[-1]] * np.prod(shape2[:-1])
+                # this come from the previous node
+                outer_ind = inner_inputs[op2].ind_l
+                op2val_out = itertools.chain.from_iterable(itertools.repeat(x, n)
+                                                           for x, n in zip(outer_ind, inner_len))
+                op2val_new = op["."](op2val_out, op2val)
+                keys = keys[:keys.index(op2)] + inner_inputs[op2].keys_out_final + keys[keys.index(op2):]
+            else:
+                op2val_new = op2val
+            pushval = (op[token](op2val_new, op1val_new), newshape)
+            stack.append(pushval)
+        else: # name of one of the inputs
+            stack.append(token)
+
+    val = stack.pop()
+    if isinstance(val, tuple):
+        val = val[0]
+
+    return val, keys, shapes, keys_fromL
+
+
+# dj: TODO: do I need keys?
+# TODO: change op1/2 to opL/R
+def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
+    """ Process splitter rpn from left to right
+    """
+    stack = []
+    keys = []
+    groups = {}
+    group_count = None
+    # dj: all axes
+    finalgroup = []
+    if not combiner:
+        combiner = []
+    if inner_inputs:
+        #previous_states_ind = {"_{}".format(v.name): (v.ind_l_final, v.keys_final) for _,v in inner_inputs.items()}
+        inner_inputs = {k: v for k,v in inner_inputs.items() if k in splitter_rpn}
+    else:
+        #previous_states_ind = {}
+        inner_inputs = {}
+    # when splitter is a single element (no operators)
+    if len(splitter_rpn) == 1:
+        op_single = splitter_rpn[0]
+        # TODO: in this situation the state should be simply the same
+        # if op_single.startswith("_"):
+        #     return previous_states_ind[op_single][1], None, None
+        if op_single in inner_inputs:
+            # TODO: have to be changed if differ length
+            keys = inner_inputs[op_single].keys_out_final + [op_single]
+            return keys, groups, finalgroup
+        else:
+            keys = splitter_rpn
+            groups[op_single], finalgroup = 0, [[0]]
+            return keys, groups, finalgroup
+
+    for token in splitter_rpn:
+        if token in ['.', '*']:
+            # dj: op1 is Right, op2 is Left
+            op1 = stack.pop()
+            op2 = stack.pop()
+            op1str = op2str = False
+            if isinstance(op2, str):
+                op2str = True
+            else:
+                oldgroup2 = op2
+            if isinstance(op1, str):
+                op1str = True
+            else:
+                oldgroup1 = op1
+
+            if token == '.':
                 if all([op1str, op2str]):
                     if group_count is None:
                         group_count = 0
@@ -690,12 +777,10 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
                     oldgroup = oldgroup2
                     # dj: changing axes for Right part of the scalar op.
                     for k, v in groups.items():
+                        pdb.set_trace()#check when I need it
                         if v in ensure_list(oldgroup1):
-                            groups[k] = ensure_list(oldgroup2)[
-                                ensure_list(oldgroup1).index(v)
-                            ]
-                newshape = shape1
-            if token == "*":
+                            groups[k] = ensure_list(oldgroup2)[ensure_list(oldgroup1).index(v)]
+            if token == '*':
                 if all([op1str, op2str]):
                     if group_count is None:
                         group_count = 0
@@ -714,73 +799,42 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
                     groups[op2] = group_count
                     oldgroup = [groups[op2]] + ensure_list(oldgroup1)
                 else:
-                    oldgroup = ensure_list(oldgroup2) + ensure_list(oldgroup1)
-                # TODO: should I change when inner?
-                newshape = tuple(list(shape2) + list(shape1))
+                    oldgroup = ensure_list(oldgroup2) + \
+                               ensure_list(oldgroup1)
 
             # TODO: do I have to insert? not enough that op2 is before op1?
             if op2str:
-                if op2.startswith("_"):
+                if False:#op2.startswith("_"):
                     keys = previous_states_ind[op2][1] + keys
                 else:
                     keys.insert(0, op2)
             if op1str:
-                if op1.startswith("_"):
+                if False:#op1.startswith("_"):
                     keys += previous_states_ind[op1][1]
                 else:
                     keys.append(op1)
-
-            # TODO: rewrite once I have more tests
-            if isinstance(op1, str) and op1 in inner_inputs:
-                # TODO: have to be changed if differ length
-                inner_len = [shape1[-1]] * np.prod(shape1[:-1])
-                # this come from the previous node
-                outer_ind = inner_inputs[op1].ind_l
-                op1val_out = itertools.chain.from_iterable(
-                    itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
-                )
-                op1val_new = op["."](op1val_out, op1val)
-                keys = (
-                    keys[: keys.index(op1)]
-                    + inner_inputs[op1].keys_out_final
-                    + keys[keys.index(op1) :]
-                )
-            else:
-                op1val_new = op1val
-            if isinstance(op2, str) and op2 in inner_inputs:
-                # TODO: have to be changed if differ length
-                inner_len = [shape2[-1]] * np.prod(shape2[:-1])
-                # this come from the previous node
-                outer_ind = inner_inputs[op2].ind_l
-                op2val_out = itertools.chain.from_iterable(
-                    itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
-                )
-                op2val_new = op["."](op2val_out, op2val)
-                keys = (
-                    keys[: keys.index(op2)]
-                    + inner_inputs[op2].keys_out_final
-                    + keys[keys.index(op2) :]
-                )
-            else:
-                op2val_new = op2val
-            pushval = (op[token](op2val_new, op1val_new), newshape, oldgroup)
-            stack.append(pushval)
-        else:  # name of one of the inputs
+            pushgroup = (oldgroup)
+            stack.append(pushgroup)
+        else: # name of one of the inputs
             stack.append(token)
 
-    val = stack.pop()
-    if isinstance(val, tuple):
-        if isinstance(val[-1], int):
-            finalgroup = [[val[-1]]]
-        else:
-            finalgroup = [val[-1]]
-        val = val[0]
+    groups_stack = stack.pop()
+    if isinstance(groups_stack, int):
+        finalgroup = [[groups_stack]]
+    else:
+        finalgroup = [groups_stack]
 
-    return val, keys, groups, finalgroup, shapes, keys_fromL
+    if combiner:
+        pass
+        # TODO: move some parts form prepare_states_combined_ind and prepare_spl_comb_final
+
+    return keys, groups, finalgroup
+
+
 
 
 def splits(splitter, inputs, inner_inputs=None):
-    values, keys, _, _, _, _ = _splits(splitter, inputs, inner_inputs=inner_inputs)
+    values, keys, _, _ = _splits(splitter, inputs, inner_inputs=inner_inputs)
     # dj: i'm not sure why you need iter_splits, _splits gives groups with all axes per input
     return iter_splits(values, keys)
 
