@@ -550,7 +550,6 @@ class NodeBase:
         )
         return dir_nm_el, state_surv_dict
 
-
     def to_job(self, ind):
         """ running interface one element generated from node_state."""
         logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
@@ -642,7 +641,6 @@ class Node(NodeBase):
             cache_dir=cache_dir,
         )
 
-
     def get_output(self):
         """collecting all outputs and updating self._output
         (assuming that file already exist and this was checked)
@@ -696,7 +694,7 @@ class Node(NodeBase):
                              ensure_list(self._cache_dir))
 
         """
-        #if not self.output:
+        # if not self.output:
         self.get_output()
         for key_out in self.output_names:
             output = self.output[key_out]
