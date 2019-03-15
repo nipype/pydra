@@ -1,17 +1,18 @@
 import os, time, pdb
 from copy import deepcopy
+import dataclasses as dc
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
 from .node import NodeBase
 
 import logging
 
-logger = logging.getLogger("nipype.workflow")
+logger = logging.getLogger("pydra.workflow")
 
 
 class Submitter(object):
     # TODO: runnable in init or run
-    def __init__(self, plugin, runnable):
+    def __init__(self, plugin):
         self.plugin = plugin
         self.node_line = []
         self._to_finish = []  # used only for wf
@@ -26,45 +27,28 @@ class Submitter(object):
         else:
             raise Exception("plugin {} not available".format(self.plugin))
 
-        if isinstance(runnable, NodeBase):  # a node/task
-            self.node = runnable
-        elif hasattr(runnable, "graph"):  # a workflow
-            self.workflow = runnable
-        else:
-            raise Exception("runnable has to be a Node or Workflow")
+    def __enter__(self):
+        return self
 
-    def run(self):
+    def __exit__(self, type, value, traceback):
+        self.close()
+
+    def run(self, runnable):
         """main running method, checks if submitter id for Node or Workflow"""
-        if hasattr(self, "node"):
-            self.run_node()
-        elif hasattr(self, "workflow"):
-            self.run_workflow()
-
-    def run_node(self):
-        """the main method to run a Node"""
-        if self.node.state:
-            self.node.state.prepare_states(self.node.inputs)
-        self._submit_node(self.node)
-        while not self.node.done:
-            logger.debug("Submitter, in while, to_finish: {}".format(self.node))
-            time.sleep(3)
-        self.node.get_output()
-
-    def _submit_node(self, node):
-        """submitting nodes's interface for all states"""
-        if node.state:
-            for ii, ind in enumerate(node.state.states_val):
-                # this is run only for a single node or the first node in a wf
-                self._submit_node_el(node, ii)
+        if not isinstance(runnable, NodeBase):  # a node/workflow
+            raise Exception("runnable has to be a Node or Workflow")
+        if runnable.state:
+            runnable.state.prepare_states(runnable.inputs)
+        futures = []
+        if runnable.state:
+            for ii, ind in enumerate(runnable.state.states_val):
+                res = self.worker.run_el(runnable.to_job(ii))
+                futures.append([ii, res])
         else:
-            self._submit_node_el(node, ind=None)
-
-    def _submit_node_el(self, node, ind):
-        """submitting node's interface for one element of states"""
-        logger.debug("SUBMIT WORKER, node: {}, ind: {}".format(node, ind))
-        res = self.worker.run_el(node.run_interface_el, ind)
-        # saving results in a node dictionary
-        node.results_dict[res[0]] = res[1]
+            res = self.worker.run_el(runnable.to_job(None))
+            futures.append([None, res])
+        for ind, task_future in futures:
+            runnable.results_dict[ind] = task_future
 
     def run_workflow(self, workflow=None, ready=True):
         """the main function to run Workflow"""

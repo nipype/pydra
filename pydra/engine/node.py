@@ -128,6 +128,9 @@ class NodeBase:
         self.messenger_args = messenger_args
         self.cache_dir = cache_dir
 
+        # dictionary of results from tasks
+        self.results_dict = {}
+
     def __getstate__(self):
         state = self.__dict__.copy()
         state["input_spec"] = pk.dumps(state["input_spec"])
@@ -547,6 +550,17 @@ class NodeBase:
         )
         return dir_nm_el, state_surv_dict
 
+
+    def to_job(self, ind):
+        """ running interface one element generated from node_state."""
+        logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
+        el = deepcopy(self)
+        el.state = None
+        _, inputs_dict = self.get_input_el(ind)
+        interf_inputs = dict((k.split(".")[1], v) for k, v in inputs_dict.items())
+        el.inputs = dc.replace(el.inputs, **interf_inputs)
+        return el
+
     # checking if all outputs are saved
     @property
     def done(self):
@@ -628,19 +642,6 @@ class Node(NodeBase):
             cache_dir=cache_dir,
         )
 
-        # dictionary of results from tasks
-        self.results_dict = {}
-
-    def run_interface_el(self, ind):
-        """ running interface one element generated from node_state."""
-        logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
-        if ind is not None:
-            state_dict, inputs_dict = self.get_input_el(ind)
-        else:
-            _, inputs_dict = self.get_input_el(ind)
-        interf_inputs = dict((k.split(".")[1], v) for k, v in inputs_dict.items())
-        res = self.run(**interf_inputs)
-        return ind, res  # TODO NOW: don't have to return
 
     def get_output(self):
         """collecting all outputs and updating self._output
@@ -652,7 +653,8 @@ class Node(NodeBase):
                 for (ii, val) in enumerate(self.state.states_val):
                     state_dict = val
                     if self.state.splitter:
-                        output_el = getattr(self.results_dict[ii].output, key_out)
+                        output = self.results_dict[ii].result().output
+                        output_el = getattr(output, key_out)
                         if not self.state.combiner:  # only splitter
                             self._output[key_out][
                                 tuple(self.state.states_val[ii].items())
@@ -664,7 +666,7 @@ class Node(NodeBase):
                     else:
                         raise Exception("not implemented, TODO")
             else:
-                output_el = getattr(self.results_dict[None].output, key_out)
+                output_el = getattr(self.results_dict[None].result().output, key_out)
                 # TODO should I have: self._output[key_out][None] or self._output[key_out]?
                 self._output[key_out][None] = output_el
         return self._output
@@ -678,10 +680,10 @@ class Node(NodeBase):
         for key_out in self.output_names:
             if self.state:
                 for ii, _ in enumerate(self.state.states_val):
-                    if getattr(self.results_dict[ii].output, key_out) is None:
+                    if getattr(self.results_dict[ii].result().output, key_out) is None:
                         return False
             else:
-                if getattr(self.results_dict[None].output, key_out) is None:
+                if getattr(self.results_dict[None].result().output, key_out) is None:
                     return False
         self._done = True
         return True
@@ -694,8 +696,8 @@ class Node(NodeBase):
                              ensure_list(self._cache_dir))
 
         """
-        if not self.output:
-            self.get_output()
+        #if not self.output:
+        self.get_output()
         for key_out in self.output_names:
             output = self.output[key_out]
             if self.state:

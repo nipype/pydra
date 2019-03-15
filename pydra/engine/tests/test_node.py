@@ -36,7 +36,7 @@ def change_dir(request):
 
 
 Plugins = ["serial", "mp", "cf", "dask"]
-Plugins = ["serial", "cf"]
+Plugins = ["cf"]
 
 
 @to_task
@@ -188,9 +188,8 @@ def test_task_nostate_1(tmpdir, plugin, change_dir):
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
 
     # checking the results
     results = nn.result()
@@ -205,9 +204,8 @@ def test_task_nostate_2(tmpdir, plugin, change_dir):
     assert np.allclose(nn.inputs.lst, [2, 3, 4])
     assert nn.state is None
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
 
     # checking the results
     results = nn.result()
@@ -225,9 +223,8 @@ def test_task_spl_1(plugin, change_dir):
     assert nn.state.splitter == "NA.a"
     assert (nn.inputs.a == np.array([3, 5])).all()
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
 
     # checking the results
     results = nn.result()
@@ -276,9 +273,8 @@ def test_task_spl_2(plugin, change_dir, splitter, state_splitter, state_rpn, exp
     assert nn.state.splitter == state_splitter
     assert nn.state.splitter_rpn == state_rpn
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
 
     # checking the results
     results = nn.result()
@@ -304,9 +300,8 @@ def test_task_spl_comb_1(plugin, change_dir):
     assert nn.state.splitter == "NA.a"
     assert nn.state.combiner == ["NA.a"]
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
 
     assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
     assert nn.state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
@@ -398,9 +393,8 @@ def test_task_spl_comb_2(
     assert nn.state.splitter_rpn == state_rpn
     assert nn.state.combiner == state_combiner
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
 
     assert set(nn.state.combiner_all) == set(state_combiner_all)
     # checking the results
@@ -429,9 +423,8 @@ def test_node_7(plugin, change_dir):
     assert (nn.inputs["NA.b"] == np.array([3, 5])).all()
     assert (nn.inputs["NA.c"] == np.array([2, 1])).all()
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
 
     # checking the results
     expected = [({"NA.b": 3, "NA.c": 2}, 5), ({"NA.b": 5, "NA.c": 1}, 6)]
@@ -458,9 +451,8 @@ def test_node_8(plugin, change_dir):
     assert (nn.inputs["NA.b"] == np.array([3, 5])).all()
     assert (nn.inputs["NA.c"] == np.array([2, 1])).all()
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
 
     # checking teh results
     expected = [
@@ -490,9 +482,8 @@ def test_node_9(plugin, change_dir):
 
     assert nn.splitter == (["NA.a", "NA.b"], ["NA.c", "NA.d"])
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
 
 
 # tests for workflows
@@ -530,9 +521,8 @@ def test_workflow_1(plugin, change_dir):
     na.split(splitter="a", inputs={"a": [3, 5]})
     wf.add_nodes([na])
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -572,9 +562,8 @@ def test_workflow_2(plugin, change_dir):
     wf.connect("NA", "out", "NB", "b")
     assert wf.nodes[0].splitter == "NA.a"
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected_A = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected_A):
@@ -617,9 +606,8 @@ def test_workflow_2a(plugin, change_dir):
     assert wf.nodes[0].splitter == "NA.a"
     assert wf.nodes[1].splitter == ("NA.a", "NB.c")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected_A = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected_A):
@@ -660,9 +648,8 @@ def test_workflow_2b(plugin):
     assert wf.nodes[0].splitter == "NA.a"
     assert wf.nodes[1].splitter == ["NA.a", "NB.c"]
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected_A = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected_A):
@@ -700,9 +687,8 @@ def test_workflow_3(plugin, change_dir):
 
     assert wf.nodes[0].splitter == "NA.a"
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -728,9 +714,8 @@ def test_workflow_3a(plugin, change_dir):
 
     assert wf.nodes[0].splitter == "NA.a"
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -756,9 +741,8 @@ def test_workflow_3b(plugin, change_dir):
 
     assert wf.nodes[0].splitter == "NA.a"
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -785,9 +769,8 @@ def test_workflow_4(plugin, change_dir):
     # connect method as it is in the current version
     wf.connect("NA", "out", "NB", "b")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -816,9 +799,8 @@ def test_workflow_4a(plugin, change_dir):
     # instead of "connect", using kwrg argument in the add method as in the example
     wf.add(nb, b="NA.out")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -858,9 +840,8 @@ def test_workflow_4b(plugin, change_dir):
     # connect method as it is in the current version
     wf.connect("NA", "out", "NB", "b")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -900,9 +881,8 @@ def test_workflow_4c(plugin, change_dir):
 
     wf.connect("NA", "out", "NB", "b")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -943,9 +923,8 @@ def test_workflow_4d(plugin, change_dir):
     wf.split_node(splitter="a", node="NA")
     wf.split_node(splitter=("NA.a", "c"), node="NB")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -973,9 +952,8 @@ def test_workflow_5(plugin, change_dir):
     # using the split method after add (using splitter for the last added node as default)
     wf.split_node(splitter="a", inputs={"a": [3, 5]})
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -993,9 +971,8 @@ def test_workflow_5a(plugin, change_dir):
 
     wf.add(na).split_node(splitter="a", inputs={"a": [3, 5]})
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -1019,9 +996,8 @@ def test_workflow_6(plugin, change_dir):
     wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
     wf.connect("NA", "out", "NB", "b")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -1051,9 +1027,8 @@ def test_workflow_6a(plugin, change_dir):
     wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]}, node=nb)
     wf.connect("NA", "out", "NB", "b")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -1080,9 +1055,8 @@ def test_workflow_6b(plugin, change_dir):
     wf.split_node(splitter="a", inputs={"a": [3, 5]}, node=na)
     wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]}, node=nb)
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -1114,9 +1088,8 @@ def test_workflow_7(plugin, change_dir):
     wf.connect_wf_input("wfa", "NA", "a")
     wf.split_node(splitter="a")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -1137,9 +1110,8 @@ def test_workflow_7a(plugin, change_dir):
     wf.add(na, a="wfa")
     wf.split_node(splitter="a")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -1162,9 +1134,8 @@ def test_workflow_8(plugin, change_dir):
     wf.connect_wf_input("c", "NB", "c")
     assert wf.nodes[0].splitter == "NA.a"
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected_A = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected_A):
@@ -1198,9 +1169,8 @@ def test_workflow_9(plugin, change_dir):
         output_names=["out"],
     ).split_node(splitter=("_NA", "c"), inputs={"c": [2, 1]})
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
@@ -1231,9 +1201,8 @@ def test_workflow_10(plugin, change_dir):
         output_names=["out"],
     ).split_node(splitter=("_NA", "c"), inputs={"c": [2, 1]})
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.b": 3, "NA.c": 0}, 3), ({"NA.b": 5, "NA.c": 10}, 15)]
     for i, res in enumerate(expected):
@@ -1267,9 +1236,8 @@ def test_workflow_10a(plugin, change_dir):
         output_names=["out"],
     ).split_node(splitter=("_NA", "c"), inputs={"c": [[2, 1], [0, 0]]})
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [
         ({"NA.b": 3, "NA.c": 0}, 3),
@@ -1317,9 +1285,8 @@ def test_workflow_11(plugin, change_dir):
         splitter=["_NA", "_NB"]
     )  # TODO: this should eb default?
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     expected = [({"NA.b": 3, "NA.c": 0}, 3), ({"NA.b": 5, "NA.c": 10}, 15)]
     for i, res in enumerate(expected):
@@ -1359,9 +1326,8 @@ def test_workflow_12(plugin, change_dir):
     wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
     wf.connect("NA", "out", "NB", "b")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     # checking if workflow.results is the same as results of nodes
     assert wf.result["NA_out"] == wf.nodes[0].result["out"]
@@ -1399,10 +1365,10 @@ def test_workflow_12a(plugin, change_dir):
     wf.split_node(splitter=("NA.a", "c"), inputs={"c": [2, 1]})
     wf.connect("NA", "out", "NB", "b")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
     # wf_out can't be used twice
     with pytest.raises(Exception) as exinfo:
-        sub.run()
+        with Submitter(plugin=plugin) as sub:
+            sub.run(wf)
     assert str(exinfo.value) == "the key wf_out is already used in workflow.result"
 
 
@@ -1423,9 +1389,8 @@ def test_workflow_13(plugin, change_dir):
     wf.add(na)
     wf.connect_wf_input("wfa", "NA", "a")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert wf.is_complete
     expected = [({"wf13.wfa": 3}, 5), ({"wf13.wfa": 5}, 7)]
@@ -1460,9 +1425,8 @@ def test_workflow_13a(plugin, change_dir):
     wf.add(na)
     wf.connect_wf_input("wfa", "NA", "b")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert wf.is_complete
     expected = [
@@ -1491,9 +1455,8 @@ def test_workflow_13b(plugin, change_dir):
     wf.add(na).split(splitter="wfa")
     wf.connect_wf_input("wfa", "NA", "a")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert wf.is_complete
     expected = [({"wf13b.wfa": 3}, 5), ({"wf13b.wfa": 5}, 7)]
@@ -1516,9 +1479,8 @@ def test_workflow_13c(plugin, change_dir):
     wf.add(na).split(splitter="wfa", inputs={"wfa": [3, 5]})
     wf.connect_wf_input("wfa", "NA", "a")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert wf.is_complete
     expected = [({"wf13c.wfa": 3}, 5), ({"wf13c.wfa": 5}, 7)]
@@ -1544,9 +1506,8 @@ def test_workflow_14(plugin, change_dir):
     wf.connect_wf_input("wfb", "NA", "b")
     wf.connect_wf_input("wfc", "NA", "c")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert wf.is_complete
     expected = [
@@ -1575,9 +1536,8 @@ def test_workflow_15(plugin, change_dir):
     wf.connect_wf_input("wfb", "NA", "b")
     wf.connect_wf_input("wfc", "NA", "c")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert wf.is_complete
     expected = [
@@ -1616,9 +1576,8 @@ def test_workflow_16(plugin, change_dir):
     )
     wf.add(wfa)
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert wf.is_complete
     assert wf.result["wfa_out"] == ({}, 5)
@@ -1646,9 +1605,8 @@ def test_workflow_16a(plugin, change_dir):
     )
     wf.add(wfa)
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert wf.is_complete
     assert wf.result["wfa_out"] == ({}, 5)
@@ -1675,9 +1633,8 @@ def test_workflow_16b(plugin, change_dir):
     wf.add(wfa)
     wf.connect_wf_input("a", "wfa", "a")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert wf.is_complete
     assert wf.result["wfa_out"] == ({}, 5)
@@ -1708,9 +1665,8 @@ def test_workflow_17(plugin, change_dir):
     )
     wf.add(wfa)
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert wf.is_complete
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
@@ -1753,9 +1709,8 @@ def test_workflow_18(plugin, change_dir):
     wf.add(wfb)
     wf.connect("NA", "out", "wfb", "b")
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     # dj should I remember the wf input?
     assert wf.is_complete
@@ -1796,9 +1751,8 @@ def test_workflow_19(plugin, change_dir):
     wf.connect("NA", "out", "wfb", "b")
     assert wf.nodes[0].splitter == "NA.a"
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
     # wf.result for NB_out doeant have state in results
     assert wf.is_complete
 
@@ -1857,9 +1811,8 @@ def test_workflow_19a(plugin, change_dir):
     wf.connect("NA", "out", "wfb", "b")
     assert wf.nodes[0].splitter == "NA.a"
 
-    sub = Submitter(runnable=wf, plugin=plugin)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     # wf.result for NB_out doeant have state in results
     assert wf.is_complete
@@ -1907,9 +1860,8 @@ def test_current_node_1(change_dir, plugin):
         output_names=["out_file"],
     )
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
     # TODO (res): nodes only returns relative path
     assert "out_file" in nn.output.keys()
 
@@ -1936,9 +1888,8 @@ def test_current_node_2(change_dir, plugin):
         output_names=["out_file"],
     )
 
-    sub = Submitter(plugin=plugin, runnable=nn)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
 
     assert "out_file" in nn.output.keys()
     assert "NA.in_file:0" in nn.output["out_file"].keys()
@@ -1974,9 +1925,8 @@ def test_current_wf_1(change_dir, plugin):
     )
     wf.add_nodes([nn])
 
-    sub = Submitter(plugin=plugin, runnable=wf)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert "fsl_out" in wf.output.keys()
 
@@ -2010,9 +1960,8 @@ def test_current_wf_1a(change_dir, plugin):
     )
     wf.add(runnable=nn)
 
-    sub = Submitter(plugin=plugin, runnable=wf)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert "fsl_out" in wf.output.keys()
 
@@ -2044,9 +1993,8 @@ def test_current_wf_1b(change_dir, plugin):
         },
     )
 
-    sub = Submitter(plugin=plugin, runnable=wf)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert "fsl_out" in wf.output.keys()
 
@@ -2077,9 +2025,8 @@ def test_current_wf_1c(change_dir, plugin):
         },
     )
 
-    sub = Submitter(plugin=plugin, runnable=wf)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert "fsl_out" in wf.output.keys()
 
@@ -2116,9 +2063,8 @@ def test_current_wf_2(change_dir, plugin):
     wf.add_nodes([nn])
     wf.connect_wf_input("in_file", "fsl", "in_file")
 
-    sub = Submitter(plugin=plugin, runnable=wf)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert "fsl_out" in wf.output.keys()
     assert "cw2.in_file:0" in wf.output["fsl_out"].keys()
@@ -2157,9 +2103,8 @@ def test_current_wf_2a(change_dir, plugin):
     wf.add_nodes([nn])
     # wf.connect_wf_input("in_file", "fsl", "in_file")
 
-    sub = Submitter(plugin=plugin, runnable=wf)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     assert "fsl_out" in wf.output.keys()
     assert "fsl.in_file:0" in wf.output["fsl_out"].keys()

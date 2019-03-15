@@ -59,13 +59,8 @@ class ConcurrentFuturesWorker(Worker):
         self.pool = cf.ProcessPoolExecutor(self.nr_proc)
         logger.debug("Initialize ConcurrentFuture")
 
-    def run_el(self, interface, inp):
-        x = self.pool.submit(interface, inp)
-        # print("X, DONE", x.done())
-        # x.add_done_callback(lambda x: print("DONE ", interface, inp, x.done))
-        # print("DIR", x.result())
-        # returning dir_nm_el and Result object for the specific element
-        return x.result()
+    def run_el(self, interface, **kwargs):
+        return self.pool.submit(interface, **kwargs)
 
     def close(self):
         self.pool.shutdown()
