@@ -7,7 +7,7 @@ from pathlib import Path
 from nipype.utils.filemanip import save_json, makedirs, to_str
 from nipype.interfaces import fsl
 
-from ..node import Node, Workflow, is_node
+from ..node import Workflow, NodeBase
 from ..submitter import Submitter
 from ..task import to_task
 
@@ -67,7 +67,7 @@ def moment(lst, n):
 def test_task_init_1():
     """Node with mandatory arguments only"""
     nn = fun_addtwo()
-    assert isinstance(nn, Node)
+    assert isinstance(nn, NodeBase)
     assert nn.name == "fun_addtwo"
     assert hasattr(nn, "__call__")
 

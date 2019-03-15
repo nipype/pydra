@@ -41,7 +41,7 @@ import dataclasses as dc
 import inspect
 import typing as ty
 
-from .node import Node
+from .node import NodeBase
 from ..utils.messenger import AuditFlag
 from .specs import (
     BaseSpec,
@@ -55,7 +55,7 @@ from .specs import (
 from .helpers import ensure_list
 
 
-class BaseTask(Node):
+class BaseTask(NodeBase):
     """This is a base class for Task objects.
     """
 

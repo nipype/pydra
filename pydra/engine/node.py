@@ -563,12 +563,8 @@ class NodeBase:
     # checking if all outputs are saved
     @property
     def done(self):
-        # once _done os True, this should not change
-        logger.debug("done {}".format(self._done))
-        if self._done:
-            return self._done
-        else:
-            return self._check_all_results()
+        if self.results_dict:
+            return all([future.done() for _, future in self.results_dict.items()])
 
     def get_output(self):
         raise NotImplementedError
@@ -616,30 +612,6 @@ class NodeBase:
             val_l = self._state_dict_to_list(self._output[key_out])
             result = val_l
         return result
-
-
-class Node(NodeBase):
-    def __init__(
-        self,
-        name,
-        splitter=None,
-        inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        messengers=None,
-        messenger_args=None,
-        cache_dir=None,
-        combiner=None,
-    ):
-        super(Node, self).__init__(
-            name=name,
-            splitter=splitter,
-            inputs=inputs,
-            combiner=combiner,
-            audit_flags=audit_flags,
-            messengers=messengers,
-            messenger_args=messenger_args,
-            cache_dir=cache_dir,
-        )
 
     def get_output(self):
         """collecting all outputs and updating self._output
@@ -980,10 +952,6 @@ class Workflow(NodeBase):
 
 def is_function(obj):
     return hasattr(obj, "__call__")
-
-
-def is_node(obj):
-    return isinstance(obj, Node)
 
 
 def is_workflow(obj):
