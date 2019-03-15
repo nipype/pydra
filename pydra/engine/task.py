@@ -55,16 +55,7 @@ from .specs import (
 from .helpers import ensure_list
 
 
-class BaseTask(NodeBase):
-    """This is a base class for Task objects.
-    """
-
-    _task_version: ty.Optional[
-        str
-    ] = None  # Task writers encouraged to define and increment when implementation changes sufficiently
-
-
-class FunctionTask(BaseTask):
+class FunctionTask(NodeBase):
     def __init__(
         self,
         func: ty.Callable,
@@ -157,7 +148,7 @@ def to_task(func_to_decorate):
     return create_func
 
 
-class ShellCommandTask(BaseTask):
+class ShellCommandTask(NodeBase):
     def __init__(
         self,
         name,

@@ -41,6 +41,9 @@ develop = True
 class NodeBase:
     _api_version: str = "0.0.1"  # Should generally not be touched by subclasses
     _version: str  # Version of tool being wrapped
+    _task_version: ty.Optional[
+        str
+    ] = None  # Task writers encouraged to define and increment when implementation changes sufficiently
     _input_sets = None  # Dictionaries of predefined input settings
 
     audit_flags: AuditFlag = AuditFlag.NONE  # What to audit. See audit flags for details
@@ -565,15 +568,6 @@ class NodeBase:
     def done(self):
         if self.results_dict:
             return all([future.done() for _, future in self.results_dict.items()])
-
-    def get_output(self):
-        raise NotImplementedError
-
-    def _check_all_results(self):
-        raise NotImplementedError
-
-    def _reading_results(self):
-        raise NotImplementedError
 
     def _state_dict_to_list(self, container):
         """creating a list of tuples from dictionary and changing key (state) from str to dict"""
