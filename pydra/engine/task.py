@@ -52,7 +52,7 @@ from .specs import (
     DockerSpec,
     SingularitySpec,
 )
-from .helpers import ensure_list
+from .helpers import ensure_list, execute
 
 
 class FunctionTask(NodeBase):
@@ -61,8 +61,6 @@ class FunctionTask(NodeBase):
         func: ty.Callable,
         output_spec: ty.Optional[BaseSpec] = None,
         name=None,
-        splitter=None,
-        combiner=None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
         messenger_args=None,
@@ -85,8 +83,6 @@ class FunctionTask(NodeBase):
         super(FunctionTask, self).__init__(
             name,
             inputs=kwargs,
-            splitter=splitter,
-            combiner=combiner,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,

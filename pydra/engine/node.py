@@ -65,8 +65,6 @@ class NodeBase:
     def __init__(
         self,
         name,
-        splitter=None,
-        combiner=None,
         inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
@@ -81,10 +79,6 @@ class NodeBase:
 
         name : str
             Unique name of this node
-        splitter : str or (list or tuple of (str or splitters))
-            Whether inputs should be split at run time
-        combiner: str or list of strings (names of variables)
-            variables that should be used to combine results together
         inputs : dictionary (input name, input value or list of values)
             States this node's input names
         """
@@ -103,10 +97,7 @@ class NodeBase:
         ]
 
         self._needed_outputs = []
-        if splitter:
-            # adding name of the node to the input name within the splitter
-            splitter = aux.change_splitter(splitter, self.name)
-        self.state = self.set_state(splitter, combiner)
+        self.state = None
         self._output = {}
         self._result = {}
         # flag that says if node finished all jobs
@@ -676,7 +667,6 @@ class Workflow(NodeBase):
         name,
         inputs=None,
         wf_output_names=None,
-        splitter=None,
         nodes=None,
         cache_dir=None,
     ):
@@ -823,8 +813,6 @@ class Workflow(NodeBase):
         name=None,
         inputs=None,
         output_names=None,
-        splitter=None,
-        combiner=None,
         cache_dir=None,
         **kwargs
     ):
@@ -847,9 +835,7 @@ class Workflow(NodeBase):
                 # TODO: pass on as many self defaults as needed
                 name=name,
                 inputs=inputs,
-                splitter=splitter,
                 other_splitters=self._node_splitters,
-                combiner=combiner,
                 output_names=output_names,
             )
         else:
