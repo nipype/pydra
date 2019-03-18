@@ -220,7 +220,9 @@ def test_innerwf_3(change_dir, plugin):
         output_names=["out"],
         inputs={"n": 3},
     )
-    nb = NodeBase(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"]
+    )
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "el_list")
 
@@ -256,7 +258,9 @@ def test_innerwf_4(change_dir, plugin):
         output_names=["out"],
         inputs={"n": 3},
     )
-    nb = NodeBase(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"]
+    )
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "a")
     nb.split(splitter="a").combine(combiner="a")
@@ -291,7 +295,9 @@ def test_innerwf_5(change_dir, plugin):
         inputs={"n": [3, 5]},
         splitter="n",
     )
-    nb = NodeBase(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"]
+    )
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "a")
     nb.split(splitter=["a", "NA.n"]).combine(combiner="a")
@@ -339,7 +345,9 @@ def test_innerwf_5a(change_dir, plugin):
         inputs={"n": [3, 5]},
         splitter="n",
     )
-    nb = NodeBase(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"]
+    )
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "a")
     nb.split(splitter=["a", "NA.n"]).combine(combiner=["a", "NA.n"])
@@ -382,7 +390,9 @@ def test_innerwf_5b(change_dir, plugin):
         inputs={"n": [3, 5]},
         splitter="n",
     )
-    nb = NodeBase(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"]
+    )
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "a")
     nb.split(splitter=["a", "NA.n"]).combine(combiner=["NA.n"])
@@ -557,7 +567,9 @@ def test_innerwf_8(change_dir, plugin):
         output_names=["out"],
         inputs={"n": 3},
     )
-    nb = NodeBase(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"]
+    )
     wf.add_nodes([na, nb])
     wf.connect("NA", "out", "NB", "a")
     nb.split(splitter="a")
@@ -603,8 +615,12 @@ def test_innerwf_9(change_dir, plugin):
         output_names=["out"],
         inputs={"n": 3},
     )
-    nb = NodeBase(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
-    nc = NodeBase(name="NC", interface=fun_addtwo(), workingdir="nc", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"]
+    )
+    nc = NodeBase(
+        name="NC", interface=fun_addtwo(), workingdir="nc", output_names=["out"]
+    )
     wf.add_nodes([na, nb, nc])
     wf.connect("NA", "out", "NB", "a")
     wf.connect("NB", "out", "NC", "a")
@@ -668,8 +684,12 @@ def test_innerwf_10(change_dir, plugin):
         inputs={"n": [3, 5]},
         splitter="n",
     )
-    nb = NodeBase(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
-    nc = NodeBase(name="NC", interface=fun_addtwo(), workingdir="nc", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"]
+    )
+    nc = NodeBase(
+        name="NC", interface=fun_addtwo(), workingdir="nc", output_names=["out"]
+    )
     wf.add_nodes([na, nb, nc])
     wf.connect("NA", "out", "NB", "a")
     wf.connect("NB", "out", "NC", "a")
@@ -760,8 +780,12 @@ def test_innerwf_10a(change_dir, plugin):
         inputs={"n": [3, 5]},
         splitter="n",
     )
-    nb = NodeBase(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
-    nc = NodeBase(name="NC", interface=fun_addtwo(), workingdir="nc", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"]
+    )
+    nc = NodeBase(
+        name="NC", interface=fun_addtwo(), workingdir="nc", output_names=["out"]
+    )
     wf.add_nodes([na, nb, nc])
     wf.connect("NA", "out", "NB", "a")
     wf.connect("NB", "out", "NC", "a")
@@ -847,8 +871,12 @@ def test_innerwf_10b(change_dir, plugin):
         inputs={"n": [3, 5]},
         splitter="n",
     )
-    nb = NodeBase(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
-    nc = NodeBase(name="NC", interface=fun_addtwo(), workingdir="nc", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"]
+    )
+    nc = NodeBase(
+        name="NC", interface=fun_addtwo(), workingdir="nc", output_names=["out"]
+    )
     wf.add_nodes([na, nb, nc])
     wf.connect("NA", "out", "NB", "a")
     wf.connect("NB", "out", "NC", "a")
@@ -908,8 +936,12 @@ def test_innerwf_10c(change_dir, plugin):
         inputs={"n": [3, 5]},
         splitter="n",
     )
-    nb = NodeBase(name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"])
-    nc = NodeBase(name="NC", interface=fun_addtwo(), workingdir="nc", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addtwo(), workingdir="nb", output_names=["out"]
+    )
+    nc = NodeBase(
+        name="NC", interface=fun_addtwo(), workingdir="nc", output_names=["out"]
+    )
     wf.add_nodes([na, nb, nc])
     wf.connect("NA", "out", "NB", "a")
     wf.connect("NB", "out", "NC", "a")

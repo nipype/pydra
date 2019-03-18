@@ -20,7 +20,7 @@ from tempfile import mkdtemp
 
 from . import state
 from . import auxiliary as aux
-from .specs import File, BaseSpec, RuntimeSpec, Result
+from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo
 from .helpers import (
     make_klass,
     create_checksum,
@@ -665,13 +665,37 @@ class Workflow(NodeBase):
     def __init__(
         self,
         name,
-        inputs=None,
-        wf_output_names=None,
-        nodes=None,
+        inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
+        input_spec: ty.Union[ty.List[ty.Text], BaseSpec, None] = None,
+        output_spec: ty.Optional[BaseSpec] = None,
+        audit_flags: AuditFlag = AuditFlag.NONE,
+        messengers=None,
+        messenger_args=None,
         cache_dir=None,
     ):
+        if input_spec:
+            if isinstance(input_spec, BaseSpec):
+                self.input_spec = input_spec
+            else:
+                self.input_spec = SpecInfo(
+                    name="Inputs",
+                    fields=[(name, ty.Any) for name in input_spec],
+                    bases=(BaseSpec,),
+                )
+        if output_spec is None:
+            output_spec = SpecInfo(
+                name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
+            )
+        self.output_spec = output_spec
+        self.set_output_keys()
+
         super(Workflow, self).__init__(
-            name=name, splitter=splitter, inputs=inputs, cache_dir=cache_dir
+            name=name,
+            inputs=inputs,
+            cache_dir=cache_dir,
+            audit_flags=audit_flags,
+            messengers=messengers,
+            messenger_args=messenger_args,
         )
 
         self.graph = nx.DiGraph()
@@ -681,17 +705,10 @@ class Workflow(NodeBase):
         self.connected_var = {}
         # input that are expected by nodes to get from wf.inputs
         self.needed_inp_wf = []
-        if nodes:
-            self.add_nodes(nodes)
-        for nn in self._nodes:
-            self.connected_var[nn] = {}
         # key: name of a node, value: the node
         self._node_names = {}
         # key: name of a node, value: splitter of the node
         self._node_splitters = {}
-        # list of (nodename, output name in the name, output name in wf) or (nodename, output name in the name)
-        # dj: using different name than for node, since this one it is defined by a user
-        self.wf_output_names = wf_output_names
 
         # nodes that are created when the workflow has splitter (key: node name, value: list of nodes)
         self.inner_nodes = {}

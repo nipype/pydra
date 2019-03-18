@@ -875,7 +875,9 @@ def test_workflow_combine_0(plugin="serial"):
     """workflow (without run) with one node with a splitter"""
     wf = Workflow(name="wf0", workingdir="test_wf0_{}".format(plugin))
     # defining a node with splitter and inputs first
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["a"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["a"]
+    )
     na.split(splitter="a", inputs={"a": [3, 5]}).combine(combiner="a")
     # one of the way of adding nodes to the workflow
     wf.add_nodes([na])
@@ -926,7 +928,9 @@ def test_workflow_combine_1a(plugin, change_dir):
         workingdir="test_wf1a_{}".format(plugin),
         wf_output_names=[("NA", "out", "NA_out")],
     )
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
     na.split(splitter="a", inputs={"a": [3, 5]}).combine(combiner="a")
     wf.add_nodes([na])
 
@@ -951,11 +955,15 @@ def test_workflow_combine_2(plugin, change_dir):
         workingdir="test_wf2_{}".format(plugin),
         wf_output_names=[("NB", "out")],
     )
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
     na.split(splitter="a", inputs={"a": [3, 5]}).combine(combiner="a")
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
-    nb = NodeBase(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"]
+    )
 
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
@@ -983,13 +991,17 @@ def test_workflow_combine_3(plugin, change_dir):
         workingdir="test_wf3_{}".format(plugin),
         wf_output_names=[("NB", "out"), ("NA", "out", "NA_out")],
     )
-    na = NodeBase(name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"]
+    )
     na.split(splitter=["b", "c"], inputs={"b": [3, 5, 7], "c": [10, 20]}).combine(
         combiner="b"
     )
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
-    nb = NodeBase(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"]
+    )
 
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
@@ -1027,13 +1039,17 @@ def test_workflow_combine_3a(plugin, change_dir):
         workingdir="test_wf3a_{}".format(plugin),
         wf_output_names=[("NB", "out")],
     )
-    na = NodeBase(name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"]
+    )
     na.split(splitter=["b", "c"], inputs={"b": [3, 5, 7], "c": [10, 20]}).combine(
         combiner="c"
     )
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
-    nb = NodeBase(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"]
+    )
 
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
@@ -1075,13 +1091,17 @@ def test_workflow_combine_3b(plugin, change_dir):
         workingdir="test_wf3b_{}".format(plugin),
         wf_output_names=[("NB", "out")],
     )
-    na = NodeBase(name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"]
+    )
     na.split(splitter=["b", "c"], inputs={"b": [3, 5, 7], "c": [10, 20]}).combine(
         combiner=["b", "c"]
     )
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
-    nb = NodeBase(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"]
+    )
 
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
@@ -1108,10 +1128,14 @@ def test_workflow_combine_4(plugin, change_dir):
         splitter in two nodes, combiner in the second
     """
     wf = Workflow(name="wf4", workingdir="test_wf4_{}".format(plugin))
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
     na.split(splitter="a", inputs={"a": [3, 5]})
     wf.add(na)
-    nb = NodeBase(name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"]
+    )
     # explicit splitter with a variable from the previous node
     # providing inputs with b
     nb.split(splitter=("NA.a", "c"), inputs={"c": [2, 1]}).combine(combiner="c")
@@ -1139,7 +1163,9 @@ def test_workflow_combine_4(plugin, change_dir):
 def test_workflow_combine_5(plugin, change_dir):
     """using split_node and combiner_node methods for one node"""
     wf = Workflow(name="wf5", workingdir="test_wf5_{}".format(plugin))
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
 
     wf.add(na)
     # using the split_node method after add (using splitter for the last added node as default)
@@ -1158,7 +1184,9 @@ def test_workflow_combine_5(plugin, change_dir):
 def test_workflow_combine_5a(plugin, change_dir):
     """using split_node and combine_node methods for one node in one chain"""
     wf = Workflow(name="wf5a", workingdir="test_wf5a_{}".format(plugin))
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
 
     wf.add(na).split_node(splitter="a", inputs={"a": [3, 5]}).combine_node(combiner="a")
 
@@ -1174,9 +1202,13 @@ def test_workflow_combine_5a(plugin, change_dir):
 def test_workflow_combine_6(plugin, change_dir):
     """using split_node and combine_node methods for two nodes (using last added node as default)"""
     wf = Workflow(name="wf6", workingdir="test_wf6_{}".format(plugin))
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
 
-    nb = NodeBase(name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"]
+    )
     # using the split methods after add (using splitter for the last added nodes as default)
     wf.add(na)
     wf.split_node(splitter="a", inputs={"a": [3, 5]})
@@ -1203,9 +1235,13 @@ def test_workflow_combine_6(plugin, change_dir):
 def test_workflow_combine_6a(plugin, change_dir):
     """using split_node and combine_node methods for two nodes (specifying the node)"""
     wf = Workflow(name="wf6a", workingdir="test_wf6a_{}".format(plugin))
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
 
-    nb = NodeBase(name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"]
+    )
     # using the split method after add (specifying the node)
     wf.add(na)
     wf.add(nb)
@@ -1234,8 +1270,12 @@ def test_workflow_combine_6b(plugin, change_dir):
     using kwarg arg instead of connect
     """
     wf = Workflow(name="wf6b", workingdir="test_wf6b_{}".format(plugin))
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
-    nb = NodeBase(name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
+    nb = NodeBase(
+        name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"]
+    )
 
     wf.add(na)
     wf.add(nb, b="NA.out")
@@ -1265,9 +1305,13 @@ def test_workflow_combine_7(plugin, change_dir):
         using combiner from previous node, scalar splitter
     """
     wf = Workflow(name="wf7", workingdir="test_wf7_{}".format(plugin))
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
 
-    nb = NodeBase(name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"]
+    )
     # using the split methods after add (using splitter for the last added nodes as default)
     wf.add(na)
     wf.split_node(splitter="a", inputs={"a": [3, 5]})
@@ -1296,9 +1340,13 @@ def test_workflow_combine_7a(plugin, change_dir):
         using combiner from previous node, outer splitter
     """
     wf = Workflow(name="wf7a", workingdir="test_wf7a_{}".format(plugin))
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
 
-    nb = NodeBase(name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_addvar(), workingdir="nb", output_names=["out"]
+    )
     # using the split methods after add (using splitter for the last added nodes as default)
     wf.add(na)
     wf.split_node(splitter="a", inputs={"a": [3, 5]})
@@ -1335,13 +1383,17 @@ def test_workflow_combine_8(plugin, change_dir):
         workingdir="test_wf8_{}".format(plugin),
         wf_output_names=[("NB", "out")],
     )
-    na = NodeBase(name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"]
+    )
     na.split(
         splitter=[("a", "b"), "c"], inputs={"a": [1, 2], "b": [3, 5], "c": [10, 20, 30]}
     ).combine(combiner="b")
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
-    nb = NodeBase(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"]
+    )
 
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
@@ -1386,14 +1438,18 @@ def test_workflow_combine_9(plugin, change_dir):
         workingdir="test_wf9_{}".format(plugin),
         wf_output_names=[("NB", "out"), ("NA", "out", "NA_out")],
     )
-    na = NodeBase(name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"]
+    )
     na.split(
         splitter=(["a", "b"], "c"),
         inputs={"a": [1, 2], "b": [3, 5, 7], "c": [[10, 20, 30], [100, 200, 300]]},
     ).combine(combiner="a")
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
-    nb = NodeBase(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"]
+    )
 
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
@@ -1439,14 +1495,18 @@ def test_workflow_combine_9a(plugin, change_dir):
         workingdir="test_wf9a_{}".format(plugin),
         wf_output_names=[("NB", "out")],
     )
-    na = NodeBase(name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"]
+    )
     na.split(
         splitter=(["a", "b"], "c"),
         inputs={"a": [1, 2], "b": [3, 5, 7], "c": [[10, 20, 30], [100, 200, 300]]},
     ).combine(combiner="b")
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
-    nb = NodeBase(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"]
+    )
 
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
@@ -1488,14 +1548,18 @@ def test_workflow_combine_9b(plugin, change_dir):
         workingdir="test_wf9b_{}".format(plugin),
         wf_output_names=[("NB", "out")],
     )
-    na = NodeBase(name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addvar3(), workingdir="na", output_names=["out"]
+    )
     na.split(
         splitter=(["a", "b"], "c"),
         inputs={"a": [1, 2], "b": [3, 5, 7], "c": [[10, 20, 30], [100, 200, 300]]},
     ).combine(combiner="c")
 
     # the second node does not have explicit splitter (but keeps the splitter from the NA node)
-    nb = NodeBase(name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"])
+    nb = NodeBase(
+        name="NB", interface=fun_sumlist(), workingdir="nb", output_names=["out"]
+    )
 
     # adding 2 nodes and create a connection (as it is now)
     wf.add_nodes([na, nb])
@@ -1526,7 +1590,9 @@ def test_workflow_combine_10(plugin, change_dir):
     wf = Workflow(
         name="wf10", inputs={"wfa": [3, 5]}, workingdir="test_wf10_{}".format(plugin)
     )
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
 
     wf.add(na)
     # connecting the node with inputs from the workflow
@@ -1732,7 +1798,9 @@ def test_workflow_combine_14(plugin, change_dir):
         combiner="wfa",
         wf_output_names=[("NA", "out", "NA_out")],
     )
-    na = NodeBase(name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addtwo(), workingdir="na", output_names=["out"]
+    )
     wf.add(na)
     wf.connect_wf_input("wfa", "NA", "a")
 
@@ -1756,7 +1824,9 @@ def test_workflow_combine_15(plugin, change_dir):
         wf_output_names=[("NA", "out", "NA_out")],
         combiner="wfb",
     )
-    na = NodeBase(name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"]
+    )
     wf.add(na)
     wf.connect_wf_input("wfb", "NA", "b")
     wf.connect_wf_input("wfc", "NA", "c")
@@ -1781,7 +1851,9 @@ def test_workflow_combine_16(plugin, change_dir):
         wf_output_names=[("NA", "out", "NA_out")],
         combiner="wfb",
     )
-    na = NodeBase(name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"])
+    na = NodeBase(
+        name="NA", interface=fun_addvar(), workingdir="na", output_names=["out"]
+    )
     wf.add(na)
     wf.connect_wf_input("wfb", "NA", "b")
     wf.connect_wf_input("wfc", "NA", "c")

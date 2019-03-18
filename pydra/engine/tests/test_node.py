@@ -256,10 +256,7 @@ def test_task_spl_1(plugin):
 @python35_only
 def test_task_spl_2(plugin, splitter, state_splitter, state_rpn, expected):
     """Node with interface, inputs and the simplest splitter, running interface"""
-    nn = fun_addvar(name="NA").split(splitter=splitter,
-                                     a=[3, 5],
-                                     b=[10, 20],
-                                     )
+    nn = fun_addvar(name="NA").split(splitter=splitter, a=[3, 5], b=[10, 20])
 
     assert np.allclose(nn.inputs.a, [3, 5])
     assert np.allclose(nn.inputs.b, [10, 20])
@@ -280,12 +277,7 @@ def test_task_spl_2(plugin, splitter, state_splitter, state_rpn, expected):
 @python35_only
 def test_task_spl_comb_1(plugin):
     """Node with interface, inputs and the simplest splitter, running interface"""
-    nn = fun_addtwo(
-        name="NA").split(
-        a=[3, 5],
-        splitter="a").combine(
-        combiner="a",
-    )
+    nn = fun_addtwo(name="NA").split(a=[3, 5], splitter="a").combine(combiner="a")
 
     assert (nn.inputs.a == np.array([3, 5])).all()
 
@@ -370,12 +362,10 @@ def test_task_spl_comb_2(
     expected,
 ):
     """Node with interface, inputs and the simplest splitter, running interface"""
-    nn = fun_addvar(
-        name="NA").split(
-        a=[3, 5],
-        b=[10, 20],
-        splitter=splitter).combine(
-        combiner=combiner
+    nn = (
+        fun_addvar(name="NA")
+        .split(a=[3, 5], b=[10, 20], splitter=splitter)
+        .combine(combiner=combiner)
     )
 
     assert (nn.inputs.a == np.array([3, 5])).all()
