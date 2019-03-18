@@ -20,7 +20,7 @@ from tempfile import mkdtemp
 
 from . import state
 from . import auxiliary as aux
-from .specs import File, BaseSpec, RuntimeSpec, Result
+from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo
 from .helpers import (
     make_klass,
     create_checksum,
@@ -41,6 +41,9 @@ develop = True
 class NodeBase:
     _api_version: str = "0.0.1"  # Should generally not be touched by subclasses
     _version: str  # Version of tool being wrapped
+    _task_version: ty.Optional[
+        str
+    ] = None  # Task writers encouraged to define and increment when implementation changes sufficiently
     _input_sets = None  # Dictionaries of predefined input settings
 
     audit_flags: AuditFlag = AuditFlag.NONE  # What to audit. See audit flags for details
@@ -62,8 +65,6 @@ class NodeBase:
     def __init__(
         self,
         name,
-        splitter=None,
-        combiner=None,
         inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
@@ -78,10 +79,6 @@ class NodeBase:
 
         name : str
             Unique name of this node
-        splitter : str or (list or tuple of (str or splitters))
-            Whether inputs should be split at run time
-        combiner: str or list of strings (names of variables)
-            variables that should be used to combine results together
         inputs : dictionary (input name, input value or list of values)
             States this node's input names
         """
@@ -100,10 +97,7 @@ class NodeBase:
         ]
 
         self._needed_outputs = []
-        if splitter:
-            # adding name of the node to the input name within the splitter
-            splitter = aux.change_splitter(splitter, self.name)
-        self.state = self.set_state(splitter, combiner)
+        self.state = None
         self._output = {}
         self._result = {}
         # flag that says if node finished all jobs
@@ -127,6 +121,9 @@ class NodeBase:
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
         self.cache_dir = cache_dir
+
+        # dictionary of results from tasks
+        self.results_dict = {}
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -547,24 +544,21 @@ class NodeBase:
         )
         return dir_nm_el, state_surv_dict
 
+    def to_job(self, ind):
+        """ running interface one element generated from node_state."""
+        logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
+        el = deepcopy(self)
+        el.state = None
+        _, inputs_dict = self.get_input_el(ind)
+        interf_inputs = dict((k.split(".")[1], v) for k, v in inputs_dict.items())
+        el.inputs = dc.replace(el.inputs, **interf_inputs)
+        return el
+
     # checking if all outputs are saved
     @property
     def done(self):
-        # once _done os True, this should not change
-        logger.debug("done {}".format(self._done))
-        if self._done:
-            return self._done
-        else:
-            return self._check_all_results()
-
-    def get_output(self):
-        raise NotImplementedError
-
-    def _check_all_results(self):
-        raise NotImplementedError
-
-    def _reading_results(self):
-        raise NotImplementedError
+        if self.results_dict:
+            return all([future.done() for _, future in self.results_dict.items()])
 
     def _state_dict_to_list(self, container):
         """creating a list of tuples from dictionary and changing key (state) from str to dict"""
@@ -604,44 +598,6 @@ class NodeBase:
             result = val_l
         return result
 
-
-class Node(NodeBase):
-    def __init__(
-        self,
-        name,
-        splitter=None,
-        inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        messengers=None,
-        messenger_args=None,
-        cache_dir=None,
-        combiner=None,
-    ):
-        super(Node, self).__init__(
-            name=name,
-            splitter=splitter,
-            inputs=inputs,
-            combiner=combiner,
-            audit_flags=audit_flags,
-            messengers=messengers,
-            messenger_args=messenger_args,
-            cache_dir=cache_dir,
-        )
-
-        # dictionary of results from tasks
-        self.results_dict = {}
-
-    def run_interface_el(self, ind):
-        """ running interface one element generated from node_state."""
-        logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
-        if ind is not None:
-            state_dict, inputs_dict = self.get_input_el(ind)
-        else:
-            _, inputs_dict = self.get_input_el(ind)
-        interf_inputs = dict((k.split(".")[1], v) for k, v in inputs_dict.items())
-        res = self.run(**interf_inputs)
-        return ind, res  # TODO NOW: don't have to return
-
     def get_output(self):
         """collecting all outputs and updating self._output
         (assuming that file already exist and this was checked)
@@ -652,7 +608,8 @@ class Node(NodeBase):
                 for (ii, val) in enumerate(self.state.states_val):
                     state_dict = val
                     if self.state.splitter:
-                        output_el = getattr(self.results_dict[ii].output, key_out)
+                        output = self.results_dict[ii].result().output
+                        output_el = getattr(output, key_out)
                         if not self.state.combiner:  # only splitter
                             self._output[key_out][
                                 tuple(self.state.states_val[ii].items())
@@ -664,7 +621,7 @@ class Node(NodeBase):
                     else:
                         raise Exception("not implemented, TODO")
             else:
-                output_el = getattr(self.results_dict[None].output, key_out)
+                output_el = getattr(self.results_dict[None].result().output, key_out)
                 # TODO should I have: self._output[key_out][None] or self._output[key_out]?
                 self._output[key_out][None] = output_el
         return self._output
@@ -678,10 +635,10 @@ class Node(NodeBase):
         for key_out in self.output_names:
             if self.state:
                 for ii, _ in enumerate(self.state.states_val):
-                    if getattr(self.results_dict[ii].output, key_out) is None:
+                    if getattr(self.results_dict[ii].result().output, key_out) is None:
                         return False
             else:
-                if getattr(self.results_dict[None].output, key_out) is None:
+                if getattr(self.results_dict[None].result().output, key_out) is None:
                     return False
         self._done = True
         return True
@@ -694,8 +651,8 @@ class Node(NodeBase):
                              ensure_list(self._cache_dir))
 
         """
-        if not self.output:
-            self.get_output()
+        # if not self.output:
+        self.get_output()
         for key_out in self.output_names:
             output = self.output[key_out]
             if self.state:
@@ -708,14 +665,37 @@ class Workflow(NodeBase):
     def __init__(
         self,
         name,
-        inputs=None,
-        wf_output_names=None,
-        splitter=None,
-        nodes=None,
+        inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
+        input_spec: ty.Union[ty.List[ty.Text], BaseSpec, None] = None,
+        output_spec: ty.Optional[BaseSpec] = None,
+        audit_flags: AuditFlag = AuditFlag.NONE,
+        messengers=None,
+        messenger_args=None,
         cache_dir=None,
     ):
+        if input_spec:
+            if isinstance(input_spec, BaseSpec):
+                self.input_spec = input_spec
+            else:
+                self.input_spec = SpecInfo(
+                    name="Inputs",
+                    fields=[(name, ty.Any) for name in input_spec],
+                    bases=(BaseSpec,),
+                )
+        if output_spec is None:
+            output_spec = SpecInfo(
+                name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
+            )
+        self.output_spec = output_spec
+        self.set_output_keys()
+
         super(Workflow, self).__init__(
-            name=name, splitter=splitter, inputs=inputs, cache_dir=cache_dir
+            name=name,
+            inputs=inputs,
+            cache_dir=cache_dir,
+            audit_flags=audit_flags,
+            messengers=messengers,
+            messenger_args=messenger_args,
         )
 
         self.graph = nx.DiGraph()
@@ -725,17 +705,10 @@ class Workflow(NodeBase):
         self.connected_var = {}
         # input that are expected by nodes to get from wf.inputs
         self.needed_inp_wf = []
-        if nodes:
-            self.add_nodes(nodes)
-        for nn in self._nodes:
-            self.connected_var[nn] = {}
         # key: name of a node, value: the node
         self._node_names = {}
         # key: name of a node, value: splitter of the node
         self._node_splitters = {}
-        # list of (nodename, output name in the name, output name in wf) or (nodename, output name in the name)
-        # dj: using different name than for node, since this one it is defined by a user
-        self.wf_output_names = wf_output_names
 
         # nodes that are created when the workflow has splitter (key: node name, value: list of nodes)
         self.inner_nodes = {}
@@ -857,8 +830,6 @@ class Workflow(NodeBase):
         name=None,
         inputs=None,
         output_names=None,
-        splitter=None,
-        combiner=None,
         cache_dir=None,
         **kwargs
     ):
@@ -881,9 +852,7 @@ class Workflow(NodeBase):
                 # TODO: pass on as many self defaults as needed
                 name=name,
                 inputs=inputs,
-                splitter=splitter,
                 other_splitters=self._node_splitters,
-                combiner=combiner,
                 output_names=output_names,
             )
         else:
@@ -980,10 +949,6 @@ class Workflow(NodeBase):
 
 def is_function(obj):
     return hasattr(obj, "__call__")
-
-
-def is_node(obj):
-    return isinstance(obj, Node)
 
 
 def is_workflow(obj):

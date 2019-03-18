@@ -41,7 +41,7 @@ import dataclasses as dc
 import inspect
 import typing as ty
 
-from .node import Node
+from .node import NodeBase
 from ..utils.messenger import AuditFlag
 from .specs import (
     BaseSpec,
@@ -52,26 +52,15 @@ from .specs import (
     DockerSpec,
     SingularitySpec,
 )
-from .helpers import ensure_list
+from .helpers import ensure_list, execute
 
 
-class BaseTask(Node):
-    """This is a base class for Task objects.
-    """
-
-    _task_version: ty.Optional[
-        str
-    ] = None  # Task writers encouraged to define and increment when implementation changes sufficiently
-
-
-class FunctionTask(BaseTask):
+class FunctionTask(NodeBase):
     def __init__(
         self,
         func: ty.Callable,
         output_spec: ty.Optional[BaseSpec] = None,
         name=None,
-        splitter=None,
-        combiner=None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
         messenger_args=None,
@@ -94,8 +83,6 @@ class FunctionTask(BaseTask):
         super(FunctionTask, self).__init__(
             name,
             inputs=kwargs,
-            splitter=splitter,
-            combiner=combiner,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
@@ -157,7 +144,7 @@ def to_task(func_to_decorate):
     return create_func
 
 
-class ShellCommandTask(BaseTask):
+class ShellCommandTask(NodeBase):
     def __init__(
         self,
         name,

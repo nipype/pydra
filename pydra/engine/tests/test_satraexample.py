@@ -1,26 +1,11 @@
-import os
-import pytest, pdb
-
-from nipype.utils.filemanip import save_json, makedirs, to_str
+import pytest
 
 from ..submitter import Submitter
 from ..task import to_task
+from ..node import Workflow
 
 
-@pytest.fixture(scope="module")
-def change_dir(request):
-    orig_dir = os.getcwd()
-    test_dir = os.path.join(orig_dir, "test_satra_example")
-    makedirs(test_dir, exist_ok=True)
-    os.chdir(test_dir)
-
-    def move2orig():
-        os.chdir(orig_dir)
-
-    request.addfinalizer(move2orig)
-
-
-Plugins = ["serial", "cf"]
+Plugins = ["cf"]
 
 
 # @python_app
@@ -45,9 +30,8 @@ def test_1(plugin):
 
     assert doubled_x.state.splitter == "double.x"
 
-    sub = Submitter(plugin=plugin, runnable=doubled_x)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(doubled_x)
 
     # checking the results
     results = doubled_x.result()
@@ -80,9 +64,8 @@ def test_2(plugin):
 
     assert multiple_x.state.splitter == ["mult.x", "mult.y"]
 
-    sub = Submitter(plugin=plugin, runnable=multiple_x)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(multiple_x)
 
     # checking the results
     results = multiple_x.result()
@@ -111,9 +94,8 @@ def test_3(plugin):
     assert multiple_x.state.splitter == ["mult.x", "mult.y"]
     assert multiple_x.state.combiner == ["mult.x"]
 
-    sub = Submitter(plugin=plugin, runnable=multiple_x)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(multiple_x)
 
     # checking the results
     results = multiple_x.result()
@@ -138,9 +120,8 @@ def test_4(plugin):
     assert multiple_x.state.splitter == ["mult.x", "mult.y"]
     assert multiple_x.state.combiner == ["mult.y", "mult.x"]
 
-    sub = Submitter(plugin=plugin, runnable=multiple_x)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(multiple_x)
 
     # checking the results
     results = multiple_x.result()
@@ -163,9 +144,8 @@ def test_5(plugin):
 
     assert multiple_x.state.splitter == ("mult.x", "mult.y")
 
-    sub = Submitter(plugin=plugin, runnable=multiple_x)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(multiple_x)
 
     # checking the results
     results = multiple_x.result()
@@ -185,9 +165,8 @@ def test_6(plugin):
     assert multiple_x.state.splitter == ("mult.x", "mult.y")
     assert multiple_x.state.combiner == ["mult.x"]
 
-    sub = Submitter(plugin=plugin, runnable=multiple_x)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(multiple_x)
 
     # checking the results
     results = multiple_x.result()
@@ -204,20 +183,29 @@ def test_6(plugin):
 # add_x = add2(x='multiply.out').combine('multiply.x')
 
 
+@to_task
+def add2(x):
+    return x + 2
+
+
 @pytest.mark.parametrize("plugin", Plugins)
 @pytest.mark.xfail(reason="wip: Workflow")
 def test_7(plugin):
-    multiple_x = multiply(name="mult").split(("x", "y"), x=[1, 2], y=[1, 2])
+    """Test workflow with workflow level splitters and combiners"""
+    wf = Workflow(name="test7", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", inputs=dict(x=wf.inputs.x, y=wf.inputs.y)))
+    wf.add(add2(name="add2", x=wf.mult.result.out))
 
-    add_x = add2(x="multiply.out").combine("multiply.x")
+    wf.split(("x", "y"), x=[1, 2], y=[1, 2])
+    wf.combine("x")
+    wf.set_output([("out", wf.add2.result.out)])
 
-    sub = Submitter(plugin=plugin, runnable=multiple_x)
-    sub.run()
-    sub.close()
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
 
     # checking the results
-    results = multiple_x.result()
-    expected = [({"mult.x": 1, "mult.y": 1}, 1), ({"mult.x": 2, "mult.y": 2}, 4)]
+    results = wf.result()
+    expected = [({"test7.x": 1, "test7.y": 1}, 1), ({"test7.x": 2, "test.y": 2}, 4)]
 
     for i, res in enumerate(expected):
         assert results["out"][i][0] == res[0]

@@ -1,7 +1,7 @@
 import os
 import pytest
 
-from ..node import Node, Workflow
+from ..node import Workflow
 from ..submitter import Submitter
 
 # dj niworkflows vs ...??

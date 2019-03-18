@@ -1,13 +1,8 @@
 import sys
-import numpy as np
 
 from ..state import State
-from ..node import Node, Workflow
-from ..task import to_task
 
-from nipype import Function
-
-import pytest, pdb
+import pytest
 
 python35_only = pytest.mark.skipif(
     sys.version_info < (3, 5), reason="requires Python>3.4"
