@@ -189,7 +189,6 @@ def add2(x):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-@pytest.mark.xfail(reason="wip: Workflow")
 def test_7(plugin):
     """Test workflow with workflow level splitters and combiners"""
     wf = Workflow(name="test7", input_spec=["x", "y"])
@@ -206,6 +205,26 @@ def test_7(plugin):
     # checking the results
     results = wf.result()
     expected = [({"test7.x": 1, "test7.y": 1}, 1), ({"test7.x": 2, "test.y": 2}, 4)]
+
+    for i, res in enumerate(expected):
+        assert results["out"][i][0] == res[0]
+        assert results["out"][i][1] == res[1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_8(plugin):
+    """Test workflow with node level splitters and combiners"""
+    wf = Workflow(name="test7", input_spec=["x", "y"])
+    wf.add(multiply(name="mult").split(("x", "y"), x=wf.inputs.x, y=wf.inputs.y))
+    wf.add(add2(name="add2", x=wf.mult.result.out).combine("x"))
+    wf.set_output([("out", wf.add2.result.out)])
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    results = wf.result()
+    expected = [({"mult.x": 1, "mult.y": 1}, 1), ({"mult.x": 2, "mult.y": 2}, 4)]
 
     for i, res in enumerate(expected):
         assert results["out"][i][0] == res[0]
