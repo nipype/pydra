@@ -140,7 +140,6 @@ def _iterate_list(element, sign, other_states, output_splitter, state_fields=Tru
 
 
 # functions used in State to know which element should be used for a specific axis
-# TODO: should I moved it to State?
 
 
 def splitting_axis(state_inputs, splitter_rpn):
@@ -286,16 +285,20 @@ def splitting_axis(state_inputs, splitter_rpn):
 
 
 def converter_groups_to_input(group_for_inputs):
-    """ Having axes for all the input fields, the function returns fields for each axis. """
+    """
+    Having axes for all the input fields,
+    the function returns fields for each axis and number of all groups.
+    """
     input_for_axis = {}
-    ndim = 0
-    for inp, gr in group_for_inputs.items():
-        if gr in input_for_axis.keys():
-            input_for_axis[gr].append(inp)
-        else:
-            ndim += 1
-            input_for_axis[gr] = [inp]
-    return input_for_axis, ndim
+    ngr = 0
+    for inp, grs in group_for_inputs.items():
+        for gr in ensure_list(grs):
+            if gr in input_for_axis.keys():
+                input_for_axis[gr].append(inp)
+            else:
+                ngr += 1
+                input_for_axis[gr] = [inp]
+    return input_for_axis, ngr
 
 
 def converting_axis2input(axis_for_input, ndim, state_inputs=None):
@@ -608,7 +611,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
             )
             op_new = op["."](op_out, opval)
             val = op_new
-            keys = inner_inputs[op_single].keys_out_final + [op_single]
+            keys = inner_inputs[op_single].keys_final + [op_single]
             return val, keys, shapes, keys_fromL
         else:
             val = op["*"](opval)
@@ -655,17 +658,21 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
             if token == '*':
                 newshape = tuple(list(shape2) + list(shape1))
 
-            #TODO: do I have to insert? not enough that op2 is before op1?
-            if op2str:
-                if op2.startswith("_"):
-                    keys = previous_states_ind[op2][1] + keys
-                else:
-                    keys.insert(0, op2)
-            if op1str:
-                if op1.startswith("_"):
-                    keys += previous_states_ind[op1][1]
-                else:
-                    keys.append(op1)
+
+            new_keys = {}
+            for i, op_tp in enumerate([(op1str, op1), (op2str, op2)]):
+                if op_tp[0]:
+                    if op_tp[1].startswith("_"):
+                        new_keys["op{}".format(i+1)] = previous_states_ind[op_tp[1]][1]
+                    else:
+                        new_keys["op{}".format(i+1)] = [op_tp[1]]
+            if op2str and op1str:
+                keys = keys + new_keys["op2"] + new_keys["op1"]
+            elif op2str:
+                keys = new_keys["op2"] + keys
+            elif op1str:
+                keys = keys + new_keys["op1"]
+
 
             # TODO: rewrite once I have more tests
             if isinstance(op1, str) and op1 in inner_inputs:
@@ -676,7 +683,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
                 op1val_out = itertools.chain.from_iterable(itertools.repeat(x, n)
                                                            for x, n in zip(outer_ind, inner_len))
                 op1val_new = op["."](op1val_out, op1val)
-                keys = keys[:keys.index(op1)] + inner_inputs[op1].keys_out_final + keys[keys.index(op1):]
+                keys = keys[:keys.index(op1)] + inner_inputs[op1].keys_final + keys[keys.index(op1):]
             else:
                 op1val_new = op1val
             if isinstance(op2, str) and op2 in inner_inputs:
@@ -687,14 +694,13 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
                 op2val_out = itertools.chain.from_iterable(itertools.repeat(x, n)
                                                            for x, n in zip(outer_ind, inner_len))
                 op2val_new = op["."](op2val_out, op2val)
-                keys = keys[:keys.index(op2)] + inner_inputs[op2].keys_out_final + keys[keys.index(op2):]
+                keys = keys[:keys.index(op2)] + inner_inputs[op2].keys_final + keys[keys.index(op2):]
             else:
                 op2val_new = op2val
             pushval = (op[token](op2val_new, op1val_new), newshape)
             stack.append(pushval)
         else: # name of one of the inputs
             stack.append(token)
-
     val = stack.pop()
     if isinstance(val, tuple):
         val = val[0]
@@ -707,34 +713,44 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
 def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     """ Process splitter rpn from left to right
     """
+    if not splitter_rpn:
+        return [], {}, [], [], {}, [], []
     stack = []
     keys = []
     groups = {}
     group_count = None
     # dj: all axes
-    finalgroup = []
+    groups_stack = []
     if not combiner:
         combiner = []
     if inner_inputs:
-        #previous_states_ind = {"_{}".format(v.name): (v.ind_l_final, v.keys_final) for _,v in inner_inputs.items()}
+        previous_states_ind = {"_{}".format(v.name): v.keys_final for _,v in inner_inputs.items()}
         inner_inputs = {k: v for k,v in inner_inputs.items() if k in splitter_rpn}
     else:
-        #previous_states_ind = {}
+        previous_states_ind = {}
         inner_inputs = {}
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
         # TODO: in this situation the state should be simply the same
-        # if op_single.startswith("_"):
-        #     return previous_states_ind[op_single][1], None, None
+        if op_single.startswith("_"):
+            return previous_states_ind[op_single], None, None, []
         if op_single in inner_inputs:
             # TODO: have to be changed if differ length
-            keys = inner_inputs[op_single].keys_out_final + [op_single]
-            return keys, groups, finalgroup
+            # TODO: i think I don't want to add here from left part
+            #keys = inner_inputs[op_single].keys_final + [op_single]
+            keys = [op_single]
+            groups[op_single], groups_stack = 0, [[], [0]]
         else:
             keys = splitter_rpn
-            groups[op_single], finalgroup = 0, [[0]]
-            return keys, groups, finalgroup
+            groups[op_single], groups_stack = 0, [[0]]
+        if combiner:
+            if combiner == splitter_rpn:
+                return keys, groups, groups_stack, [], {}, [], combiner
+            else:
+                raise Exception("combiner {} not in splitter_rpn: {}".format(combiner[0], splitter_rpn))
+        else:
+            return keys, groups, groups_stack, keys, groups, groups_stack, []
 
     for token in splitter_rpn:
         if token in ['.', '*']:
@@ -804,13 +820,13 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
 
             # TODO: do I have to insert? not enough that op2 is before op1?
             if op2str:
-                if False:#op2.startswith("_"):
-                    keys = previous_states_ind[op2][1] + keys
+                if op2.startswith("_"):
+                    keys = previous_states_ind[op2] + keys
                 else:
                     keys.insert(0, op2)
             if op1str:
-                if False:#op1.startswith("_"):
-                    keys += previous_states_ind[op1][1]
+                if op1.startswith("_"):
+                    keys += previous_states_ind[op1]
                 else:
                     keys.append(op1)
             pushgroup = (oldgroup)
@@ -820,16 +836,42 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
 
     groups_stack = stack.pop()
     if isinstance(groups_stack, int):
-        finalgroup = [[groups_stack]]
+        groups_stack = [groups_stack]
+    if inner_inputs:
+        groups_stack = [[], groups_stack]
     else:
-        finalgroup = [groups_stack]
+        groups_stack = [groups_stack]
+
+    input_for_groups, _ = converter_groups_to_input(groups)
 
     if combiner:
-        pass
-        # TODO: move some parts form prepare_states_combined_ind and prepare_spl_comb_final
+        combiner_all = []
+        for comb in combiner:
+            for gr in ensure_list(groups[comb]):
+                combiner_all += input_for_groups[gr]
+        combiner_all = list(set(combiner_all))
+        combiner_all.sort()
 
-    return keys, groups, finalgroup
+        groups_stack_final = deepcopy(groups_stack)
+        for comb in combiner:
+            grs = groups[comb]
+            for gr in ensure_list(grs):
+                if gr in groups_stack_final[-1]:
+                    groups_stack_final[-1].remove(gr)
+                else:
+                    raise Exception("input {} not ready to combine, you have to combine {} "
+                                "first".format(comb, groups_stack[-1]))
+        groups_final = {inp: gr for (inp, gr) in groups.items() if inp not in combiner_all}
+        gr_final = list(set(groups_final.values()))
+        map_gr_nr = {nr: i for (i, nr) in enumerate(sorted(gr_final))}
+        groups_final = {inp: map_gr_nr[gr] for (inp, gr) in groups_final.items()}
+        for i, groups_l in enumerate(groups_stack_final):
+            groups_stack_final[i] = [map_gr_nr[gr] for gr in groups_l]
 
+        keys_final = [key for key in keys if key not in combiner_all]
+        return keys, groups, groups_stack, keys_final, groups_final, groups_stack_final, combiner_all
+    else:
+        return keys, groups, groups_stack, keys, groups, groups_stack, []
 
 
 

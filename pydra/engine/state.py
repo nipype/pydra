@@ -1,6 +1,3 @@
-import dataclasses as dc
-from collections import OrderedDict
-import itertools
 from copy import deepcopy
 import pdb
 
@@ -17,26 +14,19 @@ class State:
         self.splitter = splitter
         self.combiner = combiner
         self.inner_inputs = {}
-        if self.other_states:
-            for name, (st, inp) in self.other_states.items():
-                self.inner_inputs["{}.{}".format(self.name, inp)] = st
-            self.connect()
-        else:
+        if not self.other_states:
             self.other_states = {}
-            self._left_splitter = None
-            self._right_splitter = None
+        for name, (st, inp) in self.other_states.items():
+            self.inner_inputs["{}.{}".format(self.name, inp)] = st
+        self.connect()
 
         _splitter_previous_node = [el for el in self.splitter_rpn
                                    if (el.startswith("_") and el in self.other_states)]
         if _splitter_previous_node:
             raise Exception("there are no previous nodes, so elements {} shouldn't be in "
                             "the splitter".format(_splitter_previous_node))
-        keys, group_for_inputs, groups_stack = aux._splits_groups(self.splitter_rpn, inner_inputs=self.inner_inputs)
-        self.keys = keys
-        self.group_for_inputs = group_for_inputs
-        self.input_for_groups, self.ndim = aux.converter_groups_to_input(self.group_for_inputs)
-        self.groups_stack = groups_stack
-        self.prepare_spl_comb_final()
+        self.set_input_groups()
+        self.set_splitter_final()
 
     @property
     def splitter(self):
@@ -75,6 +65,18 @@ class State:
         else:
             self._combiner = []
 
+    def set_input_groups(self):
+        #TODO: not sure if I need keys, group_for_inputs, groups_stack (using mostly *_final)
+        keys, group_for_inputs, groups_stack, keys_f, group_for_inputs_f, groups_stack_f, combiner_all \
+            = aux._splits_groups(self._right_splitter_rpn, combiner=self.combiner,
+                                 inner_inputs=self.inner_inputs)
+        self._right_keys_final = keys_f
+        self.combiner_all = combiner_all
+        self._right_group_for_inputs_final = group_for_inputs_f
+        self._right_groups_stack_final = groups_stack_f
+        self.connect_states()
+
+
     # dj: should this be just states property?
     def prepare_states_ind(self, inputs):
         if isinstance(inputs, BaseSpec):
@@ -112,13 +114,6 @@ class State:
             # dj: not sure if this shouldn't be already in the init
             self.key_l =[]
             self.val_l = []
-            # _, group_for_inputs, groups_stack = aux._splits_groups(self.splitter_rpn, inner_inputs=self.inner_inputs)
-            # self.group_for_inputs = group_for_inputs
-            # self.input_for_groups, self.ndim = aux.converter_groups_to_input(self.group_for_inputs)
-            # self.groups_stack = groups_stack
-            # pdb.set_trace()
-            # pass
-
         self.ind_l = values
         self.keys = keys_out
         self.states_ind = list(aux.iter_splits(values, self.keys))
@@ -129,31 +124,14 @@ class State:
         return self.states_ind
 
 
-    def prepare_spl_comb_final(self):
-        self.combiner_all = []
-        for comb in self.combiner:
-            for gr in aux.ensure_list(self.group_for_inputs[comb]):
-                self.combiner_all += self.input_for_groups[gr]
-        self.combiner_all = list(set(self.combiner_all))
-        for comb in self.combiner:
-            # dj TODO: what if group_for_inputs[comb] is a list
-            if self.group_for_inputs[comb] not in self.groups_stack[-1]:
-                raise Exception(
-                    "input {} not ready to combine, you have to combine {} "
-                    "first".format(comb, self.groups_stack[-1])
-                )
-        # TODO: change splitter when combiner?
-        # TODO: update self.group_for_inputs, self.input_for_groups,  self.groups_stack?
-        self.keys_out_final = [key for key in self.keys if key not in self.combiner]
-
-        self.splitter_rpn_final = aux.remove_inp_from_splitter_rpn(
-            deepcopy(self.splitter_rpn_nost), self.combiner_all
-        )
-        self.splitter_final = aux.rpn2splitter(self.splitter_rpn_final)
+    def set_splitter_final(self):
+        _splitter_rpn_final = aux.remove_inp_from_splitter_rpn(deepcopy(self.splitter_rpn_nost),
+                                                                self.combiner_all)
+        self.splitter_final = aux.rpn2splitter(_splitter_rpn_final)
+        self.splitter_rpn_final = aux.splitter2rpn(self.splitter_final, other_states=self.other_states)
 
 
     def prepare_states_combined_ind(self, inputs):
-        self.prepare_spl_comb_final()
         # assuming for now that the combiner is only in the right part TODO
         if self._right_splitter and self._left_splitter:
             combined_right_rpn = aux.remove_inp_from_splitter_rpn(
@@ -183,6 +161,7 @@ class State:
         keys_out = self.key_l + key_r
 
         if values:
+            #NOW TODO: move to init?
             self.states_ind_final = list(aux.iter_splits(values, keys_out))
             self.ind_l_final = values
             self.keys_final = keys_out
@@ -195,70 +174,85 @@ class State:
 
     def prepare_states(self, inputs):
         if self.other_states:
-            # for nm, (st, _) in self.other_states.items():
-            #     if not hasattr(st, "states_ind"):
-            #         # dj: should i provide different inputs?
-            #         st.prepare_states(inputs)
-            self.connect_states()
+            for nm, (st, _) in self.other_states.items():
+                if not hasattr(st, "states_ind"):
+                    # dj: should i provide different inputs?
+                    st.prepare_states(inputs)
         self.prepare_states_ind(inputs)
         self.prepare_states_val(inputs)
 
     def connect(self):
-        self.splitter, self._left_splitter, self._right_splitter = \
-            aux.connect_splitters(splitter=self.splitter, other_states=self.other_states)
+        if self.other_states:
+            self.splitter, self._left_splitter, self._right_splitter = \
+                aux.connect_splitters(splitter=self.splitter, other_states=self.other_states)
+            self._left_splitter_rpn_nost = aux.splitter2rpn(deepcopy(self._left_splitter),
+                                                        other_states=self.other_states,
+                                                            state_fields=False)
+        else:
+            self._left_splitter = None
+            self._left_splitter_rpn_nost = []
+            self._right_splitter = self.splitter
         self._right_splitter_rpn = aux.splitter2rpn(deepcopy(self._right_splitter),
                                                     other_states=self.other_states)
-        self._left_splitter_rpn_nost = aux.splitter2rpn(deepcopy(self._left_splitter),
-                                                    other_states=self.other_states,
-                                                        state_fields=False)
 
 
     def connect_states(self):
         if self._left_splitter:
-            self._merge_previous_states()
-        if self._right_splitter:
-            self._push_new_states()
+            self.merge_previous_states()
+            if self._right_splitter:
+                self.push_new_states()
+        else:
+            self.group_for_inputs_final = self._right_group_for_inputs_final
+            self.groups_stack_final = self._right_groups_stack_final
+            self.keys_final = self._right_keys_final
 
-    def _merge_previous_states(self):
-        self.last_gr = 0
-        merged_groupstack = []
-        merged_groups = {}
+
+    def merge_previous_states(self):
+        last_gr = 0
+        self.groups_stack_final = []
+        self.group_for_inputs_final = {}
+        self.keys_final = []
         for nm, (st, inp) in self.other_states.items():
-            if not hasattr(st, "group_for_inputs"):
+            if "_{}".format(nm) not in self._left_splitter_rpn_nost:
+                continue
+            self.keys_final += st.keys_final
+            if not hasattr(st, "group_for_inputs_final"):
                 raise Exception("previous state has to run first")
-            group_for_inputs = st.group_for_inputs
-            groups_stack = st.groups_stack
-            group_for_inputs = {
-                k: v + self.last_gr for k, v in group_for_inputs.items()
-            }
-            merged_groups.update(group_for_inputs)
+            group_for_inputs = st.group_for_inputs_final
+            groups_stack = st.groups_stack_final
+            group_for_inputs = {k: v + last_gr for k,v in group_for_inputs.items()}
+            self.group_for_inputs_final.update(group_for_inputs)
 
             nmb_gr = 0
             for i, groups in enumerate(groups_stack):
-                if i < len(merged_groupstack):
+                if i < len(self.groups_stack_final):
                     for gr in groups:
                         nmb_gr += 1
-                        merged_groupstack[i].append(gr + self.last_gr)
+                        self.groups_stack_final[i].append(gr + last_gr)
                 else:
-                    merged_groupstack.append([gr + self.last_gr for gr in groups])
+                    self.groups_stack_final.append([gr + last_gr for gr in groups])
                     nmb_gr += len(groups)
-            self.last_gr += nmb_gr
-        self.groups_stack = merged_groupstack
-        self.group_for_inputs = merged_groups
+            last_gr += nmb_gr
+        #TODO: left part also could be partially combined
 
-    def _push_new_states(self):
-        right_rpn = aux.splitter2rpn(deepcopy(self._right_splitter), other_states=self.other_states)
-        inner_splitters = set(self.inner_inputs).intersection(right_rpn)
-        inputs_in_right = [i for i in right_rpn if i not in ["*", "."]]
-        # if there is any inner splitter in the right part, new list is added to stack
-        # probably non-inner could be in previous list??
-        # TODO not sure if works properly!!!
-        if inner_splitters:
-            self.groups_stack.append([])
-        for inp in inputs_in_right:
-            self.group_for_inputs[inp] = self.last_gr
-            self.groups_stack[-1].append(self.last_gr)
-            self.last_gr += 1
+
+
+    def push_new_states(self):
+        self.keys_final += self._right_keys_final
+        nr_gr_f = max(self.group_for_inputs_final.values()) + 1
+        for inp, grs in self._right_group_for_inputs_final.items():
+            if isinstance(grs, int):
+                grs = grs + nr_gr_f
+            else: # a list
+                grs = [gr+nr_gr_f for gr in grs]
+            self.group_for_inputs_final[inp] = grs
+        for i, stack in enumerate(self._right_groups_stack_final):
+            if i == 0:
+                stack = [gr+nr_gr_f for gr in stack]
+                self.groups_stack_final[-1] += stack
+            else:
+                stack = [gr + nr_gr_f for gr in stack]
+                self.groups_stack_final.append(stack)
 
 
 '''    
