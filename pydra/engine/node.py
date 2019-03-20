@@ -82,6 +82,7 @@ class NodeBase:
         inputs : dictionary (input name, input value or list of values)
             States this node's input names
         """
+        #pdb.set_trace()
         self.name = name
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
@@ -687,7 +688,6 @@ class Workflow(NodeBase):
                 name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
             )
         self.output_spec = output_spec
-        self.set_output_keys()
 
         super(Workflow, self).__init__(
             name=name,
@@ -697,6 +697,8 @@ class Workflow(NodeBase):
             messengers=messengers,
             messenger_args=messenger_args,
         )
+
+        self.set_output_keys()
 
         self.graph = nx.DiGraph()
         # all nodes in the workflow (probably will be removed)
@@ -833,12 +835,11 @@ class Workflow(NodeBase):
         cache_dir=None,
         **kwargs
     ):
-        # TODO: should I also accept normal function?
-        if is_node(runnable):
+        if is_workflow(runnable):
             node = runnable
-            node.other_splitters = self._node_splitters
-        elif is_workflow(runnable):
+        elif is_task(runnable):
             node = runnable
+            setattr(self, runnable.name, node)
         elif is_function(runnable):
             if not output_names:
                 output_names = ["out"]
@@ -947,9 +948,12 @@ class Workflow(NodeBase):
     #     self.collecting_output()
 
 
+# TODO: task has also call
 def is_function(obj):
     return hasattr(obj, "__call__")
 
+def is_task(obj):
+    return hasattr(obj, "_run_task")
 
 def is_workflow(obj):
     return isinstance(obj, Workflow)
