@@ -402,7 +402,8 @@ def test_rpn2splitter(splitter, rpn):
         (["a", "b", "c", "d", "*", "*", "*"], ["b", "d"], ["a", "c", "*"]),
     ],
 )
-@pytest.mark.xfail(reason="for now using removing_inputs_rpn")
+@pytest.mark.skip(reason="for now using removing_inputs_rpn,"
+                         "will probably remove removing_inputs_rpn")
 def test_removing_inputs_rpn(rpn, keys_remove, new_rpn):
     assert new_rpn == aux.removing_inputs_rpn(rpn, keys_remove)
 
