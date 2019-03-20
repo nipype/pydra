@@ -33,11 +33,11 @@ python35_only = pytest.mark.skipif(sys.version_info < (3, 5), reason="requires P
 ])
 def test_state_1(inputs, splitter, ndim, states_ind, states_val, group_for_inputs, groups_stack):
     st = State(name="NA", splitter=splitter)
-    st.prepare_states_ind(inputs)
     assert st.group_for_inputs_final == group_for_inputs
     assert st.groups_stack_final == groups_stack
+
+    st.prepare_states(inputs)
     assert st.states_ind == states_ind
-    st.prepare_states_val(inputs)
     assert st.states_val == states_val
 
 
@@ -377,22 +377,12 @@ def test_state_merge_innerspl_1():
 
     st2.prepare_states(inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]})
 
-    assert st2.states_ind == [
-        {"NA.a": 0, "NB.b": 0},
-        {"NA.a": 0, "NB.b": 1},
-        {"NA.a": 0, "NB.b": 2},
-        {"NA.a": 1, "NB.b": 3},
-        {"NA.a": 1, "NB.b": 4},
-        {"NA.a": 1, "NB.b": 5},
-    ]
-    assert st2.states_val == [
-        {"NA.a": 3, "NB.b": 1},
-        {"NA.a": 3, "NB.b": 10},
-        {"NA.a": 3, "NB.b": 100},
-        {"NA.a": 5, "NB.b": 2},
-        {"NA.a": 5, "NB.b": 20},
-        {"NA.a": 5, "NB.b": 200},
-    ]
+    assert st2.states_ind == \
+           [{'NA.a': 0, "NB.b": 0}, {'NA.a': 0, "NB.b": 1}, {'NA.a': 0, "NB.b": 2},
+            {'NA.a': 1, "NB.b": 3}, {'NA.a': 1, "NB.b": 4}, {'NA.a': 1, "NB.b": 5}]
+    assert st2.states_val == \
+           [{'NA.a': 3, "NB.b": 1}, {'NA.a': 3, "NB.b": 10}, {'NA.a': 3, "NB.b": 100},
+            {'NA.a': 5, "NB.b": 2}, {'NA.a': 5, "NB.b": 20}, {'NA.a': 5, "NB.b": 200},]
 
 
 def test_state_merge_innerspl_1a():
@@ -704,7 +694,8 @@ def test_state_combine_1():
     assert st.groups_stack_final == []
 
     st.prepare_states(inputs={"NA.a": [3, 5]})
-    # NOW TODO: check the final!!
+    assert st.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert st.states_val == [{"NA.a": 3}, {"NA.a": 5}]
 
 
 def test_state_combine_2():

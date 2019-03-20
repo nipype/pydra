@@ -572,7 +572,7 @@ def input_shape(in1):
 
 
 # dj: changing the function so it takes splitter_rpn
-def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
+def _splits(splitter_rpn, inputs, inner_inputs=None):
     """ Process splitter rpn from left to right
     """
     import numpy as np
@@ -591,8 +591,6 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
         previous_states_ind = {}
         inner_inputs = {}
         keys_fromL = []
-    if not used_keys:
-        used_keys = []
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
@@ -619,85 +617,85 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
             return val, keys, shapes, keys_fromL
 
     for token in splitter_rpn:
-        if token in [".", "*"]:
-            # dj: op1 is Right, op2 is Left
-            op1 = stack.pop()
-            op2 = stack.pop()
-            op1str = op2str = False
-            if isinstance(op2, str):
-                if op2.startswith("_"):
-                    op2val = previous_states_ind[op2][0]
-                    op2str = True
-                    shape2 = (len(op2val),)
-                    shapes[op2] = shape2
+        if token in ['.', '*']:
+            opR = stack.pop()
+            opL = stack.pop()
+            opRstr = opLstr = False
+            if isinstance(opL, str):
+                if opL.startswith("_"):
+                    opLval = previous_states_ind[opL][0]
+                    opLstr = True
+                    shapeL = (len(opLval),)
+                    shapes[opL] = shapeL
                 else:
-                    shape2 = input_shape(inputs[op2])
-                    op2val = range(np.prod(shape2))
-                    op2str = True
-                    shapes[op2] = shape2
+                    shapeL = input_shape(inputs[opL])
+                    opLval = range(np.prod(shapeL))
+                    opLstr = True
+                    shapes[opL] = shapeL
             else:
-                op2val, shape2 = op2
-            if isinstance(op1, str):
-                if op1.startswith("_"):
-                    op1val = previous_states_ind[op1][0]
-                    op1str = True
-                    shape1 = (len(op1val),)
-                    shapes[op1] = shape1
+                opLval, shapeL = opL
+            if isinstance(opR, str):
+                if opR.startswith("_"):
+                    opRval = previous_states_ind[opR][0]
+                    opRstr = True
+                    shapeR = (len(opRval),)
+                    shapes[opR] = shapeR
                 else:
-                    shape1 = input_shape(inputs[op1])
-                    op1val = range(np.prod(shape1))
-                    op1str = True
-                    shapes[op1] = shape1
+                    shapeR = input_shape(inputs[opR])
+                    opRval = range(np.prod(shapeR))
+                    opRstr = True
+                    shapes[opR] = shapeR
             else:
-                op1val, shape1 = op1
+                opRval, shapeR = opR
 
-            if token == ".":
-                if shape2 != shape1:
-                    raise ValueError('Operands {} and {} do not have same shape.'.format(op1, op2))
-                newshape = shape1
+            if token == '.':
+                if shapeL != shapeR:
+                    raise ValueError('Operands {} and {} do not have same shape.'.format(opR, opL))
+                newshape = shapeR
             if token == '*':
-                newshape = tuple(list(shape2) + list(shape1))
+                newshape = tuple(list(shapeL) + list(shapeR))
 
 
             new_keys = {}
-            for i, op_tp in enumerate([(op1str, op1), (op2str, op2)]):
+            for i, op_tp in enumerate([(opRstr, opR), (opLstr, opL)]):
                 if op_tp[0]:
                     if op_tp[1].startswith("_"):
                         new_keys["op{}".format(i+1)] = previous_states_ind[op_tp[1]][1]
                     else:
                         new_keys["op{}".format(i+1)] = [op_tp[1]]
-            if op2str and op1str:
+            if opLstr and opRstr:
+                # new_keys["op2"] for opL, new_keys["op1"] for opR
                 keys = keys + new_keys["op2"] + new_keys["op1"]
-            elif op2str:
+            elif opLstr:
                 keys = new_keys["op2"] + keys
-            elif op1str:
+            elif opRstr:
                 keys = keys + new_keys["op1"]
 
 
             # TODO: rewrite once I have more tests
-            if isinstance(op1, str) and op1 in inner_inputs:
+            if isinstance(opR, str) and opR in inner_inputs:
                 #TODO: have to be changed if differ length
-                inner_len = [shape1[-1]]*np.prod(shape1[:-1])
+                inner_len = [shapeR[-1]]*np.prod(shapeR[:-1])
                 # this come from the previous node
-                outer_ind = inner_inputs[op1].ind_l
-                op1val_out = itertools.chain.from_iterable(itertools.repeat(x, n)
+                outer_ind = inner_inputs[opR].ind_l
+                opRval_out = itertools.chain.from_iterable(itertools.repeat(x, n)
                                                            for x, n in zip(outer_ind, inner_len))
-                op1val_new = op["."](op1val_out, op1val)
-                keys = keys[:keys.index(op1)] + inner_inputs[op1].keys_final + keys[keys.index(op1):]
+                opRval_new = op["."](opRval_out, opRval)
+                keys = keys[:keys.index(opR)] + inner_inputs[opR].keys_final + keys[keys.index(opR):]
             else:
-                op1val_new = op1val
-            if isinstance(op2, str) and op2 in inner_inputs:
+                opRval_new = opRval
+            if isinstance(opL, str) and opL in inner_inputs:
                 # TODO: have to be changed if differ length
-                inner_len = [shape2[-1]] * np.prod(shape2[:-1])
+                inner_len = [shapeL[-1]] * np.prod(shapeL[:-1])
                 # this come from the previous node
-                outer_ind = inner_inputs[op2].ind_l
-                op2val_out = itertools.chain.from_iterable(itertools.repeat(x, n)
+                outer_ind = inner_inputs[opL].ind_l
+                opLval_out = itertools.chain.from_iterable(itertools.repeat(x, n)
                                                            for x, n in zip(outer_ind, inner_len))
-                op2val_new = op["."](op2val_out, op2val)
-                keys = keys[:keys.index(op2)] + inner_inputs[op2].keys_final + keys[keys.index(op2):]
+                opLval_new = op["."](opLval_out, opLval)
+                keys = keys[:keys.index(opL)] + inner_inputs[opL].keys_final + keys[keys.index(opL):]
             else:
-                op2val_new = op2val
-            pushval = (op[token](op2val_new, op1val_new), newshape)
+                opLval_new = opLval
+            pushval = (op[token](opLval_new, opRval_new), newshape)
             stack.append(pushval)
         else: # name of one of the inputs
             stack.append(token)
@@ -709,7 +707,6 @@ def _splits(splitter_rpn, inputs, inner_inputs=None, used_keys=None):
 
 
 # dj: TODO: do I need keys?
-# TODO: change op1/2 to opL/R
 def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     """ Process splitter rpn from left to right
     """
@@ -754,81 +751,76 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
 
     for token in splitter_rpn:
         if token in ['.', '*']:
-            # dj: op1 is Right, op2 is Left
-            op1 = stack.pop()
-            op2 = stack.pop()
-            op1str = op2str = False
-            if isinstance(op2, str):
-                op2str = True
+            opR = stack.pop()
+            opL = stack.pop()
+            opRstr = opLstr = False
+            if isinstance(opL, str):
+                opLstr = True
             else:
-                oldgroup2 = op2
-            if isinstance(op1, str):
-                op1str = True
+                oldgroupL = opL
+            if isinstance(opR, str):
+                opRstr = True
             else:
-                oldgroup1 = op1
+                oldgroupR = opR
 
             if token == '.':
-                if all([op1str, op2str]):
+                if all([opRstr, opLstr]):
                     if group_count is None:
                         group_count = 0
                     else:
                         group_count += 1
-                    groups[op2] = group_count
-                    groups[op1] = group_count
+                    groups[opL] = group_count
+                    groups[opR] = group_count
                     oldgroup = group_count
-                elif op1str:
-                    groups[op1] = oldgroup2
-                    oldgroup = oldgroup2
-                elif op2str:
-                    groups[op2] = oldgroup1
-                    oldgroup = oldgroup1
+                elif opRstr:
+                    groups[opR] = oldgroupL
+                    oldgroup = oldgroupL
+                elif opLstr:
+                    groups[opL] = oldgroupR
+                    oldgroup = oldgroupR
                 else:
-                    if len(ensure_list(oldgroup2)) != len(ensure_list(oldgroup1)):
-                        raise ValueError(
-                            "Operands do not have same shape "
-                            "(left one is {}d and right one is {}d.".format(
-                                len(ensure_list(oldgroup2)), len(ensure_list(oldgroup1))
-                            )
-                        )
-                    oldgroup = oldgroup2
+                    if len(ensure_list(oldgroupL)) != len(ensure_list(oldgroupR)):
+                        raise ValueError('Operands do not have same shape '
+                                         '(left one is {}d and right one is {}d.'.format(
+                            len(ensure_list(oldgroupL)), len(ensure_list(oldgroupR))))
+                    oldgroup = oldgroupL
                     # dj: changing axes for Right part of the scalar op.
                     for k, v in groups.items():
                         pdb.set_trace()#check when I need it
-                        if v in ensure_list(oldgroup1):
-                            groups[k] = ensure_list(oldgroup2)[ensure_list(oldgroup1).index(v)]
+                        if v in ensure_list(oldgroupR):
+                            groups[k] = ensure_list(oldgroupL)[ensure_list(oldgroupR).index(v)]
             if token == '*':
-                if all([op1str, op2str]):
+                if all([opRstr, opLstr]):
                     if group_count is None:
                         group_count = 0
                     else:
                         group_count += 1
-                    groups[op2] = group_count
+                    groups[opL] = group_count
                     group_count += 1
-                    groups[op1] = group_count
-                    oldgroup = [groups[op2], groups[op1]]
-                elif op1str:
+                    groups[opR] = group_count
+                    oldgroup = [groups[opL], groups[opR]]
+                elif opRstr:
                     group_count += 1
-                    groups[op1] = group_count
-                    oldgroup = ensure_list(oldgroup2) + [groups[op1]]
-                elif op2str:
+                    groups[opR] = group_count
+                    oldgroup = ensure_list(oldgroupL) + [groups[opR]]
+                elif opLstr:
                     group_count += 1
-                    groups[op2] = group_count
-                    oldgroup = [groups[op2]] + ensure_list(oldgroup1)
+                    groups[opL] = group_count
+                    oldgroup = [groups[opL]] + ensure_list(oldgroupR)
                 else:
-                    oldgroup = ensure_list(oldgroup2) + \
-                               ensure_list(oldgroup1)
+                    oldgroup = ensure_list(oldgroupL) + \
+                               ensure_list(oldgroupR)
 
-            # TODO: do I have to insert? not enough that op2 is before op1?
-            if op2str:
-                if op2.startswith("_"):
-                    keys = previous_states_ind[op2] + keys
+            if opLstr:
+                if opL.startswith("_"):
+                    keys = previous_states_ind[opL] + keys
                 else:
-                    keys.insert(0, op2)
-            if op1str:
-                if op1.startswith("_"):
-                    keys += previous_states_ind[op1]
+                    keys.insert(0, opL)
+            if opRstr:
+                if opR.startswith("_"):
+                    keys += previous_states_ind[opR]
                 else:
-                    keys.append(op1)
+                    keys.append(opR)
             pushgroup = (oldgroup)
             stack.append(pushgroup)
         else: # name of one of the inputs
