@@ -4,7 +4,7 @@ from copy import deepcopy
 import logging
 from .helpers import ensure_list
 
-logger = logging.getLogger('pydra')
+logger = logging.getLogger("pydra")
 
 # dj: might create a new class or move to State
 
@@ -15,21 +15,33 @@ def splitter2rpn(splitter, other_states=None, state_fields=True):
     if not splitter:
         return []
     output_splitter = []
-    _ordering(deepcopy(splitter), i=0, output_splitter=output_splitter, other_states=other_states,
-              state_fields=state_fields)
+    _ordering(
+        deepcopy(splitter),
+        i=0,
+        output_splitter=output_splitter,
+        other_states=other_states,
+        state_fields=state_fields,
+    )
     return output_splitter
 
 
-def _ordering(el, i, output_splitter, current_sign=None, other_states=None, state_fields=True):
+def _ordering(
+    el, i, output_splitter, current_sign=None, other_states=None, state_fields=True
+):
     """ Used in the splitter2rpn to get a proper order of fields and signs. """
     if type(el) is tuple:
         # checking if the splitter dont contain splitter from previous nodes, i.e. has str "_NA", etc.
         if type(el[0]) is str and el[0].startswith("_"):
             node_nm = el[0][1:]
             if node_nm not in other_states:
-                raise Exception("can't ask for splitter from {}, other nodes that are connected: "
-                                .format(node_nm, other_states.keys()))
-            splitter_mod = change_splitter(splitter=other_states[node_nm][0].splitter_final, name=node_nm)
+                raise Exception(
+                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                        node_nm, other_states.keys()
+                    )
+                )
+            splitter_mod = change_splitter(
+                splitter=other_states[node_nm][0].splitter_final, name=node_nm
+            )
             if state_fields:
                 el = (splitter_mod, el[1])
             if other_states[node_nm][0].other_states:
@@ -37,21 +49,37 @@ def _ordering(el, i, output_splitter, current_sign=None, other_states=None, stat
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_states:
-                raise Exception("can't ask for splitter from {}, other nodes that are connected: "
-                                .format(node_nm, other_states.keys()))
-            splitter_mod = change_splitter(splitter=other_states[node_nm][0].splitter_final, name=node_nm)
+                raise Exception(
+                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                        node_nm, other_states.keys()
+                    )
+                )
+            splitter_mod = change_splitter(
+                splitter=other_states[node_nm][0].splitter_final, name=node_nm
+            )
             if state_fields:
                 el = (el[0], splitter_mod)
             if other_states[node_nm][0].other_states:
                 other_states.update(other_states[node_nm][0].other_states)
-        _iterate_list(el, ".", other_states, output_splitter=output_splitter, state_fields=state_fields)
+        _iterate_list(
+            el,
+            ".",
+            other_states,
+            output_splitter=output_splitter,
+            state_fields=state_fields,
+        )
     elif type(el) is list:
         if type(el[0]) is str and el[0].startswith("_"):
             node_nm = el[0][1:]
             if node_nm not in other_states:
-                raise Exception("can't ask for splitter from {}, other nodes that are connected: "
-                                .format(node_nm, other_states.keys()))
-            splitter_mod = change_splitter(splitter=other_states[node_nm][0].splitter_final, name=node_nm)
+                raise Exception(
+                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                        node_nm, other_states.keys()
+                    )
+                )
+            splitter_mod = change_splitter(
+                splitter=other_states[node_nm][0].splitter_final, name=node_nm
+            )
             if state_fields:
                 el[0] = splitter_mod
             if other_states[node_nm][0].other_states:
@@ -59,21 +87,37 @@ def _ordering(el, i, output_splitter, current_sign=None, other_states=None, stat
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_states:
-                raise Exception("can't ask for splitter from {}, other nodes that are connected: "
-                                .format(node_nm, other_states.keys()))
-            splitter_mod = change_splitter(splitter=other_states[node_nm][0].splitter_final, name=node_nm)
+                raise Exception(
+                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                        node_nm, other_states.keys()
+                    )
+                )
+            splitter_mod = change_splitter(
+                splitter=other_states[node_nm][0].splitter_final, name=node_nm
+            )
             if state_fields:
                 el[1] = splitter_mod
             if other_states[node_nm][0].other_states:
                 other_states.update(other_states[node_nm][0].other_states)
-        _iterate_list(el, "*", other_states, output_splitter=output_splitter, state_fields=state_fields)
+        _iterate_list(
+            el,
+            "*",
+            other_states,
+            output_splitter=output_splitter,
+            state_fields=state_fields,
+        )
     elif type(el) is str:
         if el.startswith("_"):
             node_nm = el[1:]
             if node_nm not in other_states:
-                raise Exception("can't ask for splitter from {}, other nodes that are connected: "
-                                .format(node_nm, other_states.keys()))
-            splitter_mod = change_splitter(splitter=other_states[node_nm][0].splitter_final, name=node_nm)
+                raise Exception(
+                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                        node_nm, other_states.keys()
+                    )
+                )
+            splitter_mod = change_splitter(
+                splitter=other_states[node_nm][0].splitter_final, name=node_nm
+            )
             if state_fields:
                 el = splitter_mod
             if other_states[node_nm][0].other_states:
@@ -81,9 +125,21 @@ def _ordering(el, i, output_splitter, current_sign=None, other_states=None, stat
         if type(el) is str:
             output_splitter.append(el)
         elif type(el) is tuple:
-            _iterate_list(el, ".", other_states, output_splitter=output_splitter, state_fields=state_fields)
+            _iterate_list(
+                el,
+                ".",
+                other_states,
+                output_splitter=output_splitter,
+                state_fields=state_fields,
+            )
         elif type(el) is list:
-            _iterate_list(el, "*", other_states, output_splitter=output_splitter, state_fields=state_fields)
+            _iterate_list(
+                el,
+                "*",
+                other_states,
+                output_splitter=output_splitter,
+                state_fields=state_fields,
+            )
     else:
         raise Exception("splitter has to be a string, a tuple or a list")
     if i > 0:
@@ -94,11 +150,17 @@ def _iterate_list(element, sign, other_states, output_splitter, state_fields=Tru
     """ Used in the splitter2rpn to get recursion. """
     for i, el in enumerate(element):
         _ordering(
-            deepcopy(el), i, current_sign=sign, other_states=other_states, output_splitter=output_splitter,
-            state_fields=state_fields)
+            deepcopy(el),
+            i,
+            current_sign=sign,
+            other_states=other_states,
+            output_splitter=output_splitter,
+            state_fields=state_fields,
+        )
 
 
 # functions used in State to know which element should be used for a specific axis
+
 
 def splitting_axis(state_inputs, splitter_rpn):
     """Having inputs and splitter (in rpn notation), functions returns the axes of output for every input."""
@@ -119,21 +181,29 @@ def splitting_axis(state_inputs, splitter_rpn):
             # when both, left and right, are already products of partial splitter
             if left.startswith("OUT") and right.startswith("OUT"):
                 if out_shape[left] != out_shape[right]:
-                    raise Exception("arrays for scalar operations should have the same size")
+                    raise Exception(
+                        "arrays for scalar operations should have the same size"
+                    )
                 current_inputs = out_inputname[left] + out_inputname[right]
             # when left is already product of partial splitter
             elif left.startswith("OUT"):
-                if state_inputs[right].shape == out_shape[left]:  #todo:should we allow for one-element array?
+                if (
+                    state_inputs[right].shape == out_shape[left]
+                ):  # todo:should we allow for one-element array?
                     axis_for_input[right] = out_axes[left]
                 else:
-                    raise Exception("arrays for scalar operations should have the same size")
+                    raise Exception(
+                        "arrays for scalar operations should have the same size"
+                    )
                 current_inputs = out_inputname[left] + [right]
             # when right is already product of partial splitter
             elif right.startswith("OUT"):
                 if state_inputs[left].shape == out_shape[right]:
                     axis_for_input[left] = out_axes[right]
                 else:
-                    raise Exception("arrays for scalar operations should have the same size")
+                    raise Exception(
+                        "arrays for scalar operations should have the same size"
+                    )
                 current_inputs = out_inputname[right] + [left]
 
             else:
@@ -144,7 +214,9 @@ def splitting_axis(state_inputs, splitter_rpn):
                     axis_for_input[right] = current_axis
                     current_inputs = [left, right]
                 else:
-                    raise Exception("arrays for scalar operations should have the same size")
+                    raise Exception(
+                        "arrays for scalar operations should have the same size"
+                    )
             # adding partial output to the stack
             stack.append("OUT_{}".format(len(out_shape)))
             out_inputname["OUT_{}".format(len(out_shape))] = current_inputs
@@ -162,17 +234,21 @@ def splitting_axis(state_inputs, splitter_rpn):
                     axis_for_input[key] = [
                         i + len(out_axes[left]) for i in axis_for_input[key]
                     ]
-                current_axis = out_axes[left] +\
-                               [i + (out_axes[left][-1] + 1) for i in out_axes[right]]
+                current_axis = out_axes[left] + [
+                    i + (out_axes[left][-1] + 1) for i in out_axes[right]
+                ]
                 current_shape = tuple([i for i in out_shape[left] + out_shape[right]])
                 current_inputs = out_inputname[left] + out_inputname[right]
             # when left is already product of partial splitter
             elif left.startswith("OUT"):
                 axis_for_input[right] = [
-                    i + (out_axes[left][-1] + 1) for i in range(state_inputs[right].ndim)
+                    i + (out_axes[left][-1] + 1)
+                    for i in range(state_inputs[right].ndim)
                 ]
                 current_axis = out_axes[left] + axis_for_input[right]
-                current_shape = tuple([i for i in out_shape[left] + state_inputs[right].shape])
+                current_shape = tuple(
+                    [i for i in out_shape[left] + state_inputs[right].shape]
+                )
                 current_inputs = out_inputname[left] + [right]
             # when right is already product of partial splitter
             elif right.startswith("OUT"):
@@ -186,9 +262,12 @@ def splitting_axis(state_inputs, splitter_rpn):
                     for i in range(state_inputs[left].ndim)
                 ]
                 current_axis = out_axes[right] + [
-                    i + (out_axes[right][-1] + 1) for i in range(state_inputs[left].ndim)
+                    i + (out_axes[right][-1] + 1)
+                    for i in range(state_inputs[left].ndim)
                 ]
-                current_shape = tuple([i for i in state_inputs[left].shape + out_shape[right]])
+                current_shape = tuple(
+                    [i for i in state_inputs[left].shape + out_shape[right]]
+                )
                 current_inputs = out_inputname[right] + [left]
             else:
                 axis_for_input[left] = list(range(state_inputs[left].ndim))
@@ -197,7 +276,8 @@ def splitting_axis(state_inputs, splitter_rpn):
                 ]
                 current_axis = axis_for_input[left] + axis_for_input[right]
                 current_shape = tuple(
-                    [i for i in state_inputs[left].shape + state_inputs[right].shape])
+                    [i for i in state_inputs[left].shape + state_inputs[right].shape]
+                )
                 current_inputs = [left, right]
             # adding partial output to the stack
             stack.append("OUT_{}".format(len(out_shape)))
@@ -261,7 +341,8 @@ def converting_axis2input(axis_for_input, ndim, state_inputs=None):
         return input_for_axis
 
 
-#function used in State if combiner
+# function used in State if combiner
+
 
 def matching_input_from_splitter(splitter_rpn):
     """similar to splitting_axis, but without state_input,
@@ -298,8 +379,9 @@ def matching_input_from_splitter(splitter_rpn):
             if left.startswith("OUT") and right.startswith("OUT"):
                 output_inputs[out_nm] = output_inputs[left] + output_inputs[right]
                 for inp in output_inputs[right] + [right]:
-                    axes_for_inputs[inp] = [i + len(axes_for_inputs[left])
-                                            for i in axes_for_inputs[inp]]
+                    axes_for_inputs[inp] = [
+                        i + len(axes_for_inputs[left]) for i in axes_for_inputs[inp]
+                    ]
                 axes_for_inputs[out_nm] = axes_for_inputs[left] + axes_for_inputs[right]
             elif right.startswith("OUT"):
                 output_inputs[out_nm] = output_inputs[right] + [left]
@@ -327,8 +409,11 @@ def matching_input_from_splitter(splitter_rpn):
         raise Exception("something wrong with the splittper")
 
     # removing "OUT*" elements
-    axes_for_inputs = dict((key, val) for (key, val) in axes_for_inputs.items()
-                           if not key.startswith("OUT"))
+    axes_for_inputs = dict(
+        (key, val)
+        for (key, val) in axes_for_inputs.items()
+        if not key.startswith("OUT")
+    )
 
     # checking if I have any axes below 0
     all_axes = []
@@ -337,10 +422,12 @@ def matching_input_from_splitter(splitter_rpn):
     min_ax = min(all_axes)
     # moving all axes in case min_ax <0 , so everything starts from 0
     if min_ax < 0:
-        axes_for_inputs = dict((key, [v + abs(min_ax) for v in val])
-                               for (key, val) in axes_for_inputs.items())
+        axes_for_inputs = dict(
+            (key, [v + abs(min_ax) for v in val])
+            for (key, val) in axes_for_inputs.items()
+        )
 
-    #dimensions
+    # dimensions
     ndim = len(set(all_axes))
 
     return axes_for_inputs, ndim
@@ -372,7 +459,7 @@ def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
                 stack_sgn.pop()
                 from_last_sign.pop()
             else:
-                stack_sgn.pop(-1*from_last_sign.pop())
+                stack_sgn.pop(-1 * from_last_sign.pop())
 
     # creating the final splitter_rpn after combining
     remaining_elements = stack_sgn + stack_inp
@@ -399,7 +486,10 @@ def rpn2splitter(splitter_rpn):
         el = splitter_rpn_copy.pop()
         # element is a sign
         if el in signs:
-            if splitter_rpn_copy[-1] not in signs and splitter_rpn_copy[-2] not in signs:
+            if (
+                splitter_rpn_copy[-1] not in signs
+                and splitter_rpn_copy[-2] not in signs
+            ):
                 right, left = splitter_rpn_copy.pop(), splitter_rpn_copy.pop()
                 if el == ".":
                     splitter_modified.append((left, right))
@@ -421,7 +511,7 @@ def rpn2splitter(splitter_rpn):
 def change_splitter(splitter, name):
     """changing names of splitter: adding names of the node"""
     if isinstance(splitter, str):
-            return _add_name([splitter], name)[0]
+        return _add_name([splitter], name)[0]
     elif isinstance(splitter, list):
         return _add_name(splitter, name)
     elif isinstance(splitter, tuple):
@@ -436,9 +526,11 @@ def _add_name(mlist, name):
                 if elem.split(".")[0] == name:
                     pass
                 else:
-                    raise Exception("can't include {} in the splitter, consider using _{}".format(
-                        elem, elem.split(".")[0]
-                    ))
+                    raise Exception(
+                        "can't include {} in the splitter, consider using _{}".format(
+                            elem, elem.split(".")[0]
+                        )
+                    )
             elif elem.startswith("_"):
                 pass
             else:
@@ -452,8 +544,7 @@ def _add_name(mlist, name):
     return mlist
 
 
-op = {'.': zip,
-      '*': itertools.product}
+op = {".": zip, "*": itertools.product}
 
 
 def flatten(vals, cur_depth=0, max_depth=None):
@@ -477,7 +568,7 @@ def iter_splits(iterable, keys):
 
 
 def next_key(new_key):
-    return '_' + chr(ord(new_key[1:]) + 1) if new_key else '_a'
+    return "_" + chr(ord(new_key[1:]) + 1) if new_key else "_a"
 
 
 def input_shape(in1):
@@ -505,12 +596,16 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
     """ Process splitter rpn from left to right
     """
     import numpy as np
+
     stack = []
     keys = []
     shapes = {}
     if inner_inputs:
-        previous_states_ind = {"_{}".format(v.name): (v.ind_l_final, v.keys_final) for _,v in inner_inputs.items()}
-        inner_inputs = {k: v for k,v in inner_inputs.items() if k in splitter_rpn}
+        previous_states_ind = {
+            "_{}".format(v.name): (v.ind_l_final, v.keys_final)
+            for _, v in inner_inputs.items()
+        }
+        inner_inputs = {k: v for k, v in inner_inputs.items() if k in splitter_rpn}
         keys_fromLeftSpl = ["_{}".format(st.name) for _, st in inner_inputs.items()]
     else:
         previous_states_ind = {}
@@ -520,8 +615,12 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
         if op_single.startswith("_"):
-            return previous_states_ind[op_single][0], previous_states_ind[op_single][1], \
-                   None, keys_fromLeftSpl
+            return (
+                previous_states_ind[op_single][0],
+                previous_states_ind[op_single][1],
+                None,
+                keys_fromLeftSpl,
+            )
         shape = input_shape(inputs[op_single])
         shapes[op_single] = shape
         opval = range(np.prod(shape))
@@ -530,8 +629,9 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
             inner_len = [shape[-1]] * np.prod(shape[:-1])
             # this come from the previous node
             outer_ind = inner_inputs[op_single].ind_l
-            op_out = itertools.chain.from_iterable(itertools.repeat(x, n)
-                                                   for x, n in zip(outer_ind, inner_len))
+            op_out = itertools.chain.from_iterable(
+                itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
+            )
             op_new = op["."](op_out, opval)
             val = op_new
             keys = inner_inputs[op_single].keys_final + [op_single]
@@ -542,7 +642,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
             return val, keys, shapes, keys_fromLeftSpl
 
     for token in splitter_rpn:
-        if token in ['.', '*']:
+        if token in [".", "*"]:
             opR = stack.pop()
             opL = stack.pop()
             opRstr = opLstr = False
@@ -573,21 +673,24 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
             else:
                 opRval, shapeR = opR
 
-            if token == '.':
+            if token == ".":
                 if shapeL != shapeR:
-                    raise ValueError('Operands {} and {} do not have same shape.'.format(opR, opL))
+                    raise ValueError(
+                        "Operands {} and {} do not have same shape.".format(opR, opL)
+                    )
                 newshape = shapeR
-            if token == '*':
+            if token == "*":
                 newshape = tuple(list(shapeL) + list(shapeR))
-
 
             new_keys = {}
             for i, op_tp in enumerate([(opRstr, opR), (opLstr, opL)]):
                 if op_tp[0]:
                     if op_tp[1].startswith("_"):
-                        new_keys["op{}".format(i+1)] = previous_states_ind[op_tp[1]][1]
+                        new_keys["op{}".format(i + 1)] = previous_states_ind[op_tp[1]][
+                            1
+                        ]
                     else:
-                        new_keys["op{}".format(i+1)] = [op_tp[1]]
+                        new_keys["op{}".format(i + 1)] = [op_tp[1]]
             if opLstr and opRstr:
                 # new_keys["op2"] for opL, new_keys["op1"] for opR
                 keys = keys + new_keys["op2"] + new_keys["op1"]
@@ -596,17 +699,21 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
             elif opRstr:
                 keys = keys + new_keys["op1"]
 
-
             # TODO: rewrite once I have more tests
             if isinstance(opR, str) and opR in inner_inputs:
-                #TODO: have to be changed if differ length
-                inner_len = [shapeR[-1]]*np.prod(shapeR[:-1])
+                # TODO: have to be changed if differ length
+                inner_len = [shapeR[-1]] * np.prod(shapeR[:-1])
                 # this come from the previous node
                 outer_ind = inner_inputs[opR].ind_l
-                opRval_out = itertools.chain.from_iterable(itertools.repeat(x, n)
-                                                           for x, n in zip(outer_ind, inner_len))
+                opRval_out = itertools.chain.from_iterable(
+                    itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
+                )
                 opRval_new = op["."](opRval_out, opRval)
-                keys = keys[:keys.index(opR)] + inner_inputs[opR].keys_final + keys[keys.index(opR):]
+                keys = (
+                    keys[: keys.index(opR)]
+                    + inner_inputs[opR].keys_final
+                    + keys[keys.index(opR) :]
+                )
             else:
                 opRval_new = opRval
             if isinstance(opL, str) and opL in inner_inputs:
@@ -614,15 +721,20 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
                 inner_len = [shapeL[-1]] * np.prod(shapeL[:-1])
                 # this come from the previous node
                 outer_ind = inner_inputs[opL].ind_l
-                opLval_out = itertools.chain.from_iterable(itertools.repeat(x, n)
-                                                           for x, n in zip(outer_ind, inner_len))
+                opLval_out = itertools.chain.from_iterable(
+                    itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
+                )
                 opLval_new = op["."](opLval_out, opLval)
-                keys = keys[:keys.index(opL)] + inner_inputs[opL].keys_final + keys[keys.index(opL):]
+                keys = (
+                    keys[: keys.index(opL)]
+                    + inner_inputs[opL].keys_final
+                    + keys[keys.index(opL) :]
+                )
             else:
                 opLval_new = opLval
             pushval = (op[token](opLval_new, opRval_new), newshape)
             stack.append(pushval)
-        else: # name of one of the inputs
+        else:  # name of one of the inputs
             stack.append(token)
     val = stack.pop()
     if isinstance(val, tuple):
@@ -643,9 +755,10 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     if not combiner:
         combiner = []
     if inner_inputs:
-        previous_states_ind = {"_{}".format(v.name): v.keys_final
-                               for _,v in inner_inputs.items()}
-        inner_inputs = {k: v for k,v in inner_inputs.items() if k in splitter_rpn}
+        previous_states_ind = {
+            "_{}".format(v.name): v.keys_final for _, v in inner_inputs.items()
+        }
+        inner_inputs = {k: v for k, v in inner_inputs.items() if k in splitter_rpn}
     else:
         previous_states_ind = {}
         inner_inputs = {}
@@ -658,7 +771,7 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
         if op_single in inner_inputs:
             # TODO: have to be changed if differ length
             # TODO: i think I don't want to add here from left part
-            #keys = inner_inputs[op_single].keys_final + [op_single]
+            # keys = inner_inputs[op_single].keys_final + [op_single]
             keys = [op_single]
             groups[op_single], groups_stack = 0, [[], [0]]
         else:
@@ -668,13 +781,16 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
             if combiner == splitter_rpn:
                 return keys, groups, groups_stack, [], {}, [], combiner
             else:
-                raise Exception("combiner {} not in splitter_rpn: {}".format(combiner[0],
-                                                                             splitter_rpn))
+                raise Exception(
+                    "combiner {} not in splitter_rpn: {}".format(
+                        combiner[0], splitter_rpn
+                    )
+                )
         else:
             return keys, groups, groups_stack, keys, groups, groups_stack, []
 
     for token in splitter_rpn:
-        if token in ['.', '*']:
+        if token in [".", "*"]:
             opR = stack.pop()
             opL = stack.pop()
             opRstr = opLstr = False
@@ -687,7 +803,7 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
             else:
                 oldgroupR = opR
 
-            if token == '.':
+            if token == ".":
                 if all([opRstr, opLstr]):
                     if group_count is None:
                         group_count = 0
@@ -704,16 +820,21 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
                     oldgroup = oldgroupR
                 else:
                     if len(ensure_list(oldgroupL)) != len(ensure_list(oldgroupR)):
-                        raise ValueError('Operands do not have same shape '
-                                         '(left one is {}d and right one is {}d.'.format(
-                            len(ensure_list(oldgroupL)), len(ensure_list(oldgroupR))))
+                        raise ValueError(
+                            "Operands do not have same shape "
+                            "(left one is {}d and right one is {}d.".format(
+                                len(ensure_list(oldgroupL)), len(ensure_list(oldgroupR))
+                            )
+                        )
                     oldgroup = oldgroupL
                     # dj: changing axes for Right part of the scalar op.
                     for k, v in groups.items():
-                        pdb.set_trace() #check if I need it (and possibly remove)
+                        pdb.set_trace()  # check if I need it (and possibly remove)
                         if v in ensure_list(oldgroupR):
-                            groups[k] = ensure_list(oldgroupL)[ensure_list(oldgroupR).index(v)]
-            if token == '*':
+                            groups[k] = ensure_list(oldgroupL)[
+                                ensure_list(oldgroupR).index(v)
+                            ]
+            if token == "*":
                 if all([opRstr, opLstr]):
                     if group_count is None:
                         group_count = 0
@@ -732,8 +853,7 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
                     groups[opL] = group_count
                     oldgroup = [groups[opL]] + ensure_list(oldgroupR)
                 else:
-                    oldgroup = ensure_list(oldgroupL) + \
-                               ensure_list(oldgroupR)
+                    oldgroup = ensure_list(oldgroupL) + ensure_list(oldgroupR)
 
             if opLstr:
                 if opL.startswith("_"):
@@ -745,9 +865,9 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
                     keys += previous_states_ind[opR]
                 else:
                     keys.append(opR)
-            pushgroup = (oldgroup)
+            pushgroup = oldgroup
             stack.append(pushgroup)
-        else: # name of one of the inputs
+        else:  # name of one of the inputs
             stack.append(token)
 
     groups_stack = stack.pop()
@@ -775,9 +895,13 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
                 if gr in groups_stack_final[-1]:
                     groups_stack_final[-1].remove(gr)
                 else:
-                    raise Exception("input {} not ready to combine, you have to combine {} "
-                                "first".format(comb, groups_stack[-1]))
-        groups_final = {inp: gr for (inp, gr) in groups.items() if inp not in combiner_all}
+                    raise Exception(
+                        "input {} not ready to combine, you have to combine {} "
+                        "first".format(comb, groups_stack[-1])
+                    )
+        groups_final = {
+            inp: gr for (inp, gr) in groups.items() if inp not in combiner_all
+        }
         gr_final = list(set(groups_final.values()))
         map_gr_nr = {nr: i for (i, nr) in enumerate(sorted(gr_final))}
         groups_final = {inp: map_gr_nr[gr] for (inp, gr) in groups_final.items()}
@@ -786,11 +910,17 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
 
         keys_final = [key for key in keys if key not in combiner_all]
         # TODO: not sure if I have to calculate and return keys, groups, groups_stack
-        return keys, groups, groups_stack, keys_final, groups_final, \
-               groups_stack_final, combiner_all
+        return (
+            keys,
+            groups,
+            groups_stack,
+            keys_final,
+            groups_final,
+            groups_stack_final,
+            combiner_all,
+        )
     else:
         return keys, groups, groups_stack, keys, groups, groups_stack, []
-
 
 
 def splits(splitter, inputs, inner_inputs=None):
@@ -801,10 +931,10 @@ def splits(splitter, inputs, inner_inputs=None):
 
 def map_splits(split_iter, inputs):
     for split in split_iter:
-        yield {k: list(flatten(ensure_list(inputs[k])))[v] for k,v in split.items()}
+        yield {k: list(flatten(ensure_list(inputs[k])))[v] for k, v in split.items()}
 
 
-'''
+"""
 def combine(combiner, groups, finalgroup, shapes, outputs):
     combine_keys = set([groups[val] for val in splitter2rpn(combiner)
                         if val not in ['*', '.']])
@@ -814,12 +944,13 @@ def combine(combiner, groups, finalgroup, shapes, outputs):
     finalgroup
     splits
     outputs
-'''
+"""
 
 
 """ Functions for merging and completing splitters in states.
  Used only in State, could be moved to that class
 """
+
 
 def connect_splitters(splitter, other_states):
     if splitter:
@@ -851,15 +982,19 @@ def connect_splitters(splitter, other_states):
             elif lr_flag == "Right":
                 left_part = _complete_left(other_states=other_states)
                 right_part = splitter
-            elif (_left_right_check(splitter[0], other_states=other_states) == "Left"
-                  and _left_right_check(splitter[1], other_states=other_states) == "Right"):
+            elif (
+                _left_right_check(splitter[0], other_states=other_states) == "Left"
+                and _left_right_check(splitter[1], other_states=other_states) == "Right"
+            ):
                 left_part = _complete_left(left=splitter[0], other_states=other_states)
                 right_part = splitter[1]
             else:
                 raise Exception("splitter doesn't have separated Left and Right parts")
         else:
-            raise Exception("splitter has to be str, tuple or list, "
-                            "{} was provided".format(type(splitter)))
+            raise Exception(
+                "splitter has to be str, tuple or list, "
+                "{} was provided".format(type(splitter))
+            )
     else:
         # if there is no splitter, I create the Left part
         left_part = _complete_left(other_states=other_states)
@@ -889,9 +1024,13 @@ def _left_right_check(splitter_part, other_states):
     """checking if splitter_part is purely Left or Right - string is returned.
     If the splitter_part is mixed None is returned.
     """
-    rpn_part = splitter2rpn(splitter_part, other_states=other_states, state_fields=False)
+    rpn_part = splitter2rpn(
+        splitter_part, other_states=other_states, state_fields=False
+    )
     inputs_in_splitter = [i for i in rpn_part if i not in ["*", "."]]
-    others_in_splitter = [True if el.startswith("_") else False for el in inputs_in_splitter]
+    others_in_splitter = [
+        True if el.startswith("_") else False for el in inputs_in_splitter
+    ]
     if all(others_in_splitter):
         return "Left"
     elif (not all(others_in_splitter)) and (not any(others_in_splitter)):
@@ -900,7 +1039,7 @@ def _left_right_check(splitter_part, other_states):
 
 def inputs_types_to_dict(name, inputs):
     """converting type.Inputs to dictionary"""
-    #dj: any better option?
+    # dj: any better option?
     input_names = [nm for nm in inputs.__dataclass_fields__.keys() if nm != "_func"]
     inputs_dict = {}
     for field in input_names:
