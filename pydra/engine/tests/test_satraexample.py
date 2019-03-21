@@ -193,11 +193,11 @@ def test_7(plugin):
     """Test workflow with workflow level splitters and combiners"""
     wf = Workflow(name="test7", input_spec=["x", "y"])
     wf.add(multiply(name="mult", inputs=dict(x=wf.inputs.x, y=wf.inputs.y)))
-    wf.add(add2(name="add2", x=wf.mult.result.out))
+    wf.add(add2(name="add2", x=wf.mult.output.out))
 
     wf.split(("x", "y"), x=[1, 2], y=[1, 2])
     wf.combine("x")
-    wf.set_output([("out", wf.add2.result.out)])
+    wf.set_output([("out", wf.add2.output.out)])
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
