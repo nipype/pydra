@@ -212,12 +212,6 @@ class NodeBase:
     def output(self):
         return self._output
 
-    def result(self, cache_locations=None, return_state=False):
-        self._reading_results()
-        return self._result
-        # return self._reading_results(cache_locations=cache_locations,
-        #                              return_state=return_state)
-
     def audit(self, message, flags=None):
         if develop:
             with open(
@@ -291,11 +285,9 @@ class NodeBase:
         with FileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            """
             result = self.result(cache_locations=cache_locations)
             if result is not None:
                 return result
-            """
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
@@ -570,62 +562,17 @@ class NodeBase:
         val_dict_l = [(self.state.states_val[i[0]], i[1]) for i in val_l]
         return val_dict_l
 
-    def _combined_output(self, key_out, state_dict, output_el):
-        for inp in self.state.combiner_all:
-            state_dict.pop(inp)
-        state_tuple = tuple(state_dict.items())
-        if state_tuple in self._output[key_out].keys():
-            self._output[key_out][state_tuple].append(output_el)
-        else:
-            self._output[key_out][state_tuple] = [output_el]
-
-    def _reading_results_one_output(self, key_out):
-        """reading results for one specific output name"""
-        if not self.state.splitter:
-            if type(self.output[key_out]) is tuple:
-                result = self.output[key_out]
-            elif type(self.output[key_out]) is dict:
-                val_l = self._state_dict_to_list(self.output[key_out])
-                if len(val_l) == 1:
-                    result = val_l[0]
-                # this is used for wf (can be no splitter but multiple values from node splitter)
-                else:
-                    result = val_l
-        elif self.state.combiner and not self.state._splitter_rpn_comb:
-            val_l = self._state_dict_to_list(self.output[key_out])
-            result = val_l[0]
-        elif self.state.splitter:
-            val_l = self._state_dict_to_list(self._output[key_out])
-            result = val_l
-        return result
-
-    def get_output(self):
-        """collecting all outputs and updating self._output
-        (assuming that file already exist and this was checked)
-        """
-        for key_out in self.output_names:
-            self._output[key_out] = {}
-            if self.state:
-                for (ii, val) in enumerate(self.state.states_val):
-                    state_dict = val
-                    if self.state.splitter:
-                        output = self.results_dict[ii].result().output
-                        output_el = getattr(output, key_out)
-                        if not self.state.combiner:  # only splitter
-                            self._output[key_out][
-                                tuple(self.state.states_val[ii].items())
-                            ] = output_el
-                        else:
-                            self._combined_output(
-                                key_out, deepcopy(state_dict), output_el
-                            )
-                    else:
-                        raise Exception("not implemented, TODO")
-            else:
-                output_el = getattr(self.results_dict[None].result().output, key_out)
-                # TODO should I have: self._output[key_out][None] or self._output[key_out]?
-                self._output[key_out][None] = output_el
-        return self._output
+    def _combined_output(self):
+        results = []
+        for (ii, val) in enumerate(self.state.states_val):
+            result = load_result(
+                self.results_dict[ii][1],
+                ensure_list(cache_locations) + ensure_list(self._cache_dir),
+            )
+            results.append(result)
+        # TODO: combine magic
+        # ....
+        return combined_results
 
     # dj: should I combine with get_output?
     def _check_all_results(self):
@@ -644,22 +591,42 @@ class NodeBase:
         self._done = True
         return True
 
-    def _reading_results(self,):
-        """ collecting all results for all output names"""
+    def result(self, state_index=None, cache_locations=None):
         """
-        return load_result(self.checksum,
-                             ensure_list(cache_locations) +
-                             ensure_list(self._cache_dir))
 
+        :param state_index:
+        :param cache_locations:
+        :return:
         """
-        # if not self.output:
-        self.get_output()
-        for key_out in self.output_names:
-            output = self.output[key_out]
-            if self.state:
-                self._result[key_out] = [(dict(k), v) for k, v in output.items()]
-            else:
-                self._result[key_out] = (None, output[None])
+        # TODO: check if result is available in load_result and
+        # return a future if not
+        if self.state:
+            if state_index is not None:
+                if self.state.combiner:
+                    return self._combined_output()[state_index]
+                result = load_result(
+                    self.results_dict[state_index][1],
+                    ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                )
+                return result
+            if self.state.combiner:  # only splitter
+                return self._combined_output()
+            results = []
+            for (ii, val) in enumerate(self.state.states_val):
+                result = load_result(
+                    self.results_dict[ii][1],
+                    ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                )
+                results.append(result)
+            return results
+        else:
+            if state_index is not None:
+                raise ValueError("Task does not have a state")
+            result = load_result(
+                self.results_dict[None][1],
+                ensure_list(cache_locations) + ensure_list(self._cache_dir),
+            )
+            return result
 
 
 class Workflow(NodeBase):
@@ -703,19 +670,10 @@ class Workflow(NodeBase):
         self.graph = nx.DiGraph()
         # all nodes in the workflow (probably will be removed)
         self._nodes = []
-        # saving all connection between nodes
-        self.connected_var = {}
         # input that are expected by nodes to get from wf.inputs
         self.needed_inp_wf = []
         # key: name of a node, value: the node
         self._node_names = {}
-        # key: name of a node, value: splitter of the node
-        self._node_splitters = {}
-
-        # nodes that are created when the workflow has splitter (key: node name, value: list of nodes)
-        self.inner_nodes = {}
-        # in case of inner workflow this points to the main/parent workflow
-        self.parent_wf = None
 
     @property
     def nodes(self):
