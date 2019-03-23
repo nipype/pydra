@@ -203,14 +203,6 @@ class NodeBase:
     def output_names(self):
         return [f.name for f in dc.fields(make_klass(self.output_spec))]
 
-    def set_output_keys(self):
-        for out in self.output_names:
-            self._output[out] = None
-
-    @property
-    def output(self):
-        return self._output
-
     def audit(self, message, flags=None):
         if develop:
             with open(
@@ -573,23 +565,6 @@ class NodeBase:
         # ....
         return combined_results
 
-    # dj: should I combine with get_output?
-    def _check_all_results(self):
-        """checking if all files that should be created are present
-        if all files and outputs are present, self._done is changed to True
-        (the method does not collect the output)
-        """
-        for key_out in self.output_names:
-            if self.state:
-                for ii, _ in enumerate(self.state.states_val):
-                    if getattr(self.results_dict[ii].result().output, key_out) is None:
-                        return False
-            else:
-                if getattr(self.results_dict[None].result().output, key_out) is None:
-                    return False
-        self._done = True
-        return True
-
     def result(self, state_index=None, cache_locations=None):
         """
 
@@ -654,7 +629,6 @@ class Workflow(NodeBase):
                 name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
             )
         self.output_spec = output_spec
-        self.set_output_keys()
 
         super(Workflow, self).__init__(
             name=name,
@@ -668,10 +642,10 @@ class Workflow(NodeBase):
         self.graph = nx.DiGraph()
         # all nodes in the workflow (probably will be removed)
         self._nodes = []
-        # input that are expected by nodes to get from wf.inputs
-        self.needed_inp_wf = []
         # key: name of a node, value: the node
         self._node_names = {}
+        # store output connections
+        self._connections = None
 
     @property
     def nodes(self):
@@ -681,94 +655,6 @@ class Workflow(NodeBase):
     def graph_sorted(self):
         # TODO: should I always update the graph?
         return list(nx.topological_sort(self.graph))
-
-    def split_node(self, splitter, node=None, inputs=None):
-        """this is setting a splitter to the wf's nodes (not to the wf)"""
-        if type(node) is str:
-            node = self._node_names[node]
-        elif node is None:
-            node = self._last_added
-        if node.splitter:
-            raise Exception("Cannot assign two splitters to the same node")
-        node.split(splitter=splitter, inputs=inputs)
-        self._node_splitters[node.name] = node.splitter
-        return self
-
-    def combine_node(self, combiner, node=None):
-        """this is setting a combiner to the wf's nodes (not to the wf)"""
-        if type(node) is str:
-            node = self._node_names[node]
-        elif node is None:
-            node = self._last_added
-        if node.combiner:
-            raise Exception("Cannot assign two combiners to the same node")
-        node.combine(combiner=combiner)
-        return self
-
-    def get_output(self):
-        # not sure, if I should collect output of all nodes or only the ones that are used in wf.output
-        self.node_outputs = {}
-        for nn in self.graph:
-            if self.splitter:
-                self.node_outputs[nn.name] = [
-                    ni.get_output() for ni in self.inner_nodes[nn.name]
-                ]
-            else:
-                self.node_outputs[nn.name] = nn.get_output()
-        if self.wf_output_names:
-            for out in self.wf_output_names:
-                if len(out) == 2:
-                    node_nm, out_nd_nm, out_wf_nm = out[0], out[1], out[1]
-                elif len(out) == 3:
-                    node_nm, out_nd_nm, out_wf_nm = out
-                else:
-                    raise Exception("wf_output_names should have 2 or 3 elements")
-                if out_wf_nm not in self._output.keys():
-                    if self.splitter:
-                        self._output[out_wf_nm] = {}
-                        for (i, val) in enumerate(self.state.states_val):
-                            wf_inputs_dict = val
-                            dir_nm_el, _ = self._directory_name_state_surv(
-                                wf_inputs_dict
-                            )
-                            output_el = self.node_outputs[node_nm][i][out_nd_nm]
-                            if not self.combiner:  # splitter only
-                                self._output[out_wf_nm][dir_nm_el] = output_el[1]
-                            else:
-                                self._combined_output(
-                                    out_wf_nm, wf_inputs_dict, output_el[1]
-                                )
-                    else:
-                        self._output[out_wf_nm] = self.node_outputs[node_nm][out_nd_nm]
-                else:
-                    raise Exception(
-                        "the key {} is already used in workflow.result".format(
-                            out_wf_nm
-                        )
-                    )
-        return self._output
-
-    # TODO: might merge with the function from Node
-    def _check_all_results(self):
-        """checking if all files that should be created are present"""
-        for nn in self.graph_sorted:
-            if nn.name in self.inner_nodes.keys():
-                if not all([ni.done for ni in self.inner_nodes[nn.name]]):
-                    return False
-            else:
-                if not nn.done:
-                    return False
-        self._done = True
-        return True
-
-    def _reading_results(self):
-        """reading all results for the workflow,
-        nodes/outputs names specified in self.wf_output_names
-        """
-        if self.wf_output_names:
-            for out in self.wf_output_names:
-                key_out = out[-1]
-                self._result[key_out] = self._reading_results_one_output(key_out)
 
     # TODO: this should be probably using add method, but might be also removed completely
     def add_nodes(self, nodes):
@@ -828,19 +714,6 @@ class Workflow(NodeBase):
                 self.connect_wf_input(source, node.name, inp)
         return self
 
-    def connect(self, from_node_nm, from_socket, to_node_nm, to_socket):
-        from_node = self._node_names[from_node_nm]
-        to_node = self._node_names[to_node_nm]
-        self.graph.add_edges_from([(from_node, to_node)])
-        if not to_node in self.nodes:
-            self.add_nodes(to_node)
-        self.connected_var[to_node][to_socket] = (from_node, from_socket)
-        # from_node.sending_output.append((from_socket, to_node, to_socket))
-        logger.debug("connecting {} and {}".format(from_node, to_node))
-
-    def connect_wf_input(self, inp_wf, node_nm, inp_nd):
-        self.needed_inp_wf.append((node_nm, inp_wf, inp_nd))
-
     def preparing(self, wf_inputs=None, wf_inputs_ind=None, st_inputs=None):
         """preparing nodes which are connected: setting the final splitter and state_inputs"""
         for node_nm, inp_wf, inp_nd in self.needed_inp_wf:
@@ -894,15 +767,21 @@ class Workflow(NodeBase):
                 pass
             nn.prepare_state_input()
 
-    # removing temp. from Workflow
-    # def run(self, plugin="serial"):
-    #     #self.preparing(wf_inputs=self.inputs) # moved to submitter
-    #     self.prepare_state_input()
-    #     logger.debug('the sorted graph is: {}'.format(self.graph_sorted))
-    #     submitter = sub.SubmitterWorkflow(workflow=self, plugin=plugin)
-    #     submitter.run_workflow()
-    #     submitter.close()
-    #     self.collecting_output()
+    def _run_task(self):
+        # TODO: implement graph execution here
+        pass
+
+    def set_output(self, connections):
+        self._connections = connections
+        fields = [(name, ty.Any) for name, _ in connections]
+
+        self.output_spec = SpecInfo(
+            name="Output", fields=fields, bases=(BaseSpec,)
+        )
+
+    def _list_outputs(self):
+        return [output() if is_function(output) else output
+                for _, output in self._connections]
 
 
 def is_function(obj):
