@@ -15,7 +15,7 @@ class Worker(object):
         logger.debug("Initialize Worker")
         pass
 
-    def run_el(self):
+    def run_el(self, interface, **kwargs):
         raise NotImplementedError
 
     def close(self):
@@ -39,15 +39,24 @@ class MpWorker(Worker):
         self.pool.terminate()
 
 
+class SerialPool:
+    """ a simply class to imitate a pool like in cf"""
+    def __init__(self, interface, **kwargs):
+        self.interface = interface
+        self.kwargs = kwargs
+
+    def result(self):
+        return self.interface(**self.kwargs)
+
+
 class SerialWorker(Worker):
     def __init__(self):
         logger.debug("Initialize SerialWorker")
         pass
 
-    def run_el(self, interface, inp):
-        res = interface(inp)
-        # returning dir_nm_el and Result object for the specific element
-        return res
+    def run_el(self, interface, **kwargs):
+        pdb.set_trace()
+        return SerialPool(interface=interface, **kwargs)
 
     def close(self):
         pass
@@ -75,16 +84,17 @@ class DaskWorker(Worker):
         self.client = Client()  # self.cluster)
         # print("BOKEH", self.client.scheduler_info()["address"] + ":" + str(self.client.scheduler_info()["services"]["bokeh"]))
 
-    def run_el(self, interface, inp):
-        print("DASK, run_el: ", interface, inp, time.time())
+    def run_el(self, interface, **kwargs):
+        print("DASK, run_el: ", interface, kwargs, time.time())
         # dask  doesn't copy the node second time, so it doesn't see that I change input in the meantime (??)
-        x = self.client.submit(interface, inp)
+        x = self.client.submit(interface, **kwargs)
         print("DASK, status: ", x.status)
         # this important, otherwise dask will not finish the job
-        x.add_done_callback(lambda x: print("DONE ", interface, inp))
+        x.add_done_callback(lambda x: print("DONE ", interface, kwargs))
         print("res", x.result())
         # returning dir_nm_el and Result object for the specific element
-        return x.result()
+        #return x.result()
+        return x
 
     def close(self):
         # self.cluster.close()
