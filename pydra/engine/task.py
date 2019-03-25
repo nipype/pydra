@@ -121,7 +121,6 @@ class FunctionTask(NodeBase):
         elif "return" in func.__annotations__:
             raise NotImplementedError("Branch not implemented")
         self.output_spec = output_spec
-        self.set_output_keys()
 
     def _run_task(self):
         inputs = dc.asdict(self.inputs)
