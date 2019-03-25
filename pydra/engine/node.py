@@ -244,6 +244,11 @@ class NodeBase:
     def cache_dir(self, location):
         if location is not None:
             self._cache_dir = Path(location)
+            self._cache_dir.mkdir(parents=False, exist_ok=True)
+        else:
+            self._cache_dir = mkdtemp()
+            self._cache_dir = Path(self._cache_dir)
+
 
     @property
     def output_dir(self):
@@ -255,12 +260,8 @@ class NodeBase:
     def __call__(self, cache_locations=None, **kwargs):
         return self.run(cache_locations=cache_locations, **kwargs)
 
-    def run(self, cache_locations=None, cache_dir=None, **kwargs):
+    def run(self, cache_locations=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
-        if cache_dir is not None:
-            self.cache_dir = Path(cache_dir)
-        if self.cache_dir is None:
-            self.cache_dir = mkdtemp()
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         """
@@ -277,15 +278,15 @@ class NodeBase:
         with FileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            result = self.result(cache_locations=cache_locations)
-            if result is not None:
-                return result
+            # TODO: fix it! self.result doesn work when self.results_dict is empty
+            # result = self.result(cache_locations=cache_locations)
+            # if result is not None:
+            #     return result
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
             cwd = os.getcwd()
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-
             # start recording provenance, but don't send till directory is created
             # in case message directory is inside task output directory
             if self.audit_check(AuditFlag.PROV):
@@ -554,7 +555,7 @@ class NodeBase:
         val_dict_l = [(self.state.states_val[i[0]], i[1]) for i in val_l]
         return val_dict_l
 
-    def _combined_output(self):
+    def _combined_output(self, cache_locations=None):
         results = []
         for (ii, val) in enumerate(self.state.states_val):
             result = load_result(
@@ -584,8 +585,9 @@ class NodeBase:
                     ensure_list(cache_locations) + ensure_list(self._cache_dir),
                 )
                 return result
-            if self.state.combiner:  # only splitter
+            if self.state.combiner:
                 return self._combined_output()
+            # if state_index=None, collecting all results
             results = []
             for (ii, val) in enumerate(self.state.states_val):
                 result = load_result(

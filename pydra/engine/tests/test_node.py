@@ -10,7 +10,7 @@ from ..node import Workflow, NodeBase
 from ..submitter import Submitter
 from ..task import to_task
 
-import pytest
+import pytest, pdb
 
 TEST_DATA_DIR = Path(os.getenv("PYDRA_TEST_DATA", "/nonexistent/path"))
 DS114_DIR = TEST_DATA_DIR / "ds000114"
@@ -34,7 +34,7 @@ def change_dir(request):
 
 
 Plugins = ["serial", "mp", "cf", "dask"]
-Plugins = ["cf"]
+Plugins = ["serial", "cf"]
 
 
 @to_task
@@ -191,7 +191,7 @@ def test_task_nostate_1(plugin):
 
     # checking the results
     results = nn.result()
-    assert results["out"] == (None, 5)
+    assert results.output.out == 5
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -207,7 +207,7 @@ def test_task_nostate_2(plugin):
 
     # checking the results
     results = nn.result()
-    assert results["out"] == (None, 33)
+    assert results.output.out == 33
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -226,8 +226,7 @@ def test_task_spl_1(plugin):
     results = nn.result()
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert results[i].output.out == res[1]
 
 
 @pytest.mark.parametrize(
@@ -269,8 +268,7 @@ def test_task_spl_2(plugin, splitter, state_splitter, state_rpn, expected):
     # checking the results
     results = nn.result()
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert results[i].output.out == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -294,8 +292,7 @@ def test_task_spl_comb_1(plugin):
     results = nn.result()
     expected = [({}, [5, 7])]
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert results[i].output.out == res[1]
 
 
 @pytest.mark.parametrize(

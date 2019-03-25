@@ -54,6 +54,7 @@ class Submitter(object):
         for ind, task_future, checksum in futures:
             runnable.results_dict[ind] = (task_future, checksum)
 
+
     def run_workflow(self, workflow=None, ready=True):
         """the main function to run Workflow"""
         if not workflow:
