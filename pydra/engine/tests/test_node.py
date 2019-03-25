@@ -290,9 +290,11 @@ def test_task_spl_comb_1(plugin):
 
     # checking the results
     results = nn.result()
+
+    combined_results = [[res.output.out for res in res_l] for res_l in results]
     expected = [({}, [5, 7])]
     for i, res in enumerate(expected):
-        assert results[i].output.out == res[1]
+        assert combined_results[i] == res[1]
 
 
 @pytest.mark.parametrize(
@@ -378,9 +380,9 @@ def test_task_spl_comb_2(
     # checking the results
     results = nn.result()
 
+    combined_results = [[res.output.out for res in res_l] for res_l in results]
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert combined_results[i] == res[1]
 
 
 @pytest.mark.xfail(reason="need updates [wip]")

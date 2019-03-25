@@ -37,8 +37,7 @@ def test_1(plugin):
     results = doubled_x.result()
     expected = [({"double.x": 0}, 0), ({"double.x": 1}, 2), ({"double.x": 2}, 4)]
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert results[i].output.out == res[1]
 
 
 # @python_app
@@ -77,8 +76,7 @@ def test_2(plugin):
     ]
 
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert results[i].output.out == res[1]
 
 
 # # multiply_x is an AppFuture
@@ -98,12 +96,11 @@ def test_3(plugin):
         sub.run(multiple_x)
 
     # checking the results
-    results = multiple_x.result()
     expected = [({"mult.y": 1}, [1, 2]), ({"mult.y": 2}, [2, 4])]
-
+    results = multiple_x.result()
+    combined_results = [[res.output.out for res in res_l] for res_l in results]
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert combined_results[i] == res[1]
 
 
 # # multiply_x is an AppFuture
@@ -124,12 +121,11 @@ def test_4(plugin):
         sub.run(multiple_x)
 
     # checking the results
-    results = multiple_x.result()
     expected = [({}, [1, 2, 2, 4])]
-
+    results = multiple_x.result()
+    combined_results = [[res.output.out for res in res_l] for res_l in results]
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert combined_results[i] == res[1]
 
 
 # in the following example, note parentheses instead of brackets. this is our syntax for synchronized parallelism
@@ -148,12 +144,10 @@ def test_5(plugin):
         sub.run(multiple_x)
 
     # checking the results
-    results = multiple_x.result()
     expected = [({"mult.x": 1, "mult.y": 1}, 1), ({"mult.x": 2, "mult.y": 2}, 4)]
-
+    results = multiple_x.result()
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert results[i].output.out == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -169,12 +163,12 @@ def test_6(plugin):
         sub.run(multiple_x)
 
     # checking the results
-    results = multiple_x.result()
     expected = [({}, [1, 4])]
-
+    results = multiple_x.result()
+    combined_results = [[res.output.out for res in res_l] for res_l in results]
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert combined_results[i] == res[1]
+
 
 
 # TODO: have to use workflow

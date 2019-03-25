@@ -556,15 +556,15 @@ class NodeBase:
         return val_dict_l
 
     def _combined_output(self, cache_locations=None):
-        results = []
-        for (ii, val) in enumerate(self.state.states_val):
-            result = load_result(
-                self.results_dict[ii][1],
-                ensure_list(cache_locations) + ensure_list(self._cache_dir),
-            )
-            results.append(result)
-        # TODO: combine magic
-        # ....
+        combined_results = []
+        for (gr, ind_l) in self.state.final_groups_mapping.items():
+            combined_results.append([])
+            for ind in ind_l:
+                result = load_result(
+                    self.results_dict[ind][1],
+                    ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                )
+                combined_results[gr].append(result)
         return combined_results
 
     def result(self, state_index=None, cache_locations=None):
