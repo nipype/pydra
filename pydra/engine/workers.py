@@ -41,22 +41,22 @@ class MpWorker(Worker):
 
 class SerialPool:
     """ a simply class to imitate a pool like in cf"""
-    def __init__(self, interface, **kwargs):
-        self.interface = interface
-        self.kwargs = kwargs
+
+    def submit(self, interface, **kwargs):
+        self.res = interface(**kwargs)
 
     def result(self):
-        return self.interface(**self.kwargs)
+        return self.res
 
 
 class SerialWorker(Worker):
     def __init__(self):
         logger.debug("Initialize SerialWorker")
-        pass
+        self.pool = SerialPool()
 
     def run_el(self, interface, **kwargs):
-        pdb.set_trace()
-        return SerialPool(interface=interface, **kwargs)
+        self.pool.submit(interface=interface, **kwargs)
+        return self.pool
 
     def close(self):
         pass
