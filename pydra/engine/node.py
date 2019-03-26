@@ -243,6 +243,11 @@ class NodeBase:
     def cache_dir(self, location):
         if location is not None:
             self._cache_dir = Path(location)
+            self._cache_dir.mkdir(parents=False, exist_ok=True)
+        else:
+            self._cache_dir = mkdtemp()
+            self._cache_dir = Path(self._cache_dir)
+
 
     @property
     def output_dir(self):
@@ -254,12 +259,8 @@ class NodeBase:
     def __call__(self, cache_locations=None, **kwargs):
         return self.run(cache_locations=cache_locations, **kwargs)
 
-    def run(self, cache_locations=None, cache_dir=None, **kwargs):
+    def run(self, cache_locations=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
-        if cache_dir is not None:
-            self.cache_dir = Path(cache_dir)
-        if self.cache_dir is None:
-            self.cache_dir = mkdtemp()
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         """
@@ -276,15 +277,15 @@ class NodeBase:
         with FileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            result = self.result(cache_locations=cache_locations)
-            if result is not None:
-                return result
+            if self.results_dict: # if run method called without submitter
+                result = self.result(cache_locations=cache_locations)
+                if result is not None:
+                    return result
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
             cwd = os.getcwd()
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-
             # start recording provenance, but don't send till directory is created
             # in case message directory is inside task output directory
             if self.audit_check(AuditFlag.PROV):
@@ -553,16 +554,16 @@ class NodeBase:
         val_dict_l = [(self.state.states_val[i[0]], i[1]) for i in val_l]
         return val_dict_l
 
-    def _combined_output(self):
-        results = []
-        for (ii, val) in enumerate(self.state.states_val):
-            result = load_result(
-                self.results_dict[ii][1],
-                ensure_list(cache_locations) + ensure_list(self._cache_dir),
-            )
-            results.append(result)
-        # TODO: combine magic
-        # ....
+    def _combined_output(self, cache_locations=None):
+        combined_results = []
+        for (gr, ind_l) in self.state.final_groups_mapping.items():
+            combined_results.append([])
+            for ind in ind_l:
+                result = load_result(
+                    self.results_dict[ind][1],
+                    ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                )
+                combined_results[gr].append(result)
         return combined_results
 
     def result(self, state_index=None, cache_locations=None):
@@ -583,8 +584,9 @@ class NodeBase:
                     ensure_list(cache_locations) + ensure_list(self._cache_dir),
                 )
                 return result
-            if self.state.combiner:  # only splitter
+            if self.state.combiner:
                 return self._combined_output()
+            # if state_index=None, collecting all results
             results = []
             for (ii, val) in enumerate(self.state.states_val):
                 result = load_result(
@@ -639,6 +641,8 @@ class Workflow(NodeBase):
             messenger_args=messenger_args,
         )
 
+        self.set_output_keys()
+
         self.graph = nx.DiGraph()
         # all nodes in the workflow (probably will be removed)
         self._nodes = []
@@ -677,12 +681,11 @@ class Workflow(NodeBase):
         cache_dir=None,
         **kwargs
     ):
-        # TODO: should I also accept normal function?
-        if is_node(runnable):
+        if is_workflow(runnable):
             node = runnable
-            node.other_splitters = self._node_splitters
-        elif is_workflow(runnable):
+        elif is_task(runnable):
             node = runnable
+            setattr(self, runnable.name, node)
         elif is_function(runnable):
             if not output_names:
                 output_names = ["out"]
@@ -784,9 +787,12 @@ class Workflow(NodeBase):
                 for _, output in self._connections]
 
 
+# TODO: task has also call
 def is_function(obj):
     return hasattr(obj, "__call__")
 
+def is_task(obj):
+    return hasattr(obj, "_run_task")
 
 def is_workflow(obj):
     return isinstance(obj, Workflow)
