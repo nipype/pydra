@@ -248,7 +248,6 @@ class NodeBase:
             self._cache_dir = mkdtemp()
             self._cache_dir = Path(self._cache_dir)
 
-
     @property
     def output_dir(self):
         return self._cache_dir / self.checksum
@@ -277,7 +276,7 @@ class NodeBase:
         with FileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            if self.results_dict: # if run method called without submitter
+            if self.results_dict:  # if run method called without submitter
                 result = self.result(cache_locations=cache_locations)
                 if result is not None:
                     return result
@@ -778,21 +777,23 @@ class Workflow(NodeBase):
         self._connections = connections
         fields = [(name, ty.Any) for name, _ in connections]
 
-        self.output_spec = SpecInfo(
-            name="Output", fields=fields, bases=(BaseSpec,)
-        )
+        self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
 
     def _list_outputs(self):
-        return [output() if is_function(output) else output
-                for _, output in self._connections]
+        return [
+            output() if is_function(output) else output
+            for _, output in self._connections
+        ]
 
 
 # TODO: task has also call
 def is_function(obj):
     return hasattr(obj, "__call__")
 
+
 def is_task(obj):
     return hasattr(obj, "_run_task")
+
 
 def is_workflow(obj):
     return isinstance(obj, Workflow)

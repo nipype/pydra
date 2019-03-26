@@ -784,12 +784,10 @@ def test_state_combine_2():
     assert st1.keys_final == ["NA.b"]
     assert st1.final_groups_mapping == {0: [0, 2], 1: [1, 3]}
 
-
     assert st2.states_ind == [{"NA.b": 0}, {"NA.b": 1}]
     assert st2.states_val == [{"NA.b": 10}, {"NA.b": 20}]
     assert st2.keys_final == ["NA.b"]
     assert st2.final_groups_mapping == {0: [0], 1: [1]}
-
 
 
 def test_state_combine_3():
@@ -828,7 +826,6 @@ def test_state_combine_3():
     ]
     assert st1.keys_final == ["NA.b"]
     assert st1.final_groups_mapping == {0: [0, 2], 1: [1, 3]}
-
 
     assert st2.states_ind == [
         {"NA.b": 0, "NB.d": 0},

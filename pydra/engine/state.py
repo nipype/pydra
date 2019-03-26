@@ -182,7 +182,6 @@ class State:
         self.prepare_states_ind(inputs)
         self.prepare_states_val(inputs)
 
-
     def prepare_states_ind(self, inputs):
         """using aux._splits to calculate a list of dictionaries with state indices"""
         if isinstance(inputs, BaseSpec):
@@ -273,7 +272,10 @@ class State:
             self.ind_l_final = values
             self.keys_final = keys_out
             # groups after combiner
-            ind_map = {tuple(aux.flatten(tup, max_depth=10)): ind for ind,tup in enumerate(self.ind_l_final)}
+            ind_map = {
+                tuple(aux.flatten(tup, max_depth=10)): ind
+                for ind, tup in enumerate(self.ind_l_final)
+            }
             self.final_groups_mapping = {i: [] for i in range(len(self.ind_l_final))}
             for ii, st in enumerate(self.states_ind):
                 ind_f = tuple([st[k] for k in self.keys_final])
@@ -283,7 +285,6 @@ class State:
             self.keys_final = keys_out
             # should be 0 or None?
             self.final_groups_mapping = {0: list(range(len(self.states_ind)))}
-
 
     def prepare_states_val(self, inputs):
         """evaluate states values having states indices"""

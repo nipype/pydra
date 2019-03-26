@@ -170,7 +170,6 @@ def test_6(plugin):
         assert combined_results[i] == res[1]
 
 
-
 # TODO: have to use workflow
 # # multiply_x is an AppFuture
 # multiple_x = multiply().split(('x', 'y'), x=range(10), y=range(10))
