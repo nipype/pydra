@@ -277,9 +277,10 @@ class NodeBase:
         with FileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            result = self.result(cache_locations=cache_locations)
-            if result is not None:
-                return result
+            if self.results_dict: # if run method called without submitter
+                result = self.result(cache_locations=cache_locations)
+                if result is not None:
+                    return result
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
