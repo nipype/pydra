@@ -44,11 +44,14 @@ class Submitter(object):
             for ii, ind in enumerate(runnable.state.states_val):
                 job = runnable.to_job(ii)
                 checksum = job.checksum
+                # run method has to have checksum to check the existing results
+                job.results_dict[None] = (None, checksum)
                 res = self.worker.run_el(job)
                 futures.append([ii, res, checksum])
         else:
             job = runnable.to_job(None)
             checksum = job.checksum
+            job.results_dict[None] = (None, checksum)
             res = self.worker.run_el(job)
             futures.append([None, res, checksum])
         for ind, task_future, checksum in futures:

@@ -82,7 +82,6 @@ class NodeBase:
         inputs : dictionary (input name, input value or list of values)
             States this node's input names
         """
-        #pdb.set_trace()
         self.name = name
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
@@ -278,10 +277,9 @@ class NodeBase:
         with FileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            # TODO: fix it! self.result doesn work when self.results_dict is empty
-            # result = self.result(cache_locations=cache_locations)
-            # if result is not None:
-            #     return result
+            result = self.result(cache_locations=cache_locations)
+            if result is not None:
+                return result
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
