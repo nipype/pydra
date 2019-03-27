@@ -33,7 +33,7 @@ class Submitter(object):
     def __exit__(self, type, value, traceback):
         self.close()
 
-    def run(self, runnable):
+    def run(self, runnable, cache_locations=None):
         """main running method, checks if submitter id for Node or Workflow"""
         if not isinstance(runnable, NodeBase):  # a node/workflow
             raise Exception("runnable has to be a Node or Workflow")
@@ -46,12 +46,16 @@ class Submitter(object):
                 checksum = job.checksum
                 # run method has to have checksum to check the existing results
                 job.results_dict[None] = (None, checksum)
+                if cache_locations:
+                    job.cache_locations = cache_locations
                 res = self.worker.run_el(job)
                 futures.append([ii, res, checksum])
         else:
             job = runnable.to_job(None)
             checksum = job.checksum
             job.results_dict[None] = (None, checksum)
+            if cache_locations:
+                job.cache_locations = cache_locations
             res = self.worker.run_el(job)
             futures.append([None, res, checksum])
         for ind, task_future, checksum in futures:
