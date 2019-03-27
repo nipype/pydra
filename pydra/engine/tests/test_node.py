@@ -195,6 +195,38 @@ def test_task_nostate_1(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_cachedir(plugin, tmpdir):
+    """Node with provided cache_dir using pytest tmpdir"""
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    assert np.allclose(nn.inputs.a, [3])
+    assert nn.state is None
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_cachedir_relativepath(plugin):
+    """Node with provided cache_dir as relative path"""
+    cache_dir = "test_task_nostate"
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    assert np.allclose(nn.inputs.a, [3])
+    assert nn.state is None
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_2(plugin):
     """Node with interface and inputs, no splitter, running interface"""
     nn = moment(name="NA", n=3, lst=[2, 3, 4])

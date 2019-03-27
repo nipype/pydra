@@ -242,7 +242,7 @@ class NodeBase:
     @cache_dir.setter
     def cache_dir(self, location):
         if location is not None:
-            self._cache_dir = Path(location)
+            self._cache_dir = Path(location).resolve()
             self._cache_dir.mkdir(parents=False, exist_ok=True)
         else:
             self._cache_dir = mkdtemp()
