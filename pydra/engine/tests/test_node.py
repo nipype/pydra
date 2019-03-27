@@ -227,6 +227,32 @@ def test_task_nostate_1_cachedir_relativepath(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_cachelocations(plugin, tmpdir):
+    """
+    Two nodes with provided cache_dir;
+    the second node has cache_locations and should not recompute the results
+    """
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    cache_dir2 = tmpdir.mkdir("test_task_nostate2")
+
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
+
+    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn2)
+
+    # checking the results
+    results2 = nn2.result()
+    assert results2.output.out == 5
+
+    # checking if the second node didn't run the interface again
+    assert nn.output_dir.exists()
+    assert not nn2.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_2(plugin):
     """Node with interface and inputs, no splitter, running interface"""
     nn = moment(name="NA", n=3, lst=[2, 3, 4])
