@@ -3,7 +3,7 @@ from copy import deepcopy
 import dataclasses as dc
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
-from .node import NodeBase
+from .node import NodeBase, is_workflow
 
 import logging
 

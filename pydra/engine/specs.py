@@ -23,6 +23,16 @@ class BaseSpec:
         """Compute a basic hash for any given set of fields"""
         return sha256(str(self).encode()).hexdigest()
 
+    def retrieve_values(self):
+        temp_values = {}
+        for field in something:
+            value = getattr(self, field)
+            if isinstance(value, LazyField):
+                value = value.get_value()
+                temp_values[field] = value
+        for field, value in temp_values.items():
+            setattr(self, field, value)
+
 
 @dc.dataclass
 class Runtime:
@@ -109,10 +119,31 @@ class SingularitySpec(ContainerSpec):
     container: str = "singularity"
 
 
-"""
-@dc.dataclass
-class OutputLink:
-    input: str
-    cache_location: Path
-    output: str
-"""
+class LazyField:
+    def __init__(self, node, attr_type):
+        self.node = node
+        if attr_type == 'input':
+            self.fields = [name for name in node.input_spec]
+        elif attr_type == 'output':
+            self.fields = node.output_names
+        else:
+            raise ValueError('LazyField: Unknown attr_type: {}'.format(attr_type))
+        self.attr_type = attr_type
+        self.field = None
+
+    def __getattr__(self, name):
+        if name in self.fields:
+            self.field = name
+            return self
+        raise AttributeError('Task {0} has no {1} attribute {2}'
+                             .format(self.node.name, self.attr_type, name))
+
+    def __repr__(self):
+        return "LF('{0}', '{1}')".format(self.node.name, self.field)
+
+    def get_value(self):
+        if self.attr_type == 'input':
+            return getattr(self.node.inputs, self.field)
+        elif self.attr_type == 'output':
+            result = self.node.result()
+            return getattr(result.output, self.field)
