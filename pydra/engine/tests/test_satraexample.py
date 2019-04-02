@@ -2,7 +2,7 @@ import pytest
 
 from ..submitter import Submitter
 from ..task import to_task
-from ..node import Workflow, sync
+from ..node import Workflow
 
 
 Plugins = ["cf"]
@@ -181,17 +181,17 @@ def add2(x):
     return x + 2
 
 
-@pytest.mark.xfail(reason="finish after futures")
+# @pytest.mark.xfail(reason="finish after futures")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_7(plugin):
     """Test workflow with workflow level splitters and combiners"""
     wf = Workflow(name="test7", input_spec=["x", "y"])
-    wf.add(multiply(name="mult", x=wf.li.x), y=wf.li.y)
-    wf.add(add2(name="add2", x=wf.mult.lo.out))
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out))
 
     wf.split(("x", "y"), x=[1, 2], y=[1, 2])
     wf.combine("x")
-    wf.set_output([("out", wf.add2.lo.out)])
+    wf.set_output([("out", wf.add2.lzout.out)])
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
