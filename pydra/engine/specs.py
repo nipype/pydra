@@ -25,11 +25,11 @@ class BaseSpec:
 
     def retrieve_values(self, wf, state_index=None):
         temp_values = {}
-        for name, _ in self.fields:
-            value = getattr(self, name)
+        for field in dc.fields(self):
+            value = getattr(self, field.name)
             if isinstance(value, LazyField):
                 value = value.get_value(wf, state_index=state_index)
-                temp_values[name] = value
+                temp_values[field.name] = value
         for field, value in temp_values.items():
             setattr(self, field, value)
 
@@ -138,10 +138,18 @@ class LazyField:
         if name in dir(self):
             return self.__getattribute__(name)
         raise AttributeError(
-            "Task {0} has no {1} attribute {2}".format(
-                self.name, self.attr_type, name
-            )
+            "Task {0} has no {1} attribute {2}".format(self.name, self.attr_type, name)
         )
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["name"] = self.name
+        state["fields"] = self.fields
+        state["field"] = self.field
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
 
     def __repr__(self):
         return "LF('{0}', '{1}')".format(self.name, self.field)

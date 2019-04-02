@@ -547,7 +547,7 @@ class NodeBase:
     @property
     def done(self):
         if self.results_dict:
-            return all([future.done() for _, future in self.results_dict.items()])
+            return all([future.done() for _, (future, _) in self.results_dict.items()])
 
     def _state_dict_to_list(self, container):
         """creating a list of tuples from dictionary and changing key (state) from str to dict"""
@@ -602,9 +602,12 @@ class NodeBase:
         else:
             if state_index is not None:
                 raise ValueError("Task does not have a state")
+            if self.results_dict:
+                checksum = self.results_dict[None][1]
+            else:
+                checksum = self.checksum
             result = load_result(
-                self.results_dict[None][1],
-                ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                checksum, ensure_list(cache_locations) + ensure_list(self._cache_dir)
             )
             return result
 
@@ -681,8 +684,10 @@ class Workflow(NodeBase):
             if isinstance(val, LazyField):
                 if val.name != self.name:
                     self.graph.add_edge(
-                        getattr(self, val.name), task,
-                        from_field=val.field, to_field=field.name
+                        getattr(self, val.name),
+                        task,
+                        from_field=val.field,
+                        to_field=field.name,
                     )
         return self
 
@@ -690,7 +695,7 @@ class Workflow(NodeBase):
         for task in self.graph_sorted:
             # TODO: this next line will not work with split and combine
             task.inputs.retrieve_values(self)
-            task.run()
+            result = task.run()
 
     def set_output(self, connections):
         self._connections = connections
@@ -702,7 +707,7 @@ class Workflow(NodeBase):
         for name, val in self._connections:
             if not isinstance(val, LazyField):
                 raise ValueError("all connections must be lazy")
-            output.append(val.get_value())
+            output.append(val.get_value(self))
         return output
 
 
