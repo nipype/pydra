@@ -20,7 +20,7 @@ from tempfile import mkdtemp
 
 from . import state
 from . import auxiliary as aux
-from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo
+from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo, LazyField
 from .helpers import (
     make_klass,
     create_checksum,
@@ -138,6 +138,11 @@ class NodeBase:
         state["output_spec"] = pk.loads(state["output_spec"])
         state["inputs"] = make_klass(state["input_spec"])(**state["inputs"])
         self.__dict__.update(state)
+
+    def __getattr__(self, name):
+        if name == 'lo':  # lazy output
+            return LazyField(self, 'output')
+        return self.__getattribute__(name)
 
     def help(self, returnhelp=False):
         """ Prints class help
@@ -658,6 +663,13 @@ class Workflow(NodeBase):
         self._node_names = {}
         # store output connections
         self._connections = None
+
+        self.submitter = None
+
+    def __getattr__(self, name):
+        if name == 'li':  # lazy output
+            return LazyField(self, 'input')
+        return self.__getattribute__(name)
 
     @property
     def nodes(self):
