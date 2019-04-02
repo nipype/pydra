@@ -2,7 +2,7 @@ import pytest
 
 from ..submitter import Submitter
 from ..task import to_task
-from ..node import Workflow, sync
+from ..node import Workflow
 
 
 Plugins = ["cf"]

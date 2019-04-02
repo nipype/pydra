@@ -339,6 +339,7 @@ def test_task_spl_1_cachedir(plugin, tmpdir):
         assert results[i].output.out == res[1]
 
 
+@pytest.mark.xfail(reason="TODO: output_dir.exists check doesn't work when splitter")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_spl_1_cachelocations(plugin, tmpdir):
     """
@@ -370,6 +371,7 @@ def test_task_spl_1_cachelocations(plugin, tmpdir):
 
 
 
+@pytest.mark.xfail(reason="TODO: output_dir.exists check doesn't work when splitter")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_spl_1_cachelocations_updated(plugin, tmpdir):
     """

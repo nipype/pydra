@@ -7,6 +7,7 @@ from ..specs import (
     ContainerSpec,
     DockerSpec,
     SingularitySpec,
+    LazyField
 )
 import pytest
 
@@ -63,3 +64,55 @@ def test_singularity():
     spec = SingularitySpec("ls", "busybox")
     assert all(hasattr(spec, attr) for attr in container_attrs)
     assert getattr(spec, "container") == "singularity"
+
+
+class TestNode:
+    def __init__(self):
+        class Input:
+            def __init__(self):
+                self.inp_a = "A"
+                self.inp_b = "B"
+        self.name = "tn"
+        self.inputs = Input()
+        self.input_spec = ["inp_a", "inp_b"]
+        self.output_names = ["out_a"]
+
+    def result(self):
+        class Output:
+            def __init__(self):
+                self.out_a = "OUT_A"
+        class Result:
+            def __init__(self):
+                self.output = Output()
+        return Result()
+
+def test_lazy_inp():
+    tn = TestNode()
+    lf = LazyField(node=tn, attr_type="input")
+
+    assert lf.get_value("inp_a") == "A"
+
+    lf.inp_b
+    assert lf.get_value("inp_b") == "B"
+
+
+def test_lazy_out():
+    tn = TestNode()
+    lf = LazyField(node=tn, attr_type="output")
+
+    assert lf.get_value("out_a") == "OUT_A"
+
+
+def test_laxy_errorattr():
+    with pytest.raises(Exception) as excinfo:
+        tn = TestNode()
+        lf = LazyField(node=tn, attr_type="out")
+    assert "LazyField: Unknown attr_type:" in str(excinfo.value)
+
+
+def test_lazy_getvale():
+    tn = TestNode()
+    lf = LazyField(node=tn, attr_type="input")
+    with pytest.raises(Exception) as excinfo:
+        lf.inp_c
+    assert str(excinfo.value) == 'Task tn has no input attribute inp_c'
