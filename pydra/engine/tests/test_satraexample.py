@@ -227,19 +227,22 @@ def test_8(plugin):
     assert results[0][1].output.out == 6
 
 
-@pytest.mark.xfail(reason="finish after futures")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_9(plugin):
     """Test workflow with node level splitters and combiners"""
     wf = Workflow(name="test7", input_spec=["x", "y"])
-    wf.add(multiply(name="mult").split(("x", "y"), x=wf.inputs.x, y=wf.inputs.y))
-    wf.add(add2(name="add2", x=wf.mult.result.out).combine("x"))
-    wf.set_output([("out", wf.add2.result.out)])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(("x", "y")))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("x"))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [1, 2]
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
 
     # checking the results
+    while not wf.done:
+        sleep(1)
     results = wf.result()
     expected = [({"mult.x": 1, "mult.y": 1}, 1), ({"mult.x": 2, "mult.y": 2}, 4)]
 
