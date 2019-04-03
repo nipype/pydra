@@ -238,14 +238,13 @@ def test_9(plugin):
     wf.inputs.y = [1, 2]
 
     with Submitter(plugin=plugin) as sub:
+        wf.submitter = sub
         sub.run(wf)
 
     # checking the results
     while not wf.done:
         sleep(1)
     results = wf.result()
-    expected = [({"mult.x": 1, "mult.y": 1}, 1), ({"mult.x": 2, "mult.y": 2}, 4)]
 
-    for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+    assert results[0][0].output.out == 3
+    assert results[0][1].output.out == 6

@@ -12,6 +12,7 @@ from pathlib import Path
 import typing as ty
 import pickle as pk
 from copy import deepcopy
+from time import sleep
 
 import cloudpickle as cp
 from filelock import FileLock
@@ -693,9 +694,15 @@ class Workflow(NodeBase):
 
     def _run_task(self):
         for task in self.graph_sorted:
-            # TODO: this next line will not work with split and combine
+            # TODO: this next line will need to be adjusted for tasks that
+            # depend on prior tasks that have state
             task.inputs.retrieve_values(self)
-            task.run()
+            if self.submitter is None:
+                task.run()
+            else:
+                self.submitter.run(task)
+                while not task.done:
+                    sleep(1)
 
     def set_output(self, connections):
         self._connections = connections
