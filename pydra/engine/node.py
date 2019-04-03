@@ -33,6 +33,7 @@ from .helpers import (
     get_inputs,
 )
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
+from .submitter import Submitter
 
 logger = logging.getLogger("pydra")
 
@@ -700,7 +701,8 @@ class Workflow(NodeBase):
             if self.submitter is None:
                 task.run()
             else:
-                self.submitter.run(task)
+                with Submitter(self.submitter) as sub:
+                    sub.run(task)
                 while not task.done:
                     sleep(1)
 

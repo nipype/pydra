@@ -238,7 +238,7 @@ def test_9(plugin):
     wf.inputs.y = [1, 2]
 
     with Submitter(plugin=plugin) as sub:
-        wf.submitter = sub
+        wf.submitter = plugin
         sub.run(wf)
 
     # checking the results
