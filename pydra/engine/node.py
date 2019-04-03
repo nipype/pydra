@@ -125,6 +125,7 @@ class NodeBase:
 
         # dictionary of results from tasks
         self.results_dict = {}
+        self.plugin = None
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -656,9 +657,6 @@ class Workflow(NodeBase):
         # store output connections
         self._connections = None
 
-        # TODO: this may be used in run task
-        self.submitter = None
-
     def __getattr__(self, name):
         if name == "lzin":  # lazy output
             return LazyField(self, "input")
@@ -697,11 +695,11 @@ class Workflow(NodeBase):
             # TODO: this next line will need to be adjusted for tasks that
             # depend on prior tasks that have state
             task.inputs.retrieve_values(self)
-            if self.submitter is None:
+            if self.plugin is None:
                 task.run()
             else:
                 from .submitter import Submitter
-                with Submitter(self.submitter) as sub:
+                with Submitter(self.plugin) as sub:
                     sub.run(task)
                 while not task.done:
                     sleep(1)

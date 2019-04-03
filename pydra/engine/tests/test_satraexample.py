@@ -236,9 +236,9 @@ def test_9(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = [1, 2]
     wf.inputs.y = [1, 2]
+    wf.plugin = 'cf'
 
     with Submitter(plugin=plugin) as sub:
-        wf.submitter = plugin
         sub.run(wf)
 
     # checking the results
