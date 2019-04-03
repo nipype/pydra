@@ -695,7 +695,7 @@ class Workflow(NodeBase):
         for task in self.graph_sorted:
             # TODO: this next line will not work with split and combine
             task.inputs.retrieve_values(self)
-            result = task.run()
+            task.run()
 
     def set_output(self, connections):
         self._connections = connections
