@@ -193,6 +193,7 @@ def test_7(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.inputs.y = 3
+    wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
@@ -207,13 +208,14 @@ def test_7(plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_8(plugin):
     """Test workflow with workflow level splitters and combiners"""
-    wf = Workflow(name="test7", input_spec=["x", "y"])
+    wf = Workflow(name="test8", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
 
     wf.split(("x", "y"), x=[1, 2], y=[1, 2])
     wf.combine("x")
     wf.set_output([("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
@@ -231,13 +233,13 @@ def test_8(plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_9(plugin):
     """Test workflow with node level splitters and combiners"""
-    wf = Workflow(name="test7", input_spec=["x", "y"])
+    wf = Workflow(name="test9", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(("x", "y")))
     wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("x"))
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = [1, 2]
     wf.inputs.y = [1, 2]
-    wf.plugin = "cf"
+    wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
