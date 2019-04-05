@@ -699,6 +699,7 @@ class Workflow(NodeBase):
                 task.run()
             else:
                 from .submitter import Submitter
+
                 with Submitter(self.plugin) as sub:
                     sub.run(task)
                 while not task.done:
