@@ -45,19 +45,22 @@ class Runtime:
 class Result:
     output: ty.Optional[ty.Any] = None
     runtime: ty.Optional[Runtime] = None
+    errored: bool = False
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        fields = tuple(state["output"].__annotations__.items())
-        state["output_spec"] = (state["output"].__class__.__name__, fields)
-        state["output"] = dc.asdict(state["output"])
+        if state["output"] is not None:
+            fields = tuple(state["output"].__annotations__.items())
+            state["output_spec"] = (state["output"].__class__.__name__, fields)
+            state["output"] = dc.asdict(state["output"])
         return state
 
     def __setstate__(self, state):
-        spec = list(state["output_spec"])
-        del state["output_spec"]
-        klass = dc.make_dataclass(spec[0], list(spec[1]))
-        state["output"] = klass(**state["output"])
+        if "output_spec" in state:
+            spec = list(state["output_spec"])
+            del state["output_spec"]
+            klass = dc.make_dataclass(spec[0], list(spec[1]))
+            state["output"] = klass(**state["output"])
         self.__dict__.update(state)
 
 

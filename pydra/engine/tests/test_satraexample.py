@@ -227,6 +227,7 @@ def test_8(plugin):
     assert results[0][1].output.out == 6
 
 
+@pytest.mark.xfail(reason="need updates from dorota")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_9(plugin):
     """Test workflow with node level splitters and combiners"""
