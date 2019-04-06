@@ -3,7 +3,7 @@ from copy import deepcopy
 import dataclasses as dc
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
-from .node import NodeBase
+from .node import NodeBase, is_workflow
 
 import logging
 
@@ -42,13 +42,20 @@ class Submitter(object):
         futures = []
         if runnable.state:
             for ii, ind in enumerate(runnable.state.states_val):
-                res = self.worker.run_el(runnable.to_job(ii))
-                futures.append([ii, res])
+                job = runnable.to_job(ii)
+                checksum = job.checksum
+                # run method has to have checksum to check the existing results
+                job.results_dict[None] = (None, checksum)
+                res = self.worker.run_el(job)
+                futures.append([ii, res, checksum])
         else:
-            res = self.worker.run_el(runnable.to_job(None))
-            futures.append([None, res])
-        for ind, task_future in futures:
-            runnable.results_dict[ind] = task_future
+            job = runnable.to_job(None)
+            checksum = job.checksum
+            job.results_dict[None] = (None, checksum)
+            res = self.worker.run_el(job)
+            futures.append([None, res, checksum])
+        for ind, task_future, checksum in futures:
+            runnable.results_dict[ind] = (task_future, checksum)
 
     def run_workflow(self, workflow=None, ready=True):
         """the main function to run Workflow"""

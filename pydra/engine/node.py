@@ -12,6 +12,7 @@ from pathlib import Path
 import typing as ty
 import pickle as pk
 from copy import deepcopy
+from time import sleep
 
 import cloudpickle as cp
 from filelock import FileLock
@@ -20,7 +21,7 @@ from tempfile import mkdtemp
 
 from . import state
 from . import auxiliary as aux
-from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo
+from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo, LazyField
 from .helpers import (
     make_klass,
     create_checksum,
@@ -29,6 +30,7 @@ from .helpers import (
     gather_runtime_info,
     save_result,
     ensure_list,
+    record_error,
     get_inputs,
 )
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
@@ -124,6 +126,7 @@ class NodeBase:
 
         # dictionary of results from tasks
         self.results_dict = {}
+        self.plugin = None
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -137,6 +140,11 @@ class NodeBase:
         state["output_spec"] = pk.loads(state["output_spec"])
         state["inputs"] = make_klass(state["input_spec"])(**state["inputs"])
         self.__dict__.update(state)
+
+    def __getattr__(self, name):
+        if name == "lzout":  # lazy output
+            return LazyField(self, "output")
+        return self.__getattribute__(name)
 
     def help(self, returnhelp=False):
         """ Prints class help
@@ -203,20 +211,6 @@ class NodeBase:
     def output_names(self):
         return [f.name for f in dc.fields(make_klass(self.output_spec))]
 
-    def set_output_keys(self):
-        for out in self.output_names:
-            self._output[out] = None
-
-    @property
-    def output(self):
-        return self._output
-
-    def result(self, cache_locations=None, return_state=False):
-        self._reading_results()
-        return self._result
-        # return self._reading_results(cache_locations=cache_locations,
-        #                              return_state=return_state)
-
     def audit(self, message, flags=None):
         if develop:
             with open(
@@ -225,7 +219,7 @@ class NodeBase:
                 context = json.load(fp)
         else:
             context = {
-                "@context": "https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld"
+                "@context": "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld"
             }
         if self.audit_flags & flags:
             if self.messenger_args:
@@ -257,6 +251,10 @@ class NodeBase:
     def cache_dir(self, location):
         if location is not None:
             self._cache_dir = Path(location)
+            self._cache_dir.mkdir(parents=False, exist_ok=True)
+        else:
+            self._cache_dir = mkdtemp()
+            self._cache_dir = Path(self._cache_dir)
 
     @property
     def output_dir(self):
@@ -268,12 +266,8 @@ class NodeBase:
     def __call__(self, cache_locations=None, **kwargs):
         return self.run(cache_locations=cache_locations, **kwargs)
 
-    def run(self, cache_locations=None, cache_dir=None, **kwargs):
+    def run(self, cache_locations=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
-        if cache_dir is not None:
-            self.cache_dir = Path(cache_dir)
-        if self.cache_dir is None:
-            self.cache_dir = mkdtemp()
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         """
@@ -290,17 +284,15 @@ class NodeBase:
         with FileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            """
-            result = self.result(cache_locations=cache_locations)
-            if result is not None:
-                return result
-            """
+            if self.results_dict:  # if run method called without submitter
+                result = self.result(cache_locations=cache_locations)
+                if result is not None:
+                    return result
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
             cwd = os.getcwd()
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-
             # start recording provenance, but don't send till directory is created
             # in case message directory is inside task output directory
             if self.audit_check(AuditFlag.PROV):
@@ -317,7 +309,7 @@ class NodeBase:
                 from ..utils.profiler import ResourceMonitor
 
                 resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
-            result = Result(output=None, runtime=None)
+            result = Result(output=None, runtime=None, errored=False)
             try:
                 if self.audit_check(AuditFlag.RESOURCE):
                     resource_monitor.start()
@@ -335,8 +327,8 @@ class NodeBase:
                 self._run_task()
                 result.output = self._collect_outputs()
             except Exception as e:
-                print(e)
-                # record_error(self, e)
+                record_error(self.output_dir, e)
+                result.errored = True
                 raise
             finally:
                 if self.audit_check(AuditFlag.RESOURCE):
@@ -372,7 +364,14 @@ class NodeBase:
                 os.chdir(cwd)
                 if self.audit_check(AuditFlag.PROV):
                     # audit outputs
-                    self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)
+                    self.audit(
+                        {
+                            "@id": aid,
+                            "endedAtTime": now(),
+                            "errored": result.errored,
+                        },
+                        AuditFlag.PROV,
+                    )
             return result
 
     # TODO: Decide if the following two functions should be separated
@@ -558,7 +557,7 @@ class NodeBase:
     @property
     def done(self):
         if self.results_dict:
-            return all([future.done() for _, future in self.results_dict.items()])
+            return all([future.done() for _, (future, _) in self.results_dict.items()])
 
     def _state_dict_to_list(self, container):
         """creating a list of tuples from dictionary and changing key (state) from str to dict"""
@@ -569,96 +568,58 @@ class NodeBase:
         val_dict_l = [(self.state.states_val[i[0]], i[1]) for i in val_l]
         return val_dict_l
 
-    def _combined_output(self, key_out, state_dict, output_el):
-        for inp in self.state.combiner_all:
-            state_dict.pop(inp)
-        state_tuple = tuple(state_dict.items())
-        if state_tuple in self._output[key_out].keys():
-            self._output[key_out][state_tuple].append(output_el)
+    def _combined_output(self, cache_locations=None):
+        combined_results = []
+        for (gr, ind_l) in self.state.final_groups_mapping.items():
+            combined_results.append([])
+            for ind in ind_l:
+                result = load_result(
+                    self.results_dict[ind][1],
+                    ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                )
+                combined_results[gr].append(result)
+        return combined_results
+
+    def result(self, state_index=None, cache_locations=None):
+        """
+
+        :param state_index:
+        :param cache_locations:
+        :return:
+        """
+        # TODO: check if result is available in load_result and
+        # return a future if not
+        if self.state:
+            if state_index is not None:
+                if self.state.combiner:
+                    return self._combined_output()[state_index]
+                result = load_result(
+                    self.results_dict[state_index][1],
+                    ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                )
+                return result
+            if self.state.combiner:
+                return self._combined_output()
+            # if state_index=None, collecting all results
+            results = []
+            for (ii, val) in enumerate(self.state.states_val):
+                result = load_result(
+                    self.results_dict[ii][1],
+                    ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                )
+                results.append(result)
+            return results
         else:
-            self._output[key_out][state_tuple] = [output_el]
-
-    def _reading_results_one_output(self, key_out):
-        """reading results for one specific output name"""
-        if not self.state.splitter:
-            if type(self.output[key_out]) is tuple:
-                result = self.output[key_out]
-            elif type(self.output[key_out]) is dict:
-                val_l = self._state_dict_to_list(self.output[key_out])
-                if len(val_l) == 1:
-                    result = val_l[0]
-                # this is used for wf (can be no splitter but multiple values from node splitter)
-                else:
-                    result = val_l
-        elif self.state.combiner and not self.state._splitter_rpn_comb:
-            val_l = self._state_dict_to_list(self.output[key_out])
-            result = val_l[0]
-        elif self.state.splitter:
-            val_l = self._state_dict_to_list(self._output[key_out])
-            result = val_l
-        return result
-
-    def get_output(self):
-        """collecting all outputs and updating self._output
-        (assuming that file already exist and this was checked)
-        """
-        for key_out in self.output_names:
-            self._output[key_out] = {}
-            if self.state:
-                for (ii, val) in enumerate(self.state.states_val):
-                    state_dict = val
-                    if self.state.splitter:
-                        output = self.results_dict[ii].result().output
-                        output_el = getattr(output, key_out)
-                        if not self.state.combiner:  # only splitter
-                            self._output[key_out][
-                                tuple(self.state.states_val[ii].items())
-                            ] = output_el
-                        else:
-                            self._combined_output(
-                                key_out, deepcopy(state_dict), output_el
-                            )
-                    else:
-                        raise Exception("not implemented, TODO")
+            if state_index is not None:
+                raise ValueError("Task does not have a state")
+            if self.results_dict:
+                checksum = self.results_dict[None][1]
             else:
-                output_el = getattr(self.results_dict[None].result().output, key_out)
-                # TODO should I have: self._output[key_out][None] or self._output[key_out]?
-                self._output[key_out][None] = output_el
-        return self._output
-
-    # dj: should I combine with get_output?
-    def _check_all_results(self):
-        """checking if all files that should be created are present
-        if all files and outputs are present, self._done is changed to True
-        (the method does not collect the output)
-        """
-        for key_out in self.output_names:
-            if self.state:
-                for ii, _ in enumerate(self.state.states_val):
-                    if getattr(self.results_dict[ii].result().output, key_out) is None:
-                        return False
-            else:
-                if getattr(self.results_dict[None].result().output, key_out) is None:
-                    return False
-        self._done = True
-        return True
-
-    def _reading_results(self,):
-        """ collecting all results for all output names"""
-        """
-        return load_result(self.checksum,
-                             ensure_list(cache_locations) +
-                             ensure_list(self._cache_dir))
-
-        """
-        # if not self.output:
-        self.get_output()
-        for key_out in self.output_names:
-            output = self.output[key_out]
-            if self.state:
-                self._result[key_out] = [(dict(k), v) for k, v in output.items()]
-            else:
-                self._result[key_out] = (None, output[None])
+                checksum = self.checksum
+            result = load_result(
+                checksum, ensure_list(cache_locations) + ensure_list(self._cache_dir)
+            )
+            return result
 
 
 class Workflow(NodeBase):
@@ -687,7 +648,6 @@ class Workflow(NodeBase):
                 name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
             )
         self.output_spec = output_spec
-        self.set_output_keys()
 
         super(Workflow, self).__init__(
             name=name,
@@ -699,21 +659,18 @@ class Workflow(NodeBase):
         )
 
         self.graph = nx.DiGraph()
-        # all nodes in the workflow (probably will be removed)
-        self._nodes = []
-        # saving all connection between nodes
-        self.connected_var = {}
-        # input that are expected by nodes to get from wf.inputs
-        self.needed_inp_wf = []
-        # key: name of a node, value: the node
-        self._node_names = {}
-        # key: name of a node, value: splitter of the node
-        self._node_splitters = {}
 
-        # nodes that are created when the workflow has splitter (key: node name, value: list of nodes)
-        self.inner_nodes = {}
-        # in case of inner workflow this points to the main/parent workflow
-        self.parent_wf = None
+        self.name2obj = {}
+
+        # store output connections
+        self._connections = None
+
+    def __getattr__(self, name):
+        if name == "lzin":  # lazy output
+            return LazyField(self, "input")
+        if name in self.name2obj:
+            return self.name2obj[name]
+        return self.__getattribute__(name)
 
     @property
     def nodes(self):
@@ -721,234 +678,62 @@ class Workflow(NodeBase):
 
     @property
     def graph_sorted(self):
-        # TODO: should I always update the graph?
         return list(nx.topological_sort(self.graph))
 
-    def split_node(self, splitter, node=None, inputs=None):
-        """this is setting a splitter to the wf's nodes (not to the wf)"""
-        if type(node) is str:
-            node = self._node_names[node]
-        elif node is None:
-            node = self._last_added
-        if node.splitter:
-            raise Exception("Cannot assign two splitters to the same node")
-        node.split(splitter=splitter, inputs=inputs)
-        self._node_splitters[node.name] = node.splitter
-        return self
-
-    def combine_node(self, combiner, node=None):
-        """this is setting a combiner to the wf's nodes (not to the wf)"""
-        if type(node) is str:
-            node = self._node_names[node]
-        elif node is None:
-            node = self._last_added
-        if node.combiner:
-            raise Exception("Cannot assign two combiners to the same node")
-        node.combine(combiner=combiner)
-        return self
-
-    def get_output(self):
-        # not sure, if I should collect output of all nodes or only the ones that are used in wf.output
-        self.node_outputs = {}
-        for nn in self.graph:
-            if self.splitter:
-                self.node_outputs[nn.name] = [
-                    ni.get_output() for ni in self.inner_nodes[nn.name]
-                ]
-            else:
-                self.node_outputs[nn.name] = nn.get_output()
-        if self.wf_output_names:
-            for out in self.wf_output_names:
-                if len(out) == 2:
-                    node_nm, out_nd_nm, out_wf_nm = out[0], out[1], out[1]
-                elif len(out) == 3:
-                    node_nm, out_nd_nm, out_wf_nm = out
-                else:
-                    raise Exception("wf_output_names should have 2 or 3 elements")
-                if out_wf_nm not in self._output.keys():
-                    if self.splitter:
-                        self._output[out_wf_nm] = {}
-                        for (i, val) in enumerate(self.state.states_val):
-                            wf_inputs_dict = val
-                            dir_nm_el, _ = self._directory_name_state_surv(
-                                wf_inputs_dict
-                            )
-                            output_el = self.node_outputs[node_nm][i][out_nd_nm]
-                            if not self.combiner:  # splitter only
-                                self._output[out_wf_nm][dir_nm_el] = output_el[1]
-                            else:
-                                self._combined_output(
-                                    out_wf_nm, wf_inputs_dict, output_el[1]
-                                )
-                    else:
-                        self._output[out_wf_nm] = self.node_outputs[node_nm][out_nd_nm]
-                else:
-                    raise Exception(
-                        "the key {} is already used in workflow.result".format(
-                            out_wf_nm
-                        )
+    def add(self, task):
+        if not is_task(task):
+            raise ValueError("Unknown workflow element: {!r}".format(task))
+        self.graph.add_nodes_from([task])
+        self.name2obj[task.name] = task
+        self._last_added = task
+        for field in dc.fields(task.inputs):
+            val = getattr(task.inputs, field.name)
+            if isinstance(val, LazyField):
+                if val.name != self.name:
+                    self.graph.add_edge(
+                        getattr(self, val.name),
+                        task,
+                        from_field=val.field,
+                        to_field=field.name,
                     )
-        return self._output
-
-    # TODO: might merge with the function from Node
-    def _check_all_results(self):
-        """checking if all files that should be created are present"""
-        for nn in self.graph_sorted:
-            if nn.name in self.inner_nodes.keys():
-                if not all([ni.done for ni in self.inner_nodes[nn.name]]):
-                    return False
-            else:
-                if not nn.done:
-                    return False
-        self._done = True
-        return True
-
-    def _reading_results(self):
-        """reading all results for the workflow,
-        nodes/outputs names specified in self.wf_output_names
-        """
-        if self.wf_output_names:
-            for out in self.wf_output_names:
-                key_out = out[-1]
-                self._result[key_out] = self._reading_results_one_output(key_out)
-
-    # TODO: this should be probably using add method, but might be also removed completely
-    def add_nodes(self, nodes):
-        """adding nodes without defining connections
-            most likely it will be removed at the end
-        """
-        self.graph.add_nodes_from(nodes)
-        for nn in nodes:
-            self._nodes.append(nn)
-            self.connected_var[nn] = {}
-            self._node_names[nn.name] = nn
-
-    # TODO: workingir shouldn't have None
-    def add(
-        self,
-        runnable,
-        name=None,
-        inputs=None,
-        output_names=None,
-        cache_dir=None,
-        **kwargs
-    ):
-        # TODO: should I also accept normal function?
-        if is_node(runnable):
-            node = runnable
-            node.other_splitters = self._node_splitters
-        elif is_workflow(runnable):
-            node = runnable
-        elif is_function(runnable):
-            if not output_names:
-                output_names = ["out"]
-            if not name:
-                raise Exception("you have to specify name for the node")
-            from .task import to_task
-
-            node = to_task(
-                runnable,
-                cache_dir=cache_dir or self.cache_dir,
-                # TODO: pass on as many self defaults as needed
-                name=name,
-                inputs=inputs,
-                other_splitters=self._node_splitters,
-                output_names=output_names,
-            )
-        else:
-            raise ValueError("Unknown workflow element: {!r}".format(runnable))
-        self.add_nodes([node])
-        self._last_added = node
-        # connecting inputs from other nodes outputs
-        # (assuming that all kwargs provide connections)
-        for (inp, source) in kwargs.items():
-            try:
-                from_node_nm, from_socket = source.split(".")
-                self.connect(from_node_nm, from_socket, node.name, inp)
-            # TODO not sure if i need it, just check if from_node_nm is not None??
-            except (ValueError):
-                self.connect_wf_input(source, node.name, inp)
         return self
 
-    def connect(self, from_node_nm, from_socket, to_node_nm, to_socket):
-        from_node = self._node_names[from_node_nm]
-        to_node = self._node_names[to_node_nm]
-        self.graph.add_edges_from([(from_node, to_node)])
-        if not to_node in self.nodes:
-            self.add_nodes(to_node)
-        self.connected_var[to_node][to_socket] = (from_node, from_socket)
-        # from_node.sending_output.append((from_socket, to_node, to_socket))
-        logger.debug("connecting {} and {}".format(from_node, to_node))
-
-    def connect_wf_input(self, inp_wf, node_nm, inp_nd):
-        self.needed_inp_wf.append((node_nm, inp_wf, inp_nd))
-
-    def preparing(self, wf_inputs=None, wf_inputs_ind=None, st_inputs=None):
-        """preparing nodes which are connected: setting the final splitter and state_inputs"""
-        for node_nm, inp_wf, inp_nd in self.needed_inp_wf:
-            node = self._node_names[node_nm]
-            if "{}.{}".format(self.name, inp_wf) in wf_inputs:
-                node.state_inputs.update(
-                    {
-                        "{}.{}".format(node_nm, inp_nd): wf_inputs[
-                            "{}.{}".format(self.name, inp_wf)
-                        ]
-                    }
-                )
-                node.inputs.update(
-                    {
-                        "{}.{}".format(node_nm, inp_nd): wf_inputs[
-                            "{}.{}".format(self.name, inp_wf)
-                        ]
-                    }
-                )
+    def _run_task(self):
+        for task in self.graph_sorted:
+            # TODO: this next line will need to be adjusted for tasks that
+            # depend on prior tasks that have state
+            task.inputs.retrieve_values(self)
+            if self.plugin is None:
+                task.run()
             else:
-                raise Exception(
-                    "{}.{} not in the workflow inputs".format(self.name, inp_wf)
-                )
-        for nn in self.graph_sorted:
-            if not st_inputs:
-                st_inputs = wf_inputs
-            dir_nm_el, _ = self._directory_name_state_surv(st_inputs)
-            if not self.splitter:
-                dir_nm_el = ""
-            nn._done = False  # helps when mp is used
-            try:
-                for inp, (out_node, out_var) in self.connected_var[nn].items():
-                    nn.ready2run = (
-                        False
-                    )  # it has some history (doesnt have to be in the loop)
-                    nn.state_inputs.update(out_node.state_inputs)
-                    nn.needed_outputs.append((out_node, out_var, inp))
-                    # if there is no splitter provided, i'm assuming that splitter is taken from the previous node
-                    if (
-                        not nn.splitter or nn.splitter == out_node.splitter
-                    ) and out_node.splitter:
-                        # TODO!!: what if I have more connections, not only from one node
-                        if out_node.combiner:
-                            nn.splitter = out_node.state.splitter_comb
-                        else:
-                            nn.splitter = out_node.splitter
-                    else:
-                        pass
-            except (KeyError):
-                # tmp: we don't care about nn that are not in self.connected_var
-                pass
-            nn.prepare_state_input()
+                from .submitter import Submitter
 
-    # removing temp. from Workflow
-    # def run(self, plugin="serial"):
-    #     #self.preparing(wf_inputs=self.inputs) # moved to submitter
-    #     self.prepare_state_input()
-    #     logger.debug('the sorted graph is: {}'.format(self.graph_sorted))
-    #     submitter = sub.SubmitterWorkflow(workflow=self, plugin=plugin)
-    #     submitter.run_workflow()
-    #     submitter.close()
-    #     self.collecting_output()
+                with Submitter(self.plugin) as sub:
+                    sub.run(task)
+                while not task.done:
+                    sleep(1)
+
+    def set_output(self, connections):
+        self._connections = connections
+        fields = [(name, ty.Any) for name, _ in connections]
+        self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
+
+    def _list_outputs(self):
+        output = []
+        for name, val in self._connections:
+            if not isinstance(val, LazyField):
+                raise ValueError("all connections must be lazy")
+            output.append(val.get_value(self))
+        return output
 
 
+# TODO: task has also call
 def is_function(obj):
     return hasattr(obj, "__call__")
+
+
+def is_task(obj):
+    return hasattr(obj, "_run_task")
 
 
 def is_workflow(obj):

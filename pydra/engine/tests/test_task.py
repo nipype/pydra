@@ -14,7 +14,6 @@ def test_output():
         return a + 2
 
     nn = funaddtwo(a=3)
-    assert nn.output == {"out": None}
     res = nn.run()
     assert res.output.out == 5
 

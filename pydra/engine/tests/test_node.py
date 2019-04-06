@@ -10,7 +10,7 @@ from ..node import Workflow, NodeBase
 from ..submitter import Submitter
 from ..task import to_task
 
-import pytest
+import pytest, pdb
 
 TEST_DATA_DIR = Path(os.getenv("PYDRA_TEST_DATA", "/nonexistent/path"))
 DS114_DIR = TEST_DATA_DIR / "ds000114"
@@ -34,7 +34,7 @@ def change_dir(request):
 
 
 Plugins = ["serial", "mp", "cf", "dask"]
-Plugins = ["cf"]
+Plugins = ["serial", "cf"]
 
 
 @to_task
@@ -60,6 +60,11 @@ def fun_addvar4(a, b, c, d):
 @to_task
 def moment(lst, n):
     return sum([i ** n for i in lst]) / len(lst)
+
+
+@to_task
+def fun_div(a, b):
+    return a / b
 
 
 def test_task_init_1():
@@ -179,6 +184,13 @@ def test_task_init_4b():
     assert str(excinfo.value) == "splitter has been already set"
 
 
+def test_task_error():
+    func = fun_div(name="div", a=1, b=0)
+    with pytest.raises(ZeroDivisionError):
+        func()
+    assert (func.output_dir / "_error.pklz").exists()
+
+
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_1(plugin):
     """Node with interface and inputs, no splitter, running interface"""
@@ -191,7 +203,7 @@ def test_task_nostate_1(plugin):
 
     # checking the results
     results = nn.result()
-    assert results["out"] == (None, 5)
+    assert results.output.out == 5
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -207,7 +219,7 @@ def test_task_nostate_2(plugin):
 
     # checking the results
     results = nn.result()
-    assert results["out"] == (None, 33)
+    assert results.output.out == 33
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -226,8 +238,7 @@ def test_task_spl_1(plugin):
     results = nn.result()
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert results[i].output.out == res[1]
 
 
 @pytest.mark.parametrize(
@@ -269,8 +280,7 @@ def test_task_spl_2(plugin, splitter, state_splitter, state_rpn, expected):
     # checking the results
     results = nn.result()
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert results[i].output.out == res[1]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -292,10 +302,11 @@ def test_task_spl_comb_1(plugin):
 
     # checking the results
     results = nn.result()
+
+    combined_results = [[res.output.out for res in res_l] for res_l in results]
     expected = [({}, [5, 7])]
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert combined_results[i] == res[1]
 
 
 @pytest.mark.parametrize(
@@ -381,9 +392,9 @@ def test_task_spl_comb_2(
     # checking the results
     results = nn.result()
 
+    combined_results = [[res.output.out for res in res_l] for res_l in results]
     for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+        assert combined_results[i] == res[1]
 
 
 @pytest.mark.xfail(reason="need updates [wip]")

@@ -23,6 +23,16 @@ class BaseSpec:
         """Compute a basic hash for any given set of fields"""
         return sha256(str(self).encode()).hexdigest()
 
+    def retrieve_values(self, wf, state_index=None):
+        temp_values = {}
+        for field in dc.fields(self):
+            value = getattr(self, field.name)
+            if isinstance(value, LazyField):
+                value = value.get_value(wf, state_index=state_index)
+                temp_values[field.name] = value
+        for field, value in temp_values.items():
+            setattr(self, field, value)
+
 
 @dc.dataclass
 class Runtime:
@@ -35,19 +45,22 @@ class Runtime:
 class Result:
     output: ty.Optional[ty.Any] = None
     runtime: ty.Optional[Runtime] = None
+    errored: bool = False
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        fields = tuple(state["output"].__annotations__.items())
-        state["output_spec"] = (state["output"].__class__.__name__, fields)
-        state["output"] = dc.asdict(state["output"])
+        if state["output"] is not None:
+            fields = tuple(state["output"].__annotations__.items())
+            state["output_spec"] = (state["output"].__class__.__name__, fields)
+            state["output"] = dc.asdict(state["output"])
         return state
 
     def __setstate__(self, state):
-        spec = list(state["output_spec"])
-        del state["output_spec"]
-        klass = dc.make_dataclass(spec[0], list(spec[1]))
-        state["output"] = klass(**state["output"])
+        if "output_spec" in state:
+            spec = list(state["output_spec"])
+            del state["output_spec"]
+            klass = dc.make_dataclass(spec[0], list(spec[1]))
+            state["output"] = klass(**state["output"])
         self.__dict__.update(state)
 
 
@@ -109,10 +122,45 @@ class SingularitySpec(ContainerSpec):
     container: str = "singularity"
 
 
-"""
-@dc.dataclass
-class OutputLink:
-    input: str
-    cache_location: Path
-    output: str
-"""
+class LazyField:
+    def __init__(self, node, attr_type):
+        self.name = node.name
+        if attr_type == "input":
+            self.fields = [name for name, _ in node.input_spec.fields]
+        elif attr_type == "output":
+            self.fields = node.output_names
+        else:
+            raise ValueError("LazyField: Unknown attr_type: {}".format(attr_type))
+        self.attr_type = attr_type
+        self.field = None
+
+    def __getattr__(self, name):
+        if name in self.fields:
+            self.field = name
+            return self
+        if name in dir(self):
+            return self.__getattribute__(name)
+        raise AttributeError(
+            "Task {0} has no {1} attribute {2}".format(self.name, self.attr_type, name)
+        )
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["name"] = self.name
+        state["fields"] = self.fields
+        state["field"] = self.field
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
+    def __repr__(self):
+        return "LF('{0}', '{1}')".format(self.name, self.field)
+
+    def get_value(self, wf, state_index=None):
+        if self.attr_type == "input":
+            return getattr(wf.inputs, self.field)
+        elif self.attr_type == "output":
+            node = getattr(wf, self.name)
+            result = node.result(state_index=state_index)
+            return getattr(result.output, self.field)
