@@ -11,7 +11,7 @@ import pdb
 from pathlib import Path
 import typing as ty
 import pickle as pk
-from copy import deepcopy
+from copy import deepcopy, copy
 from time import sleep
 
 import cloudpickle as cp
@@ -526,8 +526,11 @@ class NodeBase:
 
     def to_job(self, ind):
         """ running interface one element generated from node_state."""
-        logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
+        # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
+        print("to job 1 copy", copy(self), self.name, ind)
+        print("to job 1 deep", deepcopy(self), self.name, ind)
         el = deepcopy(self)
+        print("tO job el", el)
         el.state = None
         _, inputs_dict = self.get_input_el(ind)
         interf_inputs = dict((k.split(".")[1], v) for k, v in inputs_dict.items())
