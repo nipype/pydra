@@ -39,6 +39,10 @@
       "cpu_peak_percent": {
         "@id": "pydra:cpu_peak_percent",
         "@type": "xsd:float"
+      },
+      "errored": {
+        "@id": "pydra:errored",
+        "@type": "xsd:boolean"
       }
     }
   ]

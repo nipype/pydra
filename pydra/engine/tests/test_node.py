@@ -62,6 +62,11 @@ def moment(lst, n):
     return sum([i ** n for i in lst]) / len(lst)
 
 
+@to_task
+def fun_div(a, b):
+    return a / b
+
+
 def test_task_init_1():
     """Node with mandatory arguments only"""
     nn = fun_addtwo()
@@ -177,6 +182,13 @@ def test_task_init_4b():
     with pytest.raises(Exception) as excinfo:
         nn.split(splitter="a")
     assert str(excinfo.value) == "splitter has been already set"
+
+
+def test_task_error():
+    func = fun_div(name="div", a=1, b=0)
+    with pytest.raises(ZeroDivisionError):
+        func()
+    assert (func.output_dir / "_error.pklz").exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)

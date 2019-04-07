@@ -30,6 +30,7 @@ from .helpers import (
     gather_runtime_info,
     save_result,
     ensure_list,
+    record_error,
     get_inputs,
 )
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
@@ -218,7 +219,7 @@ class NodeBase:
                 context = json.load(fp)
         else:
             context = {
-                "@context": "https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld"
+                "@context": "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld"
             }
         if self.audit_flags & flags:
             if self.messenger_args:
@@ -308,7 +309,7 @@ class NodeBase:
                 from ..utils.profiler import ResourceMonitor
 
                 resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
-            result = Result(output=None, runtime=None)
+            result = Result(output=None, runtime=None, errored=False)
             try:
                 if self.audit_check(AuditFlag.RESOURCE):
                     resource_monitor.start()
@@ -326,8 +327,8 @@ class NodeBase:
                 self._run_task()
                 result.output = self._collect_outputs()
             except Exception as e:
-                print(e)
-                # record_error(self, e)
+                record_error(self.output_dir, e)
+                result.errored = True
                 raise
             finally:
                 if self.audit_check(AuditFlag.RESOURCE):
@@ -363,7 +364,14 @@ class NodeBase:
                 os.chdir(cwd)
                 if self.audit_check(AuditFlag.PROV):
                     # audit outputs
-                    self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)
+                    self.audit(
+                        {
+                            "@id": aid,
+                            "endedAtTime": now(),
+                            "errored": result.errored,
+                        },
+                        AuditFlag.PROV,
+                    )
             return result
 
     # TODO: Decide if the following two functions should be separated
@@ -701,6 +709,7 @@ class Workflow(NodeBase):
                 task.run()
             else:
                 from .submitter import Submitter
+
                 with Submitter(self.plugin) as sub:
                     sub.run(task)
                 while not task.done:

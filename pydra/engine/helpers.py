@@ -168,3 +168,8 @@ def get_inputs(needed_outputs):
         if result:
             in_dict[outlink.input] = getattr(result.output, outlink.output)
     return in_dict
+
+
+def record_error(error_path, error):
+    with (error_path / "_error.pklz").open("wb") as fp:
+        cp.dump(error, fp)
