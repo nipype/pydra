@@ -51,10 +51,7 @@ def load_result(checksum, cache_locations):
         if (location / checksum).exists():
             result_file = location / checksum / "_result.pklz"
             if result_file.exists():
-                try:
-                    return cp.loads(result_file.read_bytes())
-                except EOFError:
-                    return None
+                return cp.loads(result_file.read_bytes())
             return None
     return None
 

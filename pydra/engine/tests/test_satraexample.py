@@ -360,25 +360,24 @@ def test_11(plugin):
     assert results[0][1].output.out == 6
 
 
-# @pytest.mark.parametrize("plugin", Plugins)
-# def test_10a(plugin):
-#     """Test workflow with node level splitters and combiners"""
-#     wf = Workflow(name="test10", input_spec=["x"])
-#     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
-#     wf.set_output([("out", wf.add2.lzout.out)])
-#     wf.inputs.x = [1, 2]
-#     wf.plugin = plugin
-#
-#     with Submitter(plugin=plugin) as sub:
-#         sub.run(wf)
-#
-#     # checking the results
-#     while not wf.done:
-#         sleep(1)
-#     results = wf.result()
-#
-#     assert results[0][0].output.out == 3
-#     assert results[0][1].output.out == 6
+@pytest.mark.parametrize("plugin", Plugins)
+def test_10a(plugin):
+    """Test workflow with node level splitters and combiners"""
+    wf = Workflow(name="test10", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = [1, 2]
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+
+    assert results.output.out == [3, 4]
 
 
 @pytest.mark.xfail(reason="wip")
