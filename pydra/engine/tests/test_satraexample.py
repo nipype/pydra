@@ -5,7 +5,7 @@ from ..task import to_task
 from ..node import Workflow
 
 
-Plugins = ["serial"]
+Plugins = ["serial", "cf"]
 
 # @python_app
 # def double(x):
