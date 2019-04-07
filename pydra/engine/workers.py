@@ -48,6 +48,8 @@ class SerialPool:
     def result(self):
         return self.res
 
+    def done(self):
+        return True
 
 class SerialWorker(Worker):
     def __init__(self):

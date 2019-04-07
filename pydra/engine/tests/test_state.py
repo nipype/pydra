@@ -215,6 +215,7 @@ def test_state_merge_3():
     assert st3.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
     assert st3.groups_stack_final == [[0, 1]]
 
+
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
     assert st3.states_ind == [
         {"NA.a": 0, "NB.a": 0},
