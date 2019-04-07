@@ -51,10 +51,7 @@ def load_result(checksum, cache_locations):
         if (location / checksum).exists():
             result_file = location / checksum / "_result.pklz"
             if result_file.exists():
-                try:
-                    return cp.loads(result_file.read_bytes())
-                except EOFError:
-                    return None
+                return cp.loads(result_file.read_bytes())
             return None
     return None
 
@@ -168,3 +165,8 @@ def get_inputs(needed_outputs):
         if result:
             in_dict[outlink.input] = getattr(result.output, outlink.output)
     return in_dict
+
+
+def record_error(error_path, error):
+    with (error_path / "_error.pklz").open("wb") as fp:
+        cp.dump(error, fp)
