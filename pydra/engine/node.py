@@ -412,11 +412,9 @@ class NodeBase:
         if ind is not None:
             # TODO: check if the current version requires both state_dict and inputs_dict
             state_dict = self.state.states_val[ind]
-            inputs_dict = {
-                "{}.{}".format(self.name, k): state_dict["{}.{}".format(self.name, k)]
-                for k in self.input_names
-            }
-
+            inputs_dict = {}
+            for inp in set(self.input_names) - set([nm for (_, _, nm) in self.needed_outputs]):
+                inputs_dict["{}.{}".format(self.name, inp)] = state_dict["{}.{}".format(self.name, inp)]
             # reading extra inputs that come from previous nodes
             for (from_node, from_socket, to_socket) in self.needed_outputs:
                 # TODO update to new version: if previous has state, it would have to be combined
@@ -428,17 +426,7 @@ class NodeBase:
                     ] = self._get_input_comb(from_node, from_socket, state_dict)
                 else:
                     dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
-                    # TODO: do I need this if, what if this is wf?
-                    if is_node(from_node):
-                        out_from = getattr(
-                            from_node.results_dict[dir_nm_el_from].output, from_socket
-                        )
-                        if out_from:
-                            inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
-                        else:
-                            raise Exception(
-                                "output from {} doesnt exist".format(from_node)
-                            )
+                    inputs_dict["{}.{}".format(self.name, to_socket)] = getattr(self.inputs, to_socket)[ind]
             return state_dict, inputs_dict
 
         else:
@@ -458,14 +446,15 @@ class NodeBase:
             dir_nm_el_from = "_".join(
                 ["{}:{}".format(i, j) for i, j in list(state.items())]
             )
-            if is_node(from_node):
-                out_from = getattr(
-                    from_node.results_dict[dir_nm_el_from].output, from_socket
-                )
-                if out_from:
-                    inputs_all.append(out_from)
-                else:
-                    raise Exception("output from {} doesnt exist".format(from_node))
+            # TODO NOW! has to update
+            # if is_node(from_node):
+                # out_from = getattr(
+                #     from_node.results_dict[dir_nm_el_from].output, from_socket
+                # )
+                # if out_from:
+                #     inputs_all.append(out_from)
+                # else:
+                #     raise Exception("output from {} doesnt exist".format(from_node))
         return inputs_all
 
     def _state_dict_all_comb(self, from_node, state_dict):
@@ -656,6 +645,7 @@ class Workflow(NodeBase):
 
         # store output connections
         self._connections = None
+        self.node_names = []
 
     def __getattr__(self, name):
         if name == "lzin":  # lazy output
@@ -678,9 +668,14 @@ class Workflow(NodeBase):
         self.graph.add_nodes_from([task])
         self.name2obj[task.name] = task
         self._last_added = task
+        #TODO: should this add per every field
         for field in dc.fields(task.inputs):
             val = getattr(task.inputs, field.name)
             if isinstance(val, LazyField):
+                if val.name in self.node_names and getattr(self, val.name).state:
+                    other_states = {val.name: (getattr(self, val.name).state, field.name)}
+                    task.state = state.State(task.name, other_states=other_states)
+                    task.needed_outputs.append((getattr(self, val.name), val.field, field.name))
                 if val.name != self.name:
                     self.graph.add_edge(
                         getattr(self, val.name),
@@ -688,6 +683,7 @@ class Workflow(NodeBase):
                         from_field=val.field,
                         to_field=field.name,
                     )
+        self.node_names.append(task.name)
         return self
 
     def _run_task(self):
@@ -695,6 +691,9 @@ class Workflow(NodeBase):
             # TODO: this next line will need to be adjusted for tasks that
             # depend on prior tasks that have state
             task.inputs.retrieve_values(self)
+            #TODO: check where prepare_states should be run
+            if task.state and not hasattr(task.state, "states_ind"):
+                task.state.prepare_states(inputs=task.inputs)
             if self.plugin is None:
                 task.run()
             else:
@@ -703,6 +702,7 @@ class Workflow(NodeBase):
                     sub.run(task)
                 while not task.done:
                     sleep(1)
+
 
     def set_output(self, connections):
         self._connections = connections

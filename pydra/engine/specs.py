@@ -160,4 +160,7 @@ class LazyField:
         elif self.attr_type == "output":
             node = getattr(wf, self.name)
             result = node.result(state_index=state_index)
-            return getattr(result.output, self.field)
+            if isinstance(result, list):
+                return [getattr(res.output, self.field) for res in result]
+            else:
+                return getattr(result.output, self.field)

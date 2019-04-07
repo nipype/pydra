@@ -174,23 +174,27 @@ class State:
         preparing a full list of state indices (number of elements depends on the splitter)
         and state values (specific elements from inputs that can be used running interfaces)
         """
+        if isinstance(inputs, BaseSpec):
+            self.inputs = aux.inputs_types_to_dict(self.name, inputs)
+        else:
+            self.inputs = inputs
         if self.other_states:
             for nm, (st, _) in self.other_states.items():
+                # I think now this if is never used
                 if not hasattr(st, "states_ind"):
                     # dj: should i provide different inputs?
-                    st.prepare_states(inputs)
-        self.prepare_states_ind(inputs)
-        self.prepare_states_val(inputs)
+                    st.prepare_states(self.inputs)
+                self.inputs.update(st.inputs)
+        self.prepare_states_ind()
+        self.prepare_states_val()
 
-    def prepare_states_ind(self, inputs):
+    def prepare_states_ind(self):
         """using aux._splits to calculate a list of dictionaries with state indices"""
-        if isinstance(inputs, BaseSpec):
-            inputs = aux.inputs_types_to_dict(self.name, inputs)
         # if there are Left and Right parts, evaluate keys/indices
         # from Left and RIght separately and merge them
         if self._right_splitter and self._left_splitter:
             val_r, key_r, _, keys_fromLeftSpl = aux._splits(
-                self._right_splitter_rpn, inputs, inner_inputs=self.inner_inputs
+                self._right_splitter_rpn, self.inputs, inner_inputs=self.inner_inputs
             )
             val_r = list(val_r)
             updated_left_rpn = deepcopy(self._left_splitter_rpn_nost)
@@ -200,7 +204,7 @@ class State:
 
             if updated_left_rpn:
                 val_l, key_l, _, _ = aux._splits(
-                    updated_left_rpn, inputs, inner_inputs=self.inner_inputs
+                    updated_left_rpn, self.inputs, inner_inputs=self.inner_inputs
                 )
                 val_l = list(val_l)
             else:
@@ -218,7 +222,7 @@ class State:
             self.key_l = key_l
         else:
             values_out, keys_out, _, _ = aux._splits(
-                self.splitter_rpn, inputs, inner_inputs=self.inner_inputs
+                self.splitter_rpn, self.inputs, inner_inputs=self.inner_inputs
             )
             values = list(values_out)
             # dj: not sure if this shouldn't be already in the init
@@ -229,14 +233,14 @@ class State:
         self.states_ind = list(aux.iter_splits(values, self.keys))
         self.keys_final = self.keys
         if self.combiner:
-            self.prepare_states_combined_ind(inputs=inputs)
+            self.prepare_states_combined_ind()
         else:
             self.ind_l_final = self.ind_l
             self.keys_final = self.keys
             self.final_groups_mapping = {i: [i] for i in range(len(self.states_ind))}
         return self.states_ind
 
-    def prepare_states_combined_ind(self, inputs):
+    def prepare_states_combined_ind(self):
         """preparing the final list of dictionaries with indices after combiner"""
         # assuming for now that the combiner is only in the right part TODO
         if self._right_splitter and self._left_splitter:
@@ -251,7 +255,7 @@ class State:
         # TODO: create a function for this!!
         if combined_right_rpn:
             val_r, key_r, _, _ = aux._splits(
-                combined_right_rpn, inputs, inner_inputs=self.inner_inputs
+                combined_right_rpn, self.inputs, inner_inputs=self.inner_inputs
             )
             val_r = list(val_r)
         else:
@@ -286,11 +290,9 @@ class State:
             # should be 0 or None?
             self.final_groups_mapping = {0: list(range(len(self.states_ind)))}
 
-    def prepare_states_val(self, inputs):
+    def prepare_states_val(self):
         """evaluate states values having states indices"""
-        if isinstance(inputs, BaseSpec):
-            inputs = aux.inputs_types_to_dict(self.name, inputs)
-        self.states_val = list(aux.map_splits(self.states_ind, inputs))
+        self.states_val = list(aux.map_splits(self.states_ind, self.inputs))
         return self.states_val
 
 
