@@ -74,12 +74,15 @@ class TestNode:
             def __init__(self):
                 self.inp_a = "A"
                 self.inp_b = "B"
+        class InpSpec:
+            def __init__(self):
+                self.fields = [("inp_a", None), ("inp_b", None)]
         self.name = "tn"
         self.inputs = Input()
-        self.input_spec = ["inp_a", "inp_b"]
+        self.input_spec = InpSpec()
         self.output_names = ["out_a"]
 
-    def result(self):
+    def result(self, state_index=None):
         class Output:
             def __init__(self):
                 self.out_a = "OUT_A"
@@ -88,15 +91,28 @@ class TestNode:
                 self.output = Output()
         return Result()
 
+class TestWorkflow:
+    def __init__(self):
+        class Input:
+            def __init__(self):
+                self.inp_a = "A"
+                self.inp_b = "B"
+        self.inputs = Input()
+        self.tn = TestNode()
+
+
 def test_lazy_inp():
     tn = TestNode()
     lf = LazyField(node=tn, attr_type="input")
 
+    with pytest.raises(Exception):
+        lf.get_value(wf=TestWorkflow())
+
     lf.inp_a
-    assert lf.get_value() == "A"
+    assert lf.get_value(wf=TestWorkflow()) == "A"
 
     lf.inp_b
-    assert lf.get_value() == "B"
+    assert lf.get_value(wf=TestWorkflow()) == "B"
 
 
 def test_lazy_out():
@@ -104,7 +120,7 @@ def test_lazy_out():
     lf = LazyField(node=tn, attr_type="output")
 
     lf.out_a
-    assert lf.get_value() == "OUT_A"
+    assert lf.get_value(wf=TestWorkflow()) == "OUT_A"
 
 
 def test_laxy_errorattr():
