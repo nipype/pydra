@@ -90,17 +90,19 @@ def test_lazy_inp():
     tn = TestNode()
     lf = LazyField(node=tn, attr_type="input")
 
-    assert lf.get_value("inp_a") == "A"
+    lf.inp_a
+    assert lf.get_value() == "A"
 
     lf.inp_b
-    assert lf.get_value("inp_b") == "B"
+    assert lf.get_value() == "B"
 
 
 def test_lazy_out():
     tn = TestNode()
     lf = LazyField(node=tn, attr_type="output")
 
-    assert lf.get_value("out_a") == "OUT_A"
+    lf.out_a
+    assert lf.get_value() == "OUT_A"
 
 
 def test_laxy_errorattr():

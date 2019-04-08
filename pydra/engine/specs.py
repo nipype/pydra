@@ -141,11 +141,9 @@ class LazyField:
     def __repr__(self):
         return "LF('{0}', '{1}')".format(self.node.name, self.field)
 
-    def get_value(self, name=None):
-        if name is None:
-            name = self.field
+    def get_value(self):
         if self.attr_type == 'input':
-            return getattr(self.node.inputs, name)
+            return getattr(self.node.inputs, self.field)
         elif self.attr_type == 'output':
             result = self.node.result()
-            return getattr(result.output, name)
+            return getattr(result.output, self.field)
