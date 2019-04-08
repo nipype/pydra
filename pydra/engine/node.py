@@ -12,6 +12,7 @@ from pathlib import Path
 import typing as ty
 import pickle as pk
 from copy import deepcopy
+from time import sleep
 
 import cloudpickle as cp
 from filelock import FileLock
@@ -29,6 +30,7 @@ from .helpers import (
     gather_runtime_info,
     save_result,
     ensure_list,
+    record_error,
     get_inputs,
 )
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
@@ -125,6 +127,7 @@ class NodeBase:
 
         # dictionary of results from tasks
         self.results_dict = {}
+        self.plugin = None
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -140,8 +143,8 @@ class NodeBase:
         self.__dict__.update(state)
 
     def __getattr__(self, name):
-        if name == 'lo':  # lazy output
-            return LazyField(self, 'output')
+        if name == "lzout":  # lazy output
+            return LazyField(self, "output")
         return self.__getattribute__(name)
 
     def help(self, returnhelp=False):
@@ -217,7 +220,7 @@ class NodeBase:
                 context = json.load(fp)
         else:
             context = {
-                "@context": "https://raw.githubusercontent.com/satra/pydra/enh/task/pydra/schema/context.jsonld"
+                "@context": "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld"
             }
         if self.audit_flags & flags:
             if self.messenger_args:
@@ -318,7 +321,7 @@ class NodeBase:
                 from ..utils.profiler import ResourceMonitor
 
                 resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
-            result = Result(output=None, runtime=None)
+            result = Result(output=None, runtime=None, errored=False)
             try:
                 if self.audit_check(AuditFlag.RESOURCE):
                     resource_monitor.start()
@@ -336,8 +339,8 @@ class NodeBase:
                 self._run_task()
                 result.output = self._collect_outputs()
             except Exception as e:
-                print(e)
-                # record_error(self, e)
+                record_error(self.output_dir, e)
+                result.errored = True
                 raise
             finally:
                 if self.audit_check(AuditFlag.RESOURCE):
@@ -373,7 +376,14 @@ class NodeBase:
                 os.chdir(cwd)
                 if self.audit_check(AuditFlag.PROV):
                     # audit outputs
-                    self.audit({"@id": aid, "endedAtTime": now()}, AuditFlag.PROV)
+                    self.audit(
+                        {
+                            "@id": aid,
+                            "endedAtTime": now(),
+                            "errored": result.errored,
+                        },
+                        AuditFlag.PROV,
+                    )
             return result
 
     # TODO: Decide if the following two functions should be separated
@@ -558,7 +568,7 @@ class NodeBase:
     @property
     def done(self):
         if self.results_dict:
-            return all([future.done() for _, future in self.results_dict.items()])
+            return all([future.done() for _, (future, _) in self.results_dict.items()])
 
     def _state_dict_to_list(self, container):
         """creating a list of tuples from dictionary and changing key (state) from str to dict"""
@@ -611,8 +621,12 @@ class NodeBase:
         else:
             if state_index is not None:
                 raise ValueError("Task does not have a state")
+            if self.results_dict:
+                checksum = self.results_dict[None][1]
+            else:
+                checksum = self.checksum
             result = load_result(
-                self.results_dict[None][1],
+                checksum,
                 self.cache_locations
             )
             return result
@@ -654,21 +668,18 @@ class Workflow(NodeBase):
             messenger_args=messenger_args,
         )
 
-        self.set_output_keys()
-
         self.graph = nx.DiGraph()
-        # all nodes in the workflow (probably will be removed)
-        self._nodes = []
-        # key: name of a node, value: the node
-        self._node_names = {}
+
+        self.name2obj = {}
+
         # store output connections
         self._connections = None
 
-        self.submitter = None
-
     def __getattr__(self, name):
-        if name == 'li':  # lazy output
-            return LazyField(self, 'input')
+        if name == "lzin":  # lazy output
+            return LazyField(self, "input")
+        if name in self.name2obj:
+            return self.name2obj[name]
         return self.__getattribute__(name)
 
     @property
@@ -677,134 +688,53 @@ class Workflow(NodeBase):
 
     @property
     def graph_sorted(self):
-        # TODO: should I always update the graph?
         return list(nx.topological_sort(self.graph))
 
-    # TODO: this should be probably using add method, but might be also removed completely
-    def add_nodes(self, nodes):
-        """adding nodes without defining connections
-            most likely it will be removed at the end
-        """
-        self.graph.add_nodes_from(nodes)
-        for nn in nodes:
-            self._nodes.append(nn)
-            self.connected_var[nn] = {}
-            self._node_names[nn.name] = nn
-
-    # TODO: workingir shouldn't have None
-    def add(
-        self,
-        runnable,
-        name=None,
-        inputs=None,
-        output_names=None,
-        cache_dir=None,
-        **kwargs
-    ):
-        if is_workflow(runnable):
-            node = runnable
-        elif is_task(runnable):
-            node = runnable
-            setattr(self, runnable.name, node)
-        elif is_function(runnable):
-            if not output_names:
-                output_names = ["out"]
-            if not name:
-                raise Exception("you have to specify name for the node")
-            from .task import to_task
-
-            node = to_task(
-                runnable,
-                cache_dir=cache_dir or self.cache_dir,
-                # TODO: pass on as many self defaults as needed
-                name=name,
-                inputs=inputs,
-                other_splitters=self._node_splitters,
-                output_names=output_names,
-            )
-        else:
-            raise ValueError("Unknown workflow element: {!r}".format(runnable))
-        self.add_nodes([node])
-        self._last_added = node
-        # connecting inputs from other nodes outputs
-        # (assuming that all kwargs provide connections)
-        for (inp, source) in kwargs.items():
-            try:
-                from_node_nm, from_socket = source.split(".")
-                self.connect(from_node_nm, from_socket, node.name, inp)
-            # TODO not sure if i need it, just check if from_node_nm is not None??
-            except (ValueError):
-                self.connect_wf_input(source, node.name, inp)
+    def add(self, task):
+        if not is_task(task):
+            raise ValueError("Unknown workflow element: {!r}".format(task))
+        self.graph.add_nodes_from([task])
+        self.name2obj[task.name] = task
+        self._last_added = task
+        for field in dc.fields(task.inputs):
+            val = getattr(task.inputs, field.name)
+            if isinstance(val, LazyField):
+                if val.name != self.name:
+                    self.graph.add_edge(
+                        getattr(self, val.name),
+                        task,
+                        from_field=val.field,
+                        to_field=field.name,
+                    )
         return self
 
-    def preparing(self, wf_inputs=None, wf_inputs_ind=None, st_inputs=None):
-        """preparing nodes which are connected: setting the final splitter and state_inputs"""
-        for node_nm, inp_wf, inp_nd in self.needed_inp_wf:
-            node = self._node_names[node_nm]
-            if "{}.{}".format(self.name, inp_wf) in wf_inputs:
-                node.state_inputs.update(
-                    {
-                        "{}.{}".format(node_nm, inp_nd): wf_inputs[
-                            "{}.{}".format(self.name, inp_wf)
-                        ]
-                    }
-                )
-                node.inputs.update(
-                    {
-                        "{}.{}".format(node_nm, inp_nd): wf_inputs[
-                            "{}.{}".format(self.name, inp_wf)
-                        ]
-                    }
-                )
-            else:
-                raise Exception(
-                    "{}.{} not in the workflow inputs".format(self.name, inp_wf)
-                )
-        for nn in self.graph_sorted:
-            if not st_inputs:
-                st_inputs = wf_inputs
-            dir_nm_el, _ = self._directory_name_state_surv(st_inputs)
-            if not self.splitter:
-                dir_nm_el = ""
-            nn._done = False  # helps when mp is used
-            try:
-                for inp, (out_node, out_var) in self.connected_var[nn].items():
-                    nn.ready2run = (
-                        False
-                    )  # it has some history (doesnt have to be in the loop)
-                    nn.state_inputs.update(out_node.state_inputs)
-                    nn.needed_outputs.append((out_node, out_var, inp))
-                    # if there is no splitter provided, i'm assuming that splitter is taken from the previous node
-                    if (
-                        not nn.splitter or nn.splitter == out_node.splitter
-                    ) and out_node.splitter:
-                        # TODO!!: what if I have more connections, not only from one node
-                        if out_node.combiner:
-                            nn.splitter = out_node.state.splitter_comb
-                        else:
-                            nn.splitter = out_node.splitter
-                    else:
-                        pass
-            except (KeyError):
-                # tmp: we don't care about nn that are not in self.connected_var
-                pass
-            nn.prepare_state_input()
-
     def _run_task(self):
-        # TODO: implement graph execution here
-        pass
+        for task in self.graph_sorted:
+            # TODO: this next line will need to be adjusted for tasks that
+            # depend on prior tasks that have state
+            task.inputs.retrieve_values(self)
+            if self.plugin is None:
+                task.run()
+            else:
+                from .submitter import Submitter
+
+                with Submitter(self.plugin) as sub:
+                    sub.run(task)
+                while not task.done:
+                    sleep(1)
 
     def set_output(self, connections):
         self._connections = connections
         fields = [(name, ty.Any) for name, _ in connections]
-
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
 
     def _list_outputs(self):
-        return [
-            output() if is_function(output) else output
-            for _, output in self._connections
-        ]
+        output = []
+        for name, val in self._connections:
+            if not isinstance(val, LazyField):
+                raise ValueError("all connections must be lazy")
+            output.append(val.get_value(self))
+        return output
 
 
 # TODO: task has also call

@@ -181,46 +181,71 @@ def add2(x):
     return x + 2
 
 
-@pytest.mark.xfail(reason="finish after futures")
+from time import sleep
+
+
 @pytest.mark.parametrize("plugin", Plugins)
 def test_7(plugin):
     """Test workflow with workflow level splitters and combiners"""
     wf = Workflow(name="test7", input_spec=["x", "y"])
-    wf.add(multiply(name="mult", x=wf.li.x), y=wf.li.y)
-    wf.add(add2(name="add2", x=wf.mult.lo.out))
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.inputs.y = 3
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    assert 8 == results.output.out
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_8(plugin):
+    """Test workflow with workflow level splitters and combiners"""
+    wf = Workflow(name="test7", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out))
 
     wf.split(("x", "y"), x=[1, 2], y=[1, 2])
     wf.combine("x")
-    wf.set_output([("out", wf.add2.lo.out)])
+    wf.set_output([("out", wf.add2.lzout.out)])
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
 
     # checking the results
+    while not wf.done:
+        sleep(1)
     results = wf.result()
-    expected = [({"test7.x": 1, "test7.y": 1}, 1), ({"test7.x": 2, "test.y": 2}, 4)]
-
-    for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+    expected = [({"test7.x": 1, "test7.y": 1}, 3), ({"test7.x": 2, "test.y": 2}, 6)]
+    assert results[0][0].output.out == 3
+    assert results[0][1].output.out == 6
 
 
-@pytest.mark.xfail(reason="finish after futures")
+@pytest.mark.xfail(reason="need updates from dorota")
 @pytest.mark.parametrize("plugin", Plugins)
-def test_8(plugin):
+def test_9(plugin):
     """Test workflow with node level splitters and combiners"""
     wf = Workflow(name="test7", input_spec=["x", "y"])
-    wf.add(multiply(name="mult").split(("x", "y"), x=wf.inputs.x, y=wf.inputs.y))
-    wf.add(add2(name="add2", x=wf.mult.result.out).combine("x"))
-    wf.set_output([("out", wf.add2.result.out)])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(("x", "y")))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("x"))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [1, 2]
+    wf.plugin = "cf"
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
 
     # checking the results
+    while not wf.done:
+        sleep(1)
     results = wf.result()
-    expected = [({"mult.x": 1, "mult.y": 1}, 1), ({"mult.x": 2, "mult.y": 2}, 4)]
 
-    for i, res in enumerate(expected):
-        assert results["out"][i][0] == res[0]
-        assert results["out"][i][1] == res[1]
+    assert results[0][0].output.out == 3
+    assert results[0][1].output.out == 6

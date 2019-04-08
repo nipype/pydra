@@ -35,7 +35,7 @@ first-class operations. It forms the core of the Nipype 2.0 ecosystem.
 
 # versions
 NETWORKX_MIN_VERSION = "1.9"
-PYTEST_MIN_VERSION = "3.0"
+PYTEST_MIN_VERSION = "4.4.0"
 
 __packagename__ = "pydra"
 __author__ = __maintainer__ = "nipype developers"

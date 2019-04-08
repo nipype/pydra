@@ -30,6 +30,8 @@ def test_result():
     result = Result()
     assert hasattr(result, "runtime")
     assert hasattr(result, "output")
+    assert hasattr(result, "errored")
+    assert getattr(result, "errored") == False
 
 
 def test_shellspec():
