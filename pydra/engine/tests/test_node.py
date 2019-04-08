@@ -34,7 +34,6 @@ def change_dir(request):
     request.addfinalizer(move2orig)
 
 
-Plugins = ["serial", "mp", "cf", "dask"]
 Plugins = ["serial", "cf"]
 
 

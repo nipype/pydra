@@ -256,7 +256,7 @@ class NodeBase:
 
     @property
     def cache_locations(self):
-        return self._cache_locations
+        return self._cache_locations + ensure_list(self._cache_dir)
 
     @cache_locations.setter
     def cache_locations(self, locations):
@@ -576,7 +576,7 @@ class NodeBase:
             for ind in ind_l:
                 result = load_result(
                     self.results_dict[ind][1],
-                    self.cache_locations + ensure_list(self._cache_dir),
+                    self.cache_locations
                 )
                 combined_results[gr].append(result)
         return combined_results
@@ -594,7 +594,7 @@ class NodeBase:
                     return self._combined_output()[state_index]
                 result = load_result(
                     self.results_dict[state_index][1],
-                    self.cache_locations + ensure_list(self._cache_dir),
+                    self.cache_locations
                 )
                 return result
             if self.state.combiner:
@@ -613,7 +613,7 @@ class NodeBase:
                 raise ValueError("Task does not have a state")
             result = load_result(
                 self.results_dict[None][1],
-                self.cache_locations + ensure_list(self._cache_dir),
+                self.cache_locations
             )
             return result
 
