@@ -65,6 +65,7 @@ class FunctionTask(NodeBase):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
+        cache_locations=None,
         **kwargs
     ):
         self.input_spec = SpecInfo(
@@ -87,6 +88,7 @@ class FunctionTask(NodeBase):
             messengers=messengers,
             messenger_args=messenger_args,
             cache_dir=cache_dir,
+            cache_locations=cache_locations
         )
         if output_spec is None:
             if "return" not in func.__annotations__:

@@ -72,6 +72,7 @@ class NodeBase:
         messengers=None,
         messenger_args=None,
         cache_dir=None,
+        cache_locations=None
     ):
         """A base structure for nodes in the computational graph (i.e. both
         ``Node`` and ``Workflow``).
@@ -104,7 +105,6 @@ class NodeBase:
         self._result = {}
         # flag that says if node finished all jobs
         self._done = False
-
         if self._input_sets is None:
             self._input_sets = {}
         if inputs:
@@ -123,6 +123,7 @@ class NodeBase:
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
         self.cache_dir = cache_dir
+        self.cache_locations = cache_locations
 
         # dictionary of results from tasks
         self.results_dict = {}
@@ -250,11 +251,22 @@ class NodeBase:
     @cache_dir.setter
     def cache_dir(self, location):
         if location is not None:
-            self._cache_dir = Path(location)
+            self._cache_dir = Path(location).resolve()
             self._cache_dir.mkdir(parents=False, exist_ok=True)
         else:
             self._cache_dir = mkdtemp()
             self._cache_dir = Path(self._cache_dir)
+
+    @property
+    def cache_locations(self):
+        return self._cache_locations + ensure_list(self._cache_dir)
+
+    @cache_locations.setter
+    def cache_locations(self, locations):
+        if locations is not None:
+            self._cache_locations = [Path(loc) for loc in ensure_list(locations)]
+        else:
+            self._cache_locations = []
 
     @property
     def output_dir(self):
@@ -263,10 +275,10 @@ class NodeBase:
     def audit_check(self, flag):
         return self.audit_flags & flag
 
-    def __call__(self, cache_locations=None, **kwargs):
-        return self.run(cache_locations=cache_locations, **kwargs)
+    def __call__(self, **kwargs):
+        return self.run(**kwargs)
 
-    def run(self, cache_locations=None, **kwargs):
+    def run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
@@ -284,8 +296,8 @@ class NodeBase:
         with FileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            if self.results_dict:  # if run method called without submitter
-                result = self.result(cache_locations=cache_locations)
+            if self.results_dict:  # should be skipped if run called without submitter
+                result = self.result()
                 if result is not None:
                     return result
             odir = self.output_dir
@@ -430,7 +442,6 @@ class NodeBase:
                 # TODO update to new version: if previous has state, it would have to be combined
                 # if the current node has no state
                 if from_node.state.combiner:
-                    pdb.set_trace()
                     inputs_dict[
                         "{}.{}".format(self.name, to_socket)
                     ] = self._get_input_comb(from_node, from_socket, state_dict)
@@ -568,23 +579,21 @@ class NodeBase:
         val_dict_l = [(self.state.states_val[i[0]], i[1]) for i in val_l]
         return val_dict_l
 
-    def _combined_output(self, cache_locations=None):
+    def _combined_output(self):
         combined_results = []
         for (gr, ind_l) in self.state.final_groups_mapping.items():
             combined_results.append([])
             for ind in ind_l:
                 result = load_result(
                     self.results_dict[ind][1],
-                    ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                    self.cache_locations
                 )
                 combined_results[gr].append(result)
         return combined_results
 
-    def result(self, state_index=None, cache_locations=None):
+    def result(self, state_index=None):
         """
-
         :param state_index:
-        :param cache_locations:
         :return:
         """
         # TODO: check if result is available in load_result and
@@ -595,7 +604,7 @@ class NodeBase:
                     return self._combined_output()[state_index]
                 result = load_result(
                     self.results_dict[state_index][1],
-                    ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                    self.cache_locations
                 )
                 return result
             if self.state.combiner:
@@ -605,7 +614,7 @@ class NodeBase:
             for (ii, val) in enumerate(self.state.states_val):
                 result = load_result(
                     self.results_dict[ii][1],
-                    ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                    self.cache_locations + ensure_list(self._cache_dir),
                 )
                 results.append(result)
             return results
@@ -617,7 +626,8 @@ class NodeBase:
             else:
                 checksum = self.checksum
             result = load_result(
-                checksum, ensure_list(cache_locations) + ensure_list(self._cache_dir)
+                checksum,
+                self.cache_locations
             )
             return result
 

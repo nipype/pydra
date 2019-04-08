@@ -7,6 +7,7 @@ from ..specs import (
     ContainerSpec,
     DockerSpec,
     SingularitySpec,
+    LazyField
 )
 import pytest
 
@@ -65,3 +66,73 @@ def test_singularity():
     spec = SingularitySpec("ls", "busybox")
     assert all(hasattr(spec, attr) for attr in container_attrs)
     assert getattr(spec, "container") == "singularity"
+
+
+class TestNode:
+    def __init__(self):
+        class Input:
+            def __init__(self):
+                self.inp_a = "A"
+                self.inp_b = "B"
+        class InpSpec:
+            def __init__(self):
+                self.fields = [("inp_a", None), ("inp_b", None)]
+        self.name = "tn"
+        self.inputs = Input()
+        self.input_spec = InpSpec()
+        self.output_names = ["out_a"]
+
+    def result(self, state_index=None):
+        class Output:
+            def __init__(self):
+                self.out_a = "OUT_A"
+        class Result:
+            def __init__(self):
+                self.output = Output()
+        return Result()
+
+class TestWorkflow:
+    def __init__(self):
+        class Input:
+            def __init__(self):
+                self.inp_a = "A"
+                self.inp_b = "B"
+        self.inputs = Input()
+        self.tn = TestNode()
+
+
+def test_lazy_inp():
+    tn = TestNode()
+    lf = LazyField(node=tn, attr_type="input")
+
+    with pytest.raises(Exception):
+        lf.get_value(wf=TestWorkflow())
+
+    lf.inp_a
+    assert lf.get_value(wf=TestWorkflow()) == "A"
+
+    lf.inp_b
+    assert lf.get_value(wf=TestWorkflow()) == "B"
+
+
+def test_lazy_out():
+    tn = TestNode()
+    lf = LazyField(node=tn, attr_type="output")
+
+    lf.out_a
+    assert lf.get_value(wf=TestWorkflow()) == "OUT_A"
+
+
+def test_laxy_errorattr():
+    with pytest.raises(Exception) as excinfo:
+        tn = TestNode()
+        lf = LazyField(node=tn, attr_type="out")
+    assert "LazyField: Unknown attr_type:" in str(excinfo.value)
+
+
+def test_lazy_getvale():
+    tn = TestNode()
+    lf = LazyField(node=tn, attr_type="input")
+    with pytest.raises(Exception) as excinfo:
+        lf.inp_c
+    assert str(excinfo.value) == 'Task tn has no input attribute inp_c'

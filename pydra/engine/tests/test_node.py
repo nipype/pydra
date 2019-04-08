@@ -1,5 +1,6 @@
 import sys
 import os
+import shutil
 import numpy as np
 from pathlib import Path
 
@@ -33,7 +34,6 @@ def change_dir(request):
     request.addfinalizer(move2orig)
 
 
-Plugins = ["serial", "mp", "cf", "dask"]
 Plugins = ["serial", "cf"]
 
 
@@ -207,6 +207,95 @@ def test_task_nostate_1(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_cachedir(plugin, tmpdir):
+    """Node with provided cache_dir using pytest tmpdir"""
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    assert np.allclose(nn.inputs.a, [3])
+    assert nn.state is None
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_cachedir_relativepath(plugin):
+    """Node with provided cache_dir as relative path"""
+    cache_dir = "test_task_nostate"
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    assert np.allclose(nn.inputs.a, [3])
+    assert nn.state is None
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+
+    shutil.rmtree(cache_dir)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_cachelocations(plugin, tmpdir):
+    """
+    Two nodes with provided cache_dir;
+    the second node has cache_locations and should not recompute the results
+    """
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    cache_dir2 = tmpdir.mkdir("test_task_nostate2")
+
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
+
+    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn2)
+
+    # checking the results
+    results2 = nn2.result()
+    assert results2.output.out == 5
+
+    # checking if the second node didn't run the interface again
+    assert nn.output_dir.exists()
+    assert not nn2.output_dir.exists()
+
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_cachelocations_updated(plugin, tmpdir):
+    """
+    Two nodes with provided cache_dir;
+    the second node has cache_locations in init that is later overwritten in run;
+    the cache_locations from run doesn't exist so the second node should run again
+    """
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    cache_dir1 = tmpdir.mkdir("test_task_nostate1")
+    cache_dir2 = tmpdir.mkdir("test_task_nostate2")
+
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
+
+    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn2, cache_locations=cache_dir1)
+
+    # checking the results
+    results2 = nn2.result()
+    assert results2.output.out == 5
+
+    # checking if both nodes run interface
+    assert nn.output_dir.exists()
+    assert nn2.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_2(plugin):
     """Node with interface and inputs, no splitter, running interface"""
     nn = moment(name="NA", n=3, lst=[2, 3, 4])
@@ -239,6 +328,91 @@ def test_task_spl_1(plugin):
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+@python35_only
+def test_task_spl_1_cachedir(plugin, tmpdir):
+    """Node with a state and provided cache_dir using pytest tmpdir"""
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    nn = fun_addtwo(name="NA", cache_dir=cache_dir).split(splitter="a", a=[3, 5])
+
+    assert nn.state.splitter == "NA.a"
+    assert (nn.inputs.a == np.array([3, 5])).all()
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
+
+    # checking the results
+    results = nn.result()
+    expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
+    for i, res in enumerate(expected):
+        assert results[i].output.out == res[1]
+
+
+@pytest.mark.xfail(reason="TODO: output_dir.exists check doesn't work when splitter")
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_spl_1_cachelocations(plugin, tmpdir):
+    """
+    Two nodes with a state and cache_dir;
+    the second node has cache_locations and should not recompute the results
+    """
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    cache_dir2 = tmpdir.mkdir("test_task_nostate2")
+
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir).split(splitter="a", a=[3, 5])
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
+
+    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)\
+        .split(splitter="a", a=[3, 5])
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn2)
+
+    # checking the results
+    results2 = nn2.result()
+    expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
+    for i, res in enumerate(expected):
+        assert results2[i].output.out == res[1]
+
+    # TODO: this doesnt work properly when splitter
+    # checking if the second node didn't run the interface again
+    assert nn.output_dir.exists()
+    assert not nn2.output_dir.exists()
+
+
+
+@pytest.mark.xfail(reason="TODO: output_dir.exists check doesn't work when splitter")
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_spl_1_cachelocations_updated(plugin, tmpdir):
+    """
+    Two nodes with states and cache_dir;
+    the second node has cache_locations in init that is later overwritten in run;
+    the cache_locations from run doesn't exist so the second node should run again
+    """
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    cache_dir1 = tmpdir.mkdir("test_task_nostate1")
+    cache_dir2 = tmpdir.mkdir("test_task_nostate2")
+
+    nn = fun_addtwo(name="NA", cache_dir=cache_dir).split(splitter="a", a=[3, 5])
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn)
+
+    nn2 = fun_addtwo(name="NA", cache_dir=cache_dir2, cache_locations=cache_dir)\
+        .split(splitter="a", a=[3, 5])
+    with Submitter(plugin=plugin) as sub:
+        sub.run(nn2, cache_locations=cache_dir1)
+
+    # checking the results
+    results2 = nn2.result()
+    expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
+    for i, res in enumerate(expected):
+        assert results2[i].output.out == res[1]
+
+    # TODO: this doesnt work properly when splitter
+    # checking if both nodes run interface
+    assert nn.output_dir.exists()
+    assert nn2.output_dir.exists()
 
 
 @pytest.mark.parametrize(
