@@ -5,7 +5,7 @@ from ..task import to_task
 from ..node import Workflow
 
 
-Plugins = ["serial", "cf"]
+Plugins = ["serial"]
 
 # @python_app
 # def double(x):
@@ -268,6 +268,50 @@ def test_9a(plugin):
     #assert results[1].output.out == 4
 
 
+@pytest.mark.parametrize("plugin", Plugins)
+def test_10(plugin):
+    """Test workflow with one node, splitters for workflow"""
+    wf = Workflow(name="test10", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+
+    wf.split(("x"), x=[1, 2]).combine(combiner="x")
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    expected = [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
+    assert results[0][0].output.out == 3
+    assert results[0][1].output.out == 4
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_10a(plugin):
+    """Test workflow with one node, splitters on the node level"""
+    wf = Workflow(name="test10a", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x).split("x", x=[1, 2]).combine(combiner="x"))
+
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    expected = [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
+    pdb.set_trace()
+    assert results.output.out[0] == [3, 4]
+    #assert results[1].output.out == 4
+
+
 # @pytest.mark.parametrize("plugin", Plugins)
 # def test_9(plugin):
 #     """Test workflow with workflow level splitters and combiners"""
@@ -292,9 +336,9 @@ def test_9a(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_10(plugin):
+def test_11(plugin):
     """Test workflow with 2 nodes, splitter on wf level"""
-    wf = Workflow(name="test9x", input_spec=["x", "y"])
+    wf = Workflow(name="test11", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
 
@@ -316,12 +360,12 @@ def test_10(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_10a(plugin):
+def test_11a(plugin):
     """Test workflow with 2 nodes, splitter on a node level"""
-    wf = Workflow(name="test9x", input_spec=["x", "y"])
+    wf = Workflow(name="test11a", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(("x", "y"), x=[1, 2], y=[1, 2]))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
-
+    pdb.set_trace()
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
@@ -337,9 +381,9 @@ def test_10a(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_11(plugin):
+def test_12(plugin):
     """Test workflow with workflow level splitters and combiners"""
-    wf = Workflow(name="test9x", input_spec=["x", "y"])
+    wf = Workflow(name="test12", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
 
@@ -361,12 +405,13 @@ def test_11(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_10a(plugin):
-    """Test workflow with node level splitters and combiners"""
-    wf = Workflow(name="test10", input_spec=["x"])
-    wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
+def test_12a(plugin):
+    """Test workflow with 2 nodes, splitter on a node level"""
+    wf = Workflow(name="test12a", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(("x", "y"), x=[1, 2], y=[1, 2]))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("mult.x"))
+    # trzeba najpierw jakos ustawic state zanim combine
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.inputs.x = [1, 2]
     wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
@@ -376,29 +421,50 @@ def test_10a(plugin):
     while not wf.done:
         sleep(1)
     results = wf.result()
+    expected = [({"test7.x": 1, "test7.y": 1}, 3), ({"test7.x": 2, "test.y": 2}, 6)]
+    assert results.output.out == [3, 6]
 
-    assert results.output.out == [3, 4]
+
+# @pytest.mark.parametrize("plugin", Plugins)
+# def test_10a(plugin):
+#     """Test workflow with node level splitters and combiners"""
+#     wf = Workflow(name="test10", input_spec=["x"])
+#     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
+#     wf.set_output([("out", wf.add2.lzout.out)])
+#     wf.inputs.x = [1, 2]
+#     wf.plugin = plugin
+#
+#     with Submitter(plugin=plugin) as sub:
+#         sub.run(wf)
+#
+#     # checking the results
+#     while not wf.done:
+#         sleep(1)
+#     results = wf.result()
+#
+#     assert results.output.out == [3, 4]
 
 
-@pytest.mark.xfail(reason="wip")
-@pytest.mark.parametrize("plugin", Plugins)
-def test_12(plugin):
-    """Test workflow with node level splitters and combiners"""
-    wf = Workflow(name="test10", input_spec=["x", "y"])
-    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(("x", "y")))
-    wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("x"))
-    wf.set_output([("out", wf.add2.lzout.out)])
-    wf.inputs.x = [1, 2]
-    wf.inputs.y = [1, 2]
-    wf.plugin = plugin
 
-    with Submitter(plugin=plugin) as sub:
-        sub.run(wf)
-
-    # checking the results
-    while not wf.done:
-        sleep(1)
-    results = wf.result()
-
-    assert results[0][0].output.out == 3
-    assert results[0][1].output.out == 6
+# @pytest.mark.xfail(reason="wip")
+# @pytest.mark.parametrize("plugin", Plugins)
+# def test_12(plugin):
+#     """Test workflow with node level splitters and combiners"""
+#     wf = Workflow(name="test10", input_spec=["x", "y"])
+#     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(("x", "y")))
+#     wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("x"))
+#     wf.set_output([("out", wf.add2.lzout.out)])
+#     wf.inputs.x = [1, 2]
+#     wf.inputs.y = [1, 2]
+#     wf.plugin = plugin
+#
+#     with Submitter(plugin=plugin) as sub:
+#         sub.run(wf)
+#
+#     # checking the results
+#     while not wf.done:
+#         sleep(1)
+#     results = wf.result()
+#
+#     assert results[0][0].output.out == 3
+#     assert results[0][1].output.out == 6
