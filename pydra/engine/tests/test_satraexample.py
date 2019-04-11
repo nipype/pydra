@@ -5,7 +5,7 @@ from ..task import to_task
 from ..node import Workflow
 
 
-Plugins = ["serial"]
+Plugins = ["serial", "cf"]
 
 # @python_app
 # def double(x):
@@ -405,14 +405,15 @@ def test_12(plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_12a(plugin):
     """Test workflow with 2 nodes, splitter on a node level"""
-    wf = Workflow(name="test12a", input_spec=["x", "y"])
-    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).
-           split(("x", "y"), x=[1, 2], y=[11, 12]))
+    wf = Workflow(name="test12a", input_spec=["a", "b"])
+    wf.add(multiply(name="mult", x=wf.lzin.a, y=wf.lzin.b).
+           split(("x", "y")))#, x=[1, 2], y=[11, 12]))
     wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("mult.x"))
-    # trzeba najpierw jakos ustawic state zanim combine
+
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-
+    wf.inputs.a = [1, 2]
+    wf.inputs.b = [11, 12]
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
 
@@ -457,7 +458,7 @@ def test_13a(plugin):
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).
            split(["x", "y"], x=[1, 2], y=[11, 12]))
     wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("mult.x"))
-    # trzeba najpierw jakos ustawic state zanim combine
+
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
