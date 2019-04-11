@@ -548,6 +548,7 @@ class NodeBase:
     def to_job(self, ind):
         """ running interface one element generated from node_state."""
         # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
+        print("DEEPCOPY",deepcopy(self) )
         el = deepcopy(self)
         print("tO job el", el)
         el.state = None
