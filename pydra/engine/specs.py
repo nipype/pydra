@@ -163,7 +163,7 @@ class LazyField:
         elif self.attr_type == "output":
             node = getattr(wf, self.name)
             result = node.result(state_index=state_index)
-            breakpoint()
+#            breakpoint()
             if isinstance(result, list):
                 if isinstance(result[0], list):
                     results_new = []

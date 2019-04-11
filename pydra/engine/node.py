@@ -600,22 +600,22 @@ class NodeBase:
         """
         # TODO: check if result is available in load_result and
         # return a future if not
-        pdb.set_trace()
+        #pdb.set_trace()
         if self.state:
             if state_index is None:
                 # if state_index=None, collecting all results
                 if self.state.combiner:
-                    pdb.set_trace()
+                    #pdb.set_trace()
                     return self._combined_output()
                 else:
                     results = []
                     for (ii, val) in enumerate(self.state.states_val):
                         result = load_result(
                         self.results_dict[ii][1],
-                        ensure_list(cache_locations) + ensure_list(self._cache_dir),
+                        self.cache_locations
                         )
                         results.append(result)
-                    pdb.set_trace()
+                    #pdb.set_trace()
                     return results
             else: #state_index is not None
                 if self.state.combiner:
@@ -633,7 +633,7 @@ class NodeBase:
             for (ii, val) in enumerate(self.state.states_val):
                 result = load_result(
                     self.results_dict[ii][1],
-                    self.cache_locations + ensure_list(self._cache_dir),
+                    self.cache_locations
                 )
                 results.append(result)
             return results
@@ -648,7 +648,7 @@ class NodeBase:
                 checksum,
                 self.cache_locations
             )
-            pdb.set_trace()
+           # pdb.set_trace()
             return result
 
 
@@ -741,7 +741,7 @@ class Workflow(NodeBase):
                         from_field=val.field,
                         to_field=field.name,
                     )
-        pdb.set_trace()
+        #pdb.set_trace()
         self.node_names.append(task.name)
         return self
 
