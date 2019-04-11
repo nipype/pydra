@@ -626,17 +626,6 @@ class NodeBase:
                     self.cache_locations
                 )
                 return result
-            if self.state.combiner:
-                return self._combined_output()
-            # if state_index=None, collecting all results
-            results = []
-            for (ii, val) in enumerate(self.state.states_val):
-                result = load_result(
-                    self.results_dict[ii][1],
-                    self.cache_locations
-                )
-                results.append(result)
-            return results
         else:
             if state_index is not None:
                 raise ValueError("Task does not have a state")
