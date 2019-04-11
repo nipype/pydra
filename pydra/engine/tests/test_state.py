@@ -842,7 +842,7 @@ def test_state_combine_3():
     assert st2.keys_final == ["NA.b", "NB.d"]
     assert st2.final_groups_mapping == {0: [0], 1: [1], 2: [2], 3: [3]}
 
-
+#zob
 def test_state_combine_4():
     """
     two connected states; outer splitter and combiner in the first one;
@@ -897,9 +897,10 @@ def test_state_combine_4():
     assert st2.keys_final == ["NA.b"]
     assert st2.final_groups_mapping == {0: [0, 1], 1: [2, 3]}
 
-
+#zobaczyc jak dziala przy combiner="NA.a"
 def test_state_combine_innerspl_1():
-    """one previous node and one inner splitter; only Right part provided - Left had to be added"""
+    """one previous node and one inner splitter (and inner splitter combiner);
+    only Right part provided - Left had to be added"""
     st1 = State(name="NA", splitter="a")
     st2 = State(
         name="NB", splitter=["c", "b"], combiner=["b"], other_states={"NA": (st1, "b")}
@@ -907,7 +908,7 @@ def test_state_combine_innerspl_1():
 
     assert st2.splitter == ["_NA", ["NB.c", "NB.b"]]
     assert st2.splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*"]
-    assert st2.splitter_final == ["_NA", "NB.c"]
+    assert st2.splitter_final == ["NA.a", "NB.c"]
     assert st2.splitter_rpn_final == ["NA.a", "NB.c", "*"]
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 1}
     assert st2.groups_stack_final == [[0], [1]]
@@ -948,17 +949,17 @@ def test_state_combine_innerspl_1():
         {"NB.c": 17, "NA.a": 5, "NB.b": 200},
     ]
 
-
+# c jest combinerem z prawej ale nie inner
+# sprawdzic jaki sr_stacks  czy tam jest [[Na.a], ["Nb.b, nb.c]]?
 def test_state_combine_innerspl_2():
     """one previous node and one inner splitter; only Right part provided - Left had to be added"""
     st1 = State(name="NA", splitter="a")
-    st2 = State(
-        name="NB", splitter=["c", "b"], combiner=["c"], other_states={"NA": (st1, "b")}
-    )
+    st2 = State(name="NB", splitter=["c", "b"], combiner=["c"],
+                other_states={"NA": (st1, "b")})
 
     assert st2.splitter == ["_NA", ["NB.c", "NB.b"]]
     assert st2.splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*"]
-    assert st2.splitter_final == ["_NA", "NB.b"]
+    assert st2.splitter_final == ["NA.a", "NB.b"]
     assert st2.splitter_rpn_final == ["NA.a", "NB.b", "*"]
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
     assert st2.groups_stack_final == [[0], [1]]
@@ -994,6 +995,60 @@ def test_state_combine_innerspl_2():
         {"NB.c": 17, "NA.a": 5, "NB.b": 20},
         {"NB.c": 17, "NA.a": 5, "NB.b": 200},
     ]
+
+
+def test_state_combine_left_1():
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", other_states={"NA": (st1, "b")}, combiner="NA.a")
+    assert st2.splitter == "_NA"
+    assert st2.splitter_rpn == ["NA.a"]
+    assert st2.combiner == ["NA.a"]
+    assert st2.splitter_rpn_final == []
+
+    assert st2.group_for_inputs_final == {}
+    assert st2.groups_stack_final == []
+
+    st2.prepare_states(inputs={"NA.a": [3, 5]})
+    assert st2.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert st2.states_val == [{"NA.a": 3}, {"NA.a": 5}]
+
+
+def test_state_combine_left_2():
+    st1 = State(name="NA", splitter=["a", "b"])
+    st2 = State(name="NB", other_states={"NA": (st1, "b")}, combiner="NA.a")
+    assert st2.splitter == "_NA"
+    assert st2.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert st2.combiner == ["NA.a"]
+    assert st2.splitter_rpn_final == ["NA.b"]
+
+    assert st2.group_for_inputs_final == {"NA.b": 0}
+    assert st2.groups_stack_final == [[0]]
+
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
+    assert st2.states_ind == [{"NA.a": 0, "NA.b": 0}, {"NA.a": 0, "NA.b":1},
+                              {"NA.a": 1, "NA.b": 0}, {"NA.a": 1, "NA.b":1}]
+    assert st2.states_val == [{"NA.a": 3, "NA.b": 10}, {"NA.a": 3, "NA.b": 20},
+                              {"NA.a": 5, "NA.b": 10}, {"NA.a": 5, "NA.b": 20}]
+
+
+def test_state_combine_left_3():
+    st1 = State(name="NA", splitter=["a", "b"])
+    st2 = State(name="NB", other_states={"NA": (st1, "b")})
+    st3 = State(name="NC", other_states={"NB": (st2, "c")}, combiner="NA.a")
+    assert st3.splitter == "_NB"
+    assert st3.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert st3.combiner == ["NA.a"]
+    assert st3.splitter_rpn_final == ["NA.b"]
+
+    assert st3.group_for_inputs_final == {"NA.b": 0}
+    assert st3.groups_stack_final == [[0]]
+
+    st3.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
+    assert st3.states_ind == [{"NA.a": 0, "NA.b": 0}, {"NA.a": 0, "NA.b":1},
+                              {"NA.a": 1, "NA.b": 0}, {"NA.a": 1, "NA.b":1}]
+    assert st3.states_val == [{"NA.a": 3, "NA.b": 10}, {"NA.a": 3, "NA.b": 20},
+                              {"NA.a": 5, "NA.b": 10}, {"NA.a": 5, "NA.b": 20}]
+
 
 
 # def test_state_merge_inner_1():

@@ -505,7 +505,16 @@ def rpn2splitter(splitter_rpn):
     return rpn2splitter(splitter_modified)
 
 
-# used in the Node to change names in a splitter
+# used in the Node to change names in a splitter and combiner
+
+def change_combiner(combiner, name):
+    combiner_changed = []
+    for comb in combiner:
+        if "." not in comb:
+            combiner_changed.append("{}.{}".format(name, comb))
+        else:
+            combiner_changed.append(comb)
+    return combiner_changed
 
 
 def change_splitter(splitter, name):
@@ -522,16 +531,7 @@ def change_splitter(splitter, name):
 def _add_name(mlist, name):
     for i, elem in enumerate(mlist):
         if isinstance(elem, str):
-            if "." in elem:
-                if elem.split(".")[0] == name:
-                    pass
-                else:
-                    raise Exception(
-                        "can't include {} in the splitter, consider using _{}".format(
-                            elem, elem.split(".")[0]
-                        )
-                    )
-            elif elem.startswith("_"):
+            if "." in elem or elem.startswith("_"):
                 pass
             else:
                 mlist[i] = "{}.{}".format(name, mlist[i])
@@ -789,6 +789,7 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
         else:
             return keys, groups, groups_stack, keys, groups, groups_stack, []
 
+    # len(splitter_rpn) > 1
     for token in splitter_rpn:
         if token in [".", "*"]:
             opR = stack.pop()
