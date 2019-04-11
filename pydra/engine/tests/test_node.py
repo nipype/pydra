@@ -562,7 +562,7 @@ def test_task_spl_comb_2(
     with Submitter(plugin=plugin) as sub:
         sub.run(nn)
 
-    assert set(nn.state.combiner_all) == set(state_combiner_all)
+    assert set(nn.state.right_combiner_all) == set(state_combiner_all)
     # checking the results
     results = nn.result()
 
