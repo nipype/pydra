@@ -163,7 +163,6 @@ class LazyField:
         elif self.attr_type == "output":
             node = getattr(wf, self.name)
             result = node.result(state_index=state_index)
-
             if isinstance(result, list):
                 if isinstance(result[0], list):
                     results_new = []
@@ -173,3 +172,5 @@ class LazyField:
                     return results_new
                 else:
                     return [getattr(res.output, self.field) for res in result]
+            else:
+                return getattr(result.output, self.field)
