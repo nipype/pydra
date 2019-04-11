@@ -86,7 +86,6 @@ class NodeBase:
             States this node's input names
         """
         self.name = name
-        #pdb.set_trace()
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
         klass = make_klass(self.input_spec)
@@ -99,7 +98,6 @@ class NodeBase:
         self.input_names = [
             field.name for field in dc.fields(klass) if field.name not in ["_func"]
         ]
-        # pdb.set_trace()
         self._needed_outputs = []
         self.state = None
         self._output = {}
@@ -117,10 +115,8 @@ class NodeBase:
                 if self._input_sets is None or inputs not in self._input_sets:
                     raise ValueError("Unknown input set {!r}".format(inputs))
                 inputs = self._input_sets[inputs]
-            # pdb.set_trace()
             self.inputs = dc.replace(self.inputs, **inputs)
             self.state_inputs = inputs
-        # pdb.set_trace()
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
@@ -186,12 +182,10 @@ class NodeBase:
 
     @needed_outputs.setter
     def needed_outputs(self, requires):
-        #pdb.set_trace()
         self._needed_outputs = ensure_list(requires)
 
     def set_state(self, splitter, combiner=None):
         incoming_states = []
-        #pdb.set_trace()
         for node, _, _ in self.needed_outputs:
             if node.state is not None:
                 incoming_states.append(node.state)
@@ -416,9 +410,7 @@ class NodeBase:
 
     def combine(self, combiner):
         if not self.state:
-            #pdb.set_trace()
             self.split(splitter=None)
-        #pdb.set_trace()
         if not self.state:
             self.fut_combiner = combiner
             return self
@@ -580,9 +572,6 @@ class NodeBase:
 
     def _combined_output(self):
         combined_results = []
-        #pdb.set_trace()
-        #tu cos jest zle grupowane , sprawdzic final_groups_mapping
-        # jest zly final splitter
         for (gr, ind_l) in self.state.final_groups_mapping.items():
             combined_results.append([])
             for ind in ind_l:
@@ -600,12 +589,10 @@ class NodeBase:
         """
         # TODO: check if result is available in load_result and
         # return a future if not
-        #pdb.set_trace()
         if self.state:
             if state_index is None:
                 # if state_index=None, collecting all results
                 if self.state.combiner:
-                    #pdb.set_trace()
                     return self._combined_output()
                 else:
                     results = []
@@ -615,11 +602,9 @@ class NodeBase:
                         self.cache_locations
                         )
                         results.append(result)
-                    #pdb.set_trace()
                     return results
             else: #state_index is not None
                 if self.state.combiner:
-                    pdb.set_trace()
                     return self._combined_output()[state_index]
                 result = load_result(
                     self.results_dict[state_index][1],
@@ -637,7 +622,6 @@ class NodeBase:
                 checksum,
                 self.cache_locations
             )
-           # pdb.set_trace()
             return result
 
 
@@ -701,19 +685,15 @@ class Workflow(NodeBase):
         return list(nx.topological_sort(self.graph))
 
     def add(self, task):
-        #pdb.set_trace()
         if not is_task(task):
             raise ValueError("Unknown workflow element: {!r}".format(task))
         self.graph.add_nodes_from([task])
         self.name2obj[task.name] = task
         self._last_added = task
         #TODO: should this add per every field
-        #pdb.set_trace()
         for field in dc.fields(task.inputs):
-            #pdb.set_trace()
             val = getattr(task.inputs, field.name)
             if isinstance(val, LazyField):
-                #pdb.set_trace()
                 if val.name in self.node_names and getattr(self, val.name).state:
                     other_states = {val.name: (getattr(self, val.name).state, field.name)}
                     if hasattr(task, "fut_combiner"):
@@ -721,7 +701,6 @@ class Workflow(NodeBase):
                                                  combiner=task.fut_combiner)
                     else:
                         task.state = state.State(task.name, other_states=other_states)
-                    #pdb.set_trace()
                     task.needed_outputs.append((getattr(self, val.name), val.field, field.name))
                 if val.name != self.name:
                     self.graph.add_edge(
@@ -730,7 +709,6 @@ class Workflow(NodeBase):
                         from_field=val.field,
                         to_field=field.name,
                     )
-        #pdb.set_trace()
         self.node_names.append(task.name)
         return self
 

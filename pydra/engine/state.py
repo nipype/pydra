@@ -281,11 +281,11 @@ class State:
         # assuming for now that the combiner is only in the right part TODO
         if self._right_splitter and self._left_splitter:
             combined_right_rpn = aux.remove_inp_from_splitter_rpn(
-                deepcopy(self._right_splitter_rpn), self.right_combiner_all
+                deepcopy(self._right_splitter_rpn), self.right_combiner_all + self.left_combiner_all
             )
         else:
             combined_right_rpn = aux.remove_inp_from_splitter_rpn(
-                deepcopy(self.splitter_rpn), self.right_combiner_all
+                deepcopy(self.splitter_rpn), self.right_combiner_all + self.left_combiner_all
             )
 
         # TODO: create a function for this!!
@@ -325,6 +325,7 @@ class State:
             self.keys_final = keys_out
             # should be 0 or None?
             self.final_groups_mapping = {0: list(range(len(self.states_ind)))}
+
 
     def prepare_states_val(self):
         """evaluate states values having states indices"""
