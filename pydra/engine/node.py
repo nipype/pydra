@@ -549,6 +549,7 @@ class NodeBase:
         """ running interface one element generated from node_state."""
         # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
         el = deepcopy(self)
+        print("tO job el", el)
         el.state = None
         _, inputs_dict = self.get_input_el(ind)
         interf_inputs = dict((k.split(".")[1], v) for k, v in inputs_dict.items())

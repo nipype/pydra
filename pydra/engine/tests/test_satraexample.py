@@ -268,6 +268,7 @@ def test_9a(plugin):
     #assert results[1].output.out == 4
 
 
+
 @pytest.mark.parametrize("plugin", Plugins)
 def test_10(plugin):
     """Test workflow with one node, splitters for workflow"""
@@ -334,6 +335,7 @@ def test_10a(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+
 def test_11(plugin):
     """Test workflow with 2 nodes, splitter on wf level"""
     wf = Workflow(name="test11", input_spec=["x", "y"])
