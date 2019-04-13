@@ -5,7 +5,7 @@ from ..task import to_task
 from ..node import Workflow
 
 
-Plugins = ["cf"]
+Plugins = ["serial", "cf"]
 
 # @python_app
 # def double(x):
@@ -221,6 +221,7 @@ def test_8(plugin):
     while not wf.done:
         sleep(1)
     results = wf.result()
+    pdb.set_trace()
     assert 8 == results.output.out
 
 
@@ -230,7 +231,8 @@ def test_9(plugin):
     wf = Workflow(name="test9", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x"), x=[1, 2])
+    wf.split(("x"))
+    wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
@@ -250,8 +252,8 @@ def test_9(plugin):
 def test_9a(plugin):
     """Test workflow with one node, splitters on the node level"""
     wf = Workflow(name="test9a", input_spec=["x"])
-    wf.add(add2(name="add2", x=wf.lzin.x).split("x", x=[1, 2]))
-
+    wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
+    wf.inputs.x = [1, 2]
     #wf.split(("x"), x=[1, 2])
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
@@ -275,7 +277,8 @@ def test_10(plugin):
     wf = Workflow(name="test10", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x"), x=[1, 2]).combine(combiner="x")
+    wf.split(("x")).combine(combiner="x")
+    wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
@@ -295,8 +298,8 @@ def test_10(plugin):
 def test_10a(plugin):
     """Test workflow with one node, splitters on the node level"""
     wf = Workflow(name="test10a", input_spec=["x"])
-    wf.add(add2(name="add2", x=wf.lzin.x).split("x", x=[1, 2]).combine(combiner="x"))
-
+    wf.add(add2(name="add2", x=wf.lzin.x).split("x").combine(combiner="x"))
+    wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
@@ -341,8 +344,9 @@ def test_11(plugin):
     wf = Workflow(name="test11", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
-
-    wf.split(("x", "y"), x=[1, 2], y=[11, 12])
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [11, 12]
+    wf.split(("x", "y"))
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
@@ -353,6 +357,7 @@ def test_11(plugin):
     while not wf.done:
         sleep(1)
     results = wf.result()
+    pdb.set_trace()
     expected = [({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)]
     assert results[0].output.out == 13
     assert results[1].output.out == 26
@@ -364,8 +369,10 @@ def test_11a(plugin):
     """Test workflow with 2 nodes, splitter on a node level"""
     wf = Workflow(name="test11a", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y)
-           .split(("x", "y"), x=[1, 2], y=[11, 12]))
+           .split(("x", "y")))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 

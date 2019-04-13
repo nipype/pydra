@@ -116,6 +116,7 @@ class NodeBase:
                     raise ValueError("Unknown input set {!r}".format(inputs))
                 inputs = self._input_sets[inputs]
             self.inputs = dc.replace(self.inputs, **inputs)
+            #pdb.set_trace()
             self.state_inputs = inputs
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
@@ -165,12 +166,13 @@ class NodeBase:
     def checksum(self):
         return create_checksum(self.__class__.__name__, self.inputs)
 
-    def ready2run(self, index=None):
-        # flag that says if the node/wf is ready to run (has all input)
-        for node, _, _ in self.needed_outputs:
-            if not node.is_finished(index=index):
-                return False
-        return True
+    # def ready2run(self, index=None):
+    #     # flag that says if the node/wf is ready to run (has all input)
+    #     pdb.set_trace()
+    #     for node, _, _ in self.needed_outputs:
+    #         if not node.is_finished(index=index):
+    #             return False
+    #     return True
 
     def is_finished(self, index=None):
         # TODO: check local procs
@@ -178,17 +180,21 @@ class NodeBase:
 
     @property
     def needed_outputs(self):
+        #pdb.set_trace()
         return self._needed_outputs
 
     @needed_outputs.setter
     def needed_outputs(self, requires):
+        #pdb.set_trace()
         self._needed_outputs = ensure_list(requires)
 
     def set_state(self, splitter, combiner=None):
         incoming_states = []
-        for node, _, _ in self.needed_outputs:
-            if node.state is not None:
-                incoming_states.append(node.state)
+
+        # for node, _, _ in self.needed_outputs:
+        #     pdb.set_trace()
+        #     if node.state is not None:
+        #         incoming_states.append(node.state)
         if splitter is None:
             splitter = [state.name for state in incoming_states] or None
         elif len(incoming_states):
@@ -277,6 +283,7 @@ class NodeBase:
         return self.run(**kwargs)
 
     def run(self, **kwargs):
+        #pdb.set_trace()
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
@@ -434,49 +441,64 @@ class NodeBase:
         if ind is not None:
             # TODO: check if the current version requires both state_dict and inputs_dict
             state_dict = self.state.states_val[ind]
+            state_ind = self.state.states_ind[ind]
             inputs_dict = {}
-            for inp in set(self.input_names) - set([nm for (_, _, nm) in self.needed_outputs]):
-                inputs_dict["{}.{}".format(self.name, inp)] = state_dict["{}.{}".format(self.name, inp)]
-            # reading extra inputs that come from previous nodes
-            for (from_node, from_socket, to_socket) in self.needed_outputs:
-                # TODO update to new version: if previous has state, it would have to be combined
-                # if the current node has no state
-                if from_node.state.combiner:
-                    inputs_dict[
-                        "{}.{}".format(self.name, to_socket)
-                    ] = self._get_input_comb(from_node, from_socket, state_dict)
+            #pdb.set_trace()
+
+            for inp in set(self.input_names):# - set([nm for (_, _, nm) in self.needed_outputs]):
+                if f'{self.name}.{inp}' in state_dict.keys():
+                    #"." not in inp or inp.split(".")[0] != self.name:
+                    inputs_dict[inp] = getattr(self.inputs, inp)[state_ind[f'{self.name}.{inp}']]
                 else:
-                    dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
-                    inputs_dict["{}.{}".format(self.name, to_socket)] = getattr(self.inputs, to_socket)[ind]
+                    inputs_dict[inp] = getattr(self.inputs, inp)[ind]
+                #inputs_dict["{}.{}".format(self.name, inp)] = state_dict["{}.{}".format(self.name, inp)]
+                # pdb.set_trace()
+                # pass
+  #           # reading extra inputs that come from previous nodes
+  #           for (from_node, from_socket, to_socket) in self.needed_outputs:
+  # #              pdb.set_trace()
+  #               # TODO update to new version: if previous has state, it would have to be combined
+  #               # if the current node has no state
+  #               if from_node.state.combiner:
+  #                   inputs_dict[
+  #                       "{}.{}".format(self.name, to_socket)
+  #                   ] = self._get_input_comb(from_node, from_socket, state_dict)
+  #               else:
+  #                   dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
+  #                   inputs_dict["{}.{}".format(self.name, to_socket)] = getattr(self.inputs, to_socket)[ind]
+  #  #         pdb.set_trace()
             return state_dict, inputs_dict
 
         else:
             inputs_dict = {
-                "{}.{}".format(self.name, inp): getattr(self.inputs, inp)
+                #"{}.{}".format(self.name, inp)
+                inp : getattr(self.inputs, inp)
                 for inp in self.input_names
             }
             # TODO: adding parts from self.needed_outputs
+    #        pdb.set_trace()
             return None, inputs_dict
 
-    # TODO: update
-    def _get_input_comb(self, from_node, from_socket, state_dict):
-        """collecting all outputs from previous node that has combiner"""
-        state_dict_all = self._state_dict_all_comb(from_node, state_dict)
-        inputs_all = []
-        for state in state_dict_all:
-            dir_nm_el_from = "_".join(
-                ["{}:{}".format(i, j) for i, j in list(state.items())]
-            )
-            # TODO NOW! has to update
-            # if is_node(from_node):
-                # out_from = getattr(
-                #     from_node.results_dict[dir_nm_el_from].output, from_socket
-                # )
-                # if out_from:
-                #     inputs_all.append(out_from)
-                # else:
-                #     raise Exception("output from {} doesnt exist".format(from_node))
-        return inputs_all
+    # # TODO: update
+    # def _get_input_comb(self, from_node, from_socket, state_dict):
+    #     """collecting all outputs from previous node that has combiner"""
+    #     pdb.set_trace()
+    #     state_dict_all = self._state_dict_all_comb(from_node, state_dict)
+    #     inputs_all = []
+    #     for state in state_dict_all:
+    #         dir_nm_el_from = "_".join(
+    #             ["{}:{}".format(i, j) for i, j in list(state.items())]
+    #         )
+    #         # TODO NOW! has to update
+    #         # if is_node(from_node):
+    #             # out_from = getattr(
+    #             #     from_node.results_dict[dir_nm_el_from].output, from_socket
+    #             # )
+    #             # if out_from:
+    #             #     inputs_all.append(out_from)
+    #             # else:
+    #             #     raise Exception("output from {} doesnt exist".format(from_node))
+    #     return inputs_all
 
     def _state_dict_all_comb(self, from_node, state_dict):
         """collecting state dictionary for all elements that were combined together"""
@@ -548,13 +570,17 @@ class NodeBase:
     def to_job(self, ind):
         """ running interface one element generated from node_state."""
         # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
-        print("DEEPCOPY",deepcopy(self) )
+        print("DEEPCOPY name", self.name, ind)
+        print("DEEPCOPY",deepcopy(self.needed_outputs) )
         el = deepcopy(self)
         print("tO job el", el)
         el.state = None
+        #pdb.set_trace()
         _, inputs_dict = self.get_input_el(ind)
-        interf_inputs = dict((k.split(".")[1], v) for k, v in inputs_dict.items())
-        el.inputs = dc.replace(el.inputs, **interf_inputs)
+        #interf_inputs = dict((k.split(".")[1], v) for k, v in inputs_dict.items())
+        #pdb.set_trace()
+        el.inputs = dc.replace(el.inputs, **inputs_dict) #interf_inputs)
+        #pdb.set_trace()
         return el
 
     # checking if all outputs are saved
@@ -693,9 +719,12 @@ class Workflow(NodeBase):
         self.name2obj[task.name] = task
         self._last_added = task
         #TODO: should this add per every field
+        #pdb.set_trace()
         for field in dc.fields(task.inputs):
             val = getattr(task.inputs, field.name)
+            #pdb.set_trace()
             if isinstance(val, LazyField):
+                #pdb.set_trace()
                 if val.name in self.node_names and getattr(self, val.name).state:
                     other_states = {val.name: (getattr(self, val.name).state, field.name)}
                     if hasattr(task, "fut_combiner"):
@@ -703,7 +732,8 @@ class Workflow(NodeBase):
                                                  combiner=task.fut_combiner)
                     else:
                         task.state = state.State(task.name, other_states=other_states)
-                    task.needed_outputs.append((getattr(self, val.name), val.field, field.name))
+                    #pdb.set_trace()
+                    #task.needed_outputs.append((getattr(self, val.name), val.field, field.name))
                 if val.name != self.name:
                     self.graph.add_edge(
                         getattr(self, val.name),
@@ -711,6 +741,8 @@ class Workflow(NodeBase):
                         from_field=val.field,
                         to_field=field.name,
                     )
+                    #task.needed_outputs.append((getattr(self, val.name), val.field, field.name))
+        #pdb.set_trace()
         self.node_names.append(task.name)
         return self
 
