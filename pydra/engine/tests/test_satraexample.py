@@ -5,7 +5,7 @@ from ..task import to_task
 from ..node import Workflow
 
 
-Plugins = ["serial", "cf"]
+Plugins = ["serial"]
 
 # @python_app
 # def double(x):
@@ -221,7 +221,6 @@ def test_8(plugin):
     while not wf.done:
         sleep(1)
     results = wf.result()
-    pdb.set_trace()
     assert 8 == results.output.out
 
 
@@ -357,7 +356,6 @@ def test_11(plugin):
     while not wf.done:
         sleep(1)
     results = wf.result()
-    pdb.set_trace()
     expected = [({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)]
     assert results[0].output.out == 13
     assert results[1].output.out == 26
@@ -481,6 +479,58 @@ def test_13a(plugin):
 
     assert results.output.out[0] == [13, 24]
     assert results.output.out[1] == [14, 26]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_14(plugin):
+    """Test workflow with workflow level splitters and combiners"""
+    wf = Workflow(name="test13", input_spec=["x", "y"])
+    wf.add(add2(name="add2x", x=wf.lzin.x))
+    wf.add(add2(name="add2y", x=wf.lzin.y))
+    wf.add(multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out))
+    wf.split(["x", "y"], x=[1, 2, 3], y=[11, 12])
+
+    wf.set_output([("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+
+    assert len(results) == 6
+    assert results[0].output.out == 39
+    assert results[1].output.out == 42
+    assert results[5].output.out == 70
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_14a(plugin):
+    """Test workflow with 2 nodes, splitter on a node level"""
+    wf = Workflow(name="test13a", input_spec=["x", "y"])
+    wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
+    wf.add(add2(name="add2y", x=wf.lzin.y).split("x"))
+    wf.add(multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out))
+    wf.inputs.x = [1, 2, 3]
+    wf.inputs.y = [11, 12]
+
+    wf.set_output([("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+
+    assert len(results.output.out) == 6
+    # assert results.output.out[0] == [13, 24]
+    # assert results.output.out[1] == [14, 26]
 
 
 # @pytest.mark.parametrize("plugin", Plugins)
