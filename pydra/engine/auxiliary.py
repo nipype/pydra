@@ -596,10 +596,9 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
     """ Process splitter rpn from left to right
     """
     import numpy as np
-
     stack = []
     keys = []
-    shapes = {}
+    shapes_var = {}
     if inner_inputs:
         previous_states_ind = {
             "_{}".format(v.name): (v.ind_l_final, v.keys_final)
@@ -611,135 +610,95 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
         previous_states_ind = {}
         inner_inputs = {}
         keys_fromLeftSpl = []
+
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
-        if op_single.startswith("_"):
-            return (
-                previous_states_ind[op_single][0],
-                previous_states_ind[op_single][1],
-                None,
-                keys_fromLeftSpl,
-            )
-        shape = input_shape(inputs[op_single])
-        shapes[op_single] = shape
-        opval = range(np.prod(shape))
-        if op_single in inner_inputs:
-            # TODO: have to be changed if differ length
-            inner_len = [shape[-1]] * np.prod(shape[:-1])
-            # this come from the previous node
-            outer_ind = inner_inputs[op_single].ind_l
-            op_out = itertools.chain.from_iterable(
-                itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
-            )
-            op_new = op["."](op_out, opval)
-            val = op_new
-            keys = inner_inputs[op_single].keys_final + [op_single]
-            return val, keys, shapes, keys_fromLeftSpl
-        else:
-            val = op["*"](opval)
-            keys = splitter_rpn
-            return val, keys, shapes, keys_fromLeftSpl
+        return _single_op_splits(op_single, inputs, inner_inputs, shapes_var,
+                                 previous_states_ind, keys_fromLeftSpl)
 
+    terms = {}
+    trm_val = {}
+    trm_str = {}
+    shape = {}
+    # iterating splitter_rpn
     for token in splitter_rpn:
         if token in [".", "*"]:
-            opR = stack.pop()
-            opL = stack.pop()
-            opRstr = opLstr = False
-            if isinstance(opL, str):
-                if opL.startswith("_"):
-                    opLval = previous_states_ind[opL][0]
-                    opLstr = True
-                    shapeL = (len(opLval),)
-                    shapes[opL] = shapeL
-                else:
-                    shapeL = input_shape(inputs[opL])
-                    opLval = range(np.prod(shapeL))
-                    opLstr = True
-                    shapes[opL] = shapeL
-            else:
-                opLval, shapeL = opL
-            if isinstance(opR, str):
-                if opR.startswith("_"):
-                    opRval = previous_states_ind[opR][0]
-                    opRstr = True
-                    shapeR = (len(opRval),)
-                    shapes[opR] = shapeR
-                else:
-                    shapeR = input_shape(inputs[opR])
-                    opRval = range(np.prod(shapeR))
-                    opRstr = True
-                    shapes[opR] = shapeR
-            else:
-                opRval, shapeR = opR
-
-            if token == ".":
-                if shapeL != shapeR:
-                    raise ValueError(
-                        "Operands {} and {} do not have same shape.".format(opR, opL)
-                    )
-                newshape = shapeR
-            if token == "*":
-                newshape = tuple(list(shapeL) + list(shapeR))
-
-            new_keys = {}
-            for i, op_tp in enumerate([(opRstr, opR), (opLstr, opL)]):
-                if op_tp[0]:
-                    if op_tp[1].startswith("_"):
-                        new_keys["op{}".format(i + 1)] = previous_states_ind[op_tp[1]][
-                            1
-                        ]
+            terms["R"] = stack.pop()
+            terms["L"] = stack.pop()
+            # checking if terms are strings, shapes, etc.
+            for lr in ["L", "R"]:
+                term = terms[lr]
+                if isinstance(term, str):
+                    if term.startswith("_"):
+                        trm_val[lr] = previous_states_ind[term][0]
+                        shape[lr] = (len(trm_val[lr]),)
                     else:
-                        new_keys["op{}".format(i + 1)] = [op_tp[1]]
-            if opLstr and opRstr:
-                # new_keys["op2"] for opL, new_keys["op1"] for opR
-                keys = keys + new_keys["op2"] + new_keys["op1"]
-            elif opLstr:
-                keys = new_keys["op2"] + keys
-            elif opRstr:
-                keys = keys + new_keys["op1"]
+                        shape[lr] = input_shape(inputs[term])
+                        trm_val[lr] = range(np.prod(shape[lr]))
+                    trm_str[lr] = True
+                    shapes_var[term] = shape[lr]
+                else:
+                    trm_val[lr], shape[lr] = term
+                    trm_str[lr] = False
 
-            # TODO: rewrite once I have more tests
-            if isinstance(opR, str) and opR in inner_inputs:
-                # TODO: have to be changed if differ length
-                inner_len = [shapeR[-1]] * np.prod(shapeR[:-1])
-                # this come from the previous node
-                outer_ind = inner_inputs[opR].ind_l
-                opRval_out = itertools.chain.from_iterable(
-                    itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
-                )
-                opRval_new = op["."](opRval_out, opRval)
-                keys = (
-                    keys[: keys.index(opR)]
-                    + inner_inputs[opR].keys_final
-                    + keys[keys.index(opR) :]
-                )
-            else:
-                opRval_new = opRval
-            if isinstance(opL, str) and opL in inner_inputs:
-                # TODO: have to be changed if differ length
-                inner_len = [shapeL[-1]] * np.prod(shapeL[:-1])
-                # this come from the previous node
-                outer_ind = inner_inputs[opL].ind_l
-                opLval_out = itertools.chain.from_iterable(
-                    itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
-                )
-                opLval_new = op["."](opLval_out, opLval)
-                keys = (
-                    keys[: keys.index(opL)]
-                    + inner_inputs[opL].keys_final
-                    + keys[keys.index(opL) :]
-                )
-            else:
-                opLval_new = opLval
-            pushval = (op[token](opLval_new, opRval_new), newshape)
+            # checking shapes and creating newshape
+            if token == ".":
+                if shape["L"] != shape["R"]:
+                    raise ValueError(
+                        "Operands {} and {} do not have same shape.".format(terms["R"], terms["L"])
+                    )
+                newshape = shape["R"]
+            if token == "*":
+                newshape = tuple(list(shape["L"]) + list(shape["R"]))
+
+            # creating list with keys
+            new_keys = {}
+            for lr in ["R", "L"]:
+                if trm_str[lr]:
+                    if terms[lr].startswith("_"):
+                        new_keys[lr] = previous_states_ind[terms[lr]][1]
+                    else:
+                        new_keys[lr] = [terms[lr]]
+
+            if trm_str["L"] and trm_str["R"]:
+                # TODO: check why i'm using this order
+                keys = keys + new_keys["L"] + new_keys["R"]
+            elif trm_str["L"]:
+                keys = new_keys["L"] + keys
+            elif trm_str["R"]:
+                keys = keys + new_keys["R"]
+
+            #
+            newtrm_val ={}
+            for lr in ["R", "L"]:
+                # TODO: rewrite once I have more tests
+                if isinstance(terms[lr], str) and terms[lr] in inner_inputs:
+                    # TODO: have to be changed if differ length
+                    inner_len = [shape[lr][-1]] * np.prod(shape[lr][:-1])
+                    # this come from the previous node
+                    outer_ind = inner_inputs[terms[lr]].ind_l
+                    trmval_out = itertools.chain.from_iterable(
+                        itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
+                    )
+                    newtrm_val[lr] = op["."](trmval_out, trm_val[lr])
+                    keys = (
+                        keys[: keys.index(terms[lr])]
+                        + inner_inputs[terms[lr]].keys_final
+                        + keys[keys.index(terms[lr]) :]
+                    )
+                else:
+                    newtrm_val[lr] = trm_val[lr]
+
+            pushval = (op[token](newtrm_val["L"], newtrm_val["R"]), newshape)
             stack.append(pushval)
-        else:  # name of one of the inputs
+        else:  # name of one of the inputs (token not in [".", "*"])
             stack.append(token)
+
     val = stack.pop()
     if isinstance(val, tuple):
         val = val[0]
-    return val, keys, shapes, keys_fromLeftSpl
+    return val, keys, shapes_var, keys_fromLeftSpl
 
 
 # dj: TODO: do I need keys?
@@ -747,7 +706,8 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     """ Process splitter rpn from left to right
     """
     if not splitter_rpn:
-        return [], {}, [], [], {}, [], []
+        return [], {}, [], []
+
     stack = []
     keys = []
     groups = {}
@@ -762,112 +722,96 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     else:
         previous_states_ind = {}
         inner_inputs = {}
+
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
-        # TODO: in this situation the state should be simply the same
-        if op_single.startswith("_"):
-            return previous_states_ind[op_single], None, None, []
-        if op_single in inner_inputs:
-            # TODO: have to be changed if differ length
-            # TODO: i think I don't want to add here from left part
-            # keys = inner_inputs[op_single].keys_final + [op_single]
-            keys = [op_single]
-            groups[op_single], groups_stack = 0, [[], [0]]
-        else:
-            keys = splitter_rpn
-            groups[op_single], groups_stack = 0, [[0]]
-        if combiner:
-            if combiner == splitter_rpn:
-                return keys, groups, groups_stack, [], {}, [], combiner
-            else:
-                raise Exception(
-                    "combiner {} not in splitter_rpn: {}".format(
-                        combiner[0], splitter_rpn
-                    )
-                )
-        else:
-            return keys, groups, groups_stack, keys, groups, groups_stack, []
+        return _single_op_splits_groups(op_single, combiner, inner_inputs,
+                                        previous_states_ind, groups)
 
     # len(splitter_rpn) > 1
+    # iterating splitter_rpn
     for token in splitter_rpn:
         if token in [".", "*"]:
-            opR = stack.pop()
-            opL = stack.pop()
-            opRstr = opLstr = False
-            if isinstance(opL, str):
-                opLstr = True
-            else:
-                oldgroupL = opL
-            if isinstance(opR, str):
-                opRstr = True
-            else:
-                oldgroupR = opR
+            terms = {}
+            terms["R"] = stack.pop()
+            terms["L"] = stack.pop()
+
+            # checking if opL/R are strings
+            trm_str = {"L": False, "R": False}
+            oldgroups = {}
+
+            for lr in ["L", "R"]:
+                if isinstance(terms[lr], str):
+                    trm_str[lr] = True
+                else:
+                    oldgroups[lr] = terms[lr]
 
             if token == ".":
-                if all([opRstr, opLstr]):
+                if all(trm_str.values()):
                     if group_count is None:
                         group_count = 0
                     else:
                         group_count += 1
-                    groups[opL] = group_count
-                    groups[opR] = group_count
-                    oldgroup = group_count
-                elif opRstr:
-                    groups[opR] = oldgroupL
-                    oldgroup = oldgroupL
-                elif opLstr:
-                    groups[opL] = oldgroupR
-                    oldgroup = oldgroupR
+                    oldgroup = groups[terms["L"]] = groups[terms["R"]] = group_count
+                elif trm_str["R"]:
+                    groups[terms["R"]] = oldgroups["L"]
+                    oldgroup = oldgroups["L"]
+                elif trm_str["L"]:
+                    groups[terms["L"]] = oldgroups["R"]
+                    oldgroup = oldgroups["R"]
                 else:
-                    if len(ensure_list(oldgroupL)) != len(ensure_list(oldgroupR)):
+                    if len(ensure_list(oldgroups["L"])) != len(ensure_list(oldgroups["R"])):
                         raise ValueError(
                             "Operands do not have same shape "
                             "(left one is {}d and right one is {}d.".format(
-                                len(ensure_list(oldgroupL)), len(ensure_list(oldgroupR))
+                                len(ensure_list(oldgroups["L"])), len(ensure_list(oldgroups["R"]))
                             )
                         )
-                    oldgroup = oldgroupL
+                    oldgroup = oldgroups["L"]
                     # dj: changing axes for Right part of the scalar op.
                     for k, v in groups.items():
                         pdb.set_trace()  # check if I need it (and possibly remove)
-                        if v in ensure_list(oldgroupR):
-                            groups[k] = ensure_list(oldgroupL)[
-                                ensure_list(oldgroupR).index(v)
+                        if v in ensure_list(oldgroups["R"]):
+                            groups[k] = ensure_list(oldgroups["L"])[
+                                ensure_list(oldgroups["R"]).index(v)
                             ]
-            if token == "*":
-                if all([opRstr, opLstr]):
+            else: #if token == "*":
+                if all(trm_str.values()):
                     if group_count is None:
                         group_count = 0
                     else:
                         group_count += 1
-                    groups[opL] = group_count
+                    groups[terms["L"]] = group_count
                     group_count += 1
-                    groups[opR] = group_count
-                    oldgroup = [groups[opL], groups[opR]]
-                elif opRstr:
+                    groups[terms["R"]] = group_count
+                    oldgroup = [groups[terms["L"]], groups[terms["R"]]]
+                elif trm_str["R"]:
                     group_count += 1
-                    groups[opR] = group_count
-                    oldgroup = ensure_list(oldgroupL) + [groups[opR]]
-                elif opLstr:
+                    groups[terms["R"]] = group_count
+                    oldgroup = ensure_list(oldgroups["L"]) + [groups[terms["R"]]]
+                elif trm_str["L"]:
                     group_count += 1
-                    groups[opL] = group_count
-                    oldgroup = [groups[opL]] + ensure_list(oldgroupR)
+                    groups[terms["L"]] = group_count
+                    oldgroup = [groups[terms["L"]]] + ensure_list(oldgroups["R"])
                 else:
-                    oldgroup = ensure_list(oldgroupL) + ensure_list(oldgroupR)
+                    oldgroup = ensure_list(oldgroups["L"]) + ensure_list(oldgroups["R"])
 
-            if opLstr:
-                if opL.startswith("_"):
-                    keys = previous_states_ind[opL] + keys
+            # creating list of keys
+            if trm_str["L"]:
+                if terms["L"].startswith("_"):
+                    keys = previous_states_ind[terms["L"]] + keys
                 else:
-                    keys.insert(0, opL)
-            if opRstr:
-                if opR.startswith("_"):
-                    keys += previous_states_ind[opR]
+                    keys.insert(0, terms["L"])
+            if trm_str["R"]:
+                if terms["R"].startswith("_"):
+                    keys += previous_states_ind[terms["R"]]
                 else:
-                    keys.append(opR)
+                    keys.append(terms["R"])
+
             pushgroup = oldgroup
             stack.append(pushgroup)
+
         else:  # name of one of the inputs
             stack.append(token)
 
@@ -879,55 +823,112 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     else:
         groups_stack = [groups_stack]
 
-    input_for_groups, _ = converter_groups_to_input(groups)
-
     if combiner:
-        combiner_all = []
-        for comb in combiner:
-            for gr in ensure_list(groups[comb]):
-                combiner_all += input_for_groups[gr]
-        combiner_all = list(set(combiner_all))
-        combiner_all.sort()
-
-        groups_stack_final = deepcopy(groups_stack)
-        for comb in combiner:
-            grs = groups[comb]
-            for gr in ensure_list(grs):
-                if gr in groups_stack_final[-1]:
-                    groups_stack_final[-1].remove(gr)
-                else:
-                    raise Exception(
-                        "input {} not ready to combine, you have to combine {} "
-                        "first".format(comb, groups_stack[-1])
-                    )
-        groups_final = {
-            inp: gr for (inp, gr) in groups.items() if inp not in combiner_all
-        }
-        gr_final = list(set(groups_final.values()))
-        map_gr_nr = {nr: i for (i, nr) in enumerate(sorted(gr_final))}
-        groups_final = {inp: map_gr_nr[gr] for (inp, gr) in groups_final.items()}
-        for i, groups_l in enumerate(groups_stack_final):
-            groups_stack_final[i] = [map_gr_nr[gr] for gr in groups_l]
-
-        keys_final = [key for key in keys if key not in combiner_all]
-        # TODO: not sure if I have to calculate and return keys, groups, groups_stack
-        return (
-            keys,
-            groups,
-            groups_stack,
-            keys_final,
-            groups_final,
-            groups_stack_final,
-            combiner_all,
-        )
+        keys_final, groups_final, groups_stack_final, combiner_all = \
+            combine_final_groups(combiner, groups, groups_stack, keys)
+        return keys_final, groups_final, groups_stack_final, combiner_all
     else:
-        return keys, groups, groups_stack, keys, groups, groups_stack, []
+        return keys, groups, groups_stack, []
 
 
-def splits(splitter, inputs, inner_inputs=None):
-    values, keys, _, _ = _splits(splitter, inputs, inner_inputs=inner_inputs)
-    # dj: i'm not sure why you need iter_splits, _splits gives groups with all axes per input
-    return iter_splits(values, keys)
+def _single_op_splits(op_single, inputs, inner_inputs, shapes_var,
+                      previous_states_ind, keys_fromLeftSpl):
+    import numpy as np
+    if op_single.startswith("_"):
+        return (
+            previous_states_ind[op_single][0],
+            previous_states_ind[op_single][1],
+            None,
+            keys_fromLeftSpl,
+        )
+    shape = input_shape(inputs[op_single])
+    shapes_var[op_single] = shape
+    trmval = range(np.prod(shape))
+    if op_single in inner_inputs:
+        # TODO: have to be changed if differ length
+        inner_len = [shape[-1]] * np.prod(shape[:-1])
+        # this come from the previous node
+        outer_ind = inner_inputs[op_single].ind_l
+        op_out = itertools.chain.from_iterable(
+            itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
+        )
+        res = op["."](op_out, trmval)
+        val = res
+        keys = inner_inputs[op_single].keys_final + [op_single]
+        return val, keys, shapes_var, keys_fromLeftSpl
+    else:
+        val = op["*"](trmval)
+        keys = [op_single]
+        return val, keys, shapes_var, keys_fromLeftSpl
+
+
+def _single_op_splits_groups(op_single, combiner, inner_inputs,
+                             previous_states_ind, groups):
+    # TODO: in this situation the state should be simply the same
+    if op_single.startswith("_"):
+        pdb.set_trace() # TODO: do i use it??? return is wrong
+        return previous_states_ind[op_single], None, None, []
+    if op_single in inner_inputs:
+        # TODO: have to be changed if differ length
+        # TODO: i think I don't want to add here from left part
+        # keys = inner_inputs[op_single].keys_final + [op_single]
+        keys = [op_single]
+        groups[op_single], groups_stack = 0, [[], [0]]
+    else:
+        keys = [op_single]
+        groups[op_single], groups_stack = 0, [[0]]
+    if combiner:
+        if combiner == [op_single]:
+            return [], {}, [], combiner
+        else:
+            raise Exception(
+                "combiner {} not in splitter_rpn: {}".format(
+                    combiner[0], [op_single]
+                )
+            )
+    else:
+        return keys, groups, groups_stack, []
+
+
+def combine_final_groups(combiner, groups, groups_stack, keys):
+    input_for_groups, _ = converter_groups_to_input(groups)
+    combiner_all = []
+    for comb in combiner:
+        for gr in ensure_list(groups[comb]):
+            combiner_all += input_for_groups[gr]
+    combiner_all = list(set(combiner_all))
+    combiner_all.sort()
+
+    groups_stack_final = deepcopy(groups_stack)
+    for comb in combiner:
+        grs = groups[comb]
+        for gr in ensure_list(grs):
+            if gr in groups_stack_final[-1]:
+                groups_stack_final[-1].remove(gr)
+            else:
+                raise Exception(
+                    "input {} not ready to combine, you have to combine {} "
+                    "first".format(comb, groups_stack[-1])
+                )
+    groups_final = {
+        inp: gr for (inp, gr) in groups.items() if inp not in combiner_all
+    }
+    gr_final = list(set(groups_final.values()))
+    map_gr_nr = {nr: i for (i, nr) in enumerate(sorted(gr_final))}
+    groups_final = {inp: map_gr_nr[gr] for (inp, gr) in groups_final.items()}
+    for i, groups_l in enumerate(groups_stack_final):
+        groups_stack_final[i] = [map_gr_nr[gr] for gr in groups_l]
+
+    keys_final = [key for key in keys if key not in combiner_all]
+    # TODO: not sure if I have to calculate and return keys, groups, groups_stack
+    return keys_final, groups_final, groups_stack_final, combiner_all
+
+
+# looks like i'm not using anymore
+# def splits(splitter, inputs, inner_inputs=None):
+#     values, keys, _, _ = _splits(splitter, inputs, inner_inputs=inner_inputs)
+#     # dj: i'm not sure why you need iter_splits, _splits gives groups with all axes per input
+#     return iter_splits(values, keys)
 
 
 def map_splits(split_iter, inputs):

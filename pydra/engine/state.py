@@ -113,8 +113,8 @@ class State:
 
 
     def set_input_groups(self):
-        """evaluate groups, especially the final groups that address cthe combine"""
-        _, _, _, keys_f, group_for_inputs_f, groups_stack_f, combiner_all = aux._splits_groups(
+        """evaluate groups, especially the final groups that address the combiner"""
+        keys_f, group_for_inputs_f, groups_stack_f, combiner_all = aux._splits_groups(
             self._right_splitter_rpn,
             combiner=self.combiner,
             inner_inputs=self.inner_inputs,
@@ -151,7 +151,7 @@ class State:
             # checking if left combiner contains any element from the st splitter
             st_combiner = [comb for comb in self._left_combiner if comb in st.splitter_rpn_final]
             if st_combiner:
-                _, _, _, keys_f_st, group_for_inputs_f_st, groups_stack_f_st, combiner_all_st = \
+                keys_f_st, group_for_inputs_f_st, groups_stack_f_st, combiner_all_st = \
                     aux._splits_groups(
                         st.splitter_rpn_final,
                         combiner=st_combiner,
@@ -234,6 +234,8 @@ class State:
             )
             val_r = list(val_r)
             updated_left_rpn = deepcopy(self._left_splitter_rpn_nost)
+            # removing the key from left part that were related to the inner splitter
+            # and were already included in key_r
             updated_left_rpn = aux.remove_inp_from_splitter_rpn(
                 updated_left_rpn, keys_fromLeftSpl
             )

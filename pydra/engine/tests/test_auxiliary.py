@@ -40,13 +40,9 @@ class other_splitters_to_tests:
 )
 def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
     splitter_rpn = aux.splitter2rpn(splitter)
-    keys, groups, grstack, keys_f, groups_f, grstack_f, _ = aux._splits_groups(
+    keys_f, groups_f, grstack_f, _ = aux._splits_groups(
         splitter_rpn
     )
-    assert keys == keys_exp
-    assert groups == groups_exp
-    assert grstack == grstack_exp
-    # final values should be the same
     assert keys_f == keys_exp
     assert groups_f == groups_exp
     assert grstack_f == grstack_exp
@@ -54,17 +50,13 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
 
 @pytest.mark.parametrize(
     "splitter, combiner, combiner_all_exp,"
-    "keys_exp, groups_exp, grstack_exp, "
     "keys_final_exp, groups_final_exp, grstack_final_exp",
     [
-        ("a", ["a"], ["a"], ["a"], {"a": 0}, [[0]], [], {}, []),
+        ("a", ["a"], ["a"], [], {}, []),
         (
             ("a", "b"),
             ["a"],
             ["a", "b"],
-            ["a", "b"],
-            {"a": 0, "b": 0},
-            [[0]],
             [],
             {},
             [[]],
@@ -73,9 +65,6 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
             ("a", "b"),
             ["b"],
             ["a", "b"],
-            ["a", "b"],
-            {"a": 0, "b": 0},
-            [[0]],
             [],
             {},
             [[]],
@@ -84,9 +73,6 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
             ["a", "b"],
             ["b"],
             ["b"],
-            ["a", "b"],
-            {"a": 0, "b": 1},
-            [[0, 1]],
             ["a"],
             {"a": 0},
             [[0]],
@@ -95,9 +81,6 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
             ["a", "b"],
             ["a"],
             ["a"],
-            ["a", "b"],
-            {"a": 0, "b": 1},
-            [[0, 1]],
             ["b"],
             {"b": 0},
             [[0]],
@@ -106,9 +89,6 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
             (["a", "b"], "c"),
             ["a"],
             ["a", "c"],
-            ["a", "b", "c"],
-            {"a": 0, "b": 1, "c": [0, 1]},
-            [[0, 1]],
             ["b"],
             {"b": 0},
             [[0]],
@@ -117,9 +97,6 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
             (["a", "b"], "c"),
             ["b"],
             ["b", "c"],
-            ["a", "b", "c"],
-            {"a": 0, "b": 1, "c": [0, 1]},
-            [[0, 1]],
             ["a"],
             {"a": 0},
             [[0]],
@@ -128,9 +105,6 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
             (["a", "b"], "c"),
             ["a"],
             ["a", "c"],
-            ["a", "b", "c"],
-            {"a": 0, "b": 1, "c": [0, 1]},
-            [[0, 1]],
             ["b"],
             {"b": 0},
             [[0]],
@@ -139,9 +113,6 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
             (["a", "b"], "c"),
             ["c"],
             ["a", "b", "c"],
-            ["a", "b", "c"],
-            {"a": 0, "b": 1, "c": [0, 1]},
-            [[0, 1]],
             [],
             {},
             [[]],
@@ -150,9 +121,6 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
             [("a", "b"), "c"],
             ["a"],
             ["a", "b"],
-            ["a", "b", "c"],
-            {"a": 0, "b": 0, "c": 1},
-            [[0, 1]],
             ["c"],
             {"c": 0},
             [[0]],
@@ -161,9 +129,6 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
             [("a", "b"), "c"],
             ["b"],
             ["a", "b"],
-            ["a", "b", "c"],
-            {"a": 0, "b": 0, "c": 1},
-            [[0, 1]],
             ["c"],
             {"c": 0},
             [[0]],
@@ -172,9 +137,6 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
             [("a", "b"), "c"],
             ["c"],
             ["c"],
-            ["a", "b", "c"],
-            {"a": 0, "b": 0, "c": 1},
-            [[0, 1]],
             ["a", "b"],
             {"a": 0, "b": 0},
             [[0]],
@@ -184,22 +146,15 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
 def test_splits_groups_comb(
     splitter,
     combiner,
-    keys_exp,
-    groups_exp,
-    grstack_exp,
     keys_final_exp,
     groups_final_exp,
     grstack_final_exp,
     combiner_all_exp,
 ):
     splitter_rpn = aux.splitter2rpn(splitter)
-    keys, groups, grstack, keys_final, groups_final, grstack_final, combiner_all = aux._splits_groups(
+    keys_final, groups_final, grstack_final, combiner_all = aux._splits_groups(
         splitter_rpn, combiner
     )
-    assert keys == keys_exp
-    assert groups == groups_exp
-    assert grstack == grstack_exp
-
     assert keys_final == keys_final_exp
     assert groups_final == groups_final_exp
     assert grstack_final == grstack_final_exp
