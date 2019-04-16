@@ -151,6 +151,8 @@ class State:
             # checking if left combiner contains any element from the st splitter
             st_combiner = [comb for comb in self._left_combiner if comb in st.splitter_rpn_final]
             if st_combiner:
+                # keys and groups from previous states
+                # after taking into account combiner from current state
                 keys_f_st, group_for_inputs_f_st, groups_stack_f_st, combiner_all_st = \
                     aux._splits_groups(
                         st.splitter_rpn_final,
@@ -164,8 +166,9 @@ class State:
                 group_for_inputs = group_for_inputs_f_st
                 groups_stack = groups_stack_f_st
                 self.left_combiner_all = combiner_all_st
-
             else:
+                # if no element from st.splitter is in the current combiner,
+                # using st attributes without changes
                 self.keys_final += st.keys_final
                 group_for_inputs = st.group_for_inputs_final
                 groups_stack = st.groups_stack_final
@@ -284,6 +287,7 @@ class State:
             self.ind_l_final = self.ind_l
             self.keys_final = self.keys
             self.final_groups_mapping = {i: [i] for i in range(len(self.states_ind))}
+            self.states_ind_final = self.states_ind
         return self.states_ind
 
     def prepare_states_combined_ind(self):
@@ -331,6 +335,7 @@ class State:
             self.keys_final = keys_out
             # should be 0 or None?
             self.final_groups_mapping = {0: list(range(len(self.states_ind)))}
+        self.states_ind_final = list(aux.iter_splits(self.ind_l_final, self.keys_final))
 
 
     def prepare_states_val(self):
@@ -340,7 +345,41 @@ class State:
 
 
     def prepare_inputs(self):
-        pass
+        if not self.other_states:
+            self.inputs_ind = self.states_ind
+        else:
+            # removing elements that come from connected states
+            elements_to_remove = [spl for spl in self.splitter_rpn_nost
+                                  if spl[1:] in self.other_states.keys()]
+            partial_rpn = aux.remove_inp_from_splitter_rpn(deepcopy(self.splitter_rpn_nost),
+                                                           elements_to_remove)
+            if partial_rpn:
+                values_inp, keys_inp, _, _ = aux._splits(
+                    partial_rpn, self.inputs, inner_inputs=self.inner_inputs
+                )
+                inputs_ind = values_inp
+            else:
+                keys_inp = []
+                inputs_ind = []
+
+            # merging elements that comes from previous nodes outputs
+            keys_inp_L = []
+            inputs_ind_L = []
+            for name, (st, inp) in self.other_states.items():
+                if "_{}".format(name) in self.splitter_rpn_nost:
+                    st_ind = range(len(st.states_ind_final))
+                    if inputs_ind_L:
+                        inputs_ind_L = aux.op["*"](inputs_ind_L, st_ind)
+                    else:
+                        inputs_ind_L = aux.op["*"](st_ind)
+                    keys_inp_L += ["{}.{}".format(self.name, inp)]
+            keys_inp = keys_inp_L + keys_inp
+            if inputs_ind:
+                inputs_ind = aux.op["*"](inputs_ind_L, inputs_ind)
+            else:
+                inputs_ind = aux.op["*"](inputs_ind_L)
+            # iter_splits using inputs from current state/node
+            self.inputs_ind = list(aux.iter_splits(inputs_ind, keys_inp))
 
 
 '''    
