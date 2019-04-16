@@ -119,24 +119,24 @@ class State:
             combiner=self.combiner,
             inner_inputs=self.inner_inputs,
         )
-        self._right_keys_final = keys_f
         self.right_combiner_all = combiner_all
-        self._right_group_for_inputs_final = group_for_inputs_f
-        self._right_groups_stack_final = groups_stack_f
-        self.connect_groups()
+        if self._left_splitter: #if splitter has also the left part
+            self._right_keys_final = keys_f
+            self._right_group_for_inputs_final = group_for_inputs_f
+            self._right_groups_stack_final = groups_stack_f
+            self.connect_groups()
+        else:
+            self.group_for_inputs_final = group_for_inputs_f
+            self.groups_stack_final = groups_stack_f
+            self.keys_final = keys_f
+            self.left_combiner_all = []
 
 
     def connect_groups(self):
         """"connect previous states and evaluate the final groups"""
-        if self._left_splitter:  # if Left part, merging all previous nodes
-            self.merge_previous_states()
-            if self._right_splitter:  # if Right part, adding groups from current st
-                self.push_new_states()
-        else:  # if no Left part, than there is only Right part from the current node
-            self.group_for_inputs_final = self._right_group_for_inputs_final
-            self.groups_stack_final = self._right_groups_stack_final
-            self.keys_final = self._right_keys_final
-            self.left_combiner_all = []
+        self.merge_previous_states()
+        if self._right_splitter:  # if Right part, adding groups from current st
+            self.push_new_states()
 
 
     def merge_previous_states(self):
@@ -228,47 +228,55 @@ class State:
         """using aux._splits to calculate a list of dictionaries with state indices"""
         # if there are Left and Right parts, evaluate keys/indices
         # from Left and RIght separately and merge them
-        if self._right_splitter and self._left_splitter:
-            val_r, key_r, _, keys_fromLeftSpl = aux._splits(
-                self._right_splitter_rpn, self.inputs, inner_inputs=self.inner_inputs
-            )
-            val_r = list(val_r)
-            updated_left_rpn = deepcopy(self._left_splitter_rpn_nost)
-            # removing the key from left part that were related to the inner splitter
-            # and were already included in key_r
-            updated_left_rpn = aux.remove_inp_from_splitter_rpn(
-                updated_left_rpn, keys_fromLeftSpl
-            )
+        # if self._right_splitter and self._left_splitter:
+        #     val_r, key_r, _, keys_fromLeftSpl = aux._splits(
+        #         self._right_splitter_rpn, self.inputs, inner_inputs=self.inner_inputs
+        #     )
+        #     val_r = list(val_r)
+        #     updated_left_rpn = deepcopy(self._left_splitter_rpn_nost)
+        #     # removing the key from left part that were related to the inner splitter
+        #     # and were already included in key_r
+        #     updated_left_rpn = aux.remove_inp_from_splitter_rpn(
+        #         updated_left_rpn, keys_fromLeftSpl
+        #     )
+        #
+        #     if updated_left_rpn:
+        #         #pdb.set_trace()
+        #         val_l, key_l, _, _ = aux._splits(
+        #             updated_left_rpn, self.inputs, inner_inputs=self.inner_inputs
+        #         )
+        #         val_l = list(val_l)
+        #     else:
+        #         val_l = []
+        #         key_l = []
+        #
+        #     if val_l and val_r:
+        #         values = list(aux.op["*"](val_l, val_r))
+        #     elif val_l:
+        #         values = val_l
+        #     elif val_r:
+        #         values = val_r
+        #     keys_out = key_l + key_r
+        #     self.val_l = val_l
+        #     self.key_l = key_l
+        # else:
+        #     values_out, keys_out, _, _ = aux._splits(
+        #         self.splitter_rpn, self.inputs, inner_inputs=self.inner_inputs
+        #     )
+        #     values = list(values_out)
+        #     # dj: not sure if this shouldn't be already in the init
+        #     self.key_l = []
+        #     self.val_l = []
 
-            if updated_left_rpn:
-                val_l, key_l, _, _ = aux._splits(
-                    updated_left_rpn, self.inputs, inner_inputs=self.inner_inputs
-                )
-                val_l = list(val_l)
-            else:
-                val_l = []
-                key_l = []
+        values_out_pr, keys_out_pr, _, _ = aux._splits(
+            self.splitter_rpn, self.inputs, inner_inputs=self.inner_inputs
+        )
+        values_pr = list(values_out_pr)
+        #states_ind_pr = list(aux.iter_splits(values_pr, keys_out_pr))
 
-            if val_l and val_r:
-                values = list(aux.op["*"](val_l, val_r))
-            elif val_l:
-                values = val_l
-            elif val_r:
-                values = val_r
-            keys_out = key_l + key_r
-            self.val_l = val_l
-            self.key_l = key_l
-        else:
-            values_out, keys_out, _, _ = aux._splits(
-                self.splitter_rpn, self.inputs, inner_inputs=self.inner_inputs
-            )
-            values = list(values_out)
-            # dj: not sure if this shouldn't be already in the init
-            self.key_l = []
-            self.val_l = []
-        self.ind_l = values
-        self.keys = keys_out
-        self.states_ind = list(aux.iter_splits(values, self.keys))
+        self.ind_l = values_pr
+        self.keys = keys_out_pr
+        self.states_ind = list(aux.iter_splits(values_pr, self.keys))
         self.keys_final = self.keys
         if self.combiner:
             self.prepare_states_combined_ind()
@@ -281,34 +289,30 @@ class State:
     def prepare_states_combined_ind(self):
         """preparing the final list of dictionaries with indices after combiner"""
         # assuming for now that the combiner is only in the right part TODO
-        if self._right_splitter and self._left_splitter:
-            combined_right_rpn = aux.remove_inp_from_splitter_rpn(
-                deepcopy(self._right_splitter_rpn), self.right_combiner_all + self.left_combiner_all
-            )
-        else:
-            combined_right_rpn = aux.remove_inp_from_splitter_rpn(
-                deepcopy(self.splitter_rpn), self.right_combiner_all + self.left_combiner_all
-            )
+        # if self._right_splitter and self._left_splitter:
+        #     combined_right_rpn = aux.remove_inp_from_splitter_rpn(
+        #         deepcopy(self._right_splitter_rpn), self.right_combiner_all + self.left_combiner_all
+        #     )
+        # else:
+        combined_rpn = aux.remove_inp_from_splitter_rpn(
+            deepcopy(self.splitter_rpn), self.right_combiner_all + self.left_combiner_all
+        )
 
         # TODO: create a function for this!!
-        if combined_right_rpn:
+        if combined_rpn:
             val_r, key_r, _, _ = aux._splits(
-                combined_right_rpn, self.inputs, inner_inputs=self.inner_inputs
+                combined_rpn, self.inputs, inner_inputs=self.inner_inputs
             )
-            val_r = list(val_r)
-        else:
-            val_r = []
-            key_r = []
-
-        if self.val_l and val_r:
-            values = list(aux.op["*"](self.val_l, val_r))
-        elif self.val_l:
-            values = self.val_l
-        elif val_r:
-            values = val_r
+            values = list(val_r)
         else:
             values = []
-        keys_out = self.key_l + key_r
+            key_r = []
+
+        # if self.val_l and val_r:
+        #     values = list(aux.op["*"](self.val_l, val_r))
+        # elif self.val_l:
+        #     values = self.val_l
+        keys_out = key_r
         if values:
             # NOW TODO: move to init?
             self.ind_l_final = values
@@ -333,6 +337,10 @@ class State:
         """evaluate states values having states indices"""
         self.states_val = list(aux.map_splits(self.states_ind, self.inputs))
         return self.states_val
+
+
+    def prepare_inputs(self):
+        pass
 
 
 '''    
