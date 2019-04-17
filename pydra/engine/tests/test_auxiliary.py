@@ -40,9 +40,7 @@ class other_splitters_to_tests:
 )
 def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
     splitter_rpn = aux.splitter2rpn(splitter)
-    keys_f, groups_f, grstack_f, _ = aux._splits_groups(
-        splitter_rpn
-    )
+    keys_f, groups_f, grstack_f, _ = aux._splits_groups(splitter_rpn)
     assert keys_f == keys_exp
     assert groups_f == groups_exp
     assert grstack_f == grstack_exp
@@ -53,94 +51,17 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
     "keys_final_exp, groups_final_exp, grstack_final_exp",
     [
         ("a", ["a"], ["a"], [], {}, []),
-        (
-            ("a", "b"),
-            ["a"],
-            ["a", "b"],
-            [],
-            {},
-            [[]],
-        ),
-        (
-            ("a", "b"),
-            ["b"],
-            ["a", "b"],
-            [],
-            {},
-            [[]],
-        ),
-        (
-            ["a", "b"],
-            ["b"],
-            ["b"],
-            ["a"],
-            {"a": 0},
-            [[0]],
-        ),
-        (
-            ["a", "b"],
-            ["a"],
-            ["a"],
-            ["b"],
-            {"b": 0},
-            [[0]],
-        ),
-        (
-            (["a", "b"], "c"),
-            ["a"],
-            ["a", "c"],
-            ["b"],
-            {"b": 0},
-            [[0]],
-        ),
-        (
-            (["a", "b"], "c"),
-            ["b"],
-            ["b", "c"],
-            ["a"],
-            {"a": 0},
-            [[0]],
-        ),
-        (
-            (["a", "b"], "c"),
-            ["a"],
-            ["a", "c"],
-            ["b"],
-            {"b": 0},
-            [[0]],
-        ),
-        (
-            (["a", "b"], "c"),
-            ["c"],
-            ["a", "b", "c"],
-            [],
-            {},
-            [[]],
-        ),
-        (
-            [("a", "b"), "c"],
-            ["a"],
-            ["a", "b"],
-            ["c"],
-            {"c": 0},
-            [[0]],
-        ),
-        (
-            [("a", "b"), "c"],
-            ["b"],
-            ["a", "b"],
-            ["c"],
-            {"c": 0},
-            [[0]],
-        ),
-        (
-            [("a", "b"), "c"],
-            ["c"],
-            ["c"],
-            ["a", "b"],
-            {"a": 0, "b": 0},
-            [[0]],
-        ),
+        (("a", "b"), ["a"], ["a", "b"], [], {}, [[]]),
+        (("a", "b"), ["b"], ["a", "b"], [], {}, [[]]),
+        (["a", "b"], ["b"], ["b"], ["a"], {"a": 0}, [[0]]),
+        (["a", "b"], ["a"], ["a"], ["b"], {"b": 0}, [[0]]),
+        ((["a", "b"], "c"), ["a"], ["a", "c"], ["b"], {"b": 0}, [[0]]),
+        ((["a", "b"], "c"), ["b"], ["b", "c"], ["a"], {"a": 0}, [[0]]),
+        ((["a", "b"], "c"), ["a"], ["a", "c"], ["b"], {"b": 0}, [[0]]),
+        ((["a", "b"], "c"), ["c"], ["a", "b", "c"], [], {}, [[]]),
+        ([("a", "b"), "c"], ["a"], ["a", "b"], ["c"], {"c": 0}, [[0]]),
+        ([("a", "b"), "c"], ["b"], ["a", "b"], ["c"], {"c": 0}, [[0]]),
+        ([("a", "b"), "c"], ["c"], ["c"], ["a", "b"], {"a": 0, "b": 0}, [[0]]),
     ],
 )
 def test_splits_groups_comb(

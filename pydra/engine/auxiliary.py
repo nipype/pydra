@@ -507,6 +507,7 @@ def rpn2splitter(splitter_rpn):
 
 # used in the Node to change names in a splitter and combiner
 
+
 def change_combiner(combiner, name):
     combiner_changed = []
     for comb in combiner:
@@ -596,6 +597,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
     """ Process splitter rpn from left to right
     """
     import numpy as np
+
     stack = []
     keys = []
     shapes_var = {}
@@ -614,8 +616,14 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
-        return _single_op_splits(op_single, inputs, inner_inputs, shapes_var,
-                                 previous_states_ind, keys_fromLeftSpl)
+        return _single_op_splits(
+            op_single,
+            inputs,
+            inner_inputs,
+            shapes_var,
+            previous_states_ind,
+            keys_fromLeftSpl,
+        )
 
     terms = {}
     trm_val = {}
@@ -646,7 +654,9 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
             if token == ".":
                 if shape["L"] != shape["R"]:
                     raise ValueError(
-                        "Operands {} and {} do not have same shape.".format(terms["R"], terms["L"])
+                        "Operands {} and {} do not have same shape.".format(
+                            terms["R"], terms["L"]
+                        )
                     )
                 newshape = shape["R"]
             if token == "*":
@@ -670,7 +680,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
                 keys = keys + new_keys["R"]
 
             #
-            newtrm_val ={}
+            newtrm_val = {}
             for lr in ["R", "L"]:
                 # TODO: rewrite once I have more tests
                 if isinstance(terms[lr], str) and terms[lr] in inner_inputs:
@@ -726,8 +736,9 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
-        return _single_op_splits_groups(op_single, combiner, inner_inputs,
-                                        previous_states_ind, groups)
+        return _single_op_splits_groups(
+            op_single, combiner, inner_inputs, previous_states_ind, groups
+        )
 
     # len(splitter_rpn) > 1
     # iterating splitter_rpn
@@ -761,11 +772,14 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
                     groups[terms["L"]] = oldgroups["R"]
                     oldgroup = oldgroups["R"]
                 else:
-                    if len(ensure_list(oldgroups["L"])) != len(ensure_list(oldgroups["R"])):
+                    if len(ensure_list(oldgroups["L"])) != len(
+                        ensure_list(oldgroups["R"])
+                    ):
                         raise ValueError(
                             "Operands do not have same shape "
                             "(left one is {}d and right one is {}d.".format(
-                                len(ensure_list(oldgroups["L"])), len(ensure_list(oldgroups["R"]))
+                                len(ensure_list(oldgroups["L"])),
+                                len(ensure_list(oldgroups["R"])),
                             )
                         )
                     oldgroup = oldgroups["L"]
@@ -776,7 +790,7 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
                             groups[k] = ensure_list(oldgroups["L"])[
                                 ensure_list(oldgroups["R"]).index(v)
                             ]
-            else: #if token == "*":
+            else:  # if token == "*":
                 if all(trm_str.values()):
                     if group_count is None:
                         group_count = 0
@@ -824,16 +838,19 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
         groups_stack = [groups_stack]
 
     if combiner:
-        keys_final, groups_final, groups_stack_final, combiner_all = \
-            combine_final_groups(combiner, groups, groups_stack, keys)
+        keys_final, groups_final, groups_stack_final, combiner_all = combine_final_groups(
+            combiner, groups, groups_stack, keys
+        )
         return keys_final, groups_final, groups_stack_final, combiner_all
     else:
         return keys, groups, groups_stack, []
 
 
-def _single_op_splits(op_single, inputs, inner_inputs, shapes_var,
-                      previous_states_ind, keys_fromLeftSpl):
+def _single_op_splits(
+    op_single, inputs, inner_inputs, shapes_var, previous_states_ind, keys_fromLeftSpl
+):
     import numpy as np
+
     if op_single.startswith("_"):
         return (
             previous_states_ind[op_single][0],
@@ -862,11 +879,12 @@ def _single_op_splits(op_single, inputs, inner_inputs, shapes_var,
         return val, keys, shapes_var, keys_fromLeftSpl
 
 
-def _single_op_splits_groups(op_single, combiner, inner_inputs,
-                             previous_states_ind, groups):
+def _single_op_splits_groups(
+    op_single, combiner, inner_inputs, previous_states_ind, groups
+):
     # TODO: in this situation the state should be simply the same
     if op_single.startswith("_"):
-        pdb.set_trace() # TODO: do i use it??? return is wrong
+        pdb.set_trace()  # TODO: do i use it??? return is wrong
         return previous_states_ind[op_single], None, None, []
     if op_single in inner_inputs:
         # TODO: have to be changed if differ length
@@ -882,9 +900,7 @@ def _single_op_splits_groups(op_single, combiner, inner_inputs,
             return [], {}, [], combiner
         else:
             raise Exception(
-                "combiner {} not in splitter_rpn: {}".format(
-                    combiner[0], [op_single]
-                )
+                "combiner {} not in splitter_rpn: {}".format(combiner[0], [op_single])
             )
     else:
         return keys, groups, groups_stack, []
@@ -910,9 +926,7 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
                     "input {} not ready to combine, you have to combine {} "
                     "first".format(comb, groups_stack[-1])
                 )
-    groups_final = {
-        inp: gr for (inp, gr) in groups.items() if inp not in combiner_all
-    }
+    groups_final = {inp: gr for (inp, gr) in groups.items() if inp not in combiner_all}
     gr_final = list(set(groups_final.values()))
     map_gr_nr = {nr: i for (i, nr) in enumerate(sorted(gr_final))}
     groups_final = {inp: map_gr_nr[gr] for (inp, gr) in groups_final.items()}

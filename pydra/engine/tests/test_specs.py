@@ -7,7 +7,7 @@ from ..specs import (
     ContainerSpec,
     DockerSpec,
     SingularitySpec,
-    LazyField
+    LazyField,
 )
 import pytest
 
@@ -74,9 +74,11 @@ class TestNode:
             def __init__(self):
                 self.inp_a = "A"
                 self.inp_b = "B"
+
         class InpSpec:
             def __init__(self):
                 self.fields = [("inp_a", None), ("inp_b", None)]
+
         self.name = "tn"
         self.inputs = Input()
         self.input_spec = InpSpec()
@@ -86,10 +88,13 @@ class TestNode:
         class Output:
             def __init__(self):
                 self.out_a = "OUT_A"
+
         class Result:
             def __init__(self):
                 self.output = Output()
+
         return Result()
+
 
 class TestWorkflow:
     def __init__(self):
@@ -97,6 +102,7 @@ class TestWorkflow:
             def __init__(self):
                 self.inp_a = "A"
                 self.inp_b = "B"
+
         self.inputs = Input()
         self.tn = TestNode()
 
@@ -135,4 +141,4 @@ def test_lazy_getvale():
     lf = LazyField(node=tn, attr_type="input")
     with pytest.raises(Exception) as excinfo:
         lf.inp_c
-    assert str(excinfo.value) == 'Task tn has no input attribute inp_c'
+    assert str(excinfo.value) == "Task tn has no input attribute inp_c"

@@ -51,6 +51,7 @@ class SerialPool:
     def done(self):
         return True
 
+
 class SerialWorker(Worker):
     def __init__(self):
         logger.debug("Initialize SerialWorker")
