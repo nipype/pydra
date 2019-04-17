@@ -72,7 +72,7 @@ class NodeBase:
         messengers=None,
         messenger_args=None,
         cache_dir=None,
-        cache_locations=None
+        cache_locations=None,
     ):
         """A base structure for nodes in the computational graph (i.e. both
         ``Node`` and ``Workflow``).
@@ -164,11 +164,9 @@ class NodeBase:
     def checksum(self):
         return create_checksum(self.__class__.__name__, self.inputs)
 
-
     def is_finished(self, index=None):
         # TODO: check local procs
         return False
-
 
     def set_state(self, splitter, combiner=None):
         incoming_states = []
@@ -208,7 +206,7 @@ class NodeBase:
                 send_message(
                     make_message(message, context=context),
                     messengers=self.messengers,
-                    **self.messenger_args
+                    **self.messenger_args,
                 )
             else:
                 send_message(
@@ -358,11 +356,7 @@ class NodeBase:
                 if self.audit_check(AuditFlag.PROV):
                     # audit outputs
                     self.audit(
-                        {
-                            "@id": aid,
-                            "endedAtTime": now(),
-                            "errored": result.errored,
-                        },
+                        {"@id": aid, "endedAtTime": now(), "errored": result.errored},
                         AuditFlag.PROV,
                     )
             return result
@@ -397,7 +391,7 @@ class NodeBase:
         if not self.state:
             self.fut_combiner = combiner
             return self
-            #raise Exception("splitter has to be set first")
+            # raise Exception("splitter has to be set first")
         elif self.state.combiner:
             raise Exception("combiner has been already set")
         self.combiner = combiner
@@ -420,15 +414,13 @@ class NodeBase:
             input_ind = self.state.inputs_ind[ind]
             inputs_dict = {}
             for inp in set(self.input_names):
-                inputs_dict[inp] = getattr(self.inputs, inp)[input_ind[f'{self.name}.{inp}']]
+                inputs_dict[inp] = getattr(self.inputs, inp)[
+                    input_ind[f"{self.name}.{inp}"]
+                ]
             return state_dict, inputs_dict
         else:
-            inputs_dict = {
-                inp : getattr(self.inputs, inp)
-                for inp in self.input_names
-            }
+            inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
             return None, inputs_dict
-
 
     def _state_dict_all_comb(self, from_node, state_dict):
         """collecting state dictionary for all elements that were combined together"""
@@ -526,10 +518,7 @@ class NodeBase:
         for (gr, ind_l) in self.state.final_groups_mapping.items():
             combined_results.append([])
             for ind in ind_l:
-                result = load_result(
-                    self.results_dict[ind][1],
-                    self.cache_locations
-                )
+                result = load_result(self.results_dict[ind][1], self.cache_locations)
                 combined_results[gr].append(result)
         return combined_results
 
@@ -549,17 +538,15 @@ class NodeBase:
                     results = []
                     for (ii, val) in enumerate(self.state.states_val):
                         result = load_result(
-                        self.results_dict[ii][1],
-                        self.cache_locations
+                            self.results_dict[ii][1], self.cache_locations
                         )
                         results.append(result)
                     return results
-            else: #state_index is not None
+            else:  # state_index is not None
                 if self.state.combiner:
                     return self._combined_output()[state_index]
                 result = load_result(
-                    self.results_dict[state_index][1],
-                    self.cache_locations
+                    self.results_dict[state_index][1], self.cache_locations
                 )
                 return result
         else:
@@ -569,10 +556,7 @@ class NodeBase:
                 checksum = self.results_dict[None][1]
             else:
                 checksum = self.checksum
-            result = load_result(
-                checksum,
-                self.cache_locations
-            )
+            result = load_result(checksum, self.cache_locations)
             return result
 
 
@@ -642,15 +626,18 @@ class Workflow(NodeBase):
         self.name2obj[task.name] = task
         self._last_added = task
         other_states = {}
-        #TODO: should this add per every field
+        # TODO: should this add per every field
         for field in dc.fields(task.inputs):
             val = getattr(task.inputs, field.name)
             if isinstance(val, LazyField):
                 if val.name in self.node_names and getattr(self, val.name).state:
                     other_states[val.name] = (getattr(self, val.name).state, field.name)
                     if hasattr(task, "fut_combiner"):
-                        task.state = state.State(task.name, other_states=other_states,
-                                                 combiner=task.fut_combiner)
+                        task.state = state.State(
+                            task.name,
+                            other_states=other_states,
+                            combiner=task.fut_combiner,
+                        )
                     else:
                         task.state = state.State(task.name, other_states=other_states)
                 if val.name != self.name:
@@ -668,7 +655,7 @@ class Workflow(NodeBase):
             # TODO: this next line will need to be adjusted for tasks that
             # depend on prior tasks that have state
             task.inputs.retrieve_values(self)
-            #TODO: check where prepare_states should be run
+            # TODO: check where prepare_states should be run
             if task.state and not hasattr(task.state, "states_ind"):
                 task.state.prepare_states(inputs=task.inputs)
             if task.state and not hasattr(task.state, "inputs_ind"):
@@ -682,7 +669,6 @@ class Workflow(NodeBase):
                     sub.run(task)
                 while not task.done:
                     sleep(1)
-
 
     def set_output(self, connections):
         self._connections = connections

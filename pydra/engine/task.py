@@ -88,7 +88,7 @@ class FunctionTask(NodeBase):
             messengers=messengers,
             messenger_args=messenger_args,
             cache_dir=cache_dir,
-            cache_locations=cache_locations
+            cache_locations=cache_locations,
         )
         if output_spec is None:
             if "return" not in func.__annotations__:

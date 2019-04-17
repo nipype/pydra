@@ -267,7 +267,6 @@ def test_task_nostate_1_cachelocations(plugin, tmpdir):
     assert not nn2.output_dir.exists()
 
 
-
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_1_cachelocations_updated(plugin, tmpdir):
     """
@@ -365,8 +364,9 @@ def test_task_spl_1_cachelocations(plugin, tmpdir):
     with Submitter(plugin=plugin) as sub:
         sub.run(nn)
 
-    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)\
-        .split(splitter="a", a=[3, 5])
+    nn2 = fun_addtwo(
+        name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir
+    ).split(splitter="a", a=[3, 5])
     with Submitter(plugin=plugin) as sub:
         sub.run(nn2)
 
@@ -380,7 +380,6 @@ def test_task_spl_1_cachelocations(plugin, tmpdir):
     # checking if the second node didn't run the interface again
     assert nn.output_dir.exists()
     assert not nn2.output_dir.exists()
-
 
 
 @pytest.mark.xfail(reason="TODO: output_dir.exists check doesn't work when splitter")
@@ -399,8 +398,9 @@ def test_task_spl_1_cachelocations_updated(plugin, tmpdir):
     with Submitter(plugin=plugin) as sub:
         sub.run(nn)
 
-    nn2 = fun_addtwo(name="NA", cache_dir=cache_dir2, cache_locations=cache_dir)\
-        .split(splitter="a", a=[3, 5])
+    nn2 = fun_addtwo(name="NA", cache_dir=cache_dir2, cache_locations=cache_dir).split(
+        splitter="a", a=[3, 5]
+    )
     with Submitter(plugin=plugin) as sub:
         sub.run(nn2, cache_locations=cache_dir1)
 
