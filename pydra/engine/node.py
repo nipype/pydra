@@ -11,7 +11,7 @@ import pdb
 from pathlib import Path
 import typing as ty
 import pickle as pk
-from copy import deepcopy
+from copy import deepcopy, copy
 from time import sleep
 
 import cloudpickle as cp
@@ -98,8 +98,6 @@ class NodeBase:
         self.input_names = [
             field.name for field in dc.fields(klass) if field.name not in ["_func"]
         ]
-
-        self._needed_outputs = []
         self.state = None
         self._output = {}
         self._result = {}
@@ -118,7 +116,6 @@ class NodeBase:
                 inputs = self._input_sets[inputs]
             self.inputs = dc.replace(self.inputs, **inputs)
             self.state_inputs = inputs
-
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
@@ -167,30 +164,14 @@ class NodeBase:
     def checksum(self):
         return create_checksum(self.__class__.__name__, self.inputs)
 
-    def ready2run(self, index=None):
-        # flag that says if the node/wf is ready to run (has all input)
-        for node, _, _ in self.needed_outputs:
-            if not node.is_finished(index=index):
-                return False
-        return True
 
     def is_finished(self, index=None):
         # TODO: check local procs
         return False
 
-    @property
-    def needed_outputs(self):
-        return self._needed_outputs
-
-    @needed_outputs.setter
-    def needed_outputs(self, requires):
-        self._needed_outputs = ensure_list(requires)
 
     def set_state(self, splitter, combiner=None):
         incoming_states = []
-        for node, _, _ in self.needed_outputs:
-            if node.state is not None:
-                incoming_states.append(node.state)
         if splitter is None:
             splitter = [state.name for state in incoming_states] or None
         elif len(incoming_states):
@@ -412,7 +393,11 @@ class NodeBase:
 
     def combine(self, combiner):
         if not self.state:
-            raise Exception("splitter has to be set first")
+            self.split(splitter=None)
+        if not self.state:
+            self.fut_combiner = combiner
+            return self
+            #raise Exception("splitter has to be set first")
         elif self.state.combiner:
             raise Exception("combiner has been already set")
         self.combiner = combiner
@@ -430,62 +415,20 @@ class NodeBase:
     def get_input_el(self, ind):
         """collecting all inputs required to run the node (for specific state element)"""
         if ind is not None:
-            # TODO: check if the current version requires both state_dict and inputs_dict
+            # TODO: doesnt work properly for more cmplicated wf
             state_dict = self.state.states_val[ind]
-            inputs_dict = {
-                "{}.{}".format(self.name, k): state_dict["{}.{}".format(self.name, k)]
-                for k in self.input_names
-            }
-
-            # reading extra inputs that come from previous nodes
-            for (from_node, from_socket, to_socket) in self.needed_outputs:
-                # TODO update to new version: if previous has state, it would have to be combined
-                # if the current node has no state
-                if from_node.state.combiner:
-                    inputs_dict[
-                        "{}.{}".format(self.name, to_socket)
-                    ] = self._get_input_comb(from_node, from_socket, state_dict)
-                else:
-                    dir_nm_el_from, _ = from_node._directory_name_state_surv(state_dict)
-                    # TODO: do I need this if, what if this is wf?
-                    if is_node(from_node):
-                        out_from = getattr(
-                            from_node.results_dict[dir_nm_el_from].output, from_socket
-                        )
-                        if out_from:
-                            inputs_dict["{}.{}".format(self.name, to_socket)] = out_from
-                        else:
-                            raise Exception(
-                                "output from {} doesnt exist".format(from_node)
-                            )
+            input_ind = self.state.inputs_ind[ind]
+            inputs_dict = {}
+            for inp in set(self.input_names):
+                inputs_dict[inp] = getattr(self.inputs, inp)[input_ind[f'{self.name}.{inp}']]
             return state_dict, inputs_dict
-
         else:
             inputs_dict = {
-                "{}.{}".format(self.name, inp): getattr(self.inputs, inp)
+                inp : getattr(self.inputs, inp)
                 for inp in self.input_names
             }
-            # TODO: adding parts from self.needed_outputs
             return None, inputs_dict
 
-    # TODO: update
-    def _get_input_comb(self, from_node, from_socket, state_dict):
-        """collecting all outputs from previous node that has combiner"""
-        state_dict_all = self._state_dict_all_comb(from_node, state_dict)
-        inputs_all = []
-        for state in state_dict_all:
-            dir_nm_el_from = "_".join(
-                ["{}:{}".format(i, j) for i, j in list(state.items())]
-            )
-            if is_node(from_node):
-                out_from = getattr(
-                    from_node.results_dict[dir_nm_el_from].output, from_socket
-                )
-                if out_from:
-                    inputs_all.append(out_from)
-                else:
-                    raise Exception("output from {} doesnt exist".format(from_node))
-        return inputs_all
 
     def _state_dict_all_comb(self, from_node, state_dict):
         """collecting state dictionary for all elements that were combined together"""
@@ -556,12 +499,11 @@ class NodeBase:
 
     def to_job(self, ind):
         """ running interface one element generated from node_state."""
-        logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
+        # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
         el = deepcopy(self)
         el.state = None
         _, inputs_dict = self.get_input_el(ind)
-        interf_inputs = dict((k.split(".")[1], v) for k, v in inputs_dict.items())
-        el.inputs = dc.replace(el.inputs, **interf_inputs)
+        el.inputs = dc.replace(el.inputs, **inputs_dict)
         return el
 
     # checking if all outputs are saved
@@ -599,7 +541,20 @@ class NodeBase:
         # TODO: check if result is available in load_result and
         # return a future if not
         if self.state:
-            if state_index is not None:
+            if state_index is None:
+                # if state_index=None, collecting all results
+                if self.state.combiner:
+                    return self._combined_output()
+                else:
+                    results = []
+                    for (ii, val) in enumerate(self.state.states_val):
+                        result = load_result(
+                        self.results_dict[ii][1],
+                        self.cache_locations
+                        )
+                        results.append(result)
+                    return results
+            else: #state_index is not None
                 if self.state.combiner:
                     return self._combined_output()[state_index]
                 result = load_result(
@@ -607,17 +562,6 @@ class NodeBase:
                     self.cache_locations
                 )
                 return result
-            if self.state.combiner:
-                return self._combined_output()
-            # if state_index=None, collecting all results
-            results = []
-            for (ii, val) in enumerate(self.state.states_val):
-                result = load_result(
-                    self.results_dict[ii][1],
-                    self.cache_locations + ensure_list(self._cache_dir),
-                )
-                results.append(result)
-            return results
         else:
             if state_index is not None:
                 raise ValueError("Task does not have a state")
@@ -674,6 +618,7 @@ class Workflow(NodeBase):
 
         # store output connections
         self._connections = None
+        self.node_names = []
 
     def __getattr__(self, name):
         if name == "lzin":  # lazy output
@@ -696,9 +641,18 @@ class Workflow(NodeBase):
         self.graph.add_nodes_from([task])
         self.name2obj[task.name] = task
         self._last_added = task
+        other_states = {}
+        #TODO: should this add per every field
         for field in dc.fields(task.inputs):
             val = getattr(task.inputs, field.name)
             if isinstance(val, LazyField):
+                if val.name in self.node_names and getattr(self, val.name).state:
+                    other_states[val.name] = (getattr(self, val.name).state, field.name)
+                    if hasattr(task, "fut_combiner"):
+                        task.state = state.State(task.name, other_states=other_states,
+                                                 combiner=task.fut_combiner)
+                    else:
+                        task.state = state.State(task.name, other_states=other_states)
                 if val.name != self.name:
                     self.graph.add_edge(
                         getattr(self, val.name),
@@ -706,6 +660,7 @@ class Workflow(NodeBase):
                         from_field=val.field,
                         to_field=field.name,
                     )
+        self.node_names.append(task.name)
         return self
 
     def _run_task(self):
@@ -713,6 +668,11 @@ class Workflow(NodeBase):
             # TODO: this next line will need to be adjusted for tasks that
             # depend on prior tasks that have state
             task.inputs.retrieve_values(self)
+            #TODO: check where prepare_states should be run
+            if task.state and not hasattr(task.state, "states_ind"):
+                task.state.prepare_states(inputs=task.inputs)
+            if task.state and not hasattr(task.state, "inputs_ind"):
+                task.state.prepare_inputs()
             if self.plugin is None:
                 task.run()
             else:
@@ -722,6 +682,7 @@ class Workflow(NodeBase):
                     sub.run(task)
                 while not task.done:
                     sleep(1)
+
 
     def set_output(self, connections):
         self._connections = connections

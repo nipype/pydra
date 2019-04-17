@@ -81,6 +81,9 @@ def test_state_1(
     assert st.states_ind == states_ind
     assert st.states_val == states_val
 
+    st.prepare_inputs()
+    assert st.inputs_ind == states_ind
+
 
 def test_state_merge_1():
     st1 = State(name="NA", splitter="a")
@@ -94,6 +97,9 @@ def test_state_merge_1():
     assert st2.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
     assert st2.states_val == [{"NA.a": 3}, {"NA.a": 5}]
 
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [{"NB.b": 0}, {"NB.b": 1}]
+
 
 def test_state_merge_1a():
     st1 = State(name="NA", splitter="a")
@@ -106,6 +112,9 @@ def test_state_merge_1a():
     st2.prepare_states(inputs={"NA.a": [3, 5]})
     assert st2.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
     assert st2.states_val == [{"NA.a": 3}, {"NA.a": 5}]
+
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [{"NB.b": 0}, {"NB.b": 1}]
 
 
 def test_state_merge_1b_exception():
@@ -150,6 +159,14 @@ def test_state_merge_2():
         {"NA.a": 5, "NB.a": 2},
     ]
 
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [
+        {"NB.b": 0, "NB.a": 0},
+        {"NB.b": 0, "NB.a": 1},
+        {"NB.b": 1, "NB.a": 0},
+        {"NB.b": 1, "NB.a": 1},
+    ]
+
 
 def test_state_merge_2a():
     """adding scalar to st2"""
@@ -174,6 +191,14 @@ def test_state_merge_2a():
         {"NA.a": 3, "NB.a": 2},
         {"NA.a": 5, "NB.a": 1},
         {"NA.a": 5, "NB.a": 2},
+    ]
+
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [
+        {"NB.b": 0, "NB.a": 0},
+        {"NB.b": 0, "NB.a": 1},
+        {"NB.b": 1, "NB.a": 0},
+        {"NB.b": 1, "NB.a": 1},
     ]
 
 
@@ -203,6 +228,14 @@ def test_state_merge_2b():
         {"NA.a": 5, "NB.a": 2},
     ]
 
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [
+        {"NB.b": 0, "NB.a": 0},
+        {"NB.b": 0, "NB.a": 1},
+        {"NB.b": 1, "NB.a": 0},
+        {"NB.b": 1, "NB.a": 1},
+    ]
+
 
 def test_state_merge_3():
     """two states connected with st3, no splitter provided - Left has to be added"""
@@ -214,6 +247,7 @@ def test_state_merge_3():
     assert st3.splitter_rpn == ["NA.a", "NB.a", "*"]
     assert st3.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
     assert st3.groups_stack_final == [[0, 1]]
+
 
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
     assert st3.states_ind == [
@@ -227,6 +261,14 @@ def test_state_merge_3():
         {"NA.a": 3, "NB.a": 50},
         {"NA.a": 5, "NB.a": 30},
         {"NA.a": 5, "NB.a": 50},
+    ]
+
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [
+        {"NC.b": 0, "NC.c": 0},
+        {"NC.b": 0, "NC.c": 1},
+        {"NC.b": 1, "NC.c": 0},
+        {"NC.b": 1, "NC.c": 1},
     ]
 
 
@@ -259,6 +301,14 @@ def test_state_merge_3a():
         {"NA.a": 5, "NB.a": 50},
     ]
 
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [
+        {"NC.b": 0, "NC.c": 0},
+        {"NC.b": 0, "NC.c": 1},
+        {"NC.b": 1, "NC.c": 0},
+        {"NC.b": 1, "NC.c": 1},
+    ]
+
 
 def test_state_merge_3b():
     """two states connected with st3, partial Left splitter provided"""
@@ -287,6 +337,14 @@ def test_state_merge_3b():
         {"NA.a": 5, "NB.a": 50},
     ]
 
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [
+        {"NC.b": 0, "NC.c": 0},
+        {"NC.b": 0, "NC.c": 1},
+        {"NC.b": 1, "NC.c": 0},
+        {"NC.b": 1, "NC.c": 1},
+    ]
+
 
 @pytest.mark.xfail(
     reason="splitter has scallar in left part - groups don't work properly"
@@ -309,6 +367,14 @@ def test_state_merge_3c():
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
     assert st3.states_ind == [{"NA.a": 0, "NB.a": 0}, {"NA.a": 1, "NB.a": 1}]
     assert st3.states_val == [{"NA.a": 3, "NB.a": 30}, {"NA.a": 5, "NB.a": 50}]
+
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [
+        {"NC.b": 0, "NC.c": 0},
+        {"NC.b": 0, "NC.c": 1},
+        {"NC.b": 1, "NC.c": 0},
+        {"NC.b": 1, "NC.c": 1},
+    ]
 
 
 def test_state_merge_4():
@@ -333,6 +399,9 @@ def test_state_merge_4():
         {"NA.a": 5, "NA.b": 10},
         {"NA.a": 5, "NA.b": 20},
     ]
+
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [{"NB.a": 0}, {"NB.a": 1}, {"NB.a": 2}, {"NB.a": 3}]
 
 
 def test_state_merge_5():
@@ -372,6 +441,18 @@ def test_state_merge_5():
         {"NA.a": 5, "NA.b": 20, "NB.a": 700},
     ]
 
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [
+        {"NC.a": 0, "NC.b": 0},
+        {"NC.a": 0, "NC.b": 1},
+        {"NC.a": 1, "NC.b": 0},
+        {"NC.a": 1, "NC.b": 1},
+        {"NC.a": 2, "NC.b": 0},
+        {"NC.a": 2, "NC.b": 1},
+        {"NC.a": 3, "NC.b": 0},
+        {"NC.a": 3, "NC.b": 1},
+    ]
+
 
 def test_state_merge_5a():
     """two previous nodes, one with outer splitter, no splitter - Left part has to be added"""
@@ -405,6 +486,18 @@ def test_state_merge_5a():
         {"NA.a": 5, "NA.b": 20, "NB.a": 700},
     ]
 
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [
+        {"NC.a": 0, "NC.b": 0},
+        {"NC.a": 0, "NC.b": 1},
+        {"NC.a": 1, "NC.b": 0},
+        {"NC.a": 1, "NC.b": 1},
+        {"NC.a": 2, "NC.b": 0},
+        {"NC.a": 2, "NC.b": 1},
+        {"NC.a": 3, "NC.b": 0},
+        {"NC.a": 3, "NC.b": 1},
+    ]
+
 
 def test_state_merge_innerspl_1():
     """one previous node and one inner splitter; full splitter provided"""
@@ -436,6 +529,10 @@ def test_state_merge_innerspl_1():
         {"NA.a": 5, "NB.b": 200},
     ]
 
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [{"NB.b": 0}, {"NB.b": 1}, {"NB.b": 2},
+                              {"NB.b": 3}, {"NB.b": 4}, {"NB.b": 5}]
+
 
 def test_state_merge_innerspl_1a():
     """one previous node and one inner splitter; only Right part provided - Left had to be added"""
@@ -466,6 +563,10 @@ def test_state_merge_innerspl_1a():
         {"NA.a": 5, "NB.b": 20},
         {"NA.a": 5, "NB.b": 200},
     ]
+
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [{"NB.b": 0}, {"NB.b": 1}, {"NB.b": 2},
+                              {"NB.b": 3}, {"NB.b": 4}, {"NB.b": 5}]
 
 
 def test_state_merge_innerspl_1b():
@@ -519,6 +620,22 @@ def test_state_merge_innerspl_3():
         {"NB.c": 17, "NA.a": 5, "NB.b": 200},
     ]
 
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [
+        {"NB.c": 0, "NB.b": 0},
+        {"NB.c": 0, "NB.b": 1},
+        {"NB.c": 0, "NB.b": 2},
+        {"NB.c": 0, "NB.b": 3},
+        {"NB.c": 0, "NB.b": 4},
+        {"NB.c": 0, "NB.b": 5},
+        {"NB.c": 1, "NB.b": 0},
+        {"NB.c": 1, "NB.b": 1},
+        {"NB.c": 1, "NB.b": 2},
+        {"NB.c": 1, "NB.b": 3},
+        {"NB.c": 1, "NB.b": 4},
+        {"NB.c": 1, "NB.b": 5},
+    ]
+
 
 def test_state_merge_innerspl_3a():
     """
@@ -566,6 +683,22 @@ def test_state_merge_innerspl_3a():
         {"NB.c": 17, "NA.a": 5, "NB.b": 20},
         {"NB.c": 13, "NA.a": 5, "NB.b": 200},
         {"NB.c": 17, "NA.a": 5, "NB.b": 200},
+    ]
+
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [
+        {"NB.c": 0, "NB.b": 0},
+        {"NB.c": 1, "NB.b": 0},
+        {"NB.c": 0, "NB.b": 1},
+        {"NB.c": 1, "NB.b": 1},
+        {"NB.c": 0, "NB.b": 2},
+        {"NB.c": 1, "NB.b": 2},
+        {"NB.c": 0, "NB.b": 3},
+        {"NB.c": 1, "NB.b": 3},
+        {"NB.c": 0, "NB.b": 4},
+        {"NB.c": 1, "NB.b": 4},
+        {"NB.c": 0, "NB.b": 5},
+        {"NB.c": 1, "NB.b": 5},
     ]
 
 
@@ -674,6 +807,23 @@ def test_state_merge_innerspl_4():
         {"NB.c": 17, "NA.a": 5, "NB.b": 200, "NC.d": 77},
     ]
 
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [
+        {"NC.a": 0, "NC.d": 0}, {"NC.a": 0, "NC.d": 1},
+        {"NC.a": 1, "NC.d": 0}, {"NC.a": 1, "NC.d": 1},
+        {"NC.a": 2, "NC.d": 0}, {"NC.a": 2, "NC.d": 1},
+        {"NC.a": 3, "NC.d": 0}, {"NC.a": 3, "NC.d": 1},
+        {"NC.a": 4, "NC.d": 0}, {"NC.a": 4, "NC.d": 1},
+        {"NC.a": 5, "NC.d": 0}, {"NC.a": 5, "NC.d": 1},
+        {"NC.a": 6, "NC.d": 0}, {"NC.a": 6, "NC.d": 1},
+        {"NC.a": 7, "NC.d": 0}, {"NC.a": 7, "NC.d": 1},
+        {"NC.a": 8, "NC.d": 0}, {"NC.a": 8, "NC.d": 1},
+        {"NC.a": 9, "NC.d": 0}, {"NC.a": 9, "NC.d": 1},
+        {"NC.a": 10, "NC.d": 0}, {"NC.a": 10, "NC.d": 1},
+        {"NC.a": 11, "NC.d": 0}, {"NC.a": 11, "NC.d": 1},
+    ]
+
+
 
 def test_state_merge_innerspl_5():
     """two previous nodes and one inner splitter; only Right part provided - Left had to be added"""
@@ -738,6 +888,26 @@ def test_state_merge_innerspl_5():
         {"NA.a": 5, "NB.b": 20, "NB.c": 17, "NC.d": 2},
     ]
 
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [
+        {"NC.e": 0, "NC.f": 0, "NC.d": 0},
+        {"NC.e": 0, "NC.f": 0, "NC.d": 1},
+        {"NC.e": 0, "NC.f": 1, "NC.d": 0},
+        {"NC.e": 0, "NC.f": 1, "NC.d": 1},
+        {"NC.e": 0, "NC.f": 2, "NC.d": 0},
+        {"NC.e": 0, "NC.f": 2, "NC.d": 1},
+        {"NC.e": 0, "NC.f": 3, "NC.d": 0},
+        {"NC.e": 0, "NC.f": 3, "NC.d": 1},
+        {"NC.e": 1, "NC.f": 0, "NC.d": 0},
+        {"NC.e": 1, "NC.f": 0, "NC.d": 1},
+        {"NC.e": 1, "NC.f": 1, "NC.d": 0},
+        {"NC.e": 1, "NC.f": 1, "NC.d": 1},
+        {"NC.e": 1, "NC.f": 2, "NC.d": 0},
+        {"NC.e": 1, "NC.f": 2, "NC.d": 1},
+        {"NC.e": 1, "NC.f": 3, "NC.d": 0},
+        {"NC.e": 1, "NC.f": 3, "NC.d": 1},
+    ]
+
 
 def test_state_combine_1():
     """the simplest splitter and combiner"""
@@ -753,6 +923,9 @@ def test_state_combine_1():
     st.prepare_states(inputs={"NA.a": [3, 5]})
     assert st.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
     assert st.states_val == [{"NA.a": 3}, {"NA.a": 5}]
+
+    st.prepare_inputs()
+    assert st.inputs_ind == [{"NA.a": 0}, {"NA.a": 1}]
 
 
 def test_state_combine_2():
@@ -788,6 +961,9 @@ def test_state_combine_2():
     assert st2.states_val == [{"NA.b": 10}, {"NA.b": 20}]
     assert st2.keys_final == ["NA.b"]
     assert st2.final_groups_mapping == {0: [0], 1: [1]}
+
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [{"NB.c": 0}, {"NB.c": 1}]
 
 
 def test_state_combine_3():
@@ -842,7 +1018,15 @@ def test_state_combine_3():
     assert st2.keys_final == ["NA.b", "NB.d"]
     assert st2.final_groups_mapping == {0: [0], 1: [1], 2: [2], 3: [3]}
 
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [
+               {"NB.c": 0, "NB.d": 0},
+               {"NB.c": 0, "NB.d": 1},
+               {"NB.c": 1, "NB.d": 0},
+               {"NB.c": 1, "NB.d": 1},
+           ]
 
+#zob
 def test_state_combine_4():
     """
     two connected states; outer splitter and combiner in the first one;
@@ -897,9 +1081,18 @@ def test_state_combine_4():
     assert st2.keys_final == ["NA.b"]
     assert st2.final_groups_mapping == {0: [0, 1], 1: [2, 3]}
 
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [
+               {"NB.c": 0, "NB.d": 0},
+               {"NB.c": 0, "NB.d": 1},
+               {"NB.c": 1, "NB.d": 0},
+               {"NB.c": 1, "NB.d": 1},
+           ]
 
+#zobaczyc jak dziala przy combiner="NA.a"
 def test_state_combine_innerspl_1():
-    """one previous node and one inner splitter; only Right part provided - Left had to be added"""
+    """one previous node and one inner splitter (and inner splitter combiner);
+    only Right part provided - Left had to be added"""
     st1 = State(name="NA", splitter="a")
     st2 = State(
         name="NB", splitter=["c", "b"], combiner=["b"], other_states={"NA": (st1, "b")}
@@ -907,7 +1100,7 @@ def test_state_combine_innerspl_1():
 
     assert st2.splitter == ["_NA", ["NB.c", "NB.b"]]
     assert st2.splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*"]
-    assert st2.splitter_final == ["_NA", "NB.c"]
+    assert st2.splitter_final == ["NA.a", "NB.c"]
     assert st2.splitter_rpn_final == ["NA.a", "NB.c", "*"]
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 1}
     assert st2.groups_stack_final == [[0], [1]]
@@ -948,17 +1141,32 @@ def test_state_combine_innerspl_1():
         {"NB.c": 17, "NA.a": 5, "NB.b": 200},
     ]
 
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [
+        {"NB.c": 0, "NB.b": 0},
+        {"NB.c": 0, "NB.b": 1},
+        {"NB.c": 0, "NB.b": 2},
+        {"NB.c": 0, "NB.b": 3},
+        {"NB.c": 0, "NB.b": 4},
+        {"NB.c": 0, "NB.b": 5},
+        {"NB.c": 1, "NB.b": 0},
+        {"NB.c": 1, "NB.b": 1},
+        {"NB.c": 1, "NB.b": 2},
+        {"NB.c": 1, "NB.b": 3},
+        {"NB.c": 1, "NB.b": 4},
+        {"NB.c": 1, "NB.b": 5},
+    ]
+
 
 def test_state_combine_innerspl_2():
     """one previous node and one inner splitter; only Right part provided - Left had to be added"""
     st1 = State(name="NA", splitter="a")
-    st2 = State(
-        name="NB", splitter=["c", "b"], combiner=["c"], other_states={"NA": (st1, "b")}
-    )
+    st2 = State(name="NB", splitter=["c", "b"], combiner=["c"],
+                other_states={"NA": (st1, "b")})
 
     assert st2.splitter == ["_NA", ["NB.c", "NB.b"]]
     assert st2.splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*"]
-    assert st2.splitter_final == ["_NA", "NB.b"]
+    assert st2.splitter_final == ["NA.a", "NB.b"]
     assert st2.splitter_rpn_final == ["NA.a", "NB.b", "*"]
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
     assert st2.groups_stack_final == [[0], [1]]
@@ -994,6 +1202,84 @@ def test_state_combine_innerspl_2():
         {"NB.c": 17, "NA.a": 5, "NB.b": 20},
         {"NB.c": 17, "NA.a": 5, "NB.b": 200},
     ]
+
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [
+        {"NB.c": 0, "NB.b": 0},
+        {"NB.c": 0, "NB.b": 1},
+        {"NB.c": 0, "NB.b": 2},
+        {"NB.c": 0, "NB.b": 3},
+        {"NB.c": 0, "NB.b": 4},
+        {"NB.c": 0, "NB.b": 5},
+        {"NB.c": 1, "NB.b": 0},
+        {"NB.c": 1, "NB.b": 1},
+        {"NB.c": 1, "NB.b": 2},
+        {"NB.c": 1, "NB.b": 3},
+        {"NB.c": 1, "NB.b": 4},
+        {"NB.c": 1, "NB.b": 5},
+    ]
+
+
+def test_state_combine_left_1():
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", other_states={"NA": (st1, "b")}, combiner="NA.a")
+    assert st2.splitter == "_NA"
+    assert st2.splitter_rpn == ["NA.a"]
+    assert st2.combiner == ["NA.a"]
+    assert st2.splitter_rpn_final == []
+
+    assert st2.group_for_inputs_final == {}
+    assert st2.groups_stack_final == []
+
+    st2.prepare_states(inputs={"NA.a": [3, 5]})
+    assert st2.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert st2.states_val == [{"NA.a": 3}, {"NA.a": 5}]
+
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [{"NB.b": 0}, {"NB.b": 1}]
+
+
+def test_state_combine_left_2():
+    st1 = State(name="NA", splitter=["a", "b"])
+    st2 = State(name="NB", other_states={"NA": (st1, "b")}, combiner="NA.a")
+    assert st2.splitter == "_NA"
+    assert st2.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert st2.combiner == ["NA.a"]
+    assert st2.splitter_rpn_final == ["NA.b"]
+
+    assert st2.group_for_inputs_final == {"NA.b": 0}
+    assert st2.groups_stack_final == [[0]]
+
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
+    assert st2.states_ind == [{"NA.a": 0, "NA.b": 0}, {"NA.a": 0, "NA.b":1},
+                              {"NA.a": 1, "NA.b": 0}, {"NA.a": 1, "NA.b":1}]
+    assert st2.states_val == [{"NA.a": 3, "NA.b": 10}, {"NA.a": 3, "NA.b": 20},
+                              {"NA.a": 5, "NA.b": 10}, {"NA.a": 5, "NA.b": 20}]
+
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [{"NB.b": 0}, {"NB.b": 1}, {"NB.b": 2}, {"NB.b": 3}]
+
+
+def test_state_combine_left_3():
+    st1 = State(name="NA", splitter=["a", "b"])
+    st2 = State(name="NB", other_states={"NA": (st1, "b")})
+    st3 = State(name="NC", other_states={"NB": (st2, "c")}, combiner="NA.a")
+    assert st3.splitter == "_NB"
+    assert st3.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert st3.combiner == ["NA.a"]
+    assert st3.splitter_rpn_final == ["NA.b"]
+
+    assert st3.group_for_inputs_final == {"NA.b": 0}
+    assert st3.groups_stack_final == [[0]]
+
+    st3.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
+    assert st3.states_ind == [{"NA.a": 0, "NA.b": 0}, {"NA.a": 0, "NA.b":1},
+                              {"NA.a": 1, "NA.b": 0}, {"NA.a": 1, "NA.b":1}]
+    assert st3.states_val == [{"NA.a": 3, "NA.b": 10}, {"NA.a": 3, "NA.b": 20},
+                              {"NA.a": 5, "NA.b": 10}, {"NA.a": 5, "NA.b": 20}]
+
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [{"NC.c": 0}, {"NC.c": 1}, {"NC.c": 2}, {"NC.c": 3}]
 
 
 # def test_state_merge_inner_1():
