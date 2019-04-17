@@ -223,8 +223,9 @@ def test_task_nostate_1_cachedir(plugin, tmpdir):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_task_nostate_1_cachedir_relativepath(plugin):
+def test_task_nostate_1_cachedir_relativepath(tmpdir, plugin):
     """Node with provided cache_dir as relative path"""
+    cwd = tmpdir.chdir()
     cache_dir = "test_task_nostate"
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     assert np.allclose(nn.inputs.a, [3])
