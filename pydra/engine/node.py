@@ -164,13 +164,6 @@ class NodeBase:
     def checksum(self):
         return create_checksum(self.__class__.__name__, self.inputs)
 
-    # def ready2run(self, index=None):
-    #     # flag that says if the node/wf is ready to run (has all input)
-    #     pdb.set_trace()
-    #     for node, _, _ in self.needed_outputs:
-    #         if not node.is_finished(index=index):
-    #             return False
-    #     return True
 
     def is_finished(self, index=None):
         # TODO: check local procs

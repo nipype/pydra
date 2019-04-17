@@ -229,47 +229,6 @@ class State:
 
     def prepare_states_ind(self):
         """using aux._splits to calculate a list of dictionaries with state indices"""
-        # if there are Left and Right parts, evaluate keys/indices
-        # from Left and RIght separately and merge them
-        # if self._right_splitter and self._left_splitter:
-        #     val_r, key_r, _, keys_fromLeftSpl = aux._splits(
-        #         self._right_splitter_rpn, self.inputs, inner_inputs=self.inner_inputs
-        #     )
-        #     val_r = list(val_r)
-        #     updated_left_rpn = deepcopy(self._left_splitter_rpn_nost)
-        #     # removing the key from left part that were related to the inner splitter
-        #     # and were already included in key_r
-        #     updated_left_rpn = aux.remove_inp_from_splitter_rpn(
-        #         updated_left_rpn, keys_fromLeftSpl
-        #     )
-        #
-        #     if updated_left_rpn:
-        #         #pdb.set_trace()
-        #         val_l, key_l, _, _ = aux._splits(
-        #             updated_left_rpn, self.inputs, inner_inputs=self.inner_inputs
-        #         )
-        #         val_l = list(val_l)
-        #     else:
-        #         val_l = []
-        #         key_l = []
-        #
-        #     if val_l and val_r:
-        #         values = list(aux.op["*"](val_l, val_r))
-        #     elif val_l:
-        #         values = val_l
-        #     elif val_r:
-        #         values = val_r
-        #     keys_out = key_l + key_r
-        #     self.val_l = val_l
-        #     self.key_l = key_l
-        # else:
-        #     values_out, keys_out, _, _ = aux._splits(
-        #         self.splitter_rpn, self.inputs, inner_inputs=self.inner_inputs
-        #     )
-        #     values = list(values_out)
-        #     # dj: not sure if this shouldn't be already in the init
-        #     self.key_l = []
-        #     self.val_l = []
 
         # removing elements that are connected to inner splitter
         # (they will be taken into account in aux._splits anyway)
@@ -302,12 +261,7 @@ class State:
 
     def prepare_states_combined_ind(self):
         """preparing the final list of dictionaries with indices after combiner"""
-        # assuming for now that the combiner is only in the right part TODO
-        # if self._right_splitter and self._left_splitter:
-        #     combined_right_rpn = aux.remove_inp_from_splitter_rpn(
-        #         deepcopy(self._right_splitter_rpn), self.right_combiner_all + self.left_combiner_all
-        #     )
-        # else:
+
         combined_rpn = aux.remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn), self.right_combiner_all + self.left_combiner_all
         )
@@ -322,10 +276,6 @@ class State:
             values = []
             key_r = []
 
-        # if self.val_l and val_r:
-        #     values = list(aux.op["*"](self.val_l, val_r))
-        # elif self.val_l:
-        #     values = self.val_l
         keys_out = key_r
         if values:
             # NOW TODO: move to init?
