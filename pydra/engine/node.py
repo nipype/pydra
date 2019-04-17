@@ -424,18 +424,11 @@ class NodeBase:
         if ind is not None:
             # TODO: doesnt work properly for more cmplicated wf
             state_dict = self.state.states_val[ind]
-            state_ind = self.state.states_ind[ind]
+            input_ind = self.state.inputs_ind[ind]
             inputs_dict = {}
-
             for inp in set(self.input_names):
-                if f'{self.name}.{inp}' in state_dict.keys():
-                    #"." not in inp or inp.split(".")[0] != self.name:
-                    inputs_dict[inp] = getattr(self.inputs, inp)[state_ind[f'{self.name}.{inp}']]
-                else:
-                    inputs_dict[inp] = getattr(self.inputs, inp)[ind]
-                #inputs_dict["{}.{}".format(self.name, inp)] = state_dict["{}.{}".format(self.name, inp)]
+                inputs_dict[inp] = getattr(self.inputs, inp)[input_ind[f'{self.name}.{inp}']]
             return state_dict, inputs_dict
-
         else:
             inputs_dict = {
                 inp : getattr(self.inputs, inp)
@@ -655,12 +648,13 @@ class Workflow(NodeBase):
         self.graph.add_nodes_from([task])
         self.name2obj[task.name] = task
         self._last_added = task
+        other_states = {}
         #TODO: should this add per every field
         for field in dc.fields(task.inputs):
             val = getattr(task.inputs, field.name)
             if isinstance(val, LazyField):
                 if val.name in self.node_names and getattr(self, val.name).state:
-                    other_states = {val.name: (getattr(self, val.name).state, field.name)}
+                    other_states[val.name] = (getattr(self, val.name).state, field.name)
                     if hasattr(task, "fut_combiner"):
                         task.state = state.State(task.name, other_states=other_states,
                                                  combiner=task.fut_combiner)
@@ -684,6 +678,8 @@ class Workflow(NodeBase):
             #TODO: check where prepare_states should be run
             if task.state and not hasattr(task.state, "states_ind"):
                 task.state.prepare_states(inputs=task.inputs)
+            if task.state and not hasattr(task.state, "inputs_ind"):
+                task.state.prepare_inputs()
             if self.plugin is None:
                 task.run()
             else:

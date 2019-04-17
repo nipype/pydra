@@ -5,7 +5,7 @@ from ..task import to_task
 from ..node import Workflow
 
 
-Plugins = ["serial"]
+Plugins = ["serial", "cf"]
 
 # @python_app
 # def double(x):
@@ -463,9 +463,10 @@ def test_13a(plugin):
     """Test workflow with 2 nodes, splitter on a node level"""
     wf = Workflow(name="test13a", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).
-           split(["x", "y"], x=[1, 2], y=[11, 12]))
+           split(["x", "y"]))
     wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("mult.x"))
-
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
@@ -510,7 +511,7 @@ def test_14(plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_14a(plugin):
     """Test workflow with 2 nodes, splitter on a node level"""
-    wf = Workflow(name="test13a", input_spec=["x", "y"])
+    wf = Workflow(name="test14a", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
     wf.add(add2(name="add2y", x=wf.lzin.y).split("x"))
     wf.add(multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out))
@@ -529,8 +530,7 @@ def test_14a(plugin):
     results = wf.result()
 
     assert len(results.output.out) == 6
-    # assert results.output.out[0] == [13, 24]
-    # assert results.output.out[1] == [14, 26]
+    assert results.output.out == [39, 42, 52, 56, 65, 70]
 
 
 # @pytest.mark.parametrize("plugin", Plugins)

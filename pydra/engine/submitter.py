@@ -39,6 +39,7 @@ class Submitter(object):
             raise Exception("runnable has to be a Node or Workflow")
         if runnable.state:
             runnable.state.prepare_states(runnable.inputs)
+            runnable.state.prepare_inputs()
         futures = []
         if runnable.state:
             for ii, ind in enumerate(runnable.state.states_val):
