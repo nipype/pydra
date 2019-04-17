@@ -271,11 +271,21 @@ class State:
         #     self.key_l = []
         #     self.val_l = []
 
-        values_out_pr, keys_out_pr, _, _ = aux._splits(
-            self.splitter_rpn, self.inputs, inner_inputs=self.inner_inputs
+        # removing elements that are connected to inner splitter
+        # (they will be taken into account in aux._splits anyway)
+        elements_to_remove = []
+        for name, (st, inp) in self.other_states.items():
+            if ("{}.{}".format(self.name, inp) in self.splitter_rpn
+                and "_{}".format(name) in self.splitter_rpn_nost):
+                elements_to_remove.append("_{}".format(name))
+
+        partial_rpn = aux.remove_inp_from_splitter_rpn(deepcopy(self.splitter_rpn_nost),
+                                                       elements_to_remove)
+
+        values_out_pr, keys_out_pr, _, kL = aux._splits(
+            partial_rpn, self.inputs, inner_inputs=self.inner_inputs
         )
         values_pr = list(values_out_pr)
-        #states_ind_pr = list(aux.iter_splits(values_pr, keys_out_pr))
 
         self.ind_l = values_pr
         self.keys = keys_out_pr
@@ -363,24 +373,39 @@ class State:
                 inputs_ind = []
 
             # merging elements that comes from previous nodes outputs
-            keys_inp_L = []
-            inputs_ind_L = []
+            # states that are connected to inner splitters are treated differently
+            # (already included in inputs_ind)
+            keys_inp_prev = []
+            inputs_ind_prev = []
+            connected_to_inner = []
             for name, (st, inp) in self.other_states.items():
                 if "_{}".format(name) in self.splitter_rpn_nost:
-                    st_ind = range(len(st.states_ind_final))
-                    if inputs_ind_L:
-                        inputs_ind_L = aux.op["*"](inputs_ind_L, st_ind)
-                    else:
-                        inputs_ind_L = aux.op["*"](st_ind)
-                    keys_inp_L += ["{}.{}".format(self.name, inp)]
-            keys_inp = keys_inp_L + keys_inp
-            if inputs_ind:
-                inputs_ind = aux.op["*"](inputs_ind_L, inputs_ind)
+                    if "{}.{}".format(self.name, inp) in self.splitter_rpn: #inner splitter
+                        connected_to_inner += [el for el in st.splitter_rpn_final
+                                               if el not in [".", "*"]]
+                    else: # previous states that are not connected to inner splitter
+                        st_ind = range(len(st.states_ind_final))
+                        if inputs_ind_prev:
+                            inputs_ind_prev = aux.op["*"](inputs_ind_prev, st_ind)
+                        else:
+                            inputs_ind_prev = aux.op["*"](st_ind)
+                        keys_inp_prev += ["{}.{}".format(self.name, inp)]
+            keys_inp = keys_inp_prev + keys_inp
+
+            if inputs_ind and inputs_ind_prev:
+                inputs_ind = aux.op["*"](inputs_ind_prev, inputs_ind)
+            elif inputs_ind:
+                inputs_ind = aux.op["*"](inputs_ind)
+            elif inputs_ind_prev:
+                inputs_ind = aux.op["*"](inputs_ind_prev)
             else:
-                inputs_ind = aux.op["*"](inputs_ind_L)
+                inputs_ind = []
+
             # iter_splits using inputs from current state/node
             self.inputs_ind = list(aux.iter_splits(inputs_ind, keys_inp))
-
+            # removing elements that are connected to inner splitter
+            for el in connected_to_inner:
+                [dict.pop(el) for dict in self.inputs_ind]
 
 '''    
     def cross_combine(self, other):
