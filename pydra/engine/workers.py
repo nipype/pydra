@@ -66,8 +66,9 @@ class SerialWorker(Worker):
 
 
 class ConcurrentFuturesWorker(Worker):
-    def __init__(self, nr_proc=4):
-        self.nr_proc = nr_proc
+    def __init__(self, nr_proc=None):
+        self.nr_proc = nr_proc or mp.cpu_count()
+        # added cpu_count to verify, remove once confident and let PPE handle
         self.pool = cf.ProcessPoolExecutor(self.nr_proc)
         logger.debug("Initialize ConcurrentFuture")
 

@@ -125,6 +125,10 @@ class NodeBase:
         # dictionary of results from tasks
         self.results_dict = {}
         self.plugin = None
+        self._ancestors = set()
+
+    def __repr__(self):
+        return self.name
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -235,6 +239,12 @@ class NodeBase:
         else:
             self._cache_dir = mkdtemp()
             self._cache_dir = Path(self._cache_dir)
+
+    @property
+    def is_runnable(self):
+        if not self._ancestors:
+            return True
+        return all([c.is_finished for c in self._ancestors])
 
     @property
     def cache_locations(self):
@@ -422,6 +432,9 @@ class NodeBase:
             inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
             return None, inputs_dict
 
+    def _add_ancestor(self, task):
+        self._ancestors.add(task)
+
     def _state_dict_all_comb(self, from_node, state_dict):
         """collecting state dictionary for all elements that were combined together"""
         elements_per_axes = {}
@@ -597,6 +610,7 @@ class Workflow(NodeBase):
         )
 
         self.graph = nx.DiGraph()
+        #self.graph = {}
 
         self.name2obj = {}
 
@@ -641,6 +655,8 @@ class Workflow(NodeBase):
                     else:
                         task.state = state.State(task.name, other_states=other_states)
                 if val.name != self.name:
+                    logger.debug("Connecting %s to %s", val.name, task.name)
+                    task._add_ancestor(val.name)
                     self.graph.add_edge(
                         getattr(self, val.name),
                         task,
@@ -648,6 +664,7 @@ class Workflow(NodeBase):
                         to_field=field.name,
                     )
         self.node_names.append(task.name)
+        logger.debug("Added %s", task)
         return self
 
     def _run_task(self):
@@ -661,14 +678,17 @@ class Workflow(NodeBase):
             if task.state and not hasattr(task.state, "inputs_ind"):
                 task.state.prepare_inputs()
             if self.plugin is None:
+                logger.debug("Running %s", task)
                 task.run()
             else:
-                from .submitter import Submitter
 
+                from .submitter import Submitter
+                logger.debug("Running %s with %s", task, self.plugin)
                 with Submitter(self.plugin) as sub:
                     sub.run(task)
                 while not task.done:
                     sleep(1)
+            logger.debug("Completed %s", task)
 
     def set_output(self, connections):
         self._connections = connections

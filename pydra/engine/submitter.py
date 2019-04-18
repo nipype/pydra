@@ -1,12 +1,12 @@
-import os, time, pdb
+import time
 from copy import deepcopy
 import dataclasses as dc
+import asyncio
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
 from .node import NodeBase, is_workflow
 
 import logging
-
 logger = logging.getLogger("pydra.workflow")
 
 
@@ -37,30 +37,33 @@ class Submitter(object):
         """main running method, checks if submitter id for Node or Workflow"""
         if not isinstance(runnable, NodeBase):  # a node/workflow
             raise Exception("runnable has to be a Node or Workflow")
-        if runnable.state:
-            runnable.state.prepare_states(runnable.inputs)
-            runnable.state.prepare_inputs()
+        runnable.plugin = self.plugin  # assign in case of downstream execution
         futures = []
-        if runnable.state:
-            for ii, ind in enumerate(runnable.state.states_val):
-                # creating a taskFunction for every element of state
-                # this job will run interface (and will not have state)
-                job = runnable.to_job(ii)
-                checksum = job.checksum
-                # run method has to have checksum to check the existing results
-                job.results_dict[None] = (None, checksum)
-                if cache_locations:
-                    job.cache_locations = cache_locations
-                res = self.worker.run_el(job)
-                futures.append([ii, res, checksum])
-        else:
-            job = runnable.to_job(None)
-            checksum = job.checksum
-            job.results_dict[None] = (None, checksum)
-            if cache_locations:
-                job.cache_locations = cache_locations
-            res = self.worker.run_el(job)
-            futures.append([None, res, checksum])
+        # MG - ignoring states for now
+        # if runnable.state:
+        #     runnable.state.prepare_states(runnable.inputs)
+        #     runnable.state.prepare_inputs()
+        #     for ii, ind in enumerate(runnable.state.states_val):
+        #         # creating a taskFunction for every element of state
+        #         # this job will run interface (and will not have state)
+        #         job = runnable.to_job(ii)
+        #         checksum = job.checksum
+        #         # run method has to have checksum to check the existing results
+        #         job.results_dict[None] = (None, checksum)
+        #         if cache_locations:
+        #             job.cache_locations = cache_locations
+        #         res = self.worker.run_el(job)
+        #         futures.append([ii, res, checksum])
+        # else:
+
+        job = runnable.to_job(None)
+        checksum = job.checksum
+        job.results_dict[None] = (None, checksum)
+        if cache_locations:
+            job.cache_locations = cache_locations
+        res = self.worker.run_el(job)
+        futures.append([None, res, checksum])
+
         for ind, task_future, checksum in futures:
             runnable.results_dict[ind] = (task_future, checksum)
 
