@@ -6,21 +6,13 @@ python:
   - 3.6
   - 3.7
 
-env:
-  - PYDRA_TEST_DATA=/tmp/pydra_test_data
 
 before_install:
   - travis_retry bash <(wget -q -O- http://neuro.debian.net/_files/neurodebian-travis.sh);
-  - travis_retry sudo apt-get update
-  - travis_retry sudo apt-get install fsl git-annex-standalone datalad
-  - source /etc/fsl/fsl.sh
   - travis_retry pip install --upgrade pip setuptools wheel
 
 install:
   - pip install ".[all]"
-
-before_script:
-  - bash tools/get_test_data.sh
 
 script:
   - py.test -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
