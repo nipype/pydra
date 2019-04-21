@@ -350,6 +350,66 @@ def test_wf_ndst_6(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_wf_st_7(plugin):
+    """ workflow with three tasks, third one connected to two previous tasks,
+        splitter and partial combiner on the workflow level
+    """
+    wf = Workflow(name="wf_st_6", input_spec=["x", "y"])
+    wf.add(add2(name="add2x", x=wf.lzin.x))
+    wf.add(add2(name="add2y", x=wf.lzin.y))
+    wf.add(multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out))
+    wf.split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine("x")
+
+    wf.set_output([("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+
+    assert len(results) == 2
+    assert results[0][0].output.out == 39
+    assert results[0][1].output.out == 52
+    assert results[0][2].output.out == 65
+    assert results[1][0].output.out == 42
+    assert results[1][1].output.out == 56
+    assert results[1][2].output.out == 70
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndst_7(plugin):
+    """ workflow with three tasks, third one connected to two previous tasks,
+        splitter and partial combiner on the tasks levels
+    """
+    wf = Workflow(name="wf_ndst_6", input_spec=["x", "y"])
+    wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
+    wf.add(add2(name="add2y", x=wf.lzin.y).split("x"))
+    wf.add(multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out).
+           combine("add2x.x"))
+    wf.inputs.x = [1, 2, 3]
+    wf.inputs.y = [11, 12]
+
+    wf.set_output([("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+
+    assert len(results.output.out) == 2
+    assert results.output.out[0] == [39, 52, 65]
+    assert results.output.out[1] == [42, 56, 70]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_1(plugin):
     """ workflow as a node
         workflow-node with one task and no splitter
