@@ -796,7 +796,6 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
                     oldgroup = oldgroups["L"]
                     # dj: changing axes for Right part of the scalar op.
                     for k, v in groups.items():
-                        pdb.set_trace()  # check if I need it (and possibly remove)
                         if v in ensure_list(oldgroups["R"]):
                             groups[k] = ensure_list(oldgroups["L"])[
                                 ensure_list(oldgroups["R"]).index(v)
@@ -893,10 +892,6 @@ def _single_op_splits(
 def _single_op_splits_groups(
     op_single, combiner, inner_inputs, previous_states_ind, groups
 ):
-    # TODO: in this situation the state should be simply the same
-    if op_single.startswith("_"):
-        pdb.set_trace()  # TODO: do i use it??? return is wrong
-        return previous_states_ind[op_single], None, None, []
     if op_single in inner_inputs:
         # TODO: have to be changed if differ length
         # TODO: i think I don't want to add here from left part
@@ -1056,55 +1051,3 @@ def inputs_types_to_dict(name, inputs):
     for field in input_names:
         inputs_dict["{}.{}".format(name, field)] = getattr(inputs, field)
     return inputs_dict
-
-
-# TODO: I think I will not need it
-# def removing_inputs_rpn(rpn, keys_remove):
-#     #TODO: similar to remove_inp_from_splitter_rpn, for now using removing_inputs_rpn
-#     # TODO: removing_inputs_rpn doesn't raise exceptions for scalar
-#     """changes splitter rpn so it doesn't include specific fields"""
-#     if rpn == []:
-#         return []
-#     elif len(rpn) == 1:
-#         if rpn[0] in keys_remove:
-#             return []
-#         else:
-#             return rpn
-#
-#     ind_to_remove =[]
-#     for key in keys_remove:
-#         if ind_to_remove:
-#             for i in range(2):
-#                 rpn.pop(ind_to_remove.pop())
-#         i = 0
-#         while i < len(rpn):
-#             if rpn[i] == key:
-#                 if rpn[i+1] == "." or rpn[i+2] == ".":
-#                     raise Exception("can't remove field that is in a scalar splitter")
-#                 elif rpn[i+1] == "*":
-#                     ind_to_remove += [i, i+1]
-#                     break
-#                 elif rpn[i+2] == "*":
-#                     ind_to_remove += [i, i+2]
-#                     break
-#                 else:
-#                     nr_str = 2
-#                     j = i + 3
-#                     while j < len(rpn):
-#                         if rpn[j] in ["*", "."]:
-#                             if nr_str > 0:
-#                                 nr_str -= 2
-#                                 j += 1
-#                             else:
-#                                 if rpn[j] == ".":
-#                                     raise Exception("can't remove field that is in a scalar splitter")
-#                                 elif rpn[j] == "*":
-#                                     ind_to_remove += [i, j]
-#                                     break
-#                         else:
-#                             nr_str += 1
-#                             j += 1
-#                     break
-#
-#             i += 1
-#     return rpn
