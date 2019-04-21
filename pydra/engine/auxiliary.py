@@ -321,6 +321,22 @@ def converter_groups_to_input(group_for_inputs):
     return input_for_axis, ngr
 
 
+# TODO: currently not used
+def groups_stack_input(group_for_inputs, groups_stack):
+    """ function that helps testing groups_stack_final
+        returns groups_stack_final with input names
+    """
+    inputs_for_groups = converter_groups_to_input(group_for_inputs)[0]
+    groups_stack_input = []
+    for stack_el in groups_stack:
+        stack_el_inp = []
+        for gr in stack_el:
+            stack_el_inp += inputs_for_groups[gr]
+        groups_stack_input.append(stack_el_inp)
+    return groups_stack_input
+
+
+# TODO: not used currently, think if I need it
 def converting_axis2input(axis_for_input, ndim, state_inputs=None):
     """ Having axes for all the input fields, the function returns fields for each axis. """
     input_for_axis = []
@@ -343,7 +359,7 @@ def converting_axis2input(axis_for_input, ndim, state_inputs=None):
 
 # function used in State if combiner
 
-
+# TODO: not used currently, think if I need it
 def matching_input_from_splitter(splitter_rpn):
     """similar to splitting_axis, but without state_input,
         finding inputs that are for the same axes.
@@ -568,10 +584,6 @@ def iter_splits(iterable, keys):
         yield dict(zip(keys, list(flatten(iter, max_depth=1000))))
 
 
-def next_key(new_key):
-    return "_" + chr(ord(new_key[1:]) + 1) if new_key else "_a"
-
-
 def input_shape(in1):
     # TODO: have to be changed for inner splitter (sometimes different length)
     shape = [len(in1)]
@@ -717,7 +729,6 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     """
     if not splitter_rpn:
         return [], {}, [], []
-
     stack = []
     keys = []
     groups = {}
@@ -915,12 +926,17 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
     combiner_all = list(set(combiner_all))
     combiner_all.sort()
 
+    #groups that were removed (so not trying to remove twice)
+    grs_removed = []
     groups_stack_final = deepcopy(groups_stack)
     for comb in combiner:
         grs = groups[comb]
         for gr in ensure_list(grs):
             if gr in groups_stack_final[-1]:
+                grs_removed.append(gr)
                 groups_stack_final[-1].remove(gr)
+            elif gr in grs_removed:
+                pass
             else:
                 raise Exception(
                     "input {} not ready to combine, you have to combine {} "
@@ -938,35 +954,14 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
     return keys_final, groups_final, groups_stack_final, combiner_all
 
 
-# looks like i'm not using anymore
-# def splits(splitter, inputs, inner_inputs=None):
-#     values, keys, _, _ = _splits(splitter, inputs, inner_inputs=inner_inputs)
-#     # dj: i'm not sure why you need iter_splits, _splits gives groups with all axes per input
-#     return iter_splits(values, keys)
-
-
 def map_splits(split_iter, inputs):
     for split in split_iter:
         yield {k: list(flatten(ensure_list(inputs[k])))[v] for k, v in split.items()}
 
 
-"""
-def combine(combiner, groups, finalgroup, shapes, outputs):
-    combine_keys = set([groups[val] for val in splitter2rpn(combiner)
-                        if val not in ['*', '.']])
-    if combine_keys != set(ensure_list(finalgroup)):
-        raise ValueError('Combiner has keys not in final group')
-    groups
-    finalgroup
-    splits
-    outputs
-"""
-
-
 """ Functions for merging and completing splitters in states.
  Used only in State, could be moved to that class
 """
-
 
 def connect_splitters(splitter, other_states):
     if splitter:
