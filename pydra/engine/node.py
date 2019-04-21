@@ -528,8 +528,10 @@ class Workflow(NodeBase):
         self.node_names = []
 
     def __getattr__(self, name):
-        if name == "lzin":  # lazy output
+        if name == "lzin":
             return LazyField(self, "input")
+        if name == "lzout":
+            return super().__getattr__(name)
         if name in self.name2obj:
             return self.name2obj[name]
         return self.__getattribute__(name)
