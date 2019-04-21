@@ -347,3 +347,30 @@ def test_wf_ndst_6(plugin):
 
     assert len(results.output.out) == 6
     assert results.output.out == [39, 42, 52, 56, 65, 70]
+
+
+#@pytest.mark.parametrize("plugin", Plugins)
+@pytest.mark.xfail(reason="WIP")
+def test_wfasnd_1(plugin="serial"):
+    """ workflow as a node
+        workflow-node with one task and no splitter
+    """
+    wfnd = Workflow(name="wfnd", input_spec=["x"])
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wfnd.inputs.x = 2
+
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(wfnd)
+    # TODO: is this the syntax
+    wf.set_output([("out", wf.wfnd.add2.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # # checking the results
+    # while not wf.done:
+    #     sleep(1)
+    # results = wf.result()
+    # assert 4 == results.output.out
