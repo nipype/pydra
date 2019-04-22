@@ -8,13 +8,16 @@ from ..core import Workflow
 
 Plugins = ["serial", "cf"]
 
+
 @to_task
 def double(x):
     return x * 2
 
+
 @to_task
 def multiply(x, y):
     return x * y
+
 
 @to_task
 def add2(x):
@@ -104,7 +107,6 @@ def test_wf_ndst_1(plugin):
     assert results.output.out == [3, 4]
 
 
-
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_2(plugin):
     """ workflow with one task, splitters and combiner for workflow"""
@@ -149,6 +151,7 @@ def test_wf_ndst_2(plugin):
 
 
 # workflows with structures A -> B
+
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_3(plugin):
@@ -297,6 +300,7 @@ def test_wf_ndst_5(plugin):
 
 # workflows with structures A -> C, B -> C
 
+
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_6(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
@@ -391,8 +395,11 @@ def test_wf_ndst_7(plugin):
     wf = Workflow(name="wf_ndst_7", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
     wf.add(add2(name="add2y", x=wf.lzin.y).split("x"))
-    wf.add(multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out).
-           combine("add2x.x"))
+    wf.add(
+        multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out).combine(
+            "add2x.x"
+        )
+    )
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = [11, 12]
 
@@ -451,8 +458,11 @@ def test_wf_ndst_8(plugin):
     wf = Workflow(name="wf_ndst_8", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
     wf.add(add2(name="add2y", x=wf.lzin.y).split("x"))
-    wf.add(multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out).
-           combine("add2y.x"))
+    wf.add(
+        multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out).combine(
+            "add2y.x"
+        )
+    )
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = [11, 12]
 
@@ -512,8 +522,11 @@ def test_wf_ndst_9(plugin):
     wf = Workflow(name="wf_ndst_9", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
     wf.add(add2(name="add2y", x=wf.lzin.y).split("x"))
-    wf.add(multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out).
-           combine(["add2x.x", "add2y.x"]))
+    wf.add(
+        multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out).combine(
+            ["add2x.x", "add2y.x"]
+        )
+    )
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = [11, 12]
 
@@ -533,6 +546,7 @@ def test_wf_ndst_9(plugin):
 
 
 # workflows with structures wf(A)
+
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_1(plugin):
@@ -670,6 +684,7 @@ def test_wfasnd_wfst_1(plugin):
 
 # workflows with structures wf(A) -> B
 
+
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_st_2(plugin):
     """ workflow as a node,
@@ -730,6 +745,7 @@ def test_wfasnd_wfst_2(plugin):
 
 
 # workflows with structures A -> wf(B)
+
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_ndst_3(plugin):

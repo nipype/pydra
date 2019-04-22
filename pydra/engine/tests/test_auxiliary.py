@@ -37,8 +37,12 @@ class other_states_to_tests:
         ((["a", "b"], "c"), ["a", "b", "c"], {"a": 0, "b": 1, "c": [0, 1]}, [[0, 1]]),
         ([("a", "b"), "c"], ["a", "b", "c"], {"a": 0, "b": 0, "c": 1}, [[0, 1]]),
         ([["a", "b"], "c"], ["a", "b", "c"], {"a": 0, "b": 1, "c": 2}, [[0, 1, 2]]),
-        ((["a", "b"], ["c", "d"]), ["a", "b", "c", "d"],
-         {"a": 0, "b": 1, "c": 0, "d": 1}, [[0, 1]]),
+        (
+            (["a", "b"], ["c", "d"]),
+            ["a", "b", "c", "d"],
+            {"a": 0, "b": 1, "c": 0, "d": 1},
+            [[0, 1]],
+        ),
     ],
 )
 def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
@@ -394,8 +398,8 @@ def test_splits_1e(splitter, values, keys, splits):
                 {"NA.a": "a2", "NB.b": "b21"},
                 {"NA.a": "a2", "NB.b": "b22"},
             ],
-        ),
-     ],
+        )
+    ],
 )
 # TODO: adding more?
 def test_splits_2(splitter_rpn, inner_inputs, values, keys, splits):
@@ -515,8 +519,7 @@ def test_splitter2rpn_wf_splitter_1(splitter, other_states, rpn):
 )
 def test_splitter2rpn_wf_splitter_3(splitter, other_states, rpn):
     assert (
-        aux.splitter2rpn(splitter, other_states=other_states, state_fields=False)
-        == rpn
+        aux.splitter2rpn(splitter, other_states=other_states, state_fields=False) == rpn
     )
 
 
@@ -840,7 +843,7 @@ def test_connect_splitters_exception(splitter, other_states):
         ({"a": 0, "b": 1}, [[0, 1]], [["a", "b"]]),
         ({"a": 0, "b": 1, "c": [0, 1]}, [[0, 1]], [["a", "b", "c"]]),
         ({"a": 0, "b": 1}, [[0], [1]], [["a"], ["b"]]),
-    ]
+    ],
 )
 def test_groups_stack_input(group_for_inputs, groups_stack, groups_stack_input_exp):
     groups_stack_input = aux.groups_stack_input(group_for_inputs, groups_stack)

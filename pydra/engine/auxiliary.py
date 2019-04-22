@@ -921,7 +921,7 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
     combiner_all = list(set(combiner_all))
     combiner_all.sort()
 
-    #groups that were removed (so not trying to remove twice)
+    # groups that were removed (so not trying to remove twice)
     grs_removed = []
     groups_stack_final = deepcopy(groups_stack)
     for comb in combiner:
@@ -957,6 +957,7 @@ def map_splits(split_iter, inputs):
 """ Functions for merging and completing splitters in states.
  Used only in State, could be moved to that class
 """
+
 
 def connect_splitters(splitter, other_states):
     if splitter:
