@@ -40,7 +40,7 @@ logger = logging.getLogger("pydra")
 develop = True
 
 
-class NodeBase:
+class TaskBase:
     _api_version: str = "0.0.1"  # Should generally not be touched by subclasses
     _version: str  # Version of tool being wrapped
     _task_version: ty.Optional[
@@ -475,7 +475,7 @@ class NodeBase:
             return result
 
 
-class Workflow(NodeBase):
+class Workflow(TaskBase):
     def __init__(
         self,
         name,

@@ -3,7 +3,7 @@ from copy import deepcopy
 import dataclasses as dc
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
-from .core import NodeBase, is_workflow
+from .core import TaskBase, is_workflow
 
 import logging
 
@@ -35,7 +35,7 @@ class Submitter(object):
 
     def run(self, runnable, cache_locations=None):
         """main running method, checks if submitter id for Node or Workflow"""
-        if not isinstance(runnable, NodeBase):  # a node/workflow
+        if not isinstance(runnable, TaskBase):  # a node/workflow
             raise Exception("runnable has to be a Node or Workflow")
         if runnable.state:
             runnable.state.prepare_states(runnable.inputs)

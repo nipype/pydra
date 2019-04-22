@@ -2,7 +2,7 @@ import os, shutil
 import numpy as np
 import pytest, pdb
 
-from ..core import NodeBase
+from ..core import TaskBase
 from ..submitter import Submitter
 from ..task import to_task
 
@@ -56,7 +56,7 @@ def fun_div(a, b):
 def test_task_init_1():
     """ task with mandatory arguments only"""
     nn = fun_addtwo()
-    assert isinstance(nn, NodeBase)
+    assert isinstance(nn, TaskBase)
     assert nn.name == "fun_addtwo"
     assert hasattr(nn, "__call__")
 
@@ -135,7 +135,7 @@ def test_task_init_3a(splitter, state_splitter, state_rpn, states_ind, states_va
 
 
 def test_task_init_4():
-    """Node with interface and inputs. splitter set using split method"""
+    """ task with interface and inputs. splitter set using split method"""
     nn = fun_addtwo(name="NA", a=[3, 5])
     nn.split(splitter="a")
     assert np.allclose(nn.inputs.a, [3, 5])
@@ -229,7 +229,7 @@ def test_task_nostate_cachedir(plugin, tmpdir):
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_cachedir_relativepath(tmpdir, plugin):
-    """Node with provided cache_dir as relative path"""
+    """ task with provided cache_dir as relative path"""
     cwd = tmpdir.chdir()
     cache_dir = "test_task_nostate"
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
