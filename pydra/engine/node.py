@@ -155,10 +155,11 @@ class NodeBase:
     def version(self):
         return self._version
 
-    def save_set(self, name, inputs, force=False):
-        if name in self._input_sets and not force:
-            raise KeyError("Key {} already saved. Use force=True to override.")
-        self._input_sets[name] = inputs
+    # TODO: not sure what was the idea for the method (not used)
+    # def save_set(self, name, inputs, force=False):
+    #     if name in self._input_sets and not force:
+    #         raise KeyError("Key {} already saved. Use force=True to override.")
+    #     self._input_sets[name] = inputs
 
     @property
     def checksum(self):
@@ -166,16 +167,6 @@ class NodeBase:
 
 
     def set_state(self, splitter, combiner=None):
-        incoming_states = []
-        if splitter is None:
-            splitter = [state.name for state in incoming_states] or None
-        elif len(incoming_states):
-            rpn = aux.splitter2rpn(splitter)
-            # TODO: check for keys instead of just names
-            left_out = [
-                state.name for state in incoming_states if state.name not in rpn
-            ]
-
         if splitter is not None:
             self.state = state.State(
                 name=self.name, splitter=splitter, combiner=combiner
@@ -395,13 +386,14 @@ class NodeBase:
         self.set_state(splitter=self.state.splitter, combiner=self.combiner)
         return self
 
-    def checking_input_el(self, ind):
-        """checking if all inputs are available (for specific state element)"""
-        try:
-            self.get_input_el(ind)
-            return True
-        except:  # TODO specify
-            return False
+    # TODO: was used in submitter (if not needed should be removed)
+    # def checking_input_el(self, ind):
+    #     """checking if all inputs are available (for specific state element)"""
+    #     try:
+    #         self.get_input_el(ind)
+    #         return True
+    #     except:  # TODO specify
+    #         return False
 
     def get_input_el(self, ind):
         """collecting all inputs required to run the node (for specific state element)"""
