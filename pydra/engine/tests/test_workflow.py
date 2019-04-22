@@ -727,3 +727,65 @@ def test_wfasnd_wfst_2(plugin):
     results = wf.result()
     assert results[0].output.out == 4
     assert results[1].output.out == 42
+
+
+# workflows with structures A -> wf(B)
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wfasnd_ndst_3(plugin):
+    """ workflow as the second node,
+        the main workflow has two tasks,
+        splitter for the first task
+    """
+    wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(("x", "y")))
+    wf.inputs.x = [2, 4]
+    wf.inputs.y = [1, 10]
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wf.add(wfnd)
+
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    assert results.output.out == [4, 42]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wfasnd_wfst_3(plugin):
+    """ workflow as the second node,
+        the main workflow has two tasks,
+        splitter for the main workflow
+    """
+    wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.inputs.x = [2, 4]
+    wf.inputs.y = [1, 10]
+    wf.split(("x", "y"))
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wf.add(wfnd)
+
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    assert results[0].output.out == 4
+    assert results[1].output.out == 42
