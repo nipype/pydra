@@ -41,7 +41,7 @@ import dataclasses as dc
 import inspect
 import typing as ty
 
-from .node import NodeBase
+from .core import NodeBase
 from ..utils.messenger import AuditFlag
 from .specs import (
     BaseSpec,

@@ -2,7 +2,7 @@ import os, shutil
 import numpy as np
 import pytest, pdb
 
-from ..node import NodeBase
+from ..core import NodeBase
 from ..submitter import Submitter
 from ..task import to_task
 

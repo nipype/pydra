@@ -3,7 +3,7 @@ from time import sleep
 
 from ..submitter import Submitter
 from ..task import to_task
-from ..node import Workflow
+from ..core import Workflow
 
 
 Plugins = ["serial", "cf"]
