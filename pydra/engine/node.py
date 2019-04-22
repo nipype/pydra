@@ -487,13 +487,13 @@ class Workflow(NodeBase):
     def __init__(
         self,
         name,
-        inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
         input_spec: ty.Union[ty.List[ty.Text], BaseSpec, None] = None,
         output_spec: ty.Optional[BaseSpec] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
         messenger_args=None,
         cache_dir=None,
+        **kwargs
     ):
         if input_spec:
             if isinstance(input_spec, BaseSpec):
@@ -512,7 +512,7 @@ class Workflow(NodeBase):
 
         super(Workflow, self).__init__(
             name=name,
-            inputs=inputs,
+            inputs=kwargs,
             cache_dir=cache_dir,
             audit_flags=audit_flags,
             messengers=messengers,
