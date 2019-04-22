@@ -572,10 +572,8 @@ class Workflow(TaskBase):
 
     def _run_task(self):
         for task in self.graph_sorted:
-            # TODO: this next line will need to be adjusted for tasks that
             # depend on prior tasks that have state
             task.inputs.retrieve_values(self)
-            # TODO: check where prepare_states should be run
             if task.state and not hasattr(task.state, "states_ind"):
                 task.state.prepare_states(inputs=task.inputs)
             if task.state and not hasattr(task.state, "inputs_ind"):
