@@ -4,7 +4,7 @@ import numpy as np
 import pytest, pdb
 
 
-class other_splitters_to_tests:
+class other_states_to_tests:
     def __init__(
         self,
         splitter,
@@ -36,12 +36,16 @@ class other_splitters_to_tests:
         (["a", "b"], ["a", "b"], {"a": 0, "b": 1}, [[0, 1]]),
         ((["a", "b"], "c"), ["a", "b", "c"], {"a": 0, "b": 1, "c": [0, 1]}, [[0, 1]]),
         ([("a", "b"), "c"], ["a", "b", "c"], {"a": 0, "b": 0, "c": 1}, [[0, 1]]),
+        ([["a", "b"], "c"], ["a", "b", "c"], {"a": 0, "b": 1, "c": 2}, [[0, 1, 2]]),
+        ((["a", "b"], ["c", "d"]), ["a", "b", "c", "d"],
+         {"a": 0, "b": 1, "c": 0, "d": 1}, [[0, 1]]),
     ],
 )
 def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
     splitter_rpn = aux.splitter2rpn(splitter)
     keys_f, groups_f, grstack_f, _ = aux._splits_groups(splitter_rpn)
-    assert keys_f == keys_exp
+
+    assert set(keys_f) == set(keys_exp)
     assert groups_f == groups_exp
     assert grstack_f == grstack_exp
 
@@ -81,32 +85,6 @@ def test_splits_groups_comb(
     assert grstack_final == grstack_final_exp
 
     assert combiner_all == combiner_all_exp
-
-
-# TODO: I think this test should be removed, proper connections are done in the state
-# @pytest.mark.parametrize("splitter, other_splitters, keys_exp, groups_exp, grstack_exp", [
-#     ("_NA", {"NA": (other_splitters_to_tests(splitter="NA.a", keys_final=["NA.a"]), "a")},
-#      ['NA.a'], {"NA.a": 0}, [[0]]),
-#     ("_NA", {"NA": (other_splitters_to_tests(splitter=["NA.a", "NA.b"], keys_final=["NA.a", "NA.b"]), "a")},
-#      ['NA.a', "NA.b"], {"NA.a": 0, "NA.b": 1}, [[0, 1]]),
-#     (["_NA", "NB.a"],
-#      {"NA": (other_splitters_to_tests(splitter=["NA.a", "NA.b"], keys_final=["NA.a", "NA.b"]), "NB.a")},
-#      ['NA.a', "NA.b", "NB.a"], {"NA.a": 0, "NA.b": 1, "NB.a": 2}, [[0, 1], [2]]),
-#     # (["_NA", "NB.b"],
-#     #  {"NA": (other_splitters_to_tests(splitter=["NA.a", "NA.b"], keys_final=["NA.a", "NA.b"]), "NB.a")},
-#     #  ['NA.a', "NA.b", "NB.b"], {"NA.a": 0, "NA.b": 1, "NB.b": 2}, [[0, 1, 2]]),
-# ])
-# def test_splits_groups_connect(splitter, other_splitters, keys_exp, groups_exp, grstack_exp):
-#     splitter_rpn = aux.splitter2rpn(splitter, other_splitters)
-#     inner_inputs = {k: v for _, (v, k) in other_splitters.items()}
-#     keys, groups, grstack, keys_f, groups_f, grstack_f, _ = aux._splits_groups(splitter_rpn, inner_inputs=inner_inputs)
-#     assert keys == keys_exp
-#     assert groups == groups_exp
-#     assert grstack == grstack_exp
-#     # final values should be the same
-#     assert keys_f == keys_exp
-#     assert groups_f == groups_exp
-#     assert grstack_f == grstack_exp
 
 
 @pytest.mark.parametrize(
@@ -401,16 +379,10 @@ def test_splits_1e(splitter, values, keys, splits):
 @pytest.mark.parametrize(
     "splitter_rpn, inner_inputs, values, keys, splits",
     [
-        # (["NA.a", "NA.b", "*"],
-        #  {"c": other_splitters_to_tests(splitter=["NA.a", "NA.b"], keys_final=["NA.a", "NA.b"],
-        #                                 ind_l_final=[(0, 0), (0, 1), (1, 0), (1, 1)])},
-        #  [(0, 0), (0, 1), (1, 0), (1, 1)], ["NA.a", "NA.b"],
-        #  [{"NA.a": "a1", "NA.b": "b1"}, {"NA.a": "a1", "NA.b": "b2"},
-        #   {"NA.a": "a2", "NA.b": "b1"}, {"NA.a": "a2", "NA.b": "b2"}]),
         (
-            ["NA.a", "NB.b", "*"],
+            ["NB.b"],
             {
-                "NB.b": other_splitters_to_tests(
+                "NB.b": other_states_to_tests(
                     splitter="NA.a", keys_final=["NA.a"], ind_l=[(0,), (1,)]
                 )
             },
@@ -423,46 +395,25 @@ def test_splits_1e(splitter, values, keys, splits):
                 {"NA.a": "a2", "NB.b": "b22"},
             ],
         ),
-        # [(0, 0), (0, 1), (1, 2), (1, 3)],
-        # ["a", "b"],
-        # [{"a": "a1", "b": "b11"}, {"a": "a1", "b": "b12"},
-        #  {"a": "a2", "b": "b21"}, {"a": "a2", "b": "b22"}]),
-        # (["c", "a", ".", "b", "*"], ["b"], [((0, 0), 0), ((0, 0), 1), ((1, 1), 2), ((1, 1), 3)],
-        #  ["c", "a", "b"],
-        #  [{"a": "a1", "b": "b11", "c": "c1"}, {"a": "a1", "b": "b12", "c": "c1"},
-        #   {"a": "a2", "b": "b21", "c": "c2"}, {"a": "a2", "b": "b22", "c": "c2"}]),
-        # (["c", "a", "*", "d", "*"], ["d"],
-        #  [((0, 0), 0), ((0, 0), 1), ((0, 1), 2), ((0, 1), 3),
-        #   ((1, 0), 4), ((1, 0), 5), ((1, 1), 6), ((1, 1), 7)],
-        #  ["c", "a", "d"],
-        #  [{"a": "a1", "c": "c1", "d": "d111"}, {"a": "a1", "c": "c1", "d": "d112"},
-        #   {"a": "a2", "c": "c1", "d": "d121"}, {"a": "a2", "c": "c1", "d": "d122"},
-        #   {"a": "a1", "c": "c2", "d": "d211"}, {"a": "a1", "c": "c2", "d": "d212"},
-        #   {"a": "a2", "c": "c2", "d": "d221"}, {"a": "a2", "c": "c2", "d": "d222"}])
-        # no idea how this should work TODO!
-        # (["a", "b", "*", "c", "*"], ["b"])
-    ],
+     ],
 )
-@pytest.mark.xfail(reason="fix inner_inputs!")
-# TODO: check how it works with previous (with and without inner_input)
+# TODO: adding more?
 def test_splits_2(splitter_rpn, inner_inputs, values, keys, splits):
     inputs = {
         "NA.a": ["a1", "a2"],
         "NA.b": ["b1", "b2"],
         "NB.b": [["b11", "b12"], ["b21", "b22"]],
         "c": ["c1", "c2"],
-        "d": [
+        "NB.d": [
             [["d111", "d112"], ["d121", "d122"]],
             [["d211", "d212"], ["d221", "d222"]],
         ],
     }
-    # inner_inputs = {k: v for _, (v, k) in other_splitters.items()}
     values_out, keys_out, _, _ = aux._splits(
         splitter_rpn, inputs, inner_inputs=inner_inputs
     )
     value_list = list(values_out)
     assert keys == keys_out
-    assert values == value_list
     splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out), inputs))
     assert splits_out == splits
 
@@ -519,90 +470,52 @@ def test_rpn2splitter(splitter, rpn):
 
 
 @pytest.mark.parametrize(
-    "rpn, keys_remove, new_rpn",
-    [
-        (["a"], ["a"], []),
-        (["a"], [], ["a"]),
-        (["a", "b", "*"], ["a"], ["b"]),
-        (["a", "b", "*"], ["b"], ["a"]),
-        (["a", "b", "*"], ["a", "b"], []),
-        (["a", "b", "*"], ["b", "a"], []),
-        (["a", "b", "c", ".", "*"], ["a"], ["b", "c", "."]),
-        (["a", "b", "c", "d", "*", "*", "*"], ["b"], ["a", "c", "d", "*", "*"]),
-        (["a", "b", "c", "d", "*", "*", "*"], ["b", "d"], ["a", "c", "*"]),
-    ],
-)
-@pytest.mark.skip(
-    reason="for now using removing_inputs_rpn,"
-    "will probably remove removing_inputs_rpn"
-)
-def test_removing_inputs_rpn(rpn, keys_remove, new_rpn):
-    assert new_rpn == aux.removing_inputs_rpn(rpn, keys_remove)
-
-
-@pytest.mark.parametrize(
-    "rpn, keys_remove",
-    [
-        (["a", "b", "."], ["a"]),
-        (["a", "b", "."], ["b"]),
-        (["a", "b", "c", ".", "*"], ["b"]),
-    ],
-)
-@pytest.mark.xfail(reason="for now using removing_inputs_rpn")
-def test_removing_inputs_rpn_exception(rpn, keys_remove):
-    with pytest.raises(Exception):
-        aux.remove_inp_from_splitter_rpn(rpn, keys_remove)
-
-
-@pytest.mark.xfail(reason="fix the class")
-@pytest.mark.parametrize(
-    "splitter, other_splitters, rpn",
+    "splitter, other_states, rpn",
     [
         (
             ["a", "_NA"],
-            {"NA": (other_splitters_to_tests(("b", "c")), "d")},
+            {"NA": (other_states_to_tests(("b", "c")), "d")},
             ["a", "NA.b", "NA.c", ".", "*"],
         ),
         (
             ["_NA", "c"],
-            {"NA": (other_splitters_to_tests(("a", "b")), "d")},
+            {"NA": (other_states_to_tests(("a", "b")), "d")},
             ["NA.a", "NA.b", ".", "c", "*"],
         ),
         (
             ["a", ("b", "_NA")],
-            {"NA": (other_splitters_to_tests(["c", "d"]), "d")},
+            {"NA": (other_states_to_tests(["c", "d"]), "d")},
             ["a", "b", "NA.c", "NA.d", "*", ".", "*"],
         ),
     ],
 )
-def test_splitter2rpn_wf_splitter_1(splitter, other_splitters, rpn):
-    assert aux.splitter2rpn(splitter, other_splitters=other_splitters) == rpn
+def test_splitter2rpn_wf_splitter_1(splitter, other_states, rpn):
+    assert aux.splitter2rpn(splitter, other_states=other_states) == rpn
 
 
 @pytest.mark.parametrize(
-    "splitter, other_splitters, rpn",
+    "splitter, other_states, rpn",
     [
         (
             ["a", "_NA"],
-            {"NA": (other_splitters_to_tests(("b", "c")), "d")},
+            {"NA": (other_states_to_tests(("b", "c")), "d")},
             ["a", "_NA", "*"],
         ),
         (
             ["_NA", "c"],
-            {"NA": (other_splitters_to_tests(("a", "b")), "d")},
+            {"NA": (other_states_to_tests(("a", "b")), "d")},
             ["_NA", "c", "*"],
         ),
         (
             ["a", ("b", "_NA")],
-            {"NA": (other_splitters_to_tests(["c", "d"]), "d")},
+            {"NA": (other_states_to_tests(["c", "d"]), "d")},
             ["a", "b", "_NA", ".", "*"],
         ),
     ],
 )
-@pytest.mark.xfail(reason="fix the class")
-def test_splitter2rpn_wf_splitter_3(splitter, other_splitters, rpn):
+def test_splitter2rpn_wf_splitter_3(splitter, other_states, rpn):
     assert (
-        aux.splitter2rpn(splitter, other_splitters=other_splitters, state_fields=False)
+        aux.splitter2rpn(splitter, other_states=other_states, state_fields=False)
         == rpn
     )
 
@@ -835,25 +748,25 @@ def test_groups_to_input(group_for_inputs, input_for_groups, ndim):
 
 
 @pytest.mark.parametrize(
-    "splitter, other_splitters, expected_splitter, expected_left, expected_right",
+    "splitter, other_states, expected_splitter, expected_left, expected_right",
     [
         (
             None,
-            {"NA": (other_splitters_to_tests(splitter="NA.a"), "b")},
+            {"NA": (other_states_to_tests(splitter="NA.a"), "b")},
             "_NA",
             "_NA",
             None,
         ),
         (
             "b",
-            {"NA": (other_splitters_to_tests(splitter="NA.a"), "b")},
+            {"NA": (other_states_to_tests(splitter="NA.a"), "b")},
             ["_NA", "b"],
             "_NA",
             "b",
         ),
         (
             ("b", "c"),
-            {"NA": (other_splitters_to_tests(splitter="NA.a"), "b")},
+            {"NA": (other_states_to_tests(splitter="NA.a"), "b")},
             ["_NA", ("b", "c")],
             "_NA",
             ("b", "c"),
@@ -861,8 +774,8 @@ def test_groups_to_input(group_for_inputs, input_for_groups, ndim):
         (
             None,
             {
-                "NA": (other_splitters_to_tests(splitter="NA.a"), "a"),
-                "NB": (other_splitters_to_tests(splitter="NB.a"), "b"),
+                "NA": (other_states_to_tests(splitter="NA.a"), "a"),
+                "NB": (other_states_to_tests(splitter="NB.a"), "b"),
             },
             ["_NA", "_NB"],
             ["_NA", "_NB"],
@@ -871,8 +784,8 @@ def test_groups_to_input(group_for_inputs, input_for_groups, ndim):
         (
             "b",
             {
-                "NA": (other_splitters_to_tests(splitter="NA.a"), "a"),
-                "NB": (other_splitters_to_tests(splitter="NB.a"), "b"),
+                "NA": (other_states_to_tests(splitter="NA.a"), "a"),
+                "NB": (other_states_to_tests(splitter="NB.a"), "b"),
             },
             [["_NA", "_NB"], "b"],
             ["_NA", "_NB"],
@@ -881,8 +794,8 @@ def test_groups_to_input(group_for_inputs, input_for_groups, ndim):
         (
             ["_NA", "b"],
             {
-                "NA": (other_splitters_to_tests(splitter="NA.a"), "a"),
-                "NB": (other_splitters_to_tests(splitter="NB.a"), "b"),
+                "NA": (other_states_to_tests(splitter="NA.a"), "a"),
+                "NB": (other_states_to_tests(splitter="NB.a"), "b"),
             },
             [["_NB", "_NA"], "b"],
             ["_NB", "_NA"],
@@ -891,10 +804,10 @@ def test_groups_to_input(group_for_inputs, input_for_groups, ndim):
     ],
 )
 def test_connect_splitters(
-    splitter, other_splitters, expected_splitter, expected_left, expected_right
+    splitter, other_states, expected_splitter, expected_left, expected_right
 ):
     updated_splitter, left_splitter, right_splitter = aux.connect_splitters(
-        splitter, other_splitters
+        splitter, other_states
     )
     assert updated_splitter == expected_splitter
     assert left_splitter == expected_left
@@ -902,20 +815,34 @@ def test_connect_splitters(
 
 
 @pytest.mark.parametrize(
-    "splitter, other_splitters",
+    "splitter, other_states",
     [
-        ("_NB", {"NA": (other_splitters_to_tests(splitter="NA.a"), "b")}),
-        (("_NA", "b"), {"NA": (other_splitters_to_tests(splitter="NA.a"), "b")}),
-        (["b", "_NA"], {"NA": (other_splitters_to_tests(splitter="NA.a"), "b")}),
+        ("_NB", {"NA": (other_states_to_tests(splitter="NA.a"), "b")}),
+        (("_NA", "b"), {"NA": (other_states_to_tests(splitter="NA.a"), "b")}),
+        (["b", "_NA"], {"NA": (other_states_to_tests(splitter="NA.a"), "b")}),
         (
             ["_NB", ["_NA", "b"]],
             {
-                "NA": (other_splitters_to_tests(splitter="NA.a"), "a"),
-                "NB": (other_splitters_to_tests(splitter="NB.a"), "b"),
+                "NA": (other_states_to_tests(splitter="NA.a"), "a"),
+                "NB": (other_states_to_tests(splitter="NB.a"), "b"),
             },
         ),
     ],
 )
-def test_connect_splitters_exception(splitter, other_splitters):
+def test_connect_splitters_exception(splitter, other_states):
     with pytest.raises(Exception):
-        aux.connect_splitters(splitter, other_splitters)
+        aux.connect_splitters(splitter, other_states)
+
+
+@pytest.mark.parametrize(
+    "group_for_inputs, groups_stack, groups_stack_input_exp",
+    [
+        ({"a": 0, "b": 1}, [[0, 1]], [["a", "b"]]),
+        ({"a": 0, "b": 1, "c": [0, 1]}, [[0, 1]], [["a", "b", "c"]]),
+        ({"a": 0, "b": 1}, [[0], [1]], [["a"], ["b"]]),
+    ]
+)
+def test_groups_stack_input(group_for_inputs, groups_stack, groups_stack_input_exp):
+    groups_stack_input = aux.groups_stack_input(group_for_inputs, groups_stack)
+    for i, grs in enumerate(groups_stack_input):
+        assert set(grs) == set(groups_stack_input_exp[i])

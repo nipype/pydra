@@ -60,7 +60,6 @@ ISRELEASE = (
 VERSION = __version__
 PROVIDES = ["pydra"]
 REQUIRES = [
-    "nipype>=1.1.3",
     "networkx>=%s" % NETWORKX_MIN_VERSION,
     "pytest>=%s" % PYTEST_MIN_VERSION,
     'dataclasses; python_version < "3.7"',

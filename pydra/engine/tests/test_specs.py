@@ -68,7 +68,7 @@ def test_singularity():
     assert getattr(spec, "container") == "singularity"
 
 
-class TestNode:
+class NodeTesting:
     def __init__(self):
         class Input:
             def __init__(self):
@@ -96,7 +96,7 @@ class TestNode:
         return Result()
 
 
-class TestWorkflow:
+class WorkflowTesting:
     def __init__(self):
         class Input:
             def __init__(self):
@@ -104,40 +104,40 @@ class TestWorkflow:
                 self.inp_b = "B"
 
         self.inputs = Input()
-        self.tn = TestNode()
+        self.tn = NodeTesting()
 
 
 def test_lazy_inp():
-    tn = TestNode()
+    tn = NodeTesting()
     lf = LazyField(node=tn, attr_type="input")
 
     with pytest.raises(Exception):
-        lf.get_value(wf=TestWorkflow())
+        lf.get_value(wf=WorkflowTesting())
 
     lf.inp_a
-    assert lf.get_value(wf=TestWorkflow()) == "A"
+    assert lf.get_value(wf=WorkflowTesting()) == "A"
 
     lf.inp_b
-    assert lf.get_value(wf=TestWorkflow()) == "B"
+    assert lf.get_value(wf=WorkflowTesting()) == "B"
 
 
 def test_lazy_out():
-    tn = TestNode()
+    tn = NodeTesting()
     lf = LazyField(node=tn, attr_type="output")
 
     lf.out_a
-    assert lf.get_value(wf=TestWorkflow()) == "OUT_A"
+    assert lf.get_value(wf=WorkflowTesting()) == "OUT_A"
 
 
 def test_laxy_errorattr():
     with pytest.raises(Exception) as excinfo:
-        tn = TestNode()
+        tn = NodeTesting()
         lf = LazyField(node=tn, attr_type="out")
     assert "LazyField: Unknown attr_type:" in str(excinfo.value)
 
 
 def test_lazy_getvale():
-    tn = TestNode()
+    tn = NodeTesting()
     lf = LazyField(node=tn, attr_type="input")
     with pytest.raises(Exception) as excinfo:
         lf.inp_c

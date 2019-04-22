@@ -1,12 +1,7 @@
 import sys
-
-from ..state import State
-
 import pytest, pdb
 
-python35_only = pytest.mark.skipif(
-    sys.version_info < (3, 5), reason="requires Python>3.4"
-)
+from ..state import State
 
 
 @pytest.mark.parametrize(
@@ -73,6 +68,7 @@ python35_only = pytest.mark.skipif(
 def test_state_1(
     inputs, splitter, ndim, states_ind, states_val, group_for_inputs, groups_stack
 ):
+    """ single state: testing groups, prepare_states and prepare_inputs"""
     st = State(name="NA", splitter=splitter)
     assert st.group_for_inputs_final == group_for_inputs
     assert st.groups_stack_final == groups_stack
@@ -85,7 +81,10 @@ def test_state_1(
     assert st.inputs_ind == states_ind
 
 
-def test_state_merge_1():
+def test_state_connect_1():
+    """ two 'connected' states: testing groups, prepare_states and prepare_inputs
+        no explicit splitter for the second state
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", other_states={"NA": (st1, "b")})
     assert st2.splitter == "_NA"
@@ -101,7 +100,10 @@ def test_state_merge_1():
     assert st2.inputs_ind == [{"NB.b": 0}, {"NB.b": 1}]
 
 
-def test_state_merge_1a():
+def test_state_connect_1a():
+    """ two 'connected' states: testing groups, prepare_states and prepare_inputs
+        the second state has explicit splitter from the first one (Left part)
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="_NA", other_states={"NA": (st1, "b")})
     assert st2.splitter == "_NA"
@@ -117,8 +119,8 @@ def test_state_merge_1a():
     assert st2.inputs_ind == [{"NB.b": 0}, {"NB.b": 1}]
 
 
-def test_state_merge_1b_exception():
-    """can't provide explicitly NA.a"""
+def test_state_connect_1b_exception():
+    """can't provide explicitly NA.a (should be _NA)"""
     st1 = State(name="NA", splitter="a")
     with pytest.raises(Exception) as excinfo:
         st2 = State(name="NB", splitter="NA.a")
@@ -126,7 +128,7 @@ def test_state_merge_1b_exception():
 
 
 @pytest.mark.parametrize("splitter2, other_states2", [("_NA", {}), ("_N", {"NA": ()})])
-def test_state_merge_1c_exception(splitter2, other_states2):
+def test_state_connect_1c_exception(splitter2, other_states2):
     """can't ask for splitter from node that is not connected"""
     st1 = State(name="NA", splitter="a")
     with pytest.raises(Exception) as excinfo:
@@ -134,8 +136,11 @@ def test_state_merge_1c_exception(splitter2, other_states2):
     assert "other nodes that are connected" in str(excinfo.value)
 
 
-def test_state_merge_2():
-    """state2 has Left and Right part"""
+def test_state_connect_2():
+    """ two 'connected' states: testing groups, prepare_states and prepare_inputs
+         the second state has explicit splitter that contains
+         splitter from the first node and a new field (Left and Right parts)
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["_NA", "a"], other_states={"NA": (st1, "b")})
 
@@ -168,8 +173,12 @@ def test_state_merge_2():
     ]
 
 
-def test_state_merge_2a():
-    """adding scalar to st2"""
+def test_state_connect_2a():
+    """ two 'connected' states: testing groups, prepare_states and prepare_inputs
+         the second state has explicit splitter that contains 
+         splitter from the first node and a new field;
+         adding an additional scalar field that is not part of the splitter
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["_NA", "a"], other_states={"NA": (st1, "b")})
 
@@ -202,8 +211,11 @@ def test_state_merge_2a():
     ]
 
 
-def test_state_merge_2b():
-    """splitter st2 has only Right part, Left has to be added"""
+def test_state_connect_2b():
+    """ two 'connected' states: testing groups, prepare_states and prepare_inputs
+        the second state has explicit splitter with a new field (Right part)
+        splitter from the first node (Left part) has to be added
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a", other_states={"NA": (st1, "b")})
 
@@ -237,8 +249,11 @@ def test_state_merge_2b():
     ]
 
 
-def test_state_merge_3():
-    """two states connected with st3, no splitter provided - Left has to be added"""
+def test_state_connect_3():
+    """ three 'connected' states: testing groups, prepare_states and prepare_inputs
+        the third state connected to two previous states;
+        splitter from the previous states (Left part) has to be added
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a")
     st3 = State(name="NC", other_states={"NA": (st1, "b"), "NB": (st2, "c")})
@@ -271,8 +286,11 @@ def test_state_merge_3():
     ]
 
 
-def test_state_merge_3a():
-    """two states connected with st3, Left splitter provided"""
+def test_state_connect_3a():
+    """ three 'connected' states: testing groups, prepare_states and prepare_inputs
+        the third state connected to two previous states;
+        the third state has explicit splitter that contains splitters from previous states
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a")
     st3 = State(
@@ -309,8 +327,12 @@ def test_state_merge_3a():
     ]
 
 
-def test_state_merge_3b():
-    """two states connected with st3, partial Left splitter provided"""
+def test_state_connect_3b():
+    """ three 'connected' states: testing groups, prepare_states and prepare_inputs
+        the third state connected to two previous states;
+        the third state has explicit splitter that contains splitter only from the first state.
+        splitter from the second state has to be added (partial Left part)
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a")
     st3 = State(
@@ -345,11 +367,11 @@ def test_state_merge_3b():
     ]
 
 
-@pytest.mark.xfail(
-    reason="splitter has scallar in left part - groups don't work properly"
-)
-def test_state_merge_3c():
-    """two states connected with st3, scalar Left splitter provided"""
+def test_state_connect_4():
+    """ three 'connected' states: testing groups, prepare_states and prepare_inputs
+        the third state connected to two previous states;
+        the third state has explicit scalar(!) splitter that contains two previous states
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a")
     st3 = State(
@@ -370,14 +392,15 @@ def test_state_merge_3c():
     st3.prepare_inputs()
     assert st3.inputs_ind == [
         {"NC.b": 0, "NC.c": 0},
-        {"NC.b": 0, "NC.c": 1},
-        {"NC.b": 1, "NC.c": 0},
         {"NC.b": 1, "NC.c": 1},
     ]
 
 
-def test_state_merge_4():
-    """one previous node, but with outer splitter"""
+def test_state_connect_5():
+    """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
+        the first state has outer splitter,
+        the second state has no explicit splitter
+    """
     st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(name="NB", other_states={"NA": (st1, "a")})
     assert st2.splitter == "_NA"
@@ -403,8 +426,11 @@ def test_state_merge_4():
     assert st2.inputs_ind == [{"NB.a": 0}, {"NB.a": 1}, {"NB.a": 2}, {"NB.a": 3}]
 
 
-def test_state_merge_5():
-    """two previous nodes, one with outer splitter, full Left part provided"""
+def test_state_connect_6():
+    """ three 'connected' states: testing groups, prepare_states and prepare_inputs,
+        the first state has outer splitter,
+        the third state has explicit splitter with splitters from previous states
+     """
     st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(name="NB", splitter="a")
     st3 = State(
@@ -453,8 +479,11 @@ def test_state_merge_5():
     ]
 
 
-def test_state_merge_5a():
-    """two previous nodes, one with outer splitter, no splitter - Left part has to be added"""
+def test_state_connect_6a():
+    """ three 'connected' states: testing groups, prepare_states and prepare_inputs,
+        the first state has outer splitter,
+        the third state has no explicit splitter
+    """
     st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(name="NB", splitter="a")
     st3 = State(name="NC", other_states={"NA": (st1, "a"), "NB": (st2, "b")})
@@ -498,8 +527,10 @@ def test_state_merge_5a():
     ]
 
 
-def test_state_merge_innerspl_1():
-    """one previous node and one inner splitter; full splitter provided"""
+def test_state_connect_innerspl_1():
+    """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
+        the second state has an inner splitter, full splitter provided
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["_NA", "b"], other_states={"NA": (st1, "b")})
 
@@ -539,8 +570,11 @@ def test_state_merge_innerspl_1():
     ]
 
 
-def test_state_merge_innerspl_1a():
-    """one previous node and one inner splitter; only Right part provided - Left had to be added"""
+def test_state_connect_innerspl_1a():
+    """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
+        the second state has an inner splitter,
+        splitter from the first state (Left part) has to be added
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="b", other_states={"NA": (st1, "b")})
 
@@ -580,16 +614,18 @@ def test_state_merge_innerspl_1a():
     ]
 
 
-def test_state_merge_innerspl_1b():
-    """one previous node and one inner splitter;
-    incorrect splitter - Right & Left parts in scalar splitter"""
+def test_state_connect_innerspl_1b():
+    """incorrect splitter - Right & Left parts in scalar splitter"""
     with pytest.raises(Exception):
         st1 = State(name="NA", splitter="a")
         st2 = State(name="NB", splitter=("_NA", "b"), other_states={"NA": (st1, "b")})
 
 
-def test_state_merge_innerspl_3():
-    """one previous node and one inner splitter; only Right part provided - Left had to be added"""
+def test_state_connect_innerspl_2():
+    """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
+        the second state has one inner splitter and one 'normal' splitter
+        only Right part of the splitter provided (Left has to be added)
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["c", "b"], other_states={"NA": (st1, "b")})
 
@@ -648,10 +684,11 @@ def test_state_merge_innerspl_3():
     ]
 
 
-def test_state_merge_innerspl_3a():
-    """
-    one previous node and one inner splitter; only Right part provided - Left had to be added;
-    different order in splitter in st2
+def test_state_connect_innerspl_2a():
+    """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
+        the second state has one inner splitter and one 'normal' splitter
+        only Right part of the splitter provided (different order!),
+
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["b", "c"], other_states={"NA": (st1, "b")})
@@ -713,10 +750,10 @@ def test_state_merge_innerspl_3a():
     ]
 
 
-def test_state_merge_innerspl_4():
-    """
-    two previous nodes connected serially and one inner splitter;
-    only Right part provided - Left had to be added
+def test_state_connect_innerspl_3():
+    """ three serially 'connected' states: testing groups, prepare_states and prepare_inputs,
+        the second state has one inner splitter and one 'normal' splitter
+        Left parts have to be added
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["c", "b"], other_states={"NA": (st1, "b")})
@@ -847,8 +884,10 @@ def test_state_merge_innerspl_4():
     ]
 
 
-def test_state_merge_innerspl_5():
-    """two previous nodes and one inner splitter; only Right part provided - Left had to be added"""
+def test_state_connect_innerspl_4():
+    """ three'connected' states: testing groups, prepare_states and prepare_inputs,
+        the third one connected to two previous, only Right part of splitter provided
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["b", "c"])
     st3 = State(
@@ -932,7 +971,7 @@ def test_state_merge_innerspl_5():
 
 
 def test_state_combine_1():
-    """the simplest splitter and combiner"""
+    """ single state with splitter and combiner"""
     st = State(name="NA", splitter="a", combiner="a")
     assert st.splitter == "NA.a"
     assert st.splitter_rpn == ["NA.a"]
@@ -950,7 +989,7 @@ def test_state_combine_1():
     assert st.inputs_ind == [{"NA.a": 0}, {"NA.a": 1}]
 
 
-def test_state_combine_2():
+def test_state_connect_combine_1():
     """two connected states; outer splitter and combiner in the first one"""
     st1 = State(name="NA", splitter=["a", "b"], combiner="a")
     st2 = State(name="NB", other_states={"NA": (st1, "c")})
@@ -976,6 +1015,7 @@ def test_state_combine_2():
         {"NA.a": 5, "NA.b": 10},
         {"NA.a": 5, "NA.b": 20},
     ]
+    assert st1.states_ind_final == [{"NA.b": 0}, {"NA.b": 1}]
     assert st1.keys_final == ["NA.b"]
     assert st1.final_groups_mapping == {0: [0, 2], 1: [1, 3]}
 
@@ -988,7 +1028,7 @@ def test_state_combine_2():
     assert st2.inputs_ind == [{"NB.c": 0}, {"NB.c": 1}]
 
 
-def test_state_combine_3():
+def test_state_connect_combine_2():
     """
     two connected states; outer splitter and combiner in the first one;
     additional splitter in the second node
@@ -1022,6 +1062,7 @@ def test_state_combine_3():
         {"NA.a": 5, "NA.b": 10},
         {"NA.a": 5, "NA.b": 20},
     ]
+    assert st1.states_ind_final == [{"NA.b": 0}, {"NA.b": 1}]
     assert st1.keys_final == ["NA.b"]
     assert st1.final_groups_mapping == {0: [0, 2], 1: [1, 3]}
 
@@ -1049,8 +1090,7 @@ def test_state_combine_3():
     ]
 
 
-# zob
-def test_state_combine_4():
+def test_state_connect_combine_3():
     """
     two connected states; outer splitter and combiner in the first one;
     additional splitter in the second node
@@ -1086,6 +1126,7 @@ def test_state_combine_4():
         {"NA.a": 5, "NA.b": 10},
         {"NA.a": 5, "NA.b": 20},
     ]
+    assert st1.states_ind_final == [{"NA.b": 0}, {"NA.b": 1}]
     assert st1.keys_final == ["NA.b"]
     assert st1.final_groups_mapping == {0: [0, 2], 1: [1, 3]}
 
@@ -1101,6 +1142,7 @@ def test_state_combine_4():
         {"NA.b": 20, "NB.d": 0},
         {"NA.b": 20, "NB.d": 1},
     ]
+    assert st2.states_ind_final == [{"NA.b": 0}, {"NA.b": 1}]
     assert st2.keys_final == ["NA.b"]
     assert st2.final_groups_mapping == {0: [0, 1], 1: [2, 3]}
 
@@ -1113,8 +1155,7 @@ def test_state_combine_4():
     ]
 
 
-# zobaczyc jak dziala przy combiner="NA.a"
-def test_state_combine_innerspl_1():
+def test_state_connect_innerspl_combine_1():
     """one previous node and one inner splitter (and inner splitter combiner);
     only Right part provided - Left had to be added"""
     st1 = State(name="NA", splitter="a")
@@ -1164,6 +1205,12 @@ def test_state_combine_innerspl_1():
         {"NB.c": 17, "NA.a": 5, "NB.b": 20},
         {"NB.c": 17, "NA.a": 5, "NB.b": 200},
     ]
+    assert st2.states_ind_final == [
+        {"NB.c": 0, "NA.a": 0},
+        {"NB.c": 1, "NA.a": 0},
+        {"NB.c": 0, "NA.a": 1},
+        {"NB.c": 1, "NA.a": 1}
+    ]
 
     st2.prepare_inputs()
     assert st2.inputs_ind == [
@@ -1182,8 +1229,11 @@ def test_state_combine_innerspl_1():
     ]
 
 
-def test_state_combine_innerspl_2():
-    """one previous node and one inner splitter; only Right part provided - Left had to be added"""
+def test_state_connect_innerspl_combine_2():
+    """ two 'connected' state, the second has inner and normal splitter,
+        and 'normal' combiner
+        only Right part splitter provided, Left has to be added
+        """
     st1 = State(name="NA", splitter="a")
     st2 = State(
         name="NB", splitter=["c", "b"], combiner=["c"], other_states={"NA": (st1, "b")}
@@ -1227,6 +1277,14 @@ def test_state_combine_innerspl_2():
         {"NB.c": 17, "NA.a": 5, "NB.b": 20},
         {"NB.c": 17, "NA.a": 5, "NB.b": 200},
     ]
+    assert st2.states_ind_final == [
+        {"NA.a": 0, "NB.b": 0},
+        {"NA.a": 0, "NB.b": 1},
+        {"NA.a": 0, "NB.b": 2},
+        {"NA.a": 1, "NB.b": 3},
+        {"NA.a": 1, "NB.b": 4},
+        {"NA.a": 1, "NB.b": 5},
+    ]
 
     st2.prepare_inputs()
     assert st2.inputs_ind == [
@@ -1245,7 +1303,12 @@ def test_state_combine_innerspl_2():
     ]
 
 
-def test_state_combine_left_1():
+def test_state_connect_combine_left_1():
+    """ two 'connected' states,
+        the first one has the simplest splitter,
+        the second has combiner from the first state
+        (i.e. from the Left part of the splitter),
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", other_states={"NA": (st1, "b")}, combiner="NA.a")
     assert st2.splitter == "_NA"
@@ -1259,12 +1322,18 @@ def test_state_combine_left_1():
     st2.prepare_states(inputs={"NA.a": [3, 5]})
     assert st2.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
     assert st2.states_val == [{"NA.a": 3}, {"NA.a": 5}]
+    assert st2.states_ind_final == []
 
     st2.prepare_inputs()
     assert st2.inputs_ind == [{"NB.b": 0}, {"NB.b": 1}]
 
 
-def test_state_combine_left_2():
+def test_state_connect_combine_left_2():
+    """ two 'connected' states,
+        the first one has outer splitter,
+        the second has combiner from the first state
+        (i.e. from the Left part of the splitter),
+    """
     st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(name="NB", other_states={"NA": (st1, "b")}, combiner="NA.a")
     assert st2.splitter == "_NA"
@@ -1288,12 +1357,18 @@ def test_state_combine_left_2():
         {"NA.a": 5, "NA.b": 10},
         {"NA.a": 5, "NA.b": 20},
     ]
+    assert st2.states_ind_final == [{"NA.b": 0}, {"NA.b": 1}]
 
     st2.prepare_inputs()
     assert st2.inputs_ind == [{"NB.b": 0}, {"NB.b": 1}, {"NB.b": 2}, {"NB.b": 3}]
 
 
-def test_state_combine_left_3():
+def test_state_connect_combine_left_3():
+    """ three serially 'connected' states,
+        the first one has outer splitter,
+        the third one has combiner from the first state
+        (i.e. from the Left part of the splitter),
+    """
     st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(name="NB", other_states={"NA": (st1, "b")})
     st3 = State(name="NC", other_states={"NB": (st2, "c")}, combiner="NA.a")
@@ -1318,220 +1393,142 @@ def test_state_combine_left_3():
         {"NA.a": 5, "NA.b": 10},
         {"NA.a": 5, "NA.b": 20},
     ]
+    assert st3.states_ind_final == [{"NA.b": 0}, {"NA.b": 1}]
 
     st3.prepare_inputs()
     assert st3.inputs_ind == [{"NC.c": 0}, {"NC.c": 1}, {"NC.c": 2}, {"NC.c": 3}]
 
 
-# def test_state_merge_inner_1():
-#     st1 = State(name="NA", splitter="a", inputs={"a": [3, 5]})
-#     st2 = State(name="NB", others=[{"state": st1, "in_field": "b"}])
-#     assert st2.splitter == "NA.a"
-#     st2.prepare_states_ind()
+def test_state_connect_combine_left_4():
+    """ three 'connected' states: testing groups, prepare_states and prepare_inputs,
+         the first two states have the simplest splitters,
+         the third state has only Left splitter,
+         the third state has also combiner from the Left part
+      """
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter="a")
+    st3 = State(
+        name="NC",
+        splitter=["_NA", "_NB"], combiner=["NA.a"],
+        other_states={"NA": (st1, "a"), "NB": (st2, "b")},
+    )
+    assert st3.splitter == ["_NA", "_NB"]
+    assert st3.splitter_rpn == ["NA.a", "NB.a", "*"]
+    assert st3.splitter_rpn_final == ["NB.a"]
+    assert st3.group_for_inputs_final == {"NB.a": 0}
+    assert st3.groups_stack_final == [[0]]
+
+    st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [600, 700]})
+
+    assert st3.states_ind == [
+        {"NA.a": 0, "NB.a": 0},
+        {"NA.a": 0, "NB.a": 1},
+        {"NA.a": 1, "NB.a": 0},
+        {"NA.a": 1, "NB.a": 1},
+    ]
+    assert st3.states_val == [
+        {"NA.a": 3, "NB.a": 600},
+        {"NA.a": 3, "NB.a": 700},
+        {"NA.a": 5, "NB.a": 600},
+        {"NA.a": 5, "NB.a": 700},
+    ]
+    assert st3.states_ind_final == [{"NB.a": 0}, {"NB.a": 1}]
+
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [
+        {"NC.a": 0, "NC.b": 0},
+        {"NC.a": 0, "NC.b": 1},
+        {"NC.a": 1, "NC.b": 0},
+        {"NC.a": 1, "NC.b": 1},
+    ]
 
 
-# assert st._splitter_rpn == ["NA.a"]
-# assert st.splitter_comb is None
-# assert st._splitter_rpn_comb == []
-#
-# st.prepare_state_input()
-#
-# expected_axis_for_input = {"NA.a": [0]}
-# for key, val in expected_axis_for_input.items():
-#     assert st._axis_for_input[key] == val
-# assert st._ndim == 1
-# assert st._input_for_axis == [["NA.a"]]
-#
-#
-# expected_axis_for_input_comb = {}
-# for key, val in expected_axis_for_input_comb.items():
-#     assert st._axis_for_input_comb[key] == val
-# assert st._ndim_comb == 0
-# assert st._input_for_axis_comb == []
+def test_state_connect_combine_left_5():
+    """ three 'connected' states: testing groups, prepare_states and prepare_inputs,
+        the first two states have the simplest splitters,
+        the third state has scalar splitter in the Left part,
+        the third state has also combiner from the Left part
+     """
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", splitter="a")
+    st3 = State(
+        name="NC",
+        splitter=("_NA", "_NB"), combiner=["NA.a"],
+        other_states={"NA": (st1, "a"), "NB": (st2, "b")},
+    )
+    assert st3.splitter == ("_NA", "_NB")
+    assert st3.splitter_rpn == ["NA.a", "NB.a", "."]
+    assert st3.splitter_rpn_final == []
+    assert st3.group_for_inputs_final == {}
+    assert st3.groups_stack_final == []
+
+    st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [600, 700]})
+
+    assert st3.states_ind == [
+        {"NA.a": 0, "NB.a": 0},
+        {"NA.a": 1, "NB.a": 1},
+    ]
+    assert st3.states_val == [
+        {"NA.a": 3, "NB.a": 600},
+        {"NA.a": 5, "NB.a": 700},
+    ]
+    assert st3.states_ind_final == []
+
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [
+        {"NC.a": 0, "NC.b": 0},
+        {"NC.a": 1, "NC.b": 1},
+    ]
 
 
-# def test_state_1():
-#     nd = Node(name="NA", interface=fun_addtwo(), splitter="a", combiner="a",
-#               inputs={"a": np.array([3, 5])})
-#     st = State(node=nd)
-#
-#     assert st._splitter == "NA.a"
-#     assert st._splitter_rpn == ["NA.a"]
-#     assert st.splitter_comb is None
-#     assert st._splitter_rpn_comb == []
-#
-#     st.prepare_state_input()
-#
-#     expected_axis_for_input = {"NA.a": [0]}
-#     for key, val in expected_axis_for_input.items():
-#         assert st._axis_for_input[key] == val
-#     assert st._ndim == 1
-#     assert st._input_for_axis == [["NA.a"]]
-#
-#
-#     expected_axis_for_input_comb = {}
-#     for key, val in expected_axis_for_input_comb.items():
-#         assert st._axis_for_input_comb[key] == val
-#     assert st._ndim_comb == 0
-#     assert st._input_for_axis_comb == []
-#
-#
-# def test_state_1a():
-#     wf = Workflow(name="wf", workingdir="wf_test", splitter="a", combiner="a",
-#                   inputs={"a": np.array([3, 5])})
-#     st = State(node=wf)
-#
-#     assert st._splitter == "wf.a"
-#     assert st._splitter_rpn == ["wf.a"]
-#     assert st.splitter_comb is None
-#     assert st._splitter_rpn_comb == []
-#
-#     st.prepare_state_input()
-#
-#     expected_axis_for_input = {"wf.a": [0]}
-#     for key, val in expected_axis_for_input.items():
-#         assert st._axis_for_input[key] == val
-#     assert st._ndim == 1
-#     assert st._input_for_axis == [["wf.a"]]
-#
-#
-#     expected_axis_for_input_comb = {}
-#     for key, val in expected_axis_for_input_comb.items():
-#         assert st._axis_for_input_comb[key] == val
-#     assert st._ndim_comb == 0
-#     assert st._input_for_axis_comb == []
-#
-#
-# def test_state_2():
-#     nd = Node(name="NA", interface=fun_addvar(), splitter=("a", "b"), combiner="a",
-#               inputs={"a": np.array([3, 5]), "b": np.array([3, 5])})
-#     st = State(node=nd)
-#
-#     assert st._splitter == ("NA.a", "NA.b")
-#     assert st._splitter_rpn == ["NA.a", "NA.b", "."]
-#     assert st.splitter_comb is None
-#     assert st._splitter_rpn_comb == []
-#
-#     st.prepare_state_input()
-#
-#     expected_axis_for_input = {"NA.a": [0], "NA.b": [0]}
-#     for key, val in expected_axis_for_input.items():
-#         assert st._axis_for_input[key] == val
-#     assert st._ndim == 1
-#     assert st._input_for_axis == [["NA.a", "NA.b"]]
-#
-#
-#     expected_axis_for_input_comb = {}
-#     for key, val in expected_axis_for_input_comb.items():
-#         assert st._axis_for_input_comb[key] == val
-#     assert st._ndim_comb == 0
-#     assert st._input_for_axis_comb == []
-#
-#
-# def test_state_2a():
-#     wf = Workflow(name="wf", workingdir="wf_test", splitter=("a", "b"), combiner="a",
-#               inputs={"a": np.array([3, 5]), "b": np.array([3, 5])})
-#     st = State(node=wf)
-#
-#     assert st._splitter == ("wf.a", "wf.b")
-#     assert st._splitter_rpn == ["wf.a", "wf.b", "."]
-#     assert st.splitter_comb is None
-#     assert st._splitter_rpn_comb == []
-#
-#     st.prepare_state_input()
-#
-#     expected_axis_for_input = {"wf.a": [0], "wf.b": [0]}
-#     for key, val in expected_axis_for_input.items():
-#         assert st._axis_for_input[key] == val
-#     assert st._ndim == 1
-#     assert st._input_for_axis == [["wf.a", "wf.b"]]
-#
-#
-#     expected_axis_for_input_comb = {}
-#     for key, val in expected_axis_for_input_comb.items():
-#         assert st._axis_for_input_comb[key] == val
-#     assert st._ndim_comb == 0
-#     assert st._input_for_axis_comb == []
-#
-#
-# def test_state_3():
-#     nd = Node(name="NA", interface=fun_addvar(), splitter=["a", "b"], combiner="a",
-#               inputs={"a": np.array([3, 5]), "b": np.array([3, 5])})
-#     st = State(node=nd)
-#
-#     assert st._splitter == ["NA.a", "NA.b"]
-#     assert st._splitter_rpn == ["NA.a", "NA.b", "*"]
-#     assert st.splitter_comb == "NA.b"
-#     assert st._splitter_rpn_comb == ["NA.b"]
-#
-#     st.prepare_state_input()
-#
-#     expected_axis_for_input = {"NA.a": [0], "NA.b": [1]}
-#     for key, val in expected_axis_for_input.items():
-#         assert st._axis_for_input[key] == val
-#     assert st._ndim == 2
-#     assert st._input_for_axis == [["NA.a"], ["NA.b"]]
-#
-#
-#     expected_axis_for_input_comb = {"NA.b": [0]}
-#     for key, val in expected_axis_for_input_comb.items():
-#         assert st._axis_for_input_comb[key] == val
-#     assert st._ndim_comb == 1
-#     assert st._input_for_axis_comb == [["NA.b"]]
-#
-#
-# def test_state_4():
-#     nd = Node(name="NA", interface=fun_addvar3(), splitter=["a", ("b", "c")], combiner="b",
-#               inputs={"a": np.array([3, 5]), "b": np.array([3, 5]), "c": np.array([3, 5])})
-#     st = State(node=nd)
-#
-#     assert st._splitter == ["NA.a", ("NA.b", "NA.c")]
-#     assert st._splitter_rpn == ["NA.a", "NA.b", "NA.c", ".", "*"]
-#     assert st.splitter_comb == "NA.a"
-#     assert st._splitter_rpn_comb == ["NA.a"]
-#
-#     st.prepare_state_input()
-#
-#     expected_axis_for_input = {"NA.a": [0], "NA.b": [1], "NA.c": [1]}
-#     for key, val in expected_axis_for_input.items():
-#         assert st._axis_for_input[key] == val
-#     assert st._ndim == 2
-#     assert st._input_for_axis == [["NA.a"], ["NA.b", "NA.c"]]
-#
-#
-#     expected_axis_for_input_comb = {"NA.a": [0]}
-#     for key, val in expected_axis_for_input_comb.items():
-#         assert st._axis_for_input_comb[key] == val
-#     assert st._ndim_comb == 1
-#     assert st._input_for_axis_comb == [["NA.a"]]
-#
-#
-# def test_state_5():
-#     nd = Node(name="NA", interface=fun_addvar3(), splitter=("a", ["b", "c"]), combiner="b",
-#               inputs={"a": np.array([[3, 5], [3, 5]]), "b": np.array([3, 5]),
-#                       "c": np.array([3, 5])})
-#     st = State(node=nd)
-#
-#     assert st._splitter == ("NA.a", ["NA.b", "NA.c"])
-#     assert st._splitter_rpn == ["NA.a", "NA.b", "NA.c", "*", "."]
-#     assert st.splitter_comb == "NA.c"
-#     assert st._splitter_rpn_comb == ["NA.c"]
-#
-#     st.prepare_state_input()
-#
-#     expected_axis_for_input = {"NA.a": [0, 1], "NA.b": [0], "NA.c": [1]}
-#     for key, val in expected_axis_for_input.items():
-#         assert st._axis_for_input[key] == val
-#     assert st._ndim == 2
-#     expected_input_for_axis = [["NA.a", "NA.b"], ["NA.a", "NA.c"]]
-#     for (i, exp_l) in enumerate(expected_input_for_axis):
-#         exp_l.sort()
-#         st._input_for_axis[i].sort()
-#     assert st._input_for_axis[i] == exp_l
-#
-#
-#     expected_axis_for_input_comb = {"NA.c": [0]}
-#     for key, val in expected_axis_for_input_comb.items():
-#         assert st._axis_for_input_comb[key] == val
-#     assert st._ndim_comb == 1
-#     assert st._input_for_axis_comb == [["NA.c"]]
+def test_state_connect_combine_left_6():
+    """ two 'connected' states,
+        the first one has outer splitter, the second has an additional Right splitter,
+        the second also has combiner from the first state
+        (i.e. from the Left part of the splitter),
+    """
+    st1 = State(name="NA", splitter=["a", "b"])
+    st2 = State(name="NB", splitter="c", other_states={"NA": (st1, "b")}, combiner="NA.a")
+    assert st2.splitter == ["_NA", "NB.c"]
+    assert st2.splitter_rpn == ["NA.a", "NA.b", "*", "NB.c", "*"]
+    assert st2.combiner == ["NA.a"]
+    assert st2.splitter_rpn_final == ["NA.b", "NB.c", "*"]
+
+    assert st2.group_for_inputs_final == {"NA.b": 0, "NB.c": 1}
+    assert st2.groups_stack_final == [[0, 1]]
+
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.c": [0, 1]})
+    assert st2.states_ind == [
+        {"NA.a": 0, "NA.b": 0, "NB.c": 0},
+        {"NA.a": 0, "NA.b": 0, "NB.c": 1},
+        {"NA.a": 0, "NA.b": 1, "NB.c": 0},
+        {"NA.a": 0, "NA.b": 1, "NB.c": 1},
+        {"NA.a": 1, "NA.b": 0, "NB.c": 0},
+        {"NA.a": 1, "NA.b": 0, "NB.c": 1},
+        {"NA.a": 1, "NA.b": 1, "NB.c": 0},
+        {"NA.a": 1, "NA.b": 1, "NB.c": 1},
+    ]
+    assert st2.states_val == [
+        {"NA.a": 3, "NA.b": 10, "NB.c": 0},
+        {"NA.a": 3, "NA.b": 10, "NB.c": 1},
+        {"NA.a": 3, "NA.b": 20, "NB.c": 0},
+        {"NA.a": 3, "NA.b": 20, "NB.c": 1},
+        {"NA.a": 5, "NA.b": 10, "NB.c": 0},
+        {"NA.a": 5, "NA.b": 10, "NB.c": 1},
+        {"NA.a": 5, "NA.b": 20, "NB.c": 0},
+        {"NA.a": 5, "NA.b": 20, "NB.c": 1},
+    ]
+    assert st2.states_ind_final == [
+        {"NA.b": 0, "NB.c": 0},
+        {"NA.b": 0, "NB.c": 1},
+        {"NA.b": 1, "NB.c": 0},
+        {"NA.b": 1, "NB.c": 1}
+    ]
+
+    st2.prepare_inputs()
+    assert st2.inputs_ind == [
+        {"NB.b": 0, "NB.c": 0}, {"NB.b": 0, "NB.c": 1},
+        {"NB.b": 1, "NB.c": 0}, {"NB.b": 1, "NB.c": 1},
+        {"NB.b": 2, "NB.c": 0}, {"NB.b": 2, "NB.c": 1},
+        {"NB.b": 3, "NB.c": 0}, {"NB.b": 3, "NB.c": 1}
+        ]
