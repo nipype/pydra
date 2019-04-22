@@ -551,20 +551,10 @@ class Workflow(NodeBase):
         self.name2obj[task.name] = task
         self._last_added = task
         other_states = {}
-        # TODO: should this add per every field
         for field in dc.fields(task.inputs):
             val = getattr(task.inputs, field.name)
             if isinstance(val, LazyField):
-                if val.name in self.node_names and getattr(self, val.name).state:
-                    other_states[val.name] = (getattr(self, val.name).state, field.name)
-                    if hasattr(task, "fut_combiner"):
-                        task.state = state.State(
-                            task.name,
-                            other_states=other_states,
-                            combiner=task.fut_combiner,
-                        )
-                    else:
-                        task.state = state.State(task.name, other_states=other_states)
+                # adding an edge to the graph if task id expecting output from a different task
                 if val.name != self.name:
                     self.graph.add_edge(
                         getattr(self, val.name),
@@ -572,6 +562,19 @@ class Workflow(NodeBase):
                         from_field=val.field,
                         to_field=field.name,
                     )
+                if val.name in self.node_names and getattr(self, val.name).state:
+                    # adding a state from the previous task to other_states
+                    other_states[val.name] = (getattr(self, val.name).state, field.name)
+        # if task has connections state has to be recalculated
+        if other_states:
+            if hasattr(task, "fut_combiner"):
+                task.state = state.State(
+                    task.name,
+                    other_states=other_states,
+                    combiner=task.fut_combiner,
+                )
+            else:
+                task.state = state.State(task.name, other_states=other_states)
         self.node_names.append(task.name)
         return self
 
