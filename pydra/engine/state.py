@@ -99,8 +99,7 @@ class State:
                 state_fields=False,
             )
             self._left_splitter_rpn = aux.splitter2rpn(
-                deepcopy(self._left_splitter),
-                other_states=self.other_states,
+                deepcopy(self._left_splitter), other_states=self.other_states
             )
         else:  # if other_states is empty there is only Right part
             self._left_splitter = None
@@ -155,13 +154,17 @@ class State:
         self.keys_final = []
         self.left_combiner_all = []
         if self._left_combiner:
-            _, _, _, self._left_combiner = aux._splits_groups(self._left_splitter_rpn,
-                                                          combiner=self._left_combiner)
+            _, _, _, self._left_combiner = aux._splits_groups(
+                self._left_splitter_rpn, combiner=self._left_combiner
+            )
 
         for i, left_nm in enumerate(self._left_splitter_rpn_nost):
             if left_nm in ["*", "."]:
                 continue
-            if i+1 < len(self._left_splitter_rpn_nost) and self._left_splitter_rpn_nost[i+1] == ".":
+            if (
+                i + 1 < len(self._left_splitter_rpn_nost)
+                and self._left_splitter_rpn_nost[i + 1] == "."
+            ):
                 last_gr = last_gr - 1
             st = self.other_states[left_nm[1:]][0]
             # checking if left combiner contains any element from the st splitter
@@ -171,12 +174,11 @@ class State:
             if st_combiner:
                 # keys and groups from previous states
                 # after taking into account combiner from current state
-                keys_f_st, group_for_inputs_f_st, groups_stack_f_st, combiner_all_st = \
-                    aux._splits_groups(
-                        st.splitter_rpn_final,
-                        combiner=st_combiner,
-                        inner_inputs=st.inner_inputs
-                    )
+                keys_f_st, group_for_inputs_f_st, groups_stack_f_st, combiner_all_st = aux._splits_groups(
+                    st.splitter_rpn_final,
+                    combiner=st_combiner,
+                    inner_inputs=st.inner_inputs,
+                )
                 self.keys_final += keys_f_st  # st.keys_final
                 if not hasattr(st, "group_for_inputs_final"):
                     raise Exception("previous state has to run first")
@@ -204,7 +206,6 @@ class State:
                     self.groups_stack_final.append([gr + last_gr for gr in groups])
                     nmb_gr += len(groups)
             last_gr += nmb_gr
-
 
     def push_new_states(self):
         """adding additional groups from the current state"""
@@ -287,11 +288,11 @@ class State:
             deepcopy(self.splitter_rpn_nost), elements_to_remove_comb
         )
         # combiner can have parts from the left splitter, so have to have rpn with states
-        partial_rpn = aux.splitter2rpn(aux.rpn2splitter(partial_rpn_nost),
-                                       other_states=self.other_states)
+        partial_rpn = aux.splitter2rpn(
+            aux.rpn2splitter(partial_rpn_nost), other_states=self.other_states
+        )
         combined_rpn = aux.remove_inp_from_splitter_rpn(
-            deepcopy(partial_rpn),
-            self.right_combiner_all + self.left_combiner_all,
+            deepcopy(partial_rpn), self.right_combiner_all + self.left_combiner_all
         )
         # TODO: create a function for this!!
         if combined_rpn:
@@ -371,7 +372,7 @@ class State:
                     st_ind = range(len(st.states_ind_final))
                     if inputs_ind_prev:
                         # in case the Left part has scalar parts (not very well tested)
-                        if self._left_splitter_rpn_nost[ii+1] == ".":
+                        if self._left_splitter_rpn_nost[ii + 1] == ".":
                             inputs_ind_prev = aux.op["."](inputs_ind_prev, st_ind)
                         else:
                             inputs_ind_prev = aux.op["*"](inputs_ind_prev, st_ind)

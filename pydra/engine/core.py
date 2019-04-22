@@ -165,7 +165,6 @@ class TaskBase:
     def checksum(self):
         return create_checksum(self.__class__.__name__, self.inputs)
 
-
     def set_state(self, splitter, combiner=None):
         if splitter is not None:
             self.state = state.State(
@@ -411,7 +410,6 @@ class TaskBase:
             inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
             return None, inputs_dict
 
-
     def to_job(self, ind):
         """ running interface one element generated from node_state."""
         # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
@@ -426,7 +424,6 @@ class TaskBase:
     def done(self):
         if self.results_dict:
             return all([future.done() for _, (future, _) in self.results_dict.items()])
-
 
     def _combined_output(self):
         combined_results = []
@@ -485,7 +482,7 @@ class Workflow(TaskBase):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
-        **kwargs
+        **kwargs,
     ):
         if input_spec:
             if isinstance(input_spec, BaseSpec):
@@ -561,9 +558,7 @@ class Workflow(TaskBase):
         if other_states:
             if hasattr(task, "fut_combiner"):
                 task.state = state.State(
-                    task.name,
-                    other_states=other_states,
-                    combiner=task.fut_combiner,
+                    task.name, other_states=other_states, combiner=task.fut_combiner
                 )
             else:
                 task.state = state.State(task.name, other_states=other_states)

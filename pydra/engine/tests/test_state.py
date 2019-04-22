@@ -390,10 +390,7 @@ def test_state_connect_4():
     assert st3.states_val == [{"NA.a": 3, "NB.a": 30}, {"NA.a": 5, "NB.a": 50}]
 
     st3.prepare_inputs()
-    assert st3.inputs_ind == [
-        {"NC.b": 0, "NC.c": 0},
-        {"NC.b": 1, "NC.c": 1},
-    ]
+    assert st3.inputs_ind == [{"NC.b": 0, "NC.c": 0}, {"NC.b": 1, "NC.c": 1}]
 
 
 def test_state_connect_5():
@@ -1209,7 +1206,7 @@ def test_state_connect_innerspl_combine_1():
         {"NB.c": 0, "NA.a": 0},
         {"NB.c": 1, "NA.a": 0},
         {"NB.c": 0, "NA.a": 1},
-        {"NB.c": 1, "NA.a": 1}
+        {"NB.c": 1, "NA.a": 1},
     ]
 
     st2.prepare_inputs()
@@ -1409,7 +1406,8 @@ def test_state_connect_combine_left_4():
     st2 = State(name="NB", splitter="a")
     st3 = State(
         name="NC",
-        splitter=["_NA", "_NB"], combiner=["NA.a"],
+        splitter=["_NA", "_NB"],
+        combiner=["NA.a"],
         other_states={"NA": (st1, "a"), "NB": (st2, "b")},
     )
     assert st3.splitter == ["_NA", "_NB"]
@@ -1453,7 +1451,8 @@ def test_state_connect_combine_left_5():
     st2 = State(name="NB", splitter="a")
     st3 = State(
         name="NC",
-        splitter=("_NA", "_NB"), combiner=["NA.a"],
+        splitter=("_NA", "_NB"),
+        combiner=["NA.a"],
         other_states={"NA": (st1, "a"), "NB": (st2, "b")},
     )
     assert st3.splitter == ("_NA", "_NB")
@@ -1464,21 +1463,12 @@ def test_state_connect_combine_left_5():
 
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [600, 700]})
 
-    assert st3.states_ind == [
-        {"NA.a": 0, "NB.a": 0},
-        {"NA.a": 1, "NB.a": 1},
-    ]
-    assert st3.states_val == [
-        {"NA.a": 3, "NB.a": 600},
-        {"NA.a": 5, "NB.a": 700},
-    ]
+    assert st3.states_ind == [{"NA.a": 0, "NB.a": 0}, {"NA.a": 1, "NB.a": 1}]
+    assert st3.states_val == [{"NA.a": 3, "NB.a": 600}, {"NA.a": 5, "NB.a": 700}]
     assert st3.states_ind_final == []
 
     st3.prepare_inputs()
-    assert st3.inputs_ind == [
-        {"NC.a": 0, "NC.b": 0},
-        {"NC.a": 1, "NC.b": 1},
-    ]
+    assert st3.inputs_ind == [{"NC.a": 0, "NC.b": 0}, {"NC.a": 1, "NC.b": 1}]
 
 
 def test_state_connect_combine_left_6():
@@ -1488,7 +1478,9 @@ def test_state_connect_combine_left_6():
         (i.e. from the Left part of the splitter),
     """
     st1 = State(name="NA", splitter=["a", "b"])
-    st2 = State(name="NB", splitter="c", other_states={"NA": (st1, "b")}, combiner="NA.a")
+    st2 = State(
+        name="NB", splitter="c", other_states={"NA": (st1, "b")}, combiner="NA.a"
+    )
     assert st2.splitter == ["_NA", "NB.c"]
     assert st2.splitter_rpn == ["NA.a", "NA.b", "*", "NB.c", "*"]
     assert st2.combiner == ["NA.a"]
@@ -1522,13 +1514,17 @@ def test_state_connect_combine_left_6():
         {"NA.b": 0, "NB.c": 0},
         {"NA.b": 0, "NB.c": 1},
         {"NA.b": 1, "NB.c": 0},
-        {"NA.b": 1, "NB.c": 1}
+        {"NA.b": 1, "NB.c": 1},
     ]
 
     st2.prepare_inputs()
     assert st2.inputs_ind == [
-        {"NB.b": 0, "NB.c": 0}, {"NB.b": 0, "NB.c": 1},
-        {"NB.b": 1, "NB.c": 0}, {"NB.b": 1, "NB.c": 1},
-        {"NB.b": 2, "NB.c": 0}, {"NB.b": 2, "NB.c": 1},
-        {"NB.b": 3, "NB.c": 0}, {"NB.b": 3, "NB.c": 1}
-        ]
+        {"NB.b": 0, "NB.c": 0},
+        {"NB.b": 0, "NB.c": 1},
+        {"NB.b": 1, "NB.c": 0},
+        {"NB.b": 1, "NB.c": 1},
+        {"NB.b": 2, "NB.c": 0},
+        {"NB.b": 2, "NB.c": 1},
+        {"NB.b": 3, "NB.c": 0},
+        {"NB.b": 3, "NB.c": 1},
+    ]

@@ -8,6 +8,7 @@ from ..task import to_task
 
 Plugins = ["serial", "cf"]
 
+
 @pytest.fixture(scope="module")
 def change_dir(request):
     orig_dir = os.getcwd()
@@ -52,6 +53,7 @@ def fun_div(a, b):
 
 
 # Tests for tasks initializations
+
 
 def test_task_init_1():
     """ task with mandatory arguments only"""
@@ -179,6 +181,7 @@ def test_task_error():
 
 # Tests for tasks without state (i.e. no splitter)
 
+
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_1(plugin):
     """ task without splitter"""
@@ -209,7 +212,9 @@ def test_task_nostate_2(plugin):
     results = nn.result()
     assert results.output.out == 33
 
+
 # Testing caching for tasks without states
+
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_cachedir(plugin, tmpdir):
@@ -302,6 +307,7 @@ def test_task_nostate_cachelocations_updated(plugin, tmpdir):
 
 # Tests for tasks with states (i.e. with splitter)
 
+
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_1(plugin):
     """ task with the simplest splitter"""
@@ -342,7 +348,6 @@ def test_task_state_1a(plugin):
         assert results[i].output.out == res[1]
 
 
-
 @pytest.mark.parametrize(
     "splitter, state_splitter, state_rpn, expected",
     [
@@ -377,7 +382,6 @@ def test_task_state_2(plugin, splitter, state_splitter, state_rpn, expected):
     assert nn.state.splitter_final == state_splitter
     assert nn.state.splitter_rpn_final == state_rpn
 
-
     with Submitter(plugin=plugin) as sub:
         sub.run(nn)
 
@@ -399,7 +403,6 @@ def test_task_state_comb_1(plugin):
     assert nn.state.combiner == ["NA.a"]
     assert nn.state.splitter_final is None
     assert nn.state.splitter_rpn_final == []
-
 
     with Submitter(plugin=plugin) as sub:
         sub.run(nn)
@@ -478,11 +481,18 @@ def test_task_state_comb_1(plugin):
     ],
 )
 @pytest.mark.parametrize("plugin", Plugins)
-def test_task_state_comb_2(plugin, splitter, combiner,
-                           state_splitter, state_rpn,
-                           state_combiner, state_combiner_all,
-                           state_splitter_final, state_rpn_final,
-                           expected):
+def test_task_state_comb_2(
+    plugin,
+    splitter,
+    combiner,
+    state_splitter,
+    state_rpn,
+    state_combiner,
+    state_combiner_all,
+    state_splitter_final,
+    state_rpn_final,
+    expected,
+):
     """ Tasks with scalar and outer splitters and  partial or full combiners"""
     nn = (
         fun_addvar(name="NA")
@@ -512,6 +522,7 @@ def test_task_state_comb_2(plugin, splitter, combiner,
 
 
 # Testing caching for tasks with states
+
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_cachedir(plugin, tmpdir):
@@ -596,4 +607,3 @@ def test_task_state_cachelocations_updated(plugin, tmpdir):
     # checking if both tasks run interface
     assert nn.output_dir.exists()
     assert nn2.output_dir.exists()
-
