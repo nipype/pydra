@@ -168,15 +168,12 @@ class TaskBase:
     def checksum(self):
         return create_checksum(self.__class__.__name__, self.inputs)
 
-<<<<<<< HEAD:pydra/engine/node.py
     def is_finished(self, index=None):
         # TODO: check local procs
         if self.result():
             return True
         return False
 
-=======
->>>>>>> efcc80f9cf643e958b47102496afe5c892d568c1:pydra/engine/core.py
     def set_state(self, splitter, combiner=None):
         if splitter is not None:
             self.state = state.State(
@@ -581,29 +578,10 @@ class Workflow(TaskBase):
         return self
 
     def _run_task(self):
-<<<<<<< HEAD:pydra/engine/node.py
         # logic in submitter.run
         # TODO: enable lockfile for workflow execution
         # TODO: allow wf.run() without submitter
         pass
-=======
-        for task in self.graph_sorted:
-            # depend on prior tasks that have state
-            task.inputs.retrieve_values(self)
-            if task.state and not hasattr(task.state, "states_ind"):
-                task.state.prepare_states(inputs=task.inputs)
-            if task.state and not hasattr(task.state, "inputs_ind"):
-                task.state.prepare_inputs()
-            if self.plugin is None:
-                task.run()
-            else:
-                from .submitter import Submitter
-
-                with Submitter(self.plugin) as sub:
-                    sub.run(task)
-                while not task.done:
-                    sleep(1)
->>>>>>> efcc80f9cf643e958b47102496afe5c892d568c1:pydra/engine/core.py
 
     def set_output(self, connections):
         self._connections = connections
