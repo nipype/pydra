@@ -40,7 +40,7 @@ logger = logging.getLogger("pydra")
 develop = True
 
 
-class NodeBase:
+class TaskBase:
     _api_version: str = "0.0.1"  # Should generally not be touched by subclasses
     _version: str  # Version of tool being wrapped
     _task_version: ty.Optional[
@@ -158,32 +158,26 @@ class NodeBase:
     def version(self):
         return self._version
 
-    def save_set(self, name, inputs, force=False):
-        if name in self._input_sets and not force:
-            raise KeyError("Key {} already saved. Use force=True to override.")
-        self._input_sets[name] = inputs
+    # TODO: not sure what was the idea for the method (not used)
+    # def save_set(self, name, inputs, force=False):
+    #     if name in self._input_sets and not force:
+    #         raise KeyError("Key {} already saved. Use force=True to override.")
+    #     self._input_sets[name] = inputs
 
     @property
     def checksum(self):
         return create_checksum(self.__class__.__name__, self.inputs)
 
+<<<<<<< HEAD:pydra/engine/node.py
     def is_finished(self, index=None):
         # TODO: check local procs
         if self.result():
             return True
         return False
 
+=======
+>>>>>>> efcc80f9cf643e958b47102496afe5c892d568c1:pydra/engine/core.py
     def set_state(self, splitter, combiner=None):
-        incoming_states = []
-        if splitter is None:
-            splitter = [state.name for state in incoming_states] or None
-        elif len(incoming_states):
-            rpn = aux.splitter2rpn(splitter)
-            # TODO: check for keys instead of just names
-            left_out = [
-                state.name for state in incoming_states if state.name not in rpn
-            ]
-
         if splitter is not None:
             self.state = state.State(
                 name=self.name, splitter=splitter, combiner=combiner
@@ -403,13 +397,14 @@ class NodeBase:
         self.set_state(splitter=self.state.splitter, combiner=self.combiner)
         return self
 
-    def checking_input_el(self, ind):
-        """checking if all inputs are available (for specific state element)"""
-        try:
-            self.get_input_el(ind)
-            return True
-        except:  # TODO specify
-            return False
+    # TODO: was used in submitter (if not needed should be removed)
+    # def checking_input_el(self, ind):
+    #     """checking if all inputs are available (for specific state element)"""
+    #     try:
+    #         self.get_input_el(ind)
+    #         return True
+    #     except:  # TODO specify
+    #         return False
 
     def get_input_el(self, ind):
         """collecting all inputs required to run the node (for specific state element)"""
@@ -427,73 +422,6 @@ class NodeBase:
             inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
             return None, inputs_dict
 
-    def _state_dict_all_comb(self, from_node, state_dict):
-        """collecting state dictionary for all elements that were combined together"""
-        elements_per_axes = {}
-        axis_for_input = {}
-        all_axes = []
-        for inp in from_node.combiner:
-            axis_for_input[inp] = from_node.state._axis_for_input[inp]
-            for (i, ax) in enumerate(axis_for_input[inp]):
-                elements_per_axes[ax] = state_dict[inp].shape[i]
-                all_axes.append(ax)
-        all_axes = list(set(all_axes))
-        all_axes.sort()
-        # axes in axis_for_input have to be shifted, so they start in 0
-        # they should fit all_elements format
-        for inp, ax_l in axis_for_input.items():
-            ax_new_l = [all_axes.index(ax) for ax in ax_l]
-            axis_for_input[inp] = ax_new_l
-        # collecting shapes for all axes of the combiner
-        shape = [el for (ax, el) in sorted(elements_per_axes.items())]
-        all_elements = [range(i) for i in shape]
-        index_generator = itertools.product(*all_elements)
-        state_dict_all = []
-        for ind in index_generator:
-            state_dict_all.append(
-                self._state_dict_el_for_comb(ind, state_dict, axis_for_input)
-            )
-        return state_dict_all
-
-    # similar to State.state_value (could be combined?)
-    def _state_dict_el_for_comb(self, ind, state_inputs, axis_for_input, value=True):
-        """state input for a specific ind (used for connection)"""
-        state_dict_el = {}
-        for input, ax in axis_for_input.items():
-            # checking which axes are important for the input
-            sl_ax = slice(ax[0], ax[-1] + 1)
-            # taking the indexes for the axes
-            ind_inp = tuple(ind[sl_ax])  # used to be list
-            if value:
-                state_dict_el[input] = state_inputs[input][ind_inp]
-            else:  # using index instead of value
-                ind_inp_str = "x".join([str(el) for el in ind_inp])
-                state_dict_el[input] = ind_inp_str
-        # adding values from input that are not used in the splitter
-        for input in set(state_inputs) - set(axis_for_input):
-            if value:
-                state_dict_el[input] = state_inputs[input]
-            else:
-                state_dict_el[input] = None
-        # in py3.7 we can skip OrderedDict
-        return OrderedDict(sorted(state_dict_el.items(), key=lambda t: t[0]))
-
-    def _directory_name_state_surv(self, state_dict):
-        """eliminating all inputs from state dictionary that are not in
-        the splitter of the node;
-        creating a directory name
-        """
-        # should I be using self.state._splitter_rpn_comb?
-        state_surv_dict = dict(
-            (key, val)
-            for (key, val) in state_dict.items()
-            if key in self.state.splitter_rpn
-        )
-        dir_nm_el = "_".join(
-            ["{}:{}".format(i, j) for i, j in list(state_surv_dict.items())]
-        )
-        return dir_nm_el, state_surv_dict
-
     def to_job(self, ind):
         """ running interface one element generated from node_state."""
         # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
@@ -508,15 +436,6 @@ class NodeBase:
     def done(self):
         if self.results_dict:
             return all([future.done() for _, (future, _) in self.results_dict.items()])
-
-    def _state_dict_to_list(self, container):
-        """creating a list of tuples from dictionary and changing key (state) from str to dict"""
-        if type(container) is dict:
-            val_l = list(container.items())
-        else:
-            raise Exception("{} has to be dict".format(container))
-        val_dict_l = [(self.state.states_val[i[0]], i[1]) for i in val_l]
-        return val_dict_l
 
     def _combined_output(self):
         combined_results = []
@@ -565,17 +484,17 @@ class NodeBase:
             return result
 
 
-class Workflow(NodeBase):
+class Workflow(TaskBase):
     def __init__(
         self,
         name,
-        inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
         input_spec: ty.Union[ty.List[ty.Text], BaseSpec, None] = None,
         output_spec: ty.Optional[BaseSpec] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
         messenger_args=None,
         cache_dir=None,
+        **kwargs,
     ):
         if input_spec:
             if isinstance(input_spec, BaseSpec):
@@ -594,7 +513,7 @@ class Workflow(NodeBase):
 
         super(Workflow, self).__init__(
             name=name,
-            inputs=inputs,
+            inputs=kwargs,
             cache_dir=cache_dir,
             audit_flags=audit_flags,
             messengers=messengers,
@@ -611,8 +530,10 @@ class Workflow(NodeBase):
         self.node_names = []
 
     def __getattr__(self, name):
-        if name == "lzin":  # lazy output
+        if name == "lzin":
             return LazyField(self, "input")
+        if name == "lzout":
+            return super().__getattr__(name)
         if name in self.name2obj:
             return self.name2obj[name]
         return self.__getattribute__(name)
@@ -632,20 +553,10 @@ class Workflow(NodeBase):
         self.name2obj[task.name] = task
         self._last_added = task
         other_states = {}
-        # TODO: should this add per every field
         for field in dc.fields(task.inputs):
             val = getattr(task.inputs, field.name)
             if isinstance(val, LazyField):
-                if val.name in self.node_names and getattr(self, val.name).state:
-                    other_states[val.name] = (getattr(self, val.name).state, field.name)
-                    if hasattr(task, "fut_combiner"):
-                        task.state = state.State(
-                            task.name,
-                            other_states=other_states,
-                            combiner=task.fut_combiner,
-                        )
-                    else:
-                        task.state = state.State(task.name, other_states=other_states)
+                # adding an edge to the graph if task id expecting output from a different task
                 if val.name != self.name:
                     logger.debug("Connecting %s to %s", val.name, task.name)
                     self.graph.add_edge(
@@ -654,15 +565,45 @@ class Workflow(NodeBase):
                         from_field=val.field,
                         to_field=field.name,
                     )
+                if val.name in self.node_names and getattr(self, val.name).state:
+                    # adding a state from the previous task to other_states
+                    other_states[val.name] = (getattr(self, val.name).state, field.name)
+        # if task has connections state has to be recalculated
+        if other_states:
+            if hasattr(task, "fut_combiner"):
+                task.state = state.State(
+                    task.name, other_states=other_states, combiner=task.fut_combiner
+                )
+            else:
+                task.state = state.State(task.name, other_states=other_states)
         self.node_names.append(task.name)
         logger.debug("Added %s", task)
         return self
 
     def _run_task(self):
+<<<<<<< HEAD:pydra/engine/node.py
         # logic in submitter.run
         # TODO: enable lockfile for workflow execution
         # TODO: allow wf.run() without submitter
         pass
+=======
+        for task in self.graph_sorted:
+            # depend on prior tasks that have state
+            task.inputs.retrieve_values(self)
+            if task.state and not hasattr(task.state, "states_ind"):
+                task.state.prepare_states(inputs=task.inputs)
+            if task.state and not hasattr(task.state, "inputs_ind"):
+                task.state.prepare_inputs()
+            if self.plugin is None:
+                task.run()
+            else:
+                from .submitter import Submitter
+
+                with Submitter(self.plugin) as sub:
+                    sub.run(task)
+                while not task.done:
+                    sleep(1)
+>>>>>>> efcc80f9cf643e958b47102496afe5c892d568c1:pydra/engine/core.py
 
     def set_output(self, connections):
         self._connections = connections

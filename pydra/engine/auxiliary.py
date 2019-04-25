@@ -321,6 +321,22 @@ def converter_groups_to_input(group_for_inputs):
     return input_for_axis, ngr
 
 
+# TODO: currently not used
+def groups_stack_input(group_for_inputs, groups_stack):
+    """ function that helps testing groups_stack_final
+        returns groups_stack_final with input names
+    """
+    inputs_for_groups = converter_groups_to_input(group_for_inputs)[0]
+    groups_stack_input = []
+    for stack_el in groups_stack:
+        stack_el_inp = []
+        for gr in stack_el:
+            stack_el_inp += inputs_for_groups[gr]
+        groups_stack_input.append(stack_el_inp)
+    return groups_stack_input
+
+
+# TODO: not used currently, think if I need it
 def converting_axis2input(axis_for_input, ndim, state_inputs=None):
     """ Having axes for all the input fields, the function returns fields for each axis. """
     input_for_axis = []
@@ -343,7 +359,7 @@ def converting_axis2input(axis_for_input, ndim, state_inputs=None):
 
 # function used in State if combiner
 
-
+# TODO: not used currently, think if I need it
 def matching_input_from_splitter(splitter_rpn):
     """similar to splitting_axis, but without state_input,
         finding inputs that are for the same axes.
@@ -568,10 +584,6 @@ def iter_splits(iterable, keys):
         yield dict(zip(keys, list(flatten(iter, max_depth=1000))))
 
 
-def next_key(new_key):
-    return "_" + chr(ord(new_key[1:]) + 1) if new_key else "_a"
-
-
 def input_shape(in1):
     # TODO: have to be changed for inner splitter (sometimes different length)
     shape = [len(in1)]
@@ -717,7 +729,6 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     """
     if not splitter_rpn:
         return [], {}, [], []
-
     stack = []
     keys = []
     groups = {}
@@ -785,7 +796,6 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
                     oldgroup = oldgroups["L"]
                     # dj: changing axes for Right part of the scalar op.
                     for k, v in groups.items():
-                        pdb.set_trace()  # check if I need it (and possibly remove)
                         if v in ensure_list(oldgroups["R"]):
                             groups[k] = ensure_list(oldgroups["L"])[
                                 ensure_list(oldgroups["R"]).index(v)
@@ -882,10 +892,6 @@ def _single_op_splits(
 def _single_op_splits_groups(
     op_single, combiner, inner_inputs, previous_states_ind, groups
 ):
-    # TODO: in this situation the state should be simply the same
-    if op_single.startswith("_"):
-        pdb.set_trace()  # TODO: do i use it??? return is wrong
-        return previous_states_ind[op_single], None, None, []
     if op_single in inner_inputs:
         # TODO: have to be changed if differ length
         # TODO: i think I don't want to add here from left part
@@ -915,12 +921,17 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
     combiner_all = list(set(combiner_all))
     combiner_all.sort()
 
+    # groups that were removed (so not trying to remove twice)
+    grs_removed = []
     groups_stack_final = deepcopy(groups_stack)
     for comb in combiner:
         grs = groups[comb]
         for gr in ensure_list(grs):
             if gr in groups_stack_final[-1]:
+                grs_removed.append(gr)
                 groups_stack_final[-1].remove(gr)
+            elif gr in grs_removed:
+                pass
             else:
                 raise Exception(
                     "input {} not ready to combine, you have to combine {} "
@@ -938,29 +949,9 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
     return keys_final, groups_final, groups_stack_final, combiner_all
 
 
-# looks like i'm not using anymore
-# def splits(splitter, inputs, inner_inputs=None):
-#     values, keys, _, _ = _splits(splitter, inputs, inner_inputs=inner_inputs)
-#     # dj: i'm not sure why you need iter_splits, _splits gives groups with all axes per input
-#     return iter_splits(values, keys)
-
-
 def map_splits(split_iter, inputs):
     for split in split_iter:
         yield {k: list(flatten(ensure_list(inputs[k])))[v] for k, v in split.items()}
-
-
-"""
-def combine(combiner, groups, finalgroup, shapes, outputs):
-    combine_keys = set([groups[val] for val in splitter2rpn(combiner)
-                        if val not in ['*', '.']])
-    if combine_keys != set(ensure_list(finalgroup)):
-        raise ValueError('Combiner has keys not in final group')
-    groups
-    finalgroup
-    splits
-    outputs
-"""
 
 
 """ Functions for merging and completing splitters in states.
@@ -1061,55 +1052,3 @@ def inputs_types_to_dict(name, inputs):
     for field in input_names:
         inputs_dict["{}.{}".format(name, field)] = getattr(inputs, field)
     return inputs_dict
-
-
-# TODO: I think I will not need it
-# def removing_inputs_rpn(rpn, keys_remove):
-#     #TODO: similar to remove_inp_from_splitter_rpn, for now using removing_inputs_rpn
-#     # TODO: removing_inputs_rpn doesn't raise exceptions for scalar
-#     """changes splitter rpn so it doesn't include specific fields"""
-#     if rpn == []:
-#         return []
-#     elif len(rpn) == 1:
-#         if rpn[0] in keys_remove:
-#             return []
-#         else:
-#             return rpn
-#
-#     ind_to_remove =[]
-#     for key in keys_remove:
-#         if ind_to_remove:
-#             for i in range(2):
-#                 rpn.pop(ind_to_remove.pop())
-#         i = 0
-#         while i < len(rpn):
-#             if rpn[i] == key:
-#                 if rpn[i+1] == "." or rpn[i+2] == ".":
-#                     raise Exception("can't remove field that is in a scalar splitter")
-#                 elif rpn[i+1] == "*":
-#                     ind_to_remove += [i, i+1]
-#                     break
-#                 elif rpn[i+2] == "*":
-#                     ind_to_remove += [i, i+2]
-#                     break
-#                 else:
-#                     nr_str = 2
-#                     j = i + 3
-#                     while j < len(rpn):
-#                         if rpn[j] in ["*", "."]:
-#                             if nr_str > 0:
-#                                 nr_str -= 2
-#                                 j += 1
-#                             else:
-#                                 if rpn[j] == ".":
-#                                     raise Exception("can't remove field that is in a scalar splitter")
-#                                 elif rpn[j] == "*":
-#                                     ind_to_remove += [i, j]
-#                                     break
-#                         else:
-#                             nr_str += 1
-#                             j += 1
-#                     break
-#
-#             i += 1
-#     return rpn

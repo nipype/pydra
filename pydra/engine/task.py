@@ -41,7 +41,7 @@ import dataclasses as dc
 import inspect
 import typing as ty
 
-from .node import NodeBase
+from .core import TaskBase
 from ..utils.messenger import AuditFlag
 from .specs import (
     BaseSpec,
@@ -55,7 +55,7 @@ from .specs import (
 from .helpers import ensure_list, execute
 
 
-class FunctionTask(NodeBase):
+class FunctionTask(TaskBase):
     def __init__(
         self,
         func: ty.Callable,
@@ -145,7 +145,7 @@ def to_task(func_to_decorate):
     return create_func
 
 
-class ShellCommandTask(NodeBase):
+class ShellCommandTask(TaskBase):
     def __init__(
         self,
         name,
