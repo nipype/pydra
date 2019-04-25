@@ -125,7 +125,6 @@ class NodeBase:
         # dictionary of results from tasks
         self.results_dict = {}
         self.plugin = None
-        self._ancestors = set()
 
     def __repr__(self):
         return self.name
@@ -170,6 +169,8 @@ class NodeBase:
 
     def is_finished(self, index=None):
         # TODO: check local procs
+        if self.result():
+            return True
         return False
 
     def set_state(self, splitter, combiner=None):
@@ -239,12 +240,6 @@ class NodeBase:
         else:
             self._cache_dir = mkdtemp()
             self._cache_dir = Path(self._cache_dir)
-
-    @property
-    def is_runnable(self):
-        if not self._ancestors:
-            return True
-        return all([c.is_finished for c in self._ancestors])
 
     @property
     def cache_locations(self):
@@ -431,9 +426,6 @@ class NodeBase:
         else:
             inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
             return None, inputs_dict
-
-    def _add_ancestor(self, task):
-        self._ancestors.add(task)
 
     def _state_dict_all_comb(self, from_node, state_dict):
         """collecting state dictionary for all elements that were combined together"""
@@ -656,7 +648,6 @@ class Workflow(NodeBase):
                         task.state = state.State(task.name, other_states=other_states)
                 if val.name != self.name:
                     logger.debug("Connecting %s to %s", val.name, task.name)
-                    task._add_ancestor(val.name)
                     self.graph.add_edge(
                         getattr(self, val.name),
                         task,
@@ -668,27 +659,10 @@ class Workflow(NodeBase):
         return self
 
     def _run_task(self):
-        for task in self.graph_sorted:
-            # TODO: this next line will need to be adjusted for tasks that
-            # depend on prior tasks that have state
-            task.inputs.retrieve_values(self)
-            # TODO: check where prepare_states should be run
-            if task.state and not hasattr(task.state, "states_ind"):
-                task.state.prepare_states(inputs=task.inputs)
-            if task.state and not hasattr(task.state, "inputs_ind"):
-                task.state.prepare_inputs()
-            if self.plugin is None:
-                logger.debug("Running %s", task)
-                task.run()
-            else:
-
-                from .submitter import Submitter
-                logger.debug("Running %s with %s", task, self.plugin)
-                with Submitter(self.plugin) as sub:
-                    sub.run(task)
-                while not task.done:
-                    sleep(1)
-            logger.debug("Completed %s", task)
+        # logic in submitter.run
+        # TODO: enable lockfile for workflow execution
+        # TODO: allow wf.run() without submitter
+        pass
 
     def set_output(self, connections):
         self._connections = connections
@@ -715,3 +689,14 @@ def is_task(obj):
 
 def is_workflow(obj):
     return isinstance(obj, Workflow)
+
+
+def is_runnable(graph, obj):
+    """Check if a task within a graph is runnable"""
+    if (not is_task(obj)) or not hasattr(graph, "predecessors"):
+        return False
+    if graph.predecessors(obj):
+        for pred in graph.predecessors(obj):
+            if not pred.is_finished():
+                return False
+    return True

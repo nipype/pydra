@@ -1,5 +1,6 @@
-import os, time, pdb
+import time
 import multiprocessing as mp
+import asyncio
 
 # from pycon_utils import make_cluster
 from dask.distributed import Client
@@ -12,14 +13,21 @@ logger = logging.getLogger("nipype.workflow")
 
 class Worker(object):
     def __init__(self):
+        self._pending = set()
+        self._completed = set()
         logger.debug("Initialize Worker")
-        pass
 
     def run_el(self, interface, **kwargs):
         raise NotImplementedError
 
     def close(self):
         raise NotImplementedError
+
+    def _remove_pending(self, task):
+        self._pending.remove(task)
+
+    def _remove_completed(self, task):
+        self._completed.remove(task)
 
 
 class MpWorker(Worker):
@@ -66,17 +74,32 @@ class SerialWorker(Worker):
 
 
 class ConcurrentFuturesWorker(Worker):
-    def __init__(self, nr_proc=None):
+    def __init__(self, nr_proc=2):
+        super(ConcurrentFuturesWorker, self).__init__()
         self.nr_proc = nr_proc or mp.cpu_count()
         # added cpu_count to verify, remove once confident and let PPE handle
         self.pool = cf.ProcessPoolExecutor(self.nr_proc)
         logger.debug("Initialize ConcurrentFuture")
+        self.loop = asyncio.get_event_loop()  # TODO: consider windows
 
     def run_el(self, interface, **kwargs):
-        return self.pool.submit(interface, **kwargs)
+        # wrap as asyncio task
+        task = asyncio.create_task(exec_as_coro(self.loop, self.pool, interface))#, debug=True, **kwargs)
+        self._pending.add(task)
+        logger.debug("Pending tasks: %s", self._pending)
+        return task
+        # return self.pool.submit(interface, **kwargs)
 
     def close(self):
         self.pool.shutdown()
+
+    async def fetch_finished(self):
+        done, pending = await asyncio.wait(
+            self._pending, return_when=asyncio.FIRST_COMPLETED
+        )
+        # preserve pending tasks
+        self._pending.union(pending)
+        return done
 
 
 class DaskWorker(Worker):
@@ -103,3 +126,8 @@ class DaskWorker(Worker):
     def close(self):
         # self.cluster.close()
         self.client.close()
+
+
+async def exec_as_coro(loop, pool, interface):
+    res = await loop.run_in_executor(pool, interface.run)
+    return interface, res
