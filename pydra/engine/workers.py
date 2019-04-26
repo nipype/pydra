@@ -14,7 +14,6 @@ logger = logging.getLogger("nipype.workflow")
 class Worker(object):
     def __init__(self):
         self._pending = set()
-        self._completed = set()
         logger.debug("Initialize Worker")
 
     def run_el(self, interface, **kwargs):
@@ -25,9 +24,6 @@ class Worker(object):
 
     def _remove_pending(self, task):
         self._pending.remove(task)
-
-    def _remove_completed(self, task):
-        self._completed.remove(task)
 
 
 class MpWorker(Worker):
@@ -84,7 +80,7 @@ class ConcurrentFuturesWorker(Worker):
 
     def run_el(self, interface, **kwargs):
         # wrap as asyncio task
-        task = asyncio.create_task(exec_as_coro(self.loop, self.pool, interface))#, debug=True, **kwargs)
+        task = asyncio.create_task(exec_as_coro(self.loop, self.pool, interface))
         self._pending.add(task)
         logger.debug("Pending tasks: %s", self._pending)
         return task
@@ -129,5 +125,5 @@ class DaskWorker(Worker):
 
 
 async def exec_as_coro(loop, pool, interface):
-    res = await loop.run_in_executor(pool, interface.run)
+    res = await loop.run_in_executor(pool, interface)
     return interface, res
