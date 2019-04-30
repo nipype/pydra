@@ -34,3 +34,26 @@ def test_concurrent_wf():
 
     if procs >= 2:
         assert diff < 4
+
+
+def test_wf_in_wf():
+    """WF(A --> SUBWF(A --> B) --> B)"""
+    wf = Workflow(name='wf_in_wf', input_spec=['x'])
+    wf.inputs.x = 3
+    wf.add(sleep_add_one(name="wf_a", x=wf.lzin.x))
+
+    # workflow task
+    subwf = Workflow(name='sub_wf', input_spec=['x'])
+    subwf.add(sleep_add_one(name="sub_a", x=subwf.lzin.x))
+    subwf.add(sleep_add_one(name="sub_b", x=subwf.sub_a.lzout.out))
+    subwf.set_output([("out", subwf.sub_b.lzout.out)])
+    # connect, then add
+    subwf.inputs.x = wf.wf_a.lzout.out
+    wf.add(subwf)
+
+    wf.add(sleep_add_one(name="wf_b", x=wf.sub_wf.lzout.out))
+    wf.set_output([("out", wf.wf_b.lzout.out)])
+
+    with Submitter("cf") as sub:
+        print("Available processes:", sub.worker.nr_proc)
+        sub.run(wf)
