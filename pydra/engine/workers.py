@@ -8,7 +8,7 @@ import concurrent.futures as cf
 
 import logging
 
-logger = logging.getLogger("nipype.workflow")
+logger = logging.getLogger("pydra.worker")
 
 
 class Worker(object):
@@ -84,17 +84,20 @@ class ConcurrentFuturesWorker(Worker):
         self._pending.add(task)
         logger.debug("Pending tasks: %s", self._pending)
         return task
-        # return self.pool.submit(interface, **kwargs)
 
     def close(self):
         self.pool.shutdown()
 
     async def fetch_finished(self):
-        done, pending = await asyncio.wait(
-            self._pending, return_when=asyncio.FIRST_COMPLETED
-        )
+        try:
+            done, pending = await asyncio.wait(
+                self._pending, return_when=asyncio.FIRST_COMPLETED
+            )
+        except ValueError:
+            return None
         # preserve pending tasks
         self._pending.union(pending)
+        logger.debug("Finished/Errored: %s", done)
         return done
 
 
@@ -125,5 +128,6 @@ class DaskWorker(Worker):
 
 
 async def exec_as_coro(loop, pool, interface):
+    logger.debug("Starting runnable %s", interface)
     res = await loop.run_in_executor(pool, interface)
     return interface, res

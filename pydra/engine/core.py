@@ -1,18 +1,14 @@
 """Basic compute graph elements"""
 import abc
-from collections import OrderedDict
 import dataclasses as dc
-import itertools
 import json
 import logging
 import networkx as nx
 import os
-import pdb
 from pathlib import Path
 import typing as ty
 import pickle as pk
-from copy import deepcopy, copy
-from time import sleep
+from copy import deepcopy
 
 import cloudpickle as cp
 from filelock import FileLock
@@ -31,7 +27,6 @@ from .helpers import (
     save_result,
     ensure_list,
     record_error,
-    get_inputs,
 )
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 
@@ -170,8 +165,6 @@ class TaskBase:
 
     def is_finished(self, index=None):
         # TODO: check local procs
-        if self.result():
-            return True
         return False
 
     def set_state(self, splitter, combiner=None):
@@ -431,8 +424,11 @@ class TaskBase:
     # checking if all outputs are saved
     @property
     def done(self):
-        if self.results_dict:
-            return all([future.done() for _, (future, _) in self.results_dict.items()])
+        # if self.results_dict:
+        #     return all([future.done() for _, (future, _) in self.results_dict.items()])
+        if self.result():
+            return True
+        return False
 
     def _combined_output(self):
         combined_results = []
@@ -518,7 +514,6 @@ class Workflow(TaskBase):
         )
 
         self.graph = nx.DiGraph()
-        #self.graph = {}
 
         self.name2obj = {}
 
@@ -536,8 +531,16 @@ class Workflow(TaskBase):
         return self.__getattribute__(name)
 
     @property
+    def done(self):
+        for task in self.graph:
+            if not task.done:
+                logger.debug("Not done: %s", task)
+                return False
+        return True
+
+    @property
     def nodes(self):
-        return self._nodes
+        return self.name2obj.keys()
 
     @property
     def graph_sorted(self):
@@ -587,6 +590,7 @@ class Workflow(TaskBase):
         self._connections = connections
         fields = [(name, ty.Any) for name, _ in connections]
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
+        logger.info("Added %s to %s", self.output_spec, self)
 
     def _list_outputs(self):
         output = []
@@ -616,6 +620,6 @@ def is_runnable(graph, obj):
         return False
     if graph.predecessors(obj):
         for pred in graph.predecessors(obj):
-            if not pred.is_finished():
+            if not pred.done:
                 return False
     return True

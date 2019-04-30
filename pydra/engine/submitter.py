@@ -5,14 +5,13 @@ from .core import is_workflow, is_task, is_runnable
 
 import logging
 logging.basicConfig(level=logging.DEBUG)  # TODO: RF
-logger = logging.getLogger("pydra.workflow")
+logger = logging.getLogger("pydra.submitter")
 
 
 class Submitter(object):
     # TODO: runnable in init or run
     def __init__(self, plugin):
         self.plugin = plugin
-        self.submitted = set()
         if self.plugin == "mp":
             self.worker = MpWorker()
         elif self.plugin == "serial":
@@ -32,29 +31,48 @@ class Submitter(object):
 
     async def check_pending(self):
         done = await self.worker.fetch_finished()
-        for fut in done:
-            task, res = await fut
-            logger.debug("Task: %s, Result: %s", task, res)
-            self.worker._remove_pending(fut)
+        if done:
+            for fut in done:
+                task, res = await fut
+                logger.debug("Task: %s completed with result: %s", task, res)
+                self.worker._remove_pending(fut)
 
     async def _run_workflow(self, wf):
         # some notion of topological sorting
         # regardless of DFS/BFS, will not always be absolute order
         # (no notion of job duration)
         remaining_tasks = wf.graph_sorted
+
+        # TODO: remove after debug
+        timeout = 5
+        iters = 0
+
         while remaining_tasks:
+            iters += 1
+            # TODO: remove after debug endless loop
+            if timeout < iters:
+                breakpoint()
+
             remaining_tasks, tasks = await get_runnable_tasks(
                 wf.graph, remaining_tasks
             )
+            logger.debug("Runnable tasks: %s", tasks)
             if tasks:
-                # what if task is workflow?
                 for task in tasks:
                     # grab inputs if needed
+                    logger.debug("Retrieving inputs for %s", task)
                     task.inputs.retrieve_values(wf)
-                    # pass the future off to the worker
-                    self.worker.run_el(task)  # TODO: self.run(task)
+                    if is_workflow(task):
+                        # recurse into previous run
+                        # this is blocking
+                        logger.debug("Task %s is a workflow, expanding out and executing", task)
+                        self.run(task)
+                    else:
+                        # pass the future off to the worker
+                        self.worker.run_el(task)
                 # wait for one of the tasks to finish
                 await self.check_pending()
+        return wf
 
         # no more tasks to queue, but some may still be running
         if self.worker._pending:
@@ -80,18 +98,20 @@ class Submitter(object):
                     job.cache_locations = cache_locations
                 # res = self.worker.run_el(job)
         else:
+            # job = runnable
             job = runnable.to_job(None)
             checksum = job.checksum
             job.results_dict[None] = (None, checksum)
             if cache_locations:
                 job.cache_locations = cache_locations
 
-        # job = runnable
-
-        if is_workflow(job):  # expand out
+        if is_workflow(job):
+            # blocking
+            # however, this does not call wf.run()
+            # no lockfile / cache is generated
             asyncio.run(self._run_workflow(job))
         else:
-            job.run()
+            self.worker.run_el(job)
 
     def close(self):
         self.worker.close()
@@ -99,8 +119,7 @@ class Submitter(object):
 
 async def get_runnable_tasks(graph, remaining_tasks, polling=1):
     """Parse a graph and return all runnable tasks"""
-    didx = []
-    tasks = []
+    didx, tasks = [], []
     for idx, task in enumerate(remaining_tasks):
         # are all predecessors finished
         if is_runnable(graph, task):
