@@ -82,7 +82,7 @@ class ConcurrentFuturesWorker(Worker):
         # wrap as asyncio task
         task = asyncio.create_task(exec_as_coro(self.loop, self.pool, interface))
         self._pending.add(task)
-        logger.debug("Pending tasks: %s", self._pending)
+        logger.debug("Pending tasks: %d", len(self._pending))
         return task
 
     def close(self):
@@ -97,7 +97,7 @@ class ConcurrentFuturesWorker(Worker):
             return None
         # preserve pending tasks
         self._pending.union(pending)
-        logger.debug("Finished/Errored: %s", done)
+        logger.debug("Tasks finished: %d", len(done))
         return done
 
 

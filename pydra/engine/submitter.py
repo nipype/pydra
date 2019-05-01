@@ -34,7 +34,7 @@ class Submitter(object):
         if done:
             for fut in done:
                 task, res = await fut
-                logger.debug("Task: %s completed with result: %s", task, res)
+                logger.debug("Task: %s completed", task)
                 self.worker._remove_pending(fut)
 
     async def _run_workflow(self, wf):
@@ -59,24 +59,31 @@ class Submitter(object):
             logger.debug("Runnable tasks: %s", tasks)
             if tasks:
                 for task in tasks:
+                    print("Submitter._run_workflow")
+                    print(task, hex(id(task)))
+                    print(task.checksum, task.cache_locations)
                     # grab inputs if needed
                     logger.debug("Retrieving inputs for %s", task)
                     task.inputs.retrieve_values(wf)
                     if is_workflow(task):
-                        # recurse into previous run
-                        # this is blocking
+                        # recurse into previous run and halt execution
                         logger.debug("Task %s is a workflow, expanding out and executing", task)
-                        self.run(task)
+                        # self.run(task)
+                        task.plugin = self.plugin
+                        task.run()
                     else:
                         # pass the future off to the worker
                         self.worker.run_el(task)
                 # wait for one of the tasks to finish
                 await self.check_pending()
-        return wf
+        logger.debug("Finished workflow %s", wf)
+        # breakpoint()
 
         # no more tasks to queue, but some may still be running
         if self.worker._pending:
             await self.check_pending()
+
+        return wf  # return all the results
 
     def run(self, runnable, cache_locations=None):
         """main running method, checks if submitter id for Task or Workflow"""
@@ -98,20 +105,27 @@ class Submitter(object):
                     job.cache_locations = cache_locations
                 # res = self.worker.run_el(job)
         else:
-            # job = runnable
-            job = runnable.to_job(None)
+            job = runnable
+            # job = runnable.to_job(None)
             checksum = job.checksum
             job.results_dict[None] = (None, checksum)
             if cache_locations:
                 job.cache_locations = cache_locations
 
+        print("Submitter.run")
+        print(job, hex(id(job)))
+        print(job.checksum, job.cache_locations)
+
         if is_workflow(job):
             # blocking
             # however, this does not call wf.run()
             # no lockfile / cache is generated
-            asyncio.run(self._run_workflow(job))
+            completed = asyncio.run(self._run_workflow(job))
         else:
-            self.worker.run_el(job)
+            completed = self.worker.run_el(job)
+
+        # add results to runnable results_dict
+        return completed
 
     def close(self):
         self.worker.close()

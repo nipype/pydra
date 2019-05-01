@@ -30,6 +30,7 @@ from .helpers import (
 )
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 
+logging.basicConfig(level=logging.DEBUG)  # TODO: RF
 logger = logging.getLogger("pydra")
 
 develop = True
@@ -262,6 +263,7 @@ class TaskBase:
         """
         # TODO add signal handler for processes killed after lock acquisition
         with FileLock(lockfile):
+            logger.debug("Starting %s.run", self)
             # Let only one equivalent process run
             # Eagerly retrieve cached
             if self.results_dict:  # should be skipped if run called without submitter
@@ -348,6 +350,7 @@ class TaskBase:
                         {"@id": aid, "endedAtTime": now(), "errored": result.errored},
                         AuditFlag.PROV,
                     )
+            logger.debug("Completed %s.run", self)
             return result
 
     # TODO: Decide if the following two functions should be separated
@@ -581,10 +584,13 @@ class Workflow(TaskBase):
         return self
 
     def _run_task(self):
-        # logic in submitter.run
-        # TODO: enable lockfile for workflow execution
-        # TODO: allow wf.run() without submitter
-        pass
+        # avoid cyclic imports
+        from .submitter import Submitter
+
+        plugin = self.plugin or "cf"  # TODO: default to serial
+        with Submitter(plugin) as sub:
+            # hand off graph expansion to submitter
+            self.results_dict = sub.run(self)
 
     def set_output(self, connections):
         self._connections = connections
