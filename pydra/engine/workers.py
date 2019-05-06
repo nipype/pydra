@@ -22,6 +22,10 @@ class Worker(object):
     def close(self):
         raise NotImplementedError
 
+    @property
+    def pending(self):
+        return bool(len(self._pending))
+
     def _remove_pending(self, task):
         self._pending.remove(task)
 
@@ -89,12 +93,15 @@ class ConcurrentFuturesWorker(Worker):
         self.pool.shutdown()
 
     async def fetch_finished(self):
+        done = []
         try:
             done, pending = await asyncio.wait(
                 self._pending, return_when=asyncio.FIRST_COMPLETED
             )
-        except ValueError:
-            return None
+        except ValueError as e:
+            # nothing pending!
+            print(str(e))
+            pending = set()
         # preserve pending tasks
         self._pending.union(pending)
         logger.debug("Tasks finished: %d", len(done))

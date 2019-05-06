@@ -29,26 +29,41 @@ class Submitter(object):
     def __exit__(self, type, value, traceback):
         self.close()
 
-    async def check_pending(self):
+    async def fetch_pending(self):
         done = await self.worker.fetch_finished()
-        if done:
-            for fut in done:
-                task, res = await fut
-                logger.debug("Task: %s completed", task)
-                self.worker._remove_pending(fut)
+        for fut in done:
+            task, res = await fut
+            logger.debug("Task: %s completed", task)
+            self.worker._remove_pending(fut)
 
-    async def _run_task(self, task):
-        """Submit and await a `Task` with multiple states"""
-        if task.state:
-            for ii in range(len(task.state.states_val)):
-                job = task.to_job(ii)
+    def _run_task(self, task, wait_on_results=True):
+        """
+        Submits a ``Task`` across all states to a worker.
+        """
+        if task.state is None:
+            job = task.to_job(None)
+            checksum = job.checksum
+            job.results_dict[None] = (None, checksum)
+            self.worker.run_el(job)
+        else:
+            task.state.prepare_states(task.inputs)
+            task.state.prepare_inputs()
+            # submit each state as a separate job
+            for sidx in range(len(task.state.states_val)):
+                job = task.to_job(sidx)
                 checksum = job.checksum
-                job.results_dict[None] = (None, checksum)
-
-        while not task.done:  # TODO: verify True if all states completed; False otherwise
-            self.worker.run_el(task)
+                job.results_dict[None] = (sidx, checksum)
+                self.worker.run_el(job)
+        # results should be waited for by default
+        # avoid awaiting per job in workflow context
+        if wait_on_results:
+            asyncio.run(self.fetch_pending())
+            # TODO: ensure these results are joined together?
 
     async def _run_workflow(self, wf):
+        """
+        Submits a workflow and awaits the completion.
+        """
         # some notion of topological sorting
         # regardless of DFS/BFS, will not always be absolute order
         # (no notion of job duration)
@@ -71,50 +86,23 @@ class Submitter(object):
                     # pass the future off to the worker
                     # state??: ensure downstream do not start until all states finish?
                     # but ensure job starts!!
-                    self.worker.run_el(task)
+                    self._run_task(task, wait_on_results=False)
             # wait for one of the tasks to finish
-            await self.check_pending()
-    
+            await self.fetch_pending()
+
         logger.debug("Finished workflow %s", wf)
         return wf  # return the run workflow
 
     def run(self, runnable, cache_locations=None):
-        """main running method, checks if submitter id for Task or Workflow"""
-        """Submits jobs"""
+        """Submitter for ``Task``s and ``Workflow``s."""
         if not is_task(runnable):
             raise Exception("runnable has to be a Task or Workflow")
-        runnable.plugin = self.plugin  # assign in case of downstream execution
 
-        if runnable.state:
-            runnable.state.prepare_states(runnable.inputs)
-            runnable.state.prepare_inputs()
-            for ii, ind in enumerate(runnable.state.states_val):
-                # creating a taskFunction for every element of state
-                # this job will run interface (and will not have state)
-                job = runnable.to_job(ii)
-                checksum = job.checksum
-                # run method has to have checksum to check the existing results
-                job.results_dict[None] = (None, checksum)
-                if cache_locations:
-                    job.cache_locations = cache_locations
-
-                # res = self.worker.run_el(job)
+        if is_workflow(runnable):
+            runnable.plugin = self.plugin  # assign in case of downstream execution
+            completed = asyncio.run(self._run_workflow(runnable))
         else:
-            job = runnable.to_job(None)
-            checksum = job.checksum
-            job.results_dict[None] = (None, checksum)
-            if cache_locations:
-                job.cache_locations = cache_locations
-
-        if is_workflow(job):
-            completed = asyncio.run(self._run_workflow(job))
-        else:
-            completed = self.worker.run_el(job)
-
-        # replace object
-        # runnable = completed
-
-        # add results to runnable results_dict
+            completed = asyncio.run(self._run_task(runnable))
         return completed
 
     def close(self):
