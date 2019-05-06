@@ -590,7 +590,9 @@ class Workflow(TaskBase):
         plugin = self.plugin or "cf"  # TODO: default to serial
         with Submitter(plugin) as sub:
             # hand off graph expansion to submitter
-            self.results_dict = sub.run(self)
+            newself = sub.run(self)
+        # replace with submitted workflow
+        self.__dict__.update(newself.__dict__)
 
     def set_output(self, connections):
         self._connections = connections
