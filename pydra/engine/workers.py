@@ -74,13 +74,14 @@ class SerialWorker(Worker):
 
 
 class ConcurrentFuturesWorker(Worker):
-    def __init__(self, nr_proc=2):
+    def __init__(self, nr_proc=2, loop=None):
         super(ConcurrentFuturesWorker, self).__init__()
         self.nr_proc = nr_proc or mp.cpu_count()
         # added cpu_count to verify, remove once confident and let PPE handle
         self.pool = cf.ProcessPoolExecutor(self.nr_proc)
+        self.loop = loop
+        # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
-        self.loop = asyncio.get_event_loop()  # TODO: consider windows
 
     def run_el(self, interface, **kwargs):
         # wrap as asyncio task
@@ -98,9 +99,8 @@ class ConcurrentFuturesWorker(Worker):
             done, pending = await asyncio.wait(
                 self._pending, return_when=asyncio.FIRST_COMPLETED
             )
-        except ValueError as e:
+        except ValueError:
             # nothing pending!
-            print(str(e))
             pending = set()
         # preserve pending tasks
         self._pending.union(pending)
@@ -110,8 +110,6 @@ class ConcurrentFuturesWorker(Worker):
 
 class DaskWorker(Worker):
     def __init__(self):
-        from distributed.deploy.local import LocalCluster
-
         logger.debug("Initialize Dask Worker")
         # self.cluster = LocalCluster()
         self.client = Client()  # self.cluster)

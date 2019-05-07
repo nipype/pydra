@@ -1,6 +1,5 @@
-from ..node import Workflow
+from ..core import Workflow
 from ..task import to_task
-from ..submitter import Submitter
 
 import time
 
@@ -24,16 +23,9 @@ def test_concurrent_wf():
     wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
     wf.set_output([("out1", wf.taskc.lzout.out),
                    ("out2", wf.taskd.lzout.out)])
-
-    with Submitter('cf') as sub:
-        procs = sub.worker.nr_proc
-        start = time.time()
-        sub.run(wf)
-
-    diff = time.time() - start
-
-    if procs >= 2:
-        assert diff < 4
+    wf.plugin = 'cf'
+    res = wf.run()
+    assert res
 
 
 def test_wf_in_wf():
@@ -54,6 +46,6 @@ def test_wf_in_wf():
     wf.add(sleep_add_one(name="wf_b", x=wf.sub_wf.lzout.out))
     wf.set_output([("out", wf.wf_b.lzout.out)])
 
-    with Submitter("cf") as sub:
-        print("Available processes:", sub.worker.nr_proc)
-        sub.run(wf)
+    wf.plugin = 'cf'
+    res = wf.run()
+    assert res

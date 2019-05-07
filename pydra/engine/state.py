@@ -1,6 +1,4 @@
 from copy import deepcopy
-import pdb
-
 
 from . import auxiliary as aux
 from .specs import BaseSpec

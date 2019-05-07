@@ -164,10 +164,6 @@ class TaskBase:
     def checksum(self):
         return create_checksum(self.__class__.__name__, self.inputs)
 
-    def is_finished(self, index=None):
-        # TODO: check local procs
-        return False
-
     def set_state(self, splitter, combiner=None):
         if splitter is not None:
             self.state = state.State(
@@ -247,7 +243,7 @@ class TaskBase:
     def __call__(self, **kwargs):
         return self.run(**kwargs)
 
-    def run(self, **kwargs):
+    def run(self, loop=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
@@ -543,7 +539,7 @@ class Workflow(TaskBase):
 
     @property
     def nodes(self):
-        return self.name2obj.keys()
+        return self.name2obj.values()
 
     @property
     def graph_sorted(self):
@@ -583,12 +579,12 @@ class Workflow(TaskBase):
         logger.debug("Added %s", task)
         return self
 
-    def _run_task(self):
+    def _run_task(self, loop=None):
         # avoid cyclic imports
         from .submitter import Submitter
 
         plugin = self.plugin or "cf"  # TODO: default to serial
-        with Submitter(plugin) as sub:
+        with Submitter(plugin, loop) as sub:
             # hand off graph expansion to submitter
             sub.run(self)
 

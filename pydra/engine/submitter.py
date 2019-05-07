@@ -8,10 +8,11 @@ logging.basicConfig(level=logging.DEBUG)  # TODO: RF
 logger = logging.getLogger("pydra.submitter")
 
 
-class Submitter(object):
+class Submitter:
     # TODO: runnable in init or run
-    def __init__(self, plugin):
+    def __init__(self, plugin, loop=None):
         self.plugin = plugin
+        self.loop = loop or asyncio.get_event_loop()
         if self.plugin == "mp":
             self.worker = MpWorker()
         elif self.plugin == "serial":
@@ -19,7 +20,7 @@ class Submitter(object):
         elif self.plugin == "dask":
             self.worker = DaskWorker()
         elif self.plugin == "cf":
-            self.worker = ConcurrentFuturesWorker()
+            self.worker = ConcurrentFuturesWorker(loop=self.loop)
         else:
             raise Exception("plugin {} not available".format(self.plugin))
 
@@ -81,7 +82,8 @@ class Submitter(object):
                     # recurse into previous run and halt execution
                     logger.debug("Task %s is a workflow, expanding out and executing", task)
                     task.plugin = self.plugin
-                    task.run()  # ensure this handles workflow states
+                    # submit as job
+                    task.run(self.loop)  # ensure this handles workflow states
                 else:
                     # pass the future off to the worker
                     # state??: ensure downstream do not start until all states finish?
@@ -98,11 +100,9 @@ class Submitter(object):
         if not is_task(runnable):
             raise Exception("runnable has to be a Task or Workflow")
 
-        if is_workflow(runnable):
-            runnable.plugin = self.plugin  # assign in case of downstream execution
-            completed = asyncio.run(self._run_workflow(runnable))
-        else:
-            completed = asyncio.run(self._run_task(runnable))
+        runnable.plugin = self.plugin  # assign in case of downstream execution
+        coro = self._run_workflow if is_workflow(runnable) else self._run_task
+        completed = self.loop.run_until_complete(coro(runnable))
         return completed
 
     def close(self):
@@ -119,6 +119,5 @@ async def get_runnable_tasks(graph, remaining_tasks, polling=1):
             tasks.append(task)
     for i in sorted(didx, reverse=True):
         del remaining_tasks[i]
-    # if len(tasks):
+
     return remaining_tasks, tasks
-    # return remaining_tasks, None
