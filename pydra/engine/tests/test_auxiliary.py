@@ -1,7 +1,9 @@
 from .. import auxiliary as aux
 
 import numpy as np
+import string
 import pytest, pdb
+from hypothesis import given, strategies as st
 
 
 class other_states_to_tests:
@@ -54,6 +56,23 @@ def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
     assert grstack_f == grstack_exp
 
 
+splitter_h = st.recursive(
+        st.text(string.ascii_letters, min_size=1),
+        lambda substrat: st.lists(substrat, min_size=2, max_size=2) |
+                         st.lists(substrat, min_size=2, max_size=2).map(tuple),
+)
+
+@given(splitter=splitter_h)
+def test_splits_groups_hypothesis(splitter):
+    print("Splitter from hypothesis", splitter)
+    splitter_rpn = aux.splitter2rpn(splitter)
+    try:
+        keys_f, groups_f, grstack_f, _ = aux._splits_groups(splitter_rpn)
+    except ValueError as e:
+        if "do not have same shape" not in str(e):
+            raise
+
+
 @pytest.mark.parametrize(
     "splitter, combiner, combiner_all_exp,"
     "keys_final_exp, groups_final_exp, grstack_final_exp",
@@ -89,6 +108,27 @@ def test_splits_groups_comb(
     assert grstack_final == grstack_final_exp
 
     assert combiner_all == combiner_all_exp
+
+splitter_h = st.recursive(
+        st.text(string.ascii_letters, min_size=1),
+        lambda substrat: st.lists(substrat, min_size=2, max_size=2) |
+                         st.lists(substrat, min_size=2, max_size=2).map(tuple),
+)
+
+@pytest.mark.xfail(reason="WIP")
+@given(splitter=splitter_h)
+def test_splits_groups_comb_hypothesis(splitter):
+    splitter_rpn = aux.splitter2rpn(splitter)
+    if splitter_rpn:
+        combiner = [splitter_rpn[0]]
+    else:
+        combiner = []
+    print("Splitter from hypothesis", splitter, combiner)
+    try:
+        _, _, _, _ = aux._splits_groups(splitter_rpn, combiner)
+    except ValueError as e:
+        if "do not have same shape" not in str(e):
+            raise
 
 
 @pytest.mark.parametrize(
@@ -470,6 +510,18 @@ def test_splitter2rpn_2(splitter, rpn):
     ],
 )
 def test_rpn2splitter(splitter, rpn):
+    assert aux.rpn2splitter(rpn) == splitter
+
+
+splitter_h = st.recursive(
+        st.text(string.ascii_letters, min_size=1),
+        lambda substrat: st.lists(substrat, min_size=2, max_size=2) |
+                         st.lists(substrat, min_size=2, max_size=2).map(tuple),
+)
+
+@given(splitter=splitter_h)
+def test_splitter_rpn_hypothesis(splitter):
+    rpn = aux.splitter2rpn(splitter)
     assert aux.rpn2splitter(rpn) == splitter
 
 
