@@ -68,7 +68,8 @@ REQUIRES = [
 ]
 
 SETUP_REQUIRES = ["setuptools>=27.0"]
-TESTS_REQUIRES = ["pytest-cov", "codecov", "pytest-env", "pytest-xdist", "pyld", "hypothesis"]
+TESTS_REQUIRES = ["pytest-cov", "codecov", "pytest-env", "pytest-xdist", "pyld",
+                  "hypothesis", "hypothesis_networkx"]
 LINKS_REQUIRES = []
 
 EXTRA_REQUIRES = {

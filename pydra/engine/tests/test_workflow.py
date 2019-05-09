@@ -1,6 +1,10 @@
 import pytest, pdb
 from time import sleep
 import shutil
+import string
+from hypothesis_networkx import graph_builder
+from hypothesis import given, strategies as st, settings
+import networkx as nx
 
 from ..submitter import Submitter
 from ..task import to_task
@@ -1022,3 +1026,47 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     # checking if both dir exists
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
+
+# testing with hypothesis
+
+@to_task
+def sum_args(x0, x1=0, x2=0, x3=0, x4=0, x5=0):
+    return x0 + x1 + x2 + x3 + x4 + x5 + 1
+
+
+node_data = st.fixed_dictionaries({})  # {'name': st.text(),
+# 'number': st.integers()})
+
+builder = graph_builder(graph_type=nx.DiGraph,
+                        node_keys=st.text(string.ascii_letters, min_size=1),
+                        node_data=node_data,
+                        # edge_data=edge_data,
+                        min_nodes=4, max_nodes=10,
+                        min_edges=2, max_edges=None,
+                        self_loops=False,
+                        connected=True)
+
+graph = builder.example()
+
+
+@given(graph=builder)
+@settings(max_examples=100, deadline=None)  # should I explore why the timing is different?
+@pytest.mark.parametrize("plugin", Plugins)
+def test_my_function(graph, plugin):
+    wf = Workflow(name="wf_1", input_spec=["x"])
+    wf.inputs.x = 2
+    wf.plugin = plugin
+    if list(nx.simple_cycles(graph)):
+        return None
+
+    for nd in list(nx.topological_sort(graph)):
+        if not graph.in_edges(nd):
+            wf.add(sum_args(name=nd, x0=wf.lzin.x))
+        else:
+            inp_dict = {}
+            for i, el in enumerate(graph.in_edges(nd)):
+                inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
+            wf.add(sum_args(name=nd, **inp_dict))
+    wf.set_output([("out", getattr(wf, nd).lzout.out)])
+    # simple results check
+    assert results.output.out >= len(list(graph.predecessors(nd))) + 2

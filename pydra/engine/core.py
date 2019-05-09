@@ -531,6 +531,7 @@ class Workflow(TaskBase):
 
     @property
     def nodes(self):
+        # TODO: do we want to have this property? doesn't work now
         return self._nodes
 
     @property
