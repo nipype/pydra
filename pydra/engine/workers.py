@@ -1,6 +1,7 @@
 import time
 import multiprocessing as mp
 import asyncio
+from functools import partial
 
 # from pycon_utils import make_cluster
 from dask.distributed import Client
@@ -79,7 +80,7 @@ class ConcurrentFuturesWorker(Worker):
         self.nr_proc = nr_proc or mp.cpu_count()
         # added cpu_count to verify, remove once confident and let PPE handle
         self.pool = cf.ProcessPoolExecutor(self.nr_proc)
-        self.loop = loop
+        self.loop = loop or asyncio.get_event_loop()
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
@@ -134,5 +135,5 @@ class DaskWorker(Worker):
 
 async def exec_as_coro(loop, pool, interface):
     logger.debug("Starting runnable %s", interface)
-    res = await loop.run_in_executor(pool, interface)
-    return interface, res
+    res = await loop.run_in_executor(pool, partial(interface, return_self=True))
+    return res

@@ -243,7 +243,7 @@ class TaskBase:
     def __call__(self, **kwargs):
         return self.run(**kwargs)
 
-    def run(self, loop=None, **kwargs):
+    def run(self, return_self=False, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
@@ -347,6 +347,8 @@ class TaskBase:
                         AuditFlag.PROV,
                     )
             logger.debug("Completed %s.run", self)
+            if return_self:
+                return self
             return result
 
     # TODO: Decide if the following two functions should be separated
@@ -579,12 +581,13 @@ class Workflow(TaskBase):
         logger.debug("Added %s", task)
         return self
 
-    def _run_task(self, loop=None):
+    def _run_task(self):
         # avoid cyclic imports
         from .submitter import Submitter
 
+        # should be empty
         plugin = self.plugin or "cf"  # TODO: default to serial
-        with Submitter(plugin, loop) as sub:
+        with Submitter(plugin) as sub:
             # hand off graph expansion to submitter
             sub.run(self)
 
