@@ -1052,10 +1052,11 @@ graph = builder.example()
 @given(graph=builder)
 @settings(max_examples=100, deadline=None)  # should I explore why the timing is different?
 @pytest.mark.parametrize("plugin", Plugins)
-def test_my_function(graph, plugin):
+def test_hypothesis_graph(graph, plugin):
     wf = Workflow(name="wf_1", input_spec=["x"])
     wf.inputs.x = 2
     wf.plugin = plugin
+    # reomoving graphs with loops
     if list(nx.simple_cycles(graph)):
         return None
 
@@ -1069,4 +1070,120 @@ def test_my_function(graph, plugin):
             wf.add(sum_args(name=nd, **inp_dict))
     wf.set_output([("out", getattr(wf, nd).lzout.out)])
     # simple results check
-    assert results.output.out >= len(list(graph.predecessors(nd))) + 2
+    assert results.output.out >= len(list(graph.predecessors(nd))) \
+           + 1 + wf.inputs.x
+
+
+@given(graph=builder)
+@settings(max_examples=100, deadline=None) # should I explore why the timing is different?
+@pytest.mark.parametrize("plugin", Plugins)
+def test_hypothesis_graph_wf_splitter(graph, plugin):
+    wf = Workflow(name="wf_1", input_spec=["x", "y"])
+    wf.split(splitter=["x", "y"])
+    wf.inputs.x = [2, 4]
+    wf.inputs.y = [10, 20]
+    wf.plugin = plugin
+    # reomoving graphs with loops
+    if list(nx.simple_cycles(graph)):
+        return None
+
+    for nd in list(nx.topological_sort(graph)):
+        if not graph.in_edges(nd):
+            wf.add(sum_args(name=nd, x0=wf.lzin.x, x1=wf.lzin.y))
+        else:
+            inp_dict = {}
+            for i, el in enumerate(graph.in_edges(nd)):
+                inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
+            wf.add(sum_args(name=nd, **inp_dict))
+    wf.set_output([("out", getattr(wf, nd).lzout.out)])
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    # simple results check
+    #pdb.set_trace()
+    for ind, (x, y) in enumerate([(2, 10), (2, 20), (4, 10), (4, 20)]):
+        assert results[ind].output.out >= \
+               len(list(graph.predecessors(nd))) + 1 + x + y
+
+
+@given(graph=builder)
+@settings(max_examples=100, deadline=None) # should I explore why the timing is different?
+@pytest.mark.parametrize("plugin", Plugins)
+def test_hypothesis_graph_wf_splitter_comb(graph, plugin):
+    wf = Workflow(name="wf_1", input_spec=["x", "y"])
+    wf.split(splitter=["x", "y"]).combine(combiner="x")
+    wf.inputs.x = [2, 4]
+    wf.inputs.y = [10, 20]
+    wf.plugin = plugin
+    # reomoving graphs with loops
+    if list(nx.simple_cycles(graph)):
+        return None
+
+    for nd in list(nx.topological_sort(graph)):
+        if not graph.in_edges(nd):
+            wf.add(sum_args(name=nd, x0=wf.lzin.x, x1=wf.lzin.y))
+        else:
+            inp_dict = {}
+            for i, el in enumerate(graph.in_edges(nd)):
+                inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
+            wf.add(sum_args(name=nd, **inp_dict))
+    wf.set_output([("out", getattr(wf, nd).lzout.out)])
+
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    # simple results check
+    #pdb.set_trace()
+    for ind_y, y in enumerate(wf.inputs.y):
+        for ind_x, x in enumerate(wf.inputs.x):
+            assert results[ind_y][ind_x].output.out >= \
+                   len(list(graph.predecessors(nd))) + 1 + x + y
+
+#todo nie wiem dlaczego nie dziala
+@given(graph=builder)
+@settings(max_examples=10, deadline=None) # should I explore why the timing is different?
+@pytest.mark.parametrize("plugin", Plugins)
+def test_hypothesis_graph_nd_splitter(graph, plugin):
+    wf = Workflow(name="wf_1", input_spec=["x", "y"])
+    wf.inputs.x = [2, 4]
+    wf.inputs.y = [10, 20]
+    wf.plugin = plugin
+    # reomoving graphs with loops
+    if list(nx.simple_cycles(graph)):
+        return None
+
+    nd_spl =[]
+    for nd in list(nx.topological_sort(graph)):
+        if not graph.in_edges(nd):
+            nd_spl.append(nd)
+            wf.add(sum_args(name=nd, x0=wf.lzin.x, x1=wf.lzin.y)
+                   .split(splitter=["x0", "x1"]))
+        else:
+            inp_dict = {}
+            for i, el in enumerate(graph.in_edges(nd)):
+                inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
+            wf.add(sum_args(name=nd, **inp_dict))
+    wf.set_output([("out", getattr(wf, nd).lzout.out)])
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    # simple results check
+    pdb.set_trace()
+    for ind, (x, y) in enumerate([(2, 10), (2, 20), (4, 10), (4, 20)]):
+        assert results[ind].output.out >= \
+               len(list(graph.predecessors(nd))) + 1 + x + y
