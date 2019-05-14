@@ -133,7 +133,7 @@ class DaskWorker(Worker):
         self.client.close()
 
 
-async def exec_as_coro(loop, pool, interface):
+async def exec_as_coro(loop, pool, interface, sidx=None):
     logger.debug("Starting runnable %s", interface)
     res = await loop.run_in_executor(pool, partial(interface, return_self=True))
-    return res
+    return sidx, res

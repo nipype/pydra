@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
 from .core import is_workflow, is_task, is_runnable
@@ -29,21 +30,40 @@ class Submitter:
     def __exit__(self, type, value, traceback):
         self.close()
 
-    async def fetch_pending(self, wf):
+    async def fetch_pending(self, wf=None):
         """
-        Await worker for any finished tasks.
-        If any task is a workflow, return it.
+        Fetch any completed Futures from worker and remove from worker's pending tasks.
+        If wf is defined and a completed Future is a ``Workflow`` object, wf.Workflow
+        is replaced with Future.result().
+
+        Parameters
+        ----------
+        wf : Workflow (optional)
+            The preceding workflow
         """
         done = await self.worker.fetch_finished()
         for fut in done:
-            task = await fut
+            sidx, task = await fut
             self.worker._remove_pending(fut)
-            logger.debug("Task: %s completed", task)
-            if is_workflow(task):
-                wf.name2obj.get(task.name).__dict__.update(task.__dict__)
+            msg = "Task: %s%s completed" % (
+                task, " (with state index %s)" if sidx is not None else ""
+            )
+            logger.debug(msg)
+
+            # handle completition vs states differently
+            if sidx is None:
+                if is_workflow(task):
+                    wf.name2obj.get(task.name).__dict__.update(task.__dict__)
+            else:
+                # additional operations to ensure joining of state results
+                # grab task master and add results to it
+
+                # sidx is state index task.result() should pertain to
+                # check if all state index have finished to update master task
+                breakpoint()
         return wf
 
-    async def _run_task(self, task, wait_on_results=True):
+    async def _run_task(self, task):
         """
         Submits a ``Task`` across all states to a worker.
         """
@@ -61,9 +81,6 @@ class Submitter:
                 checksum = job.checksum
                 job.results_dict[None] = (sidx, checksum)
                 self.worker.run_el(job)
-        # results should be waited for by default
-        if wait_on_results:
-            pass  # TODO: ensure these results are joined together?
 
     async def _run_workflow(self, wf):
         """
@@ -91,11 +108,9 @@ class Submitter:
                     # recurse into previous run and halt execution
                     logger.debug("Task %s is a workflow, expanding out and executing", task)
                     task.plugin = self.plugin
-
                 # do not treat workflow tasks differently
                 # instead, allow them to spawn a job
-                await self._run_task(task, wait_on_results=False)
-
+                await self._run_task(task)
             # wait for at least one of the tasks to finish
             wf = await self.fetch_pending(wf)
 
@@ -110,11 +125,12 @@ class Submitter:
         runnable.plugin = self.plugin  # assign in case of downstream execution
         coro = self._run_workflow if is_workflow(runnable) else self._run_task
 
+        startt = time.time()
         loop = asyncio.new_event_loop()  # create new loop for every workflow
         loop.set_debug(True)
-        # completed = loop.run_until_complete(asyncio.gather(coro(runnable), loop=loop))
         completed = loop.run_until_complete(coro(runnable))
-        logger.debug("Closing event loop %s", hex(id(loop)))
+        logger.debug("Closing event loop %s, total running time: %s",
+                     hex(id(loop)), time.time() - startt)
         loop.close()
         return completed
 

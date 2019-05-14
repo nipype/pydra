@@ -49,3 +49,17 @@ def test_wf_in_wf():
     wf.plugin = 'cf'
     res = wf.run()
     assert res
+
+
+def test_wf_with_state():
+    wf = Workflow(name='wf_state_1', input_spec=['x'])
+    wf.add(sleep_add_one(name='taska', x=wf.lzin.x))
+    wf.add(sleep_add_one(name='taskb', x=wf.taska.lzout.out))
+    wf.set_output([("out", wf.taskb.lzout.out)])
+
+    wf.inputs.x = [1, 2, 3]
+    wf.split(["x"])
+
+    wf.plugin = 'cf'
+    res = wf.run()
+    assert res
