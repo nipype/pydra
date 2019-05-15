@@ -65,6 +65,59 @@ def test_wf_2(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_wf_2a(plugin):
+    """ workflow with 2 tasks, no splitter
+        creating add2_task first (before calling add method),
+    """
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    add2_task = add2(name="add2")
+    add2_task.inputs.x = wf.mult.lzout.out
+    wf.add(add2_task)
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.inputs.y = 3
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    assert 8 == results.output.out
+
+
+@pytest.mark.xfail(reason="x=lzout added after calling wf.add(add2_task):"
+                          "edge is not created (fix: creating edges in run?)")
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_2b(plugin):
+    """ workflow with 2 tasks, no splitter
+        creating add2_task first (before calling add method),
+        adding inputs.x after add method
+    """
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    add2_task = add2(name="add2")
+    wf.add(add2_task)
+    add2_task.inputs.x = wf.mult.lzout.out
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.inputs.y = 3
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    assert 8 == results.output.out
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_1(plugin):
     """ Workflow with one task, a splitter for the workflow"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
