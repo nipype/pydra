@@ -84,11 +84,10 @@ class ConcurrentFuturesWorker(Worker):
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
-    def run_el(self, interface, **kwargs):
+    def run_el(self, interface, sidx=None, **kwargs):
         # wrap as asyncio task
-        task = asyncio.create_task(exec_as_coro(self.loop, self.pool, interface))
+        task = asyncio.create_task(exec_as_coro(self.loop, self.pool, interface, sidx))
         self._pending.add(task)
-        logger.debug("Pending tasks: %d", len(self._pending))
         return task
 
     def close(self):
@@ -134,6 +133,8 @@ class DaskWorker(Worker):
 
 
 async def exec_as_coro(loop, pool, interface, sidx=None):
-    logger.debug("Starting runnable %s", interface)
+    logger.debug(
+        f'Executing runnable {interface}{str(sidx) if sidx is not None else ""}'
+    )
     res = await loop.run_in_executor(pool, partial(interface, return_self=True))
     return sidx, res

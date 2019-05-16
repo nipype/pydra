@@ -259,7 +259,6 @@ class TaskBase:
         """
         # TODO add signal handler for processes killed after lock acquisition
         with FileLock(lockfile):
-            logger.debug("Starting %s.run", self)
             # Let only one equivalent process run
             # Eagerly retrieve cached
             if self.results_dict:  # should be skipped if run called without submitter
@@ -346,7 +345,6 @@ class TaskBase:
                         {"@id": aid, "endedAtTime": now(), "errored": result.errored},
                         AuditFlag.PROV,
                     )
-            logger.debug("Completed %s.run", self)
             if return_self:
                 return self
             return result
@@ -425,10 +423,13 @@ class TaskBase:
     # checking if all outputs are saved
     @property
     def done(self):
-        # if self.results_dict:
-        #     return all([future.done() for _, (future, _) in self.results_dict.items()])
-        if self.result():
-            return True
+        if self.state:
+            # TODO: only check for needed state result
+            if len(self.result()) and all(self.result()):
+                return True
+        else:
+            if self.result():
+                return True
         return False
 
     def _combined_output(self):
@@ -535,7 +536,6 @@ class Workflow(TaskBase):
     def done(self):
         for task in self.graph:
             if not task.done:
-                logger.debug("Not done: %s", task)
                 return False
         return True
 
@@ -621,8 +621,6 @@ def is_workflow(obj):
 
 def is_runnable(graph, obj):
     """Check if a task within a graph is runnable"""
-    if (not is_task(obj)) or not hasattr(graph, "predecessors"):
-        return False
     if graph.predecessors(obj):
         for pred in graph.predecessors(obj):
             if not pred.done:

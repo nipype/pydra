@@ -43,24 +43,26 @@ class Submitter:
         """
         done = await self.worker.fetch_finished()
         for fut in done:
-            sidx, task = await fut
+            sidx, job = await fut
             self.worker._remove_pending(fut)
-            msg = "Task: %s%s completed" % (
-                task, " (with state index %s)" if sidx is not None else ""
+            logger.debug(
+                f"{job.name}{str(sidx) if sidx is not None else ''} completed"
             )
-            logger.debug(msg)
 
             # handle completition vs states differently
             if sidx is None:
-                if is_workflow(task):
-                    wf.name2obj.get(task.name).__dict__.update(task.__dict__)
+                if is_workflow(job):
+                    wf.name2obj.get(job.name).__dict__.update(job.__dict__)
             else:
                 # additional operations to ensure joining of state results
                 # grab task master and add results to it
 
-                # sidx is state index task.result() should pertain to
+                # sidx is state index job.result() should pertain to.
                 # check if all state index have finished to update master task
-                breakpoint()
+                master = wf.name2obj.get(job.name)
+                if sidx not in master.results_dict:
+                    raise Exception("Unexpected state")
+                master.results_dict[sidx] = (job.result(), job.checksum)
         return wf
 
     async def _run_task(self, task):
@@ -75,12 +77,14 @@ class Submitter:
         else:
             task.state.prepare_states(task.inputs)
             task.state.prepare_inputs()
+            logger.debug(f"Expanding {task} into {len(task.state.states_val)} states")
             # submit each state as a separate job
             for sidx in range(len(task.state.states_val)):
                 job = task.to_job(sidx)
                 checksum = job.checksum
                 job.results_dict[None] = (sidx, checksum)
-                self.worker.run_el(job)
+                self.worker.run_el(job, sidx)
+                task.results_dict[sidx] = (None, checksum)
 
     async def _run_workflow(self, wf):
         """
@@ -89,7 +93,6 @@ class Submitter:
         # some notion of topological sorting
         # regardless of DFS/BFS, will not always be absolute order
         # (no notion of job duration)
-        self.worker.loop = asyncio.get_event_loop()
         logger.debug("Executing %s in event loop %s", wf, hex(id(self.worker.loop)))
         remaining_tasks = wf.graph_sorted
         while not wf.done:
@@ -111,6 +114,7 @@ class Submitter:
                 # do not treat workflow tasks differently
                 # instead, allow them to spawn a job
                 await self._run_task(task)
+
             # wait for at least one of the tasks to finish
             wf = await self.fetch_pending(wf)
 
@@ -127,6 +131,7 @@ class Submitter:
 
         startt = time.time()
         loop = asyncio.new_event_loop()  # create new loop for every workflow
+        self.worker.loop = loop
         loop.set_debug(True)
         completed = loop.run_until_complete(coro(runnable))
         logger.debug("Closing event loop %s, total running time: %s",
@@ -143,7 +148,7 @@ async def get_runnable_tasks(graph, remaining_tasks):
     didx, tasks = [], []
     for idx, task in enumerate(remaining_tasks):
         # are all predecessors finished
-        if is_runnable(graph, task):
+        if is_runnable(graph, task):  # consider states
             didx.append(idx)
             tasks.append(task)
     for i in sorted(didx, reverse=True):
