@@ -729,6 +729,8 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     """
     if not splitter_rpn:
         return [], {}, [], []
+    else:
+        _splitter_check(splitter_rpn)
     stack = []
     keys = []
     groups = {}
@@ -937,10 +939,15 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
                     "input {} not ready to combine, you have to combine {} "
                     "first".format(comb, groups_stack[-1])
                 )
-    groups_final = {inp: gr for (inp, gr) in groups.items() if inp not in combiner_all}
-    gr_final = list(set(groups_final.values()))
+    groups_nocomb = {inp: gr for (inp, gr) in groups.items() if inp not in combiner_all}
+    gr_final = list(set(flatten(groups_nocomb.values(), max_depth=2)))
     map_gr_nr = {nr: i for (i, nr) in enumerate(sorted(gr_final))}
-    groups_final = {inp: map_gr_nr[gr] for (inp, gr) in groups_final.items()}
+    groups_final = {}
+    for (inp, gr) in groups_nocomb.items():
+        if isinstance(gr, list):
+            groups_final[inp] = [map_gr_nr[el] for el in gr]
+        else:
+            groups_final[inp] = map_gr_nr[gr]
     for i, groups_l in enumerate(groups_stack_final):
         groups_stack_final[i] = [map_gr_nr[gr] for gr in groups_l]
 
@@ -1052,3 +1059,14 @@ def inputs_types_to_dict(name, inputs):
     for field in input_names:
         inputs_dict["{}.{}".format(name, field)] = getattr(inputs, field)
     return inputs_dict
+
+
+def _splitter_check(splitter_rpn):
+    """ not sure how to deal if input appears twice in splitter_rpn
+        TODO: checking if they are in the same groups?
+    """
+    repeated_elements = set([el for el in splitter_rpn
+                             if (splitter_rpn.count(el) > 1
+                                 and el not in ["*", "."])])
+    if repeated_elements:
+        raise Exception(f"elements {repeated_elements} are repeated in the splitter")

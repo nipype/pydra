@@ -31,7 +31,6 @@ from .helpers import (
     save_result,
     ensure_list,
     record_error,
-    get_inputs,
 )
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 

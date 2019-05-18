@@ -1037,6 +1037,7 @@ def sum_args(x0, x1=0, x2=0, x3=0, x4=0, x5=0):
 node_data = st.fixed_dictionaries({})  # {'name': st.text(),
 # 'number': st.integers()})
 
+# creating a graph
 builder = graph_builder(graph_type=nx.DiGraph,
                         node_keys=st.text(string.ascii_letters, min_size=1),
                         node_data=node_data,
@@ -1056,10 +1057,11 @@ def test_hypothesis_graph(graph, plugin):
     wf = Workflow(name="wf_1", input_spec=["x"])
     wf.inputs.x = 2
     wf.plugin = plugin
-    # reomoving graphs with loops
+    # removing graphs with loops
     if list(nx.simple_cycles(graph)):
         return None
 
+    # creating input/output connections required in pydra
     for nd in list(nx.topological_sort(graph)):
         if not graph.in_edges(nd):
             wf.add(sum_args(name=nd, x0=wf.lzin.x))
@@ -1068,9 +1070,18 @@ def test_hypothesis_graph(graph, plugin):
             for i, el in enumerate(graph.in_edges(nd)):
                 inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
             wf.add(sum_args(name=nd, **inp_dict))
-    wf.set_output([("out", getattr(wf, nd).lzout.out)])
+    lst_nd = nd
+    wf.set_output([("out", getattr(wf, lst_nd).lzout.out)])
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
     # simple results check
-    assert results.output.out >= len(list(graph.predecessors(nd))) \
+    assert results.output.out >= len(list(graph.predecessors(lst_nd))) \
            + 1 + wf.inputs.x
 
 
@@ -1083,7 +1094,7 @@ def test_hypothesis_graph_wf_splitter(graph, plugin):
     wf.inputs.x = [2, 4]
     wf.inputs.y = [10, 20]
     wf.plugin = plugin
-    # reomoving graphs with loops
+    # removing graphs with loops
     if list(nx.simple_cycles(graph)):
         return None
 
@@ -1095,7 +1106,8 @@ def test_hypothesis_graph_wf_splitter(graph, plugin):
             for i, el in enumerate(graph.in_edges(nd)):
                 inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
             wf.add(sum_args(name=nd, **inp_dict))
-    wf.set_output([("out", getattr(wf, nd).lzout.out)])
+    lst_nd = nd
+    wf.set_output([("out", getattr(wf, lst_nd).lzout.out)])
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
@@ -1105,10 +1117,9 @@ def test_hypothesis_graph_wf_splitter(graph, plugin):
         sleep(1)
     results = wf.result()
     # simple results check
-    #pdb.set_trace()
     for ind, (x, y) in enumerate([(2, 10), (2, 20), (4, 10), (4, 20)]):
         assert results[ind].output.out >= \
-               len(list(graph.predecessors(nd))) + 1 + x + y
+               len(list(graph.predecessors(lst_nd))) + 1 + x + y
 
 
 @given(graph=builder)
@@ -1120,7 +1131,7 @@ def test_hypothesis_graph_wf_splitter_comb(graph, plugin):
     wf.inputs.x = [2, 4]
     wf.inputs.y = [10, 20]
     wf.plugin = plugin
-    # reomoving graphs with loops
+    # removing graphs with loops
     if list(nx.simple_cycles(graph)):
         return None
 
@@ -1132,8 +1143,8 @@ def test_hypothesis_graph_wf_splitter_comb(graph, plugin):
             for i, el in enumerate(graph.in_edges(nd)):
                 inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
             wf.add(sum_args(name=nd, **inp_dict))
-    wf.set_output([("out", getattr(wf, nd).lzout.out)])
-
+    lst_nd = nd
+    wf.set_output([("out", getattr(wf, lst_nd).lzout.out)])
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
@@ -1143,11 +1154,10 @@ def test_hypothesis_graph_wf_splitter_comb(graph, plugin):
         sleep(1)
     results = wf.result()
     # simple results check
-    #pdb.set_trace()
     for ind_y, y in enumerate(wf.inputs.y):
         for ind_x, x in enumerate(wf.inputs.x):
             assert results[ind_y][ind_x].output.out >= \
-                   len(list(graph.predecessors(nd))) + 1 + x + y
+                   len(list(graph.predecessors(lst_nd))) + 1 + x + y
 
 #todo nie wiem dlaczego nie dziala
 @given(graph=builder)
@@ -1158,7 +1168,7 @@ def test_hypothesis_graph_nd_splitter(graph, plugin):
     wf.inputs.x = [2, 4]
     wf.inputs.y = [10, 20]
     wf.plugin = plugin
-    # reomoving graphs with loops
+    # removing graphs with loops
     if list(nx.simple_cycles(graph)):
         return None
 
@@ -1173,7 +1183,8 @@ def test_hypothesis_graph_nd_splitter(graph, plugin):
             for i, el in enumerate(graph.in_edges(nd)):
                 inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
             wf.add(sum_args(name=nd, **inp_dict))
-    wf.set_output([("out", getattr(wf, nd).lzout.out)])
+    lst_nd = nd
+    wf.set_output([("out", getattr(wf, lst_nd).lzout.out)])
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf)
@@ -1186,4 +1197,4 @@ def test_hypothesis_graph_nd_splitter(graph, plugin):
     pdb.set_trace()
     for ind, (x, y) in enumerate([(2, 10), (2, 20), (4, 10), (4, 20)]):
         assert results[ind].output.out >= \
-               len(list(graph.predecessors(nd))) + 1 + x + y
+               len(list(graph.predecessors(lst_nd))) + 1 + x + y

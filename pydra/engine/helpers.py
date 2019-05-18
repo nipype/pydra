@@ -158,13 +158,14 @@ def create_checksum(name, inputs):
     return "_".join((name, inputs.hash))
 
 
-def get_inputs(needed_outputs):
-    in_dict = {}
-    for outlink in needed_outputs:
-        result = load_result(outlink.cache_location)
-        if result:
-            in_dict[outlink.input] = getattr(result.output, outlink.output)
-    return in_dict
+# TODO: we are not using, remove?
+# def get_inputs(needed_outputs):
+#     in_dict = {}
+#     for outlink in needed_outputs:
+#         result = load_result(outlink.cache_location)
+#         if result:
+#             in_dict[outlink.input] = getattr(result.output, outlink.output)
+#     return in_dict
 
 
 def record_error(error_path, error):
