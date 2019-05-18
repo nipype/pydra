@@ -15,7 +15,6 @@ CLASSIFIERS = [
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.6",
     "Programming Language :: Python :: 3.7",
     "Topic :: Scientific/Engineering",
 ]
@@ -68,8 +67,15 @@ REQUIRES = [
 ]
 
 SETUP_REQUIRES = ["setuptools>=27.0"]
-TESTS_REQUIRES = ["pytest-cov", "codecov", "pytest-env", "pytest-xdist", "pyld",
-                  "hypothesis", "hypothesis_networkx"]
+TESTS_REQUIRES = [
+    "pytest-cov",
+    "codecov",
+    "pytest-env",
+    "pytest-xdist",
+    "pyld",
+    "hypothesis",
+    "hypothesis_networkx",
+]
 LINKS_REQUIRES = []
 
 EXTRA_REQUIRES = {
