@@ -853,12 +853,13 @@ def test_groups_stack_input(group_for_inputs, groups_stack, groups_stack_input_e
         assert set(grs) == set(groups_stack_input_exp[i])
 
 
-
 splitter_h = st.recursive(
-        st.text(string.ascii_letters, min_size=1),
-        lambda substrat: st.lists(substrat, min_size=2, max_size=2) |
-                         st.lists(substrat, min_size=2, max_size=2).map(tuple),
+    st.text(string.ascii_letters, min_size=1),
+    lambda substrat: st.lists(substrat, min_size=2, max_size=2)
+    | st.lists(substrat, min_size=2, max_size=2).map(tuple),
 )
+
+
 @given(splitter=splitter_h)
 def test_splits_groups_hypothesis(splitter):
     print("Splitter from hypothesis", splitter)
@@ -875,10 +876,12 @@ def test_splits_groups_hypothesis(splitter):
 
 
 splitter_h = st.recursive(
-        st.text(string.ascii_letters, min_size=1),
-        lambda substrat: st.lists(substrat, min_size=2, max_size=2) |
-                         st.lists(substrat, min_size=2, max_size=2).map(tuple),
+    st.text(string.ascii_letters, min_size=1),
+    lambda substrat: st.lists(substrat, min_size=2, max_size=2)
+    | st.lists(substrat, min_size=2, max_size=2).map(tuple),
 )
+
+
 @given(splitter=splitter_h)
 def test_splits_groups_comb_hypothesis(splitter):
     splitter_rpn = aux.splitter2rpn(splitter)
@@ -900,10 +903,12 @@ def test_splits_groups_comb_hypothesis(splitter):
 
 
 splitter_h = st.recursive(
-        st.text(string.ascii_letters, min_size=1),
-        lambda substrat: st.lists(substrat, min_size=2, max_size=2) |
-                         st.lists(substrat, min_size=2, max_size=2).map(tuple),
+    st.text(string.ascii_letters, min_size=1),
+    lambda substrat: st.lists(substrat, min_size=2, max_size=2)
+    | st.lists(substrat, min_size=2, max_size=2).map(tuple),
 )
+
+
 @given(splitter=splitter_h)
 def test_splitter_rpn_hypothesis(splitter):
     rpn = aux.splitter2rpn(splitter)

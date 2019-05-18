@@ -1029,29 +1029,36 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
 
 # testing with hypothesis
 
+
 @to_task
 def sum_args(x0, x1=0, x2=0, x3=0, x4=0, x5=0):
     return x0 + x1 + x2 + x3 + x4 + x5 + 1
 
 
 node_data = st.fixed_dictionaries({})  # {'name': st.text(),
-# 'number': st.integers()})
+#'number': st.integers()})
 
 # creating a graph
-builder = graph_builder(graph_type=nx.DiGraph,
-                        node_keys=st.text(string.ascii_letters, min_size=1),
-                        node_data=node_data,
-                        # edge_data=edge_data,
-                        min_nodes=4, max_nodes=10,
-                        min_edges=2, max_edges=None,
-                        self_loops=False,
-                        connected=True)
+builder = graph_builder(
+    graph_type=nx.DiGraph,
+    node_keys=st.text(string.ascii_letters, min_size=1),
+    node_data=node_data,
+    # edge_data=edge_data,
+    min_nodes=4,
+    max_nodes=10,
+    min_edges=2,
+    max_edges=None,
+    self_loops=False,
+    connected=True,
+)
 
 graph = builder.example()
 
 
 @given(graph=builder)
-@settings(max_examples=100, deadline=None)  # should I explore why the timing is different?
+@settings(
+    max_examples=100, deadline=None
+)  # should I explore why the timing is different?
 @pytest.mark.parametrize("plugin", Plugins)
 def test_hypothesis_graph(graph, plugin):
     wf = Workflow(name="wf_1", input_spec=["x"])
@@ -1068,7 +1075,7 @@ def test_hypothesis_graph(graph, plugin):
         else:
             inp_dict = {}
             for i, el in enumerate(graph.in_edges(nd)):
-                inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
+                inp_dict[f"x{i}"] = getattr(wf, el[0]).lzout.out
             wf.add(sum_args(name=nd, **inp_dict))
     lst_nd = nd
     wf.set_output([("out", getattr(wf, lst_nd).lzout.out)])
@@ -1081,12 +1088,13 @@ def test_hypothesis_graph(graph, plugin):
         sleep(1)
     results = wf.result()
     # simple results check
-    assert results.output.out >= len(list(graph.predecessors(lst_nd))) \
-           + 1 + wf.inputs.x
+    assert results.output.out >= len(list(graph.predecessors(lst_nd))) + 1 + wf.inputs.x
 
 
 @given(graph=builder)
-@settings(max_examples=100, deadline=None) # should I explore why the timing is different?
+@settings(
+    max_examples=100, deadline=None
+)  # should I explore why the timing is different?
 @pytest.mark.parametrize("plugin", Plugins)
 def test_hypothesis_graph_wf_splitter(graph, plugin):
     wf = Workflow(name="wf_1", input_spec=["x", "y"])
@@ -1104,7 +1112,7 @@ def test_hypothesis_graph_wf_splitter(graph, plugin):
         else:
             inp_dict = {}
             for i, el in enumerate(graph.in_edges(nd)):
-                inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
+                inp_dict[f"x{i}"] = getattr(wf, el[0]).lzout.out
             wf.add(sum_args(name=nd, **inp_dict))
     lst_nd = nd
     wf.set_output([("out", getattr(wf, lst_nd).lzout.out)])
@@ -1118,12 +1126,15 @@ def test_hypothesis_graph_wf_splitter(graph, plugin):
     results = wf.result()
     # simple results check
     for ind, (x, y) in enumerate([(2, 10), (2, 20), (4, 10), (4, 20)]):
-        assert results[ind].output.out >= \
-               len(list(graph.predecessors(lst_nd))) + 1 + x + y
+        assert (
+            results[ind].output.out >= len(list(graph.predecessors(lst_nd))) + 1 + x + y
+        )
 
 
 @given(graph=builder)
-@settings(max_examples=100, deadline=None) # should I explore why the timing is different?
+@settings(
+    max_examples=100, deadline=None
+)  # should I explore why the timing is different?
 @pytest.mark.parametrize("plugin", Plugins)
 def test_hypothesis_graph_wf_splitter_comb(graph, plugin):
     wf = Workflow(name="wf_1", input_spec=["x", "y"])
@@ -1141,7 +1152,7 @@ def test_hypothesis_graph_wf_splitter_comb(graph, plugin):
         else:
             inp_dict = {}
             for i, el in enumerate(graph.in_edges(nd)):
-                inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
+                inp_dict[f"x{i}"] = getattr(wf, el[0]).lzout.out
             wf.add(sum_args(name=nd, **inp_dict))
     lst_nd = nd
     wf.set_output([("out", getattr(wf, lst_nd).lzout.out)])
@@ -1156,12 +1167,17 @@ def test_hypothesis_graph_wf_splitter_comb(graph, plugin):
     # simple results check
     for ind_y, y in enumerate(wf.inputs.y):
         for ind_x, x in enumerate(wf.inputs.x):
-            assert results[ind_y][ind_x].output.out >= \
-                   len(list(graph.predecessors(lst_nd))) + 1 + x + y
+            assert (
+                results[ind_y][ind_x].output.out
+                >= len(list(graph.predecessors(lst_nd))) + 1 + x + y
+            )
 
-#todo nie wiem dlaczego nie dziala
+
+# todo nie wiem dlaczego nie dziala
 @given(graph=builder)
-@settings(max_examples=10, deadline=None) # should I explore why the timing is different?
+@settings(
+    max_examples=10, deadline=None
+)  # should I explore why the timing is different?
 @pytest.mark.parametrize("plugin", Plugins)
 def test_hypothesis_graph_nd_splitter(graph, plugin):
     wf = Workflow(name="wf_1", input_spec=["x", "y"])
@@ -1172,16 +1188,19 @@ def test_hypothesis_graph_nd_splitter(graph, plugin):
     if list(nx.simple_cycles(graph)):
         return None
 
-    nd_spl =[]
+    nd_spl = []
     for nd in list(nx.topological_sort(graph)):
         if not graph.in_edges(nd):
             nd_spl.append(nd)
-            wf.add(sum_args(name=nd, x0=wf.lzin.x, x1=wf.lzin.y)
-                   .split(splitter=["x0", "x1"]))
+            wf.add(
+                sum_args(name=nd, x0=wf.lzin.x, x1=wf.lzin.y).split(
+                    splitter=["x0", "x1"]
+                )
+            )
         else:
             inp_dict = {}
             for i, el in enumerate(graph.in_edges(nd)):
-                inp_dict[f'x{i}'] = getattr(wf, el[0]).lzout.out
+                inp_dict[f"x{i}"] = getattr(wf, el[0]).lzout.out
             wf.add(sum_args(name=nd, **inp_dict))
     lst_nd = nd
     wf.set_output([("out", getattr(wf, lst_nd).lzout.out)])
@@ -1196,5 +1215,6 @@ def test_hypothesis_graph_nd_splitter(graph, plugin):
     # simple results check
     pdb.set_trace()
     for ind, (x, y) in enumerate([(2, 10), (2, 20), (4, 10), (4, 20)]):
-        assert results[ind].output.out >= \
-               len(list(graph.predecessors(lst_nd))) + 1 + x + y
+        assert (
+            results[ind].output.out >= len(list(graph.predecessors(lst_nd))) + 1 + x + y
+        )

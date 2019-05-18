@@ -1065,8 +1065,12 @@ def _splitter_check(splitter_rpn):
     """ not sure how to deal if input appears twice in splitter_rpn
         TODO: checking if they are in the same groups?
     """
-    repeated_elements = set([el for el in splitter_rpn
-                             if (splitter_rpn.count(el) > 1
-                                 and el not in ["*", "."])])
+    repeated_elements = set(
+        [
+            el
+            for el in splitter_rpn
+            if (splitter_rpn.count(el) > 1 and el not in ["*", "."])
+        ]
+    )
     if repeated_elements:
         raise Exception(f"elements {repeated_elements} are repeated in the splitter")
