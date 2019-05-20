@@ -5,7 +5,7 @@ language: python
 python:
   - 3.6
   - 3.7
-  - pypy3.6
+  - "pypy3.6"
 
 before_install:
   - travis_retry bash <(wget -q -O- http://neuro.debian.net/_files/neurodebian-travis.sh);
