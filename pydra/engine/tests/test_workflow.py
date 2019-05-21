@@ -3,7 +3,7 @@ from time import sleep
 import shutil
 import string
 from hypothesis_networkx import graph_builder
-from hypothesis import given, strategies as st, settings
+from hypothesis import given, strategies as st, settings, reproduce_failure
 import networkx as nx
 
 from ..submitter import Submitter
@@ -1032,6 +1032,7 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
 
 @to_task
 def sum_args(x0, x1=0, x2=0, x3=0, x4=0, x5=0):
+    print("FUN", x0, x1, x2, x3, x4, x5)
     return x0 + x1 + x2 + x3 + x4 + x5 + 1
 
 
@@ -1142,10 +1143,11 @@ def test_hypothesis_graph_wf_splitter_comb(graph, plugin):
     wf.inputs.x = [2, 4]
     wf.inputs.y = [10, 20]
     wf.plugin = plugin
+    print("\n PRZED", graph.nodes, graph.edges)
     # removing graphs with loops
     if list(nx.simple_cycles(graph)):
         return None
-
+    print("GRAPH", graph.nodes, graph.edges)
     for nd in list(nx.topological_sort(graph)):
         if not graph.in_edges(nd):
             wf.add(sum_args(name=nd, x0=wf.lzin.x, x1=wf.lzin.y))
@@ -1178,7 +1180,8 @@ def test_hypothesis_graph_wf_splitter_comb(graph, plugin):
 @settings(
     max_examples=10, deadline=None
 )  # should I explore why the timing is different?
-@pytest.mark.parametrize("plugin", Plugins)
+@reproduce_failure('4.17.2', b'AAEBAQEBAAAAAQEEAQAAAQABAAABAQABAgABAwA=')
+@pytest.mark.parametrize("plugin", ["serial"])
 def test_hypothesis_graph_nd_splitter(graph, plugin):
     wf = Workflow(name="wf_1", input_spec=["x", "y"])
     wf.inputs.x = [2, 4]
@@ -1187,7 +1190,6 @@ def test_hypothesis_graph_nd_splitter(graph, plugin):
     # removing graphs with loops
     if list(nx.simple_cycles(graph)):
         return None
-
     nd_spl = []
     for nd in list(nx.topological_sort(graph)):
         if not graph.in_edges(nd):
@@ -1213,8 +1215,7 @@ def test_hypothesis_graph_nd_splitter(graph, plugin):
         sleep(1)
     results = wf.result()
     # simple results check
-    pdb.set_trace()
     for ind, (x, y) in enumerate([(2, 10), (2, 20), (4, 10), (4, 20)]):
         assert (
-            results[ind].output.out >= len(list(graph.predecessors(lst_nd))) + 1 + x + y
+            results.output.out[ind] >= len(list(graph.predecessors(lst_nd))) + 1 + x + y
         )
