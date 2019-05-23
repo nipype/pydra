@@ -14,7 +14,6 @@ logger = logging.getLogger("pydra.worker")
 
 class Worker(object):
     def __init__(self):
-        self._pending = set()
         logger.debug("Initialize Worker")
 
     def run_el(self, interface, **kwargs):
@@ -22,13 +21,6 @@ class Worker(object):
 
     def close(self):
         raise NotImplementedError
-
-    @property
-    def pending(self):
-        return bool(len(self._pending))
-
-    def _remove_pending(self, task):
-        self._pending.remove(task)
 
 
 class MpWorker(Worker):
@@ -87,25 +79,34 @@ class ConcurrentFuturesWorker(Worker):
     def run_el(self, interface, sidx=None, **kwargs):
         # wrap as asyncio task
         task = asyncio.create_task(exec_as_coro(self.loop, self.pool, interface, sidx))
-        self._pending.add(task)
         return task
 
     def close(self):
         self.pool.shutdown()
 
-    async def fetch_finished(self):
-        done = []
+    async def fetch_finished(self, futures):
+        """Awaits asyncio ``Tasks`` until one is finished
+
+        Parameters
+        ----------
+        futures : set of ``Futures``
+            Pending tasks
+
+        Returns
+        -------
+        done : set
+            Finished or cancelled tasks
+        """
+        done = set()
         try:
             done, pending = await asyncio.wait(
-                self._pending, return_when=asyncio.FIRST_COMPLETED
+                futures, return_when=asyncio.FIRST_COMPLETED
             )
         except ValueError:
             # nothing pending!
             pending = set()
-        # preserve pending tasks
-        self._pending.union(pending)
-        logger.debug("Tasks finished: %d", len(done))
-        return done
+        logger.debug(f"Tasks finished: {len(done)}")
+        return done, pending
 
 
 class DaskWorker(Worker):
