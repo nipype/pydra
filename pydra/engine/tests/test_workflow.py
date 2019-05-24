@@ -1,5 +1,6 @@
 import pytest, pdb
 from time import sleep
+import shutil
 
 from ..submitter import Submitter
 from ..task import to_task
@@ -89,8 +90,10 @@ def test_wf_2a(plugin):
     assert 8 == results.output.out
 
 
-@pytest.mark.xfail(reason="x=lzout added after calling wf.add(add2_task):"
-                          "edge is not created (fix: creating edges in run?)")
+@pytest.mark.xfail(
+    reason="x=lzout added after calling wf.add(add2_task):"
+    "edge is not created (fix: creating edges in run?)"
+)
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_2b(plugin):
     """ workflow with 2 tasks, no splitter
@@ -858,3 +861,105 @@ def test_wfasnd_wfst_3(plugin):
     results = wf.result()
     assert results[0].output.out == 4
     assert results[1].output.out == 42
+
+
+# Testing caching for tasks without states
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_nostate_cachedir(plugin, tmpdir):
+    """ task with provided cache_dir using pytest tmpdir"""
+    cache_dir = tmpdir.mkdir("test_wf_cache_1")
+
+    wf = Workflow(name="wf_2", input_spec=["x", "y"], cache_dir=cache_dir)
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.inputs.y = 3
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    assert 8 == results.output.out
+
+    shutil.rmtree(cache_dir)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
+    """ task with provided cache_dir as relative path"""
+    cwd = tmpdir.chdir()
+    cache_dir = "test_wf_cache_2"
+
+    wf = Workflow(name="wf_2", input_spec=["x", "y"], cache_dir=cache_dir)
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.inputs.y = 3
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf)
+
+    # checking the results
+    while not wf.done:
+        sleep(1)
+    results = wf.result()
+    assert 8 == results.output.out
+
+    shutil.rmtree(cache_dir)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_nostate_cachelocations(plugin, tmpdir):
+    """
+    Two identical tasks with provided cache_dir;
+    the second task has cache_locations and should not recompute the results
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+    cache_dir2 = tmpdir.mkdir("test_wf_cache4")
+
+    wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
+    wf1.add(add2(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.inputs.x = 2
+    wf1.inputs.y = 3
+    wf1.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf1)
+
+    results1 = wf1.result()
+    assert 8 == results1.output.out
+    pdb.set_trace()
+
+    wf2 = Workflow(
+        name="wf",
+        input_spec=["x", "y"],
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+    )
+    wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y))
+    wf2.add(add2(name="add2", x=wf2.mult.lzout.out))
+    wf2.set_output([("out", wf2.add2.lzout.out)])
+    wf2.inputs.x = 2
+    wf2.inputs.y = 3
+    wf2.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub.run(wf2)
+
+    results2 = wf2.result()
+    assert 8 == results2.output.out
+
+    # checking if the second task didn't run the interface again
+    assert wf1.output_dir.exists()
+    assert not wf2.output_dir.exists()
