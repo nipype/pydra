@@ -937,9 +937,11 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     with Submitter(plugin=plugin) as sub:
         sub.run(wf1)
 
+    while not wf1.done:
+        sleep(1)
+
     results1 = wf1.result()
     assert 8 == results1.output.out
-    pdb.set_trace()
 
     wf2 = Workflow(
         name="wf",
@@ -956,6 +958,9 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
 
     with Submitter(plugin=plugin) as sub:
         sub.run(wf2)
+
+    while not wf2.done:
+        sleep(1)
 
     results2 = wf2.result()
     assert 8 == results2.output.out

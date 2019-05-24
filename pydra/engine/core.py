@@ -484,6 +484,7 @@ class Workflow(TaskBase):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
+        cache_locations=None,
         **kwargs,
     ):
         if input_spec:
@@ -506,6 +507,7 @@ class Workflow(TaskBase):
             name=name,
             inputs=kwargs,
             cache_dir=cache_dir,
+            cache_locations=cache_locations,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,

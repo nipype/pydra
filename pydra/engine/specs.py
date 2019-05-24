@@ -30,7 +30,6 @@ class BaseSpec:
         if hasattr(self, "_graph"):
 
             graph_hash = [nd.checksum for nd in self._graph]
-            breakpoint()
             return self._hash((inp_hash, graph_hash))
         else:
             return inp_hash
