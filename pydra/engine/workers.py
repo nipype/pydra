@@ -137,5 +137,5 @@ async def exec_as_coro(loop, pool, interface, sidx=None):
     logger.debug(
         f'Executing runnable {interface}{str(sidx) if sidx is not None else ""}'
     )
-    res = await loop.run_in_executor(pool, partial(interface, return_self=True))
-    return sidx, res
+    res = await loop.run_in_executor(pool, interface)
+    return (interface, res, sidx)
