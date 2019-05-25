@@ -1,4 +1,5 @@
 from copy import copy, deepcopy
+from .helpers import ensure_list
 
 
 class MyGraph:
@@ -47,6 +48,26 @@ class MyGraph:
             self._connections_pred[nd_in].append(nd_out)
             self._connections_succ[nd_out].append(nd_in)
 
+    def add_nodes(self, new_nodes):
+        # todo?
+        self.nodes = self._nodes + ensure_list(new_nodes)
+        for nd in ensure_list(new_nodes):
+            self._connections_pred[nd] = []
+            self._connections_succ[nd] = []
+        if hasattr(self, "sorted_nodes"):
+            # starting from the previous sorted list, so is faster
+            self.sorting(presorted=self.sorted_nodes + ensure_list(new_nodes))
+
+    def add_edges(self, new_edges):
+        # todo?
+        self.edges = self._edges + ensure_list(new_edges)
+        for (nd_out, nd_in) in ensure_list(new_edges):
+            self._connections_pred[nd_in].append(nd_out)
+            self._connections_succ[nd_out].append(nd_in)
+        if hasattr(self, "sorted_nodes"):
+            # starting from the previous sorted list, so is faster
+            self.sorting(presorted=self.sorted_nodes + [])
+
     def _sorting(self, notsorted_list, connections_pred):
         left_nodes = []
         sorted_part = []
@@ -75,7 +96,7 @@ class MyGraph:
                 for nd_in in self._connections_succ[nd_out]:
                     connections_pred[nd_in].remove(nd_out)
 
-    def removing(self, node):
+    def remove_node(self, node):
         """removing a node, re-sorting if needed"""
         if node not in self.nodes:
             raise Exception(f"{node} is not present in the graph")
