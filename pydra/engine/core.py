@@ -514,8 +514,6 @@ class Workflow(TaskBase):
         )
 
         self.graph = nx.DiGraph()
-        self._graph_sorted = []
-        self.inputs._graph = self._graph_sorted
         self.name2obj = {}
 
         # store output connections
@@ -537,8 +535,7 @@ class Workflow(TaskBase):
 
     @property
     def graph_sorted(self):
-        self._graph_sorted[:] = list(nx.topological_sort(self.graph))
-        return self._graph_sorted
+        return list(nx.topological_sort(self.graph))
 
     def add(self, task):
         if not is_task(task):
@@ -570,7 +567,7 @@ class Workflow(TaskBase):
             else:
                 task.state = state.State(task.name, other_states=other_states)
         self.node_names.append(task.name)
-        self.graph_sorted
+        self.inputs._graph = self.graph_sorted
         return self
 
     def _run_task(self):
