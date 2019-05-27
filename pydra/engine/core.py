@@ -96,7 +96,9 @@ class TaskBase:
             }
         )
         self.input_names = [
-            field.name for field in dc.fields(klass) if field.name not in ["_func"]
+            field.name
+            for field in dc.fields(klass)
+            if field.name not in ["_func", "_graph"]
         ]
         self.state = None
         self._output = {}
@@ -482,6 +484,7 @@ class Workflow(TaskBase):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
+        cache_locations=None,
         **kwargs,
     ):
         if input_spec:
@@ -490,7 +493,8 @@ class Workflow(TaskBase):
             else:
                 self.input_spec = SpecInfo(
                     name="Inputs",
-                    fields=[(name, ty.Any) for name in input_spec],
+                    fields=[(name, ty.Any) for name in input_spec]
+                    + [("_graph", ty.Any)],
                     bases=(BaseSpec,),
                 )
         if output_spec is None:
@@ -503,13 +507,13 @@ class Workflow(TaskBase):
             name=name,
             inputs=kwargs,
             cache_dir=cache_dir,
+            cache_locations=cache_locations,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
         )
 
         self.graph = nx.DiGraph()
-
         self.name2obj = {}
 
         # store output connections
@@ -563,6 +567,7 @@ class Workflow(TaskBase):
             else:
                 task.state = state.State(task.name, other_states=other_states)
         self.node_names.append(task.name)
+        self.inputs._graph = self.graph_sorted
         return self
 
     def _run_task(self):
