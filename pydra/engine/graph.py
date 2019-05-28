@@ -3,6 +3,11 @@ from .helpers import ensure_list
 
 
 class Graph:
+    """
+    A simple Directed Graph object
+
+    """
+
     def __init__(self, nodes=None, edges=None):
         self.nodes = nodes
         self.edges = edges
@@ -16,6 +21,7 @@ class Graph:
     @nodes.setter
     def nodes(self, nodes):
         if nodes:
+            nodes = ensure_list(nodes)
             if len(set(nodes)) != len(nodes):
                 raise Exception("nodes have repeated elements")
             self._nodes = nodes
@@ -33,6 +39,7 @@ class Graph:
     @edges.setter
     def edges(self, edges):
         if edges:
+            edges = ensure_list(edges)
             for (nd_out, nd_in) in edges:
                 if nd_out not in self.nodes or nd_in not in self.nodes:
                     raise Exception(
@@ -140,3 +147,29 @@ class Graph:
                 self._sorted_nodes.remove(node)
                 # starting from the previous sorted list, so is faster
                 self.sorting(presorted=self.sorted_nodes)
+
+    def _checking_path(self, node_name, first_name, path=0):
+        """recursive function to calculate all paths using connections list"""
+        if not self._connections_succ[node_name]:
+            return True
+        for nd_in in self._connections_succ[node_name]:
+            if nd_in.name in self.max_paths[first_name].keys():
+                # chose the maximum paths
+                self.max_paths[first_name][nd_in.name] = max(
+                    self.max_paths[first_name][nd_in.name], path + 1
+                )
+            else:
+                self.max_paths[first_name][nd_in.name] = path + 1
+            self._checking_path(
+                node_name=nd_in.name, first_name=first_name, path=path + 1
+            )
+
+    def calculate_max_paths(self):
+        """ calculate maximum paths between any node without in connections (no predecessors)
+        and all of the connections
+        """
+        self.max_paths = {}
+        first_nodes = [key for (key, val) in self._connections_pred.items() if not val]
+        for nm in first_nodes:
+            self.max_paths[nm] = {}
+            self._checking_path(node_name=nm, first_name=nm)

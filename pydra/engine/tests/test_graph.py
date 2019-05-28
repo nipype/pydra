@@ -295,3 +295,46 @@ def test_remove_add_2():
     assert graph.nodes_names == ["b", "c", "d", "a"]
     assert graph.edges_names == [("b", "c"), ("a", "b"), ("a", "c")]
     assert graph.sorted_nodes_names == ["d", "a", "b", "c"]
+
+
+def test_maxpath_1():
+    """a -> b"""
+    graph = Graph(nodes=[B, A], edges=[(A, B)])
+    graph.calculate_max_paths()
+    assert list(graph.max_paths.keys()) == ["a"]
+    assert graph.max_paths["a"] == {"b": 1}
+
+
+def test_maxpath_2():
+    """a -> b -> c"""
+    graph = Graph(nodes=[B, A, C], edges=[(A, B), (B, C)])
+    graph.calculate_max_paths()
+    assert list(graph.max_paths.keys()) == ["a"]
+    assert graph.max_paths["a"] == {"b": 1, "c": 2}
+
+
+def test_maxpath_3():
+    """a -> b -> c; d"""
+    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C)])
+    graph.calculate_max_paths()
+    assert list(graph.max_paths.keys()) == ["a", "d"]
+    assert graph.max_paths["a"] == {"b": 1, "c": 2}
+    assert graph.max_paths["d"] == {}
+
+
+def test_maxpath_4():
+    """a-> b -> c; a -> c; d"""
+    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
+    graph.calculate_max_paths()
+    assert list(graph.max_paths.keys()) == ["a", "d"]
+    assert graph.max_paths["a"] == {"b": 1, "c": 2}
+    assert graph.max_paths["d"] == {}
+
+
+def test_maxpath_5():
+    """a-> b -> c; a -> c; d -> b"""
+    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C), (D, B)])
+    graph.calculate_max_paths()
+    assert list(graph.max_paths.keys()) == ["a", "d"]
+    assert graph.max_paths["a"] == {"b": 1, "c": 2}
+    assert graph.max_paths["d"] == {"b": 1, "c": 2}
