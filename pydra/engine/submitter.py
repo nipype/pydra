@@ -91,15 +91,17 @@ class Submitter:
                 # 2. workflow with no state --> await _submit (recurse)
                 # 3. task with state --> _expand and submit to worker
                 # 4. task with no state --> submit to worker
-                task_futures = await self._submit(task)
-                # self.task_to_worker(task_future)
-                running_futures.union(task_futures)
+                if is_workflow(task):
+                    await task.run(submitter=self)
+                else:
+                    task_futures = await self.submit(task)
+                    running_futures.union(task_futures)
 
             # TODO: ensure wf is updating
             task_futures = await self.fetch_from_worker(wf, task_futures)
         return wf, state_idx
 
-    async def _submit(self, runnable, gather_results=False):
+    async def submit(self, runnable, return_task=False):
         """
         Coroutine entrypoint for task submission.
 
@@ -110,8 +112,8 @@ class Submitter:
         ----------
         runnable : Task
             Task instance (``Task``, ``Workflow``)
-        gather_results : bool (False)
-            Option to halt execution until all results complete or error
+        return_task : bool (False)
+            Option to return runnable once all states have finished
         """
         runnables = []
         futures = set()
@@ -139,31 +141,33 @@ class Submitter:
             checksum = job.checksum
             job.results_dict[None] = (None, checksum)
             if is_workflow(runnable):
-                runnables = [asyncio.create_task(self._run_workflow(job))]
+                # runnables = [asyncio.create_task(self._run_workflow(job))]
+                runnable, _ = await self._run_workflow(job)
             else:
                 # submit task to worker
                 futures.add(self.worker.run_el(job))
 
-        if gather_results:
+        if return_task:
             # run coroutines concurrently and wait for execution
-            await asyncio.gather(*runnables)
+            # TODO: ensure unification of states
+            done = await asyncio.gather(*runnables)
             return runnable
         else:
             return futures
 
-    def submit(self, runnable):
-        """
-        Entrypoint for ``Task`` submission
+    # async def submit(self, runnable):
+    #     """
+    #     Entrypoint for ``Task`` submission
 
-        Parameters
-        ----------
-        runnable : Task
-            Task instance (``Task``, ``Workflow``)
-        """
-        if not self.loop:
-            self.loop = asyncio.get_event_loop()
-        task = self.loop.run_until_complete(self._submit(runnable, gather_results=True))
-        return task
+    #     Parameters
+    #     ----------
+    #     runnable : Task
+    #         Task instance (``Task``, ``Workflow``)
+    #     sync : bool
+    #         Run outside of loop
+    #     """
+    #     res = await self.run(runnable)
+    #     return res
 
     def close(self):
         self.worker.close()

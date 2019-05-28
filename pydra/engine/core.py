@@ -9,6 +9,7 @@ from pathlib import Path
 import typing as ty
 import pickle as pk
 from copy import deepcopy
+import asyncio
 
 import cloudpickle as cp
 from filelock import FileLock
@@ -579,9 +580,118 @@ class Workflow(TaskBase):
         logger.debug("Added %s", task)
         return self
 
-    def _run_task(self):
-        # this is handled within the submitter
-        pass
+    async def run(self, submitter=None, **kwargs):
+        self.inputs = dc.replace(self.inputs, **kwargs)
+        checksum = self.checksum
+        lockfile = self.cache_dir / (checksum + ".lock")
+        """
+        Concurrent execution scenarios
+
+        1. prior cache exists -> return result
+        2. other process running -> wait
+           a. finishes (with or without exception) -> return result
+           b. gets killed -> restart
+        3. no cache or other process -> start
+        4. two or more concurrent new processes get to start
+        """
+        # TODO add signal handler for processes killed after lock acquisition
+        with FileLock(lockfile):
+            # Let only one equivalent process run
+            # Eagerly retrieve cached
+            if self.results_dict:  # should be skipped if run called without submitter
+                result = self.result()
+                if result is not None:
+                    return result
+            odir = self.output_dir
+            if not self.can_resume and odir.exists():
+                shutil.rmtree(odir)
+            cwd = os.getcwd()
+            odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
+            # start recording provenance, but don't send till directory is created
+            # in case message directory is inside task output directory
+            if self.audit_check(AuditFlag.PROV):
+                aid = "uid:{}".format(gen_uuid())
+                start_message = {"@id": aid, "@type": "task", "startedAtTime": now()}
+            os.chdir(odir)
+            if self.audit_check(AuditFlag.PROV):
+                self.audit(start_message, AuditFlag.PROV)
+                # audit inputs
+            # check_runtime(self._runtime_requirements)
+            # isolate inputs if files
+            # cwd = os.getcwd()
+            if self.audit_check(AuditFlag.RESOURCE):
+                from ..utils.profiler import ResourceMonitor
+
+                resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
+            result = Result(output=None, runtime=None, errored=False)
+            try:
+                if self.audit_check(AuditFlag.RESOURCE):
+                    resource_monitor.start()
+                    if self.audit_check(AuditFlag.PROV):
+                        mid = "uid:{}".format(gen_uuid())
+                        self.audit(
+                            {
+                                "@id": mid,
+                                "@type": "monitor",
+                                "startedAtTime": now(),
+                                "wasStartedBy": aid,
+                            },
+                            AuditFlag.PROV,
+                        )
+                await self._run_task(submitter)
+                result.output = self._collect_outputs()
+            except Exception as e:
+                record_error(self.output_dir, e)
+                result.errored = True
+                raise
+            finally:
+                if self.audit_check(AuditFlag.RESOURCE):
+                    resource_monitor.stop()
+                    result.runtime = gather_runtime_info(resource_monitor.fname)
+                    if self.audit_check(AuditFlag.PROV):
+                        self.audit(
+                            {"@id": mid, "endedAtTime": now(), "wasEndedBy": aid},
+                            AuditFlag.PROV,
+                        )
+                        # audit resources/runtime information
+                        eid = "uid:{}".format(gen_uuid())
+                        entity = dc.asdict(result.runtime)
+                        entity.update(
+                            **{
+                                "@id": eid,
+                                "@type": "runtime",
+                                "prov:wasGeneratedBy": aid,
+                            }
+                        )
+                        self.audit(entity, AuditFlag.PROV)
+                        self.audit(
+                            {
+                                "@type": "prov:Generation",
+                                "entity_generated": eid,
+                                "hadActivity": mid,
+                            },
+                            AuditFlag.PROV,
+                        )
+                save_result(odir, result)
+                with open(odir / "_node.pklz", "wb") as fp:
+                    cp.dump(self, fp)
+                os.chdir(cwd)
+                if self.audit_check(AuditFlag.PROV):
+                    # audit outputs
+                    self.audit(
+                        {"@id": aid, "endedAtTime": now(), "errored": result.errored},
+                        AuditFlag.PROV,
+                    )
+            return result
+
+    async def _run_task(self, submitter):
+
+        if not submitter:
+            from .submitter import Submitter
+            submitter = Submitter()
+            submitter.loop = asyncio.get_event_loop()
+        nwf = await submitter.submit(self, return_task=True)
+        self.__dict__.update(nwf.__dict__)
 
     def set_output(self, connections):
         self._connections = connections
@@ -596,6 +706,24 @@ class Workflow(TaskBase):
                 raise ValueError("all connections must be lazy")
             output.append(val.get_value(self))
         return output
+
+    def submit_async(self, submitter=None):
+        """Start event loop and submit workflow"""
+
+        async def runner(submitter, task, loop):
+            """Coroutine to start workflow submission"""
+            if submitter is None:
+                from .submitter import Submitter
+                submitter = Submitter()
+            submitter.loop = loop
+            print(f"Submitting {task}")
+            res = await self.run(submitter)
+            return res
+
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(
+            runner(submitter, self, loop)
+        )
 
 
 # TODO: task has also call
