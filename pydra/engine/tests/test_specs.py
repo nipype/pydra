@@ -15,7 +15,7 @@ import pytest
 def test_basespec():
     spec = BaseSpec()
     assert (
-        spec.hash == "01c12e5004b5e311e6f37bc758727644c08a719e46ab794eba312338e1d38ab0"
+        spec.hash == "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
     )
 
 

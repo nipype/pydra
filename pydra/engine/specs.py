@@ -21,7 +21,21 @@ class BaseSpec:
     @property
     def hash(self):
         """Compute a basic hash for any given set of fields"""
-        return sha256(str(self).encode()).hexdigest()
+        inp_dict = {
+            field.name: getattr(self, field.name)
+            for field in dc.fields(self)
+            if field.name not in ["_graph"]
+        }
+        inp_hash = self._hash(inp_dict)
+        if hasattr(self, "_graph"):
+
+            graph_hash = [nd.checksum for nd in self._graph]
+            return self._hash((inp_hash, graph_hash))
+        else:
+            return inp_hash
+
+    def _hash(self, obj):
+        return sha256(str(obj).encode()).hexdigest()
 
     def retrieve_values(self, wf, state_index=None):
         temp_values = {}
@@ -126,7 +140,7 @@ class LazyField:
     def __init__(self, node, attr_type):
         self.name = node.name
         if attr_type == "input":
-            self.fields = [name for name, _ in node.input_spec.fields]
+            self.fields = [field[0] for field in node.input_spec.fields]
         elif attr_type == "output":
             self.fields = node.output_names
         else:
