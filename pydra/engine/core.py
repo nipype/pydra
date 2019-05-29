@@ -721,9 +721,13 @@ class Workflow(TaskBase):
             return res
 
         loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         loop.run_until_complete(
             runner(submitter, self, loop)
         )
+        loop.close()
 
 
 # TODO: task has also call

@@ -79,7 +79,7 @@ class Submitter:
         """
         remaining_tasks = wf.graph_sorted
         # keep track of local futures
-        running_futures = set()
+        task_futures = set()
         while not wf.done:
             remaining_tasks, tasks = await get_runnable_tasks(
                 wf.graph, remaining_tasks
@@ -101,7 +101,7 @@ class Submitter:
                     await task.run(submitter=self)
                 else:
                     task_futures = await self.submit(task)
-                    running_futures.union(task_futures)
+                    # running_futures.union(task_futures)
 
             # TODO: ensure wf is updating
             task_futures = await self.fetch_from_worker(wf, task_futures)
