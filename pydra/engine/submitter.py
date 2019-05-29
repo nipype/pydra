@@ -25,6 +25,12 @@ class Submitter:
         else:
             raise Exception("plugin {} not available".format(self.plugin))
 
+    def __call__(self, runnable):
+        if is_workflow(runnable):
+            runnable.submit_async(self)
+        else:
+            raise NotImplementedError()
+
     def __enter__(self):
         return self
 

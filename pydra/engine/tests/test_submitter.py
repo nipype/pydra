@@ -1,5 +1,6 @@
 from ..core import Workflow
 from ..task import to_task
+from ..submitter import Submitter
 
 import time
 
@@ -23,9 +24,14 @@ def test_concurrent_wf():
     wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
     wf.set_output([("out1", wf.taskc.lzout.out),
                    ("out2", wf.taskd.lzout.out)])
-    wf.plugin = 'cf'
-    res = wf.run()
-    assert res
+    # wf.plugin = 'cf'
+    # res = wf.run()
+    with Submitter('cf') as sub:
+        sub(wf)
+
+    res = wf.result()
+    assert res.output.out1 == 7
+    assert res.output.out2 == 12
 
 
 def test_wf_in_wf():
