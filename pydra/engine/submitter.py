@@ -121,6 +121,8 @@ class Submitter:
         return_task : bool (False)
             Option to return runnable once all states have finished
         """
+        # ensure worker is using same loop
+        self.worker.loop = self.loop
         runnables = []
         futures = set()
 

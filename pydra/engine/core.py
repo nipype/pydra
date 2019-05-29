@@ -687,9 +687,7 @@ class Workflow(TaskBase):
     async def _run_task(self, submitter):
 
         if not submitter:
-            from .submitter import Submitter
-            submitter = Submitter()
-            submitter.loop = asyncio.get_event_loop()
+            raise Exception("Submitter should already be set.")
         nwf = await submitter.submit(self, return_task=True)
         self.__dict__.update(nwf.__dict__)
 
@@ -708,25 +706,24 @@ class Workflow(TaskBase):
         return output
 
     def submit_async(self, submitter=None):
-        """Start event loop and submit workflow"""
-
-        async def runner(submitter, task, loop):
-            """Coroutine to start workflow submission"""
-            if submitter is None:
-                from .submitter import Submitter
-                submitter = Submitter()
-            submitter.loop = loop
-            print(f"Submitting {task}")
-            res = await self.run(submitter)
-            return res
+        """Start event loop and run workflow"""
 
         loop = asyncio.get_event_loop()
         if loop.is_closed():
+            logger.debug(
+                "Current event loop is closed, starting new loop"
+            )
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+
+        if submitter is None:
+            from .submitter import Submitter
+            submitter = Submitter('cf')
+        submitter.loop = loop
         loop.run_until_complete(
-            runner(submitter, self, loop)
+            self.run(submitter)
         )
+        logger.debug(f"Closing event loop {hex(id(loop))}")
         loop.close()
 
 

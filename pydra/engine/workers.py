@@ -1,7 +1,6 @@
 import time
 import multiprocessing as mp
 import asyncio
-from functools import partial
 
 # from pycon_utils import make_cluster
 from dask.distributed import Client
@@ -13,8 +12,9 @@ logger = logging.getLogger("pydra.worker")
 
 
 class Worker(object):
-    def __init__(self):
+    def __init__(self, loop=None):
         logger.debug("Initialize Worker")
+        self.loop = loop
 
     def run_el(self, interface, **kwargs):
         raise NotImplementedError
@@ -67,19 +67,29 @@ class SerialWorker(Worker):
 
 
 class ConcurrentFuturesWorker(Worker):
-    def __init__(self, nr_proc=2, loop=None):
+    def __init__(self, nr_proc=None):
         super(ConcurrentFuturesWorker, self).__init__()
         self.nr_proc = nr_proc or mp.cpu_count()
         # added cpu_count to verify, remove once confident and let PPE handle
         self.pool = cf.ProcessPoolExecutor(self.nr_proc)
-        self.loop = loop or asyncio.get_event_loop()
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
     def run_el(self, interface, sidx=None, **kwargs):
         # wrap as asyncio task
-        task = asyncio.create_task(exec_as_coro(self.loop, self.pool, interface, sidx))
+        if not self.loop:
+            raise Exception("No event loop available to submit tasks")
+        task = asyncio.create_task(
+            exec_as_coro(self.loop, self.pool, interface, sidx)
+        )
         return task
+
+    async def exec_as_coro(self, interface, sidx=None):
+        logger.debug(
+            f'Executing runnable {interface}{str(sidx) if sidx is not None else ""}'
+        )
+        res = await self.loop.run_in_executor(self.pool, interface)
+        return (interface, res, sidx)
 
     def close(self):
         self.pool.shutdown()
