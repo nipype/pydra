@@ -29,7 +29,7 @@ class Submitter:
         if is_workflow(runnable):
             runnable.submit_async(self)
         else:
-            raise NotImplementedError()
+            self.submit(runnable, return_task=True)
 
     def __enter__(self):
         return self
@@ -123,7 +123,6 @@ class Submitter:
         """
         # ensure worker is using same loop
         self.worker.loop = self.loop
-        runnables = []
         futures = set()
 
         if runnable.state:
@@ -138,7 +137,8 @@ class Submitter:
                 job.results_dict[None] = (sidx, checksum)
                 runnable.results_dict[sidx] = (None, checksum)
                 if is_workflow(runnable):
-                    runnables.append(
+                    # runnables.append(
+                    futures.add(
                         asyncio.create_task(self._run_workflow(job, state_idx=sidx))
                     )
                 else:
@@ -149,16 +149,26 @@ class Submitter:
             checksum = job.checksum
             job.results_dict[None] = (None, checksum)
             if is_workflow(runnable):
-                # runnables = [asyncio.create_task(self._run_workflow(job))]
                 runnable, _ = await self._run_workflow(job)
             else:
                 # submit task to worker
                 futures.add(self.worker.run_el(job))
 
         if return_task:
+            # finish all futures and return runnable
             # run coroutines concurrently and wait for execution
             # TODO: ensure unification of states
-            done = await asyncio.gather(*runnables)
+            try:
+                futs = await asyncio.gather(*futures)
+            except TypeError:
+                # empty futures
+                return runnable
+            for fut in futs:
+                breakpoint()
+                state_job, sidx = fut
+                runnable.results_dict[sidx] = (state_job.result(), state_job.checksum)
+                #breakpoint()
+            breakpoint()
             return runnable
         else:
             return futures

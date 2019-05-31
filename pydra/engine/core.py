@@ -690,7 +690,6 @@ class Workflow(TaskBase):
             return result
 
     async def _run_task(self, submitter):
-
         if not submitter:
             raise Exception("Submitter should already be set.")
         nwf = await submitter.submit(self, return_task=True)
