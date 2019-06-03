@@ -120,7 +120,7 @@ def test_wf_2b(plugin):
     assert 8 == results.output.out
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_1(plugin):
     """ Workflow with one task, a splitter for the workflow"""
@@ -144,7 +144,7 @@ def test_wf_st_1(plugin):
     assert results[1].output.out == 4
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_1(plugin):
     """ workflow with one task, a splitter on the task level"""
@@ -165,7 +165,7 @@ def test_wf_ndst_1(plugin):
     assert results.output.out == [3, 4]
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_2(plugin):
     """ workflow with one task, splitters and combiner for workflow"""
@@ -189,7 +189,7 @@ def test_wf_st_2(plugin):
     assert results[0][1].output.out == 4
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_2(plugin):
     """ workflow with one task, splitters and combiner on the task level"""
@@ -213,7 +213,7 @@ def test_wf_ndst_2(plugin):
 # workflows with structures A -> B
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_3(plugin):
     """ workflow with 2 tasks, splitter on wf level"""
@@ -238,7 +238,7 @@ def test_wf_st_3(plugin):
     assert results[1].output.out == 26
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_3(plugin):
     """Test workflow with 2 tasks, splitter on a task level"""
@@ -261,7 +261,7 @@ def test_wf_ndst_3(plugin):
     assert results.output.out == [13, 26]
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_4(plugin):
     """ workflow with two tasks, scalar splitter and combiner for the workflow"""
@@ -288,7 +288,7 @@ def test_wf_st_4(plugin):
     assert results[0][1].output.out == 26
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_4(plugin):
     """ workflow with two tasks, scalar splitter and combiner on tasks level"""
@@ -313,7 +313,7 @@ def test_wf_ndst_4(plugin):
     assert results.output.out[0] == [13, 26]
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_5(plugin):
     """ workflow with two tasks, outer splitter and combiner for the workflow"""
@@ -340,7 +340,7 @@ def test_wf_st_5(plugin):
     assert results[1][1].output.out == 26
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_5(plugin):
     """ workflow with two tasks, outer splitter and combiner on tasks level"""
@@ -367,7 +367,7 @@ def test_wf_ndst_5(plugin):
 # workflows with structures A -> C, B -> C
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_6(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
@@ -396,7 +396,7 @@ def test_wf_st_6(plugin):
     assert results[5].output.out == 70
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_6(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
@@ -424,7 +424,7 @@ def test_wf_ndst_6(plugin):
     assert results.output.out == [39, 42, 52, 56, 65, 70]
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_7(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
@@ -456,7 +456,7 @@ def test_wf_st_7(plugin):
     assert results[1][2].output.out == 70
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_7(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
@@ -489,7 +489,7 @@ def test_wf_ndst_7(plugin):
     assert results.output.out[1] == [42, 56, 70]
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_8(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
@@ -521,7 +521,7 @@ def test_wf_st_8(plugin):
     assert results[2][1].output.out == 70
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_8(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
@@ -555,7 +555,7 @@ def test_wf_ndst_8(plugin):
     assert results.output.out[2] == [65, 70]
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_9(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
@@ -587,7 +587,7 @@ def test_wf_st_9(plugin):
     assert results[0][5].output.out == 70
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_9(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
@@ -673,7 +673,7 @@ def test_wfasnd_wfinp_1(plugin):
     assert results.output.out == 4
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_st_1(plugin):
     """ workflow as a node
@@ -701,7 +701,7 @@ def test_wfasnd_st_1(plugin):
     assert results.output.out == [4, 6]
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_ndst_1(plugin):
     """ workflow as a node
@@ -730,7 +730,7 @@ def test_wfasnd_ndst_1(plugin):
     assert results.output.out == [4, 6]
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_wfst_1(plugin):
     """ workflow as a node
@@ -762,7 +762,7 @@ def test_wfasnd_wfst_1(plugin):
 # workflows with structures wf(A) -> B
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_st_2(plugin):
     """ workflow as a node,
@@ -792,7 +792,7 @@ def test_wfasnd_st_2(plugin):
     assert results.output.out == [4, 42]
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_wfst_2(plugin):
     """ workflow as a node,
@@ -826,7 +826,7 @@ def test_wfasnd_wfst_2(plugin):
 # workflows with structures A -> wf(B)
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_ndst_3(plugin):
     """ workflow as the second node,
@@ -856,7 +856,7 @@ def test_wfasnd_ndst_3(plugin):
     assert results.output.out == [4, 42]
 
 
-@pytest.mark.xfail(reason="WIP: state doesnt work yet")
+@pytest.mark.skip(reason="WIP: state doesnt work yet")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_wfst_3(plugin):
     """ workflow as the second node,

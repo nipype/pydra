@@ -5,6 +5,7 @@ from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
 from .core import is_workflow, is_task, is_runnable
 
 import logging
+
 logging.basicConfig(level=logging.DEBUG)  # TODO: RF
 logger = logging.getLogger("pydra.submitter")
 
@@ -51,9 +52,7 @@ class Submitter:
         done, pending = await self.worker.fetch_finished(pending_futures)
         for fut in done:
             job, res, sidx = await fut
-            logger.debug(
-                f"{job.name}{str(sidx) if sidx is not None else ''} completed"
-            )
+            logger.debug(f"{job.name}{str(sidx) if sidx is not None else ''} completed")
             # within workflow tasks can still have state
             if sidx is not None:
                 master = wf.name2obj.get(job.name)
@@ -81,9 +80,7 @@ class Submitter:
         # keep track of local futures
         task_futures = set()
         while not wf.done:
-            remaining_tasks, tasks = await get_runnable_tasks(
-                wf.graph, remaining_tasks
-            )
+            remaining_tasks, tasks = await get_runnable_tasks(wf.graph, remaining_tasks)
             if not tasks and not task_futures:
                 raise Exception("Nothing queued or todo - something went wrong")
             for task in tasks:
@@ -164,11 +161,8 @@ class Submitter:
                 # empty futures
                 return runnable
             for fut in futs:
-                breakpoint()
                 state_job, sidx = fut
                 runnable.results_dict[sidx] = (state_job.result(), state_job.checksum)
-                #breakpoint()
-            breakpoint()
             return runnable
         else:
             return futures
