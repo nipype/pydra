@@ -92,4 +92,7 @@ def test_wf_with_state():
         sub(wf)
 
     res = wf.result()
-    assert res.output.out
+
+    assert res[0].output.out == 3
+    assert res[1].output.out == 4
+    assert res[2].output.out == 5
