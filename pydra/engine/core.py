@@ -537,6 +537,9 @@ class Workflow(TaskBase):
 
     @property
     def done(self):
+        if super(Workflow, self).done:
+            return True
+        # TODO: not sure why this is needed
         for task in self.graph:
             if not task.done:
                 return False
@@ -603,10 +606,12 @@ class Workflow(TaskBase):
         with FileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            if self.results_dict:  # should be skipped if run called without submitter
-                result = self.result()
-                if result is not None:
-                    return result
+            # not sure why we needed tis if
+            # if self.results_dict:  # should be skipped if run called without submitter
+            result = self.result()
+            if result is not None:
+                return result
+
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
@@ -714,19 +719,16 @@ class Workflow(TaskBase):
 
         loop = asyncio.get_event_loop()
         if loop.is_closed():
-            logger.debug(
-                "Current event loop is closed, starting new loop"
-            )
+            logger.debug("Current event loop is closed, starting new loop")
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
         if submitter is None:
             from .submitter import Submitter
-            submitter = Submitter('cf')
+
+            submitter = Submitter("cf")
         submitter.loop = loop
-        loop.run_until_complete(
-            self.run(submitter)
-        )
+        loop.run_until_complete(self.run(submitter))
         logger.debug(f"Closing event loop {hex(id(loop))}")
         loop.close()
 
