@@ -146,9 +146,7 @@ def execute(cmd):
         loop = asyncio.ProactorEventLoop()  # for subprocess' pipes on Windows
         asyncio.set_event_loop(loop)
     else:
-        if asyncio.get_event_loop().is_closed():
-            asyncio.set_event_loop(asyncio.new_event_loop())
-        loop = asyncio.get_event_loop()
+        loop = get_open_loop()
     rc, stdout, stderr = loop.run_until_complete(read_and_display(*cmd))
     loop.close()
     return rc, stdout, stderr
@@ -170,3 +168,20 @@ def get_inputs(needed_outputs):
 def record_error(error_path, error):
     with (error_path / "_error.pklz").open("wb") as fp:
         cp.dump(error, fp)
+
+
+def get_open_loop():
+    """
+    Gets current event loop. If the loop is closed, a new
+    loop is created and set as the current event loop.
+
+    Returns
+    -------
+    loop : EventLoop
+        The current event loop
+    """
+    loop = asyncio.get_event_loop()
+    if loop.is_closed():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop

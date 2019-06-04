@@ -9,7 +9,6 @@ from pathlib import Path
 import typing as ty
 import pickle as pk
 from copy import deepcopy
-import asyncio
 
 import cloudpickle as cp
 from filelock import FileLock
@@ -28,6 +27,7 @@ from .helpers import (
     save_result,
     ensure_list,
     record_error,
+    get_open_loop,
 )
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 
@@ -606,8 +606,6 @@ class Workflow(TaskBase):
         with FileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            # not sure why we needed tis if
-            # if self.results_dict:  # should be skipped if run called without submitter
             result = self.result()
             if result is not None:
                 return result
@@ -697,6 +695,7 @@ class Workflow(TaskBase):
     async def _run_task(self, submitter):
         if not submitter:
             raise Exception("Submitter should already be set.")
+        # at this point Workflow is stateless so this should be fine
         nwf = await submitter.submit(self, return_task=True)
         self.__dict__.update(nwf.__dict__)
 
@@ -714,22 +713,17 @@ class Workflow(TaskBase):
             output.append(val.get_value(self))
         return output
 
-    def submit_async(self, submitter=None):
+    def submit_async(self, submitter):
         """Start event loop and run workflow"""
 
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            logger.debug("Current event loop is closed, starting new loop")
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        if submitter is None:
-            from .submitter import Submitter
-
-            submitter = Submitter("cf")
+        loop = get_open_loop()
         submitter.loop = loop
-        loop.run_until_complete(self.run(submitter))
-        logger.debug(f"Closing event loop {hex(id(loop))}")
+        if self.state:
+            loop.run_until_complete(submitter.submit(self, return_task=True))
+        else:
+            loop.run_until_complete(self.run(submitter))
+        # should go through submit first to expand iterables
+        logger.debug(f"Closing event loop ({hex(id(loop))})")
         loop.close()
 
 

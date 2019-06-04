@@ -1,8 +1,8 @@
 import asyncio
-import time
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
-from .core import is_workflow, is_task, is_runnable
+from .core import is_workflow, is_runnable
+from .helpers import get_open_loop
 
 import logging
 
@@ -30,7 +30,9 @@ class Submitter:
         if is_workflow(runnable):
             runnable.submit_async(self)
         else:
-            self.submit(runnable, return_task=True)
+            loop = get_open_loop()
+            loop.run_until_complete(self.submit(runnable, return_task=True))
+            loop.close()
 
     def __enter__(self):
         return self
@@ -134,10 +136,11 @@ class Submitter:
                 job.results_dict[None] = (sidx, checksum)
                 runnable.results_dict[sidx] = (None, checksum)
                 if is_workflow(runnable):
-                    # runnables.append(
-                    futures.add(
-                        asyncio.create_task(self._run_workflow(job, state_idx=sidx))
-                    )
+                    # futures.add(
+                    #     asyncio.create_task(self._run_workflow(job, state_idx=sidx))
+                    # )
+                    futures.add(asyncio.create_task(job.run(self)))
+                    # futures.add(asyncio.create_task(self._run_workflow(job)))
                 else:
                     # tasks are submitted to worker for execution
                     futures.add(self.worker.run_el(job, sidx))
@@ -152,34 +155,13 @@ class Submitter:
                 futures.add(self.worker.run_el(job))
 
         if return_task:
-            # finish all futures and return runnable
             # run coroutines concurrently and wait for execution
-            # TODO: ensure unification of states
-            try:
-                futs = await asyncio.gather(*futures)
-            except TypeError:
-                # empty futures
-                return runnable
-            for fut in futs:
-                state_job, sidx = fut
-                runnable.results_dict[sidx] = (state_job.result(), state_job.checksum)
+            if futures:
+                # wait until all states complete or error
+                await asyncio.gather(*futures)
             return runnable
-        else:
-            return futures
-
-    # async def submit(self, runnable):
-    #     """
-    #     Entrypoint for ``Task`` submission
-
-    #     Parameters
-    #     ----------
-    #     runnable : Task
-    #         Task instance (``Task``, ``Workflow``)
-    #     sync : bool
-    #         Run outside of loop
-    #     """
-    #     res = await self.run(runnable)
-    #     return res
+        # otherwise pass along futures to be awaited independently
+        return futures
 
     def close(self):
         self.worker.close()

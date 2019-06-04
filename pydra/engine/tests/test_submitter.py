@@ -52,20 +52,44 @@ def test_wf_in_wf():
     wf.add(sleep_add_one(name="wf_b", x=wf.sub_wf.lzout.out))
     wf.set_output([("out", wf.wf_b.lzout.out)])
 
-    wf.plugin = 'cf'
-    res = wf.run()
-    assert res
+    with Submitter('cf') as sub:
+        sub(wf)
+
+    res = wf.result()
+    assert res.output.out == 7
+
+
+def test_wf2():
+    """ workflow as a node
+        workflow-node with one task and no splitter
+    """
+    wfnd = Workflow(name="wfnd", input_spec=["x"])
+    wfnd.add(sleep_add_one(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wfnd.inputs.x = 2
+
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
+    with Submitter('cf') as sub:
+        sub(wf)
+
+    res = wf.result()
+    assert res.output.out == 3
 
 
 def test_wf_with_state():
-    wf = Workflow(name='wf_state_1', input_spec=['x'])
-    wf.add(sleep_add_one(name='taska', x=wf.lzin.x).split('x'))
+    wf = Workflow(name='wf_with_state', input_spec=['x'])
+    wf.add(sleep_add_one(name='taska', x=wf.lzin.x))
     wf.add(sleep_add_one(name='taskb', x=wf.taska.lzout.out))
 
     wf.inputs.x = [1, 2, 3]
     wf.split('x')
     wf.set_output([("out", wf.taskb.lzout.out)])
 
-    wf.plugin = 'cf'
-    res = wf.run()
-    assert res
+    with Submitter('cf') as sub:
+        sub(wf)
+
+    res = wf.result()
+    assert res.output.out
