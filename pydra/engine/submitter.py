@@ -6,7 +6,6 @@ from .helpers import get_open_loop
 
 import logging
 
-logging.basicConfig(level=logging.DEBUG)  # TODO: RF
 logger = logging.getLogger("pydra.submitter")
 
 
@@ -39,30 +38,6 @@ class Submitter:
 
     def __exit__(self, type, value, traceback):
         self.close()
-
-    async def fetch_from_worker(self, wf=None, pending_futures=None):
-        """
-        Fetch any completed ``Future``s from worker and update pending futures.
-        If wf is defined and a completed Future is a ``Workflow`` object, wf.Workflow
-        is replaced with Future.result().
-
-        Parameters
-        ----------
-        wf : Workflow (optional)
-            The preceding workflow
-        """
-        done, pending = await self.worker.fetch_finished(pending_futures)
-        for fut in done:
-            # future can be completed workflow or task
-            # job, res, sidx = await fut
-            await fut
-            # logger.debug(f"{job.name}{str(sidx) if sidx is not None else ''} completed")
-            # within workflow tasks can still have state
-            # if sidx is not None:
-                # master = wf.name2obj.get(job.name)
-                # ensure there is no overwriting
-                # master.results_dict[sidx] = (job.result(), job.checksum)
-        return pending
 
     async def _run_workflow(self, wf):
         """
@@ -97,8 +72,10 @@ class Submitter:
                 else:
                     task_futures = await self.submit(task)
 
-            # TODO: ensure wf is updating
-            task_futures = await self.fetch_from_worker(wf, task_futures)
+            done, task_futures = await self.worker.fetch_finished(task_futures)
+            for fut in done:
+                # let caching take care of results
+                await fut
         return wf
 
     async def submit(self, runnable, return_task=False):
@@ -142,15 +119,19 @@ class Submitter:
                 job = runnable.to_job(sidx)
                 job.results_dict[None] = (sidx, job.checksum)
                 runnable.results_dict[sidx] = (None, job.checksum)
+                logger.debug(
+                    f'Submitting runnable {job}{str(sidx) if sidx is not None else ""}'
+                )
                 if is_workflow(runnable):
                     futures.add(asyncio.create_task(job.run(self)))
                 else:
                     # tasks are submitted to worker for execution
-                    futures.add(self.worker.run_el(job, sidx))
+                    futures.add(self.worker.run_el(job))
         else:
             job = runnable.to_job(None)
             job.results_dict[None] = (None, job.checksum)
             if is_workflow(runnable):
+                # this should only be reached through the job's `run()` method
                 runnable = await self._run_workflow(job)
             else:
                 # submit task to worker

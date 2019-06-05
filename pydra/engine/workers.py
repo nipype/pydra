@@ -75,21 +75,18 @@ class ConcurrentFuturesWorker(Worker):
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
-    def run_el(self, interface, sidx=None, **kwargs):
+    def run_el(self, interface, **kwargs):
         # wrap as asyncio task
         if not self.loop:
             raise Exception("No event loop available to submit tasks")
         task = asyncio.create_task(
-            exec_as_coro(self.loop, self.pool, interface, sidx)
+            exec_as_coro(self.loop, self.pool, interface)
         )
         return task
 
-    async def exec_as_coro(self, interface, sidx=None):
-        logger.debug(
-            f'Executing runnable {interface}{str(sidx) if sidx is not None else ""}'
-        )
+    async def exec_as_coro(self, interface):  # sidx=None):
         res = await self.loop.run_in_executor(self.pool, interface)
-        return (interface, res, sidx)
+        return res
 
     def close(self):
         self.pool.shutdown()
@@ -143,9 +140,6 @@ class DaskWorker(Worker):
         self.client.close()
 
 
-async def exec_as_coro(loop, pool, interface, sidx=None):
-    logger.debug(
-        f'Executing runnable {interface}{str(sidx) if sidx is not None else ""}'
-    )
+async def exec_as_coro(loop, pool, interface):
     res = await loop.run_in_executor(pool, interface)
-    return (interface, res, sidx)
+    return res
