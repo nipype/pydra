@@ -11,7 +11,7 @@ import pickle as pk
 from copy import deepcopy
 
 import cloudpickle as cp
-from filelock import FileLock
+from filelock import SoftFileLock
 import shutil
 from tempfile import mkdtemp
 
@@ -31,7 +31,6 @@ from .helpers import (
 )
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 
-logging.basicConfig(level=logging.DEBUG)  # TODO: RF
 logger = logging.getLogger("pydra")
 
 develop = True
@@ -261,7 +260,7 @@ class TaskBase:
         4. two or more concurrent new processes get to start
         """
         # TODO add signal handler for processes killed after lock acquisition
-        with FileLock(lockfile):
+        with SoftFileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
             if self.results_dict:  # should be skipped if run called without submitter
@@ -603,7 +602,7 @@ class Workflow(TaskBase):
         4. two or more concurrent new processes get to start
         """
         # TODO add signal handler for processes killed after lock acquisition
-        with FileLock(lockfile):
+        with SoftFileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
             result = self.result()
