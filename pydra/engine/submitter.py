@@ -53,16 +53,18 @@ class Submitter:
         """
         done, pending = await self.worker.fetch_finished(pending_futures)
         for fut in done:
-            job, res, sidx = await fut
-            logger.debug(f"{job.name}{str(sidx) if sidx is not None else ''} completed")
+            # future can be completed workflow or task
+            # job, res, sidx = await fut
+            await fut
+            # logger.debug(f"{job.name}{str(sidx) if sidx is not None else ''} completed")
             # within workflow tasks can still have state
-            if sidx is not None:
-                master = wf.name2obj.get(job.name)
+            # if sidx is not None:
+                # master = wf.name2obj.get(job.name)
                 # ensure there is no overwriting
-                master.results_dict[sidx] = (job.result(), job.checksum)
+                # master.results_dict[sidx] = (job.result(), job.checksum)
         return pending
 
-    async def _run_workflow(self, wf, state_idx=None):
+    async def _run_workflow(self, wf):
         """
         Expands and executes a stateless ``Workflow``.
 
@@ -70,8 +72,6 @@ class Submitter:
         ----------
         wf : Workflow
             Workflow Task object
-        state_idx : int or None
-            Job state index
 
         Returns
         -------
@@ -84,27 +84,22 @@ class Submitter:
         while not wf.done:
             remaining_tasks, tasks = await get_runnable_tasks(wf.graph, remaining_tasks)
             if not tasks and not task_futures:
+                breakpoint()
                 raise Exception("Nothing queued or todo - something went wrong")
             for task in tasks:
                 # grab inputs if needed
                 logger.debug(f"Retrieving inputs for {task}")
                 # TODO: add state idx to retrieve values to reduce waiting
                 task.inputs.retrieve_values(wf)
-
-                # a few choice options here
-                # 1. workflow with state --> await _submit (recurse)
-                # 2. workflow with no state --> await _submit (recurse)
-                # 3. task with state --> _expand and submit to worker
-                # 4. task with no state --> submit to worker
-                if is_workflow(task):
-                    await task.run(submitter=self)
+                if is_workflow(task) and not task.state:
+                    # ensure workflow is executed
+                    await task.run(self)
                 else:
                     task_futures = await self.submit(task)
-                    # running_futures.union(task_futures)
 
             # TODO: ensure wf is updating
             task_futures = await self.fetch_from_worker(wf, task_futures)
-        return wf, state_idx
+        return wf
 
     async def submit(self, runnable, return_task=False):
         """
@@ -113,12 +108,25 @@ class Submitter:
         Removes state from task and adds one or more
         asyncio ``Task``s to the running loop.
 
+         Possible routes for the runnable
+         1. ``Workflow`` w/ state: separate states into individual jobs and run() each
+         2. ``Workflow`` w/o state: await graph expansion
+         3. ``Task`` w/ state: separate states and submit to worker
+         4. ``Task`` w/o state: submit to worker
+
         Parameters
         ----------
         runnable : Task
             Task instance (``Task``, ``Workflow``)
         return_task : bool (False)
-            Option to return runnable once all states have finished
+            Option to return runnable instead of futures once all states have finished
+
+        Returns
+        -------
+        futures : set
+            Asyncio tasks
+        runnable : ``Task``
+            Signals the end of submission
         """
         # ensure worker is using same loop
         self.worker.loop = self.loop
@@ -132,24 +140,18 @@ class Submitter:
             )
             for sidx in range(len(runnable.state.states_val)):
                 job = runnable.to_job(sidx)
-                checksum = job.checksum
-                job.results_dict[None] = (sidx, checksum)
-                runnable.results_dict[sidx] = (None, checksum)
+                job.results_dict[None] = (sidx, job.checksum)
+                runnable.results_dict[sidx] = (None, job.checksum)
                 if is_workflow(runnable):
-                    # futures.add(
-                    #     asyncio.create_task(self._run_workflow(job, state_idx=sidx))
-                    # )
                     futures.add(asyncio.create_task(job.run(self)))
-                    # futures.add(asyncio.create_task(self._run_workflow(job)))
                 else:
                     # tasks are submitted to worker for execution
                     futures.add(self.worker.run_el(job, sidx))
         else:
             job = runnable.to_job(None)
-            checksum = job.checksum
-            job.results_dict[None] = (None, checksum)
+            job.results_dict[None] = (None, job.checksum)
             if is_workflow(runnable):
-                runnable, _ = await self._run_workflow(job)
+                runnable = await self._run_workflow(job)
             else:
                 # submit task to worker
                 futures.add(self.worker.run_el(job))
