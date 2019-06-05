@@ -426,7 +426,7 @@ class TaskBase:
     def done(self):
         if self.state:
             # TODO: only check for needed state result
-            if len(self.result()) and all(self.result()):
+            if self.result() and all(self.result()):
                 return True
         else:
             if self.result():
