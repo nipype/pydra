@@ -50,7 +50,7 @@ def load_result(checksum, cache_locations):
     for location in cache_locations:
         if (location / checksum).exists():
             result_file = location / checksum / "_result.pklz"
-            if result_file.exists():
+            if result_file.exists() and result_file.stat().st_size > 0:
                 return cp.loads(result_file.read_bytes())
             return None
     return None
