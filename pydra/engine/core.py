@@ -715,15 +715,10 @@ class Workflow(TaskBase):
     def submit_async(self, submitter):
         """Start event loop and run workflow"""
 
-        loop = get_open_loop()
-        submitter.loop = loop
         if self.state:
-            loop.run_until_complete(submitter.submit(self, return_task=True))
+            submitter.loop.run_until_complete(submitter.submit(self, return_task=True))
         else:
-            loop.run_until_complete(self.run(submitter))
-        # should go through submit first to expand iterables
-        logger.debug(f"Closing event loop ({hex(id(loop))})")
-        loop.close()
+            submitter.loop.run_until_complete(self.run(submitter))
 
 
 # TODO: task has also call

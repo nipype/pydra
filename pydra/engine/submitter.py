@@ -12,7 +12,7 @@ logger = logging.getLogger("pydra.submitter")
 class Submitter:
     # TODO: runnable in init or run
     def __init__(self, plugin):
-        self.loop = None
+        self.loop = get_open_loop()
         self.plugin = plugin
         if self.plugin == "mp":
             self.worker = MpWorker()
@@ -24,14 +24,13 @@ class Submitter:
             self.worker = ConcurrentFuturesWorker()
         else:
             raise Exception("plugin {} not available".format(self.plugin))
+        self.worker.loop = self.loop
 
     def __call__(self, runnable):
         if is_workflow(runnable):
             runnable.submit_async(self)
         else:
-            loop = get_open_loop()
-            loop.run_until_complete(self.submit(runnable, return_task=True))
-            loop.close()
+            self.loop.run_until_complete(self.submit(runnable, return_task=True))
 
     def __enter__(self):
         return self
@@ -106,7 +105,6 @@ class Submitter:
             Signals the end of submission
         """
         # ensure worker is using same loop
-        self.worker.loop = self.loop
         futures = set()
 
         if runnable.state:
@@ -147,6 +145,7 @@ class Submitter:
         return futures
 
     def close(self):
+        self.loop.close()
         self.worker.close()
 
 
