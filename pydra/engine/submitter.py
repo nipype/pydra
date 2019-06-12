@@ -58,7 +58,6 @@ class Submitter:
         while not wf.done:
             remaining_tasks, tasks = await get_runnable_tasks(wf.graph, remaining_tasks)
             if not tasks and not task_futures:
-                breakpoint()
                 raise Exception("Nothing queued or todo - something went wrong")
             for task in tasks:
                 # grab inputs if needed
@@ -139,7 +138,11 @@ class Submitter:
             # run coroutines concurrently and wait for execution
             if futures:
                 # wait until all states complete or error
-                await asyncio.gather(*futures)
+                try:
+                    await asyncio.gather(*futures)
+                except TypeError:
+                    # Some Workers will output a job ID instead of Future
+                    NotImplementedError
             return runnable
         # otherwise pass along futures to be awaited independently
         return futures

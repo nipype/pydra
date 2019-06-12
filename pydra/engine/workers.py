@@ -22,6 +22,9 @@ class Worker(object):
     def close(self):
         raise NotImplementedError
 
+    async def fetch_finished(self, futures):
+        raise NotImplementedError
+
 
 class MpWorker(Worker):
     def __init__(self, nr_proc=4):  # should be none
@@ -80,7 +83,7 @@ class ConcurrentFuturesWorker(Worker):
         if not self.loop:
             raise Exception("No event loop available to submit tasks")
         task = asyncio.create_task(
-            exec_as_coro(self.loop, self.pool, interface)
+            self.exec_as_coro(interface)
         )
         return task
 
@@ -140,6 +143,24 @@ class DaskWorker(Worker):
         self.client.close()
 
 
-async def exec_as_coro(loop, pool, interface):
-    res = await loop.run_in_executor(pool, interface)
-    return res
+class SLURMWorker(Worker):
+    _cmd = "sbatch"
+
+    def __init__(self, sbatch_args=None, **kwargs):
+        super(SLURMWorker, self).__init__()
+        self.sbatch_args = sbatch_args
+        self.pending = set()
+
+    def run_el(self, interface):
+        """
+        Standalone script needs to be created and submitted.
+        # """
+        # sbatch job --> jobID
+        # add jobID to pending
+        cmd = [self._cmd] + self.sbatch_args or []
+
+    def close(self):
+        pass
+
+    async def fetch_finished():
+        pass

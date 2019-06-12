@@ -99,14 +99,13 @@ def make_klass(spec):
 
 
 # https://stackoverflow.com/questions/17190221
-@asyncio.coroutine
-def read_stream_and_display(stream, display):
+async def read_stream_and_display(stream, display):
     """Read from stream line by line until EOF, display, and capture the lines.
 
     """
     output = []
     while True:
-        line = yield from stream.readline()
+        line = await stream.readline()
         if not line:
             break
         output.append(line)
@@ -114,20 +113,19 @@ def read_stream_and_display(stream, display):
     return b"".join(output).decode()
 
 
-@asyncio.coroutine
-def read_and_display(*cmd):
+async def read_and_display(*cmd):
     """Capture cmd's stdout, stderr while displaying them as they arrive
     (line by line).
 
     """
     # start process
-    process = yield from asyncio.create_subprocess_exec(
+    process = await asyncio.create_subprocess_exec(
         *cmd, stdout=asp.PIPE, stderr=asp.PIPE
     )
 
     # read child's stdout/stderr concurrently (capture and display)
     try:
-        stdout, stderr = yield from asyncio.gather(
+        stdout, stderr = await asyncio.gather(
             read_stream_and_display(process.stdout, sys.stdout.buffer.write),
             read_stream_and_display(process.stderr, sys.stderr.buffer.write),
         )
@@ -136,7 +134,7 @@ def read_and_display(*cmd):
         raise
     finally:
         # wait for the process to exit
-        rc = yield from process.wait()
+        rc = await process.wait()
     return rc, stdout, stderr
 
 
@@ -185,3 +183,45 @@ def get_open_loop():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     return loop
+
+
+def create_pyscript(task_path, hash):
+    """
+    Create standalone script for task execution in
+    a different environment.
+
+    Parameters
+    ----------
+    task_path : Path
+        Pickled ``Task`` path
+    hash : str
+        ``Task``'s hash
+
+    Returns
+    -------
+    pyscript : File
+        Execution script
+    """
+    if not task_path.exists() or not task_path.stat().st_size:
+        raise Exception("Missing or empty task!")
+
+    content = f"""import cloudpickle as cp
+from pydra.engine.submitter import Submitter
+from pathlib import Path
+
+task_path = Path("{str(task_path)}")
+task = cp.loads(task_path.read_bytes())
+sub_opt = "cf"  # TODO: use linear
+with Submitter(sub_opt) as sub:
+    sub(task)
+
+if not task.result():
+    raise Exception("Something went wrong")
+
+with open("{str(task_path)}", "wb") as fp:
+    cp.dump(task, fp
+"""
+    pyscript = f"pyscript_{task_hash}.py"
+    with open(pyscript, "wt") as fp:
+        fp.writelines(content)
+    return pyscript
