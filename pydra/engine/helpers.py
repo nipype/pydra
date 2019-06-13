@@ -56,9 +56,27 @@ def load_result(checksum, cache_locations):
     return None
 
 
-def save_result(result_path: Path, result):
-    with (result_path / "_result.pklz").open("wb") as fp:
-        cp.dump(result, fp)
+def save(task_path: Path, result=None, task=None):
+    """
+    Save ``Task`` object and/or results.
+
+    Parameters
+    ----------
+    task_path : Path
+        Write directory
+    result : Result
+        Result to pickle and write
+    task : Task
+        Task to pickle and write
+    """
+    if task is None and result is None:
+        raise ValueError("Nothing to be saved")
+    if result:
+        with (task_path / "_result.pklz").open("wb") as fp:
+            cp.dump(result, fp)
+    if task:
+        with (task_path / "_task.pklz").open("wb") as fp:
+            cp.dump(task, fp)
 
 
 def task_hash(task_obj):
@@ -211,7 +229,7 @@ from pathlib import Path
 
 task_path = Path("{str(task_path)}")
 task = cp.loads(task_path.read_bytes())
-sub_opt = "cf"  # TODO: use linear
+sub_opt = task.plugin or "cf"  # TODO: use linear
 with Submitter(sub_opt) as sub:
     sub(task)
 
@@ -221,7 +239,7 @@ if not task.result():
 with open("{str(task_path)}", "wb") as fp:
     cp.dump(task, fp
 """
-    pyscript = f"pyscript_{task_hash}.py"
-    with open(pyscript, "wt") as fp:
+    pyscript = Path(f"pyscript_{hash}.py").absolute()
+    with pyscript.open("wt") as fp:
         fp.writelines(content)
     return pyscript

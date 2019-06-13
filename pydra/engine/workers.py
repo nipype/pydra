@@ -1,17 +1,20 @@
 import time
 import multiprocessing as mp
 import asyncio
+import sys
 
 # from pycon_utils import make_cluster
 from dask.distributed import Client
 import concurrent.futures as cf
+
+from .helpers import save, create_pyscript
 
 import logging
 
 logger = logging.getLogger("pydra.worker")
 
 
-class Worker(object):
+class Worker:
     def __init__(self, loop=None):
         logger.debug("Initialize Worker")
         self.loop = loop
@@ -24,6 +27,22 @@ class Worker(object):
 
     async def fetch_finished(self, futures):
         raise NotImplementedError
+
+
+class DistributedWorker(Worker):
+    """Base Worker for distributed execution"""
+
+    @staticmethod
+    def _prepare_runscripts(task, interpretter):
+        pyscript = create_pyscript(
+            (task.output_dir / "task.pklz"), task.hash
+        )
+        batchscript = pyscript.parent / f"batchscript_{task.hash}.sh"
+        shebang = f"#!/{interpretter}"
+        bcmd = "\n".join((shebang, f"{sys.executable} {str(pyscript)}"))
+        with batchscript.open('wt') as fp:
+            fp.writelines(bcmd)
+        return batchscript
 
 
 class MpWorker(Worker):
@@ -143,7 +162,7 @@ class DaskWorker(Worker):
         self.client.close()
 
 
-class SLURMWorker(Worker):
+class SLURMWorker(DistributedWorker):
     _cmd = "sbatch"
 
     def __init__(self, sbatch_args=None, **kwargs):
@@ -151,12 +170,23 @@ class SLURMWorker(Worker):
         self.sbatch_args = sbatch_args
         self.pending = set()
 
-    def run_el(self, interface):
+    def _submit_job(self, batchscript):
+        pass
+
+    def run_el(self, task):
         """
-        Standalone script needs to be created and submitted.
-        # """
+        xx 1) Pickle task
+        xx 2) Create python run script
+        xx 3) Create bash submission script
+        4) Submit with sbatch
+        5) Add job id to pending
+        """
         # sbatch job --> jobID
         # add jobID to pending
+        save(task.output_dir, task=task)
+        runscript = self._prepare_runscript(task, interpreter="bin/bash")
+        self._submit_job(runscript)
+
         cmd = [self._cmd] + self.sbatch_args or []
 
     def close(self):

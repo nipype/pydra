@@ -24,10 +24,9 @@ from .helpers import (
     print_help,
     load_result,
     gather_runtime_info,
-    save_result,
+    save,
     ensure_list,
     record_error,
-    get_open_loop,
 )
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 
@@ -337,9 +336,7 @@ class TaskBase:
                             },
                             AuditFlag.PROV,
                         )
-                save_result(odir, result)
-                with open(odir / "_node.pklz", "wb") as fp:
-                    cp.dump(self, fp)
+                save(odir, result=result, task=self)
                 os.chdir(cwd)
                 if self.audit_check(AuditFlag.PROV):
                     # audit outputs
@@ -679,9 +676,7 @@ class Workflow(TaskBase):
                             },
                             AuditFlag.PROV,
                         )
-                save_result(odir, result)
-                with open(odir / "_node.pklz", "wb") as fp:
-                    cp.dump(self, fp)
+                save(odir, result=result, task=self)
                 os.chdir(cwd)
                 if self.audit_check(AuditFlag.PROV):
                     # audit outputs
