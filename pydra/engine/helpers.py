@@ -164,7 +164,6 @@ def execute(cmd):
     else:
         loop = get_open_loop()
     rc, stdout, stderr = loop.run_until_complete(read_and_display(*cmd))
-    loop.close()
     return rc, stdout, stderr
 
 
@@ -223,7 +222,7 @@ def create_pyscript(task_path, hash):
     if not task_path.exists() or not task_path.stat().st_size:
         raise Exception("Missing or empty task!")
 
-    content = f"""import cloudpickle as cp
+    content = """import cloudpickle as cp
 from pydra.engine.submitter import Submitter
 from pathlib import Path
 

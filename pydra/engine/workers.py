@@ -2,12 +2,13 @@ import time
 import multiprocessing as mp
 import asyncio
 import sys
+import re
 
 # from pycon_utils import make_cluster
 from dask.distributed import Client
 import concurrent.futures as cf
 
-from .helpers import save, create_pyscript
+from .helpers import create_pyscript, execute, save
 
 import logging
 
@@ -38,7 +39,7 @@ class DistributedWorker(Worker):
             (task.output_dir / "task.pklz"), task.hash
         )
         batchscript = pyscript.parent / f"batchscript_{task.hash}.sh"
-        shebang = f"#!/{interpretter}"
+        shebang = f"#!{interpretter}"
         bcmd = "\n".join((shebang, f"{sys.executable} {str(pyscript)}"))
         with batchscript.open('wt') as fp:
             fp.writelines(bcmd)
@@ -170,27 +171,36 @@ class SLURMWorker(DistributedWorker):
         self.sbatch_args = sbatch_args
         self.pending = set()
 
-    def _submit_job(self, batchscript):
-        pass
+    def _submit_job(self, batchscript, jobname):
+        cmd = f"{self._cmd} {self.sbatch_args or ''} -J {jobname} {batchscript}"
+        _, stdout, _ = execute(cmd)
+        jobid = re.search(r"\d+", stdout)
+        if not jobid:
+            raise RuntimeError("Could not extract job ID")
+        self.pending.add(jobid)
+
+    def _poll_job(self):
+        cmd = f"squeue -j {','.join(self.pending)}"
+        _, stdout, _ = execute(cmd)
 
     def run_el(self, task):
         """
         xx 1) Pickle task
         xx 2) Create python run script
         xx 3) Create bash submission script
-        4) Submit with sbatch
-        5) Add job id to pending
+        xx 4) Submit with sbatch
+        xx 5) Add jobid to pending
         """
-        # sbatch job --> jobID
-        # add jobID to pending
         save(task.output_dir, task=task)
-        runscript = self._prepare_runscript(task, interpreter="bin/bash")
-        self._submit_job(runscript)
-
-        cmd = [self._cmd] + self.sbatch_args or []
+        runscript = self._prepare_runscript(task, interpreter="/bin/bash")
+        jobname = ".".join((task.name, task.hash))
+        self._submit_job(runscript, jobname)
 
     def close(self):
         pass
 
-    async def fetch_finished():
+    async def fetch_finished(self, jobs):
+        """
+        Waits until at least one job finishes
+        """
         pass
