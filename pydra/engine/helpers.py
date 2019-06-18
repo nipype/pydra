@@ -158,11 +158,7 @@ async def read_and_display(*cmd):
 
 # run the event loop
 def execute(cmd):
-    if os.name == "nt":
-        loop = asyncio.ProactorEventLoop()  # for subprocess' pipes on Windows
-        asyncio.set_event_loop(loop)
-    else:
-        loop = get_open_loop()
+    loop = get_open_loop()
     rc, stdout, stderr = loop.run_until_complete(read_and_display(*cmd))
     return rc, stdout, stderr
 
@@ -195,10 +191,14 @@ def get_open_loop():
     loop : EventLoop
         The current event loop
     """
-    loop = asyncio.get_event_loop()
-    if loop.is_closed():
-        loop = asyncio.new_event_loop()
+    if os.name == "nt":
+        loop = asyncio.ProactorEventLoop()  # for subprocess' pipes on Windows
         asyncio.set_event_loop(loop)
+    else:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
     return loop
 
 
