@@ -5,10 +5,9 @@ import sys
 import re
 
 # from pycon_utils import make_cluster
-from dask.distributed import Client
 import concurrent.futures as cf
 
-from .helpers import create_pyscript, read_and_display, save
+from .helpers import create_pyscript, ensure_list, read_and_display, save
 
 import logging
 
@@ -142,6 +141,7 @@ class ConcurrentFuturesWorker(Worker):
 class DaskWorker(Worker):
     def __init__(self):
         logger.debug("Initialize Dask Worker")
+        from dask.distributed import Client
         # self.cluster = LocalCluster()
         self.client = Client()  # self.cluster)
         # print("BOKEH", self.client.scheduler_info()["address"] + ":" + str(self.client.scheduler_info()["services"]["bokeh"]))
@@ -170,11 +170,15 @@ class SLURMWorker(DistributedWorker):
         super(SLURMWorker, self).__init__()
         self.poll_delay = poll_delay
         self.sbatch_args = sbatch_args
+        self.sacct_re = re.compile(
+            '(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +'
+            '(?P<exit_code>\\d+):\\d+'
+        )
         self.pending = set()
 
     def _submit_job(self, batchscript, jobname):
-        cmd = f"{self._cmd} {self.sbatch_args or ''} -J {jobname} {batchscript}"
-        _, stdout, _ = read_and_display(cmd)
+        cmd = ensure_list(self.sbatch_args) + ["-J", jobname, batchscript]
+        _, stdout, _ = read_and_display('sbatch', *cmd)
         jobid = re.search(r"\d+", stdout)
         if not jobid:
             raise RuntimeError("Could not extract job ID")
@@ -196,14 +200,24 @@ class SLURMWorker(DistributedWorker):
     def close(self):
         pass
 
-    @staticmethod
-    async def _poll_job(jobid):
-        sargs = f"-j {jobid}"
-        rc, stdout, stderr = await read_and_display('squeue', cmd)
+    async def _poll_job(self, jobid):
+        sargs = ("-h", "-j", jobid)
+        rc, _, stderr = await read_and_display('squeue', *sargs)
+        if stderr and "slurm_load_jobs" in stderr:
+            # job is no longer running - check exit code
+            # possibly requeue?
+            ec = await self._verify_exit_code(jobid)
+            return ec
+        elif rc != 0:
+            raise RuntimeError("Job query failed")
 
-    async def _verify_exit_codes(self):
-        sargs = f"-bPnXj {','.join(self.pending)}"
-        _, stdout, _ = await read_and_display('sacct', cmd)
+
+    async def _verify_exit_code(self, jobid):
+        sargs = ("-n", "-X", "-j", jobid, "-o", "JobID,State,ExitCode")
+        _, stdout, _ = await read_and_display('sacct', *sargs)
+        if not stdout:
+            raise RuntimeError("Job information not found")
+        m = self.sacct_re.search(stdout)
 
     async def fetch_finished(self, jobs):
         """
