@@ -8,7 +8,7 @@ import re
 from dask.distributed import Client
 import concurrent.futures as cf
 
-from .helpers import create_pyscript, execute, save
+from .helpers import create_pyscript, read_and_display, save
 
 import logging
 
@@ -166,22 +166,19 @@ class DaskWorker(Worker):
 class SLURMWorker(DistributedWorker):
     _cmd = "sbatch"
 
-    def __init__(self, sbatch_args=None, **kwargs):
+    def __init__(self, poll_delay=5, sbatch_args=None, **kwargs):
         super(SLURMWorker, self).__init__()
+        self.poll_delay = poll_delay
         self.sbatch_args = sbatch_args
         self.pending = set()
 
     def _submit_job(self, batchscript, jobname):
         cmd = f"{self._cmd} {self.sbatch_args or ''} -J {jobname} {batchscript}"
-        _, stdout, _ = execute(cmd)
+        _, stdout, _ = read_and_display(cmd)
         jobid = re.search(r"\d+", stdout)
         if not jobid:
             raise RuntimeError("Could not extract job ID")
         self.pending.add(jobid)
-
-    def _poll_job(self):
-        cmd = f"squeue -j {','.join(self.pending)}"
-        _, stdout, _ = execute(cmd)
 
     def run_el(self, task):
         """
@@ -199,8 +196,18 @@ class SLURMWorker(DistributedWorker):
     def close(self):
         pass
 
+    @staticmethod
+    async def _poll_job(jobid):
+        sargs = f"-j {jobid}"
+        rc, stdout, stderr = await read_and_display('squeue', cmd)
+
+    async def _verify_exit_codes(self):
+        sargs = f"-bPnXj {','.join(self.pending)}"
+        _, stdout, _ = await read_and_display('sacct', cmd)
+
     async def fetch_finished(self, jobs):
         """
         Waits until at least one job finishes
         """
-        pass
+        for job in self.pending:
+            pass
