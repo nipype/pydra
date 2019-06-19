@@ -205,7 +205,8 @@ class SLURMWorker(DistributedWorker):
         save(task.output_dir, task=task)
         runscript = self._prepare_runscripts(task, interpreter="/bin/bash")
         jobname = ".".join((task.name, task.checksum))
-        self._submit_job(task, runscript, jobname)
+        task = asyncio.create_task(self._submit_job(task, runscript, jobname))
+        return task
 
     def close(self):
         pass
