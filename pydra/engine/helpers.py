@@ -71,6 +71,7 @@ def save(task_path: Path, result=None, task=None):
     """
     if task is None and result is None:
         raise ValueError("Nothing to be saved")
+    task_path.mkdir(parents=True, exist_ok=True)
     if result:
         with (task_path / "_result.pklz").open("wb") as fp:
             cp.dump(result, fp)
@@ -224,6 +225,7 @@ def create_pyscript(task_path, hash):
 
     content = """import cloudpickle as cp
 from pydra.engine.submitter import Submitter
+from pydra.engine.helpers import save
 from pathlib import Path
 
 task_path = Path("{str(task_path)}")
@@ -235,8 +237,7 @@ with Submitter(sub_opt) as sub:
 if not task.result():
     raise Exception("Something went wrong")
 
-with open("{str(task_path)}", "wb") as fp:
-    cp.dump(task, fp
+save(task_path, task=task)
 """
     pyscript = Path(f"pyscript_{hash}.py").absolute()
     with pyscript.open("wt") as fp:

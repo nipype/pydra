@@ -33,12 +33,12 @@ class DistributedWorker(Worker):
     """Base Worker for distributed execution"""
 
     @staticmethod
-    def _prepare_runscripts(task, interpretter):
+    def _prepare_runscripts(task, interpreter="/bin/sh"):
         pyscript = create_pyscript(
-            (task.output_dir / "task.pklz"), task.hash
+            (task.output_dir / "_task.pklz"), task.checksum
         )
-        batchscript = pyscript.parent / f"batchscript_{task.hash}.sh"
-        shebang = f"#!{interpretter}"
+        batchscript = pyscript.parent / f"batchscript_{task.checksum}.sh"
+        shebang = f"#!{interpreter}"
         bcmd = "\n".join((shebang, f"{sys.executable} {str(pyscript)}"))
         with batchscript.open('wt') as fp:
             fp.writelines(bcmd)
@@ -139,8 +139,11 @@ class ConcurrentFuturesWorker(Worker):
         except ValueError:
             # nothing pending!
             pending = set()
+
         logger.debug(f"Tasks finished: {len(done)}")
-        return done, pending
+        for fut in done:
+            await fut
+        return pending
 
 
 class DaskWorker(Worker):
@@ -182,14 +185,14 @@ class SLURMWorker(DistributedWorker):
         self.pending = set()
         self.failed = set()
 
-    def _submit_job(self, task, batchscript, jobname):
-        cmd = ensure_list(self.sbatch_args) + ["-J", jobname, batchscript]
-        _, stdout, _ = read_and_display('sbatch', *cmd)
+    async def _submit_job(self, task, batchscript, jobname):
+        cmd = ensure_list(self.sbatch_args) + ["-J", jobname, str(batchscript)]
+        # TO CONSIDER: add random sleep to avoid overloading calls
+        _, stdout, _ = await read_and_display('sbatch', *cmd)
         jobid = re.search(r"\d+", stdout)
         if not jobid:
             raise RuntimeError("Could not extract job ID")
-        self.jobkey[jobid] = task
-        self.pending.add(jobid)
+        return jobid
 
     def run_el(self, task):
         """
@@ -200,8 +203,8 @@ class SLURMWorker(DistributedWorker):
         xx 5) Add jobid to pending
         """
         save(task.output_dir, task=task)
-        runscript = self._prepare_runscript(task, interpreter="/bin/bash")
-        jobname = ".".join((task.name, task.hash))
+        runscript = self._prepare_runscripts(task, interpreter="/bin/bash")
+        jobname = ".".join((task.name, task.checksum))
         self._submit_job(task, runscript, jobname)
 
     def close(self):
@@ -226,6 +229,7 @@ class SLURMWorker(DistributedWorker):
             return jobid
         elif rc != 0:
             raise RuntimeError("Job query failed")
+        return None
 
     async def _verify_exit_code(self, jobid):
         sargs = ("-n", "-X", "-j", jobid, "-o", "JobID,State,ExitCode")
@@ -237,7 +241,7 @@ class SLURMWorker(DistributedWorker):
             self.failed.add(jobid)
             # TODO: potential for requeuing
 
-    async def fetch_finished(self, jobs):
+    async def fetch_finished(self, futures):
         """
         Waits until at least one job finishes
         Basic implementation of FIRST_COMPLETED
@@ -245,18 +249,19 @@ class SLURMWorker(DistributedWorker):
         done = set()
         raise_exception = False
 
-        # TODO: avoid situation where no job successfully completes
-        while True:
-            for job in self.pending:
-                jobid = await self._poll_job(job)
-                if jobid:
-                    self.failed.discard(jobid)
-                    del self.jobkey[jobid]
-                    done.add(asyncio.create_task(self._awaitable(jobid)))
-                    break
-                time.sleep(0.5)  # avoid overloading slurmd
-            if not self._poll_jobs(raise_exception):
-                # job could have completed in the meantime
-                raise_exception = True
+        submitted = await asyncio.gather(futures)
 
-        return done, self.pending
+        for job in submitted:
+            # tracker for submitted job IDs
+            self.pending.add(job)
+
+        while True:
+            # check all submitted jobs
+            for job in self.pending:
+                done = await self._poll_job(job)
+                if done is not None:
+                    # break blocking call as soon as a job is completed
+                    self.pending.remove(job)
+                    return self.pending
+                asyncio.sleep(self.poll_delay)
+            raise_exception = await self._poll_jobs(raise_exception)

@@ -1,6 +1,13 @@
 import asyncio
 
-from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
+from .workers import (
+    MpWorker,
+    SerialWorker,
+    DaskWorker,
+    ConcurrentFuturesWorker,
+    SLURMWorker
+)
+
 from .core import is_workflow, is_runnable
 from .helpers import get_open_loop
 
@@ -22,6 +29,8 @@ class Submitter:
             self.worker = DaskWorker()
         elif self.plugin == "cf":
             self.worker = ConcurrentFuturesWorker()
+        elif self.plugin == "slurm":
+            self.worker = SLURMWorker()
         else:
             raise Exception("plugin {} not available".format(self.plugin))
         self.worker.loop = self.loop
@@ -70,10 +79,7 @@ class Submitter:
                 else:
                     task_futures = await self.submit(task)
 
-            done, task_futures = await self.worker.fetch_finished(task_futures)
-            for fut in done:
-                # let caching take care of results
-                await fut
+            task_futures = await self.worker.fetch_finished(task_futures)
         return wf
 
     async def submit(self, runnable, return_task=False):
