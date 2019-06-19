@@ -44,6 +44,11 @@ class DistributedWorker(Worker):
             fp.writelines(bcmd)
         return batchscript
 
+    @staticmethod
+    async def _awaitable(jobid):
+        """Readily available coroutine"""
+        return jobid
+
 
 class MpWorker(Worker):
     def __init__(self, nr_proc=4):  # should be none
@@ -175,13 +180,15 @@ class SLURMWorker(DistributedWorker):
             '(?P<exit_code>\\d+):\\d+'
         )
         self.pending = set()
+        self.failed = set()
 
-    def _submit_job(self, batchscript, jobname):
+    def _submit_job(self, task, batchscript, jobname):
         cmd = ensure_list(self.sbatch_args) + ["-J", jobname, batchscript]
         _, stdout, _ = read_and_display('sbatch', *cmd)
         jobid = re.search(r"\d+", stdout)
         if not jobid:
             raise RuntimeError("Could not extract job ID")
+        self.jobkey[jobid] = task
         self.pending.add(jobid)
 
     def run_el(self, task):
@@ -195,10 +202,19 @@ class SLURMWorker(DistributedWorker):
         save(task.output_dir, task=task)
         runscript = self._prepare_runscript(task, interpreter="/bin/bash")
         jobname = ".".join((task.name, task.hash))
-        self._submit_job(runscript, jobname)
+        self._submit_job(task, runscript, jobname)
 
     def close(self):
         pass
+
+    async def _poll_jobs(self, raise_exception=False):
+        sargs = ("-h", "-j", ",".join(self.pending))
+        _, stdout, _ = await read_and_display('squeue', *sargs)
+        if not stdout:
+            if raise_exception:
+                raise RuntimeError("Nothing to run")
+            return False
+        return True
 
     async def _poll_job(self, jobid):
         sargs = ("-h", "-j", jobid)
@@ -206,11 +222,10 @@ class SLURMWorker(DistributedWorker):
         if stderr and "slurm_load_jobs" in stderr:
             # job is no longer running - check exit code
             # possibly requeue?
-            ec = await self._verify_exit_code(jobid)
-            return ec
+            await self._verify_exit_code(jobid)
+            return jobid
         elif rc != 0:
             raise RuntimeError("Job query failed")
-
 
     async def _verify_exit_code(self, jobid):
         sargs = ("-n", "-X", "-j", jobid, "-o", "JobID,State,ExitCode")
@@ -218,10 +233,30 @@ class SLURMWorker(DistributedWorker):
         if not stdout:
             raise RuntimeError("Job information not found")
         m = self.sacct_re.search(stdout)
+        if int(m.group('exit_code')) != 0 or m.group('status') != "COMPLETED":
+            self.failed.add(jobid)
+            # TODO: potential for requeuing
 
     async def fetch_finished(self, jobs):
         """
         Waits until at least one job finishes
+        Basic implementation of FIRST_COMPLETED
         """
-        for job in self.pending:
-            pass
+        done = set()
+        raise_exception = False
+
+        # TODO: avoid situation where no job successfully completes
+        while True:
+            for job in self.pending:
+                jobid = await self._poll_job(job)
+                if jobid:
+                    self.failed.discard(jobid)
+                    del self.jobkey[jobid]
+                    done.add(asyncio.create_task(self._awaitable(jobid)))
+                    break
+                time.sleep(0.5)  # avoid overloading slurmd
+            if not self._poll_jobs(raise_exception):
+                # job could have completed in the meantime
+                raise_exception = True
+
+        return done, self.pending
