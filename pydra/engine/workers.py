@@ -199,7 +199,7 @@ class SLURMWorker(DistributedWorker):
         """Wraps SLURM batch submission (sbatch)"""
         cmd = ensure_list(self.sbatch_args) + ["-J", jobname, str(batchscript)]
         # TO CONSIDER: add random sleep to avoid overloading calls
-        _, stdout, _ = await read_and_display('sbatch', *cmd)
+        _, stdout, _ = await read_and_display('sbatch', *cmd, hide_display=True)
         jobid = re.search(r"\d+", stdout)
         if not jobid:
             raise RuntimeError("Could not extract job ID")
@@ -208,21 +208,20 @@ class SLURMWorker(DistributedWorker):
     def close(self):
         pass
 
-    async def _poll_jobs(self, raise_exception=False):
+    async def _poll_jobs(self, raise_exception):
         sargs = ("-h", "-j", ",".join(self.pending))
-        _, stdout, _ = await read_and_display('squeue', *sargs)
+        _, stdout, _ = await read_and_display('squeue', *sargs, hide_display=True)
         if not stdout:
             if raise_exception:
                 raise RuntimeError("Nothing to run")
-            return False
-        return True
+            return True
+        return False
 
     async def _poll_job(self, jobid):
         sargs = ("-h", "-j", jobid)
-        rc, _, stderr = await read_and_display('squeue', *sargs)
-        if stderr and "slurm_load_jobs" in stderr:
+        rc, stdout, stderr = await read_and_display('squeue', *sargs, hide_display=True)
+        if not stdout or "slurm_load_jobs" in stderr:
             # job is no longer running - check exit code
-            # possibly requeue?
             await self._verify_exit_code(jobid)
             return jobid
         elif rc != 0:
@@ -231,7 +230,7 @@ class SLURMWorker(DistributedWorker):
 
     async def _verify_exit_code(self, jobid):
         sargs = ("-n", "-X", "-j", jobid, "-o", "JobID,State,ExitCode")
-        _, stdout, _ = await read_and_display('sacct', *sargs)
+        _, stdout, _ = await read_and_display('sacct', *sargs, hide_display=True)
         if not stdout:
             raise RuntimeError("Job information not found")
         m = self.sacct_re.search(stdout)
@@ -247,7 +246,6 @@ class SLURMWorker(DistributedWorker):
         """
         done = set()
         raise_exception = False
-
         # wait for all futures to complete (submit to SLURM)
         submitted = await asyncio.gather(*futures)
         for job in submitted:
@@ -255,12 +253,12 @@ class SLURMWorker(DistributedWorker):
             self.pending.add(job)
 
         while True:
-            # poll all jobs until finished
+            # poll all submitted jobs until single job has completed
             for job in self.pending:
                 done = await self._poll_job(job)
                 if done is not None:
-                    # break blocking call as soon as a job is completed
                     self.pending.remove(job)
+                    # break polling and check if pending jobs
                     return self.pending
                 await asyncio.sleep(self.poll_delay)
             raise_exception = await self._poll_jobs(raise_exception)

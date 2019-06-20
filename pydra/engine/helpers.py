@@ -128,11 +128,12 @@ async def read_stream_and_display(stream, display):
         if not line:
             break
         output.append(line)
-        display(line)  # assume it doesn't block
+        if display is not None:
+            display(line)  # assume it doesn't block
     return b"".join(output).decode()
 
 
-async def read_and_display(*cmd):
+async def read_and_display(*cmd, hide_display=False):
     """Capture cmd's stdout, stderr while displaying them as they arrive
     (line by line).
 
@@ -142,11 +143,13 @@ async def read_and_display(*cmd):
         *cmd, stdout=asp.PIPE, stderr=asp.PIPE
     )
 
+    stdout_display = sys.stdout.buffer.write if not hide_display else None
+    stderr_display = sys.stderr.buffer.write if not hide_display else None
     # read child's stdout/stderr concurrently (capture and display)
     try:
         stdout, stderr = await asyncio.gather(
-            read_stream_and_display(process.stdout, sys.stdout.buffer.write),
-            read_stream_and_display(process.stderr, sys.stderr.buffer.write),
+            read_stream_and_display(process.stdout, stdout_display),
+            read_stream_and_display(process.stderr, stderr_display),
         )
     except Exception:
         process.kill()
@@ -220,18 +223,19 @@ def create_pyscript(task_path, checksum):
     pyscript : File
         Execution script
     """
-    if not task_path.exists() or not task_path.stat().st_size:
-        raise Exception("Missing or empty task!")
-
     task_pkl = (task_path / "_task.pklz")
+
+    if not task_pkl.exists() or not task_pkl.stat().st_size:
+        raise Exception("Missing or empty task!")
 
     content = f"""import cloudpickle as cp
 from pydra.engine.submitter import Submitter
 from pydra.engine.helpers import save
 from pathlib import Path
 
-task_path = Path("{str(task_pkl)}")
-task = cp.loads(task_path.read_bytes())
+task_path = Path("{str(task_path)}")
+task_pkl = (task_path / "_task.pklz")
+task = cp.loads(task_pkl.read_bytes())
 sub_opt = task.plugin or "cf"  # TODO: use linear
 with Submitter(sub_opt) as sub:
     sub(task)
@@ -240,6 +244,7 @@ if not task.result():
     raise Exception("Something went wrong")
 
 save(task_path, task=task)
+print("Completed", task, task.checksum)
 """
     pyscript = (task_path / f"pyscript_{checksum}.py")
     with pyscript.open("wt") as fp:

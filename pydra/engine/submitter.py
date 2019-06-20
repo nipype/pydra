@@ -15,21 +15,22 @@ import logging
 
 logger = logging.getLogger("pydra.submitter")
 
+
 class Submitter:
     # TODO: runnable in init or run
-    def __init__(self, plugin):
+    def __init__(self, plugin, **wargs):
         self.loop = get_open_loop()
         self.plugin = plugin
         if self.plugin == "mp":
-            self.worker = MpWorker()
+            self.worker = MpWorker(**wargs)
         elif self.plugin == "serial":
-            self.worker = SerialWorker()
+            self.worker = SerialWorker(**wargs)
         elif self.plugin == "dask":
-            self.worker = DaskWorker()
+            self.worker = DaskWorker(**wargs)
         elif self.plugin == "cf":
-            self.worker = ConcurrentFuturesWorker()
+            self.worker = ConcurrentFuturesWorker(**wargs)
         elif self.plugin == "slurm":
-            self.worker = SLURMWorker()
+            self.worker = SLURMWorker(**wargs)
         else:
             raise Exception("plugin {} not available".format(self.plugin))
         self.worker.loop = self.loop

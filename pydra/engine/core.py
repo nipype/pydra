@@ -10,7 +10,6 @@ import typing as ty
 import pickle as pk
 from copy import deepcopy
 
-import cloudpickle as cp
 from filelock import SoftFileLock
 import shutil
 from tempfile import mkdtemp
