@@ -15,7 +15,6 @@ import logging
 
 logger = logging.getLogger("pydra.submitter")
 
-
 class Submitter:
     # TODO: runnable in init or run
     def __init__(self, plugin):

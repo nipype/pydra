@@ -34,10 +34,8 @@ class DistributedWorker(Worker):
 
     @staticmethod
     def _prepare_runscripts(task, interpreter="/bin/sh"):
-        pyscript = create_pyscript(
-            (task.output_dir / "_task.pklz"), task.checksum
-        )
-        batchscript = pyscript.parent / f"batchscript_{task.checksum}.sh"
+        pyscript = create_pyscript(task.output_dir, task.checksum)
+        batchscript = (task.output_dir / f"batchscript_{task.checksum}.sh")
         shebang = f"#!{interpreter}"
         bcmd = "\n".join((shebang, f"{sys.executable} {str(pyscript)}"))
         with batchscript.open('wt') as fp:
@@ -174,8 +172,10 @@ class DaskWorker(Worker):
 class SLURMWorker(DistributedWorker):
     _cmd = "sbatch"
 
-    def __init__(self, poll_delay=5, sbatch_args=None, **kwargs):
+    def __init__(self, poll_delay=0.5, sbatch_args=None, **kwargs):
         super(SLURMWorker, self).__init__()
+        if not poll_delay or poll_delay < 0:
+            poll_delay = 0
         self.poll_delay = poll_delay
         self.sbatch_args = sbatch_args
         self.sacct_re = re.compile(
@@ -185,28 +185,25 @@ class SLURMWorker(DistributedWorker):
         self.pending = set()
         self.failed = set()
 
-    async def _submit_job(self, task, batchscript, jobname):
-        cmd = ensure_list(self.sbatch_args) + ["-J", jobname, str(batchscript)]
-        # TO CONSIDER: add random sleep to avoid overloading calls
-        _, stdout, _ = await read_and_display('sbatch', *cmd)
-        jobid = re.search(r"\d+", stdout)
-        if not jobid:
-            raise RuntimeError("Could not extract job ID")
-        return jobid
-
     def run_el(self, task):
         """
-        xx 1) Pickle task
-        xx 2) Create python run script
-        xx 3) Create bash submission script
-        xx 4) Submit with sbatch
-        xx 5) Add jobid to pending
+        Worker submission API
         """
         save(task.output_dir, task=task)
         runscript = self._prepare_runscripts(task, interpreter="/bin/bash")
         jobname = ".".join((task.name, task.checksum))
         task = asyncio.create_task(self._submit_job(task, runscript, jobname))
         return task
+
+    async def _submit_job(self, task, batchscript, jobname):
+        """Wraps SLURM batch submission (sbatch)"""
+        cmd = ensure_list(self.sbatch_args) + ["-J", jobname, str(batchscript)]
+        # TO CONSIDER: add random sleep to avoid overloading calls
+        _, stdout, _ = await read_and_display('sbatch', *cmd)
+        jobid = re.search(r"\d+", stdout)
+        if not jobid:
+            raise RuntimeError("Could not extract job ID")
+        return jobid.group()
 
     def close(self):
         pass
@@ -239,8 +236,9 @@ class SLURMWorker(DistributedWorker):
             raise RuntimeError("Job information not found")
         m = self.sacct_re.search(stdout)
         if int(m.group('exit_code')) != 0 or m.group('status') != "COMPLETED":
-            self.failed.add(jobid)
             # TODO: potential for requeuing
+            self.pending.remove(jobid)
+            self.failed.add(jobid)
 
     async def fetch_finished(self, futures):
         """
@@ -250,19 +248,19 @@ class SLURMWorker(DistributedWorker):
         done = set()
         raise_exception = False
 
-        submitted = await asyncio.gather(futures)
-
+        # wait for all futures to complete (submit to SLURM)
+        submitted = await asyncio.gather(*futures)
         for job in submitted:
             # tracker for submitted job IDs
             self.pending.add(job)
 
         while True:
-            # check all submitted jobs
+            # poll all jobs until finished
             for job in self.pending:
                 done = await self._poll_job(job)
                 if done is not None:
                     # break blocking call as soon as a job is completed
                     self.pending.remove(job)
                     return self.pending
-                asyncio.sleep(self.poll_delay)
+                await asyncio.sleep(self.poll_delay)
             raise_exception = await self._poll_jobs(raise_exception)
