@@ -5,7 +5,7 @@ from .workers import (
     SerialWorker,
     DaskWorker,
     ConcurrentFuturesWorker,
-    SLURMWorker
+    SlurmWorker
 )
 
 from .core import is_workflow, is_runnable
@@ -30,7 +30,7 @@ class Submitter:
         elif self.plugin == "cf":
             self.worker = ConcurrentFuturesWorker(**wargs)
         elif self.plugin == "slurm":
-            self.worker = SLURMWorker(**wargs)
+            self.worker = SlurmWorker(**wargs)
         else:
             raise Exception("plugin {} not available".format(self.plugin))
         self.worker.loop = self.loop

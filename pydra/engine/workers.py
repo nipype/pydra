@@ -169,15 +169,24 @@ class DaskWorker(Worker):
         self.client.close()
 
 
-class SLURMWorker(DistributedWorker):
+class SlurmWorker(DistributedWorker):
     _cmd = "sbatch"
 
-    def __init__(self, poll_delay=0.5, sbatch_args=None, **kwargs):
-        super(SLURMWorker, self).__init__()
+    def __init__(self, poll_delay=1, sbatch_args=None, **kwargs):
+        """Initialize Slurm Worker
+
+        Parameters
+        ----------
+        poll_delay : seconds
+            Delay between polls to slurmd
+        sbatch_args : str
+            Additional sbatch arguments
+        """
+        super(SlurmWorker, self).__init__()
         if not poll_delay or poll_delay < 0:
             poll_delay = 0
         self.poll_delay = poll_delay
-        self.sbatch_args = sbatch_args
+        self.sbatch_args = sbatch_args or ""
         self.sacct_re = re.compile(
             '(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +'
             '(?P<exit_code>\\d+):\\d+'
@@ -191,15 +200,23 @@ class SLURMWorker(DistributedWorker):
         """
         save(task.output_dir, task=task)
         runscript = self._prepare_runscripts(task, interpreter="/bin/bash")
-        jobname = ".".join((task.name, task.checksum))
-        task = asyncio.create_task(self._submit_job(task, runscript, jobname))
+        task = asyncio.create_task(self._submit_job(task, runscript))
         return task
 
     async def _submit_job(self, task, batchscript, jobname):
-        """Wraps SLURM batch submission (sbatch)"""
-        cmd = ensure_list(self.sbatch_args) + ["-J", jobname, str(batchscript)]
+        """Wraps Slurm batch submission (sbatch)"""
+        sargs = self.sbatch_args.split()
+        jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
+        if not jobname:
+            jobname = ".".join((task.name, task.checksum))
+            sargs.append(f"--job-name={jobname}")
+        output = re.search(r"(?<=-o )\S+|(?<=--output=)\S+", self.sbatch_args)
+        if not output:
+            output = str(batchscript.parent / 'slurm-%j.out')
+            sargs.append(f"--output={output}")
+        sargs.append(str(batchscript))
         # TO CONSIDER: add random sleep to avoid overloading calls
-        _, stdout, _ = await read_and_display('sbatch', *cmd, hide_display=True)
+        _, stdout, _ = await read_and_display('sbatch', *sargs, hide_display=True)
         jobid = re.search(r"\d+", stdout)
         if not jobid:
             raise RuntimeError("Could not extract job ID")
@@ -246,7 +263,7 @@ class SLURMWorker(DistributedWorker):
         """
         done = set()
         raise_exception = False
-        # wait for all futures to complete (submit to SLURM)
+        # wait for all futures to complete (submit to Slurm)
         submitted = await asyncio.gather(*futures)
         for job in submitted:
             # tracker for submitted job IDs
