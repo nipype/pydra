@@ -57,9 +57,10 @@ class Submitter:
         task_futures = set()
         while not wf.done:
             remaining_tasks, tasks = await get_runnable_tasks(wf.graph, remaining_tasks)
-            if not tasks and not task_futures:
-                breakpoint()
-                raise Exception("Nothing queued or todo - something went wrong")
+            # dj: i actually think that this is ok if tasks is empty...
+            # if not tasks and not task_futures:
+            #     breakpoint()
+            #     raise Exception("Nothing queued or todo - something went wrong")
             for task in tasks:
                 # grab inputs if needed
                 logger.debug(f"Retrieving inputs for {task}")
