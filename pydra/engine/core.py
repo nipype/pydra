@@ -438,6 +438,8 @@ class TaskBase:
             combined_results.append([])
             for ind in ind_l:
                 result = load_result(self.results_dict[ind][1], self.cache_locations)
+                if result is None:
+                    return None
                 combined_results[gr].append(result)
         return combined_results
 
@@ -459,6 +461,8 @@ class TaskBase:
                         result = load_result(
                             self.results_dict[ii][1], self.cache_locations
                         )
+                        if result is None:
+                            return None
                         results.append(result)
                     return results
             else:  # state_index is not None

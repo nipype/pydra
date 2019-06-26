@@ -58,7 +58,6 @@ class Submitter:
         while not wf.done:
             remaining_tasks, tasks = await get_runnable_tasks(wf.graph, remaining_tasks)
             if not tasks and not task_futures:
-                breakpoint()
                 raise Exception("Nothing queued or todo - something went wrong")
             for task in tasks:
                 # grab inputs if needed
@@ -69,7 +68,8 @@ class Submitter:
                     # ensure workflow is executed
                     await task.run(self)
                 else:
-                    task_futures = await self.submit(task)
+                    for fut in await self.submit(task):
+                        task_futures.add(fut)
 
             done, task_futures = await self.worker.fetch_finished(task_futures)
             for fut in done:
