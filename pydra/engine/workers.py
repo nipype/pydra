@@ -79,9 +79,7 @@ class ConcurrentFuturesWorker(Worker):
         # wrap as asyncio task
         if not self.loop:
             raise Exception("No event loop available to submit tasks")
-        task = asyncio.create_task(
-            exec_as_coro(self.loop, self.pool, interface)
-        )
+        task = asyncio.create_task(exec_as_coro(self.loop, self.pool, interface))
         return task
 
     async def exec_as_coro(self, interface):  # sidx=None):
@@ -112,6 +110,10 @@ class ConcurrentFuturesWorker(Worker):
         except ValueError:
             # nothing pending!
             pending = set()
+        if done.union(pending) != futures:
+            raise Exception(
+                "all tasks from futures should be either in done or pending"
+            )
         logger.debug(f"Tasks finished: {len(done)}")
         return done, pending
 
