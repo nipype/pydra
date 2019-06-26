@@ -26,7 +26,9 @@ class Submitter:
             raise Exception("plugin {} not available".format(self.plugin))
         self.worker.loop = self.loop
 
-    def __call__(self, runnable):
+    def __call__(self, runnable, cache_locations=None):
+        if cache_locations is not None:
+            runnable.cache_locations = cache_locations
         if is_workflow(runnable):
             runnable.submit_async(self)
         else:
