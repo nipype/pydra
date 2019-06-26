@@ -3,11 +3,12 @@ import multiprocessing as mp
 import asyncio
 import sys
 import re
+from tempfile import gettempdir
 
 # from pycon_utils import make_cluster
 import concurrent.futures as cf
 
-from .helpers import create_pyscript, ensure_list, read_and_display, save
+from .helpers import create_pyscript, read_and_display, save
 
 import logging
 
@@ -198,12 +199,15 @@ class SlurmWorker(DistributedWorker):
         """
         Worker submission API
         """
-        save(task.output_dir, task=task)
+        odir = task.output_dir
+        if (odir.anchor + odir.parts[1]) == gettempdir():
+            logger.warning("Temporary directories may not be shared across computers")
+        save(odir, task=task)
         runscript = self._prepare_runscripts(task, interpreter="/bin/bash")
         task = asyncio.create_task(self._submit_job(task, runscript))
         return task
 
-    async def _submit_job(self, task, batchscript, jobname):
+    async def _submit_job(self, task, batchscript):
         """Wraps Slurm batch submission (sbatch)"""
         sargs = self.sbatch_args.split()
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
