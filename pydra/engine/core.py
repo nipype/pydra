@@ -700,6 +700,7 @@ class Workflow(TaskBase):
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
         nwf = await submitter.submit(self, return_task=True)
+        # TODO: check if this might be done differently
         self.__dict__.update(nwf.__dict__)
 
     def set_output(self, connections):

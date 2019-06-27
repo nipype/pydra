@@ -1,5 +1,6 @@
 import pytest
 import shutil
+import time
 
 from ..submitter import Submitter
 from ..task import to_task
@@ -21,6 +22,8 @@ def multiply(x, y):
 
 @to_task
 def add2(x):
+    if x == 1 or x == 12:
+        time.sleep(1)
     return x + 2
 
 
@@ -862,6 +865,57 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
     assert not wf2.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_nostate_cachelocations_updated(plugin, tmpdir):
+    """
+    Two identical wfs with provided cache_dir;
+    the second wf has cache_locations in init,
+     that is later overwritten in Submitter.__call__;
+    the cache_locations from call doesn't exist so the second task should run again
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+    cache_dir1_empty = tmpdir.mkdir("test_wf_cache3_empty")
+    cache_dir2 = tmpdir.mkdir("test_wf_cache4")
+
+    wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
+    wf1.add(add2(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.inputs.x = 2
+    wf1.inputs.y = 3
+    wf1.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+
+    results1 = wf1.result()
+    assert 8 == results1.output.out
+
+    wf2 = Workflow(
+        name="wf",
+        input_spec=["x", "y"],
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+    )
+    wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y))
+    wf2.add(add2(name="add2", x=wf2.mult.lzout.out))
+    wf2.set_output([("out", wf2.add2.lzout.out)])
+    wf2.inputs.x = 2
+    wf2.inputs.y = 3
+    wf2.plugin = plugin
+
+    # changing cache_locations to non-existing dir
+    with Submitter(plugin=plugin) as sub:
+        sub(wf2, cache_locations=cache_dir1_empty)
+
+    results2 = wf2.result()
+    assert 8 == results2.output.out
+
+    # checking if both wf run
+    assert wf1.output_dir.exists()
+    assert wf2.output_dir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
