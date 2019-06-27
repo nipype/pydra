@@ -110,10 +110,10 @@ class ConcurrentFuturesWorker(Worker):
         except ValueError:
             # nothing pending!
             pending = set()
-        if done.union(pending) != futures:
-            raise Exception(
-                "all tasks from futures should be either in done or pending"
-            )
+
+        assert (
+            done.union(pending) == futures
+        ), "all tasks from futures should be either in done or pending"
         logger.debug(f"Tasks finished: {len(done)}")
         return done, pending
 
