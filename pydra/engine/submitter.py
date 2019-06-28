@@ -57,7 +57,7 @@ class Submitter:
         remaining_tasks = wf.graph_sorted
         # keep track of local futures
         task_futures = set()
-        while not wf.done:
+        while not wf.done_all_tasks:
             remaining_tasks, tasks = await get_runnable_tasks(wf.graph, remaining_tasks)
             if not tasks and not task_futures:
                 raise Exception("Nothing queued or todo - something went wrong")
@@ -108,7 +108,6 @@ class Submitter:
         """
         # ensure worker is using same loop
         futures = set()
-
         if runnable.state:
             runnable.state.prepare_states(runnable.inputs)
             runnable.state.prepare_inputs()
@@ -130,9 +129,10 @@ class Submitter:
         else:
             job = runnable.to_job(None)
             job.results_dict[None] = (None, job.checksum)
+            runnable.results_dict[None] = (None, job.checksum)
             if is_workflow(runnable):
                 # this should only be reached through the job's `run()` method
-                runnable = await self._run_workflow(job)
+                job = await self._run_workflow(job)
             else:
                 # submit task to worker
                 futures.add(self.worker.run_el(job))
@@ -142,7 +142,10 @@ class Submitter:
             if futures:
                 # wait until all states complete or error
                 await asyncio.gather(*futures)
-            return runnable
+            if runnable.state:
+                return runnable
+            else:
+                return job  # dj: not sure why I can't return runnable!!
         # otherwise pass along futures to be awaited independently
         return futures
 

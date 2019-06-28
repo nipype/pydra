@@ -27,7 +27,6 @@ from .helpers import (
     save_result,
     ensure_list,
     record_error,
-    get_open_loop,
 )
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 
@@ -539,10 +538,11 @@ class Workflow(TaskBase):
         return self.__getattribute__(name)
 
     @property
-    def done(self):
-        if super(Workflow, self).done:
-            return True
-        # TODO: not sure why this is needed
+    def done_all_tasks(self):
+        """ checking if all tasks from the graph are done;
+            (it doesn't mean that results of the wf are available,
+            this can be checked with self.done)
+        """
         for task in self.graph:
             if not task.done:
                 return False
@@ -700,8 +700,9 @@ class Workflow(TaskBase):
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
         nwf = await submitter.submit(self, return_task=True)
-        # TODO: check if this might be done differently
-        self.__dict__.update(nwf.__dict__)
+        # dj TODO: don't understand why I need it
+        if not self.state:
+            self.__dict__.update(nwf.__dict__)
 
     def set_output(self, connections):
         self._connections = connections
