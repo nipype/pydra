@@ -683,6 +683,14 @@ class Workflow(TaskBase):
                             },
                             AuditFlag.PROV,
                         )
+                print(
+                    "SAVE: name, res, odir, self.output_dir, self.checksum: ",
+                    self.name,
+                    result,
+                    odir,
+                    self.output_dir,
+                    self.checksum,
+                )
                 save_result(odir, result)
                 with open(odir / "_node.pklz", "wb") as fp:
                     cp.dump(self, fp)
@@ -700,9 +708,6 @@ class Workflow(TaskBase):
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
         nwf = await submitter.submit(self, return_task=True)
-        # dj TODO: don't understand why I need it
-        if not self.state:
-            self.__dict__.update(nwf.__dict__)
 
     def set_output(self, connections):
         self._connections = connections
@@ -717,14 +722,6 @@ class Workflow(TaskBase):
                 raise ValueError("all connections must be lazy")
             output.append(val.get_value(self))
         return output
-
-    def submit_async(self, submitter):
-        """Start event loop and run workflow"""
-
-        if self.state:
-            submitter.loop.run_until_complete(submitter.submit(self, return_task=True))
-        else:
-            submitter.loop.run_until_complete(self.run(submitter))
 
 
 # TODO: task has also call

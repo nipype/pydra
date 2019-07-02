@@ -30,7 +30,7 @@ class Submitter:
         if cache_locations is not None:
             runnable.cache_locations = cache_locations
         if is_workflow(runnable):
-            runnable.submit_async(self)
+            self.submit_wf_async(runnable)
         else:
             self.loop.run_until_complete(self.submit(runnable, return_task=True))
 
@@ -122,32 +122,37 @@ class Submitter:
                     f'Submitting runnable {job}{str(sidx) if sidx is not None else ""}'
                 )
                 if is_workflow(runnable):
+                    # job has no state anymore
                     futures.add(asyncio.create_task(job.run(self)))
                 else:
                     # tasks are submitted to worker for execution
                     futures.add(self.worker.run_el(job))
         else:
-            job = runnable.to_job(None)
-            job.results_dict[None] = (None, job.checksum)
-            runnable.results_dict[None] = (None, job.checksum)
+            runnable.results_dict[None] = (None, runnable.checksum)
             if is_workflow(runnable):
                 # this should only be reached through the job's `run()` method
-                job = await self._run_workflow(job)
+                runnable = await self._run_workflow(runnable)
             else:
                 # submit task to worker
-                futures.add(self.worker.run_el(job))
+                futures.add(self.worker.run_el(runnable))
 
         if return_task:
             # run coroutines concurrently and wait for execution
             if futures:
                 # wait until all states complete or error
                 await asyncio.gather(*futures)
-            if runnable.state:
-                return runnable
-            else:
-                return job  # dj: not sure why I can't return runnable!!
+            return runnable
         # otherwise pass along futures to be awaited independently
-        return futures
+        else:
+            return futures
+
+    def submit_wf_async(self, runnable):
+        """Start event loop and run workflow"""
+
+        if runnable.state:
+            self.loop.run_until_complete(self.submit(runnable, return_task=True))
+        else:
+            self.loop.run_until_complete(runnable.run(self))
 
     def close(self):
         self.loop.close()

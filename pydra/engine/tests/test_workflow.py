@@ -41,6 +41,7 @@ def test_wf_1(plugin):
 
     results = wf.result()
     assert 4 == results.output.out
+    # assert wf.output_dir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -56,7 +57,7 @@ def test_wf_2(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert 8 == results.output.out
 
@@ -78,7 +79,7 @@ def test_wf_2a(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert 8 == results.output.out
 
@@ -105,7 +106,7 @@ def test_wf_2b(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert 8 == results.output.out
 
@@ -123,7 +124,7 @@ def test_wf_st_1(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results[0].output.out == 3
@@ -141,7 +142,7 @@ def test_wf_ndst_1(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results.output.out == [3, 4]
@@ -160,7 +161,7 @@ def test_wf_st_2(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     # expected: [[({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]]
     assert results[0][0].output.out == 3
@@ -178,7 +179,7 @@ def test_wf_ndst_2(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     # expected: [[({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]]
     assert results.output.out[0] == [3, 4]
@@ -201,7 +202,7 @@ def test_wf_st_3(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     # expected: [({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)]
     assert results[0].output.out == 13
@@ -221,7 +222,7 @@ def test_wf_ndst_3(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     # expected: [({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)]
     assert results.output.out == [13, 26]
@@ -241,7 +242,7 @@ def test_wf_st_4(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     # expected: [
     #     [({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)]
@@ -263,7 +264,7 @@ def test_wf_ndst_4(plugin):
     wf.inputs.b = [11, 12]
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     # expected: [
     #     [({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)]
@@ -287,7 +288,7 @@ def test_wf_st_5(plugin):
         sub(wf)
 
     results = wf.result()
-
+    # assert wf.output_dir.exists()
     assert results[0][0].output.out == 13
     assert results[0][1].output.out == 24
     assert results[1][0].output.out == 14
@@ -309,7 +310,7 @@ def test_wf_ndst_5(plugin):
         sub(wf)
 
     results = wf.result()
-
+    # assert wf.output_dir.exists()
     assert results.output.out[0] == [13, 24]
     assert results.output.out[1] == [14, 26]
 
@@ -333,7 +334,7 @@ def test_wf_st_6(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
 
     assert len(results) == 6
@@ -359,7 +360,7 @@ def test_wf_ndst_6(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
 
     assert len(results.output.out) == 6
@@ -382,7 +383,7 @@ def test_wf_st_7(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
 
     assert len(results) == 2
@@ -415,7 +416,7 @@ def test_wf_ndst_7(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
 
     assert len(results.output.out) == 2
@@ -439,7 +440,7 @@ def test_wf_st_8(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
 
     assert len(results) == 3
@@ -474,7 +475,7 @@ def test_wf_ndst_8(plugin):
         sub(wf)
 
     results = wf.result()
-
+    # assert wf.output_dir.exists()
     assert len(results.output.out) == 3
     assert results.output.out[0] == [39, 42]
     assert results.output.out[1] == [52, 56]
@@ -499,7 +500,7 @@ def test_wf_st_9(plugin):
         sub(wf)
 
     results = wf.result()
-
+    # assert wf.output_dir.exists()
     assert len(results) == 1
     assert results[0][0].output.out == 39
     assert results[0][1].output.out == 42
@@ -530,7 +531,7 @@ def test_wf_ndst_9(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
 
     assert len(results.output.out) == 1
@@ -557,7 +558,7 @@ def test_wfasnd_1(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert results.output.out == 4
 
@@ -580,7 +581,7 @@ def test_wfasnd_wfinp_1(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert results.output.out == 4
 
@@ -607,6 +608,7 @@ def test_wfasnd_st_1(plugin):
 
     results = wf.result()
     assert results.output.out == [4, 6]
+    assert wf.output_dir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -629,7 +631,7 @@ def test_wfasnd_ndst_1(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert results.output.out == [4, 6]
 
@@ -653,7 +655,7 @@ def test_wfasnd_wfst_1(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert results[0].output.out == 4
     assert results[1].output.out == 6
@@ -683,7 +685,7 @@ def test_wfasnd_st_2(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert results.output.out == [4, 42]
 
@@ -709,7 +711,7 @@ def test_wfasnd_wfst_2(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert results[0].output.out == 4
     assert results[1].output.out == 42
@@ -739,7 +741,7 @@ def test_wfasnd_ndst_3(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert results.output.out == [4, 42]
 
@@ -766,7 +768,7 @@ def test_wfasnd_wfst_3(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert results[0].output.out == 4
     assert results[1].output.out == 42
@@ -790,7 +792,7 @@ def test_wf_nostate_cachedir(plugin, tmpdir):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert 8 == results.output.out
 
@@ -813,7 +815,7 @@ def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-
+    # assert wf.output_dir.exists()
     results = wf.result()
     assert 8 == results.output.out
 

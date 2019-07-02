@@ -44,6 +44,7 @@ class BaseSpec:
             if isinstance(value, LazyField):
                 value = value.get_value(wf, state_index=state_index)
                 temp_values[field.name] = value
+        # dj: changes the outputd_dir (node is updating input)
         for field, value in temp_values.items():
             setattr(self, field, value)
 
