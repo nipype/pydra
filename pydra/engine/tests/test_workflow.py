@@ -27,6 +27,12 @@ def add2(x):
     return x + 2
 
 
+@to_task
+def add2_wait(x):
+    time.sleep(5)
+    return x + 2
+
+
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_1(plugin):
     """ workflow with one task and no splitter"""
@@ -41,7 +47,7 @@ def test_wf_1(plugin):
 
     results = wf.result()
     assert 4 == results.output.out
-    # assert wf.output_dir.exists()
+    assert wf.output_dir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -833,14 +839,16 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
 
     wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
     wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
-    wf1.add(add2(name="add2", x=wf1.mult.lzout.out))
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
     wf1.set_output([("out", wf1.add2.lzout.out)])
     wf1.inputs.x = 2
     wf1.inputs.y = 3
     wf1.plugin = plugin
 
+    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf1)
+    t1 = time.time() - t0
 
     results1 = wf1.result()
     assert 8 == results1.output.out
@@ -858,15 +866,21 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     wf2.inputs.y = 3
     wf2.plugin = plugin
 
+    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf2)
+    t2 = time.time() - t0
 
     results2 = wf2.result()
     assert 8 == results2.output.out
 
+    # checking execution time
+    assert t1 > 5
+    assert t2 < 0.1
+
     # checking if the second wf didn't run again
-    assert wf1.output_dir.exists()
-    assert not wf2.output_dir.exists()
+    # assert wf1.output_dir.exists()
+    # assert not wf2.output_dir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -883,14 +897,16 @@ def test_wf_nostate_cachelocations_updated(plugin, tmpdir):
 
     wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
     wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
-    wf1.add(add2(name="add2", x=wf1.mult.lzout.out))
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
     wf1.set_output([("out", wf1.add2.lzout.out)])
     wf1.inputs.x = 2
     wf1.inputs.y = 3
     wf1.plugin = plugin
 
+    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf1)
+    t1 = time.time() - t0
 
     results1 = wf1.result()
     assert 8 == results1.output.out
@@ -908,16 +924,22 @@ def test_wf_nostate_cachelocations_updated(plugin, tmpdir):
     wf2.inputs.y = 3
     wf2.plugin = plugin
 
+    t0 = time.time()
     # changing cache_locations to non-existing dir
     with Submitter(plugin=plugin) as sub:
         sub(wf2, cache_locations=cache_dir1_empty)
+    t2 = time.time() - t0
 
     results2 = wf2.result()
     assert 8 == results2.output.out
 
+    # checking execution time
+    assert t1 > 5
+    assert t2 > 5
+
     # checking if both wf run
-    assert wf1.output_dir.exists()
-    assert wf2.output_dir.exists()
+    # assert wf1.output_dir.exists()
+    # assert wf2.output_dir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -937,8 +959,10 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     wf1.inputs.y = 3
     wf1.plugin = plugin
 
+    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf1)
+    t1 = time.time() - t0
 
     results1 = wf1.result()
     assert 8 == results1.output.out
@@ -951,18 +975,24 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     )
     # different argument assigment
     wf2.add(multiply(name="mult", x=wf2.lzin.y, y=wf2.lzin.x))
-    wf2.add(add2(name="add2", x=wf2.mult.lzout.out))
+    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
     wf2.set_output([("out", wf2.add2.lzout.out)])
     wf2.inputs.x = 2
     wf2.inputs.y = 3
     wf2.plugin = plugin
 
+    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf2)
+    t2 = time.time() - t0
 
     results2 = wf2.result()
     assert 8 == results2.output.out
 
+    # checking execution time
+    assert t1 > 5
+    assert t2 > 5
+
     # checking if both dir exists
-    assert wf1.output_dir.exists()
-    assert wf2.output_dir.exists()
+    # assert wf1.output_dir.exists()
+    # assert wf2.output_dir.exists()
