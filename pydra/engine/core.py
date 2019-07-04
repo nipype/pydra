@@ -118,6 +118,7 @@ class TaskBase:
         self.messenger_args = messenger_args
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
+        self._checksum = None
 
         # dictionary of results from tasks
         self.results_dict = {}
@@ -163,7 +164,15 @@ class TaskBase:
 
     @property
     def checksum(self):
-        return create_checksum(self.__class__.__name__, self.inputs)
+        """calculating checksum if self._checksum is None only
+            (avoiding recomputing during the execution)
+        """
+        if self._checksum is None:
+            if self.state is None:
+                self._checksum = create_checksum(self.__class__.__name__, self.inputs)
+            else:
+                return {sidx: res[1] for (sidx, res) in self.results_dict.items()}
+        return self._checksum
 
     def set_state(self, splitter, combiner=None):
         if splitter is not None:
@@ -236,7 +245,13 @@ class TaskBase:
 
     @property
     def output_dir(self):
-        return self._cache_dir / self.checksum
+        if self.state:
+            return {
+                sidx: self._cache_dir / checksum
+                for (sidx, checksum) in self.checksum.items()
+            }
+        else:
+            return self._cache_dir / self.checksum
 
     def audit_check(self, flag):
         return self.audit_flags & flag
@@ -415,6 +430,8 @@ class TaskBase:
         # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
         el = deepcopy(self)
         el.state = None
+        # dj might be needed
+        # el._checksum = None
         _, inputs_dict = self.get_input_el(ind)
         el.inputs = dc.replace(el.inputs, **inputs_dict)
         return el
@@ -683,14 +700,6 @@ class Workflow(TaskBase):
                             },
                             AuditFlag.PROV,
                         )
-                print(
-                    "SAVE: name, res, odir, self.output_dir, self.checksum: ",
-                    self.name,
-                    result,
-                    odir,
-                    self.output_dir,
-                    self.checksum,
-                )
                 save_result(odir, result)
                 with open(odir / "_node.pklz", "wb") as fp:
                     cp.dump(self, fp)
