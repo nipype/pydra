@@ -198,6 +198,35 @@ def test_task_nostate_1(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_call_subm(plugin):
+    """ task without splitter"""
+    nn = fun_addtwo(name="NA", a=3)
+    assert np.allclose(nn.inputs.a, [3])
+    assert nn.state is None
+
+    with Submitter(plugin=plugin) as sub:
+        nn(submitter=sub)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_call_plug(plugin):
+    """ task without splitter"""
+    nn = fun_addtwo(name="NA", a=3)
+    assert np.allclose(nn.inputs.a, [3])
+    assert nn.state is None
+
+    nn(plugin=plugin)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_2(plugin):
     """ task with a list as an input, but no splitter"""
     nn = moment(name="NA", n=3, lst=[2, 3, 4])

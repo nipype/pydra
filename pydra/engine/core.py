@@ -256,10 +256,20 @@ class TaskBase:
     def audit_check(self, flag):
         return self.audit_flags & flag
 
-    def __call__(self, **kwargs):
-        return self.run(**kwargs)
+    def __call__(self, submitter=None, plugin=None, **kwargs):
+        if submitter and plugin:
+            raise Exception("you can specify submitter OR plugin, not both")
+        elif submitter:
+            submitter(self)
+        elif plugin:
+            from .submitter import Submitter
 
-    def run(self, **kwargs):
+            with Submitter(plugin=plugin) as sub:
+                sub(self)
+        else:
+            return self._run(**kwargs)
+
+    def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
@@ -608,7 +618,7 @@ class Workflow(TaskBase):
         self.inputs._graph = self.graph_sorted
         return self
 
-    async def run(self, submitter=None, **kwargs):
+    async def _run(self, submitter=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")

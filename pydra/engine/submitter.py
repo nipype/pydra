@@ -70,7 +70,7 @@ class Submitter:
                 task._checksum = None
                 if is_workflow(task) and not task.state:
                     # ensure workflow is executed
-                    await task.run(self)
+                    await task._run(self)
                 else:
                     for fut in await self.submit(task):
                         task_futures.add(fut)
@@ -125,7 +125,7 @@ class Submitter:
                 )
                 if is_workflow(runnable):
                     # job has no state anymore
-                    futures.add(asyncio.create_task(job.run(self)))
+                    futures.add(asyncio.create_task(job._run(self)))
                 else:
                     # tasks are submitted to worker for execution
                     futures.add(self.worker.run_el(job))
@@ -154,7 +154,7 @@ class Submitter:
         if runnable.state:
             self.loop.run_until_complete(self.submit(runnable, return_task=True))
         else:
-            self.loop.run_until_complete(runnable.run(self))
+            self.loop.run_until_complete(runnable._run(self))
 
     def close(self):
         self.loop.close()

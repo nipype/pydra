@@ -14,7 +14,7 @@ def test_output():
         return a + 2
 
     nn = funaddtwo(a=3)
-    res = nn.run()
+    res = nn._run()
     assert res.output.out == 5
 
 
@@ -120,7 +120,7 @@ def test_notannotated_func():
     assert hasattr(natask.inputs, "d")
     assert hasattr(natask.inputs, "_func")
 
-    result = natask.run()
+    result = natask._run()
     assert hasattr(result, "output")
     assert hasattr(result.output, "out")
     assert result.output.out == 20.2
@@ -167,14 +167,14 @@ def test_shell_cmd(tmpdir):
     # all args given as executable
     shelly = ShellCommandTask(name="shelly", executable=cmd)
     assert shelly.cmdline == " ".join(cmd)
-    res = shelly.run()
+    res = shelly._run()
     assert res.output.stdout == " ".join(cmd[1:]) + "\n"
 
     # separate command into exec + args
     shelly = ShellCommandTask(executable=cmd[0], args=cmd[1:])
     assert shelly.inputs.executable == "echo"
     assert shelly.cmdline == " ".join(cmd)
-    res = shelly.run()
+    res = shelly._run()
     assert res.output.return_code == 0
     assert res.output.stdout == " ".join(cmd[1:]) + "\n"
 

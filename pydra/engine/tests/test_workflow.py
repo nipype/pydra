@@ -52,6 +52,59 @@ def test_wf_1(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_wf_1_call_subm(plugin):
+    """using wf.__call_ with submitter"""
+    wf = Workflow(name="wf_1", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.plugin = plugin
+    odir = wf.output_dir
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    results = wf.result()
+    assert 4 == results.output.out
+    assert wf.output_dir == odir
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_1_call_plug(plugin):
+    """using wf.__call_ with plugin"""
+    wf = Workflow(name="wf_1", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.plugin = plugin
+    odir = wf.output_dir
+
+    wf(plugin=plugin)
+
+    results = wf.result()
+    assert 4 == results.output.out
+    assert wf.output_dir == odir
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_1_call_exception(plugin):
+    """using wf.__call_ with plugin and submitter - should raise an exception"""
+    wf = Workflow(name="wf_1", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.plugin = plugin
+    odir = wf.output_dir
+
+    with Submitter(plugin=plugin) as sub:
+        with pytest.raises(Exception) as e:
+            wf(submitter=sub, plugin=plugin)
+        assert "you can specify submitter OR plugin" in str(e.value)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_2(plugin):
     """ workflow with 2 tasks, no splitter"""
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
@@ -142,6 +195,51 @@ def test_wf_st_1(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
+
+    results = wf.result()
+    # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
+    assert results[0].output.out == 3
+    assert results[1].output.out == 4
+    # checking all directories
+    for _, odir in wf.output_dir.items():
+        assert odir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_st_1_call_subm(plugin):
+    """ Workflow with one task, a splitter for the workflow"""
+    wf = Workflow(name="wf_spl_1", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+
+    wf.split(("x"))
+    wf.inputs.x = [1, 2]
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    results = wf.result()
+    # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
+    assert results[0].output.out == 3
+    assert results[1].output.out == 4
+    # checking all directories
+    for _, odir in wf.output_dir.items():
+        assert odir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_st_1_call_plug(plugin):
+    """ Workflow with one task, a splitter for the workflow"""
+    wf = Workflow(name="wf_spl_1", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+
+    wf.split(("x"))
+    wf.inputs.x = [1, 2]
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+
+    wf(plugin=plugin)
 
     results = wf.result()
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
