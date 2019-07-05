@@ -29,7 +29,7 @@ def add2(x):
 
 @to_task
 def add2_wait(x):
-    time.sleep(5)
+    time.sleep(3)
     return x + 2
 
 
@@ -1067,7 +1067,7 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     assert 8 == results2.output.out
 
     # checking execution time
-    assert t1 > 5
+    assert t1 > 3
     assert t2 < 0.1
 
     # checking if the second wf didn't run again
@@ -1126,7 +1126,7 @@ def test_wf_state_cachelocations(plugin, tmpdir):
     assert results2[1].output.out == 82
 
     # checking execution time
-    assert t1 > 5
+    assert t1 > 3
     assert t2 < 0.1
 
     # checking all directories
@@ -1155,10 +1155,8 @@ def test_wf_state_n_nostate_cachelocations(plugin, tmpdir):
     wf1.inputs.y = 3
     wf1.plugin = plugin
 
-    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf1)
-    t1 = time.time() - t0
 
     results1 = wf1.result()
     assert results1.output.out == 8
@@ -1177,10 +1175,8 @@ def test_wf_state_n_nostate_cachelocations(plugin, tmpdir):
     wf2.split(splitter=("x", "y"))
     wf2.plugin = plugin
 
-    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf2)
-    t2 = time.time() - t0
 
     results2 = wf2.result()
     assert results2[0].output.out == 8
@@ -1244,8 +1240,8 @@ def test_wf_nostate_cachelocations_updated(plugin, tmpdir):
     assert 8 == results2.output.out
 
     # checking execution time
-    assert t1 > 5
-    assert t2 > 5
+    assert t1 > 3
+    assert t2 > 3
 
     # checking if both wf run
     assert wf1.output_dir.exists()
@@ -1300,8 +1296,8 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     assert 8 == results2.output.out
 
     # checking execution time
-    assert t1 > 5
-    assert t2 > 5
+    assert t1 > 3
+    assert t2 > 3
 
     # checking if both dir exists
     assert wf1.output_dir.exists()
