@@ -423,6 +423,30 @@ def test_task_state_2(plugin, splitter, state_splitter, state_rpn, expected):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_task_state_singl_1(plugin):
+    """ Tasks with two inputs and a splitter (no combiner)
+        one input is a single value, the other is in the splitter and combiner
+    """
+    nn = fun_addvar(name="NA").split(splitter="a", a=[3, 5], b=10)
+
+    assert nn.inputs.a == [3, 5]
+    assert nn.inputs.b == 10
+    assert nn.state.splitter == "NA.a"
+    assert nn.state.splitter_rpn == ["NA.a"]
+    assert nn.state.splitter_final == "NA.a"
+    assert nn.state.splitter_rpn_final == ["NA.a"]
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    expected = [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 10}, 15)]
+    results = nn.result()
+    for i, res in enumerate(expected):
+        assert results[i].output.out == res[1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_comb_1(plugin):
     """ task with the simplest splitter and combiner"""
     nn = fun_addtwo(name="NA").split(a=[3, 5], splitter="a").combine(combiner="a")
@@ -547,6 +571,32 @@ def test_task_state_comb_2(
     # checking the results
     results = nn.result()
 
+    combined_results = [[res.output.out for res in res_l] for res_l in results]
+    for i, res in enumerate(expected):
+        assert combined_results[i] == res[1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_state_comb_singl_1(plugin):
+    """ Tasks with two inputs;
+     one input is a single value, the other is in the splitter and combiner
+     """
+    nn = fun_addvar(name="NA").split(splitter="a", a=[3, 5], b=10).combine(combiner="a")
+
+    assert nn.inputs.a == [3, 5]
+    assert nn.inputs.b == 10
+    assert nn.state.splitter == "NA.a"
+    assert nn.state.splitter_rpn == ["NA.a"]
+    assert nn.state.combiner == ["NA.a"]
+    assert nn.state.splitter_final == None
+    assert nn.state.splitter_rpn_final == []
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    expected = [({}, [13, 15])]
+    results = nn.result()
     combined_results = [[res.output.out for res in res_l] for res_l in results]
     for i, res in enumerate(expected):
         assert combined_results[i] == res[1]
