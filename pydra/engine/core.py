@@ -3,7 +3,6 @@ import abc
 import dataclasses as dc
 import json
 import logging
-import networkx as nx
 import os
 from pathlib import Path
 import typing as ty
@@ -29,6 +28,8 @@ from .helpers import (
 )
 from .audit import Audit
 from ..utils.messenger import AuditFlag
+from .graph import Graph
+from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 
 logger = logging.getLogger("pydra")
 
@@ -468,7 +469,7 @@ class Workflow(TaskBase):
             messenger_args=messenger_args,
         )
 
-        self.graph = nx.DiGraph()
+        self.graph = Graph()
         self.name2obj = {}
 
         # store output connections
@@ -501,12 +502,12 @@ class Workflow(TaskBase):
 
     @property
     def graph_sorted(self):
-        return list(nx.topological_sort(self.graph))
+        return self.graph.sorted_nodes
 
     def add(self, task):
         if not is_task(task):
             raise ValueError("Unknown workflow element: {!r}".format(task))
-        self.graph.add_nodes_from([task])
+        self.graph.add_nodes(task)
         self.name2obj[task.name] = task
         self._last_added = task
         other_states = {}
@@ -516,12 +517,7 @@ class Workflow(TaskBase):
                 # adding an edge to the graph if task id expecting output from a different task
                 if val.name != self.name:
                     logger.debug("Connecting %s to %s", val.name, task.name)
-                    self.graph.add_edge(
-                        getattr(self, val.name),
-                        task,
-                        from_field=val.field,
-                        to_field=field.name,
-                    )
+                    self.graph.add_edges((getattr(self, val.name), task))
                 if val.name in self.node_names and getattr(self, val.name).state:
                     # adding a state from the previous task to other_states
                     other_states[val.name] = (getattr(self, val.name).state, field.name)
