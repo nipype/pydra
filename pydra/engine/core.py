@@ -491,7 +491,7 @@ class Workflow(TaskBase):
             (it doesn't mean that results of the wf are available,
             this can be checked with self.done)
         """
-        for task in self.graph:
+        for task in self.graph.nodes:
             if not task.done:
                 return False
         return True
@@ -615,8 +615,8 @@ def is_workflow(obj):
 
 def is_runnable(graph, obj):
     """Check if a task within a graph is runnable"""
-    if graph.predecessors(obj):
-        for pred in graph.predecessors(obj):
+    if graph.connections_pred[obj.name]:
+        for pred in graph.connections_pred[obj.name]:
             if not pred.done:
                 return False
     return True
