@@ -29,8 +29,8 @@ class Graph:
             self._nodes = []
 
     @property
-    def nodes_names(self):
-        return [nd.name for nd in self.nodes]
+    def nodes_names_map(self):
+        return {nd.name: nd for nd in self.nodes}
 
     @property
     def edges(self):
@@ -64,22 +64,22 @@ class Graph:
         return [nd.name for nd in self._sorted_nodes]
 
     def _create_connections(self):
-        self._connections_pred = {}
-        self._connections_succ = {}
+        self.connections_pred = {}
+        self.connections_succ = {}
         for nd in self.nodes:
-            self._connections_pred[nd.name] = []
-            self._connections_succ[nd.name] = []
+            self.connections_pred[nd.name] = []
+            self.connections_succ[nd.name] = []
 
         for (nd_out, nd_in) in self.edges:
-            self._connections_pred[nd_in.name].append(nd_out)
-            self._connections_succ[nd_out.name].append(nd_in)
+            self.connections_pred[nd_in.name].append(nd_out)
+            self.connections_succ[nd_out.name].append(nd_in)
 
     def add_nodes(self, new_nodes):
         # todo?
         self.nodes = self._nodes + ensure_list(new_nodes)
         for nd in ensure_list(new_nodes):
-            self._connections_pred[nd.name] = []
-            self._connections_succ[nd.name] = []
+            self.connections_pred[nd.name] = []
+            self.connections_succ[nd.name] = []
         if self._sorted_nodes is not None:
             # starting from the previous sorted list, so is faster
             self.sorting(presorted=self.sorted_nodes + ensure_list(new_nodes))
@@ -88,8 +88,8 @@ class Graph:
         # todo?
         self.edges = self._edges + ensure_list(new_edges)
         for (nd_out, nd_in) in ensure_list(new_edges):
-            self._connections_pred[nd_in.name].append(nd_out)
-            self._connections_succ[nd_out.name].append(nd_in)
+            self.connections_pred[nd_in.name].append(nd_out)
+            self.connections_succ[nd_out.name].append(nd_in)
         if self._sorted_nodes is not None:
             # starting from the previous sorted list, so is faster
             self.sorting(presorted=self.sorted_nodes + [])
@@ -112,7 +112,7 @@ class Graph:
         else:
             notsorted_nodes = copy(self.nodes)
         connections_pred = {
-            key: copy(val) for (key, val) in self._connections_pred.items()
+            key: copy(val) for (key, val) in self.connections_pred.items()
         }
 
         while notsorted_nodes:
@@ -121,22 +121,22 @@ class Graph:
             )
             self._sorted_nodes += sorted_part
             for nd_out in sorted_part:
-                for nd_in in self._connections_succ[nd_out.name]:
+                for nd_in in self.connections_succ[nd_out.name]:
                     connections_pred[nd_in.name].remove(nd_out)
 
     def remove_node(self, node):
         """removing a node, re-sorting if needed"""
         if node not in self.nodes:
             raise Exception(f"{node} is not present in the graph")
-        if self._connections_pred[node.name]:
+        if self.connections_pred[node.name]:
             raise Exception("this node shoudn't be run, has to wait")
 
         self.nodes.remove(node)
-        for nd_in in self._connections_succ[node.name]:
-            self._connections_pred[nd_in.name].remove(node)
+        for nd_in in self.connections_succ[node.name]:
+            self.connections_pred[nd_in.name].remove(node)
             self.edges.remove((node, nd_in))
-        self._connections_succ.pop(node.name)
-        self._connections_pred.pop(node.name)
+        self.connections_succ.pop(node.name)
+        self.connections_pred.pop(node.name)
 
         # if graph is sorted, the sorted list has to be updated
         if hasattr(self, "sorted_nodes"):
@@ -150,9 +150,9 @@ class Graph:
 
     def _checking_path(self, node_name, first_name, path=0):
         """recursive function to calculate all paths using connections list"""
-        if not self._connections_succ[node_name]:
+        if not self.connections_succ[node_name]:
             return True
-        for nd_in in self._connections_succ[node_name]:
+        for nd_in in self.connections_succ[node_name]:
             if nd_in.name in self.max_paths[first_name].keys():
                 # chose the maximum paths
                 self.max_paths[first_name][nd_in.name] = max(
@@ -169,7 +169,7 @@ class Graph:
         and all of the connections
         """
         self.max_paths = {}
-        first_nodes = [key for (key, val) in self._connections_pred.items() if not val]
+        first_nodes = [key for (key, val) in self.connections_pred.items() if not val]
         for nm in first_nodes:
             self.max_paths[nm] = {}
             self._checking_path(node_name=nm, first_name=nm)
