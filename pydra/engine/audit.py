@@ -24,10 +24,6 @@ class Audit:
         os.chdir(self.odir)
         if self.audit_check(self.AuditFlag.PROV):
             self.audit_message(start_message, self.AuditFlag.PROV)
-            # audit inputs
-        # check_runtime(self._runtime_requirements)
-        # isolate inputs if files
-        # cwd = os.getcwd()
         if self.audit_check(self.AuditFlag.RESOURCE):
             from ..utils.profiler import ResourceMonitor
 
