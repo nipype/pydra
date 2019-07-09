@@ -160,12 +160,6 @@ class TaskBase:
     def version(self):
         return self._version
 
-    # TODO: not sure what was the idea for the method (not used)
-    # def save_set(self, name, inputs, force=False):
-    #     if name in self._input_sets and not force:
-    #         raise KeyError("Key {} already saved. Use force=True to override.")
-    #     self._input_sets[name] = inputs
-
     @property
     def checksum(self):
         """calculating checksum if self._checksum is None only
@@ -304,7 +298,6 @@ class TaskBase:
         output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
         return dc.replace(output, **dict(zip(self.output_names, run_output)))
 
-    # TODO: should change state!
     def split(self, splitter, **kwargs):
         if kwargs:
             self.inputs = dc.replace(self.inputs, **kwargs)
@@ -320,24 +313,17 @@ class TaskBase:
     def combine(self, combiner):
         if not self.state:
             self.split(splitter=None)
-        if not self.state:
+            # a task can have a combiner without a splitter
+            # if is connected to one with a splitter;
+            # self.fut_combiner will be used later as a combiner
             self.fut_combiner = combiner
             return self
-            # raise Exception("splitter has to be set first")
         elif self.state.combiner:
             raise Exception("combiner has been already set")
-        self.combiner = combiner
-        self.set_state(splitter=self.state.splitter, combiner=self.combiner)
-        return self
-
-    # TODO: was used in submitter (if not needed should be removed)
-    # def checking_input_el(self, ind):
-    #     """checking if all inputs are available (for specific state element)"""
-    #     try:
-    #         self.get_input_el(ind)
-    #         return True
-    #     except:  # TODO specify
-    #         return False
+        else:  # self.state and not self.state.combiner
+            self.combiner = combiner
+            self.set_state(splitter=self.state.splitter, combiner=self.combiner)
+            return self
 
     def get_input_el(self, ind):
         """collecting all inputs required to run the node (for specific state element)"""
@@ -590,7 +576,7 @@ class Workflow(TaskBase):
         if not submitter:
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
-        nwf = await submitter.submit(self, return_task=True)
+        await submitter.submit(self, return_task=True)
 
     def set_output(self, connections):
         self._connections = connections
