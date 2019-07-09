@@ -6,7 +6,7 @@ from ..core import TaskBase
 from ..submitter import Submitter
 from ..task import to_task
 
-Plugins = ["serial", "cf"]
+Plugins = ["cf"]
 
 
 @pytest.fixture(scope="module")
@@ -190,7 +190,36 @@ def test_task_nostate_1(plugin):
     assert nn.state is None
 
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_call_subm(plugin):
+    """ task without splitter"""
+    nn = fun_addtwo(name="NA", a=3)
+    assert np.allclose(nn.inputs.a, [3])
+    assert nn.state is None
+
+    with Submitter(plugin=plugin) as sub:
+        nn(submitter=sub)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_call_plug(plugin):
+    """ task without splitter"""
+    nn = fun_addtwo(name="NA", a=3)
+    assert np.allclose(nn.inputs.a, [3])
+    assert nn.state is None
+
+    nn(plugin=plugin)
 
     # checking the results
     results = nn.result()
@@ -206,7 +235,7 @@ def test_task_nostate_2(plugin):
     assert nn.state is None
 
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     # checking the results
     results = nn.result()
@@ -225,7 +254,7 @@ def test_task_nostate_cachedir(plugin, tmpdir):
     assert nn.state is None
 
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     # checking the results
     results = nn.result()
@@ -242,7 +271,7 @@ def test_task_nostate_cachedir_relativepath(tmpdir, plugin):
     assert nn.state is None
 
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     # checking the results
     results = nn.result()
@@ -262,11 +291,11 @@ def test_task_nostate_cachelocations(plugin, tmpdir):
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn2)
+        sub(nn2)
 
     # checking the results
     results2 = nn2.result()
@@ -281,8 +310,9 @@ def test_task_nostate_cachelocations(plugin, tmpdir):
 def test_task_nostate_cachelocations_updated(plugin, tmpdir):
     """
     Two identical tasks with provided cache_dir;
-    the second task has cache_locations in init that is later overwritten in run;
-    the cache_locations from run doesn't exist so the second task should run again
+    the second task has cache_locations in init,
+     that is later overwritten in Submitter.__call__;
+    the cache_locations passed to call doesn't exist so the second task should run again
     """
     cache_dir = tmpdir.mkdir("test_task_nostate")
     cache_dir1 = tmpdir.mkdir("test_task_nostate1")
@@ -290,11 +320,12 @@ def test_task_nostate_cachelocations_updated(plugin, tmpdir):
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    # updating cache location to non-existing dir
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn2, cache_locations=cache_dir1)
+        sub(nn2, cache_locations=cache_dir1)
 
     # checking the results
     results2 = nn2.result()
@@ -318,7 +349,7 @@ def test_task_state_1(plugin):
     assert (nn.inputs.a == np.array([3, 5])).all()
 
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     # checking the results
     results = nn.result()
@@ -339,7 +370,7 @@ def test_task_state_1a(plugin):
     assert (nn.inputs.a == np.array([3, 5])).all()
 
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     # checking the results
     results = nn.result()
@@ -383,7 +414,7 @@ def test_task_state_2(plugin, splitter, state_splitter, state_rpn, expected):
     assert nn.state.splitter_rpn_final == state_rpn
 
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     # checking the results
     results = nn.result()
@@ -405,7 +436,7 @@ def test_task_state_comb_1(plugin):
     assert nn.state.splitter_rpn_final == []
 
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
     assert nn.state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
@@ -511,7 +542,7 @@ def test_task_state_comb_2(
     assert set(nn.state.right_combiner_all) == set(state_combiner_all)
 
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     # checking the results
     results = nn.result()
@@ -534,7 +565,7 @@ def test_task_state_cachedir(plugin, tmpdir):
     assert (nn.inputs.a == np.array([3, 5])).all()
 
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     # checking the results
     results = nn.result()
@@ -555,13 +586,13 @@ def test_task_state_cachelocations(plugin, tmpdir):
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir).split(splitter="a", a=[3, 5])
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     nn2 = fun_addtwo(
         name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir
     ).split(splitter="a", a=[3, 5])
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn2)
+        sub(nn2)
 
     # checking the results
     results2 = nn2.result()
@@ -580,8 +611,9 @@ def test_task_state_cachelocations(plugin, tmpdir):
 def test_task_state_cachelocations_updated(plugin, tmpdir):
     """
     Two identical tasks with states and cache_dir;
-    the second task has cache_locations in init that is later overwritten in run;
-    the cache_locations from run doesn't exist so the second task should run again
+    the second task has cache_locations in init,
+     that is later overwritten in Submitter.__call__;
+    the cache_locations from call doesn't exist so the second task should run again
     """
     cache_dir = tmpdir.mkdir("test_task_nostate")
     cache_dir1 = tmpdir.mkdir("test_task_nostate1")
@@ -589,13 +621,13 @@ def test_task_state_cachelocations_updated(plugin, tmpdir):
 
     nn = fun_addtwo(name="NA", cache_dir=cache_dir).split(splitter="a", a=[3, 5])
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn)
+        sub(nn)
 
     nn2 = fun_addtwo(name="NA", cache_dir=cache_dir2, cache_locations=cache_dir).split(
         splitter="a", a=[3, 5]
     )
     with Submitter(plugin=plugin) as sub:
-        sub.run(nn2, cache_locations=cache_dir1)
+        sub(nn2, cache_locations=cache_dir1)
 
     # checking the results
     results2 = nn2.result()

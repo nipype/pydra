@@ -194,7 +194,7 @@ class ShellCommandTask(TaskBase):
     def cmdline(self):
         return " ".join(self.command_args)
 
-    def _run_task(self):
+    def _run_task(self, ):
         self.output_ = None
         args = self.command_args
         if args:
@@ -266,6 +266,7 @@ class ContainerTask(ShellCommandTask):
         args = self.container_args + self.command_args
         if args:
             self.output_ = execute(args)
+
 
 
 class DockerTask(ContainerTask):

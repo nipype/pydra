@@ -1,6 +1,4 @@
 from copy import deepcopy
-import pdb
-
 
 from . import auxiliary as aux
 from .specs import BaseSpec
@@ -21,6 +19,8 @@ class State:
         }
         self.set_input_groups()
         self.set_splitter_final()
+        self.states_val = []
+        self.final_groups_mapping = {}
 
     @property
     def splitter(self):

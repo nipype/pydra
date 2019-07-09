@@ -7,6 +7,7 @@ __pycache__
 
 .ipynb_checkpoints
 *.ipynb
+.vscode/
 
 .coverage*
 !.coveragerc

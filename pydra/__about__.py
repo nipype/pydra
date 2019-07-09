@@ -15,7 +15,6 @@ CLASSIFIERS = [
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.6",
     "Programming Language :: Python :: 3.7",
     "Topic :: Scientific/Engineering",
 ]
@@ -36,7 +35,6 @@ first-class operations. It forms the core of the Nipype 2.0 ecosystem.
 # versions
 NETWORKX_MIN_VERSION = "1.9"
 PYTEST_MIN_VERSION = "4.4.0"
-
 __packagename__ = "pydra"
 __author__ = __maintainer__ = "nipype developers"
 __email__ = "neuroimaging@python.org"
@@ -51,8 +49,10 @@ DOWNLOAD_URL = "http://github.com/nipype/{name}/archives/{ver}.tar.gz".format(
 )
 PLATFORMS = "OS Independent"
 MAJOR = __version__.split(".")[0]
-MINOR = __version__.split(".")[1]
-MICRO = __version__.replace("-", ".").split(".")[2]
+if len(__version__.split(".")) > 1:
+    MINOR = __version__.split(".")[1]
+if len(__version__.split(".")) > 2:
+    MICRO = __version__.replace("-", ".").split(".")[2]
 ISRELEASE = (
     len(__version__.replace("-", ".").split(".")) == 3
     or "post" in __version__.replace("-", ".").split(".")[-1]
