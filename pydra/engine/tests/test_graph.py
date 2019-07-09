@@ -22,7 +22,7 @@ def test_no_edges():
     assert [nd.name for nd in graph.nodes] == ["a", "b"]
     assert [(edg[0].name, edg[1].name) for edg in graph.edges] == []
     # checking names
-    assert graph.nodes_names == ["a", "b"]
+    assert set(graph.nodes_names_map.keys()) == {"a", "b"}
     assert graph.edges_names == []
 
 
@@ -33,7 +33,7 @@ def test_edges_1():
     assert [nd.name for nd in graph.nodes] == ["a", "b"]
     assert [(edg[0].name, edg[1].name) for edg in graph.edges] == [("a", "b")]
 
-    assert graph.nodes_names == ["a", "b"]
+    assert set(graph.nodes_names_map.keys()) == {"a", "b"}
     assert graph.edges_names == [("a", "b")]
 
 
@@ -43,21 +43,21 @@ def test_edges_1a():
     graph.add_nodes([A, B])
     graph.add_edges((A, B))
 
-    assert graph.nodes_names == ["a", "b"]
+    assert set(graph.nodes_names_map.keys()) == {"a", "b"}
     assert graph.edges_names == [("a", "b")]
 
 
 def test_edges_2():
     """a -> b"""
     graph = Graph(nodes=[B, A], edges=[(A, B)])
-    assert graph.nodes_names == ["b", "a"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a"}
     assert graph.edges_names == [("a", "b")]
 
 
 def test_edges_3():
     """a-> b -> c; a -> c; d"""
     graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
-    assert graph.nodes_names == ["b", "a", "c", "d"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
 
 
@@ -76,7 +76,7 @@ def test_edges_ecxeption_2():
 def test_sort_1():
     """a -> b"""
     graph = Graph(nodes=[A, B], edges=[(A, B)])
-    assert graph.nodes_names == ["a", "b"]
+    assert set(graph.nodes_names_map.keys()) == {"a", "b"}
     assert graph.edges_names == [("a", "b")]
 
     graph.sorting()
@@ -86,7 +86,7 @@ def test_sort_1():
 def test_sort_2():
     """a -> b"""
     graph = Graph(nodes=[B, A], edges=[(A, B)])
-    assert graph.nodes_names == ["b", "a"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a"}
     assert graph.edges_names == [("a", "b")]
 
     graph.sorting()
@@ -96,7 +96,7 @@ def test_sort_2():
 def test_sort_3():
     """a-> b -> c; a -> c; d"""
     graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
-    assert graph.nodes_names == ["b", "a", "c", "d"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
 
     graph.sorting()
@@ -106,7 +106,7 @@ def test_sort_3():
 def test_sort_4():
     """a-> b -> c; a -> c; a -> d"""
     graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C), (A, D)])
-    assert graph.nodes_names == ["b", "a", "c", "d"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c"), ("a", "d")]
 
     graph.sorting()
@@ -116,7 +116,7 @@ def test_sort_4():
 def test_sort_5():
     """a-> b -> c; a -> c; d -> c"""
     graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C), (D, C)])
-    assert graph.nodes_names == ["b", "a", "c", "d"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c"), ("d", "c")]
 
     graph.sorting()
@@ -128,7 +128,7 @@ def test_sort_5a():
     graph = Graph(nodes=[A, C, D], edges=[(A, C), (D, C)])
     graph.add_nodes(B)
     graph.add_edges([(A, B), (B, C)])
-    assert graph.nodes_names == ["a", "c", "d", "b"]
+    assert set(graph.nodes_names_map.keys()) == {"a", "c", "d", "b"}
     assert graph.edges_names == [("a", "c"), ("d", "c"), ("a", "b"), ("b", "c")]
 
     graph.sorting()
@@ -138,19 +138,19 @@ def test_sort_5a():
 def test_sort_5b():
     """a-> b -> c; a -> c; d -> c (add_nodes/edges)"""
     graph = Graph(nodes=[A, C, D], edges=[(A, C), (D, C)])
-    assert graph.nodes_names == ["a", "c", "d"]
+    assert set(graph.nodes_names_map.keys()) == {"a", "c", "d"}
     assert graph.edges_names == [("a", "c"), ("d", "c")]
 
     graph.sorting()
     assert graph.sorted_nodes_names == ["a", "d", "c"]
 
     graph.add_nodes(B)
-    assert graph.nodes_names == ["a", "c", "d", "b"]
+    assert set(graph.nodes_names_map.keys()) == {"a", "c", "d", "b"}
     assert graph.edges_names == [("a", "c"), ("d", "c")]
     assert graph.sorted_nodes_names == ["a", "d", "b", "c"]
 
     graph.add_edges([(A, B), (B, C)])
-    assert graph.nodes_names == ["a", "c", "d", "b"]
+    assert set(graph.nodes_names_map.keys()) == {"a", "c", "d", "b"}
     assert graph.edges_names == [("a", "c"), ("d", "c"), ("a", "b"), ("b", "c")]
     assert graph.sorted_nodes_names == ["a", "d", "b", "c"]
 
@@ -160,7 +160,7 @@ def test_sort_6():
     graph = Graph(
         nodes=[D, E, C, B, A], edges=[(A, B), (B, C), (A, C), (B, D), (C, E), (D, E)]
     )
-    assert graph.nodes_names == ["d", "e", "c", "b", "a"]
+    assert set(graph.nodes_names_map.keys()) == {"d", "e", "c", "b", "a"}
     assert graph.edges_names == [
         ("a", "b"),
         ("b", "c"),
@@ -177,7 +177,7 @@ def test_sort_6():
 def test_remove_1():
     """a -> b (removing a node)"""
     graph = Graph(nodes=[A, B], edges=[(A, B)])
-    assert graph.nodes_names == ["a", "b"]
+    assert set(graph.nodes_names_map.keys()) == {"a", "b"}
     assert graph.edges_names == [("a", "b")]
 
     graph.sorting()
@@ -185,7 +185,7 @@ def test_remove_1():
 
     # removing a node (e.g. after is sent to run)
     graph.remove_node(A)
-    assert graph.nodes_names == ["b"]
+    assert set(graph.nodes_names_map.keys()) == {"b"}
     assert graph.edges_names == []
     assert graph.sorted_nodes_names == ["b"]
 
@@ -193,14 +193,14 @@ def test_remove_1():
 def test_remove_2():
     """a-> b -> c; a -> c; d (removing a node)"""
     graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
-    assert graph.nodes_names == ["b", "a", "c", "d"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
 
     graph.sorting()
     assert graph.sorted_nodes_names == ["a", "d", "b", "c"]
 
     graph.remove_node(A)
-    assert graph.nodes_names == ["b", "c", "d"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "c", "d"}
     assert graph.edges_names == [("b", "c")]
     assert graph.sorted_nodes_names == ["d", "b", "c"]
 
@@ -208,14 +208,14 @@ def test_remove_2():
 def test_remove_3():
     """a-> b -> c; a -> c; d (removing a node)"""
     graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
-    assert graph.nodes_names == ["b", "a", "c", "d"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
 
     graph.sorting()
     assert graph.sorted_nodes_names == ["a", "d", "b", "c"]
 
     graph.remove_node(D)
-    assert graph.nodes_names == ["b", "a", "c"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
     assert graph.sorted_nodes_names == ["a", "b", "c"]
 
@@ -223,19 +223,19 @@ def test_remove_3():
 def test_remove_4():
     """ a-> b -> c; a -> d -> e (removing a node)"""
     graph = Graph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
-    assert graph.nodes_names == ["b", "a", "c", "d", "e"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d", "e"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "d"), ("d", "e")]
 
     graph.sorting()
     assert graph.sorted_nodes_names == ["a", "b", "d", "c", "e"]
 
     graph.remove_node(A)
-    assert graph.nodes_names == ["b", "c", "d", "e"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "c", "d", "e"}
     assert graph.edges_names == [("b", "c"), ("d", "e")]
     assert graph.sorted_nodes_names == ["b", "d", "c", "e"]
 
     graph.remove_node(D)
-    assert graph.nodes_names == ["b", "c", "e"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "c", "e"}
     assert graph.edges_names == [("b", "c")]
     assert graph.sorted_nodes_names == ["b", "e", "c"]
 
@@ -243,7 +243,7 @@ def test_remove_4():
 def test_remove_exception_1():
     """a -> b (removing a node)"""
     graph = Graph(nodes=[A, B], edges=[(A, B)])
-    assert graph.nodes_names == ["a", "b"]
+    assert set(graph.nodes_names_map.keys()) == {"a", "b"}
     assert graph.edges_names == [("a", "b")]
 
     graph.sorting()
@@ -257,7 +257,7 @@ def test_remove_exception_1():
 def test_remove_add_1():
     """a -> b (removing and adding nodes)"""
     graph = Graph(nodes=[A, B], edges=[(A, B)])
-    assert graph.nodes_names == ["a", "b"]
+    assert set(graph.nodes_names_map.keys()) == {"a", "b"}
     assert graph.edges_names == [("a", "b")]
 
     graph.sorting()
@@ -265,13 +265,13 @@ def test_remove_add_1():
 
     # removing a node (e.g. after is sent to run)
     graph.remove_node(A)
-    assert graph.nodes_names == ["b"]
+    assert set(graph.nodes_names_map.keys()) == {"b"}
     assert graph.edges_names == []
     assert graph.sorted_nodes_names == ["b"]
 
     graph.add_nodes(A)
     graph.add_edges((A, B))
-    assert graph.nodes_names == ["b", "a"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a"}
     assert graph.edges_names == [("a", "b")]
     assert graph.sorted_nodes_names == ["a", "b"]
 
@@ -279,20 +279,20 @@ def test_remove_add_1():
 def test_remove_add_2():
     """a-> b -> c; a -> c; d (removing and adding nodes)"""
     graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
-    assert graph.nodes_names == ["b", "a", "c", "d"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
 
     graph.sorting()
     assert graph.sorted_nodes_names == ["a", "d", "b", "c"]
 
     graph.remove_node(A)
-    assert graph.nodes_names == ["b", "c", "d"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "c", "d"}
     assert graph.edges_names == [("b", "c")]
     assert graph.sorted_nodes_names == ["d", "b", "c"]
 
     graph.add_nodes(A)
     graph.add_edges([(A, B), (A, C)])
-    assert graph.nodes_names == ["b", "c", "d", "a"]
+    assert set(graph.nodes_names_map.keys()) == {"b", "c", "d", "a"}
     assert graph.edges_names == [("b", "c"), ("a", "b"), ("a", "c")]
     assert graph.sorted_nodes_names == ["d", "a", "b", "c"]
 
