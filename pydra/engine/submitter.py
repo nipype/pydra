@@ -29,8 +29,9 @@ class Submitter:
     def __call__(self, runnable, cache_locations=None):
         if cache_locations is not None:
             runnable.cache_locations = cache_locations
-        if is_workflow(runnable):
-            self.submit_wf_async(runnable)
+        # Start event loop and run workflow/task
+        if is_workflow(runnable) and runnable.state is None:
+            self.loop.run_until_complete(runnable._run(self))
         else:
             self.loop.run_until_complete(self.submit(runnable, return_task=True))
 
@@ -133,7 +134,7 @@ class Submitter:
             runnable.results_dict[None] = (None, runnable.checksum)
             if is_workflow(runnable):
                 # this should only be reached through the job's `run()` method
-                runnable = await self._run_workflow(runnable)
+                await self._run_workflow(runnable)
             else:
                 # submit task to worker
                 futures.add(self.worker.run_el(runnable))
@@ -143,18 +144,9 @@ class Submitter:
             if futures:
                 # wait until all states complete or error
                 await asyncio.gather(*futures)
-            return runnable
         # otherwise pass along futures to be awaited independently
         else:
             return futures
-
-    def submit_wf_async(self, runnable):
-        """Start event loop and run workflow"""
-
-        if runnable.state:
-            self.loop.run_until_complete(self.submit(runnable, return_task=True))
-        else:
-            self.loop.run_until_complete(runnable._run(self))
 
     def close(self):
         self.loop.close()
