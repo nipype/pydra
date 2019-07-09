@@ -702,6 +702,111 @@ def test_wf_ndst_9(plugin):
     assert wf.output_dir == odir
 
 
+# workflow that have some single values as the input
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_st_singl_1(plugin):
+    """ workflow with two tasks, only one input is in the splitter and combiner"""
+    wf = Workflow(name="wf_st_5", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out))
+
+    wf.split("x", x=[1, 2], y=11)
+    wf.combine("x")
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results[0][0].output.out == 13
+    assert results[0][1].output.out == 24
+    # checking all directories
+    for _, odir in wf.output_dir.items():
+        assert odir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndst_singl_1(plugin):
+    """ workflow with two tasks, outer splitter and combiner on tasks level;
+        only one input is part of the splitter, the other is a single value
+    """
+    wf = Workflow(name="wf_ndst_5", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split("x"))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("mult.x"))
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = 11
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+    odir = wf.output_dir
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out[0] == [13, 24]
+    # checking the output directory
+    assert wf.output_dir.exists()
+    assert wf.output_dir == odir
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_st_singl_2(plugin):
+    """ workflow with three tasks, third one connected to two previous tasks,
+        splitter on the workflow level
+        only one input is part of the splitter, the other is a single value
+    """
+    wf = Workflow(name="wf_st_6", input_spec=["x", "y"])
+    wf.add(add2(name="add2x", x=wf.lzin.x))
+    wf.add(add2(name="add2y", x=wf.lzin.y))
+    wf.add(multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out))
+    wf.split("x", x=[1, 2, 3], y=11)
+
+    wf.set_output([("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert len(results) == 3
+    assert results[0].output.out == 39
+    assert results[1].output.out == 52
+    assert results[2].output.out == 65
+    # checking all directories
+    for _, odir in wf.output_dir.items():
+        assert odir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndst_singl_2(plugin):
+    """ workflow with three tasks, third one connected to two previous tasks,
+        splitter on the tasks levels
+        only one input is part of the splitter, the other is a single value
+    """
+    wf = Workflow(name="wf_ndst_6", input_spec=["x", "y"])
+    wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
+    wf.add(add2(name="add2y", x=wf.lzin.y))
+    wf.add(multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out))
+    wf.inputs.x = [1, 2, 3]
+    wf.inputs.y = 11
+    wf.set_output([("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+    odir = wf.output_dir
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert len(results.output.out) == 3
+    assert results.output.out == [39, 52, 65]
+    # checking the output directory
+    assert wf.output_dir.exists()
+    assert wf.output_dir == odir
+
+
 # workflows with structures wf(A)
 
 

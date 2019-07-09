@@ -333,9 +333,12 @@ class TaskBase:
             input_ind = self.state.inputs_ind[ind]
             inputs_dict = {}
             for inp in set(self.input_names):
-                inputs_dict[inp] = getattr(self.inputs, inp)[
-                    input_ind[f"{self.name}.{inp}"]
-                ]
+                if f"{self.name}.{inp}" in input_ind:
+                    inputs_dict[inp] = getattr(self.inputs, inp)[
+                        input_ind[f"{self.name}.{inp}"]
+                    ]
+                else:
+                    inputs_dict[inp] = getattr(self.inputs, inp)
             return state_dict, inputs_dict
         else:
             inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
