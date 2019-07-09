@@ -33,7 +33,6 @@ first-class operations. It forms the core of the Nipype 2.0 ecosystem.
 """
 
 # versions
-NETWORKX_MIN_VERSION = "1.9"
 PYTEST_MIN_VERSION = "4.4.0"
 __packagename__ = "pydra"
 __author__ = __maintainer__ = "nipype developers"
@@ -60,7 +59,6 @@ ISRELEASE = (
 VERSION = __version__
 PROVIDES = ["pydra"]
 REQUIRES = [
-    "networkx>=%s" % NETWORKX_MIN_VERSION,
     "pytest>=%s" % PYTEST_MIN_VERSION,
     'dataclasses; python_version < "3.7"',
     "cloudpickle",
