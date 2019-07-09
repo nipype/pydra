@@ -23,13 +23,12 @@ from .helpers import (
     create_checksum,
     print_help,
     load_result,
-    gather_runtime_info,
     save_result,
     ensure_list,
     record_error,
-    get_open_loop,
 )
-from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
+from .audit import Audit
+from ..utils.messenger import AuditFlag
 
 logger = logging.getLogger("pydra")
 
@@ -114,11 +113,16 @@ class TaskBase:
                 inputs = self._input_sets[inputs]
             self.inputs = dc.replace(self.inputs, **inputs)
             self.state_inputs = inputs
-        self.audit_flags = audit_flags
-        self.messengers = ensure_list(messengers)
-        self.messenger_args = messenger_args
+        self.audit = Audit(
+            AuditFlag=AuditFlag,
+            audit_flags=audit_flags,
+            messengers=messengers,
+            messenger_args=messenger_args,
+            develop=develop,
+        )
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
+        self._checksum = None
 
         # dictionary of results from tasks
         self.results_dict = {}
@@ -156,15 +160,17 @@ class TaskBase:
     def version(self):
         return self._version
 
-    # TODO: not sure what was the idea for the method (not used)
-    # def save_set(self, name, inputs, force=False):
-    #     if name in self._input_sets and not force:
-    #         raise KeyError("Key {} already saved. Use force=True to override.")
-    #     self._input_sets[name] = inputs
-
     @property
     def checksum(self):
-        return create_checksum(self.__class__.__name__, self.inputs)
+        """calculating checksum if self._checksum is None only
+            (avoiding recomputing during the execution)
+        """
+        if self._checksum is None:
+            if self.state is None:
+                self._checksum = create_checksum(self.__class__.__name__, self.inputs)
+            else:
+                return {sidx: res[1] for (sidx, res) in self.results_dict.items()}
+        return self._checksum
 
     def set_state(self, splitter, combiner=None):
         if splitter is not None:
@@ -178,28 +184,6 @@ class TaskBase:
     @property
     def output_names(self):
         return [f.name for f in dc.fields(make_klass(self.output_spec))]
-
-    def audit(self, message, flags=None):
-        if develop:
-            with open(
-                Path(os.path.dirname(__file__)) / ".." / "schema/context.jsonld", "rt"
-            ) as fp:
-                context = json.load(fp)
-        else:
-            context = {
-                "@context": "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld"
-            }
-        if self.audit_flags & flags:
-            if self.messenger_args:
-                send_message(
-                    make_message(message, context=context),
-                    messengers=self.messengers,
-                    **self.messenger_args,
-                )
-            else:
-                send_message(
-                    make_message(message, context=context), messengers=self.messengers
-                )
 
     @property
     def can_resume(self):
@@ -237,15 +221,28 @@ class TaskBase:
 
     @property
     def output_dir(self):
-        return self._cache_dir / self.checksum
+        if self.state:
+            return {
+                sidx: self._cache_dir / checksum
+                for (sidx, checksum) in self.checksum.items()
+            }
+        else:
+            return self._cache_dir / self.checksum
 
-    def audit_check(self, flag):
-        return self.audit_flags & flag
+    def __call__(self, submitter=None, plugin=None, **kwargs):
+        if submitter and plugin:
+            raise Exception("you can specify submitter OR plugin, not both")
+        elif submitter:
+            submitter(self)
+        elif plugin:
+            from .submitter import Submitter
 
-    def __call__(self, **kwargs):
-        return self.run(**kwargs)
+            with Submitter(plugin=plugin) as sub:
+                sub(self)
+        else:
+            return self._run(**kwargs)
 
-    def run(self, **kwargs):
+    def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
@@ -272,37 +269,10 @@ class TaskBase:
                 shutil.rmtree(odir)
             cwd = os.getcwd()
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-            # start recording provenance, but don't send till directory is created
-            # in case message directory is inside task output directory
-            if self.audit_check(AuditFlag.PROV):
-                aid = "uid:{}".format(gen_uuid())
-                start_message = {"@id": aid, "@type": "task", "startedAtTime": now()}
-            os.chdir(odir)
-            if self.audit_check(AuditFlag.PROV):
-                self.audit(start_message, AuditFlag.PROV)
-                # audit inputs
-            # check_runtime(self._runtime_requirements)
-            # isolate inputs if files
-            # cwd = os.getcwd()
-            if self.audit_check(AuditFlag.RESOURCE):
-                from ..utils.profiler import ResourceMonitor
-
-                resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
+            self.audit.start_audit(odir)
             result = Result(output=None, runtime=None, errored=False)
             try:
-                if self.audit_check(AuditFlag.RESOURCE):
-                    resource_monitor.start()
-                    if self.audit_check(AuditFlag.PROV):
-                        mid = "uid:{}".format(gen_uuid())
-                        self.audit(
-                            {
-                                "@id": mid,
-                                "@type": "monitor",
-                                "startedAtTime": now(),
-                                "wasStartedBy": aid,
-                            },
-                            AuditFlag.PROV,
-                        )
+                self.audit.monitor()
                 self._run_task()
                 result.output = self._collect_outputs()
             except Exception as e:
@@ -310,43 +280,11 @@ class TaskBase:
                 result.errored = True
                 raise
             finally:
-                if self.audit_check(AuditFlag.RESOURCE):
-                    resource_monitor.stop()
-                    result.runtime = gather_runtime_info(resource_monitor.fname)
-                    if self.audit_check(AuditFlag.PROV):
-                        self.audit(
-                            {"@id": mid, "endedAtTime": now(), "wasEndedBy": aid},
-                            AuditFlag.PROV,
-                        )
-                        # audit resources/runtime information
-                        eid = "uid:{}".format(gen_uuid())
-                        entity = dc.asdict(result.runtime)
-                        entity.update(
-                            **{
-                                "@id": eid,
-                                "@type": "runtime",
-                                "prov:wasGeneratedBy": aid,
-                            }
-                        )
-                        self.audit(entity, AuditFlag.PROV)
-                        self.audit(
-                            {
-                                "@type": "prov:Generation",
-                                "entity_generated": eid,
-                                "hadActivity": mid,
-                            },
-                            AuditFlag.PROV,
-                        )
+                self.audit.finalize_audit(result)
                 save_result(odir, result)
                 with open(odir / "_node.pklz", "wb") as fp:
                     cp.dump(self, fp)
                 os.chdir(cwd)
-                if self.audit_check(AuditFlag.PROV):
-                    # audit outputs
-                    self.audit(
-                        {"@id": aid, "endedAtTime": now(), "errored": result.errored},
-                        AuditFlag.PROV,
-                    )
             return result
 
     # TODO: Decide if the following two functions should be separated
@@ -360,7 +298,6 @@ class TaskBase:
         output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
         return dc.replace(output, **dict(zip(self.output_names, run_output)))
 
-    # TODO: should change state!
     def split(self, splitter, **kwargs):
         if kwargs:
             self.inputs = dc.replace(self.inputs, **kwargs)
@@ -376,24 +313,17 @@ class TaskBase:
     def combine(self, combiner):
         if not self.state:
             self.split(splitter=None)
-        if not self.state:
+            # a task can have a combiner without a splitter
+            # if is connected to one with a splitter;
+            # self.fut_combiner will be used later as a combiner
             self.fut_combiner = combiner
             return self
-            # raise Exception("splitter has to be set first")
         elif self.state.combiner:
             raise Exception("combiner has been already set")
-        self.combiner = combiner
-        self.set_state(splitter=self.state.splitter, combiner=self.combiner)
-        return self
-
-    # TODO: was used in submitter (if not needed should be removed)
-    # def checking_input_el(self, ind):
-    #     """checking if all inputs are available (for specific state element)"""
-    #     try:
-    #         self.get_input_el(ind)
-    #         return True
-    #     except:  # TODO specify
-    #         return False
+        else:  # self.state and not self.state.combiner
+            self.combiner = combiner
+            self.set_state(splitter=self.state.splitter, combiner=self.combiner)
+            return self
 
     def get_input_el(self, ind):
         """collecting all inputs required to run the node (for specific state element)"""
@@ -416,6 +346,8 @@ class TaskBase:
         # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
         el = deepcopy(self)
         el.state = None
+        # dj might be needed
+        # el._checksum = None
         _, inputs_dict = self.get_input_el(ind)
         el.inputs = dc.replace(el.inputs, **inputs_dict)
         return el
@@ -539,10 +471,11 @@ class Workflow(TaskBase):
         return self.__getattribute__(name)
 
     @property
-    def done(self):
-        if super(Workflow, self).done:
-            return True
-        # TODO: not sure why this is needed
+    def done_all_tasks(self):
+        """ checking if all tasks from the graph are done;
+            (it doesn't mean that results of the wf are available,
+            this can be checked with self.done)
+        """
         for task in self.graph:
             if not task.done:
                 return False
@@ -591,10 +524,15 @@ class Workflow(TaskBase):
         self.inputs._graph = self.graph_sorted
         return self
 
-    async def run(self, submitter=None, **kwargs):
+    async def _run(self, submitter=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
+        # Eagerly retrieve cached
+        result = self.result()
+        if result is not None:
+            return result
+
         """
         Concurrent execution scenarios
 
@@ -607,48 +545,16 @@ class Workflow(TaskBase):
         """
         # TODO add signal handler for processes killed after lock acquisition
         with SoftFileLock(lockfile):
-            # Let only one equivalent process run
-            # Eagerly retrieve cached
-            result = self.result()
-            if result is not None:
-                return result
-
+            # # Let only one equivalent process run
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
             cwd = os.getcwd()
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-            # start recording provenance, but don't send till directory is created
-            # in case message directory is inside task output directory
-            if self.audit_check(AuditFlag.PROV):
-                aid = "uid:{}".format(gen_uuid())
-                start_message = {"@id": aid, "@type": "task", "startedAtTime": now()}
-            os.chdir(odir)
-            if self.audit_check(AuditFlag.PROV):
-                self.audit(start_message, AuditFlag.PROV)
-                # audit inputs
-            # check_runtime(self._runtime_requirements)
-            # isolate inputs if files
-            # cwd = os.getcwd()
-            if self.audit_check(AuditFlag.RESOURCE):
-                from ..utils.profiler import ResourceMonitor
-
-                resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
+            self.audit.start_audit(odir=odir)
             result = Result(output=None, runtime=None, errored=False)
             try:
-                if self.audit_check(AuditFlag.RESOURCE):
-                    resource_monitor.start()
-                    if self.audit_check(AuditFlag.PROV):
-                        mid = "uid:{}".format(gen_uuid())
-                        self.audit(
-                            {
-                                "@id": mid,
-                                "@type": "monitor",
-                                "startedAtTime": now(),
-                                "wasStartedBy": aid,
-                            },
-                            AuditFlag.PROV,
-                        )
+                self.audit.monitor()
                 await self._run_task(submitter)
                 result.output = self._collect_outputs()
             except Exception as e:
@@ -656,52 +562,18 @@ class Workflow(TaskBase):
                 result.errored = True
                 raise
             finally:
-                if self.audit_check(AuditFlag.RESOURCE):
-                    resource_monitor.stop()
-                    result.runtime = gather_runtime_info(resource_monitor.fname)
-                    if self.audit_check(AuditFlag.PROV):
-                        self.audit(
-                            {"@id": mid, "endedAtTime": now(), "wasEndedBy": aid},
-                            AuditFlag.PROV,
-                        )
-                        # audit resources/runtime information
-                        eid = "uid:{}".format(gen_uuid())
-                        entity = dc.asdict(result.runtime)
-                        entity.update(
-                            **{
-                                "@id": eid,
-                                "@type": "runtime",
-                                "prov:wasGeneratedBy": aid,
-                            }
-                        )
-                        self.audit(entity, AuditFlag.PROV)
-                        self.audit(
-                            {
-                                "@type": "prov:Generation",
-                                "entity_generated": eid,
-                                "hadActivity": mid,
-                            },
-                            AuditFlag.PROV,
-                        )
+                self.audit.finalize_audit(result=result)
                 save_result(odir, result)
                 with open(odir / "_node.pklz", "wb") as fp:
                     cp.dump(self, fp)
                 os.chdir(cwd)
-                if self.audit_check(AuditFlag.PROV):
-                    # audit outputs
-                    self.audit(
-                        {"@id": aid, "endedAtTime": now(), "errored": result.errored},
-                        AuditFlag.PROV,
-                    )
             return result
 
     async def _run_task(self, submitter):
         if not submitter:
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
-        nwf = await submitter.submit(self, return_task=True)
-        # TODO: check if this might be done differently
-        self.__dict__.update(nwf.__dict__)
+        await submitter.submit(self, return_task=True)
 
     def set_output(self, connections):
         self._connections = connections
@@ -716,14 +588,6 @@ class Workflow(TaskBase):
                 raise ValueError("all connections must be lazy")
             output.append(val.get_value(self))
         return output
-
-    def submit_async(self, submitter):
-        """Start event loop and run workflow"""
-
-        if self.state:
-            submitter.loop.run_until_complete(submitter.submit(self, return_task=True))
-        else:
-            submitter.loop.run_until_complete(self.run(submitter))
 
 
 # TODO: task has also call

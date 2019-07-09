@@ -29,8 +29,9 @@ class Submitter:
     def __call__(self, runnable, cache_locations=None):
         if cache_locations is not None:
             runnable.cache_locations = cache_locations
-        if is_workflow(runnable):
-            runnable.submit_async(self)
+        # Start event loop and run workflow/task
+        if is_workflow(runnable) and runnable.state is None:
+            self.loop.run_until_complete(runnable._run(self))
         else:
             self.loop.run_until_complete(self.submit(runnable, return_task=True))
 
@@ -57,7 +58,7 @@ class Submitter:
         remaining_tasks = wf.graph_sorted
         # keep track of local futures
         task_futures = set()
-        while not wf.done:
+        while not wf.done_all_tasks:
             remaining_tasks, tasks = await get_runnable_tasks(wf.graph, remaining_tasks)
             if not tasks and not task_futures:
                 raise Exception("Nothing queued or todo - something went wrong")
@@ -66,9 +67,11 @@ class Submitter:
                 logger.debug(f"Retrieving inputs for {task}")
                 # TODO: add state idx to retrieve values to reduce waiting
                 task.inputs.retrieve_values(wf)
+                # checksum has to be updated, so resetting
+                task._checksum = None
                 if is_workflow(task) and not task.state:
                     # ensure workflow is executed
-                    await task.run(self)
+                    await task._run(self)
                 else:
                     for fut in await self.submit(task):
                         task_futures.add(fut)
@@ -108,7 +111,6 @@ class Submitter:
         """
         # ensure worker is using same loop
         futures = set()
-
         if runnable.state:
             runnable.state.prepare_states(runnable.inputs)
             runnable.state.prepare_inputs()
@@ -123,28 +125,28 @@ class Submitter:
                     f'Submitting runnable {job}{str(sidx) if sidx is not None else ""}'
                 )
                 if is_workflow(runnable):
-                    futures.add(asyncio.create_task(job.run(self)))
+                    # job has no state anymore
+                    futures.add(asyncio.create_task(job._run(self)))
                 else:
                     # tasks are submitted to worker for execution
                     futures.add(self.worker.run_el(job))
         else:
-            job = runnable.to_job(None)
-            job.results_dict[None] = (None, job.checksum)
+            runnable.results_dict[None] = (None, runnable.checksum)
             if is_workflow(runnable):
                 # this should only be reached through the job's `run()` method
-                runnable = await self._run_workflow(job)
+                await self._run_workflow(runnable)
             else:
                 # submit task to worker
-                futures.add(self.worker.run_el(job))
+                futures.add(self.worker.run_el(runnable))
 
         if return_task:
             # run coroutines concurrently and wait for execution
             if futures:
                 # wait until all states complete or error
                 await asyncio.gather(*futures)
-            return runnable
         # otherwise pass along futures to be awaited independently
-        return futures
+        else:
+            return futures
 
     def close(self):
         self.loop.close()
