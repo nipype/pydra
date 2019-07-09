@@ -4,15 +4,13 @@ import dataclasses as dc
 import json
 import logging
 import os
-import pdb
 from pathlib import Path
 import typing as ty
 import pickle as pk
-from copy import deepcopy, copy
-from time import sleep
+from copy import deepcopy
 
 import cloudpickle as cp
-from filelock import FileLock
+from filelock import SoftFileLock
 import shutil
 from tempfile import mkdtemp
 
@@ -24,14 +22,13 @@ from .helpers import (
     create_checksum,
     print_help,
     load_result,
-    gather_runtime_info,
     save_result,
     ensure_list,
     record_error,
-    get_inputs,
 )
 from .graph import Graph
-from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
+from .audit import Audit
+from ..utils.messenger import AuditFlag
 
 logger = logging.getLogger("pydra")
 
@@ -116,15 +113,23 @@ class TaskBase:
                 inputs = self._input_sets[inputs]
             self.inputs = dc.replace(self.inputs, **inputs)
             self.state_inputs = inputs
-        self.audit_flags = audit_flags
-        self.messengers = ensure_list(messengers)
-        self.messenger_args = messenger_args
+        self.audit = Audit(
+            AuditFlag=AuditFlag,
+            audit_flags=audit_flags,
+            messengers=messengers,
+            messenger_args=messenger_args,
+            develop=develop,
+        )
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
+        self._checksum = None
 
         # dictionary of results from tasks
         self.results_dict = {}
         self.plugin = None
+
+    def __repr__(self):
+        return self.name
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -155,15 +160,17 @@ class TaskBase:
     def version(self):
         return self._version
 
-    # TODO: not sure what was the idea for the method (not used)
-    # def save_set(self, name, inputs, force=False):
-    #     if name in self._input_sets and not force:
-    #         raise KeyError("Key {} already saved. Use force=True to override.")
-    #     self._input_sets[name] = inputs
-
     @property
     def checksum(self):
-        return create_checksum(self.__class__.__name__, self.inputs)
+        """calculating checksum if self._checksum is None only
+            (avoiding recomputing during the execution)
+        """
+        if self._checksum is None:
+            if self.state is None:
+                self._checksum = create_checksum(self.__class__.__name__, self.inputs)
+            else:
+                return {sidx: res[1] for (sidx, res) in self.results_dict.items()}
+        return self._checksum
 
     def set_state(self, splitter, combiner=None):
         if splitter is not None:
@@ -177,28 +184,6 @@ class TaskBase:
     @property
     def output_names(self):
         return [f.name for f in dc.fields(make_klass(self.output_spec))]
-
-    def audit(self, message, flags=None):
-        if develop:
-            with open(
-                Path(os.path.dirname(__file__)) / ".." / "schema/context.jsonld", "rt"
-            ) as fp:
-                context = json.load(fp)
-        else:
-            context = {
-                "@context": "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld"
-            }
-        if self.audit_flags & flags:
-            if self.messenger_args:
-                send_message(
-                    make_message(message, context=context),
-                    messengers=self.messengers,
-                    **self.messenger_args,
-                )
-            else:
-                send_message(
-                    make_message(message, context=context), messengers=self.messengers
-                )
 
     @property
     def can_resume(self):
@@ -236,15 +221,28 @@ class TaskBase:
 
     @property
     def output_dir(self):
-        return self._cache_dir / self.checksum
+        if self.state:
+            return {
+                sidx: self._cache_dir / checksum
+                for (sidx, checksum) in self.checksum.items()
+            }
+        else:
+            return self._cache_dir / self.checksum
 
-    def audit_check(self, flag):
-        return self.audit_flags & flag
+    def __call__(self, submitter=None, plugin=None, **kwargs):
+        if submitter and plugin:
+            raise Exception("you can specify submitter OR plugin, not both")
+        elif submitter:
+            submitter(self)
+        elif plugin:
+            from .submitter import Submitter
 
-    def __call__(self, **kwargs):
-        return self.run(**kwargs)
+            with Submitter(plugin=plugin) as sub:
+                sub(self)
+        else:
+            return self._run(**kwargs)
 
-    def run(self, **kwargs):
+    def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
@@ -259,7 +257,7 @@ class TaskBase:
         4. two or more concurrent new processes get to start
         """
         # TODO add signal handler for processes killed after lock acquisition
-        with FileLock(lockfile):
+        with SoftFileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
             if self.results_dict:  # should be skipped if run called without submitter
@@ -271,37 +269,10 @@ class TaskBase:
                 shutil.rmtree(odir)
             cwd = os.getcwd()
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-            # start recording provenance, but don't send till directory is created
-            # in case message directory is inside task output directory
-            if self.audit_check(AuditFlag.PROV):
-                aid = "uid:{}".format(gen_uuid())
-                start_message = {"@id": aid, "@type": "task", "startedAtTime": now()}
-            os.chdir(odir)
-            if self.audit_check(AuditFlag.PROV):
-                self.audit(start_message, AuditFlag.PROV)
-                # audit inputs
-            # check_runtime(self._runtime_requirements)
-            # isolate inputs if files
-            # cwd = os.getcwd()
-            if self.audit_check(AuditFlag.RESOURCE):
-                from ..utils.profiler import ResourceMonitor
-
-                resource_monitor = ResourceMonitor(os.getpid(), logdir=odir)
+            self.audit.start_audit(odir)
             result = Result(output=None, runtime=None, errored=False)
             try:
-                if self.audit_check(AuditFlag.RESOURCE):
-                    resource_monitor.start()
-                    if self.audit_check(AuditFlag.PROV):
-                        mid = "uid:{}".format(gen_uuid())
-                        self.audit(
-                            {
-                                "@id": mid,
-                                "@type": "monitor",
-                                "startedAtTime": now(),
-                                "wasStartedBy": aid,
-                            },
-                            AuditFlag.PROV,
-                        )
+                self.audit.monitor()
                 self._run_task()
                 result.output = self._collect_outputs()
             except Exception as e:
@@ -309,43 +280,11 @@ class TaskBase:
                 result.errored = True
                 raise
             finally:
-                if self.audit_check(AuditFlag.RESOURCE):
-                    resource_monitor.stop()
-                    result.runtime = gather_runtime_info(resource_monitor.fname)
-                    if self.audit_check(AuditFlag.PROV):
-                        self.audit(
-                            {"@id": mid, "endedAtTime": now(), "wasEndedBy": aid},
-                            AuditFlag.PROV,
-                        )
-                        # audit resources/runtime information
-                        eid = "uid:{}".format(gen_uuid())
-                        entity = dc.asdict(result.runtime)
-                        entity.update(
-                            **{
-                                "@id": eid,
-                                "@type": "runtime",
-                                "prov:wasGeneratedBy": aid,
-                            }
-                        )
-                        self.audit(entity, AuditFlag.PROV)
-                        self.audit(
-                            {
-                                "@type": "prov:Generation",
-                                "entity_generated": eid,
-                                "hadActivity": mid,
-                            },
-                            AuditFlag.PROV,
-                        )
+                self.audit.finalize_audit(result)
                 save_result(odir, result)
                 with open(odir / "_node.pklz", "wb") as fp:
                     cp.dump(self, fp)
                 os.chdir(cwd)
-                if self.audit_check(AuditFlag.PROV):
-                    # audit outputs
-                    self.audit(
-                        {"@id": aid, "endedAtTime": now(), "errored": result.errored},
-                        AuditFlag.PROV,
-                    )
             return result
 
     # TODO: Decide if the following two functions should be separated
@@ -359,7 +298,6 @@ class TaskBase:
         output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
         return dc.replace(output, **dict(zip(self.output_names, run_output)))
 
-    # TODO: should change state!
     def split(self, splitter, **kwargs):
         if kwargs:
             self.inputs = dc.replace(self.inputs, **kwargs)
@@ -375,24 +313,17 @@ class TaskBase:
     def combine(self, combiner):
         if not self.state:
             self.split(splitter=None)
-        if not self.state:
+            # a task can have a combiner without a splitter
+            # if is connected to one with a splitter;
+            # self.fut_combiner will be used later as a combiner
             self.fut_combiner = combiner
             return self
-            # raise Exception("splitter has to be set first")
         elif self.state.combiner:
             raise Exception("combiner has been already set")
-        self.combiner = combiner
-        self.set_state(splitter=self.state.splitter, combiner=self.combiner)
-        return self
-
-    # TODO: was used in submitter (if not needed should be removed)
-    # def checking_input_el(self, ind):
-    #     """checking if all inputs are available (for specific state element)"""
-    #     try:
-    #         self.get_input_el(ind)
-    #         return True
-    #     except:  # TODO specify
-    #         return False
+        else:  # self.state and not self.state.combiner
+            self.combiner = combiner
+            self.set_state(splitter=self.state.splitter, combiner=self.combiner)
+            return self
 
     def get_input_el(self, ind):
         """collecting all inputs required to run the node (for specific state element)"""
@@ -402,9 +333,12 @@ class TaskBase:
             input_ind = self.state.inputs_ind[ind]
             inputs_dict = {}
             for inp in set(self.input_names):
-                inputs_dict[inp] = getattr(self.inputs, inp)[
-                    input_ind[f"{self.name}.{inp}"]
-                ]
+                if f"{self.name}.{inp}" in input_ind:
+                    inputs_dict[inp] = getattr(self.inputs, inp)[
+                        input_ind[f"{self.name}.{inp}"]
+                    ]
+                else:
+                    inputs_dict[inp] = getattr(self.inputs, inp)
             return state_dict, inputs_dict
         else:
             inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
@@ -415,6 +349,8 @@ class TaskBase:
         # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
         el = deepcopy(self)
         el.state = None
+        # dj might be needed
+        # el._checksum = None
         _, inputs_dict = self.get_input_el(ind)
         el.inputs = dc.replace(el.inputs, **inputs_dict)
         return el
@@ -422,8 +358,14 @@ class TaskBase:
     # checking if all outputs are saved
     @property
     def done(self):
-        if self.results_dict:
-            return all([future.done() for _, (future, _) in self.results_dict.items()])
+        if self.state:
+            # TODO: only check for needed state result
+            if self.result() and all(self.result()):
+                return True
+        else:
+            if self.result():
+                return True
+        return False
 
     def _combined_output(self):
         combined_results = []
@@ -431,6 +373,8 @@ class TaskBase:
             combined_results.append([])
             for ind in ind_l:
                 result = load_result(self.results_dict[ind][1], self.cache_locations)
+                if result is None:
+                    return None
                 combined_results[gr].append(result)
         return combined_results
 
@@ -452,6 +396,8 @@ class TaskBase:
                         result = load_result(
                             self.results_dict[ii][1], self.cache_locations
                         )
+                        if result is None:
+                            return None
                         results.append(result)
                     return results
             else:  # state_index is not None
@@ -528,8 +474,19 @@ class Workflow(TaskBase):
         return self.__getattribute__(name)
 
     @property
+    def done_all_tasks(self):
+        """ checking if all tasks from the graph are done;
+            (it doesn't mean that results of the wf are available,
+            this can be checked with self.done)
+        """
+        for task in self.graph:
+            if not task.done:
+                return False
+        return True
+
+    @property
     def nodes(self):
-        return self._nodes
+        return self.name2obj.values()
 
     @property
     def graph_sorted(self):
@@ -548,6 +505,7 @@ class Workflow(TaskBase):
                 # adding an edge to the graph if task id expecting output from a different task
                 if val.name != self.name:
                     self.graph.add_edges((getattr(self, val.name), task))
+                    logger.debug("Connecting %s to %s", val.name, task.name)
                 if val.name in self.node_names and getattr(self, val.name).state:
                     # adding a state from the previous task to other_states
                     other_states[val.name] = (getattr(self, val.name).state, field.name)
@@ -560,31 +518,66 @@ class Workflow(TaskBase):
             else:
                 task.state = state.State(task.name, other_states=other_states)
         self.node_names.append(task.name)
+        logger.debug(f"Added {task}")
         self.inputs._graph = self.graph_sorted
         return self
 
-    def _run_task(self):
-        for task in self.graph_sorted:
-            # depend on prior tasks that have state
-            task.inputs.retrieve_values(self)
-            if task.state and not hasattr(task.state, "states_ind"):
-                task.state.prepare_states(inputs=task.inputs)
-            if task.state and not hasattr(task.state, "inputs_ind"):
-                task.state.prepare_inputs()
-            if self.plugin is None:
-                task.run()
-            else:
-                from .submitter import Submitter
+    async def _run(self, submitter=None, **kwargs):
+        self.inputs = dc.replace(self.inputs, **kwargs)
+        checksum = self.checksum
+        lockfile = self.cache_dir / (checksum + ".lock")
+        # Eagerly retrieve cached
+        result = self.result()
+        if result is not None:
+            return result
 
-                with Submitter(self.plugin) as sub:
-                    sub.run(task)
-                while not task.done:
-                    sleep(1)
+        """
+        Concurrent execution scenarios
+
+        1. prior cache exists -> return result
+        2. other process running -> wait
+           a. finishes (with or without exception) -> return result
+           b. gets killed -> restart
+        3. no cache or other process -> start
+        4. two or more concurrent new processes get to start
+        """
+        # TODO add signal handler for processes killed after lock acquisition
+        with SoftFileLock(lockfile):
+            # # Let only one equivalent process run
+            odir = self.output_dir
+            if not self.can_resume and odir.exists():
+                shutil.rmtree(odir)
+            cwd = os.getcwd()
+            odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
+            self.audit.start_audit(odir=odir)
+            result = Result(output=None, runtime=None, errored=False)
+            try:
+                self.audit.monitor()
+                await self._run_task(submitter)
+                result.output = self._collect_outputs()
+            except Exception as e:
+                record_error(self.output_dir, e)
+                result.errored = True
+                raise
+            finally:
+                self.audit.finalize_audit(result=result)
+                save_result(odir, result)
+                with open(odir / "_node.pklz", "wb") as fp:
+                    cp.dump(self, fp)
+                os.chdir(cwd)
+            return result
+
+    async def _run_task(self, submitter):
+        if not submitter:
+            raise Exception("Submitter should already be set.")
+        # at this point Workflow is stateless so this should be fine
+        await submitter.submit(self, return_task=True)
 
     def set_output(self, connections):
         self._connections = connections
         fields = [(name, ty.Any) for name, _ in connections]
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
+        logger.info("Added %s to %s", self.output_spec, self)
 
     def _list_outputs(self):
         output = []
@@ -606,3 +599,12 @@ def is_task(obj):
 
 def is_workflow(obj):
     return isinstance(obj, Workflow)
+
+
+def is_runnable(graph, obj):
+    """Check if a task within a graph is runnable"""
+    if graph.predecessors(obj):
+        for pred in graph.predecessors(obj):
+            if not pred.done:
+                return False
+    return True
