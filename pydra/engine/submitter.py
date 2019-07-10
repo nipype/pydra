@@ -163,7 +163,7 @@ def get_runnable_tasks(graph):
     for tsk in graph.sorted_nodes:
         # since the list is sorted (breadth-first) we can stop
         # when we find a task that depends on any task that is already in tasks
-        if set(graph.connections_pred[tsk.name]).intersection(set(tasks)):
+        if set(graph.predecessors[tsk.name]).intersection(set(tasks)):
             break
         if is_runnable(graph, tsk):
             tasks.append(tsk)
@@ -177,7 +177,7 @@ def get_runnable_tasks(graph):
 def is_runnable(graph, obj):
     """Check if a task within a graph is runnable"""
     connections_to_remove = []
-    for pred in graph.connections_pred[obj.name]:
+    for pred in graph.predecessors[obj.name]:
         is_done = pred.done
         if not is_done:
             return False

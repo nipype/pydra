@@ -1,4 +1,4 @@
-from ..graph import Graph
+from ..graph import DiGraph
 import pytest
 
 
@@ -16,7 +16,7 @@ E = ObjTest("e")
 
 def test_no_edges():
     """a, b"""
-    graph = Graph(nodes=[A, B])
+    graph = DiGraph(nodes=[A, B])
 
     # checking nodes and edges
     assert [nd.name for nd in graph.nodes] == ["a", "b"]
@@ -28,7 +28,7 @@ def test_no_edges():
 
 def test_edges_1():
     """a -> b"""
-    graph = Graph(nodes=[A, B], edges=[(A, B)])
+    graph = DiGraph(nodes=[A, B], edges=[(A, B)])
 
     assert [nd.name for nd in graph.nodes] == ["a", "b"]
     assert [(edg[0].name, edg[1].name) for edg in graph.edges] == [("a", "b")]
@@ -39,7 +39,7 @@ def test_edges_1():
 
 def test_edges_1a():
     """a -> b (add_nodes and add_edges)"""
-    graph = Graph()
+    graph = DiGraph()
     graph.add_nodes([A, B])
     graph.add_edges((A, B))
 
@@ -49,33 +49,33 @@ def test_edges_1a():
 
 def test_edges_2():
     """a -> b"""
-    graph = Graph(nodes=[B, A], edges=[(A, B)])
+    graph = DiGraph(nodes=[B, A], edges=[(A, B)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a"}
     assert graph.edges_names == [("a", "b")]
 
 
 def test_edges_3():
     """a-> b -> c; a -> c; d"""
-    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
 
 
 def test_edges_ecxeption_1():
     with pytest.raises(Exception) as excinfo:
-        graph = Graph(nodes=[A, B, A], edges=[(A, B)])
+        graph = DiGraph(nodes=[A, B, A], edges=[(A, B)])
     assert "repeated elements" in str(excinfo.value)
 
 
 def test_edges_ecxeption_2():
     with pytest.raises(Exception) as excinfo:
-        graph = Graph(nodes=[A, B], edges=[(A, C)])
+        graph = DiGraph(nodes=[A, B], edges=[(A, C)])
     assert "can't be added" in str(excinfo.value)
 
 
 def test_sort_1():
     """a -> b"""
-    graph = Graph(nodes=[A, B], edges=[(A, B)])
+    graph = DiGraph(nodes=[A, B], edges=[(A, B)])
     assert set(graph.nodes_names_map.keys()) == {"a", "b"}
     assert graph.edges_names == [("a", "b")]
 
@@ -85,7 +85,7 @@ def test_sort_1():
 
 def test_sort_2():
     """a -> b"""
-    graph = Graph(nodes=[B, A], edges=[(A, B)])
+    graph = DiGraph(nodes=[B, A], edges=[(A, B)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a"}
     assert graph.edges_names == [("a", "b")]
 
@@ -95,7 +95,7 @@ def test_sort_2():
 
 def test_sort_3():
     """a-> b -> c; a -> c; d"""
-    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
 
@@ -105,7 +105,7 @@ def test_sort_3():
 
 def test_sort_4():
     """a-> b -> c; a -> c; a -> d"""
-    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C), (A, D)])
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C), (A, D)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c"), ("a", "d")]
 
@@ -115,7 +115,7 @@ def test_sort_4():
 
 def test_sort_5():
     """a-> b -> c; a -> c; d -> c"""
-    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C), (D, C)])
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C), (D, C)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c"), ("d", "c")]
 
@@ -125,7 +125,7 @@ def test_sort_5():
 
 def test_sort_5a():
     """a-> b -> c; a -> c; d -> c (add_nodes/edges)"""
-    graph = Graph(nodes=[A, C, D], edges=[(A, C), (D, C)])
+    graph = DiGraph(nodes=[A, C, D], edges=[(A, C), (D, C)])
     graph.add_nodes(B)
     graph.add_edges([(A, B), (B, C)])
     assert set(graph.nodes_names_map.keys()) == {"a", "c", "d", "b"}
@@ -137,7 +137,7 @@ def test_sort_5a():
 
 def test_sort_5b():
     """a-> b -> c; a -> c; d -> c (add_nodes/edges)"""
-    graph = Graph(nodes=[A, C, D], edges=[(A, C), (D, C)])
+    graph = DiGraph(nodes=[A, C, D], edges=[(A, C), (D, C)])
     assert set(graph.nodes_names_map.keys()) == {"a", "c", "d"}
     assert graph.edges_names == [("a", "c"), ("d", "c")]
 
@@ -157,7 +157,7 @@ def test_sort_5b():
 
 def test_sort_6():
     """a -> b -> c -> e; a -> c -> e; a -> b -> d -> e"""
-    graph = Graph(
+    graph = DiGraph(
         nodes=[D, E, C, B, A], edges=[(A, B), (B, C), (A, C), (B, D), (C, E), (D, E)]
     )
     assert set(graph.nodes_names_map.keys()) == {"d", "e", "c", "b", "a"}
@@ -176,7 +176,7 @@ def test_sort_6():
 
 def test_remove_1():
     """a -> b (removing a node)"""
-    graph = Graph(nodes=[A, B], edges=[(A, B)])
+    graph = DiGraph(nodes=[A, B], edges=[(A, B)])
     assert set(graph.nodes_names_map.keys()) == {"a", "b"}
     assert graph.edges_names == [("a", "b")]
 
@@ -198,7 +198,7 @@ def test_remove_1():
 
 def test_remove_2():
     """a-> b -> c; a -> c; d (removing a node)"""
-    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
 
@@ -218,7 +218,7 @@ def test_remove_2():
 
 def test_remove_3():
     """a-> b -> c; a -> c; d (removing a node)"""
-    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
 
@@ -234,7 +234,7 @@ def test_remove_3():
 
 def test_remove_4():
     """ a-> b -> c; a -> d -> e (removing A and later D)"""
-    graph = Graph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
+    graph = DiGraph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d", "e"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "d"), ("d", "e")]
 
@@ -256,7 +256,7 @@ def test_remove_4():
 
 def test_remove_5():
     """ a-> b -> c; a -> d -> e (removing A, and [B, D] at the same time)"""
-    graph = Graph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
+    graph = DiGraph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d", "e"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "d"), ("d", "e")]
 
@@ -278,7 +278,7 @@ def test_remove_5():
 
 def test_remove_exception_1():
     """a -> b (removing a node)"""
-    graph = Graph(nodes=[A, B], edges=[(A, B)])
+    graph = DiGraph(nodes=[A, B], edges=[(A, B)])
     assert set(graph.nodes_names_map.keys()) == {"a", "b"}
     assert graph.edges_names == [("a", "b")]
 
@@ -292,7 +292,7 @@ def test_remove_exception_1():
 
 def test_remove_add_1():
     """a -> b (removing and adding nodes)"""
-    graph = Graph(nodes=[A, B], edges=[(A, B)])
+    graph = DiGraph(nodes=[A, B], edges=[(A, B)])
     assert set(graph.nodes_names_map.keys()) == {"a", "b"}
     assert graph.edges_names == [("a", "b")]
 
@@ -315,7 +315,7 @@ def test_remove_add_1():
 
 def test_remove_add_2():
     """a-> b -> c; a -> c; d (removing and adding nodes)"""
-    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
 
@@ -337,7 +337,7 @@ def test_remove_add_2():
 
 def test_maxpath_1():
     """a -> b"""
-    graph = Graph(nodes=[B, A], edges=[(A, B)])
+    graph = DiGraph(nodes=[B, A], edges=[(A, B)])
     graph.calculate_max_paths()
     assert list(graph.max_paths.keys()) == ["a"]
     assert graph.max_paths["a"] == {"b": 1}
@@ -345,7 +345,7 @@ def test_maxpath_1():
 
 def test_maxpath_2():
     """a -> b -> c"""
-    graph = Graph(nodes=[B, A, C], edges=[(A, B), (B, C)])
+    graph = DiGraph(nodes=[B, A, C], edges=[(A, B), (B, C)])
     graph.calculate_max_paths()
     assert list(graph.max_paths.keys()) == ["a"]
     assert graph.max_paths["a"] == {"b": 1, "c": 2}
@@ -353,7 +353,7 @@ def test_maxpath_2():
 
 def test_maxpath_3():
     """a -> b -> c; d"""
-    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C)])
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C)])
     graph.calculate_max_paths()
     assert list(graph.max_paths.keys()) == ["a", "d"]
     assert graph.max_paths["a"] == {"b": 1, "c": 2}
@@ -362,7 +362,7 @@ def test_maxpath_3():
 
 def test_maxpath_4():
     """a-> b -> c; a -> c; d"""
-    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
     graph.calculate_max_paths()
     assert list(graph.max_paths.keys()) == ["a", "d"]
     assert graph.max_paths["a"] == {"b": 1, "c": 2}
@@ -371,7 +371,7 @@ def test_maxpath_4():
 
 def test_maxpath_5():
     """a-> b -> c; a -> c; d -> b"""
-    graph = Graph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C), (D, B)])
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C), (D, B)])
     graph.calculate_max_paths()
     assert list(graph.max_paths.keys()) == ["a", "d"]
     assert graph.max_paths["a"] == {"b": 1, "c": 2}

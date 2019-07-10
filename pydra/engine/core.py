@@ -26,7 +26,7 @@ from .helpers import (
     ensure_list,
     record_error,
 )
-from .graph import Graph
+from .graph import DiGraph
 from .audit import Audit
 from ..utils.messenger import AuditFlag
 
@@ -457,7 +457,7 @@ class Workflow(TaskBase):
             messenger_args=messenger_args,
         )
 
-        self.graph = Graph()
+        self.graph = DiGraph()
         self.name2obj = {}
 
         # store output connections
