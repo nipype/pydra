@@ -184,7 +184,13 @@ def test_remove_1():
     assert graph.sorted_nodes_names == ["a", "b"]
 
     # removing a node (e.g. after is sent to run)
-    graph.remove_node(A)
+    graph.remove_nodes(A)
+    assert set(graph.nodes_names_map.keys()) == {"b"}
+    assert graph.edges_names == [("a", "b")]
+    assert graph.sorted_nodes_names == ["b"]
+
+    # removing all connections (e.g. after the task is done)
+    graph.remove_nodes_connections(A)
     assert set(graph.nodes_names_map.keys()) == {"b"}
     assert graph.edges_names == []
     assert graph.sorted_nodes_names == ["b"]
@@ -199,7 +205,12 @@ def test_remove_2():
     graph.sorting()
     assert graph.sorted_nodes_names == ["a", "d", "b", "c"]
 
-    graph.remove_node(A)
+    graph.remove_nodes(A)
+    assert set(graph.nodes_names_map.keys()) == {"b", "c", "d"}
+    assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
+    assert graph.sorted_nodes_names == ["d", "b", "c"]
+
+    graph.remove_nodes_connections(A)
     assert set(graph.nodes_names_map.keys()) == {"b", "c", "d"}
     assert graph.edges_names == [("b", "c")]
     assert graph.sorted_nodes_names == ["d", "b", "c"]
@@ -214,14 +225,15 @@ def test_remove_3():
     graph.sorting()
     assert graph.sorted_nodes_names == ["a", "d", "b", "c"]
 
-    graph.remove_node(D)
+    graph.remove_nodes(D)
+    graph.remove_nodes_connections(D)
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
     assert graph.sorted_nodes_names == ["a", "b", "c"]
 
 
 def test_remove_4():
-    """ a-> b -> c; a -> d -> e (removing a node)"""
+    """ a-> b -> c; a -> d -> e (removing A and later D)"""
     graph = Graph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d", "e"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "d"), ("d", "e")]
@@ -229,15 +241,39 @@ def test_remove_4():
     graph.sorting()
     assert graph.sorted_nodes_names == ["a", "b", "d", "c", "e"]
 
-    graph.remove_node(A)
+    graph.remove_nodes(A)
+    graph.remove_nodes_connections(A)
     assert set(graph.nodes_names_map.keys()) == {"b", "c", "d", "e"}
     assert graph.edges_names == [("b", "c"), ("d", "e")]
     assert graph.sorted_nodes_names == ["b", "d", "c", "e"]
 
-    graph.remove_node(D)
+    graph.remove_nodes(D)
+    graph.remove_nodes_connections(D)
     assert set(graph.nodes_names_map.keys()) == {"b", "c", "e"}
     assert graph.edges_names == [("b", "c")]
     assert graph.sorted_nodes_names == ["b", "e", "c"]
+
+
+def test_remove_5():
+    """ a-> b -> c; a -> d -> e (removing A, and [B, D] at the same time)"""
+    graph = Graph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d", "e"}
+    assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "d"), ("d", "e")]
+
+    graph.sorting()
+    assert graph.sorted_nodes_names == ["a", "b", "d", "c", "e"]
+
+    graph.remove_nodes(A)
+    graph.remove_nodes_connections(A)
+    assert set(graph.nodes_names_map.keys()) == {"b", "c", "d", "e"}
+    assert graph.edges_names == [("b", "c"), ("d", "e")]
+    assert graph.sorted_nodes_names == ["b", "d", "c", "e"]
+
+    graph.remove_nodes([B, D])
+    graph.remove_nodes_connections([B, D])
+    assert set(graph.nodes_names_map.keys()) == {"c", "e"}
+    assert graph.edges_names == []
+    assert graph.sorted_nodes_names == ["c", "e"]
 
 
 def test_remove_exception_1():
@@ -250,7 +286,7 @@ def test_remove_exception_1():
     assert graph.sorted_nodes_names == ["a", "b"]
 
     with pytest.raises(Exception) as excinfo:
-        graph.remove_node(B)
+        graph.remove_nodes(B)
     assert "has to wait" in str(excinfo.value)
 
 
@@ -264,7 +300,8 @@ def test_remove_add_1():
     assert graph.sorted_nodes_names == ["a", "b"]
 
     # removing a node (e.g. after is sent to run)
-    graph.remove_node(A)
+    graph.remove_nodes(A)
+    graph.remove_nodes_connections(A)
     assert set(graph.nodes_names_map.keys()) == {"b"}
     assert graph.edges_names == []
     assert graph.sorted_nodes_names == ["b"]
@@ -285,7 +322,8 @@ def test_remove_add_2():
     graph.sorting()
     assert graph.sorted_nodes_names == ["a", "d", "b", "c"]
 
-    graph.remove_node(A)
+    graph.remove_nodes(A)
+    graph.remove_nodes_connections(A)
     assert set(graph.nodes_names_map.keys()) == {"b", "c", "d"}
     assert graph.edges_names == [("b", "c")]
     assert graph.sorted_nodes_names == ["d", "b", "c"]

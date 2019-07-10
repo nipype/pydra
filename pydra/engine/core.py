@@ -599,12 +599,3 @@ def is_task(obj):
 
 def is_workflow(obj):
     return isinstance(obj, Workflow)
-
-
-def is_runnable(graph, obj):
-    """Check if a task within a graph is runnable"""
-    if graph.connections_pred[obj.name]:
-        for pred in graph.connections_pred[obj.name]:
-            if not pred.done:
-                return False
-    return True

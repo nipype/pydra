@@ -13,6 +13,27 @@ class Graph:
         self.edges = edges
         self._create_connections()
         self._sorted_nodes = None
+        self._node_wip = []
+
+    # dj: should this be __copy__ or should I create a new method?
+    def __copy__(self):
+        """overloading copy, so new lists and dictionaries are created,
+            but runnable objects are the same
+        """
+        cls = self.__class__
+        new_graph = cls.__new__(cls)
+        new_graph._nodes = self._nodes[:]
+        new_graph._node_wip = self._node_wip[:]
+        new_graph._edges = self._edges[:]
+        if self._sorted_nodes:
+            new_graph._sorted_nodes = self._sorted_nodes[:]
+        new_graph.connections_pred = {}
+        for key, val in self.connections_pred.items():
+            new_graph.connections_pred[key] = self.connections_pred[key][:]
+        new_graph.connections_succ = {}
+        for key, val in self.connections_succ.items():
+            new_graph.connections_succ[key] = self.connections_succ[key][:]
+        return new_graph
 
     @property
     def nodes(self):
@@ -112,6 +133,12 @@ class Graph:
             key: copy(val) for (key, val) in self.connections_pred.items()
         }
 
+        # nodes that depends only on the self._nodes_wip should go first
+        # soe remove them from the connections
+        for nd_out in self._node_wip:
+            for nd_in in self.connections_succ[nd_out.name]:
+                connections_pred[nd_in.name].remove(nd_out)
+
         while notsorted_nodes:
             sorted_part, notsorted_nodes = self._sorting(
                 notsorted_nodes, connections_pred
@@ -134,29 +161,44 @@ class Graph:
                 remaining_nodes.append(nd)
         return sorted_part, remaining_nodes
 
-    def remove_node(self, node):
-        """removing a node, re-sorting if needed"""
-        if node not in self.nodes:
-            raise Exception(f"{node} is not present in the graph")
-        if self.connections_pred[node.name]:
-            raise Exception("this node shoudn't be run, has to wait")
-
-        self.nodes.remove(node)
-        for nd_in in self.connections_succ[node.name]:
-            self.connections_pred[nd_in.name].remove(node)
-            self.edges.remove((node, nd_in))
-        self.connections_succ.pop(node.name)
-        self.connections_pred.pop(node.name)
-
+    def remove_nodes(self, nodes):
+        """ remove nodes from the graph, re-sorting if needed,
+            does not remove connections, see remove_node_connections,
+            nodes are added to _node_wip (will be removed completely
+            when the connections are removed)
+        """
+        nodes = ensure_list(nodes)
+        for nd in nodes:
+            if nd not in self.nodes:
+                raise Exception(f"{nd} is not present in the graph")
+            if self.connections_pred[nd.name]:
+                raise Exception("this node shoudn't be run, has to wait")
+            self.nodes.remove(nd)
+            # adding the node to self._node_wip as for
+            self._node_wip.append(nd)
         # if graph is sorted, the sorted list has to be updated
         if hasattr(self, "sorted_nodes"):
-            if node == self.sorted_nodes[0]:
+            if nodes == self.sorted_nodes[: len(nodes)]:
                 # if the first node is removed, no need to sort again
-                self._sorted_nodes = self.sorted_nodes[1:]
+                self._sorted_nodes = self.sorted_nodes[len(nodes) :]
             else:
-                self._sorted_nodes.remove(node)
+                for nd in nodes:
+                    self._sorted_nodes.remove(nd)
                 # starting from the previous sorted list, so is faster
                 self.sorting(presorted=self.sorted_nodes)
+
+    def remove_nodes_connections(self, nodes):
+        """ removes nodes from the connections
+            removes also the nodes from _node_wip
+        """
+        nodes = ensure_list(nodes)
+        for nd in nodes:
+            for nd_in in self.connections_succ[nd.name]:
+                self.connections_pred[nd_in.name].remove(nd)
+                self.edges.remove((nd, nd_in))
+            self.connections_succ.pop(nd.name)
+            self.connections_pred.pop(nd.name)
+            self._node_wip.remove(nd)
 
     def _checking_path(self, node_name, first_name, path=0):
         """recursive function to calculate all paths using connections list"""

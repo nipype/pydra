@@ -1,7 +1,8 @@
 import asyncio
+import copy
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
-from .core import is_workflow, is_runnable
+from .core import is_workflow
 from .helpers import get_open_loop
 
 import logging
@@ -55,11 +56,13 @@ class Submitter:
         wf : Workflow
             The computed workflow
         """
-        remaining_tasks = wf.graph_sorted
+        # creating a copy of the graph that will be modified
+        # the copy contains new lists with original runnable objects
+        graph_copy = copy.copy(wf.graph)
         # keep track of local futures
         task_futures = set()
         while not wf.done_all_tasks:
-            remaining_tasks, tasks = await get_runnable_tasks(wf.graph, remaining_tasks)
+            tasks = get_runnable_tasks(graph_copy)
             if not tasks and not task_futures:
                 raise Exception("Nothing queued or todo - something went wrong")
             for task in tasks:
@@ -153,15 +156,34 @@ class Submitter:
         self.worker.close()
 
 
-async def get_runnable_tasks(graph, remaining_tasks):
+def get_runnable_tasks(graph):
     """Parse a graph and return all runnable tasks"""
-    didx, tasks = [], []
-    for idx, task in enumerate(remaining_tasks):
-        # are all predecessors finished
-        if is_runnable(graph, task):  # consider states
-            didx.append(idx)
-            tasks.append(task)
-    for i in sorted(didx, reverse=True):
-        del remaining_tasks[i]
+    tasks = []
+    to_remove = []
+    for tsk in graph.sorted_nodes:
+        # since the list is sorted (breadth-first) we can stop
+        # when we find a task that depends on any task that is already in tasks
+        if set(graph.connections_pred[tsk.name]).intersection(set(tasks)):
+            break
+        if is_runnable(graph, tsk):
+            tasks.append(tsk)
+            to_remove.append(tsk)
+    # removing tasks that are ready to run from the graph
+    for nd in to_remove:
+        graph.remove_nodes(nd)
+    return tasks
 
-    return remaining_tasks, tasks
+
+def is_runnable(graph, obj):
+    """Check if a task within a graph is runnable"""
+    connections_to_remove = []
+    for pred in graph.connections_pred[obj.name]:
+        is_done = pred.done
+        if not is_done:
+            return False
+        else:
+            connections_to_remove.append(pred)
+    # removing nodes that are done from connections
+    for nd in connections_to_remove:
+        graph.remove_nodes_connections(nd)
+    return True
