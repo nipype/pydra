@@ -15,9 +15,8 @@ class DiGraph:
         self._sorted_nodes = None
         self._node_wip = []
 
-    # dj: should this be __copy__ or should I create a new method?
-    def __copy__(self):
-        """overloading copy, so new lists and dictionaries are created,
+    def copy(self):
+        """ creating a copy that contains new lists and dictionaries,
             but runnable objects are the same
         """
         cls = self.__class__

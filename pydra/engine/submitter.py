@@ -1,5 +1,4 @@
 import asyncio
-import copy
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
 from .core import is_workflow
@@ -58,7 +57,7 @@ class Submitter:
         """
         # creating a copy of the graph that will be modified
         # the copy contains new lists with original runnable objects
-        graph_copy = copy.copy(wf.graph)
+        graph_copy = wf.graph.copy()
         # keep track of local futures
         task_futures = set()
         while not wf.done_all_tasks:

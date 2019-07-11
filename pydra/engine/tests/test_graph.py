@@ -376,3 +376,15 @@ def test_maxpath_5():
     assert list(graph.max_paths.keys()) == ["a", "d"]
     assert graph.max_paths["a"] == {"b": 1, "c": 2}
     assert graph.max_paths["d"] == {"b": 1, "c": 2}
+
+
+def test_copy_1():
+    """a -> b"""
+    graph = DiGraph(nodes=[B, A], edges=[(A, B)])
+    graph_copy = graph.copy()
+
+    assert graph.nodes == graph_copy.nodes
+    assert id(graph.nodes) != (graph_copy.nodes)
+    assert id(graph.nodes[0]) == id(graph_copy.nodes[0])
+    assert graph.edges == graph_copy.edges
+    assert id(graph.edges) != (graph_copy.edges)
