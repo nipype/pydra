@@ -105,13 +105,11 @@ class ConcurrentFuturesWorker(Worker):
         # wrap as asyncio task
         if not self.loop:
             raise Exception("No event loop available to submit tasks")
-        task = asyncio.create_task(
-            self.exec_as_coro(interface)
-        )
+        task = asyncio.create_task(self.exec_as_coro(interface._run))
         return task
 
     async def exec_as_coro(self, interface):  # sidx=None):
-        res = await self.loop.run_in_executor(self.pool, interface)
+        res = await self.loop.run_in_executor(self.pool, interface._run)
         return res
 
     def close(self):
@@ -139,6 +137,9 @@ class ConcurrentFuturesWorker(Worker):
             # nothing pending!
             pending = set()
 
+        assert (
+            done.union(pending) == futures
+        ), "all tasks from futures should be either in done or pending"
         logger.debug(f"Tasks finished: {len(done)}")
         for fut in done:
             await fut
