@@ -1,6 +1,7 @@
 import pytest
 import shutil
 import time
+import random
 
 from ..submitter import Submitter
 from ..task import to_task
@@ -31,6 +32,24 @@ def add2(x):
 def add2_wait(x):
     time.sleep(3)
     return x + 2
+
+
+@to_task
+def random_init():
+    return random.randint(0, 10)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_noinp_1(plugin):
+    """ workflow without input"""
+    wf = Workflow(name="wf_1")
+    wf.add(random_init(name="random"))
+    wf.set_output([("out", wf.random.lzout.out)])
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert 0 <= results.output.out <= 10
 
 
 @pytest.mark.parametrize("plugin", Plugins)

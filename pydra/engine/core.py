@@ -54,11 +54,6 @@ class TaskBase:
     _cache_dir = None  # Working directory in which to operate
     _references = None  # List of references for a task
 
-    # dj: do we need it??
-    input_spec = BaseSpec
-    output_spec = BaseSpec
-
-    # TODO: write state should be removed
     def __init__(
         self,
         name,
@@ -431,22 +426,21 @@ class Workflow(TaskBase):
         cache_locations=None,
         **kwargs,
     ):
-        if input_spec:
-            if isinstance(input_spec, BaseSpec):
-                self.input_spec = input_spec
-            else:
-                self.input_spec = SpecInfo(
-                    name="Inputs",
-                    fields=[(name, ty.Any) for name in input_spec]
-                    + [("_graph", ty.Any)],
-                    bases=(BaseSpec,),
-                )
+        if isinstance(input_spec, BaseSpec):
+            self.input_spec = input_spec
+        else:
+            if input_spec is None:
+                input_spec = []
+            self.input_spec = SpecInfo(
+                name="Inputs",
+                fields=[(name, ty.Any) for name in input_spec] + [("_graph", ty.Any)],
+                bases=(BaseSpec,),
+            )
         if output_spec is None:
             output_spec = SpecInfo(
                 name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
             )
         self.output_spec = output_spec
-
         super(Workflow, self).__init__(
             name=name,
             inputs=kwargs,
@@ -461,7 +455,7 @@ class Workflow(TaskBase):
         self.name2obj = {}
 
         # store output connections
-        self._connections = None
+        self._connections = []
         self.node_names = []
 
     def __getattr__(self, name):
