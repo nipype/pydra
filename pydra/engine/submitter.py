@@ -43,6 +43,7 @@ class Submitter:
             self.loop.run_until_complete(runnable._run(self))
         else:
             self.loop.run_until_complete(self.submit(runnable, return_task=True))
+        return runnable.result()
 
     def __enter__(self):
         return self

@@ -230,16 +230,19 @@ class TaskBase:
 
     def __call__(self, submitter=None, plugin=None, **kwargs):
         if submitter and plugin:
-            raise Exception("you can specify submitter OR plugin, not both")
-        elif submitter:
-            submitter(self)
+            raise Exception("Specify submitter OR plugin, not both")
+
+        if not submitter and not plugin:
+            if is_workflow(self):
+                raise NotImplementedError(
+                    "TODO: linear workflow execution - assign submitter or plugin for the moment"
+                )
+            return self._run(**kwargs)
         elif plugin:
             from .submitter import Submitter
-
-            with Submitter(plugin=plugin) as sub:
-                sub(self)
-        else:
-            return self._run(**kwargs)
+            submitter = Submitter(plugin=plugin)
+        with submitter as sub:
+            return sub(self)
 
     def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
@@ -581,11 +584,6 @@ class Workflow(TaskBase):
                 raise ValueError("all connections must be lazy")
             output.append(val.get_value(self))
         return output
-
-
-# TODO: task has also call
-def is_function(obj):
-    return hasattr(obj, "__call__")
 
 
 def is_task(obj):
