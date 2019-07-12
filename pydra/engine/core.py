@@ -3,7 +3,6 @@ import abc
 import dataclasses as dc
 import json
 import logging
-import networkx as nx
 import os
 from pathlib import Path
 import typing as ty
@@ -27,6 +26,7 @@ from .helpers import (
     ensure_list,
     record_error,
 )
+from .graph import DiGraph
 from .audit import Audit
 from ..utils.messenger import AuditFlag
 
@@ -457,7 +457,7 @@ class Workflow(TaskBase):
             messenger_args=messenger_args,
         )
 
-        self.graph = nx.DiGraph()
+        self.graph = DiGraph()
         self.name2obj = {}
 
         # store output connections
@@ -479,7 +479,7 @@ class Workflow(TaskBase):
             (it doesn't mean that results of the wf are available,
             this can be checked with self.done)
         """
-        for task in self.graph:
+        for task in self.graph.nodes:
             if not task.done:
                 return False
         return True
@@ -490,12 +490,12 @@ class Workflow(TaskBase):
 
     @property
     def graph_sorted(self):
-        return list(nx.topological_sort(self.graph))
+        return self.graph.sorted_nodes
 
     def add(self, task):
         if not is_task(task):
             raise ValueError("Unknown workflow element: {!r}".format(task))
-        self.graph.add_nodes_from([task])
+        self.graph.add_nodes(task)
         self.name2obj[task.name] = task
         self._last_added = task
         other_states = {}
@@ -504,13 +504,8 @@ class Workflow(TaskBase):
             if isinstance(val, LazyField):
                 # adding an edge to the graph if task id expecting output from a different task
                 if val.name != self.name:
+                    self.graph.add_edges((getattr(self, val.name), task))
                     logger.debug("Connecting %s to %s", val.name, task.name)
-                    self.graph.add_edge(
-                        getattr(self, val.name),
-                        task,
-                        from_field=val.field,
-                        to_field=field.name,
-                    )
                 if val.name in self.node_names and getattr(self, val.name).state:
                     # adding a state from the previous task to other_states
                     other_states[val.name] = (getattr(self, val.name).state, field.name)
@@ -604,12 +599,3 @@ def is_task(obj):
 
 def is_workflow(obj):
     return isinstance(obj, Workflow)
-
-
-def is_runnable(graph, obj):
-    """Check if a task within a graph is runnable"""
-    if graph.predecessors(obj):
-        for pred in graph.predecessors(obj):
-            if not pred.done:
-                return False
-    return True
