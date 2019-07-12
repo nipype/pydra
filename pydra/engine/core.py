@@ -563,9 +563,7 @@ class Workflow(TaskBase):
                 raise
             finally:
                 self.audit.finalize_audit(result=result)
-                save_result(odir, result)
-                with open(odir / "_node.pklz", "wb") as fp:
-                    cp.dump(self, fp)
+                save(odir, result=result, task=self)
                 os.chdir(cwd)
             return result
 

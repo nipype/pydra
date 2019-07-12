@@ -101,15 +101,15 @@ class ConcurrentFuturesWorker(Worker):
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
-    def run_el(self, interface, **kwargs):
+    def run_el(self, runnable, **kwargs):
         # wrap as asyncio task
         if not self.loop:
             raise Exception("No event loop available to submit tasks")
-        task = asyncio.create_task(self.exec_as_coro(interface._run))
+        task = asyncio.create_task(self.exec_as_coro(runnable))
         return task
 
-    async def exec_as_coro(self, interface):  # sidx=None):
-        res = await self.loop.run_in_executor(self.pool, interface._run)
+    async def exec_as_coro(self, runnable):  # sidx=None):
+        res = await self.loop.run_in_executor(self.pool, runnable._run)
         return res
 
     def close(self):
