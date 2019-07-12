@@ -96,12 +96,11 @@ def test_wf_1_call_exception(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         with pytest.raises(Exception) as e:
             wf(submitter=sub, plugin=plugin)
-        assert "you can specify submitter OR plugin" in str(e.value)
+        assert "Specify submitter OR plugin" in str(e.value)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1104,7 +1103,7 @@ def test_wf_nostate_cachedir(plugin, tmpdir):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
     """ wf with provided cache_dir as relative path"""
-    cwd = tmpdir.chdir()
+    tmpdir.chdir()
     cache_dir = "test_wf_cache_2"
 
     wf = Workflow(name="wf_2", input_spec=["x", "y"], cache_dir=cache_dir)
