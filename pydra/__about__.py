@@ -69,11 +69,7 @@ SETUP_REQUIRES = ["setuptools>=27.0"]
 TESTS_REQUIRES = ["pytest-cov", "codecov", "pytest-env", "pytest-xdist", "pyld"]
 LINKS_REQUIRES = []
 
-EXTRA_REQUIRES = {
-    "tests": TESTS_REQUIRES,
-    "dev": TESTS_REQUIRES + ["yapf>=0.22"],
-    "plugins": ["dask", "distributed"],
-}
+EXTRA_REQUIRES = {"tests": TESTS_REQUIRES, "dev": TESTS_REQUIRES + ["yapf>=0.22"]}
 
 
 def _list_union(iterable):
