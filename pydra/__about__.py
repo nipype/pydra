@@ -73,6 +73,7 @@ TESTS_REQUIRES = [
     "pytest-xdist",
     "pyld",
     "numpy",
+    "psutil",
 ]
 LINKS_REQUIRES = []
 
