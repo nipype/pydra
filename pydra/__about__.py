@@ -76,7 +76,7 @@ TESTS_REQUIRES = [
 ]
 LINKS_REQUIRES = []
 
-EXTRA_REQUIRES = {"tests": TESTS_REQUIRES, "dev": TESTS_REQUIRES + ["yapf>=0.22"]}
+EXTRA_REQUIRES = {"tests": TESTS_REQUIRES, "dev": TESTS_REQUIRES + ["pre-commit"]}
 
 
 def _list_union(iterable):
