@@ -38,11 +38,13 @@ class Submitter:
     def __call__(self, runnable, cache_locations=None):
         if cache_locations is not None:
             runnable.cache_locations = cache_locations
-        # Start event loop and run workflow/task
-        if is_workflow(runnable) and runnable.state is None:
-            self.loop.run_until_complete(runnable._run(self))
+        if self.worker._distributed:
+            self.loop.run_until_complete(self.distribute(runnable, cache_locations))
         else:
-            self.loop.run_until_complete(self.submit(runnable, return_task=True))
+            if is_workflow(runnable) and runnable.state is None:
+                self.loop.run_until_complete(runnable._run(self))
+            else:
+                self.loop.run_until_complete(self.submit(runnable, return_task=True))
         return runnable.result()
 
     def __enter__(self):
@@ -156,6 +158,12 @@ class Submitter:
         # otherwise pass along futures to be awaited independently
         else:
             return futures
+
+    async def distribute(self, runnable, cache_locations=None):
+        """Submitter for distributed systems"""
+        task = self.worker.run_el(runnable)
+        fut = await task
+        await self.worker.fetch_finished(fut)
 
     def close(self):
         self.loop.close()

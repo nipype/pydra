@@ -17,8 +17,9 @@ logger = logging.getLogger("pydra.worker")
 
 class Worker:
     def __init__(self, loop=None):
-        logger.debug("Initialize Worker")
+        logger.debug(f"Initializing {self.__class__.__name__}")
         self.loop = loop
+        self._distributed = False
 
     def run_el(self, interface, **kwargs):
         raise NotImplementedError
@@ -32,6 +33,10 @@ class Worker:
 
 class DistributedWorker(Worker):
     """Base Worker for distributed execution"""
+
+    def __init__(self, loop=None):
+        super(DistributedWorker, self).__init__(loop)
+        self._distributed = True
 
     @staticmethod
     def _prepare_runscripts(task, interpreter="/bin/sh"):

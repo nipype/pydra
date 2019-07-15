@@ -215,7 +215,6 @@ def create_pyscript(task_path, checksum):
         Execution script
     """
     task_pkl = (task_path / "_task.pklz")
-
     if not task_pkl.exists() or not task_pkl.stat().st_size:
         raise Exception("Missing or empty task!")
 
