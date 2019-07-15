@@ -66,7 +66,14 @@ REQUIRES = [
 ]
 
 SETUP_REQUIRES = ["setuptools>=27.0"]
-TESTS_REQUIRES = ["pytest-cov", "codecov", "pytest-env", "pytest-xdist", "pyld"]
+TESTS_REQUIRES = [
+    "pytest-cov",
+    "codecov",
+    "pytest-env",
+    "pytest-xdist",
+    "pyld",
+    "numpy",
+]
 LINKS_REQUIRES = []
 
 EXTRA_REQUIRES = {"tests": TESTS_REQUIRES, "dev": TESTS_REQUIRES + ["yapf>=0.22"]}
