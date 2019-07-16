@@ -13,7 +13,7 @@ class Submitter:
     # TODO: runnable in init or run
     def __init__(self, plugin):
         self.loop = get_open_loop()
-        self._running_loop = self.loop.is_running()
+        self._own_loop = not self.loop.is_running()
         self.plugin = plugin
         if self.plugin == "serial":
             self.worker = SerialWorker()
