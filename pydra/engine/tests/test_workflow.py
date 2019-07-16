@@ -151,10 +151,6 @@ def test_wf_2a(plugin):
     assert wf.output_dir == odir
 
 
-@pytest.mark.xfail(
-    reason="x=lzout added after calling wf.add(add2_task):"
-    "edge is not created (fix: creating edges in run?)"
-)
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_2b(plugin):
     """ workflow with 2 tasks, no splitter
