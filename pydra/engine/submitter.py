@@ -149,7 +149,7 @@ class Submitter:
 
     def close(self):
         # do not close previously running loop
-        if not self._running_loop:
+        if self._own_loop:
             self.loop.close()
         self.worker.close()
 
