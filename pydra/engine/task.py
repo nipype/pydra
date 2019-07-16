@@ -66,7 +66,7 @@ class FunctionTask(TaskBase):
         messenger_args=None,
         cache_dir=None,
         cache_locations=None,
-        **kwargs
+        **kwargs,
     ):
         self.input_spec = SpecInfo(
             name="Inputs",
@@ -155,7 +155,7 @@ class ShellCommandTask(TaskBase):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
-        **kwargs
+        **kwargs,
     ):
         if input_spec is None:
             field = dc.field(default_factory=list)
@@ -194,7 +194,7 @@ class ShellCommandTask(TaskBase):
     def cmdline(self):
         return " ".join(self.command_args)
 
-    def _run_task(self, ):
+    def _run_task(self,):
         self.output_ = None
         args = self.command_args
         if args:
@@ -214,7 +214,7 @@ class ContainerTask(ShellCommandTask):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
-        **kwargs
+        **kwargs,
     ):
 
         if input_spec is None:
@@ -229,7 +229,7 @@ class ContainerTask(ShellCommandTask):
             messengers=messengers,
             messenger_args=messenger_args,
             cache_dir=cache_dir,
-            **kwargs
+            **kwargs,
         )
 
     @property
@@ -268,7 +268,6 @@ class ContainerTask(ShellCommandTask):
             self.output_ = execute(args)
 
 
-
 class DockerTask(ContainerTask):
     def __init__(
         self,
@@ -279,7 +278,7 @@ class DockerTask(ContainerTask):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
-        **kwargs
+        **kwargs,
     ):
         if input_spec is None:
             field = dc.field(default_factory=list)
@@ -293,7 +292,7 @@ class DockerTask(ContainerTask):
             messengers=messengers,
             messenger_args=messenger_args,
             cache_dir=cache_dir,
-            **kwargs
+            **kwargs,
         )
 
     @property
@@ -316,7 +315,7 @@ class SingularityTask(ContainerTask):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
-        **kwargs
+        **kwargs,
     ):
         if input_spec is None:
             field = dc.field(default_factory=list)
@@ -331,7 +330,7 @@ class SingularityTask(ContainerTask):
             messengers=messengers,
             messenger_args=messenger_args,
             cache_dir=cache_dir,
-            **kwargs
+            **kwargs,
         )
 
     @property

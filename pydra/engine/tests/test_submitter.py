@@ -15,18 +15,17 @@ def test_concurrent_wf():
     # concurrent workflow
     # A --> C
     # B --> D
-    wf = Workflow('new_wf', input_spec=['x', 'y'])
+    wf = Workflow("new_wf", input_spec=["x", "y"])
     wf.inputs.x = 5
     wf.inputs.y = 10
     wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
     wf.add(sleep_add_one(name="taskb", x=wf.lzin.y))
     wf.add(sleep_add_one(name="taskc", x=wf.taska.lzout.out))
     wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
-    wf.set_output([("out1", wf.taskc.lzout.out),
-                   ("out2", wf.taskd.lzout.out)])
+    wf.set_output([("out1", wf.taskc.lzout.out), ("out2", wf.taskd.lzout.out)])
     # wf.plugin = 'cf'
     # res = wf.run()
-    with Submitter('cf') as sub:
+    with Submitter("cf") as sub:
         sub(wf)
 
     res = wf.result()
@@ -36,12 +35,12 @@ def test_concurrent_wf():
 
 def test_wf_in_wf():
     """WF(A --> SUBWF(A --> B) --> B)"""
-    wf = Workflow(name='wf_in_wf', input_spec=['x'])
+    wf = Workflow(name="wf_in_wf", input_spec=["x"])
     wf.inputs.x = 3
     wf.add(sleep_add_one(name="wf_a", x=wf.lzin.x))
 
     # workflow task
-    subwf = Workflow(name='sub_wf', input_spec=['x'])
+    subwf = Workflow(name="sub_wf", input_spec=["x"])
     subwf.add(sleep_add_one(name="sub_a", x=subwf.lzin.x))
     subwf.add(sleep_add_one(name="sub_b", x=subwf.sub_a.lzout.out))
     subwf.set_output([("out", subwf.sub_b.lzout.out)])
@@ -52,7 +51,7 @@ def test_wf_in_wf():
     wf.add(sleep_add_one(name="wf_b", x=wf.sub_wf.lzout.out))
     wf.set_output([("out", wf.wf_b.lzout.out)])
 
-    with Submitter('cf') as sub:
+    with Submitter("cf") as sub:
         sub(wf)
 
     res = wf.result()
@@ -72,7 +71,7 @@ def test_wf2():
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
 
-    with Submitter('cf') as sub:
+    with Submitter("cf") as sub:
         sub(wf)
 
     res = wf.result()
@@ -80,15 +79,15 @@ def test_wf2():
 
 
 def test_wf_with_state():
-    wf = Workflow(name='wf_with_state', input_spec=['x'])
-    wf.add(sleep_add_one(name='taska', x=wf.lzin.x))
-    wf.add(sleep_add_one(name='taskb', x=wf.taska.lzout.out))
+    wf = Workflow(name="wf_with_state", input_spec=["x"])
+    wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
+    wf.add(sleep_add_one(name="taskb", x=wf.taska.lzout.out))
 
     wf.inputs.x = [1, 2, 3]
-    wf.split('x')
+    wf.split("x")
     wf.set_output([("out", wf.taskb.lzout.out)])
 
-    with Submitter('cf') as sub:
+    with Submitter("cf") as sub:
         sub(wf)
 
     res = wf.result()
