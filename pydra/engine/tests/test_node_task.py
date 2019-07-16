@@ -52,6 +52,13 @@ def fun_div(a, b):
     return a / b
 
 
+@to_task
+def modf(a):
+    import math
+
+    return math.modf(a)
+
+
 # Tests for tasks initializations
 
 
@@ -198,11 +205,25 @@ def test_task_nostate_1(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_task_nostate_1_call_subm(plugin):
-    """ task without splitter"""
+def test_task_nostate_1_call(plugin):
+    """ task without splitter,
+        calling task using __call__
+    """
     nn = fun_addtwo(name="NA", a=3)
-    assert np.allclose(nn.inputs.a, [3])
-    assert nn.state is None
+
+    nn()
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_1_call_subm(plugin):
+    """ task without splitter,
+        calling task and providing submitter
+    """
+    nn = fun_addtwo(name="NA", a=3)
 
     with Submitter(plugin=plugin) as sub:
         nn(submitter=sub)
@@ -214,10 +235,10 @@ def test_task_nostate_1_call_subm(plugin):
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_1_call_plug(plugin):
-    """ task without splitter"""
+    """ task without splitter
+        calling task and providing plugin
+    """
     nn = fun_addtwo(name="NA", a=3)
-    assert np.allclose(nn.inputs.a, [3])
-    assert nn.state is None
 
     nn(plugin=plugin)
 
@@ -240,6 +261,54 @@ def test_task_nostate_2(plugin):
     # checking the results
     results = nn.result()
     assert results.output.out == 33
+
+
+@pytest.mark.xfail(reason="only one value from return is saved")
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_3(plugin):
+    """ function returns multiple values"""
+    nn = modf(name="NA", a=3.5)
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == (0.5, 3)
+
+
+# Testing output names (TODO: should also test output_spec)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_outname_1(plugin):
+    """ task without splitter,
+        providing output name instead of using the default "out"
+    """
+    nn = fun_addtwo(name="NA", a=3, output_names="addtwo_out")
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.addtwo_out == 5
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_outname_2(plugin):
+    """ task without splitter,
+        providing list of output names instead of using the default "out"
+    """
+    nn = modf(name="NA", a=3.5, output_names=["fractional", "integer"])
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.fractional == 0.5
+    assert results.output.integer == 3
 
 
 # Testing caching for tasks without states
@@ -350,6 +419,55 @@ def test_task_state_1(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(nn)
+
+    # checking the results
+    results = nn.result()
+    expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
+    for i, res in enumerate(expected):
+        assert results[i].output.out == res[1]
+
+
+@pytest.mark.xfail(reason="__call__ doesn't work for task with splitter")
+def test_task_state_1_call():
+    """ task with the simplest splitter
+        using __call__ method without submitter
+    """
+    nn = fun_addtwo(name="NA").split(splitter="a", a=[3, 5])
+
+    nn()
+
+    # checking the results
+    results = nn.result()
+    expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
+    for i, res in enumerate(expected):
+        assert results[i].output.out == res[1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_state_1_call_plugin(plugin):
+    """ task with the simplest splitter
+        using __call__ method providing plugin
+    """
+    nn = fun_addtwo(name="NA").split(splitter="a", a=[3, 5])
+
+    nn(plugin=plugin)
+
+    # checking the results
+    results = nn.result()
+    expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
+    for i, res in enumerate(expected):
+        assert results[i].output.out == res[1]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_state_1_call_subm(plugin):
+    """ task with the simplest splitter
+        using __call__ method providing plugin
+    """
+    nn = fun_addtwo(name="NA").split(splitter="a", a=[3, 5])
+
+    with Submitter(plugin=plugin) as sub:
+        nn(submitter=sub)
 
     # checking the results
     results = nn.result()

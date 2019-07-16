@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
 from .core import is_workflow, is_runnable
@@ -149,7 +150,9 @@ class Submitter:
             return futures
 
     def close(self):
-        self.loop.close()
+        # jupyter is also using cf, so can't close the loop
+        if not "Jupyter" in os.environ:
+            self.loop.close()
         self.worker.close()
 
 

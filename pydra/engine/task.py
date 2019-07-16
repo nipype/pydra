@@ -60,6 +60,7 @@ class FunctionTask(TaskBase):
         self,
         func: ty.Callable,
         output_spec: ty.Optional[BaseSpec] = None,
+        output_names=None,
         name=None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
@@ -92,9 +93,11 @@ class FunctionTask(TaskBase):
         )
         if output_spec is None:
             if "return" not in func.__annotations__:
-                output_spec = SpecInfo(
-                    name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
-                )
+                if output_names is None:
+                    fields = [("out", ty.Any)]
+                else:
+                    fields = [(name, ty.Any) for name in ensure_list(output_names)]
+                output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
             else:
                 return_info = func.__annotations__["return"]
                 if hasattr(return_info, "__name__"):
@@ -194,7 +197,7 @@ class ShellCommandTask(TaskBase):
     def cmdline(self):
         return " ".join(self.command_args)
 
-    def _run_task(self, ):
+    def _run_task(self,):
         self.output_ = None
         args = self.command_args
         if args:
@@ -266,7 +269,6 @@ class ContainerTask(ShellCommandTask):
         args = self.container_args + self.command_args
         if args:
             self.output_ = execute(args)
-
 
 
 class DockerTask(ContainerTask):

@@ -54,10 +54,6 @@ class TaskBase:
     _cache_dir = None  # Working directory in which to operate
     _references = None  # List of references for a task
 
-    # dj: do we need it??
-    input_spec = BaseSpec
-    output_spec = BaseSpec
-
     # TODO: write state should be removed
     def __init__(
         self,
@@ -441,6 +437,8 @@ class Workflow(TaskBase):
                     + [("_graph", ty.Any)],
                     bases=(BaseSpec,),
                 )
+        else:
+            raise Exception("Workflow has to have input_spec")
         if output_spec is None:
             output_spec = SpecInfo(
                 name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
