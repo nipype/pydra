@@ -9,7 +9,7 @@ from .workers import (
 )
 
 from .core import is_workflow
-from .helpers import get_open_loop
+from .helpers import ensure_list, get_open_loop
 
 import logging
 
@@ -161,9 +161,8 @@ class Submitter:
 
     async def distribute(self, runnable, cache_locations=None):
         """Submitter for distributed systems"""
-        task = self.worker.run_el(runnable)
-        fut = await task
-        await self.worker.fetch_finished(fut)
+        task = ensure_list(self.worker.run_el(runnable))
+        await self.worker.fetch_finished(task)
 
     def close(self):
         self.loop.close()
