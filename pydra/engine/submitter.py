@@ -13,6 +13,7 @@ class Submitter:
     # TODO: runnable in init or run
     def __init__(self, plugin):
         self.loop = get_open_loop()
+        self._running_loop = self.loop.is_running()
         self.plugin = plugin
         if self.plugin == "serial":
             self.worker = SerialWorker()
@@ -147,7 +148,9 @@ class Submitter:
             return futures
 
     def close(self):
-        self.loop.close()
+        # do not close previously running loop
+        if not self._running_loop:
+            self.loop.close()
         self.worker.close()
 
 
