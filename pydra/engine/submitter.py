@@ -148,9 +148,7 @@ class Submitter:
             return futures
 
     def close(self):
-        # jupyter is also using cf, so can't close the loop
-        if not "Jupyter" in os.environ:
-            self.loop.close()
+        self.loop.close()
         self.worker.close()
 
 
