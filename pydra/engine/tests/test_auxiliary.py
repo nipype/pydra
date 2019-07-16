@@ -1,7 +1,7 @@
 from .. import auxiliary as aux
 
 import numpy as np
-import pytest, pdb
+import pytest
 
 
 class other_states_to_tests:

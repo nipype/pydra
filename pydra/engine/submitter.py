@@ -1,6 +1,6 @@
 import asyncio
 
-from .workers import MpWorker, SerialWorker, DaskWorker, ConcurrentFuturesWorker
+from .workers import SerialWorker, ConcurrentFuturesWorker
 from .core import is_workflow
 from .helpers import get_open_loop
 
@@ -14,12 +14,8 @@ class Submitter:
     def __init__(self, plugin):
         self.loop = get_open_loop()
         self.plugin = plugin
-        if self.plugin == "mp":
-            self.worker = MpWorker()
-        elif self.plugin == "serial":
+        if self.plugin == "serial":
             self.worker = SerialWorker()
-        elif self.plugin == "dask":
-            self.worker = DaskWorker()
         elif self.plugin == "cf":
             self.worker = ConcurrentFuturesWorker()
         else:
