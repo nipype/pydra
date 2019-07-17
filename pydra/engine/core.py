@@ -460,7 +460,6 @@ class Workflow(TaskBase):
 
         # store output connections
         self._connections = None
-        self.node_names = []
 
     def __getattr__(self, name):
         if name == "lzin":
@@ -491,22 +490,37 @@ class Workflow(TaskBase):
         return self.graph.sorted_nodes
 
     def add(self, task):
+        """adding a task to the workflow"""
         if not is_task(task):
             raise ValueError("Unknown workflow element: {!r}".format(task))
         self.graph.add_nodes(task)
         self.name2obj[task.name] = task
         self._last_added = task
+        self.create_connections(task)
+        logger.debug(f"Added {task}")
+        self.inputs._graph = self.graph_sorted
+        return self
+
+    def create_connections(self, task):
+        """creating connections between tasks"""
         other_states = {}
         for field in dc.fields(task.inputs):
             val = getattr(task.inputs, field.name)
             if isinstance(val, LazyField):
                 # adding an edge to the graph if task id expecting output from a different task
                 if val.name != self.name:
+                    # checking if the connection is already in the graph
+                    if (getattr(self, val.name), task) in self.graph.edges:
+                        continue
                     self.graph.add_edges((getattr(self, val.name), task))
                     logger.debug("Connecting %s to %s", val.name, task.name)
-                if val.name in self.node_names and getattr(self, val.name).state:
-                    # adding a state from the previous task to other_states
-                    other_states[val.name] = (getattr(self, val.name).state, field.name)
+
+                    if getattr(self, val.name).state:
+                        # adding a state from the previous task to other_states
+                        other_states[val.name] = (
+                            getattr(self, val.name).state,
+                            field.name,
+                        )
         # if task has connections state has to be recalculated
         if other_states:
             if hasattr(task, "fut_combiner"):
@@ -515,10 +529,6 @@ class Workflow(TaskBase):
                 )
             else:
                 task.state = state.State(task.name, other_states=other_states)
-        self.node_names.append(task.name)
-        logger.debug(f"Added {task}")
-        self.inputs._graph = self.graph_sorted
-        return self
 
     async def _run(self, submitter=None, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
@@ -528,7 +538,9 @@ class Workflow(TaskBase):
         result = self.result()
         if result is not None:
             return result
-
+        # creating connections that were defined after adding tasks to the wf
+        for task in self.graph.nodes:
+            self.create_connections(task)
         """
         Concurrent execution scenarios
 
