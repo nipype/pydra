@@ -1,13 +1,6 @@
 import asyncio
 
-from .workers import (
-    MpWorker,
-    SerialWorker,
-    DaskWorker,
-    ConcurrentFuturesWorker,
-    SlurmWorker
-)
-
+from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker
 from .core import is_workflow
 from .helpers import ensure_list, get_open_loop
 
@@ -20,13 +13,10 @@ class Submitter:
     # TODO: runnable in init or run
     def __init__(self, plugin, **wargs):
         self.loop = get_open_loop()
+        self._own_loop = not self.loop.is_running()
         self.plugin = plugin
-        if self.plugin == "mp":
-            self.worker = MpWorker(**wargs)
-        elif self.plugin == "serial":
-            self.worker = SerialWorker(**wargs)
-        elif self.plugin == "dask":
-            self.worker = DaskWorker(**wargs)
+        if self.plugin == "serial":
+            self.worker = SerialWorker()
         elif self.plugin == "cf":
             self.worker = ConcurrentFuturesWorker(**wargs)
         elif self.plugin == "slurm":
@@ -165,7 +155,9 @@ class Submitter:
         await self.worker.fetch_finished(task)
 
     def close(self):
-        self.loop.close()
+        # do not close previously running loop
+        if self._own_loop:
+            self.loop.close()
         self.worker.close()
 
 

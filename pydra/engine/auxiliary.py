@@ -1,5 +1,5 @@
-import pdb
 import itertools
+from functools import reduce
 from copy import deepcopy
 import logging
 from .helpers import ensure_list
@@ -608,8 +608,6 @@ def input_shape(in1):
 def _splits(splitter_rpn, inputs, inner_inputs=None):
     """ Process splitter rpn from left to right
     """
-    import numpy as np
-
     stack = []
     keys = []
     shapes_var = {}
@@ -655,7 +653,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
                         shape[lr] = (len(trm_val[lr]),)
                     else:
                         shape[lr] = input_shape(inputs[term])
-                        trm_val[lr] = range(np.prod(shape[lr]))
+                        trm_val[lr] = range(reduce(lambda x, y: x * y, shape[lr]))
                     trm_str[lr] = True
                     shapes_var[term] = shape[lr]
                 else:
@@ -697,7 +695,9 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
                 # TODO: rewrite once I have more tests
                 if isinstance(terms[lr], str) and terms[lr] in inner_inputs:
                     # TODO: have to be changed if differ length
-                    inner_len = [shape[lr][-1]] * np.prod(shape[lr][:-1])
+                    inner_len = [shape[lr][-1]] * reduce(
+                        lambda x, y: x * y, shape[lr][:-1]
+                    )
                     # this come from the previous node
                     outer_ind = inner_inputs[terms[lr]].ind_l
                     trmval_out = itertools.chain.from_iterable(
@@ -870,10 +870,10 @@ def _single_op_splits(
         )
     shape = input_shape(inputs[op_single])
     shapes_var[op_single] = shape
-    trmval = range(np.prod(shape))
+    trmval = range(reduce(lambda x, y: x * y, shape))
     if op_single in inner_inputs:
         # TODO: have to be changed if differ length
-        inner_len = [shape[-1]] * np.prod(shape[:-1])
+        inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
         # this come from the previous node
         outer_ind = inner_inputs[op_single].ind_l
         op_out = itertools.chain.from_iterable(
