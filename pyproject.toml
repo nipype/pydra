@@ -1,0 +1,6 @@
+[build-system]
+requires = ["setuptools >= 30.3.0", "wheel"]
+
+[tool.black]
+target-version = ['py37', 'py38']
+exclude = "pydra/_version.py"
