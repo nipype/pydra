@@ -1,14 +1,6 @@
-from .__about__ import (
-    __version__,
-    __author__,
-    __license__,
-    __maintainer__,
-    __email__,
-    __status__,
-    __url__,
-    __packagename__,
-    __description__,
-    __longdesc__,
-)
+from ._version import get_versions
+
+__version__ = get_versions()["version"]
+del get_versions
 
 from .engine import Workflow, to_task, Submitter
