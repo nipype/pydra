@@ -80,7 +80,7 @@ script:
     if [ "$CHECK_TYPE" = "test" ]; then
         py.test -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
     elif [ "$CHECK_TYPE" = "style" ]; then
-        black --py36 --exclude 'pydra/_version.py' pydra setup.py
+        black pydra setup.py
     fi
 
 after_script:
