@@ -6,10 +6,10 @@ a new engine
 
 ### Installation
 
-Pydra requires Python 3.7+
+Pydra requires Python 3.7+. To install in developer mode:
 
 ```
 git clone git@github.com:nipype/pydra.git
 cd pydra
-pip install -e [all]
+pip install -e .[dev]
 ```
