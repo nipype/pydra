@@ -16,7 +16,7 @@ clean-build:
 clean: clean-pyc clean-build
 
 format:
-	black --py36 --exclude 'pydra/_version.py' pydra setup.py
+	black pydra setup.py
 
 lint:
 	flake8
