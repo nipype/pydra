@@ -18,10 +18,6 @@ def test_output():
     assert res.output.out == 5
 
 
-@pytest.mark.xfail(
-    reason="when task run without submitter, results are not collected,"
-    "so result() method will not work"
-)
 def test_annotated_func():
     @to_task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out1", float)]):
@@ -64,10 +60,6 @@ def test_annotated_func():
     ]
 
 
-@pytest.mark.xfail(
-    reason="when task run without submitter, results are not collected,"
-    "so result() method will not work"
-)
 def test_halfannotated_func():
     @to_task
     def testfunc(a, b) -> (int, int):
@@ -135,7 +127,7 @@ def test_exception_func():
     assert pytest.raises(Exception, bad_funk)
 
 
-@pytest.mark.xfail(reason="errors with RDF, need to ask Satra")
+@pytest.mark.xfail(reason="errors from cloudpickle")
 def test_audit(tmpdir):
     @to_task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
@@ -160,7 +152,6 @@ def test_audit(tmpdir):
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
 
 
-@pytest.mark.xfail(reason="problems with pickling? need to ask Satra")
 def test_shell_cmd(tmpdir):
     cmd = ["echo", "hail", "pydra"]
 
@@ -171,7 +162,7 @@ def test_shell_cmd(tmpdir):
     assert res.output.stdout == " ".join(cmd[1:]) + "\n"
 
     # separate command into exec + args
-    shelly = ShellCommandTask(executable=cmd[0], args=cmd[1:])
+    shelly = ShellCommandTask(name="test", executable=cmd[0], args=cmd[1:])
     assert shelly.inputs.executable == "echo"
     assert shelly.cmdline == " ".join(cmd)
     res = shelly._run()

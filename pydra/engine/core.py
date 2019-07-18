@@ -19,7 +19,6 @@ from . import auxiliary as aux
 from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo, LazyField
 from .helpers import (
     make_klass,
-    create_checksum,
     print_help,
     load_result,
     save_result,
@@ -162,14 +161,13 @@ class TaskBase:
 
     @property
     def checksum(self):
-        """calculating checksum if self._checksum is None only
-            (avoiding recomputing during the execution)
+        """calculating checksum
         """
-        if self._checksum is None:
-            if self.state is None:
-                self._checksum = create_checksum(self.__class__.__name__, self.inputs)
-            else:
-                return {sidx: res[1] for (sidx, res) in self.results_dict.items()}
+        if self.state is None:
+            input_hash = self.inputs.hash
+            self._checksum = "_".join((self.__class__.__name__, input_hash))
+        else:
+            self._checksum = {sidx: res[1] for (sidx, res) in self.results_dict.items()}
         return self._checksum
 
     def set_state(self, splitter, combiner=None):
@@ -500,7 +498,7 @@ class Workflow(TaskBase):
         self._last_added = task
         self.create_connections(task)
         logger.debug(f"Added {task}")
-        self.inputs._graph = self.graph_sorted
+        self.inputs._graph = deepcopy(self.graph_sorted)
         return self
 
     def create_connections(self, task):

@@ -152,10 +152,6 @@ def execute(cmd):
     return rc, stdout, stderr
 
 
-def create_checksum(name, inputs):
-    return "_".join((name, inputs.hash))
-
-
 def record_error(error_path, error):
     with (error_path / "_error.pklz").open("wb") as fp:
         cp.dump(error, fp)
