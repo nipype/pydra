@@ -96,7 +96,6 @@ def test_wf_1_call_exception(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         with pytest.raises(Exception) as e:
@@ -188,6 +187,8 @@ def test_wf_st_1(plugin):
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert wf.output_dir  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -197,6 +198,7 @@ def test_wf_st_1(plugin):
     assert results[0].output.out == 3
     assert results[1].output.out == 4
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -220,6 +222,7 @@ def test_wf_st_1_call_subm(plugin):
     assert results[0].output.out == 3
     assert results[1].output.out == 4
     # checking all directories
+    assert wf.output_dir
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -242,6 +245,7 @@ def test_wf_st_1_call_plug(plugin):
     assert results[0].output.out == 3
     assert results[1].output.out == 4
     # checking all directories
+    assert wf.output_dir
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -276,6 +280,8 @@ def test_wf_st_2(plugin):
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -285,6 +291,7 @@ def test_wf_st_2(plugin):
     assert results[0][0].output.out == 3
     assert results[0][1].output.out == 4
     # checking all directories
+    assert odir_init == wf.output_dir
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -323,6 +330,8 @@ def test_wf_st_3(plugin):
     wf.split(("x", "y"))
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -332,6 +341,7 @@ def test_wf_st_3(plugin):
     assert results[0].output.out == 13
     assert results[1].output.out == 26
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -370,6 +380,8 @@ def test_wf_st_4(plugin):
     wf.combine("x")
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -381,6 +393,7 @@ def test_wf_st_4(plugin):
     assert results[0][0].output.out == 13
     assert results[0][1].output.out == 26
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -422,6 +435,8 @@ def test_wf_st_5(plugin):
     wf.combine("x")
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -432,6 +447,7 @@ def test_wf_st_5(plugin):
     assert results[1][0].output.out == 14
     assert results[1][1].output.out == 26
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -475,6 +491,8 @@ def test_wf_st_6(plugin):
 
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -485,6 +503,7 @@ def test_wf_st_6(plugin):
     assert results[1].output.out == 42
     assert results[5].output.out == 70
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -528,6 +547,8 @@ def test_wf_st_7(plugin):
 
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -541,6 +562,7 @@ def test_wf_st_7(plugin):
     assert results[1][1].output.out == 56
     assert results[1][2].output.out == 70
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -589,6 +611,8 @@ def test_wf_st_8(plugin):
 
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -602,6 +626,7 @@ def test_wf_st_8(plugin):
     assert results[2][0].output.out == 65
     assert results[2][1].output.out == 70
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -650,6 +675,8 @@ def test_wf_st_9(plugin):
     wf.split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine(["x", "y"])
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -663,6 +690,7 @@ def test_wf_st_9(plugin):
     assert results[0][4].output.out == 65
     assert results[0][5].output.out == 70
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -712,6 +740,8 @@ def test_wf_st_singl_1(plugin):
     wf.combine("x")
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -720,6 +750,7 @@ def test_wf_st_singl_1(plugin):
     assert results[0][0].output.out == 13
     assert results[0][1].output.out == 24
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -762,6 +793,8 @@ def test_wf_st_singl_2(plugin):
 
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -772,6 +805,7 @@ def test_wf_st_singl_2(plugin):
     assert results[1].output.out == 52
     assert results[2].output.out == 65
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -932,6 +966,8 @@ def test_wfasnd_wfst_1(plugin):
     wf.inputs.x = [2, 4]
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -940,6 +976,7 @@ def test_wfasnd_wfst_1(plugin):
     assert results[0].output.out == 4
     assert results[1].output.out == 6
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -995,6 +1032,8 @@ def test_wfasnd_wfst_2(plugin):
     wf.inputs.y = [1, 10]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -1003,6 +1042,7 @@ def test_wfasnd_wfst_2(plugin):
     assert results[0].output.out == 4
     assert results[1].output.out == 42
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 
@@ -1059,6 +1099,8 @@ def test_wfasnd_wfst_3(plugin):
 
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
+    odir_init = wf.output_dir
+    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -1067,6 +1109,7 @@ def test_wfasnd_wfst_3(plugin):
     assert results[0].output.out == 4
     assert results[1].output.out == 42
     # checking all directories
+    assert wf.output_dir == odir_init
     for _, odir in wf.output_dir.items():
         assert odir.exists()
 

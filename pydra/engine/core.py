@@ -164,10 +164,16 @@ class TaskBase:
         """calculating checksum
         """
         if self.state is None:
-            input_hash = self.inputs.hash
+            input_hash = self.inputs.hash()
             self._checksum = "_".join((self.__class__.__name__, input_hash))
         else:
-            self._checksum = {sidx: res[1] for (sidx, res) in self.results_dict.items()}
+            self._checksum = {}
+            self.state.prepare_states(self.inputs)
+            self.state.prepare_inputs()
+            for sidx, inp in enumerate(self.state.states_val):
+                inp_repl = {key.split(".")[1]: val for (key, val) in inp.items()}
+                input_hash = self.inputs.hash(replace=inp_repl)
+                self._checksum[sidx] = "_".join((self.__class__.__name__, input_hash))
         return self._checksum
 
     def set_state(self, splitter, combiner=None):

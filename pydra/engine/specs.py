@@ -18,18 +18,19 @@ class SpecInfo:
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs"""
 
-    @property
-    def hash(self):
+    def hash(self, replace=None):
         """Compute a basic hash for any given set of fields"""
         inp_dict = {
             field.name: getattr(self, field.name)
             for field in dc.fields(self)
             if field.name not in ["_graph"]
         }
+        if replace:
+            inp_dict.update(replace)
         inp_hash = self._hash(inp_dict)
         if hasattr(self, "_graph"):
-
-            graph_hash = [nd.checksum for nd in self._graph]
+            # calculating inputs.hash for every node inside the graph
+            graph_hash = [nd.inputs.hash() for nd in self._graph]
             return self._hash((inp_hash, graph_hash))
         else:
             return inp_hash
@@ -44,7 +45,6 @@ class BaseSpec:
             if isinstance(value, LazyField):
                 value = value.get_value(wf, state_index=state_index)
                 temp_values[field.name] = value
-        # dj: changes the outputd_dir (node is updating input)
         for field, value in temp_values.items():
             setattr(self, field, value)
 
