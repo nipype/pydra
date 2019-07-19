@@ -18,6 +18,19 @@ def test_output():
     assert res.output.out == 5
 
 
+@pytest.mark.xfail(reason="cp.dumps(func) depends on the system/setup, TODO!!")
+def test_checksum():
+    @to_task
+    def funaddtwo(a):
+        return a + 2
+
+    nn = funaddtwo(a=3)
+    assert (
+        nn.checksum
+        == "FunctionTask_abb4e7cc03b13d0e73884b87d142ed5deae6a312275187a9d8df54407317d7d3"
+    )
+
+
 def test_annotated_func():
     @to_task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out1", float)]):

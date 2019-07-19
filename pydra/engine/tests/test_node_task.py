@@ -74,10 +74,6 @@ def test_task_init_2():
     # adding NA to the name of the variable
     assert getattr(nn.inputs, "a") == 3
     assert nn.state is None
-    assert (
-        nn.checksum
-        == "FunctionTask_3cdd9d5ca28649cc1c823bfb06365cf5ecf19551b8823df87a3ba9e5439bc32c"
-    )
 
 
 @pytest.mark.parametrize(
