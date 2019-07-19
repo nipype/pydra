@@ -10,8 +10,9 @@
 - [ ] I have added tests to cover my changes
 - [ ] I have updated documentation (if necessary)
 - [ ] My code follows the code style of this project 
-(we are using `black`: you can `pip install pre-commit` 
-and start using by running `pre-commit install` in the `pydra` directory)
+(we are using `black`: you can `pip install pre-commit`, 
+run `pre-commit install` in the `pydra` directory 
+and `black` will be run automatically with each commit)
 
 
 ## Summary
