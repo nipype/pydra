@@ -41,13 +41,12 @@ def test_wf_1(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.plugin = plugin
-    odir = wf.output_dir
+
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     results = wf.result()
     assert 4 == results.output.out
-    assert wf.output_dir == odir
     assert wf.output_dir.exists()
 
 
@@ -59,14 +58,12 @@ def test_wf_1_call_subm(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
 
     results = wf.result()
     assert 4 == results.output.out
-    assert wf.output_dir == odir
     assert wf.output_dir.exists()
 
 
@@ -78,13 +75,11 @@ def test_wf_1_call_plug(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.plugin = plugin
-    odir = wf.output_dir
 
     wf(plugin=plugin)
 
     results = wf.result()
     assert 4 == results.output.out
-    assert wf.output_dir == odir
     assert wf.output_dir.exists()
 
 
@@ -113,13 +108,11 @@ def test_wf_2(plugin):
     wf.inputs.x = 2
     wf.inputs.y = 3
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
     results = wf.result()
     assert 8 == results.output.out
 
@@ -138,16 +131,13 @@ def test_wf_2a(plugin):
     wf.inputs.x = 2
     wf.inputs.y = 3
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-    # assert wf.output_dir.exists()
+
     results = wf.result()
     assert 8 == results.output.out
-
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -165,16 +155,14 @@ def test_wf_2b(plugin):
     wf.inputs.x = 2
     wf.inputs.y = 3
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-    # assert wf.output_dir.exists()
+
     results = wf.result()
     assert 8 == results.output.out
 
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -187,8 +175,6 @@ def test_wf_st_1(plugin):
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert wf.output_dir  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -198,8 +184,8 @@ def test_wf_st_1(plugin):
     assert results[0].output.out == 3
     assert results[1].output.out == 4
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -223,7 +209,7 @@ def test_wf_st_1_call_subm(plugin):
     assert results[1].output.out == 4
     # checking all directories
     assert wf.output_dir
-    for _, odir in wf.output_dir.items():
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -246,7 +232,7 @@ def test_wf_st_1_call_plug(plugin):
     assert results[1].output.out == 4
     # checking all directories
     assert wf.output_dir
-    for _, odir in wf.output_dir.items():
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -258,7 +244,6 @@ def test_wf_ndst_1(plugin):
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -267,7 +252,6 @@ def test_wf_ndst_1(plugin):
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results.output.out == [3, 4]
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -280,8 +264,6 @@ def test_wf_st_2(plugin):
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -291,8 +273,8 @@ def test_wf_st_2(plugin):
     assert results[0][0].output.out == 3
     assert results[0][1].output.out == 4
     # checking all directories
-    assert odir_init == wf.output_dir
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -304,7 +286,6 @@ def test_wf_ndst_2(plugin):
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -313,7 +294,6 @@ def test_wf_ndst_2(plugin):
     # expected: [[({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]]
     assert results.output.out[0] == [3, 4]
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 # workflows with structures A -> B
@@ -330,8 +310,6 @@ def test_wf_st_3(plugin):
     wf.split(("x", "y"))
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -341,8 +319,8 @@ def test_wf_st_3(plugin):
     assert results[0].output.out == 13
     assert results[1].output.out == 26
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -356,7 +334,6 @@ def test_wf_ndst_3(plugin):
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -366,7 +343,6 @@ def test_wf_ndst_3(plugin):
     assert results.output.out == [13, 26]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -380,8 +356,6 @@ def test_wf_st_4(plugin):
     wf.combine("x")
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -393,8 +367,8 @@ def test_wf_st_4(plugin):
     assert results[0][0].output.out == 13
     assert results[0][1].output.out == 26
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -409,7 +383,6 @@ def test_wf_ndst_4(plugin):
     wf.plugin = plugin
     wf.inputs.a = [1, 2]
     wf.inputs.b = [11, 12]
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -421,7 +394,6 @@ def test_wf_ndst_4(plugin):
     assert results.output.out[0] == [13, 26]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -435,8 +407,6 @@ def test_wf_st_5(plugin):
     wf.combine("x")
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -447,8 +417,8 @@ def test_wf_st_5(plugin):
     assert results[1][0].output.out == 14
     assert results[1][1].output.out == 26
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -462,7 +432,6 @@ def test_wf_ndst_5(plugin):
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -472,7 +441,6 @@ def test_wf_ndst_5(plugin):
     assert results.output.out[1] == [14, 26]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 # workflows with structures A -> C, B -> C
@@ -491,8 +459,6 @@ def test_wf_st_6(plugin):
 
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -503,8 +469,8 @@ def test_wf_st_6(plugin):
     assert results[1].output.out == 42
     assert results[5].output.out == 70
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -521,7 +487,6 @@ def test_wf_ndst_6(plugin):
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -531,7 +496,6 @@ def test_wf_ndst_6(plugin):
     assert results.output.out == [39, 42, 52, 56, 65, 70]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -547,8 +511,6 @@ def test_wf_st_7(plugin):
 
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -562,8 +524,8 @@ def test_wf_st_7(plugin):
     assert results[1][1].output.out == 56
     assert results[1][2].output.out == 70
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -584,7 +546,6 @@ def test_wf_ndst_7(plugin):
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -595,7 +556,6 @@ def test_wf_ndst_7(plugin):
     assert results.output.out[1] == [42, 56, 70]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -611,8 +571,6 @@ def test_wf_st_8(plugin):
 
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -626,8 +584,8 @@ def test_wf_st_8(plugin):
     assert results[2][0].output.out == 65
     assert results[2][1].output.out == 70
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -648,7 +606,6 @@ def test_wf_ndst_8(plugin):
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -660,7 +617,6 @@ def test_wf_ndst_8(plugin):
     assert results.output.out[2] == [65, 70]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -675,8 +631,6 @@ def test_wf_st_9(plugin):
     wf.split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine(["x", "y"])
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -690,8 +644,8 @@ def test_wf_st_9(plugin):
     assert results[0][4].output.out == 65
     assert results[0][5].output.out == 70
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -712,7 +666,6 @@ def test_wf_ndst_9(plugin):
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -723,7 +676,6 @@ def test_wf_ndst_9(plugin):
     assert results.output.out == [[39, 42, 52, 56, 65, 70]]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 # workflow that have some single values as the input
@@ -740,8 +692,6 @@ def test_wf_st_singl_1(plugin):
     wf.combine("x")
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -750,8 +700,8 @@ def test_wf_st_singl_1(plugin):
     assert results[0][0].output.out == 13
     assert results[0][1].output.out == 24
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -767,7 +717,6 @@ def test_wf_ndst_singl_1(plugin):
     wf.inputs.y = 11
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -776,7 +725,6 @@ def test_wf_ndst_singl_1(plugin):
     assert results.output.out[0] == [13, 24]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -793,8 +741,6 @@ def test_wf_st_singl_2(plugin):
 
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -805,8 +751,8 @@ def test_wf_st_singl_2(plugin):
     assert results[1].output.out == 52
     assert results[2].output.out == 65
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -824,7 +770,6 @@ def test_wf_ndst_singl_2(plugin):
     wf.inputs.y = 11
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -834,7 +779,6 @@ def test_wf_ndst_singl_2(plugin):
     assert results.output.out == [39, 52, 65]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 # workflows with structures wf(A)
@@ -854,7 +798,6 @@ def test_wfasnd_1(plugin):
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -863,7 +806,6 @@ def test_wfasnd_1(plugin):
     assert results.output.out == 4
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -881,7 +823,6 @@ def test_wfasnd_wfinp_1(plugin):
     wf.inputs.x = 2
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -890,7 +831,6 @@ def test_wfasnd_wfinp_1(plugin):
     assert results.output.out == 4
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -909,7 +849,6 @@ def test_wfasnd_st_1(plugin):
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -918,7 +857,6 @@ def test_wfasnd_st_1(plugin):
     assert results.output.out == [4, 6]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -938,7 +876,6 @@ def test_wfasnd_ndst_1(plugin):
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -947,7 +884,6 @@ def test_wfasnd_ndst_1(plugin):
     assert results.output.out == [4, 6]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -966,8 +902,6 @@ def test_wfasnd_wfst_1(plugin):
     wf.inputs.x = [2, 4]
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -976,8 +910,8 @@ def test_wfasnd_wfst_1(plugin):
     assert results[0].output.out == 4
     assert results[1].output.out == 6
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -1002,7 +936,6 @@ def test_wfasnd_st_2(plugin):
     wf.add(add2(name="add2", x=wf.wfnd.lzout.out))
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -1011,7 +944,6 @@ def test_wfasnd_st_2(plugin):
     assert results.output.out == [4, 42]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1032,8 +964,6 @@ def test_wfasnd_wfst_2(plugin):
     wf.inputs.y = [1, 10]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -1042,8 +972,8 @@ def test_wfasnd_wfst_2(plugin):
     assert results[0].output.out == 4
     assert results[1].output.out == 42
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
@@ -1068,7 +998,6 @@ def test_wfasnd_ndst_3(plugin):
 
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
-    odir = wf.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -1077,7 +1006,6 @@ def test_wfasnd_ndst_3(plugin):
     assert results.output.out == [4, 42]
     # checking the output directory
     assert wf.output_dir.exists()
-    assert wf.output_dir == odir
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1099,8 +1027,6 @@ def test_wfasnd_wfst_3(plugin):
 
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
-    odir_init = wf.output_dir
-    assert odir_init  # checking if the dictionary is not empty
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -1109,12 +1035,12 @@ def test_wfasnd_wfst_3(plugin):
     assert results[0].output.out == 4
     assert results[1].output.out == 42
     # checking all directories
-    assert wf.output_dir == odir_init
-    for _, odir in wf.output_dir.items():
+    assert wf.output_dir
+    for odir in wf.output_dir:
         assert odir.exists()
 
 
-# Testing caching for tasks without states
+# Testing caching
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1274,11 +1200,13 @@ def test_wf_state_cachelocations(plugin, tmpdir):
     assert t2 < 0.1
 
     # checking all directories
-    for _, odir in wf1.output_dir.items():
+    assert wf1.output_dir
+    for odir in wf1.output_dir:
         assert odir.exists()
     # checking if the second wf didn't run again
     # checking all directories
-    for _, odir in wf2.output_dir.items():
+    assert wf2.output_dir
+    for odir in wf2.output_dir:
         assert not odir.exists()
 
 
@@ -1445,4 +1373,128 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
 
     # checking if both dir exists
     assert wf1.output_dir.exists()
+    assert wf2.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstate_cachelocations(plugin, tmpdir):
+    """
+    Two wfs with identical inputs and slightly different graph (a node has different state);
+    the second wf has cache_locations and should recompute the results
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+    cache_dir2 = tmpdir.mkdir("test_wf_cache4")
+
+    wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(
+        multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y).split(splitter=("x", "y"))
+    )
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.inputs.x = [2, 20]
+    wf1.inputs.y = [3, 4]
+    wf1.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+    t1 = time.time() - t0
+
+    results1 = wf1.result()
+    assert results1.output.out == [8, 82]
+
+    wf2 = Workflow(
+        name="wf",
+        input_spec=["x", "y"],
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+    )
+    wf2.add(
+        multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y).split(splitter=("x", "y"))
+    )
+    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
+    wf2.set_output([("out", wf2.add2.lzout.out)])
+    wf2.inputs.x = [2, 20]
+    wf2.inputs.y = [3, 4]
+    wf2.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf2)
+    t2 = time.time() - t0
+
+    results2 = wf2.result()
+    assert results2.output.out == [8, 82]
+
+    # checking execution time
+    assert t1 > 3
+    assert t2 < 0.1
+
+    # checking all directories
+    assert wf1.output_dir.exists()
+
+    # checking if the second wf didn't run again
+    # checking all directories
+    assert not wf2.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstate_cachelocations_recompute(plugin, tmpdir):
+    """
+    Two wfs (with nodes with states) with provided cache_dir;
+    the second wf has cache_locations and should not recompute the results
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+    cache_dir2 = tmpdir.mkdir("test_wf_cache4")
+
+    wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(
+        multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y).split(splitter=("x", "y"))
+    )
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.inputs.x = [2, 20]
+    wf1.inputs.y = [3, 4]
+    wf1.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+    t1 = time.time() - t0
+
+    results1 = wf1.result()
+    assert results1.output.out == [8, 82]
+
+    wf2 = Workflow(
+        name="wf",
+        input_spec=["x", "y"],
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+    )
+    wf2.add(
+        multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y).split(splitter=["x", "y"])
+    )
+    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
+    wf2.set_output([("out", wf2.add2.lzout.out)])
+    wf2.inputs.x = [2, 20]
+    wf2.inputs.y = [3, 4]
+    wf2.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf2)
+    t2 = time.time() - t0
+
+    results2 = wf2.result()
+    assert results2.output.out == [8, 10, 62, 82]
+
+    # checking execution time
+    assert t1 > 3
+    assert t2 > 3
+
+    # checking all directories
+    assert wf1.output_dir.exists()
+
+    # checking if the second wf didn't run again
+    # checking all directories
     assert wf2.output_dir.exists()

@@ -183,6 +183,25 @@ def test_task_error():
     assert (func.output_dir / "_error.pklz").exists()
 
 
+def test_odir_init():
+    """ checking if output_dir is available for a task without init
+        before running the task
+    """
+    nn = fun_addtwo(name="NA", a=3)
+    assert nn.output_dir
+
+
+def test_odir_init_error():
+    """ checking if output_dir raises an error for task with a state
+        if the task doesn't have result (before running)
+    """
+    nn = fun_addtwo(name="NA").split(splitter="a", a=[3, 5])
+
+    with pytest.raises(Exception) as excinfo:
+        assert nn.output_dir
+    assert "output_dir not available" in str(excinfo.value)
+
+
 # Tests for tasks without state (i.e. no splitter)
 
 
@@ -192,7 +211,6 @@ def test_task_nostate_1(plugin):
     nn = fun_addtwo(name="NA", a=3)
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
-    odir_orig = nn.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(nn)
@@ -201,7 +219,6 @@ def test_task_nostate_1(plugin):
     results = nn.result()
     assert results.output.out == 5
     # checking the output_dir
-    assert nn.output_dir == odir_orig
     assert nn.output_dir.exists()
 
 
@@ -211,7 +228,6 @@ def test_task_nostate_1_call_subm(plugin):
     nn = fun_addtwo(name="NA", a=3)
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
-    odir_orig = nn.output_dir
 
     with Submitter(plugin=plugin) as sub:
         nn(submitter=sub)
@@ -220,7 +236,6 @@ def test_task_nostate_1_call_subm(plugin):
     results = nn.result()
     assert results.output.out == 5
     # checking the output_dir
-    assert nn.output_dir == odir_orig
     assert nn.output_dir.exists()
 
 
@@ -247,7 +262,6 @@ def test_task_nostate_2(plugin):
     assert np.allclose(nn.inputs.n, [3])
     assert np.allclose(nn.inputs.lst, [2, 3, 4])
     assert nn.state is None
-    odir_orig = nn.output_dir
 
     with Submitter(plugin=plugin) as sub:
         sub(nn)
@@ -256,7 +270,6 @@ def test_task_nostate_2(plugin):
     results = nn.result()
     assert results.output.out == 33
     # checking the output_dir
-    assert nn.output_dir == odir_orig
     assert nn.output_dir.exists()
 
 
@@ -365,8 +378,6 @@ def test_task_state_1(plugin):
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
     assert (nn.inputs.a == np.array([3, 5])).all()
-    odir_orig = nn.output_dir
-    assert odir_orig  # checking if this is not an empty dictionary
 
     with Submitter(plugin=plugin) as sub:
         sub(nn)
@@ -377,8 +388,8 @@ def test_task_state_1(plugin):
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
     # checking the output_dir
-    assert nn.output_dir == odir_orig
-    for _, odir in nn.output_dir.items():
+    assert nn.output_dir
+    for odir in nn.output_dir:
         assert odir.exists()
 
 
@@ -436,8 +447,6 @@ def test_task_state_2(plugin, splitter, state_splitter, state_rpn, expected):
     assert nn.state.splitter_rpn == state_rpn
     assert nn.state.splitter_final == state_splitter
     assert nn.state.splitter_rpn_final == state_rpn
-    odir_orig = nn.output_dir
-    assert odir_orig
 
     with Submitter(plugin=plugin) as sub:
         sub(nn)
@@ -447,8 +456,8 @@ def test_task_state_2(plugin, splitter, state_splitter, state_rpn, expected):
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
     # checking the output_dir
-    assert nn.output_dir == odir_orig
-    for _, odir in nn.output_dir.items():
+    assert nn.output_dir
+    for odir in nn.output_dir:
         assert odir.exists()
 
 
@@ -465,8 +474,6 @@ def test_task_state_singl_1(plugin):
     assert nn.state.splitter_rpn == ["NA.a"]
     assert nn.state.splitter_final == "NA.a"
     assert nn.state.splitter_rpn_final == ["NA.a"]
-    odir_orig = nn.output_dir
-    assert odir_orig
 
     with Submitter(plugin=plugin) as sub:
         sub(nn)
@@ -477,8 +484,8 @@ def test_task_state_singl_1(plugin):
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
     # checking the output_dir
-    assert nn.output_dir == odir_orig
-    for _, odir in nn.output_dir.items():
+    assert nn.output_dir
+    for odir in nn.output_dir:
         assert odir.exists()
 
 
@@ -494,8 +501,6 @@ def test_task_state_comb_1(plugin):
     assert nn.state.combiner == ["NA.a"]
     assert nn.state.splitter_final is None
     assert nn.state.splitter_rpn_final == []
-    odir_orig = nn.output_dir
-    assert odir_orig
 
     with Submitter(plugin=plugin) as sub:
         sub(nn)
@@ -511,8 +516,8 @@ def test_task_state_comb_1(plugin):
     for i, res in enumerate(expected):
         assert combined_results[i] == res[1]
     # checking the output_dir
-    assert nn.output_dir == odir_orig
-    for _, odir in nn.output_dir.items():
+    assert nn.output_dir
+    for odir in nn.output_dir:
         assert odir.exists()
 
 
@@ -606,8 +611,6 @@ def test_task_state_comb_2(
     assert nn.state.splitter_final == state_splitter_final
     assert nn.state.splitter_rpn_final == state_rpn_final
     assert set(nn.state.right_combiner_all) == set(state_combiner_all)
-    odir_orig = nn.output_dir
-    assert odir_orig
 
     with Submitter(plugin=plugin) as sub:
         sub(nn)
@@ -619,8 +622,8 @@ def test_task_state_comb_2(
     for i, res in enumerate(expected):
         assert combined_results[i] == res[1]
     # checking the output_dir
-    assert nn.output_dir == odir_orig
-    for _, odir in nn.output_dir.items():
+    assert nn.output_dir
+    for odir in nn.output_dir:
         assert odir.exists()
 
 
@@ -638,8 +641,6 @@ def test_task_state_comb_singl_1(plugin):
     assert nn.state.combiner == ["NA.a"]
     assert nn.state.splitter_final == None
     assert nn.state.splitter_rpn_final == []
-    odir_orig = nn.output_dir
-    assert odir_orig
 
     with Submitter(plugin=plugin) as sub:
         sub(nn)
@@ -651,8 +652,8 @@ def test_task_state_comb_singl_1(plugin):
     for i, res in enumerate(expected):
         assert combined_results[i] == res[1]
     # checking the output_dir
-    assert nn.output_dir == odir_orig
-    for _, odir in nn.output_dir.items():
+    assert nn.output_dir
+    for odir in nn.output_dir:
         assert odir.exists()
 
 

@@ -1,5 +1,4 @@
 import dataclasses as dc
-from hashlib import sha256
 from pathlib import Path
 import typing as ty
 
@@ -18,25 +17,23 @@ class SpecInfo:
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs"""
 
-    def hash(self, replace=None):
+    @property
+    def hash(self):
         """Compute a basic hash for any given set of fields"""
+        from .helpers import hash_function
+
         inp_dict = {
             field.name: getattr(self, field.name)
             for field in dc.fields(self)
             if field.name not in ["_graph"]
         }
-        if replace:
-            inp_dict.update(replace)
-        inp_hash = self._hash(inp_dict)
+        inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph"):
-            # calculating inputs.hash for every node inside the graph
-            graph_hash = [nd.inputs.hash() for nd in self._graph]
-            return self._hash((inp_hash, graph_hash))
+            # calculating checksum for every node inside the graph
+            graph_hash = [nd.checksum for nd in self._graph]
+            return hash_function((inp_hash, graph_hash))
         else:
             return inp_hash
-
-    def _hash(self, obj):
-        return sha256(str(obj).encode()).hexdigest()
 
     def retrieve_values(self, wf, state_index=None):
         temp_values = {}

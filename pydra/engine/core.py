@@ -19,11 +19,13 @@ from . import auxiliary as aux
 from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo, LazyField
 from .helpers import (
     make_klass,
+    create_checksum,
     print_help,
     load_result,
     save_result,
     ensure_list,
     record_error,
+    hash_function,
 )
 from .graph import DiGraph
 from .audit import Audit
@@ -163,17 +165,15 @@ class TaskBase:
     def checksum(self):
         """calculating checksum
         """
+        input_hash = self.inputs.hash
         if self.state is None:
-            input_hash = self.inputs.hash()
-            self._checksum = "_".join((self.__class__.__name__, input_hash))
+            self._checksum = create_checksum(self.__class__.__name__, input_hash)
         else:
-            self._checksum = {}
-            self.state.prepare_states(self.inputs)
-            self.state.prepare_inputs()
-            for sidx, inp in enumerate(self.state.states_val):
-                inp_repl = {key.split(".")[1]: val for (key, val) in inp.items()}
-                input_hash = self.inputs.hash(replace=inp_repl)
-                self._checksum[sidx] = "_".join((self.__class__.__name__, input_hash))
+            # including splitter in the hash
+            splitter_hash = hash_function(self.state.splitter)
+            self._checksum = create_checksum(
+                self.__class__.__name__, hash_function([input_hash, splitter_hash])
+            )
         return self._checksum
 
     def set_state(self, splitter, combiner=None):
@@ -226,10 +226,14 @@ class TaskBase:
     @property
     def output_dir(self):
         if self.state:
-            return {
-                sidx: self._cache_dir / checksum
-                for (sidx, checksum) in self.checksum.items()
-            }
+            if self.results_dict:
+                return [
+                    self._cache_dir / res[1] for (_, res) in self.results_dict.items()
+                ]
+            else:
+                raise Exception(
+                    f"output_dir not available, will be ready after running {self.name}"
+                )
         else:
             return self._cache_dir / self.checksum
 

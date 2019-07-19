@@ -5,6 +5,7 @@ import cloudpickle as cp
 from pathlib import Path
 import os
 import sys
+from hashlib import sha256
 
 from .specs import Runtime
 
@@ -152,6 +153,10 @@ def execute(cmd):
     return rc, stdout, stderr
 
 
+def create_checksum(name, inputs):
+    return "_".join((name, inputs))
+
+
 def record_error(error_path, error):
     with (error_path / "_error.pklz").open("wb") as fp:
         cp.dump(error, fp)
@@ -172,3 +177,7 @@ def get_open_loop():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     return loop
+
+
+def hash_function(obj):
+    return sha256(str(obj).encode()).hexdigest()
