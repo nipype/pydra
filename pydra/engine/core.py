@@ -94,7 +94,7 @@ class TaskBase:
         self.input_names = [
             field.name
             for field in dc.fields(klass)
-            if field.name not in ["_func", "_graph"]
+            if field.name not in ["_func", "_graph_checksums"]
         ]
         self.state = None
         self._output = {}
@@ -446,7 +446,7 @@ class Workflow(TaskBase):
                 self.input_spec = SpecInfo(
                     name="Inputs",
                     fields=[(name, ty.Any) for name in input_spec]
-                    + [("_graph", ty.Any)],
+                    + [("_graph_checksums", ty.Any)],
                     bases=(BaseSpec,),
                 )
         if output_spec is None:
@@ -508,7 +508,7 @@ class Workflow(TaskBase):
         self._last_added = task
         self.create_connections(task)
         logger.debug(f"Added {task}")
-        self.inputs._graph = deepcopy(self.graph_sorted)
+        self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
         return self
 
     def create_connections(self, task):
