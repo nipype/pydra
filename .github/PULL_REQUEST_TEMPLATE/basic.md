@@ -3,10 +3,16 @@
 - [ ] Bug fix (non-breaking change which fixes an issue)
 - [ ] New feature (non-breaking change which adds functionality)
 - [ ] Breaking change (fix or feature that would cause existing functionality to change)
-- [ ] My code follows the code style of this project.
-- [ ] My change requires a change to the documentation.
-- [ ] I have updated the documentation accordingly.
-- [ ] I have added tests to cover my changes.
+
+## Checklist
+<!--- Please, let us know if you need help-->
+- [ ] All tests passing
+- [ ] I have added tests to cover my changes
+- [ ] I have updated documentation (if necessary)
+- [ ] My code follows the code style of this project 
+(we are using `black`: you can `pip install pre-commit` 
+and start using by running `pre-commit install` in the `pydra` directory)
+
 
 ## Summary
 <!--- What does your code do? -->
