@@ -25,6 +25,7 @@ from .helpers import (
     save_result,
     ensure_list,
     record_error,
+    hash_function,
 )
 from .graph import DiGraph
 from .audit import Audit
@@ -162,14 +163,17 @@ class TaskBase:
 
     @property
     def checksum(self):
-        """calculating checksum if self._checksum is None only
-            (avoiding recomputing during the execution)
+        """calculating checksum
         """
-        if self._checksum is None:
-            if self.state is None:
-                self._checksum = create_checksum(self.__class__.__name__, self.inputs)
-            else:
-                return {sidx: res[1] for (sidx, res) in self.results_dict.items()}
+        input_hash = self.inputs.hash
+        if self.state is None:
+            self._checksum = create_checksum(self.__class__.__name__, input_hash)
+        else:
+            # including splitter in the hash
+            splitter_hash = hash_function(self.state.splitter)
+            self._checksum = create_checksum(
+                self.__class__.__name__, hash_function([input_hash, splitter_hash])
+            )
         return self._checksum
 
     def set_state(self, splitter, combiner=None):
@@ -222,10 +226,14 @@ class TaskBase:
     @property
     def output_dir(self):
         if self.state:
-            return {
-                sidx: self._cache_dir / checksum
-                for (sidx, checksum) in self.checksum.items()
-            }
+            if self.results_dict:
+                return [
+                    self._cache_dir / res[1] for (_, res) in self.results_dict.items()
+                ]
+            else:
+                raise Exception(
+                    f"output_dir not available, will be ready after running {self.name}"
+                )
         else:
             return self._cache_dir / self.checksum
 
@@ -500,7 +508,7 @@ class Workflow(TaskBase):
         self._last_added = task
         self.create_connections(task)
         logger.debug(f"Added {task}")
-        self.inputs._graph = self.graph_sorted
+        self.inputs._graph = deepcopy(self.graph_sorted)
         return self
 
     def create_connections(self, task):

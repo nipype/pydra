@@ -1,5 +1,6 @@
 import os, json
 from pathlib import Path
+import dataclasses as dc
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from .helpers import ensure_list, gather_runtime_info
 

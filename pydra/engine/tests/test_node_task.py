@@ -179,6 +179,25 @@ def test_task_error():
     assert (func.output_dir / "_error.pklz").exists()
 
 
+def test_odir_init():
+    """ checking if output_dir is available for a task without init
+        before running the task
+    """
+    nn = fun_addtwo(name="NA", a=3)
+    assert nn.output_dir
+
+
+def test_odir_init_error():
+    """ checking if output_dir raises an error for task with a state
+        if the task doesn't have result (before running)
+    """
+    nn = fun_addtwo(name="NA").split(splitter="a", a=[3, 5])
+
+    with pytest.raises(Exception) as excinfo:
+        assert nn.output_dir
+    assert "output_dir not available" in str(excinfo.value)
+
+
 # Tests for tasks without state (i.e. no splitter)
 
 
@@ -195,6 +214,8 @@ def test_task_nostate_1(plugin):
     # checking the results
     results = nn.result()
     assert results.output.out == 5
+    # checking the output_dir
+    assert nn.output_dir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -210,6 +231,8 @@ def test_task_nostate_1_call_subm(plugin):
     # checking the results
     results = nn.result()
     assert results.output.out == 5
+    # checking the output_dir
+    assert nn.output_dir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -224,6 +247,8 @@ def test_task_nostate_1_call_plug(plugin):
     # checking the results
     results = nn.result()
     assert results.output.out == 5
+    # checking the output_dir
+    assert nn.output_dir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -240,6 +265,8 @@ def test_task_nostate_2(plugin):
     # checking the results
     results = nn.result()
     assert results.output.out == 33
+    # checking the output_dir
+    assert nn.output_dir.exists()
 
 
 # Testing caching for tasks without states
@@ -356,6 +383,10 @@ def test_task_state_1(plugin):
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
+    # checking the output_dir
+    assert nn.output_dir
+    for odir in nn.output_dir:
+        assert odir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -420,6 +451,10 @@ def test_task_state_2(plugin, splitter, state_splitter, state_rpn, expected):
     results = nn.result()
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
+    # checking the output_dir
+    assert nn.output_dir
+    for odir in nn.output_dir:
+        assert odir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -444,6 +479,10 @@ def test_task_state_singl_1(plugin):
     results = nn.result()
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
+    # checking the output_dir
+    assert nn.output_dir
+    for odir in nn.output_dir:
+        assert odir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -472,6 +511,10 @@ def test_task_state_comb_1(plugin):
     expected = [({}, [5, 7])]
     for i, res in enumerate(expected):
         assert combined_results[i] == res[1]
+    # checking the output_dir
+    assert nn.output_dir
+    for odir in nn.output_dir:
+        assert odir.exists()
 
 
 @pytest.mark.parametrize(
@@ -574,6 +617,10 @@ def test_task_state_comb_2(
     combined_results = [[res.output.out for res in res_l] for res_l in results]
     for i, res in enumerate(expected):
         assert combined_results[i] == res[1]
+    # checking the output_dir
+    assert nn.output_dir
+    for odir in nn.output_dir:
+        assert odir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -600,6 +647,10 @@ def test_task_state_comb_singl_1(plugin):
     combined_results = [[res.output.out for res in res_l] for res_l in results]
     for i, res in enumerate(expected):
         assert combined_results[i] == res[1]
+    # checking the output_dir
+    assert nn.output_dir
+    for odir in nn.output_dir:
+        assert odir.exists()
 
 
 # Testing caching for tasks with states
