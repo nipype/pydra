@@ -175,7 +175,7 @@ def test_shell_cmd(tmpdir):
     assert res.output.stdout == " ".join(cmd[1:]) + "\n"
 
     # separate command into exec + args
-    shelly = ShellCommandTask(name="test", executable=cmd[0], args=cmd[1:])
+    shelly = ShellCommandTask(executable=cmd[0], args=cmd[1:])
     assert shelly.inputs.executable == "echo"
     assert shelly.cmdline == " ".join(cmd)
     res = shelly._run()
