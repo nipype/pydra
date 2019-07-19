@@ -5,6 +5,7 @@ import cloudpickle as cp
 from pathlib import Path
 import os
 import sys
+from hashlib import sha256
 
 from .specs import Runtime
 
@@ -168,7 +169,7 @@ def execute(cmd):
 
 
 def create_checksum(name, inputs):
-    return "_".join((name, inputs.hash))
+    return "_".join((name, inputs))
 
 
 def record_error(error_path, error):
@@ -214,7 +215,7 @@ def create_pyscript(task_path, checksum):
     pyscript : File
         Execution script
     """
-    task_pkl = (task_path / "_task.pklz")
+    task_pkl = task_path / "_task.pklz"
     if not task_pkl.exists() or not task_pkl.stat().st_size:
         raise Exception("Missing or empty task!")
 
@@ -236,7 +237,11 @@ if not task.result():
 save(task_path, task=task)
 print("Completed", task, task.checksum)
 """
-    pyscript = (task_path / f"pyscript_{checksum}.py")
+    pyscript = task_path / f"pyscript_{checksum}.py"
     with pyscript.open("wt") as fp:
         fp.writelines(content)
     return pyscript
+
+
+def hash_function(obj):
+    return sha256(str(obj).encode()).hexdigest()

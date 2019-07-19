@@ -148,7 +148,7 @@ def to_task(func_to_decorate):
 class ShellCommandTask(TaskBase):
     def __init__(
         self,
-        name,
+        name=None,
         input_spec: ty.Optional[SpecInfo] = None,
         output_spec: ty.Optional[SpecInfo] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,

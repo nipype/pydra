@@ -14,6 +14,8 @@ env:
     - CHECK_TYPE="test"
     - INSTALL_TYPE="pip"
     - INSTALL_DEPENDS="pip setuptools"
+    - PIP_ARGS=""
+
   matrix:
     - INSTALL_TYPE="install"
     - INSTALL_TYPE="develop"
@@ -26,9 +28,14 @@ env:
 # This should only fail with pip 10.0.1 with URL requirements (e.g., "package @ URL")
 # Useful for testing un-released upstream fixes
 matrix:
+  include:
+  - python: "3.8-dev"
+    env: INSTALL_TYPE="pip" PIP_ARGS="--pre"
   allow_failures:
   - python: 3.7
     env: INSTALL_DEPENDS="pip==10.0.1 setuptools==30.3.0"
+  - python: "3.8-dev"
+    env: INSTALL_TYPE="pip" PIP_ARGS="--pre"
 
 
 before_install:
@@ -39,7 +46,7 @@ install:
   - |
     if [ "$CHECK_TYPE" = "test" ]; then
         if [ "$INSTALL_TYPE" = "pip" ]; then
-            pip install .
+            pip install "$PIP_ARGS" .
         elif [ "$INSTALL_TYPE" = "install" ]; then
             python setup.py install
         elif [ "$INSTALL_TYPE" = "develop" ]; then
@@ -78,7 +85,7 @@ before_script:
 script:
   - |
     if [ "$CHECK_TYPE" = "test" ]; then
-        py.test -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+       pytest -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
     elif [ "$CHECK_TYPE" = "style" ]; then
         black pydra setup.py
     fi
