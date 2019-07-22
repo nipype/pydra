@@ -220,17 +220,31 @@ def test_exception_func():
     assert pytest.raises(Exception, bad_funk)
 
 
-# @pytest.mark.xfail(reason="errors from cloudpickle")
-def test_audit(tmpdir):
+def test_audit_prov(tmpdir):
     @to_task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
-    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     funky.cache_dir = tmpdir
     funky()
 
-    # TODO: AuditFlag.ALL gives a picle error
+    funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    message_path = tmpdir / funky.checksum / "messages"
+    funky.cache_dir = tmpdir
+    funky.messenger_args = dict(message_dir=message_path)
+    funky()
+
+    collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
+    assert (tmpdir / funky.checksum / "messages.jsonld").exists()
+
+
+@pytest.mark.xfail(reason="errors from cloudpickle")
+def test_audit_all(tmpdir):
+    @to_task
+    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+        return a + b
+
     funky = testfunc(a=2, audit_flags=AuditFlag.ALL, messengers=FileMessenger())
     message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
