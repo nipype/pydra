@@ -301,7 +301,6 @@ def test_wf_ndst_updatespl_1a(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.xfail(reason="updating input doesn't work TODO")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_updateinp_1(plugin):
     """ workflow with one task,
@@ -315,7 +314,7 @@ def test_wf_ndst_updateinp_1(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
     wf.add2.split("x")
-    wf.add2.x = wf.lzin.y
+    wf.add2.inputs.x = wf.lzin.y
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
