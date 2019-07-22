@@ -508,7 +508,6 @@ class Workflow(TaskBase):
         self._last_added = task
         self.create_connections(task)
         logger.debug(f"Added {task}")
-        self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
         return self
 
     def create_connections(self, task):

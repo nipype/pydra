@@ -255,6 +255,79 @@ def test_wf_ndst_1(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndst_updatespl_1(plugin):
+    """ workflow with one task,
+        a splitter on the task level is added *after* calling add
+    """
+    wf = Workflow(name="wf_spl_1", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+    wf.inputs.x = [1, 2]
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+    wf.add2.split("x")
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
+    assert results.output.out == [3, 4]
+    assert wf.output_dir.exists()
+
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndst_updatespl_1a(plugin):
+    """ workflow with one task (initialize before calling add),
+        a splitter on the task level is added *after* calling add
+    """
+    wf = Workflow(name="wf_spl_1", input_spec=["x"])
+    task_add2 = add2(name="add2", x=wf.lzin.x)
+    wf.add(task_add2)
+    task_add2.split("x")
+    wf.inputs.x = [1, 2]
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
+    assert results.output.out == [3, 4]
+    assert wf.output_dir.exists()
+
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.xfail(reason="updating input doesn't work TODO")
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndst_updateinp_1(plugin):
+    """ workflow with one task,
+        a splitter on the task level,
+        updating input of the task after calling add
+    """
+    wf = Workflow(name="wf_spl_1", input_spec=["x", "y"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [11, 12]
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+    wf.add2.split("x")
+    wf.add2.x = wf.lzin.y
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out == [13, 14]
+    assert wf.output_dir.exists()
+
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_2(plugin):
     """ workflow with one task, splitters and combiner for workflow"""
     wf = Workflow(name="wf_st_2", input_spec=["x"])
@@ -860,6 +933,32 @@ def test_wfasnd_st_1(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_wfasnd_st_updatespl_1(plugin):
+    """ workflow as a node
+        workflow-node with one task,
+        splitter for wfnd is set after add
+    """
+    wfnd = Workflow(name="wfnd", input_spec=["x"])
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wfnd.inputs.x = [2, 4]
+
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(wfnd)
+    wfnd.split("x")
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out == [4, 6]
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_ndst_1(plugin):
     """ workflow as a node
         workflow-node with one task,
@@ -874,6 +973,34 @@ def test_wfasnd_ndst_1(plugin):
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out == [4, 6]
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wfasnd_ndst_updatespl_1(plugin):
+    """ workflow as a node
+        workflow-node with one task,
+        splitter for node added after add
+    """
+    wfnd = Workflow(name="wfnd", input_spec=["x"])
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    # TODO: without this the test is failing
+    wfnd.plugin = plugin
+    wfnd.inputs.x = [2, 4]
+
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(wfnd)
+    wfnd.add2.split("x")
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
 
