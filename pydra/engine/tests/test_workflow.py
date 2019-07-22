@@ -1337,6 +1337,74 @@ def test_wf_state_cachelocations(plugin, tmpdir):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
+    """
+    Two identical wfs (with states) with provided cache_dir;
+    the second wf has cache_locations and should not recompute the results
+    (the lazy input of the node is updated to the correct one,
+    i.e. the same as in wf1, after adding the node to the wf)
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+    cache_dir2 = tmpdir.mkdir("test_wf_cache4")
+
+    wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.inputs.x = [2, 20]
+    wf1.inputs.y = [3, 4]
+    wf1.split(splitter=("x", "y"))
+    wf1.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+    t1 = time.time() - t0
+
+    results1 = wf1.result()
+    assert results1[0].output.out == 8
+    assert results1[1].output.out == 82
+
+    wf2 = Workflow(
+        name="wf",
+        input_spec=["x", "y"],
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+    )
+    wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.x))
+    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
+    wf2.set_output([("out", wf2.add2.lzout.out)])
+    wf2.inputs.x = [2, 20]
+    wf2.inputs.y = [3, 4]
+    wf2.split(splitter=("x", "y"))
+    wf2.plugin = plugin
+    wf2.mult.inputs.y = wf2.lzin.y
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf2)
+    t2 = time.time() - t0
+
+    results2 = wf2.result()
+    assert results2[0].output.out == 8
+    assert results2[1].output.out == 82
+
+    # checking execution time
+    assert t1 > 3
+    assert t2 < 0.1
+
+    # checking all directories
+    assert wf1.output_dir
+    for odir in wf1.output_dir:
+        assert odir.exists()
+    # checking if the second wf didn't run again
+    # checking all directories
+    assert wf2.output_dir
+    for odir in wf2.output_dir:
+        assert not odir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_state_n_nostate_cachelocations(plugin, tmpdir):
     """
     Two wfs with provided cache_dir, the first one has no state, the second has;
@@ -1505,8 +1573,8 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstate_cachelocations(plugin, tmpdir):
     """
-    Two wfs with identical inputs and slightly different graph (a node has different state);
-    the second wf has cache_locations and should recompute the results
+    Two wfs with identical inputs and node states;
+    the second wf has cache_locations and should not recompute the results
     """
     cache_dir1 = tmpdir.mkdir("test_wf_cache3")
     cache_dir2 = tmpdir.mkdir("test_wf_cache4")
@@ -1539,6 +1607,68 @@ def test_wf_ndstate_cachelocations(plugin, tmpdir):
         multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y).split(splitter=("x", "y"))
     )
     wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
+    wf2.set_output([("out", wf2.add2.lzout.out)])
+    wf2.inputs.x = [2, 20]
+    wf2.inputs.y = [3, 4]
+    wf2.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf2)
+    t2 = time.time() - t0
+
+    results2 = wf2.result()
+    assert results2.output.out == [8, 82]
+
+    # checking execution time
+    assert t1 > 3
+    assert t2 < 0.1
+
+    # checking all directories
+    assert wf1.output_dir.exists()
+
+    # checking if the second wf didn't run again
+    # checking all directories
+    assert not wf2.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstate_cachelocations_updatespl(plugin, tmpdir):
+    """
+    Two wfs with identical inputs and node state (that is set after adding the node!);
+    the second wf has cache_locations and should not recompute the results
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+    cache_dir2 = tmpdir.mkdir("test_wf_cache4")
+
+    wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(
+        multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y).split(splitter=("x", "y"))
+    )
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.inputs.x = [2, 20]
+    wf1.inputs.y = [3, 4]
+    wf1.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+    t1 = time.time() - t0
+
+    results1 = wf1.result()
+    assert results1.output.out == [8, 82]
+
+    wf2 = Workflow(
+        name="wf",
+        input_spec=["x", "y"],
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+    )
+    wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y))
+
+    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
+    wf2.mult.split(splitter=("x", "y"))
     wf2.set_output([("out", wf2.add2.lzout.out)])
     wf2.inputs.x = [2, 20]
     wf2.inputs.y = [3, 4]

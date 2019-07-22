@@ -506,7 +506,6 @@ class Workflow(TaskBase):
         self.graph.add_nodes(task)
         self.name2obj[task.name] = task
         self._last_added = task
-        self.create_connections(task)
         logger.debug(f"Added {task}")
         return self
 

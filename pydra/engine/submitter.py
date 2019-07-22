@@ -26,7 +26,10 @@ class Submitter:
     def __call__(self, runnable, cache_locations=None):
         if cache_locations is not None:
             runnable.cache_locations = cache_locations
+        # creating all connections and calculating the checksum of the graph before running
         if is_workflow(runnable):
+            for nd in runnable.graph.nodes:
+                runnable.create_connections(nd)
             runnable.inputs._graph_checksums = [
                 nd.checksum for nd in runnable.graph_sorted
             ]
