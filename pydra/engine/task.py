@@ -97,29 +97,32 @@ class FunctionTask(TaskBase):
                 )
             else:
                 return_info = func.__annotations__["return"]
-                if hasattr(return_info, "__name__"):
+                if hasattr(return_info, "__name__") and hasattr(
+                    return_info, "__annotations__"
+                ):
                     output_spec = SpecInfo(
                         name=return_info.__name__,
                         fields=list(return_info.__annotations__.items()),
                         bases=(BaseSpec,),
                     )
                 # Objects like int, float, list, tuple, and dict do not have __name__ attribute.
+                elif hasattr(return_info, "__annotations__"):
+                    output_spec = SpecInfo(
+                        name="Output",
+                        fields=list(return_info.__annotations__.items()),
+                        bases=(BaseSpec,),
+                    )
                 else:
-                    if hasattr(return_info, "__annotations__"):
-                        output_spec = SpecInfo(
-                            name="Output",
-                            fields=list(return_info.__annotations__.items()),
-                            bases=(BaseSpec,),
-                        )
-                    else:
-                        output_spec = SpecInfo(
-                            name="Output",
-                            fields=[
-                                ("out{}".format(n + 1), t)
-                                for n, t in enumerate(return_info)
-                            ],
-                            bases=(BaseSpec,),
-                        )
+                    if not isinstance(return_info, tuple):
+                        return_info = (return_info,)
+                    output_spec = SpecInfo(
+                        name="Output",
+                        fields=[
+                            ("out{}".format(n + 1), t)
+                            for n, t in enumerate(return_info)
+                        ],
+                        bases=(BaseSpec,),
+                    )
         elif "return" in func.__annotations__:
             raise NotImplementedError("Branch not implemented")
         self.output_spec = output_spec
