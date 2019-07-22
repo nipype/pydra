@@ -220,7 +220,7 @@ def test_exception_func():
     assert pytest.raises(Exception, bad_funk)
 
 
-@pytest.mark.xfail(reason="errors from cloudpickle")
+# @pytest.mark.xfail(reason="errors from cloudpickle")
 def test_audit(tmpdir):
     @to_task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
@@ -230,6 +230,7 @@ def test_audit(tmpdir):
     funky.cache_dir = tmpdir
     funky()
 
+    # TODO: AuditFlag.ALL gives a picle error
     funky = testfunc(a=2, audit_flags=AuditFlag.ALL, messengers=FileMessenger())
     message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
