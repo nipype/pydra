@@ -78,7 +78,7 @@ before_script:
 script:
   - |
     if [ "$CHECK_TYPE" = "test" ]; then
-        py.test -vs -n auto --cov pydra/engine/tests/test_task.py --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+        py.test -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
     elif [ "$CHECK_TYPE" = "style" ]; then
         black pydra setup.py
     fi
