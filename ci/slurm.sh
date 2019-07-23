@@ -5,7 +5,7 @@ export DOCKER_IMAGE="mgxd/slurm:19.05.1"
 function travis_before_install {
     docker pull ${DOCKER_IMAGE}
     # have image running in background
-    export CONTAINER_ID=$(docker run -itd -h ernie -v `pwd`:/pydra ${DOCKERIMAGE})
+    export CONTAINER_ID=$(docker run -itd -h ernie -v `pwd`:/pydra ${DOCKER_IMAGE})
     docker exec ${CONTAINER_ID} bash -c "sacct && sinfo && squeue" 2&> /dev/null
     if [ $? -ne 0 ]; then
         echo "Slurm docker image error"
