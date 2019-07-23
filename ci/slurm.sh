@@ -23,7 +23,7 @@ function travis_before_script {
 }
 
 function travis_script {
-    docker exec slurm bash -c "pytest -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra/engine/"
+    docker exec slurm bash -c "cd /pydra && pytest -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra"
 }
 
 function travis_after_script {
