@@ -9,7 +9,7 @@ from ...utils.messenger import PrintMessenger, FileMessenger, collect_messages
 
 
 def test_output():
-    @to_task
+    @to_task()
     def funaddtwo(a):
         return a + 2
 
@@ -20,7 +20,7 @@ def test_output():
 
 @pytest.mark.xfail(reason="cp.dumps(func) depends on the system/setup, TODO!!")
 def test_checksum():
-    @to_task
+    @to_task()
     def funaddtwo(a):
         return a + 2
 
@@ -32,7 +32,7 @@ def test_checksum():
 
 
 def test_annotated_func():
-    @to_task
+    @to_task()
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out1", float)]):
         return a + b
 
@@ -76,7 +76,7 @@ def test_annotated_func():
 def test_annotated_func_multreturn():
     """function has two elements in the return statement"""
 
-    @to_task
+    @to_task()
     def testfunc(
         a: float
     ) -> ty.NamedTuple("Output", [("fractional", float), ("integer", int)]):
@@ -117,7 +117,7 @@ def test_annotated_func_multreturn_exception():
         but three element provided in the spec - should raise an error
     """
 
-    @to_task
+    @to_task()
     def testfunc(
         a: float
     ) -> ty.NamedTuple(
@@ -134,7 +134,7 @@ def test_annotated_func_multreturn_exception():
 
 
 def test_halfannotated_func():
-    @to_task
+    @to_task()
     def testfunc(a, b) -> int:
         return a + b
 
@@ -175,7 +175,7 @@ def test_halfannotated_func():
 
 
 def test_halfannotated_func_multreturn():
-    @to_task
+    @to_task()
     def testfunc(a, b) -> (int, int):
         return a + 1, b + 1
 
@@ -217,7 +217,7 @@ def test_halfannotated_func_multreturn():
 
 
 def test_notannotated_func():
-    @to_task
+    @to_task()
     def no_annots(c, d):
         return c + d
 
@@ -237,7 +237,7 @@ def test_notannotated_func_multreturn():
         all elements should be returned as a tuple ans set to "out"
     """
 
-    @to_task
+    @to_task()
     def no_annots(c, d):
         return c + d, c - d
 
@@ -252,8 +252,58 @@ def test_notannotated_func_multreturn():
     assert result.output.out == (20.2, 13.8)
 
 
+def test_decorator_halfannotated_func():
+    @to_task(outputs_annotation="my_output")
+    def no_annots(c, d):
+        return c + d
+
+    natask = no_annots(c=17, d=3.2)
+    assert hasattr(natask.inputs, "c")
+    assert hasattr(natask.inputs, "d")
+    assert hasattr(natask.inputs, "_func")
+
+    result = natask._run()
+    assert hasattr(result, "output")
+    assert hasattr(result.output, "my_output")
+    assert result.output.my_output == 20.2
+
+
+def test_decorator_halfannotated_func_multreturn():
+    @to_task(outputs_annotation=["sum", "sub"])
+    def no_annots(c, d):
+        return c + d, c - d
+
+    natask = no_annots(c=17, d=3.2)
+    assert hasattr(natask.inputs, "c")
+    assert hasattr(natask.inputs, "d")
+    assert hasattr(natask.inputs, "_func")
+
+    result = natask._run()
+    assert hasattr(result, "output")
+    assert hasattr(result.output, "sum")
+    assert result.output.sum == 20.2
+    assert hasattr(result.output, "sub")
+    assert result.output.sub == 13.8
+
+
+def test_decorator_annotated_func():
+    @to_task(outputs_annotation=("my_output", float))
+    def no_annots(c, d):
+        return c + d
+
+    natask = no_annots(c=17, d=3.2)
+    assert hasattr(natask.inputs, "c")
+    assert hasattr(natask.inputs, "d")
+    assert hasattr(natask.inputs, "_func")
+
+    result = natask._run()
+    assert hasattr(result, "output")
+    assert hasattr(result.output, "my_output")
+    assert result.output.my_output == 20.2
+
+
 def test_exception_func():
-    @to_task
+    @to_task()
     def raise_exception(c, d):
         raise Exception()
 
@@ -262,7 +312,7 @@ def test_exception_func():
 
 
 def test_audit_prov(tmpdir):
-    @to_task
+    @to_task()
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
@@ -282,7 +332,7 @@ def test_audit_prov(tmpdir):
 
 @pytest.mark.xfail(reason="errors from cloudpickle")
 def test_audit_all(tmpdir):
-    @to_task
+    @to_task()
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 

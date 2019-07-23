@@ -66,6 +66,7 @@ class FunctionTask(TaskBase):
         messenger_args=None,
         cache_dir=None,
         cache_locations=None,
+        outputs_annotation_decorator=None,
         **kwargs,
     ):
         self.input_spec = SpecInfo(
@@ -91,7 +92,13 @@ class FunctionTask(TaskBase):
             cache_locations=cache_locations,
         )
         if output_spec is None:
-            if "return" not in func.__annotations__:
+            if outputs_annotation_decorator:
+                fields = [
+                    el if isinstance(el, tuple) else (el, ty.Any)
+                    for el in outputs_annotation_decorator
+                ]
+                output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
+            elif "return" not in func.__annotations__:
                 output_spec = SpecInfo(
                     name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
                 )
@@ -147,12 +154,23 @@ class FunctionTask(TaskBase):
         return self.output_
 
 
-def to_task(func_to_decorate):
-    def create_func(**original_kwargs):
-        function_task = FunctionTask(func=func_to_decorate, **original_kwargs)
-        return function_task
+def to_task(outputs_annotation=None):
+    if outputs_annotation:
+        outputs_annotation = ensure_list(outputs_annotation)
 
-    return create_func
+    def to_task_wrap(func_to_decorate):
+        def create_func(**original_kwargs):
+            print(outputs_annotation)
+            function_task = FunctionTask(
+                func=func_to_decorate,
+                outputs_annotation_decorator=outputs_annotation,
+                **original_kwargs,
+            )
+            return function_task
+
+        return create_func
+
+    return to_task_wrap
 
 
 class ShellCommandTask(TaskBase):
