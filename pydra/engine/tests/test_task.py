@@ -73,7 +73,108 @@ def test_annotated_func():
     ]
 
 
+def test_annotated_func_multreturn():
+    """function has two elements in the return statement"""
+
+    @to_task
+    def testfunc(
+        a: float
+    ) -> ty.NamedTuple("Output", [("fractional", float), ("integer", int)]):
+        import math
+
+        return math.modf(a)
+
+    funky = testfunc(a=3.5)
+    assert hasattr(funky.inputs, "a")
+    assert hasattr(funky.inputs, "_func")
+    assert getattr(funky.inputs, "a") == 3.5
+    assert getattr(funky.inputs, "_func") is not None
+    assert set(funky.output_names) == set(["fractional", "integer"])
+    assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
+
+    result = funky()
+    assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
+    assert hasattr(result, "output")
+    assert hasattr(result.output, "fractional")
+    assert result.output.fractional == 0.5
+    assert hasattr(result.output, "integer")
+    assert result.output.integer == 3
+
+    help = funky.help(returnhelp=True)
+    assert help == [
+        "Help for FunctionTask",
+        "Input Parameters:",
+        "- a: float",
+        "- _func: str",
+        "Output Parameters:",
+        "- fractional: float",
+        "- integer: int",
+    ]
+
+
+def test_annotated_func_multreturn_exception():
+    """function has two elements in the return statement,
+        but three element provided in the spec - should raise an error
+    """
+
+    @to_task
+    def testfunc(
+        a: float
+    ) -> ty.NamedTuple(
+        "Output", [("fractional", float), ("integer", int), ("whoknows", int)]
+    ):
+        import math
+
+        return math.modf(a)
+
+    funky = testfunc(a=3.5)
+    with pytest.raises(Exception) as excinfo:
+        funky()
+    assert "expected 3 elements" in str(excinfo.value)
+
+
 def test_halfannotated_func():
+    @to_task
+    def testfunc(a, b) -> int:
+        return a + b
+
+    funky = testfunc(a=10, b=20)
+    assert hasattr(funky.inputs, "a")
+    assert hasattr(funky.inputs, "b")
+    assert hasattr(funky.inputs, "_func")
+    assert getattr(funky.inputs, "a") == 10
+    assert getattr(funky.inputs, "b") == 20
+    assert getattr(funky.inputs, "_func") is not None
+    assert set(funky.output_names) == set(["out1"])
+    assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
+
+    result = funky()
+    assert hasattr(result, "output")
+    assert hasattr(result.output, "out1")
+    assert result.output.out1 == 30
+
+    assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
+
+    funky.result()  # should not recompute
+    funky.inputs.a = 11
+    assert funky.result() is None
+    funky()
+    result = funky.result()
+    assert result.output.out1 == 31
+    help = funky.help(returnhelp=True)
+
+    assert help == [
+        "Help for FunctionTask",
+        "Input Parameters:",
+        "- a: _empty",
+        "- b: _empty",
+        "- _func: str",
+        "Output Parameters:",
+        "- out1: int",
+    ]
+
+
+def test_halfannotated_func_multreturn():
     @to_task
     def testfunc(a, b) -> (int, int):
         return a + 1, b + 1
@@ -131,6 +232,26 @@ def test_notannotated_func():
     assert result.output.out == 20.2
 
 
+def test_notannotated_func_multreturn():
+    """ no annotation and multiple values are returned
+        all elements should be returned as a tuple ans set to "out"
+    """
+
+    @to_task
+    def no_annots(c, d):
+        return c + d, c - d
+
+    natask = no_annots(c=17, d=3.2)
+    assert hasattr(natask.inputs, "c")
+    assert hasattr(natask.inputs, "d")
+    assert hasattr(natask.inputs, "_func")
+
+    result = natask._run()
+    assert hasattr(result, "output")
+    assert hasattr(result.output, "out")
+    assert result.output.out == (20.2, 13.8)
+
+
 def test_exception_func():
     @to_task
     def raise_exception(c, d):
@@ -140,15 +261,29 @@ def test_exception_func():
     assert pytest.raises(Exception, bad_funk)
 
 
-@pytest.mark.xfail(reason="errors from cloudpickle")
-def test_audit(tmpdir):
+def test_audit_prov(tmpdir):
     @to_task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
-    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     funky.cache_dir = tmpdir
     funky()
+
+    funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    message_path = tmpdir / funky.checksum / "messages"
+    funky.cache_dir = tmpdir
+    funky.messenger_args = dict(message_dir=message_path)
+    funky()
+
+    collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
+    assert (tmpdir / funky.checksum / "messages.jsonld").exists()
+
+
+def test_audit_all(tmpdir):
+    @to_task
+    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+        return a + b
 
     funky = testfunc(a=2, audit_flags=AuditFlag.ALL, messengers=FileMessenger())
     message_path = tmpdir / funky.checksum / "messages"

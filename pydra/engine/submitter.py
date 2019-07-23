@@ -30,6 +30,16 @@ class Submitter:
             runnable.cache_locations = cache_locations
         if self.worker._distributed:
             self.loop.run_until_complete(self.distribute(runnable, cache_locations))
+        # creating all connections and calculating the checksum of the graph before running
+        if is_workflow(runnable):
+            for nd in runnable.graph.nodes:
+                runnable.create_connections(nd)
+            runnable.inputs._graph_checksums = [
+                nd.checksum for nd in runnable.graph_sorted
+            ]
+        # Start event loop and run workflow/task
+        if is_workflow(runnable) and runnable.state is None:
+            self.loop.run_until_complete(runnable._run(self))
         else:
             if is_workflow(runnable) and runnable.state is None:
                 self.loop.run_until_complete(runnable._run(self))

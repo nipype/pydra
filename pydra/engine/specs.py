@@ -25,13 +25,11 @@ class BaseSpec:
         inp_dict = {
             field.name: getattr(self, field.name)
             for field in dc.fields(self)
-            if field.name not in ["_graph"]
+            if field.name not in ["_graph_checksums"]
         }
         inp_hash = hash_function(inp_dict)
-        if hasattr(self, "_graph"):
-            # calculating checksum for every node inside the graph
-            graph_hash = [nd.checksum for nd in self._graph]
-            return hash_function((inp_hash, graph_hash))
+        if hasattr(self, "_graph_checksums"):
+            return hash_function((inp_hash, self._graph_checksums))
         else:
             return inp_hash
 
