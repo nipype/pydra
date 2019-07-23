@@ -132,9 +132,16 @@ class FunctionTask(TaskBase):
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
-        if not isinstance(output, tuple):
-            output = (output,)
-        self.output_ = list(output)
+        if len(self.output_spec.fields) > 1:
+            if len(self.output_spec.fields) == len(output):
+                self.output_ = list(output)
+            else:
+                raise Exception(
+                    f"expected {len(self.output_spec.fields)} elements, "
+                    f"but {len(output)} were returned"
+                )
+        else:  # if only one element in the fields, everything should be returned together
+            self.output_ = output
 
     def _list_outputs(self):
         return self.output_

@@ -112,6 +112,27 @@ def test_annotated_func_multreturn():
     ]
 
 
+def test_annotated_func_multreturn_exception():
+    """function has two elements in the return statement,
+        but three element provided in the spec - should raise an error
+    """
+
+    @to_task
+    def testfunc(
+        a: float
+    ) -> ty.NamedTuple(
+        "Output", [("fractional", float), ("integer", int), ("whoknows", int)]
+    ):
+        import math
+
+        return math.modf(a)
+
+    funky = testfunc(a=3.5)
+    with pytest.raises(Exception) as excinfo:
+        funky()
+    assert "expected 3 elements" in str(excinfo.value)
+
+
 def test_halfannotated_func():
     @to_task
     def testfunc(a, b) -> int:
@@ -209,6 +230,26 @@ def test_notannotated_func():
     assert hasattr(result, "output")
     assert hasattr(result.output, "out")
     assert result.output.out == 20.2
+
+
+def test_notannotated_func_multreturn():
+    """ no annotation and multiple values are returned
+        all elements should be returned as a tuple ans set to "out"
+    """
+
+    @to_task
+    def no_annots(c, d):
+        return c + d, c - d
+
+    natask = no_annots(c=17, d=3.2)
+    assert hasattr(natask.inputs, "c")
+    assert hasattr(natask.inputs, "d")
+    assert hasattr(natask.inputs, "_func")
+
+    result = natask._run()
+    assert hasattr(result, "output")
+    assert hasattr(result.output, "out")
+    assert result.output.out == (20.2, 13.8)
 
 
 def test_exception_func():
