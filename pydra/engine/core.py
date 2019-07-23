@@ -115,7 +115,6 @@ class TaskBase:
             self.inputs = dc.replace(self.inputs, **inputs)
             self.state_inputs = inputs
         self.audit = Audit(
-            AuditFlag=AuditFlag,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,

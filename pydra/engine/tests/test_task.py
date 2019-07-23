@@ -280,7 +280,6 @@ def test_audit_prov(tmpdir):
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
 
 
-@pytest.mark.xfail(reason="errors from cloudpickle")
 def test_audit_all(tmpdir):
     @to_task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
