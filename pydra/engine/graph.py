@@ -26,6 +26,8 @@ class DiGraph:
         new_graph._edges = self._edges[:]
         if self._sorted_nodes:
             new_graph._sorted_nodes = self._sorted_nodes[:]
+        else:
+            new_graph._sorted_nodes = None
         new_graph.predecessors = {}
         for key, val in self.predecessors.items():
             new_graph.predecessors[key] = self.predecessors[key][:]
