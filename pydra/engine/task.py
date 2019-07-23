@@ -97,29 +97,32 @@ class FunctionTask(TaskBase):
                 )
             else:
                 return_info = func.__annotations__["return"]
-                if hasattr(return_info, "__name__"):
+                if hasattr(return_info, "__name__") and hasattr(
+                    return_info, "__annotations__"
+                ):
                     output_spec = SpecInfo(
                         name=return_info.__name__,
                         fields=list(return_info.__annotations__.items()),
                         bases=(BaseSpec,),
                     )
                 # Objects like int, float, list, tuple, and dict do not have __name__ attribute.
+                elif hasattr(return_info, "__annotations__"):
+                    output_spec = SpecInfo(
+                        name="Output",
+                        fields=list(return_info.__annotations__.items()),
+                        bases=(BaseSpec,),
+                    )
                 else:
-                    if hasattr(return_info, "__annotations__"):
-                        output_spec = SpecInfo(
-                            name="Output",
-                            fields=list(return_info.__annotations__.items()),
-                            bases=(BaseSpec,),
-                        )
-                    else:
-                        output_spec = SpecInfo(
-                            name="Output",
-                            fields=[
-                                ("out{}".format(n + 1), t)
-                                for n, t in enumerate(return_info)
-                            ],
-                            bases=(BaseSpec,),
-                        )
+                    if not isinstance(return_info, tuple):
+                        return_info = (return_info,)
+                    output_spec = SpecInfo(
+                        name="Output",
+                        fields=[
+                            ("out{}".format(n + 1), t)
+                            for n, t in enumerate(return_info)
+                        ],
+                        bases=(BaseSpec,),
+                    )
         elif "return" in func.__annotations__:
             raise NotImplementedError("Branch not implemented")
         self.output_spec = output_spec
@@ -129,9 +132,16 @@ class FunctionTask(TaskBase):
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
-        if not isinstance(output, tuple):
-            output = (output,)
-        self.output_ = list(output)
+        if len(self.output_spec.fields) > 1:
+            if len(self.output_spec.fields) == len(output):
+                self.output_ = list(output)
+            else:
+                raise Exception(
+                    f"expected {len(self.output_spec.fields)} elements, "
+                    f"but {len(output)} were returned"
+                )
+        else:  # if only one element in the fields, everything should be returned together
+            self.output_ = output
 
     def _list_outputs(self):
         return self.output_
