@@ -6,7 +6,13 @@ function travis_before_install {
     docker pull ${DOCKER_IMAGE}
     # have image running in background
     docker run -itd -h ernie --name slurm -v `pwd`:/pydra ${DOCKER_IMAGE}
-    echo "Sleeping so ports can wake up" && sleep 10
+    echo "Allowing ports/daemons time to start" && sleep 10
+    # ensure sacct displays previous jobs
+    # https://github.com/giovtorres/docker-centos7-slurm/issues/3
+    docker exec slurm bash -c "sacctmgr -i add cluster name=linux \
+        && supervisorctl restart slurmdbd \
+        && supervisorctl restart slurmctld \
+        && sacctmgr -i add account none,test Cluster=linux Description='none' Organization='none'"
     docker exec slurm bash -c "sacct && sinfo && squeue" 2&> /dev/null
     if [ $? -ne 0 ]; then
         echo "Slurm docker image error"
@@ -15,7 +21,7 @@ function travis_before_install {
 }
 
 function travis_install {
-    docker exec slurm bash -c "cd /pydra && pip install -e .[test] && python -c 'import pydra; print(pydra.__version__)'"
+    docker exec slurm bash -c "pip install -e /pydra[test] && python -c 'import pydra; print(pydra.__version__)'"
 }
 
 function travis_before_script {
@@ -23,7 +29,7 @@ function travis_before_script {
 }
 
 function travis_script {
-    docker exec slurm bash -c "cd /pydra && pytest -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra"
+    docker exec slurm bash -c "pytest --color=yes -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules /pydra/pydra"
 }
 
 function travis_after_script {
