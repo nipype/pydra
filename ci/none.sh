@@ -49,7 +49,7 @@ function travis_script {
     if [ "$CHECK_TYPE" = "test" ]; then
        pytest -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
     elif [ "$CHECK_TYPE" = "style" ]; then
-        black pydra setup.py
+        black --check pydra setup.py
     fi
 }
 
