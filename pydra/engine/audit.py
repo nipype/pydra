@@ -6,9 +6,7 @@ from .helpers import ensure_list, gather_runtime_info
 
 
 class Audit:
-    def __init__(
-        self, audit_flags, messengers, messenger_args, develop=None
-    ):
+    def __init__(self, audit_flags, messengers, messenger_args, develop=None):
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
