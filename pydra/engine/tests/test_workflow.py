@@ -1754,3 +1754,34 @@ def test_wf_ndstate_cachelocations_recompute(plugin, tmpdir):
     # checking if the second wf didn't run again
     # checking all directories
     assert wf2.output_dir.exists()
+
+
+@pytest.fixture
+def create_tasks():
+    wf = Workflow(name="wf", input_spec=["x"])
+    t1 = add2(name="task1")
+    t2 = multiply(name="task2")
+    return wf, t1, t2
+
+
+def test_cache_propagation1(tmpdir, create_tasks):
+    wf, t1, t2 = create_tasks
+    assert wf.cache_dir != t1.cache_dir != t2.cache_dir
+    # add tasks to workflow with already set cache_dir
+    wf.cache_dir = (tmpdir / "newdir").strpath
+    wf.add(t1)
+    t2.cache_dir = (tmpdir / "otherdir").strpath
+    wf.add(t2)
+    assert wf.cache_dir == t1.cache_dir == t2.cache_dir
+
+
+@pytest.mark.xfail(message="Not implemented")
+def test_cache_propagation2(tmpdir, create_tasks):
+    wf, t1, t2 = create_tasks
+    assert wf.cache_dir != t1.cache_dir != t2.cache_dir
+    # add tasks to workflow, and then set cache_dir
+    wf.add(t1)
+    t2.cache_dir = (tmpdir / "otherdir").strpath
+    wf.add(t2)
+    wf.cache_dir = (tmpdir / "newdir").strpath
+    assert wf.cache_dir == t1.cache_dir == t2.cache_dir

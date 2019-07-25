@@ -205,9 +205,11 @@ class TaskBase:
     @cache_dir.setter
     def cache_dir(self, location):
         if location is not None:
+            self._custom_cache_dir = True
             self._cache_dir = Path(location).resolve()
             self._cache_dir.mkdir(parents=False, exist_ok=True)
         else:
+            self._custom_cache_dir = False
             self._cache_dir = mkdtemp()
             self._cache_dir = Path(self._cache_dir)
 
@@ -502,6 +504,8 @@ class Workflow(TaskBase):
         """adding a task to the workflow"""
         if not is_task(task):
             raise ValueError("Unknown workflow element: {!r}".format(task))
+        if self._custom_cache_dir:
+            task.cache_dir = self.cache_dir
         self.graph.add_nodes(task)
         self.name2obj[task.name] = task
         self._last_added = task
