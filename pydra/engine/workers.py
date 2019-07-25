@@ -1,4 +1,3 @@
-import time
 import asyncio
 import sys
 import re
@@ -36,13 +35,19 @@ class DistributedWorker(Worker):
         super(DistributedWorker, self).__init__(loop)
         self._distributed = True
 
-    @staticmethod
-    def _prepare_runscripts(task, interpreter="/bin/sh"):
-        pyscript = create_pyscript(task.output_dir, task.checksum)
-        batchscript = (task.output_dir / f"batchscript_{task.checksum}.sh")
-        shebang = f"#!{interpreter}"
-        bcmd = "\n".join((shebang, f"{sys.executable} {str(pyscript)}"))
-        with batchscript.open('wt') as fp:
+    def _prepare_runscripts(self, task, interpreter="/bin/sh"):
+        script_dir = task.cache_dir / f"{self.__class__.__name__}scripts"
+        script_dir.mkdir(parents=True, exist_ok=True)
+        pyscript = create_pyscript(script_dir, task.output_dir, task.checksum)
+        batchscript = script_dir / f"batchscript_{task.checksum}.sh"
+        bcmd = "\n".join(
+            (
+                f"#!{interpreter}",
+                f"#SBATCH --output={str(script_dir / 'slurm-%j.out')}",
+                f"{sys.executable} {str(pyscript)}",
+            )
+        )
+        with batchscript.open("wt") as fp:
             fp.writelines(bcmd)
         return batchscript
 
@@ -149,8 +154,7 @@ class SlurmWorker(DistributedWorker):
         self.poll_delay = poll_delay
         self.sbatch_args = sbatch_args or ""
         self.sacct_re = re.compile(
-            '(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +'
-            '(?P<exit_code>\\d+):\\d+'
+            "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
         )
         self.pending = set()
         self.failed = set()
@@ -176,11 +180,11 @@ class SlurmWorker(DistributedWorker):
             sargs.append(f"--job-name={jobname}")
         output = re.search(r"(?<=-o )\S+|(?<=--output=)\S+", self.sbatch_args)
         if not output:
-            output = str(batchscript.parent / 'slurm-%j.out')
+            output = str(batchscript.parent / "slurm-%j.out")
             sargs.append(f"--output={output}")
         sargs.append(str(batchscript))
         # TO CONSIDER: add random sleep to avoid overloading calls
-        _, stdout, _ = await read_and_display('sbatch', *sargs, hide_display=True)
+        _, stdout, _ = await read_and_display("sbatch", *sargs, hide_display=True)
         jobid = re.search(r"\d+", stdout)
         if not jobid:
             raise RuntimeError("Could not extract job ID")
@@ -191,7 +195,7 @@ class SlurmWorker(DistributedWorker):
 
     async def _poll_jobs(self, raise_exception):
         sargs = ("-h", "-j", ",".join(self.pending))
-        _, stdout, _ = await read_and_display('squeue', *sargs, hide_display=True)
+        _, stdout, _ = await read_and_display("squeue", *sargs, hide_display=True)
         if not stdout:
             if raise_exception:
                 raise RuntimeError("Nothing to run")
@@ -200,7 +204,7 @@ class SlurmWorker(DistributedWorker):
 
     async def _poll_job(self, jobid):
         sargs = ("-h", "-j", jobid)
-        rc, stdout, stderr = await read_and_display('squeue', *sargs, hide_display=True)
+        rc, stdout, stderr = await read_and_display("squeue", *sargs, hide_display=True)
         if not stdout or "slurm_load_jobs" in stderr:
             # job is no longer running - check exit code
             await self._verify_exit_code(jobid)
@@ -211,11 +215,11 @@ class SlurmWorker(DistributedWorker):
 
     async def _verify_exit_code(self, jobid):
         sargs = ("-n", "-X", "-j", jobid, "-o", "JobID,State,ExitCode")
-        _, stdout, _ = await read_and_display('sacct', *sargs, hide_display=True)
+        _, stdout, _ = await read_and_display("sacct", *sargs, hide_display=True)
         if not stdout:
             raise RuntimeError("Job information not found")
         m = self.sacct_re.search(stdout)
-        if int(m.group('exit_code')) != 0 or m.group('status') != "COMPLETED":
+        if int(m.group("exit_code")) != 0 or m.group("status") != "COMPLETED":
             # TODO: potential for requeuing
             self.pending.remove(jobid)
             self.failed.add(jobid)
@@ -232,13 +236,14 @@ class SlurmWorker(DistributedWorker):
         for job in submitted:
             # tracker for submitted job IDs
             self.pending.add(job)
+            print(f"Added job {job}")
 
         while True:
             # poll all submitted jobs until single job has completed
             for job in self.pending:
                 done = await self._poll_job(job)
                 if done is not None:
-                    self.pending.remove(job)
+                    print(f"Removed job {job}")
                     # break polling and check if pending jobs
                     return self.pending
                 await asyncio.sleep(self.poll_delay)

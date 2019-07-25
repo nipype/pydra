@@ -2,35 +2,12 @@ import pytest
 import shutil
 import time
 
+from .utils import add2, add2_wait, multiply
 from ..submitter import Submitter
-from ..task import to_task
 from ..core import Workflow
 
 
 Plugins = ["cf"]
-
-
-@to_task
-def double(x):
-    return x * 2
-
-
-@to_task
-def multiply(x, y):
-    return x * y
-
-
-@to_task
-def add2(x):
-    if x == 1 or x == 12:
-        time.sleep(1)
-    return x + 2
-
-
-@to_task
-def add2_wait(x):
-    time.sleep(3)
-    return x + 2
 
 
 @pytest.mark.parametrize("plugin", Plugins)

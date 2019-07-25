@@ -198,14 +198,14 @@ def get_open_loop():
     return loop
 
 
-def create_pyscript(task_path, checksum):
+def create_pyscript(script_path, task_path, checksum):
     """
     Create standalone script for task execution in
     a different environment.
 
     Parameters
     ----------
-    task_path : Path
+    script_path : Path
         Pickled ``Task`` path
     checksum : str
         ``Task``'s checksum
@@ -237,7 +237,7 @@ if not task.result():
 save(task_path, task=task)
 print("Completed", task, task.checksum)
 """
-    pyscript = task_path / f"pyscript_{checksum}.py"
+    pyscript = script_path / f"pyscript_{checksum}.py"
     with pyscript.open("wt") as fp:
         fp.writelines(content)
     return pyscript

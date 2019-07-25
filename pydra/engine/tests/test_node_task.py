@@ -1,10 +1,12 @@
-import os, shutil
+import os
+import shutil
 import numpy as np
-import pytest, pdb
+import pytest
+
+from .utils import fun_addtwo, fun_addvar, fun_addvar4, moment, fun_div
 
 from ..core import TaskBase
 from ..submitter import Submitter
-from ..task import to_task
 
 Plugins = ["cf"]
 
@@ -22,39 +24,7 @@ def change_dir(request):
     request.addfinalizer(move2orig)
 
 
-@to_task
-def fun_addtwo(a):
-    import time
-
-    time.sleep(1)
-    if a == 3:
-        time.sleep(2)
-    return a + 2
-
-
-@to_task
-def fun_addvar(a, b):
-    return a + b
-
-
-@to_task
-def fun_addvar4(a, b, c, d):
-    return a + b + c + d
-
-
-@to_task
-def moment(lst, n):
-    return sum([i ** n for i in lst]) / len(lst)
-
-
-@to_task
-def fun_div(a, b):
-    return a / b
-
-
 # Tests for tasks initializations
-
-
 def test_task_init_1():
     """ task with mandatory arguments only"""
     nn = fun_addtwo()
