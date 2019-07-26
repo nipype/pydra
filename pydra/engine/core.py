@@ -62,7 +62,7 @@ class TaskBase:
     # TODO: write state should be removed
     def __init__(
         self,
-        name,
+        name: str,
         inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
@@ -122,6 +122,7 @@ class TaskBase:
         )
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
+        self.allow_cache_override = True
         self._checksum = None
 
         # dictionary of results from tasks
@@ -166,12 +167,16 @@ class TaskBase:
         """
         input_hash = self.inputs.hash
         if self.state is None:
-            self._checksum = create_checksum(self.__class__.__name__, input_hash)
+            self._checksum = create_checksum(
+                self.__class__.__name__, self.name, input_hash
+            )
         else:
             # including splitter in the hash
             splitter_hash = hash_function(self.state.splitter)
             self._checksum = create_checksum(
-                self.__class__.__name__, hash_function([input_hash, splitter_hash])
+                self.__class__.__name__,
+                self.name,
+                hash_function([input_hash, splitter_hash]),
             )
         return self._checksum
 
@@ -504,8 +509,6 @@ class Workflow(TaskBase):
         """adding a task to the workflow"""
         if not is_task(task):
             raise ValueError("Unknown workflow element: {!r}".format(task))
-        if self._custom_cache_dir:
-            task.cache_dir = self.cache_dir
         self.graph.add_nodes(task)
         self.name2obj[task.name] = task
         self._last_added = task
