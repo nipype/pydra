@@ -5,10 +5,11 @@ import pytest
 
 from ..submitter import Submitter
 from ..core import Workflow
-from ..task import to_task
+from ... import mark
+from ..specs import File
 
 
-@to_task
+@mark.task
 def file_add2(file):
     array_inp = np.load(file)
     array_out = array_inp + 2
@@ -19,8 +20,29 @@ def file_add2(file):
     return file_out
 
 
-@to_task
+@mark.task
 def file_mult(file):
+    array_inp = np.load(file)
+    array_out = 10 * array_inp
+    cwd = os.getcwd()
+    file_out = os.path.join(cwd, "arr_out.npy")
+    np.save(file_out, array_out)
+    return file_out
+
+
+@mark.task
+def file_add2_annot(file: File) -> File:
+    array_inp = np.load(file)
+    array_out = array_inp + 2
+    cwd = os.getcwd()
+    # providing a full path
+    file_out = os.path.join(cwd, "arr_out.npy")
+    np.save(file_out, array_out)
+    return file_out
+
+
+@mark.task
+def file_mult_annot(file: File) -> File:
     array_inp = np.load(file)
     array_out = 10 * array_inp
     cwd = os.getcwd()
@@ -70,3 +92,21 @@ def test_wf_1(tmpdir):
     # loading results
     array_out = np.load(file_output)
     assert np.array_equal(array_out, [40, 50])
+
+
+def test_file_annotation_1(tmpdir):
+    """ task that takes file as an input"""
+    os.chdir(tmpdir)
+    arr = np.array([2])
+    # creating abs path
+    file = os.path.join(os.getcwd(), "arr1.npy")
+    np.save(file, arr)
+    nn = file_add2_annot(name="add2", file=file)
+    breakpoint()
+    with Submitter(plugin="cf") as sub:
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    res = np.load(results.output.out)
+    assert res == np.array([4])
