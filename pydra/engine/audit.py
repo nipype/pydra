@@ -6,10 +6,7 @@ from .helpers import ensure_list, gather_runtime_info
 
 
 class Audit:
-    def __init__(
-        self, AuditFlag, audit_flags, messengers, messenger_args, develop=None
-    ):
-        self.AuditFlag = AuditFlag  # should I use AuditFlag from utils.messenger??
+    def __init__(self, audit_flags, messengers, messenger_args, develop=None):
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
@@ -19,13 +16,13 @@ class Audit:
         # start recording provenance, but don't send till directory is created
         # in case message directory is inside task output directory
         self.odir = odir
-        if self.audit_check(self.AuditFlag.PROV):
+        if self.audit_check(AuditFlag.PROV):
             self.aid = "uid:{}".format(gen_uuid())
             start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now()}
         os.chdir(self.odir)
-        if self.audit_check(self.AuditFlag.PROV):
-            self.audit_message(start_message, self.AuditFlag.PROV)
-        if self.audit_check(self.AuditFlag.RESOURCE):
+        if self.audit_check(AuditFlag.PROV):
+            self.audit_message(start_message, AuditFlag.PROV)
+        if self.audit_check(AuditFlag.RESOURCE):
             from ..utils.profiler import ResourceMonitor
 
             self.resource_monitor = ResourceMonitor(os.getpid(), logdir=self.odir)
@@ -73,6 +70,7 @@ class Audit:
                     },
                     AuditFlag.PROV,
                 )
+            self.resource_monitor = None
         if self.audit_check(AuditFlag.PROV):
             # audit outputs
             self.audit_message(

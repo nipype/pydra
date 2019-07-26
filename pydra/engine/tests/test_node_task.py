@@ -2,9 +2,9 @@ import os, shutil
 import numpy as np
 import pytest, pdb
 
+from ... import mark
 from ..core import TaskBase
 from ..submitter import Submitter
-from ..task import to_task
 
 Plugins = ["cf"]
 
@@ -22,7 +22,7 @@ def change_dir(request):
     request.addfinalizer(move2orig)
 
 
-@to_task
+@mark.task
 def fun_addtwo(a):
     import time
 
@@ -32,22 +32,22 @@ def fun_addtwo(a):
     return a + 2
 
 
-@to_task
+@mark.task
 def fun_addvar(a, b):
     return a + b
 
 
-@to_task
+@mark.task
 def fun_addvar4(a, b, c, d):
     return a + b + c + d
 
 
-@to_task
+@mark.task
 def moment(lst, n):
     return sum([i ** n for i in lst]) / len(lst)
 
 
-@to_task
+@mark.task
 def fun_div(a, b):
     return a / b
 

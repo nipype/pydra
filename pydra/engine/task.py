@@ -112,6 +112,12 @@ class FunctionTask(TaskBase):
                         fields=list(return_info.__annotations__.items()),
                         bases=(BaseSpec,),
                     )
+                elif isinstance(return_info, dict):
+                    output_spec = SpecInfo(
+                        name="Output",
+                        fields=list(return_info.items()),
+                        bases=(BaseSpec,),
+                    )
                 else:
                     if not isinstance(return_info, tuple):
                         return_info = (return_info,)
@@ -145,14 +151,6 @@ class FunctionTask(TaskBase):
 
     def _list_outputs(self):
         return self.output_
-
-
-def to_task(func_to_decorate):
-    def create_func(**original_kwargs):
-        function_task = FunctionTask(func=func_to_decorate, **original_kwargs)
-        return function_task
-
-    return create_func
 
 
 class ShellCommandTask(TaskBase):
