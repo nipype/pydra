@@ -62,7 +62,7 @@ class TaskBase:
     # TODO: write state should be removed
     def __init__(
         self,
-        name,
+        name: str,
         inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
@@ -122,6 +122,7 @@ class TaskBase:
         )
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
+        self.allow_cache_override = True
         self._checksum = None
 
         # dictionary of results from tasks
