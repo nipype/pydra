@@ -167,16 +167,12 @@ class TaskBase:
         """
         input_hash = self.inputs.hash
         if self.state is None:
-            self._checksum = create_checksum(
-                self.__class__.__name__, self.name, input_hash
-            )
+            self._checksum = create_checksum(self.__class__.__name__, input_hash)
         else:
             # including splitter in the hash
             splitter_hash = hash_function(self.state.splitter)
             self._checksum = create_checksum(
-                self.__class__.__name__,
-                self.name,
-                hash_function([input_hash, splitter_hash]),
+                self.__class__.__name__, hash_function([input_hash, splitter_hash])
             )
         return self._checksum
 

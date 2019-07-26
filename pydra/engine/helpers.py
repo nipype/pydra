@@ -153,8 +153,8 @@ def execute(cmd):
     return rc, stdout, stderr
 
 
-def create_checksum(klass, name, inputs):
-    return f"{klass}-{name}_{inputs}"
+def create_checksum(name, inputs):
+    return "_".join((name, inputs))
 
 
 def record_error(error_path, error):
