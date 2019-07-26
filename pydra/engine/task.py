@@ -147,14 +147,6 @@ class FunctionTask(TaskBase):
         return self.output_
 
 
-def to_task(func_to_decorate):
-    def create_func(**original_kwargs):
-        function_task = FunctionTask(func=func_to_decorate, **original_kwargs)
-        return function_task
-
-    return create_func
-
-
 class ShellCommandTask(TaskBase):
     def __init__(
         self,
