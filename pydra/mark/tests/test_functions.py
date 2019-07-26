@@ -66,3 +66,22 @@ def test_invalid_annotation():
         @annotate({"b": int})
         def addtwo(a):
             return a + 2
+
+
+def test_annotated_task():
+    @task
+    def square(in_val: float):
+        return in_val ** 2
+
+    res = square(in_val=2.0)._run()
+    assert res.output.out == 4.0
+
+
+def test_return_annotated_task():
+    @task
+    @annotate({"in_val": float, "return": {"squared": float}})
+    def square(in_val):
+        return in_val ** 2
+
+    res = square(in_val=2.0)._run()
+    assert res.output.squared == 4.0

@@ -112,6 +112,12 @@ class FunctionTask(TaskBase):
                         fields=list(return_info.__annotations__.items()),
                         bases=(BaseSpec,),
                     )
+                elif isinstance(return_info, dict):
+                    output_spec = SpecInfo(
+                        name="Output",
+                        fields=list(return_info.items()),
+                        bases=(BaseSpec,),
+                    )
                 else:
                     if not isinstance(return_info, tuple):
                         return_info = (return_info,)
