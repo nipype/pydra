@@ -237,14 +237,17 @@ class TaskBase:
             return self._cache_dir / self.checksum
 
     def __call__(self, submitter=None, plugin=None, **kwargs):
+        from .submitter import Submitter
+
         if submitter and plugin:
             raise Exception("you can specify submitter OR plugin, not both")
         elif submitter:
             submitter(self)
         elif plugin:
-            from .submitter import Submitter
-
             with Submitter(plugin=plugin) as sub:
+                sub(self)
+        elif self.state:
+            with Submitter() as sub:
                 sub(self)
         else:
             return self._run(**kwargs)

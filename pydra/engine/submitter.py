@@ -11,7 +11,7 @@ logger = logging.getLogger("pydra.submitter")
 
 class Submitter:
     # TODO: runnable in init or run
-    def __init__(self, plugin):
+    def __init__(self, plugin="cf"):
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
         self.plugin = plugin
