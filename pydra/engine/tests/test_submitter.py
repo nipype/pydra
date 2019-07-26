@@ -1,11 +1,11 @@
 from ..core import Workflow
-from ..task import to_task
 from ..submitter import Submitter
+from ... import mark
 
 import time
 
 
-@to_task
+@mark.task
 def sleep_add_one(x):
     time.sleep(1)
     return x + 1

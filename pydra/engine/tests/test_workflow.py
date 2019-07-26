@@ -3,31 +3,31 @@ import shutil
 import time
 
 from ..submitter import Submitter
-from ..task import to_task
 from ..core import Workflow
+from ... import mark
 
 
 Plugins = ["cf"]
 
 
-@to_task
+@mark.task
 def double(x):
     return x * 2
 
 
-@to_task
+@mark.task
 def multiply(x, y):
     return x * y
 
 
-@to_task
+@mark.task
 def add2(x):
     if x == 1 or x == 12:
         time.sleep(1)
     return x + 2
 
 
-@to_task
+@mark.task
 def add2_wait(x):
     time.sleep(3)
     return x + 2
