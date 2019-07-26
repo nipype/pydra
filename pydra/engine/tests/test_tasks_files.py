@@ -102,7 +102,7 @@ def test_file_annotation_1(tmpdir):
     file = os.path.join(os.getcwd(), "arr1.npy")
     np.save(file, arr)
     nn = file_add2_annot(name="add2", file=file)
-    breakpoint()
+
     with Submitter(plugin="cf") as sub:
         sub(nn)
 
