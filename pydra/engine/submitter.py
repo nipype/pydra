@@ -30,7 +30,7 @@ class Submitter:
         if is_workflow(runnable):
             for nd in runnable.graph.nodes:
                 runnable.create_connections(nd)
-                if runnable._custom_cache_dir and nd.allow_cache_override:
+                if nd.allow_cache_override:
                     nd.cache_dir = runnable.cache_dir
             runnable.inputs._graph_checksums = [
                 nd.checksum for nd in runnable.graph_sorted

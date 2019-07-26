@@ -1772,18 +1772,13 @@ def test_cache_propagation1(tmpdir, create_tasks):
     """No cache set, all independent"""
     wf, t1, t2 = create_tasks
     wf(plugin="cf")
-    assert wf.cache_dir != t1.cache_dir != t2.cache_dir
-
-
-def test_cache_propagation2(tmpdir, create_tasks):
-    """Tasks inherit cache_dir"""
-    wf, t1, t2 = create_tasks
+    assert wf.cache_dir == t1.cache_dir == t2.cache_dir
     wf.cache_dir = (tmpdir / "shared").strpath
     wf(plugin="cf")
     assert wf.cache_dir == t1.cache_dir == t2.cache_dir
 
 
-def test_cache_propagation3(tmpdir, create_tasks):
+def test_cache_propagation2(tmpdir, create_tasks):
     """Task explicitly states no inheriting"""
     wf, t1, t2 = create_tasks
     wf.cache_dir = (tmpdir / "shared").strpath
@@ -1792,7 +1787,7 @@ def test_cache_propagation3(tmpdir, create_tasks):
     assert wf.cache_dir == t1.cache_dir != t2.cache_dir
 
 
-def test_cache_propagation4(tmpdir, create_tasks):
+def test_cache_propagation3(tmpdir, create_tasks):
     """Shared cache_dir with state"""
     wf, t1, t2 = create_tasks
     wf.inputs.x = [1, 2]
