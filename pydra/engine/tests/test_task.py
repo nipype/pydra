@@ -5,8 +5,13 @@ import os
 import pytest
 
 from ... import mark
-from ..task import AuditFlag, ShellCommandTask, ContainerTask, DockerTask
-from ...utils.messenger import PrintMessenger, FileMessenger, collect_messages
+from ..task import ShellCommandTask, ContainerTask, DockerTask
+from ...utils.messenger import (
+    AuditFlag,
+    PrintMessenger,
+    FileMessenger,
+    collect_messages,
+)
 
 
 def test_output():
@@ -267,10 +272,12 @@ def test_audit_prov(tmpdir):
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
-    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    # printing the audit message
+    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
     funky.cache_dir = tmpdir
     funky()
 
+    # saving the audit message into the file
     funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
