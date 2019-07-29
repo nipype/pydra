@@ -41,10 +41,7 @@ class Submitter:
         if is_workflow(runnable) and runnable.state is None:
             self.loop.run_until_complete(runnable._run(self))
         else:
-            if is_workflow(runnable) and runnable.state is None:
-                self.loop.run_until_complete(runnable._run(self))
-            else:
-                self.loop.run_until_complete(self.submit(runnable, return_task=True))
+            self.loop.run_until_complete(self.submit(runnable, return_task=True))
         return runnable.result()
 
     def __enter__(self):
@@ -79,6 +76,8 @@ class Submitter:
             for task in tasks:
                 # grab inputs if needed
                 logger.debug(f"Retrieving inputs for {task}")
+                if wf.plugin and not task.plugin:
+                    task.plugin = wf.plugin
                 # TODO: add state idx to retrieve values to reduce waiting
                 task.inputs.retrieve_values(wf)
                 # checksum has to be updated, so resetting
@@ -161,8 +160,7 @@ class Submitter:
 
     async def distribute(self, runnable, cache_locations=None):
         """Submitter for distributed systems"""
-        task = ensure_list(self.worker.run_el(runnable))
-        await self.worker.fetch_finished(task)
+        await self.worker.run_el(runnable)
 
     def close(self):
         # do not close previously running loop
