@@ -25,7 +25,32 @@ class Worker:
         raise NotImplementedError
 
     async def fetch_finished(self, futures):
-        raise NotImplementedError
+        """Awaits asyncio ``Tasks`` until one is finished
+
+        Parameters
+        ----------
+        futures : set of ``Futures``
+            Pending tasks
+
+        Returns
+        -------
+        done : set
+            Finished or cancelled tasks
+        """
+        done = set()
+        try:
+            done, pending = await asyncio.wait(
+                futures, return_when=asyncio.FIRST_COMPLETED
+            )
+        except ValueError:
+            # nothing pending!
+            pending = set()
+
+        assert (
+            done.union(pending) == futures
+        ), "all tasks from futures should be either in done or pending"
+        logger.debug(f"Tasks finished: {len(done)}")
+        return pending
 
 
 class DistributedWorker(Worker):
@@ -36,7 +61,7 @@ class DistributedWorker(Worker):
         self._distributed = True
 
     def _prepare_runscripts(self, task, interpreter="/bin/sh"):
-        script_dir = task.cache_dir / f"{self.__class__.__name__}scripts"
+        script_dir = task.cache_dir / f"{self.__class__.__name__}_scripts"
         script_dir.mkdir(parents=True, exist_ok=True)
         pyscript = create_pyscript(script_dir, task.output_dir, task.checksum)
         batchscript = script_dir / f"batchscript_{task.checksum}.sh"
@@ -104,36 +129,6 @@ class ConcurrentFuturesWorker(Worker):
     def close(self):
         self.pool.shutdown()
 
-    async def fetch_finished(self, futures):
-        """Awaits asyncio ``Tasks`` until one is finished
-
-        Parameters
-        ----------
-        futures : set of ``Futures``
-            Pending tasks
-
-        Returns
-        -------
-        done : set
-            Finished or cancelled tasks
-        """
-        done = set()
-        try:
-            done, pending = await asyncio.wait(
-                futures, return_when=asyncio.FIRST_COMPLETED
-            )
-        except ValueError:
-            # nothing pending!
-            pending = set()
-
-        assert (
-            done.union(pending) == futures
-        ), "all tasks from futures should be either in done or pending"
-        logger.debug(f"Tasks finished: {len(done)}")
-        for fut in done:
-            await fut
-        return pending
-
 
 class SlurmWorker(DistributedWorker):
     _cmd = "sbatch"
@@ -152,12 +147,11 @@ class SlurmWorker(DistributedWorker):
         if not poll_delay or poll_delay < 0:
             poll_delay = 0
         self.poll_delay = poll_delay
+        self._retries = 3
         self.sbatch_args = sbatch_args or ""
         self.sacct_re = re.compile(
             "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
         )
-        self.pending = set()
-        self.failed = set()
 
     def run_el(self, task):
         """
@@ -172,7 +166,7 @@ class SlurmWorker(DistributedWorker):
         return task
 
     async def _submit_job(self, task, batchscript):
-        """Wraps Slurm batch submission (sbatch)"""
+        """Coroutine that submits task runscript and polls job until completion or error."""
         sargs = self.sbatch_args.split()
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
         if not jobname:
@@ -188,63 +182,47 @@ class SlurmWorker(DistributedWorker):
         jobid = re.search(r"\d+", stdout)
         if not jobid:
             raise RuntimeError("Could not extract job ID")
-        return jobid.group()
+        jobid = jobid.group()
+        # intermittent polling
+        while True:
+            # 3 possibilities
+            # False: job is still pending/working
+            # True: job is complete
+            # Exception: Polling / job failure
+            done = await self._poll_job(jobid)
+            if done:
+                return True
+            await asyncio.sleep(self.poll_delay)
 
     def close(self):
         pass
 
-    async def _poll_jobs(self, raise_exception):
-        sargs = ("-h", "-j", ",".join(self.pending))
-        _, stdout, _ = await read_and_display("squeue", *sargs, hide_display=True)
-        if not stdout:
-            if raise_exception:
-                raise RuntimeError("Nothing to run")
-            return True
-        return False
+    # async def _poll_jobs(self, raise_exception):
+    #     sargs = ("-h", "-j", ",".join(self.pending))
+    #     _, stdout, _ = await read_and_display("squeue", *sargs, hide_display=True)
+    #     if not stdout:
+    #         if raise_exception:
+    #             raise RuntimeError("Nothing to run")
+    #         return True
+    #     return False
 
     async def _poll_job(self, jobid):
-        sargs = ("-h", "-j", jobid)
-        rc, stdout, stderr = await read_and_display("squeue", *sargs, hide_display=True)
-        if not stdout or "slurm_load_jobs" in stderr:
+        cmd = ("squeue", "-h", "-j", jobid)
+        logger.debug(f"Polling job {jobid}")
+        rc, stdout, stderr = await read_and_display(*cmd, hide_display=True)
+        if not stdout or "slurm_load_jobs error" in stderr:
             # job is no longer running - check exit code
-            await self._verify_exit_code(jobid)
-            return jobid
-        elif rc != 0:
-            raise RuntimeError("Job query failed")
-        return None
+            status = await self._verify_exit_code(jobid)
+            return status
+        return False
 
     async def _verify_exit_code(self, jobid):
-        sargs = ("-n", "-X", "-j", jobid, "-o", "JobID,State,ExitCode")
-        _, stdout, _ = await read_and_display("sacct", *sargs, hide_display=True)
+        cmd = ("sacct", "-n", "-X", "-j", jobid, "-o", "JobID,State,ExitCode")
+        _, stdout, _ = await read_and_display(*cmd, hide_display=True)
         if not stdout:
             raise RuntimeError("Job information not found")
         m = self.sacct_re.search(stdout)
         if int(m.group("exit_code")) != 0 or m.group("status") != "COMPLETED":
             # TODO: potential for requeuing
-            self.pending.remove(jobid)
-            self.failed.add(jobid)
-
-    async def fetch_finished(self, futures):
-        """
-        Waits until at least one job finishes
-        Basic implementation of FIRST_COMPLETED
-        """
-        done = set()
-        raise_exception = False
-        # wait for all futures to complete (submit to Slurm)
-        submitted = await asyncio.gather(*futures)
-        for job in submitted:
-            # tracker for submitted job IDs
-            self.pending.add(job)
-            print(f"Added job {job}")
-
-        while True:
-            # poll all submitted jobs until single job has completed
-            for job in self.pending:
-                done = await self._poll_job(job)
-                if done is not None:
-                    print(f"Removed job {job}")
-                    # break polling and check if pending jobs
-                    return self.pending
-                await asyncio.sleep(self.poll_delay)
-            raise_exception = await self._poll_jobs(raise_exception)
+            raise Exception("Job failed")
+        return True
