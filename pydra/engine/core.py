@@ -6,7 +6,6 @@ import logging
 import os
 from pathlib import Path
 import typing as ty
-import pickle as pk
 from copy import deepcopy
 
 import cloudpickle as cp
@@ -134,14 +133,14 @@ class TaskBase:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state["input_spec"] = pk.dumps(state["input_spec"])
-        state["output_spec"] = pk.dumps(state["output_spec"])
+        state["input_spec"] = cp.dumps(state["input_spec"])
+        state["output_spec"] = cp.dumps(state["output_spec"])
         state["inputs"] = dc.asdict(state["inputs"])
         return state
 
     def __setstate__(self, state):
-        state["input_spec"] = pk.loads(state["input_spec"])
-        state["output_spec"] = pk.loads(state["output_spec"])
+        state["input_spec"] = cp.loads(state["input_spec"])
+        state["output_spec"] = cp.loads(state["output_spec"])
         state["inputs"] = make_klass(state["input_spec"])(**state["inputs"])
         self.__dict__.update(state)
 
