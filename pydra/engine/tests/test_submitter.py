@@ -1,8 +1,15 @@
-from ..core import Workflow
-from ..task import to_task
-from ..submitter import Submitter
-
 import time
+import shutil
+
+import pytest
+
+from ..core import Workflow
+from ..submitter import Submitter
+from ..task import to_task
+from .utils import gen_basic_wf
+
+# list of (plugin, available)
+plugins = {"slurm": bool(shutil.which("sbatch"))}
 
 
 @to_task
@@ -95,3 +102,25 @@ def test_wf_with_state():
     assert res[0].output.out == 3
     assert res[1].output.out == 4
     assert res[2].output.out == 5
+
+
+@pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
+def test_slurm_wf(tmpdir):
+    wf = gen_basic_wf()
+    wf.cache_dir = tmpdir
+    # submit workflow and every task as slurm job
+    wf(plugin="slurm")
+    assert (tmpdir / "SlurmWorker_scripts").exists()
+    breakpoint()
+    assert wf.result()
+
+
+
+@pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
+def test_slurm_wf_cf(tmpdir):
+    # submit entire workflow as single job executing with cf worker
+    wf2 = gen_basic_wf()
+    wf2.plugin = "cf"
+    with Submitter("slurm") as sub:
+        sub(wf2)
+    assert wf2.result()
