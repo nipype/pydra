@@ -1754,3 +1754,44 @@ def test_wf_ndstate_cachelocations_recompute(plugin, tmpdir):
     # checking if the second wf didn't run again
     # checking all directories
     assert wf2.output_dir.exists()
+
+
+@pytest.fixture
+def create_tasks():
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.inputs.x = 1
+    wf.add(add2(name="t1", x=wf.lzin.x))
+    wf.add(multiply(name="t2", x=wf.t1.lzout.out, y=2))
+    wf.set_output([("out", wf.t2.lzout.out)])
+    t1 = wf.name2obj["t1"]
+    t2 = wf.name2obj["t2"]
+    return wf, t1, t2
+
+
+def test_cache_propagation1(tmpdir, create_tasks):
+    """No cache set, all independent"""
+    wf, t1, t2 = create_tasks
+    wf(plugin="cf")
+    assert wf.cache_dir == t1.cache_dir == t2.cache_dir
+    wf.cache_dir = (tmpdir / "shared").strpath
+    wf(plugin="cf")
+    assert wf.cache_dir == t1.cache_dir == t2.cache_dir
+
+
+def test_cache_propagation2(tmpdir, create_tasks):
+    """Task explicitly states no inheriting"""
+    wf, t1, t2 = create_tasks
+    wf.cache_dir = (tmpdir / "shared").strpath
+    t2.allow_cache_override = False
+    wf(plugin="cf")
+    assert wf.cache_dir == t1.cache_dir != t2.cache_dir
+
+
+def test_cache_propagation3(tmpdir, create_tasks):
+    """Shared cache_dir with state"""
+    wf, t1, t2 = create_tasks
+    wf.inputs.x = [1, 2]
+    wf.split("x")
+    wf.cache_dir = (tmpdir / "shared").strpath
+    wf(plugin="cf")
+    assert wf.cache_dir == t1.cache_dir == t2.cache_dir
