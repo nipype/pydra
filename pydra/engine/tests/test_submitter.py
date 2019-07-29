@@ -3,16 +3,16 @@ import shutil
 
 import pytest
 
+from .utils import gen_basic_wf
 from ..core import Workflow
 from ..submitter import Submitter
-from ..task import to_task
-from .utils import gen_basic_wf
+from ... import mark
 
 # list of (plugin, available)
 plugins = {"slurm": bool(shutil.which("sbatch"))}
 
 
-@to_task
+@mark.task
 def sleep_add_one(x):
     time.sleep(1)
     return x + 1

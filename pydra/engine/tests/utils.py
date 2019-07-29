@@ -2,10 +2,10 @@
 import time
 
 from ..core import Workflow
-from ..task import to_task
+from ... import mark
 
 
-@to_task
+@mark.to_task
 def fun_addtwo(a):
     import time
 
@@ -15,39 +15,39 @@ def fun_addtwo(a):
     return a + 2
 
 
-@to_task
+@mark.to_task
 def fun_addvar(a, b):
     return a + b
 
 
-@to_task
+@mark.to_task
 def fun_addvar4(a, b, c, d):
     return a + b + c + d
 
 
-@to_task
+@mark.to_task
 def moment(lst, n):
     return sum([i ** n for i in lst]) / len(lst)
 
 
-@to_task
+@mark.to_task
 def fun_div(a, b):
     return a / b
 
 
-@to_task
+@mark.to_task
 def multiply(x, y):
     return x * y
 
 
-@to_task
+@mark.to_task
 def add2(x):
     if x == 1 or x == 12:
         time.sleep(1)
     return x + 2
 
 
-@to_task
+@mark.to_task
 def add2_wait(x):
     time.sleep(3)
     return x + 2

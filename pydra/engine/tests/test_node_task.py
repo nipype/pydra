@@ -3,7 +3,7 @@ import shutil
 import numpy as np
 import pytest
 
-from .utils import fun_addtwo, fun_addvar, fun_addvar4, moment, fun_div
+from .utils import fun_addtwo, fun_addvar, moment, fun_div
 
 from ..core import TaskBase
 from ..submitter import Submitter
