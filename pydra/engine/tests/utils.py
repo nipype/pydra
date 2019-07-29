@@ -5,7 +5,7 @@ from ..core import Workflow
 from ... import mark
 
 
-@mark.to_task
+@mark.task
 def fun_addtwo(a):
     import time
 
@@ -15,39 +15,39 @@ def fun_addtwo(a):
     return a + 2
 
 
-@mark.to_task
+@mark.task
 def fun_addvar(a, b):
     return a + b
 
 
-@mark.to_task
+@mark.task
 def fun_addvar4(a, b, c, d):
     return a + b + c + d
 
 
-@mark.to_task
+@mark.task
 def moment(lst, n):
     return sum([i ** n for i in lst]) / len(lst)
 
 
-@mark.to_task
+@mark.task
 def fun_div(a, b):
     return a / b
 
 
-@mark.to_task
+@mark.task
 def multiply(x, y):
     return x * y
 
 
-@mark.to_task
+@mark.task
 def add2(x):
     if x == 1 or x == 12:
         time.sleep(1)
     return x + 2
 
 
-@mark.to_task
+@mark.task
 def add2_wait(x):
     time.sleep(3)
     return x + 2

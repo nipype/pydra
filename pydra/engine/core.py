@@ -8,6 +8,7 @@ from pathlib import Path
 import typing as ty
 from copy import deepcopy
 
+import cloudpickle as cp
 from filelock import SoftFileLock
 import shutil
 from tempfile import mkdtemp

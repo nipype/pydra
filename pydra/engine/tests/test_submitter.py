@@ -111,7 +111,6 @@ def test_slurm_wf(tmpdir):
     # submit workflow and every task as slurm job
     wf(plugin="slurm")
     assert (tmpdir / "SlurmWorker_scripts").exists()
-    breakpoint()
     assert wf.result()
 
 
