@@ -333,6 +333,29 @@ def test_task_nostate_cachelocations(plugin, tmpdir):
     assert not nn2.output_dir.exists()
 
 
+def test_task_nostate_cachelocations_nosubmitter(tmpdir):
+    """
+    Two identical tasks (that are run without submitter!) with provided cache_dir;
+    the second task has cache_locations and should not recompute the results
+    """
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    cache_dir2 = tmpdir.mkdir("test_task_nostate2")
+
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    nn()
+
+    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2()
+
+    # checking the results
+    results2 = nn2.result()
+    assert results2.output.out == 5
+
+    # checking if the second task didn't run the interface again
+    assert nn.output_dir.exists()
+    assert not nn2.output_dir.exists()
+
+
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_cachelocations_updated(plugin, tmpdir):
     """
