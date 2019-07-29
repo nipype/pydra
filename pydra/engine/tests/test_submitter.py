@@ -114,7 +114,6 @@ def test_slurm_wf(tmpdir):
     assert wf.result()
 
 
-
 @pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
 def test_slurm_wf_cf(tmpdir):
     # submit entire workflow as single job executing with cf worker
