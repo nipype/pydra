@@ -1,0 +1,3 @@
+# This should match install_requires in setup.cfg, but with == instead of ">=" or "~="
+cloudpickle==0.8.0
+filelock==3.0.0

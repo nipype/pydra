@@ -14,6 +14,7 @@ env:
     - CHECK_TYPE="test"
     - INSTALL_TYPE="pip"
     - INSTALL_DEPENDS="pip setuptools"
+    - DEPENDS=""
     - PIP_ARGS=""
 
   matrix:
@@ -23,6 +24,7 @@ env:
     - INSTALL_TYPE="wheel"
     - INSTALL_DEPENDS="pip==18.1 setuptools==30.2.1"
     - INSTALL_DEPENDS="pip==10.0.1 setuptools==30.3.0"
+    - DEPENDS="-r min-requirements.txt"
     - CHECK_TYPE="style"
 
 # This should only fail with pip 10.0.1 with URL requirements (e.g., "package @ URL")
@@ -40,7 +42,7 @@ matrix:
 
 before_install:
   - travis_retry bash <(wget -q -O- http://neuro.debian.net/_files/neurodebian-travis.sh);
-  - travis_retry python -m pip install --upgrade $INSTALL_DEPENDS
+  - travis_retry python -m pip install --upgrade $INSTALL_DEPENDS $DEPENDS
 
 install:
   - |
