@@ -6,7 +6,7 @@ function travis_before_install {
     export CI_ENV=`bash <(curl -s https://codecov.io/env)`
     docker pull ${DOCKER_IMAGE}
     # have image running in background
-    docker run -itd -e CI_ENV=$CI_ENV -h ernie --name slurm -v `pwd`:/pydra ${DOCKER_IMAGE}
+    docker run -itd -e CI_ENV -h ernie --name slurm -v `pwd`:/pydra ${DOCKER_IMAGE}
     echo "Allowing ports/daemons time to start" && sleep 10
     # ensure sacct displays previous jobs
     # https://github.com/giovtorres/docker-centos7-slurm/issues/3
