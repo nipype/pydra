@@ -43,8 +43,8 @@ Dir_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "notebooks"
     [
         os.path.join(Dir_path, "intro_task.ipynb"),
         os.path.join(Dir_path, "intro_task_splitter_combiner.ipynb"),
-    ]
-    #    os.path.join(Dir_path, "intro_workflow.ipynb")]
+        os.path.join(Dir_path, "intro_workflow.ipynb"),
+    ],
 )
 def test_notebooks(notebook):
     t0 = time.time()
