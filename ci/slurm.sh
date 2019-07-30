@@ -3,10 +3,10 @@
 export DOCKER_IMAGE="mgxd/slurm:19.05.1"
 
 function travis_before_install {
-    export CI_ENV=`bash <(curl -s https://codecov.io/env)`
+    CI_ENV=`bash <(curl -s https://codecov.io/env)`
     docker pull ${DOCKER_IMAGE}
     # have image running in background
-    docker run -itd -e CI_ENV -h ernie --name slurm -v `pwd`:/pydra ${DOCKER_IMAGE}
+    docker run $CI_ENV -itd -h ernie --name slurm -v `pwd`:/pydra ${DOCKER_IMAGE}
     echo "Allowing ports/daemons time to start" && sleep 10
     # ensure sacct displays previous jobs
     # https://github.com/giovtorres/docker-centos7-slurm/issues/3
@@ -30,10 +30,10 @@ function travis_before_script {
 }
 
 function travis_script {
-    docker exec slurm bash -c "cd /pydra && pytest --color=yes -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra"
+    docker exec slurm bash -c "pytest --color=yes -vs -n auto --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra"
 }
 
 function travis_after_script {
-    docker exec slurm bash -c "cd /pydra && codecov --file cov.xml --flags unittests -e $CI_ENV"
-    docker stop slurm && docker rm slurm
+    docker exec slurm bash -c "codecov --root /pydra -f cov.xml -F unittests"
+    docker rm -f slurm
 }
