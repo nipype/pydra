@@ -109,16 +109,47 @@ def test_slurm_wf(tmpdir):
     wf = gen_basic_wf()
     wf.cache_dir = tmpdir
     # submit workflow and every task as slurm job
-    wf(plugin="slurm")
-    assert (tmpdir / "SlurmWorker_scripts").exists()
-    assert wf.result()
+    with Submitter("slurm") as sub:
+        sub(wf)
+
+    res = wf.result()
+    assert res.output.out == 9
+    script_dir = tmpdir / "SlurmWorker_scripts"
+    assert script_dir.exists()
+    # ensure each task was executed with slurm
+    assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 3
 
 
 @pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
 def test_slurm_wf_cf(tmpdir):
     # submit entire workflow as single job executing with cf worker
-    wf2 = gen_basic_wf()
-    wf2.plugin = "cf"
+    wf = gen_basic_wf()
+    wf.cache_dir = tmpdir
+    wf.plugin = "cf"
     with Submitter("slurm") as sub:
-        sub(wf2)
-    assert wf2.result()
+        sub(wf)
+    res = wf.result()
+    assert res.output.out == 9
+    script_dir = tmpdir / "SlurmWorker_scripts"
+    assert script_dir.exists()
+    # ensure only workflow was executed with slurm
+    sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
+    assert len(sdirs) == 1
+    assert sdirs[0].basename == wf.checksum
+
+
+@pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
+def test_slurm_wf_state(tmpdir):
+    wf = gen_basic_wf()
+    wf.split("x")
+    wf.inputs.x = [5, 6]
+    wf.cache_dir = tmpdir
+    with Submitter("slurm") as sub:
+        sub(wf)
+    res = wf.result()
+    assert res[0].output.out == 9
+    assert res[1].output.out == 10
+    script_dir = tmpdir / "SlurmWorker_scripts"
+    assert script_dir.exists()
+    sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
+    assert len(sdirs) == 3 * len(wf.inputs.x)

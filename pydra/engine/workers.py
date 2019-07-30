@@ -22,7 +22,7 @@ class Worker:
         raise NotImplementedError
 
     def close(self):
-        raise NotImplementedError
+        pass
 
     async def fetch_finished(self, futures):
         """Awaits asyncio ``Tasks`` until one is finished
@@ -61,9 +61,13 @@ class DistributedWorker(Worker):
         self._distributed = True
 
     def _prepare_runscripts(self, task, interpreter="/bin/sh"):
-        script_dir = task.cache_dir / f"{self.__class__.__name__}_scripts"
+        script_dir = (
+            task.cache_dir / f"{self.__class__.__name__}_scripts" / task.checksum
+        )
         script_dir.mkdir(parents=True, exist_ok=True)
-        pyscript = create_pyscript(script_dir, task.output_dir, task.checksum)
+        if not (script_dir / "_task.pkl").exists():
+            save(script_dir, task=task)
+        pyscript = create_pyscript(script_dir, task.checksum)
         batchscript = script_dir / f"batchscript_{task.checksum}.sh"
         bcmd = "\n".join(
             (
@@ -74,7 +78,7 @@ class DistributedWorker(Worker):
         )
         with batchscript.open("wt") as fp:
             fp.writelines(bcmd)
-        return batchscript
+        return script_dir, pyscript, batchscript
 
     @staticmethod
     async def _awaitable(jobid):
@@ -147,22 +151,19 @@ class SlurmWorker(DistributedWorker):
         if not poll_delay or poll_delay < 0:
             poll_delay = 0
         self.poll_delay = poll_delay
-        self._retries = 3
         self.sbatch_args = sbatch_args or ""
         self.sacct_re = re.compile(
             "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
         )
 
-    def run_el(self, task):
+    def run_el(self, runnable):
         """
         Worker submission API
         """
-        odir = task.output_dir
-        if (odir.anchor + odir.parts[1]) == gettempdir():
+        script_dir, _, batch_script = self._prepare_runscripts(runnable)
+        if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
-        save(odir, task=task)
-        runscript = self._prepare_runscripts(task, interpreter="/bin/bash")
-        task = asyncio.create_task(self._submit_job(task, runscript))
+        task = asyncio.create_task(self._submit_job(runnable, batch_script))
         return task
 
     async def _submit_job(self, task, batchscript):
@@ -193,18 +194,6 @@ class SlurmWorker(DistributedWorker):
             if done:
                 return True
             await asyncio.sleep(self.poll_delay)
-
-    def close(self):
-        pass
-
-    # async def _poll_jobs(self, raise_exception):
-    #     sargs = ("-h", "-j", ",".join(self.pending))
-    #     _, stdout, _ = await read_and_display("squeue", *sargs, hide_display=True)
-    #     if not stdout:
-    #         if raise_exception:
-    #             raise RuntimeError("Nothing to run")
-    #         return True
-    #     return False
 
     async def _poll_job(self, jobid):
         cmd = ("squeue", "-h", "-j", jobid)

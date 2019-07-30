@@ -28,8 +28,6 @@ class Submitter:
     def __call__(self, runnable, cache_locations=None):
         if cache_locations is not None:
             runnable.cache_locations = cache_locations
-        if self.worker._distributed:
-            self.loop.run_until_complete(self.distribute(runnable, cache_locations))
         # creating all connections and calculating the checksum of the graph before running
         if is_workflow(runnable):
             for nd in runnable.graph.nodes:
@@ -39,18 +37,85 @@ class Submitter:
             runnable.inputs._graph_checksums = [
                 nd.checksum for nd in runnable.graph_sorted
             ]
-        # Start event loop and run workflow/task
         if is_workflow(runnable) and runnable.state is None:
-            self.loop.run_until_complete(runnable._run(self))
+            self.loop.run_until_complete(self.submit_workflow(runnable))
         else:
-            self.loop.run_until_complete(self.submit(runnable, return_task=True))
+            self.loop.run_until_complete(self.submit(runnable, wait=True))
         return runnable.result()
 
-    def __enter__(self):
-        return self
+    async def submit_workflow(self, workflow):
+        """Distributes or initiates workflow execution"""
+        if self.worker._distributed and not workflow._submitted:
+            # submit job to be executed on different machine
+            workflow._submitted = True
+            if workflow.plugin is None:
+                workflow.plugin = self.plugin
+            await self.worker.run_el(workflow)
+        else:
+            # trigger execution
+            await workflow._run(self)
 
-    def __exit__(self, type, value, traceback):
-        self.close()
+    async def submit(self, runnable, wait=False):
+        """
+        Coroutine entrypoint for task submission.
+
+        Removes state from task and adds one or more
+        asyncio ``Task``s to the running loop.
+
+         Possible routes for the runnable
+         1. ``Workflow`` w/ state: separate states into individual jobs and run() each
+         2. ``Workflow`` w/o state: await graph expansion
+         3. ``Task`` w/ state: separate states and submit to worker
+         4. ``Task`` w/o state: submit to worker
+
+        Parameters
+        ----------
+        runnable : Task
+            Task instance (``Task``, ``Workflow``)
+        wait : bool (False)
+            Await all futures before completing
+
+        Returns
+        -------
+        futures : set or None
+            Tasks yet to be awaited
+        """
+        futures = set()
+        if runnable.state:
+            runnable.state.prepare_states(runnable.inputs)
+            runnable.state.prepare_inputs()
+            logger.debug(
+                f"Expanding {runnable} into {len(runnable.state.states_val)} states"
+            )
+            for sidx in range(len(runnable.state.states_val)):
+                job = runnable.to_job(sidx)
+                job.results_dict[None] = (sidx, job.checksum)
+                runnable.results_dict[sidx] = (None, job.checksum)
+                logger.debug(
+                    f'Submitting runnable {job}{str(sidx) if sidx is not None else ""}'
+                )
+                if is_workflow(runnable):
+                    # job has no state anymore
+                    # futures.add(asyncio.create_task(job._run(self)))
+                    futures.add(asyncio.create_task(self.submit_workflow(job)))
+                else:
+                    # tasks are submitted to worker for execution
+                    futures.add(self.worker.run_el(job))
+        else:
+            runnable.results_dict[None] = (None, runnable.checksum)
+            if is_workflow(runnable):
+                await self._run_workflow(runnable)
+            else:
+                # submit task to worker
+                futures.add(self.worker.run_el(runnable))
+
+        if wait and futures:
+            # run coroutines concurrently and wait for execution
+            # wait until all states complete or error
+            await asyncio.gather(*futures)
+            return
+        # pass along futures to be awaited independently
+        return futures
 
     async def _run_workflow(self, wf):
         """
@@ -78,15 +143,18 @@ class Submitter:
             for task in tasks:
                 # grab inputs if needed
                 logger.debug(f"Retrieving inputs for {task}")
-                if wf.plugin and not task.plugin:
-                    task.plugin = wf.plugin
                 # TODO: add state idx to retrieve values to reduce waiting
                 task.inputs.retrieve_values(wf)
                 # checksum has to be updated, so resetting
                 task._checksum = None
                 if is_workflow(task) and not task.state:
-                    # ensure workflow is executed
-                    await task._run(self)
+                    # allow overriding of submitter
+                    if task.plugin is not None and task.plugin != self.plugin:
+                        submitter = Submitter(task.plugin)
+                    else:
+                        task.plugin = self.plugin
+                        submitter = self
+                    await task._run(submitter)
                 else:
                     for fut in await self.submit(task):
                         task_futures.add(fut)
@@ -94,75 +162,11 @@ class Submitter:
             task_futures = await self.worker.fetch_finished(task_futures)
         return wf
 
-    async def submit(self, runnable, return_task=False):
-        """
-        Coroutine entrypoint for task submission.
+    def __enter__(self):
+        return self
 
-        Removes state from task and adds one or more
-        asyncio ``Task``s to the running loop.
-
-         Possible routes for the runnable
-         1. ``Workflow`` w/ state: separate states into individual jobs and run() each
-         2. ``Workflow`` w/o state: await graph expansion
-         3. ``Task`` w/ state: separate states and submit to worker
-         4. ``Task`` w/o state: submit to worker
-
-        Parameters
-        ----------
-        runnable : Task
-            Task instance (``Task``, ``Workflow``)
-        return_task : bool (False)
-            Option to return runnable instead of futures once all states have finished
-
-        Returns
-        -------
-        futures : set
-            Asyncio tasks
-        runnable : ``Task``
-            Signals the end of submission
-        """
-        # ensure worker is using same loop
-        futures = set()
-        if runnable.state:
-            runnable.state.prepare_states(runnable.inputs)
-            runnable.state.prepare_inputs()
-            logger.debug(
-                f"Expanding {runnable} into {len(runnable.state.states_val)} states"
-            )
-            for sidx in range(len(runnable.state.states_val)):
-                job = runnable.to_job(sidx)
-                job.results_dict[None] = (sidx, job.checksum)
-                runnable.results_dict[sidx] = (None, job.checksum)
-                logger.debug(
-                    f'Submitting runnable {job}{str(sidx) if sidx is not None else ""}'
-                )
-                if is_workflow(runnable):
-                    # job has no state anymore
-                    futures.add(asyncio.create_task(job._run(self)))
-                else:
-                    # tasks are submitted to worker for execution
-                    futures.add(self.worker.run_el(job))
-        else:
-            runnable.results_dict[None] = (None, runnable.checksum)
-            if is_workflow(runnable):
-                # this should only be reached through the job's `run()` method
-                await self._run_workflow(runnable)
-            else:
-                # submit task to worker
-                futures.add(self.worker.run_el(runnable))
-
-        if return_task:
-            # run coroutines concurrently and wait for execution
-            if futures:
-                # wait until all states complete or error
-                await asyncio.gather(*futures)
-        # otherwise pass along futures to be awaited independently
-        else:
-            return futures
-
-    async def distribute(self, runnable, cache_locations=None):
-        """Submitter for distributed systems"""
-        await self.worker.run_el(runnable)
+    def __exit__(self, type, value, traceback):
+        self.close()
 
     def close(self):
         # do not close previously running loop

@@ -239,19 +239,23 @@ class TaskBase:
     def __call__(self, submitter=None, plugin=None, **kwargs):
         if submitter and plugin:
             raise Exception("Specify submitter OR plugin, not both")
-
         if not submitter and not plugin:
             if is_workflow(self):
-                raise NotImplementedError(
-                    "TODO: linear workflow execution - assign submitter or plugin for the moment"
-                )
-            return self._run(**kwargs)
+                if self.plugin:
+                    plugin = self.plugin
+                else:
+                    raise NotImplementedError(
+                        "TODO: linear workflow execution - assign submitter or plugin for now"
+                    )
+            else:
+                self._run(**kwargs)
+                return
         elif plugin:
             from .submitter import Submitter
 
             submitter = Submitter(plugin=plugin)
         with submitter as sub:
-            return sub(self)
+            sub(self)
 
     def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
@@ -468,6 +472,7 @@ class Workflow(TaskBase):
 
         self.graph = DiGraph()
         self.name2obj = {}
+        self._submitted = False
 
         # store output connections
         self._connections = None
@@ -588,7 +593,9 @@ class Workflow(TaskBase):
         if not submitter:
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
-        await submitter.submit(self, return_task=True)
+        if submitter.worker._distributed:
+            self._submitted = True
+        await submitter.submit(self)
 
     def set_output(self, connections):
         self._connections = connections

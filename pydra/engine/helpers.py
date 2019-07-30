@@ -198,7 +198,7 @@ def get_open_loop():
     return loop
 
 
-def create_pyscript(script_path, task_path, checksum):
+def create_pyscript(script_path, checksum):
     """
     Create standalone script for task execution in
     a different environment.
@@ -206,7 +206,6 @@ def create_pyscript(script_path, task_path, checksum):
     Parameters
     ----------
     script_path : Path
-        Pickled ``Task`` path
     checksum : str
         ``Task``'s checksum
 
@@ -215,27 +214,25 @@ def create_pyscript(script_path, task_path, checksum):
     pyscript : File
         Execution script
     """
-    task_pkl = task_path / "_task.pklz"
+    task_pkl = script_path / "_task.pklz"
     if not task_pkl.exists() or not task_pkl.stat().st_size:
         raise Exception("Missing or empty task!")
 
     content = f"""import cloudpickle as cp
-from pydra.engine.submitter import Submitter
-from pydra.engine.helpers import save
 from pathlib import Path
 
-task_path = Path("{str(task_path)}")
-task_pkl = (task_path / "_task.pklz")
+
+cache_path = Path("{str(script_path)}")
+task_pkl = (cache_path / "_task.pklz")
 task = cp.loads(task_pkl.read_bytes())
-sub_opt = task.plugin or "cf"  # TODO: use linear
-with Submitter(sub_opt) as sub:
-    sub(task)
+
+# submit task
+task()
 
 if not task.result():
     raise Exception("Something went wrong")
-
-save(task_path, task=task)
-print("Completed", task, task.checksum)
+print("Completed", task.checksum, task)
+task_pkl.unlink()
 """
     pyscript = script_path / f"pyscript_{checksum}.py"
     with pyscript.open("wt") as fp:
