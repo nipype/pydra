@@ -29,10 +29,10 @@ function travis_before_script {
 }
 
 function travis_script {
-    docker exec slurm bash -c "pytest --color=yes -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules /pydra/pydra"
+    docker exec slurm bash -c "cd /pydra && pytest --color=yes -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra"
 }
 
 function travis_after_script {
-    docker exec slurm bash -c "codecov --file /pydra/cov.xml --flags unittests -e $TRAVIS_JOB_NUMBER"
+    docker exec slurm bash -c "cd /pydra && codecov --file cov.xml --flags unittests -e $TRAVIS_JOB_NUMBER"
     docker stop slurm && docker rm slurm
 }
