@@ -212,6 +212,8 @@ class SlurmWorker(DistributedWorker):
             raise RuntimeError("Job information not found")
         m = self.sacct_re.search(stdout)
         if int(m.group("exit_code")) != 0 or m.group("status") != "COMPLETED":
+            if m.group("status") in ["RUNNING", "PENDING"]:
+                return False
             # TODO: potential for requeuing
             raise Exception("Job failed")
         return True
