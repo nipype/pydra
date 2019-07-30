@@ -906,6 +906,63 @@ def test_wfasnd_wfinp_1(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_wfasnd_wfndupdate(plugin):
+    """ workflow as a node
+        workflow-node with one task and no splitter
+        wfasnode input is updated to use the main workflow input
+    """
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=2)
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+
+    wf = Workflow(name="wf", input_spec=["x"], x=3)
+    wfnd.inputs.x = wf.lzin.x
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+    breakpoint()
+    results = wf.result()
+    assert results.output.out == 5
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.xfail(reason="wfnd is not updating input for it's nodes")
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wfasnd_wfndupdate_rerun(plugin):
+    """ workflow as a node
+        workflow-node with one task and no splitter
+        wfasnode is run first and later is
+        updated to use the main workflow input
+    """
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=2)
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    with Submitter(plugin=plugin) as sub:
+        sub(wfnd)
+
+    wf = Workflow(name="wf", input_spec=["x"], x=3)
+    # trying to set before
+    wfnd.inputs.x = wf.lzin.x
+    wf.add(wfnd)
+    # trying to set after add...
+    wf.wfnd.inputs.x = wf.lzin.x
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out == 5
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_st_1(plugin):
     """ workflow as a node
         workflow-node with one task,
