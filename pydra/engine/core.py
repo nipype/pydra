@@ -239,23 +239,22 @@ class TaskBase:
     def __call__(self, submitter=None, plugin=None, **kwargs):
         if submitter and plugin:
             raise Exception("Specify submitter OR plugin, not both")
-        if not submitter and not plugin:
-            if is_workflow(self):
-                if self.plugin:
-                    plugin = self.plugin
-                else:
-                    raise NotImplementedError(
-                        "TODO: linear workflow execution - assign submitter or plugin for now"
-                    )
-            else:
-                self._run(**kwargs)
-                return
-        elif plugin:
+
+        plugin = plugin or self.plugin
+        if plugin:
             from .submitter import Submitter
 
             submitter = Submitter(plugin=plugin)
-        with submitter as sub:
-            sub(self)
+        if submitter:
+            with submitter as sub:
+                res = sub(self)
+        else:
+            if is_workflow(self):
+                raise NotImplementedError(
+                    "TODO: linear workflow execution - assign submitter or plugin for now"
+                )
+            res = self._run(**kwargs)
+        return res
 
     def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
