@@ -34,6 +34,6 @@ function travis_script {
 }
 
 function travis_after_script {
-    docker exec slurm bash -c "codecov --root /pydra -f cov.xml -F unittests"
+    docker exec slurm bash -c "codecov --root /pydra -f /pydra/cov.xml -F unittests"
     docker rm -f slurm
 }
