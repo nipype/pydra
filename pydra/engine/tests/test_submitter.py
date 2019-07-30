@@ -18,6 +18,21 @@ def sleep_add_one(x):
     return x + 1
 
 
+def test_callable_wf():
+    wf = gen_basic_wf()
+    with pytest.raises(NotImplementedError):
+        wf()
+
+    res = wf(plugin="cf")
+    assert res.output.out == 9
+    del wf, res
+
+    wf = gen_basic_wf()
+    sub = Submitter("cf")
+    res = wf(submitter=sub)
+    assert res.output.out == 9
+
+
 def test_concurrent_wf():
     # concurrent workflow
     # A --> C
