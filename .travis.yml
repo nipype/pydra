@@ -14,7 +14,6 @@ env:
     - CHECK_TYPE="test"
     - INSTALL_TYPE="pip"
     - INSTALL_DEPENDS="pip setuptools"
-    - PIP_ARGS=""
 
   matrix:
     - INSTALL_TYPE="install"
@@ -23,30 +22,31 @@ env:
     - INSTALL_TYPE="wheel"
     - INSTALL_DEPENDS="pip==18.1 setuptools==30.2.1"
     - INSTALL_DEPENDS="pip==10.0.1 setuptools==30.3.0"
+    - DEPENDS="-r min-requirements.txt"
     - CHECK_TYPE="style"
 
 # This should only fail with pip 10.0.1 with URL requirements (e.g., "package @ URL")
 # Useful for testing un-released upstream fixes
 matrix:
   include:
-  - python: "3.8-dev"
+  - python: 3.8-dev
     env: INSTALL_TYPE="pip" PIP_ARGS="--pre"
   allow_failures:
   - python: 3.7
     env: INSTALL_DEPENDS="pip==10.0.1 setuptools==30.3.0"
-  - python: "3.8-dev"
+  - python: 3.8-dev
     env: INSTALL_TYPE="pip" PIP_ARGS="--pre"
 
 
 before_install:
   - travis_retry bash <(wget -q -O- http://neuro.debian.net/_files/neurodebian-travis.sh);
-  - travis_retry python -m pip install --upgrade $INSTALL_DEPENDS
+  - travis_retry python -m pip install --upgrade $INSTALL_DEPENDS $DEPENDS
 
 install:
   - |
     if [ "$CHECK_TYPE" = "test" ]; then
         if [ "$INSTALL_TYPE" = "pip" ]; then
-            pip install "$PIP_ARGS" .
+            pip install $PIP_ARGS .
         elif [ "$INSTALL_TYPE" = "install" ]; then
             python setup.py install
         elif [ "$INSTALL_TYPE" = "develop" ]; then
@@ -87,7 +87,7 @@ script:
     if [ "$CHECK_TYPE" = "test" ]; then
         pytest -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
     elif [ "$CHECK_TYPE" = "style" ]; then
-        black --check pydra setup.py
+        black --check pydra tools setup.py
     fi
 
 after_script:
