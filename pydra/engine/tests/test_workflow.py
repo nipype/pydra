@@ -1,6 +1,7 @@
 import pytest
 import shutil
 import time
+import platform
 
 from .utils import add2, add2_wait, multiply
 from ..submitter import Submitter
@@ -1872,9 +1873,6 @@ def create_tasks():
     t1 = wf.name2obj["t1"]
     t2 = wf.name2obj["t2"]
     return wf, t1, t2
-
-
-import platform
 
 
 @pytest.mark.xfail(platform.system() == "Darwin", reason="fails on osx, see #108")

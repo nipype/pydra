@@ -71,8 +71,8 @@ def test_concurrent_wf_nr_proc():
     # wf.plugin = 'cf'
     # res = wf.run()
     with Submitter("cf", nr_proc=2) as sub:
-        breakpoint()
         sub(wf)
+
     res = wf.result()
     assert res.output.out1 == 7
     assert res.output.out2 == 12
