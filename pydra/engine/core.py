@@ -247,6 +247,9 @@ class TaskBase:
             from .submitter import Submitter
 
             submitter = Submitter(plugin=plugin)
+        elif self.state:
+            submitter = Submitter()
+
         if submitter:
             with submitter as sub:
                 res = sub(self)
