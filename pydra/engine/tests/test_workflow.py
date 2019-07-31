@@ -2,35 +2,13 @@ import pytest
 import shutil
 import time
 
+from .utils import add2, add2_wait, multiply
 from ..submitter import Submitter
 from ..core import Workflow
 from ... import mark
 
 
 Plugins = ["cf"]
-
-
-@mark.task
-def double(x):
-    return x * 2
-
-
-@mark.task
-def multiply(x, y):
-    return x * y
-
-
-@mark.task
-def add2(x):
-    if x == 1 or x == 12:
-        time.sleep(1)
-    return x + 2
-
-
-@mark.task
-def add2_wait(x):
-    time.sleep(3)
-    return x + 2
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -95,7 +73,7 @@ def test_wf_1_call_exception(plugin):
     with Submitter(plugin=plugin) as sub:
         with pytest.raises(Exception) as e:
             wf(submitter=sub, plugin=plugin)
-        assert "you can specify submitter OR plugin" in str(e.value)
+        assert "Specify submitter OR plugin" in str(e.value)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1195,7 +1173,7 @@ def test_wf_nostate_cachedir(plugin, tmpdir):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
     """ wf with provided cache_dir as relative path"""
-    cwd = tmpdir.chdir()
+    tmpdir.chdir()
     cache_dir = "test_wf_cache_2"
 
     wf = Workflow(name="wf_2", input_spec=["x", "y"], cache_dir=cache_dir)
