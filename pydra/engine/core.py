@@ -262,9 +262,6 @@ class TaskBase:
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
-        result = self.result()
-        if result is not None:
-            return result
         """
         Concurrent execution scenarios
 
@@ -278,6 +275,9 @@ class TaskBase:
         self.hooks.pre_run(self)
         # TODO add signal handler for processes killed after lock acquisition
         with SoftFileLock(lockfile):
+            result = self.result()
+            if result is not None:
+                return result
             # Let only one equivalent process run
             odir = self.output_dir
             if not self.can_resume and odir.exists():
