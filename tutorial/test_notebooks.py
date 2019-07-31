@@ -42,7 +42,7 @@ Dir_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "notebooks"
     "notebook",
     [
         os.path.join(Dir_path, "intro_task.ipynb"),
-        os.path.join(Dir_path, "intro_task_splitter_combiner.ipynb"),
+        os.path.join(Dir_path, "intro_task_state.ipynb"),
         os.path.join(Dir_path, "intro_workflow.ipynb"),
     ],
 )
