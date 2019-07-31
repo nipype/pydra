@@ -57,9 +57,28 @@ def load_result(checksum, cache_locations):
     return None
 
 
-def save_result(result_path: Path, result):
-    with (result_path / "_result.pklz").open("wb") as fp:
-        cp.dump(result, fp)
+def save(task_path: Path, result=None, task=None):
+    """
+    Save ``Task`` object and/or results.
+
+    Parameters
+    ----------
+    task_path : Path
+        Write directory
+    result : Result
+        Result to pickle and write
+    task : Task
+        Task to pickle and write
+    """
+    if task is None and result is None:
+        raise ValueError("Nothing to be saved")
+    task_path.mkdir(parents=True, exist_ok=True)
+    if result:
+        with (task_path / "_result.pklz").open("wb") as fp:
+            cp.dump(result, fp)
+    if task:
+        with (task_path / "_task.pklz").open("wb") as fp:
+            cp.dump(task, fp)
 
 
 def task_hash(task_obj):
@@ -100,56 +119,52 @@ def make_klass(spec):
 
 
 # https://stackoverflow.com/questions/17190221
-@asyncio.coroutine
-def read_stream_and_display(stream, display):
+async def read_stream_and_display(stream, display):
     """Read from stream line by line until EOF, display, and capture the lines.
 
     """
     output = []
     while True:
-        line = yield from stream.readline()
+        line = await stream.readline()
         if not line:
             break
         output.append(line)
-        display(line)  # assume it doesn't block
+        if display is not None:
+            display(line)  # assume it doesn't block
     return b"".join(output).decode()
 
 
-@asyncio.coroutine
-def read_and_display(*cmd):
+async def read_and_display(*cmd, hide_display=False):
     """Capture cmd's stdout, stderr while displaying them as they arrive
     (line by line).
 
     """
     # start process
-    process = yield from asyncio.create_subprocess_exec(
+    process = await asyncio.create_subprocess_exec(
         *cmd, stdout=asp.PIPE, stderr=asp.PIPE
     )
 
+    stdout_display = sys.stdout.buffer.write if not hide_display else None
+    stderr_display = sys.stderr.buffer.write if not hide_display else None
     # read child's stdout/stderr concurrently (capture and display)
     try:
-        stdout, stderr = yield from asyncio.gather(
-            read_stream_and_display(process.stdout, sys.stdout.buffer.write),
-            read_stream_and_display(process.stderr, sys.stderr.buffer.write),
+        stdout, stderr = await asyncio.gather(
+            read_stream_and_display(process.stdout, stdout_display),
+            read_stream_and_display(process.stderr, stderr_display),
         )
     except Exception:
         process.kill()
         raise
     finally:
         # wait for the process to exit
-        rc = yield from process.wait()
+        rc = await process.wait()
     return rc, stdout, stderr
 
 
 # run the event loop
 def execute(cmd):
-    if os.name == "nt":
-        loop = asyncio.ProactorEventLoop()  # for subprocess' pipes on Windows
-        asyncio.set_event_loop(loop)
-    else:
-        loop = get_open_loop()
+    loop = get_open_loop()
     rc, stdout, stderr = loop.run_until_complete(read_and_display(*cmd))
-    loop.close()
     return rc, stdout, stderr
 
 
@@ -172,11 +187,57 @@ def get_open_loop():
     loop : EventLoop
         The current event loop
     """
-    loop = asyncio.get_event_loop()
-    if loop.is_closed():
-        loop = asyncio.new_event_loop()
+    if os.name == "nt":
+        loop = asyncio.ProactorEventLoop()  # for subprocess' pipes on Windows
         asyncio.set_event_loop(loop)
+    else:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
     return loop
+
+
+def create_pyscript(script_path, checksum):
+    """
+    Create standalone script for task execution in
+    a different environment.
+
+    Parameters
+    ----------
+    script_path : Path
+    checksum : str
+        ``Task``'s checksum
+
+    Returns
+    -------
+    pyscript : File
+        Execution script
+    """
+    task_pkl = script_path / "_task.pklz"
+    if not task_pkl.exists() or not task_pkl.stat().st_size:
+        raise Exception("Missing or empty task!")
+
+    content = f"""import cloudpickle as cp
+from pathlib import Path
+
+
+cache_path = Path("{str(script_path)}")
+task_pkl = (cache_path / "_task.pklz")
+task = cp.loads(task_pkl.read_bytes())
+
+# submit task
+task()
+
+if not task.result():
+    raise Exception("Something went wrong")
+print("Completed", task.checksum, task)
+task_pkl.unlink()
+"""
+    pyscript = script_path / f"pyscript_{checksum}.py"
+    with pyscript.open("wt") as fp:
+        fp.writelines(content)
+    return pyscript
 
 
 def hash_function(obj):

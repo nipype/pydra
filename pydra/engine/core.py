@@ -6,7 +6,6 @@ import logging
 import os
 from pathlib import Path
 import typing as ty
-import pickle as pk
 from copy import deepcopy
 
 import cloudpickle as cp
@@ -22,7 +21,7 @@ from .helpers import (
     create_checksum,
     print_help,
     load_result,
-    save_result,
+    save,
     ensure_list,
     record_error,
     hash_function,
@@ -62,7 +61,7 @@ class TaskBase:
     # TODO: write state should be removed
     def __init__(
         self,
-        name,
+        name: str,
         inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
@@ -122,6 +121,7 @@ class TaskBase:
         )
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
+        self.allow_cache_override = True
         self._checksum = None
 
         # dictionary of results from tasks
@@ -133,14 +133,14 @@ class TaskBase:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state["input_spec"] = pk.dumps(state["input_spec"])
-        state["output_spec"] = pk.dumps(state["output_spec"])
+        state["input_spec"] = cp.dumps(state["input_spec"])
+        state["output_spec"] = cp.dumps(state["output_spec"])
         state["inputs"] = dc.asdict(state["inputs"])
         return state
 
     def __setstate__(self, state):
-        state["input_spec"] = pk.loads(state["input_spec"])
-        state["output_spec"] = pk.loads(state["output_spec"])
+        state["input_spec"] = cp.loads(state["input_spec"])
+        state["output_spec"] = cp.loads(state["output_spec"])
         state["inputs"] = make_klass(state["input_spec"])(**state["inputs"])
         self.__dict__.update(state)
 
@@ -240,17 +240,23 @@ class TaskBase:
         from .submitter import Submitter
 
         if submitter and plugin:
-            raise Exception("you can specify submitter OR plugin, not both")
-        elif submitter:
-            submitter(self)
-        elif plugin:
-            with Submitter(plugin=plugin) as sub:
-                sub(self)
-        elif self.state:
-            with Submitter() as sub:
-                sub(self)
+            raise Exception("Specify submitter OR plugin, not both")
+
+        plugin = plugin or self.plugin
+        if plugin:
+            from .submitter import Submitter
+
+            submitter = Submitter(plugin=plugin)
+        if submitter:
+            with submitter as sub:
+                res = sub(self)
         else:
-            return self._run(**kwargs)
+            if is_workflow(self):
+                raise NotImplementedError(
+                    "TODO: linear workflow execution - assign submitter or plugin for now"
+                )
+            res = self._run(**kwargs)
+        return res
 
     def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
@@ -290,9 +296,7 @@ class TaskBase:
                 raise
             finally:
                 self.audit.finalize_audit(result)
-                save_result(odir, result)
-                with open(odir / "_node.pklz", "wb") as fp:
-                    cp.dump(self, fp)
+                save(odir, result=result, task=self)
                 os.chdir(cwd)
             return result
 
@@ -468,6 +472,7 @@ class Workflow(TaskBase):
 
         self.graph = DiGraph()
         self.name2obj = {}
+        self._submitted = False
 
         # store output connections
         self._connections = None
@@ -580,9 +585,7 @@ class Workflow(TaskBase):
                 raise
             finally:
                 self.audit.finalize_audit(result=result)
-                save_result(odir, result)
-                with open(odir / "_node.pklz", "wb") as fp:
-                    cp.dump(self, fp)
+                save(odir, result=result, task=self)
                 os.chdir(cwd)
             return result
 
@@ -590,7 +593,9 @@ class Workflow(TaskBase):
         if not submitter:
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
-        await submitter.submit(self, return_task=True)
+        if submitter.worker._distributed:
+            self._submitted = True
+        await submitter.submit(self)
 
     def set_output(self, connections):
         self._connections = connections
@@ -605,11 +610,6 @@ class Workflow(TaskBase):
                 raise ValueError("all connections must be lazy")
             output.append(val.get_value(self))
         return output
-
-
-# TODO: task has also call
-def is_function(obj):
-    return hasattr(obj, "__call__")
 
 
 def is_task(obj):

@@ -4,21 +4,18 @@ import typing as ty
 import os
 import pytest
 
+from .utils import gen_basic_wf
 from ... import mark
-from ..task import ShellCommandTask, ContainerTask, DockerTask
-from ...utils.messenger import (
-    AuditFlag,
-    PrintMessenger,
-    FileMessenger,
-    collect_messages,
-)
+from ..task import AuditFlag, ShellCommandTask, ContainerTask, DockerTask
+from ...utils.messenger import FileMessenger, collect_messages
+
+
+@mark.task
+def funaddtwo(a):
+    return a + 2
 
 
 def test_output():
-    @mark.task
-    def funaddtwo(a):
-        return a + 2
-
     nn = funaddtwo(a=3)
     res = nn._run()
     assert res.output.out == 5
@@ -26,10 +23,6 @@ def test_output():
 
 @pytest.mark.xfail(reason="cp.dumps(func) depends on the system/setup, TODO!!")
 def test_checksum():
-    @mark.task
-    def funaddtwo(a):
-        return a + 2
-
     nn = funaddtwo(a=3)
     assert (
         nn.checksum
@@ -350,3 +343,23 @@ def test_docker_cmd(tmpdir):
         "docker run --rm -it -v /local/path:/container/path:ro"
         " -v /local2:/container2:rw busybox pwd"
     )
+
+
+def test_functask_callable(tmpdir):
+    # no submitter or plugin
+    foo = funaddtwo(a=1)
+    res = foo()
+    assert res.output.out == 3
+    assert foo.plugin is None
+
+    # plugin
+    bar = funaddtwo(a=2)
+    res = bar(plugin="cf")
+    assert res.output.out == 4
+    assert bar.plugin is None
+
+    foo2 = funaddtwo(a=3)
+    foo2.plugin = "cf"
+    res = foo2()
+    assert res.output.out == 5
+    assert foo2.plugin == "cf"

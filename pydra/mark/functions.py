@@ -7,7 +7,7 @@ def annotate(annotation):
     >>> import pydra
     >>> @pydra.mark.annotate({'a': int, 'return': float})
     ... def square(a):
-    ...     a ** 2.0
+    ...     return a ** 2.0
     """
     import inspect
 
@@ -28,7 +28,7 @@ def task(func):
     >>> import pydra
     >>> @pydra.mark.task
     ... def square(a: int) -> float:
-    ...     a ** 2.0
+    ...     return a ** 2.0
     """
     from ..engine.task import FunctionTask
 
