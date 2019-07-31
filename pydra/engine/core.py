@@ -598,8 +598,19 @@ class Workflow(TaskBase):
         await submitter.submit(self)
 
     def set_output(self, connections):
-        self._connections = connections
-        fields = [(name, ty.Any) for name, _ in connections]
+        if isinstance(connections, tuple) and len(connections) == 2:
+            self._connections = [connections]
+        elif isinstance(connections, list) and all(
+            [len(el) == 2 for el in connections]
+        ):
+            self._connections = connections
+        elif isinstance(connections, dict):
+            self._connections = list(connections.items())
+        else:
+            raise Exception(
+                "Connections can be a 2-elements tuple, a list of these tuples, or dictionary"
+            )
+        fields = [(name, ty.Any) for name, _ in self._connections]
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
         logger.info("Added %s to %s", self.output_spec, self)
 
