@@ -15,7 +15,7 @@ from tempfile import mkdtemp
 
 from . import state
 from . import auxiliary as aux
-from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo, LazyField
+from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo, LazyField, TaskHook
 from .helpers import (
     make_klass,
     create_checksum,
@@ -127,6 +127,7 @@ class TaskBase:
         # dictionary of results from tasks
         self.results_dict = {}
         self.plugin = None
+        self.hooks = TaskHook()
 
     def __repr__(self):
         return self.name
@@ -263,6 +264,7 @@ class TaskBase:
         3. no cache or other process -> start
         4. two or more concurrent new processes get to start
         """
+        self.hooks.pre_run(self)
         # TODO add signal handler for processes killed after lock acquisition
         with SoftFileLock(lockfile):
             # Let only one equivalent process run
@@ -278,6 +280,7 @@ class TaskBase:
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
             self.audit.start_audit(odir)
             result = Result(output=None, runtime=None, errored=False)
+            self.hooks.pre_run_task(self)
             try:
                 self.audit.monitor()
                 self._run_task()
@@ -287,12 +290,14 @@ class TaskBase:
                 result.errored = True
                 raise
             finally:
+                self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
                 save_result(odir, result)
                 with open(odir / "_node.pklz", "wb") as fp:
                     cp.dump(self, fp)
                 os.chdir(cwd)
-            return result
+        self.hooks.post_run(self, result)
+        return result
 
     # TODO: Decide if the following two functions should be separated
     @abc.abstractmethod
