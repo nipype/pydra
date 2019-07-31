@@ -1,14 +1,36 @@
+import time
+import shutil
+
+import pytest
+
+from .utils import gen_basic_wf
 from ..core import Workflow
 from ..submitter import Submitter
 from ... import mark
 
-import time
+# list of (plugin, available)
+plugins = {"slurm": bool(shutil.which("sbatch"))}
 
 
 @mark.task
 def sleep_add_one(x):
     time.sleep(1)
     return x + 1
+
+
+def test_callable_wf():
+    wf = gen_basic_wf()
+    with pytest.raises(NotImplementedError):
+        wf()
+
+    res = wf(plugin="cf")
+    assert res.output.out == 9
+    del wf, res
+
+    wf = gen_basic_wf()
+    sub = Submitter("cf")
+    res = wf(submitter=sub)
+    assert res.output.out == 9
 
 
 def test_concurrent_wf():
@@ -95,3 +117,54 @@ def test_wf_with_state():
     assert res[0].output.out == 3
     assert res[1].output.out == 4
     assert res[2].output.out == 5
+
+
+@pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
+def test_slurm_wf(tmpdir):
+    wf = gen_basic_wf()
+    wf.cache_dir = tmpdir
+    # submit workflow and every task as slurm job
+    with Submitter("slurm") as sub:
+        sub(wf)
+
+    res = wf.result()
+    assert res.output.out == 9
+    script_dir = tmpdir / "SlurmWorker_scripts"
+    assert script_dir.exists()
+    # ensure each task was executed with slurm
+    assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 3
+
+
+@pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
+def test_slurm_wf_cf(tmpdir):
+    # submit entire workflow as single job executing with cf worker
+    wf = gen_basic_wf()
+    wf.cache_dir = tmpdir
+    wf.plugin = "cf"
+    with Submitter("slurm") as sub:
+        sub(wf)
+    res = wf.result()
+    assert res.output.out == 9
+    script_dir = tmpdir / "SlurmWorker_scripts"
+    assert script_dir.exists()
+    # ensure only workflow was executed with slurm
+    sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
+    assert len(sdirs) == 1
+    assert sdirs[0].basename == wf.checksum
+
+
+@pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
+def test_slurm_wf_state(tmpdir):
+    wf = gen_basic_wf()
+    wf.split("x")
+    wf.inputs.x = [5, 6]
+    wf.cache_dir = tmpdir
+    with Submitter("slurm") as sub:
+        sub(wf)
+    res = wf.result()
+    assert res[0].output.out == 9
+    assert res[1].output.out == 10
+    script_dir = tmpdir / "SlurmWorker_scripts"
+    assert script_dir.exists()
+    sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
+    assert len(sdirs) == 3 * len(wf.inputs.x)
