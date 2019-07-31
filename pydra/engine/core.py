@@ -261,6 +261,10 @@ class TaskBase:
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
+        # Eagerly retrieve cached
+        result = self.result()
+        if result is not None:
+            return result
         """
         Concurrent execution scenarios
 
@@ -275,11 +279,6 @@ class TaskBase:
         # TODO add signal handler for processes killed after lock acquisition
         with SoftFileLock(lockfile):
             # Let only one equivalent process run
-            # Eagerly retrieve cached
-            if self.results_dict:  # should be skipped if run called without submitter
-                result = self.result()
-                if result is not None:
-                    return result
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
@@ -570,6 +569,7 @@ class Workflow(TaskBase):
         4. two or more concurrent new processes get to start
         """
         # TODO add signal handler for processes killed after lock acquisition
+        self.hooks.pre_run(self)
         with SoftFileLock(lockfile):
             # # Let only one equivalent process run
             odir = self.output_dir
@@ -579,6 +579,7 @@ class Workflow(TaskBase):
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
             self.audit.start_audit(odir=odir)
             result = Result(output=None, runtime=None, errored=False)
+            self.hooks.pre_run_task(self)
             try:
                 self.audit.monitor()
                 await self._run_task(submitter)
@@ -588,10 +589,12 @@ class Workflow(TaskBase):
                 result.errored = True
                 raise
             finally:
+                self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
                 save(odir, result=result, task=self)
                 os.chdir(cwd)
-            return result
+        self.hooks.post_run(self, result)
+        return result
 
     async def _run_task(self, submitter):
         if not submitter:
