@@ -55,6 +55,29 @@ def test_concurrent_wf():
     assert res.output.out2 == 12
 
 
+def test_concurrent_wf_nr_proc():
+    # concurrent workflow
+    # setting nr_proc in Submitter that is passed to the worker
+    # A --> C
+    # B --> D
+    wf = Workflow("new_wf", input_spec=["x", "y"])
+    wf.inputs.x = 5
+    wf.inputs.y = 10
+    wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
+    wf.add(sleep_add_one(name="taskb", x=wf.lzin.y))
+    wf.add(sleep_add_one(name="taskc", x=wf.taska.lzout.out))
+    wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
+    wf.set_output([("out1", wf.taskc.lzout.out), ("out2", wf.taskd.lzout.out)])
+    # wf.plugin = 'cf'
+    # res = wf.run()
+    with Submitter("cf", nr_proc=2) as sub:
+        breakpoint()
+        sub(wf)
+    res = wf.result()
+    assert res.output.out1 == 7
+    assert res.output.out2 == 12
+
+
 def test_wf_in_wf():
     """WF(A --> SUBWF(A --> B) --> B)"""
     wf = Workflow(name="wf_in_wf", input_spec=["x"])
