@@ -200,5 +200,8 @@ class TaskHook:
 
     def __setattr__(cls, attr, val):
         if not hasattr(cls, attr):
-            raise Exception("Cannot set unknown hook")
+            raise AttributeError("Cannot set unknown hook")
         super().__setattr__(attr, val)
+
+    def reset(self):
+        self.__dict__ = TaskHook().__dict__
