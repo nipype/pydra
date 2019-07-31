@@ -4,10 +4,9 @@ import typing as ty
 import os
 import pytest
 
-from .utils import gen_basic_wf
 from ... import mark
 from ..task import AuditFlag, ShellCommandTask, ContainerTask, DockerTask
-from ...utils.messenger import FileMessenger, collect_messages
+from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 
 
 @mark.task
