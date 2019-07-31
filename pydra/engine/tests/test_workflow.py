@@ -924,7 +924,7 @@ def test_wfasnd_wfndupdate(plugin):
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
-    breakpoint()
+
     results = wf.result()
     assert results.output.out == 5
     assert wf.output_dir.exists()
