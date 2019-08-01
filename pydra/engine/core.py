@@ -237,6 +237,8 @@ class TaskBase:
             return self._cache_dir / self.checksum
 
     def __call__(self, submitter=None, plugin=None, **kwargs):
+        from .submitter import Submitter
+
         if submitter and plugin:
             raise Exception("Specify submitter OR plugin, not both")
 
@@ -245,6 +247,9 @@ class TaskBase:
             from .submitter import Submitter
 
             submitter = Submitter(plugin=plugin)
+        elif self.state:
+            submitter = Submitter()
+
         if submitter:
             with submitter as sub:
                 res = sub(self)
@@ -274,10 +279,9 @@ class TaskBase:
         with SoftFileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            if self.results_dict:  # should be skipped if run called without submitter
-                result = self.result()
-                if result is not None:
-                    return result
+            result = self.result()
+            if result is not None:
+                return result
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
@@ -597,8 +601,19 @@ class Workflow(TaskBase):
         await submitter.submit(self)
 
     def set_output(self, connections):
-        self._connections = connections
-        fields = [(name, ty.Any) for name, _ in connections]
+        if isinstance(connections, tuple) and len(connections) == 2:
+            self._connections = [connections]
+        elif isinstance(connections, list) and all(
+            [len(el) == 2 for el in connections]
+        ):
+            self._connections = connections
+        elif isinstance(connections, dict):
+            self._connections = list(connections.items())
+        else:
+            raise Exception(
+                "Connections can be a 2-elements tuple, a list of these tuples, or dictionary"
+            )
+        fields = [(name, ty.Any) for name, _ in self._connections]
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
         logger.info("Added %s to %s", self.output_spec, self)
 

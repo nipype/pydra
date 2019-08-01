@@ -4,10 +4,9 @@ import typing as ty
 import os
 import pytest
 
-from .utils import gen_basic_wf
 from ... import mark
 from ..task import AuditFlag, ShellCommandTask, ContainerTask, DockerTask
-from ...utils.messenger import FileMessenger, collect_messages
+from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 
 
 @mark.task
@@ -265,10 +264,12 @@ def test_audit_prov(tmpdir):
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
-    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    # printing the audit message
+    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
     funky.cache_dir = tmpdir
     funky()
 
+    # saving the audit message into the file
     funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
