@@ -6,14 +6,15 @@ import pytest
 
 from ... import mark
 from ..task import AuditFlag, ShellCommandTask, ContainerTask, DockerTask
-from ...utils.messenger import PrintMessenger, FileMessenger, collect_messages
+from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
+
+
+@mark.task
+def funaddtwo(a):
+    return a + 2
 
 
 def test_output():
-    @mark.task
-    def funaddtwo(a):
-        return a + 2
-
     nn = funaddtwo(a=3)
     res = nn._run()
     assert res.output.out == 5
@@ -21,10 +22,6 @@ def test_output():
 
 @pytest.mark.xfail(reason="cp.dumps(func) depends on the system/setup, TODO!!")
 def test_checksum():
-    @mark.task
-    def funaddtwo(a):
-        return a + 2
-
     nn = funaddtwo(a=3)
     assert (
         nn.checksum
@@ -267,10 +264,12 @@ def test_audit_prov(tmpdir):
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
-    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    # printing the audit message
+    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
     funky.cache_dir = tmpdir
     funky()
 
+    # saving the audit message into the file
     funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
@@ -343,3 +342,23 @@ def test_docker_cmd(tmpdir):
         "docker run --rm -it -v /local/path:/container/path:ro"
         " -v /local2:/container2:rw busybox pwd"
     )
+
+
+def test_functask_callable(tmpdir):
+    # no submitter or plugin
+    foo = funaddtwo(a=1)
+    res = foo()
+    assert res.output.out == 3
+    assert foo.plugin is None
+
+    # plugin
+    bar = funaddtwo(a=2)
+    res = bar(plugin="cf")
+    assert res.output.out == 4
+    assert bar.plugin is None
+
+    foo2 = funaddtwo(a=3)
+    foo2.plugin = "cf"
+    res = foo2()
+    assert res.output.out == 5
+    assert foo2.plugin == "cf"

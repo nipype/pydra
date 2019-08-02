@@ -1,8 +1,10 @@
-import os, shutil
+import os
+import shutil
 import numpy as np
-import pytest, pdb
+import pytest
 
-from ... import mark
+from .utils import fun_addtwo, fun_addvar, moment, fun_div
+
 from ..core import TaskBase
 from ..submitter import Submitter
 
@@ -22,39 +24,7 @@ def change_dir(request):
     request.addfinalizer(move2orig)
 
 
-@mark.task
-def fun_addtwo(a):
-    import time
-
-    time.sleep(1)
-    if a == 3:
-        time.sleep(2)
-    return a + 2
-
-
-@mark.task
-def fun_addvar(a, b):
-    return a + b
-
-
-@mark.task
-def fun_addvar4(a, b, c, d):
-    return a + b + c + d
-
-
-@mark.task
-def moment(lst, n):
-    return sum([i ** n for i in lst]) / len(lst)
-
-
-@mark.task
-def fun_div(a, b):
-    return a / b
-
-
 # Tests for tasks initializations
-
-
 def test_task_init_1():
     """ task with mandatory arguments only"""
     nn = fun_addtwo()
@@ -323,6 +293,29 @@ def test_task_nostate_cachelocations(plugin, tmpdir):
     nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
     with Submitter(plugin=plugin) as sub:
         sub(nn2)
+
+    # checking the results
+    results2 = nn2.result()
+    assert results2.output.out == 5
+
+    # checking if the second task didn't run the interface again
+    assert nn.output_dir.exists()
+    assert not nn2.output_dir.exists()
+
+
+def test_task_nostate_cachelocations_nosubmitter(tmpdir):
+    """
+    Two identical tasks (that are run without submitter!) with provided cache_dir;
+    the second task has cache_locations and should not recompute the results
+    """
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    cache_dir2 = tmpdir.mkdir("test_task_nostate2")
+
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    nn()
+
+    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2()
 
     # checking the results
     results2 = nn2.result()

@@ -13,3 +13,7 @@ git clone git@github.com:nipype/pydra.git
 cd pydra
 pip install -e .[dev]
 ```
+
+### Tutorial
+A short tutorial is available on mybinder!
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/nipype/pydra/master?filepath=tutorial%2Fnotebooks)

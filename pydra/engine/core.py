@@ -21,7 +21,7 @@ from .helpers import (
     create_checksum,
     print_help,
     load_result,
-    save_result,
+    save,
     ensure_list,
     record_error,
     hash_function,
@@ -32,7 +32,7 @@ from ..utils.messenger import AuditFlag
 
 logger = logging.getLogger("pydra")
 
-develop = True
+develop = False
 
 
 class TaskBase:
@@ -237,17 +237,29 @@ class TaskBase:
             return self._cache_dir / self.checksum
 
     def __call__(self, submitter=None, plugin=None, **kwargs):
+        from .submitter import Submitter
+
         if submitter and plugin:
-            raise Exception("you can specify submitter OR plugin, not both")
-        elif submitter:
-            submitter(self)
-        elif plugin:
+            raise Exception("Specify submitter OR plugin, not both")
+
+        plugin = plugin or self.plugin
+        if plugin:
             from .submitter import Submitter
 
-            with Submitter(plugin=plugin) as sub:
-                sub(self)
+            submitter = Submitter(plugin=plugin)
+        elif self.state:
+            submitter = Submitter()
+
+        if submitter:
+            with submitter as sub:
+                res = sub(self)
         else:
-            return self._run(**kwargs)
+            if is_workflow(self):
+                raise NotImplementedError(
+                    "TODO: linear workflow execution - assign submitter or plugin for now"
+                )
+            res = self._run(**kwargs)
+        return res
 
     def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
@@ -267,10 +279,9 @@ class TaskBase:
         with SoftFileLock(lockfile):
             # Let only one equivalent process run
             # Eagerly retrieve cached
-            if self.results_dict:  # should be skipped if run called without submitter
-                result = self.result()
-                if result is not None:
-                    return result
+            result = self.result()
+            if result is not None:
+                return result
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
@@ -288,9 +299,7 @@ class TaskBase:
                 raise
             finally:
                 self.audit.finalize_audit(result)
-                save_result(odir, result)
-                with open(odir / "_node.pklz", "wb") as fp:
-                    cp.dump(self, fp)
+                save(odir, result=result, task=self)
                 os.chdir(cwd)
             return result
 
@@ -466,6 +475,7 @@ class Workflow(TaskBase):
 
         self.graph = DiGraph()
         self.name2obj = {}
+        self._submitted = False
 
         # store output connections
         self._connections = None
@@ -578,9 +588,7 @@ class Workflow(TaskBase):
                 raise
             finally:
                 self.audit.finalize_audit(result=result)
-                save_result(odir, result)
-                with open(odir / "_node.pklz", "wb") as fp:
-                    cp.dump(self, fp)
+                save(odir, result=result, task=self)
                 os.chdir(cwd)
             return result
 
@@ -588,11 +596,24 @@ class Workflow(TaskBase):
         if not submitter:
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
-        await submitter.submit(self, return_task=True)
+        if submitter.worker._distributed:
+            self._submitted = True
+        await submitter.submit(self)
 
     def set_output(self, connections):
-        self._connections = connections
-        fields = [(name, ty.Any) for name, _ in connections]
+        if isinstance(connections, tuple) and len(connections) == 2:
+            self._connections = [connections]
+        elif isinstance(connections, list) and all(
+            [len(el) == 2 for el in connections]
+        ):
+            self._connections = connections
+        elif isinstance(connections, dict):
+            self._connections = list(connections.items())
+        else:
+            raise Exception(
+                "Connections can be a 2-elements tuple, a list of these tuples, or dictionary"
+            )
+        fields = [(name, ty.Any) for name, _ in self._connections]
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
         logger.info("Added %s to %s", self.output_spec, self)
 
@@ -603,11 +624,6 @@ class Workflow(TaskBase):
                 raise ValueError("all connections must be lazy")
             output.append(val.get_value(self))
         return output
-
-
-# TODO: task has also call
-def is_function(obj):
-    return hasattr(obj, "__call__")
 
 
 def is_task(obj):

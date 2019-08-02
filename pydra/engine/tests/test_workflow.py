@@ -1,7 +1,9 @@
 import pytest
 import shutil
 import time
+import platform
 
+from .utils import add2, add2_wait, multiply
 from ..submitter import Submitter
 from ..core import Workflow
 from ... import mark
@@ -10,35 +12,31 @@ from ... import mark
 Plugins = ["cf"]
 
 
-@mark.task
-def double(x):
-    return x * 2
-
-
-@mark.task
-def multiply(x, y):
-    return x * y
-
-
-@mark.task
-def add2(x):
-    if x == 1 or x == 12:
-        time.sleep(1)
-    return x + 2
-
-
-@mark.task
-def add2_wait(x):
-    time.sleep(3)
-    return x + 2
-
-
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_1(plugin):
     """ workflow with one task and no splitter"""
     wf = Workflow(name="wf_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert 4 == results.output.out
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_1a_outpastuple(plugin):
+    """ workflow with one task and no splitter
+        set_output takes a tuple
+    """
+    wf = Workflow(name="wf_1", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+    wf.set_output(("out", wf.add2.lzout.out))
     wf.inputs.x = 2
     wf.plugin = plugin
 
@@ -95,7 +93,7 @@ def test_wf_1_call_exception(plugin):
     with Submitter(plugin=plugin) as sub:
         with pytest.raises(Exception) as e:
             wf(submitter=sub, plugin=plugin)
-        assert "you can specify submitter OR plugin" in str(e.value)
+        assert "Specify submitter OR plugin" in str(e.value)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -162,6 +160,58 @@ def test_wf_2b(plugin):
     results = wf.result()
     assert 8 == results.output.out
 
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_2c_multoutp(plugin):
+    """ workflow with 2 tasks, no splitter
+        setting multiple outputs for the workflow
+    """
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    add2_task = add2(name="add2")
+    add2_task.inputs.x = wf.mult.lzout.out
+    wf.add(add2_task)
+    # setting multiple output (from both nodes)
+    wf.set_output([("out_add2", wf.add2.lzout.out), ("out_mult", wf.mult.lzout.out)])
+    wf.inputs.x = 2
+    wf.inputs.y = 3
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    # checking outputs from both nodes
+    assert 6 == results.output.out_mult
+    assert 8 == results.output.out_add2
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_2d_outpasdict(plugin):
+    """ workflow with 2 tasks, no splitter
+        setting multiple outputs using a dictionary
+    """
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    add2_task = add2(name="add2")
+    add2_task.inputs.x = wf.mult.lzout.out
+    wf.add(add2_task)
+    # setting multiple output (from both nodes)
+    wf.set_output({"out_add2": wf.add2.lzout.out, "out_mult": wf.mult.lzout.out})
+    wf.inputs.x = 2
+    wf.inputs.y = 3
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    # checking outputs from both nodes
+    assert 6 == results.output.out_mult
+    assert 8 == results.output.out_add2
     assert wf.output_dir.exists()
 
 
@@ -906,6 +956,63 @@ def test_wfasnd_wfinp_1(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_wfasnd_wfndupdate(plugin):
+    """ workflow as a node
+        workflow-node with one task and no splitter
+        wfasnode input is updated to use the main workflow input
+    """
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=2)
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+
+    wf = Workflow(name="wf", input_spec=["x"], x=3)
+    wfnd.inputs.x = wf.lzin.x
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out == 5
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.xfail(reason="wfnd is not updating input for it's nodes")
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wfasnd_wfndupdate_rerun(plugin):
+    """ workflow as a node
+        workflow-node with one task and no splitter
+        wfasnode is run first and later is
+        updated to use the main workflow input
+    """
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=2)
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    with Submitter(plugin=plugin) as sub:
+        sub(wfnd)
+
+    wf = Workflow(name="wf", input_spec=["x"], x=3)
+    # trying to set before
+    wfnd.inputs.x = wf.lzin.x
+    wf.add(wfnd)
+    # trying to set after add...
+    wf.wfnd.inputs.x = wf.lzin.x
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out == 5
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_st_1(plugin):
     """ workflow as a node
         workflow-node with one task,
@@ -1195,7 +1302,7 @@ def test_wf_nostate_cachedir(plugin, tmpdir):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
     """ wf with provided cache_dir as relative path"""
-    cwd = tmpdir.chdir()
+    tmpdir.chdir()
     cache_dir = "test_wf_cache_2"
 
     wf = Workflow(name="wf_2", input_spec=["x", "y"], cache_dir=cache_dir)
@@ -1768,6 +1875,7 @@ def create_tasks():
     return wf, t1, t2
 
 
+@pytest.mark.xfail(platform.system() == "Darwin", reason="fails on osx, see #108")
 def test_cache_propagation1(tmpdir, create_tasks):
     """No cache set, all independent"""
     wf, t1, t2 = create_tasks
