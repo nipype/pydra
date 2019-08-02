@@ -1875,7 +1875,6 @@ def create_tasks():
     return wf, t1, t2
 
 
-@pytest.mark.xfail(platform.system() == "Darwin", reason="fails on osx, see #108")
 def test_cache_propagation1(tmpdir, create_tasks):
     """No cache set, all independent"""
     wf, t1, t2 = create_tasks
