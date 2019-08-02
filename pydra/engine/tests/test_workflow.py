@@ -1498,7 +1498,7 @@ def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
 
     # checking execution time
     assert t1 > 3
-    assert t2 < 0.1
+    assert t2 < 0.3
 
     # checking all directories
     assert wf1.output_dir
