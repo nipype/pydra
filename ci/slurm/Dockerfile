@@ -10,3 +10,4 @@ RUN conda update -yq --all conda \
     && conda config --set always_yes yes \
     && conda config --add channels conda-forge \
     && rm ~/miniconda.sh
+COPY ./slurm.conf /etc/slurm/slurm.conf
