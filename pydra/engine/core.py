@@ -209,7 +209,7 @@ class TaskBase:
             self._cache_dir.mkdir(parents=False, exist_ok=True)
         else:
             self._cache_dir = mkdtemp()
-            self._cache_dir = Path(self._cache_dir)
+            self._cache_dir = Path(self._cache_dir).resolve()
 
     @property
     def cache_locations(self):
