@@ -8,7 +8,10 @@ from .utils import fun_addtwo, fun_addvar, moment, fun_div
 from ..core import TaskBase
 from ..submitter import Submitter
 
-Plugins = ["cf"]
+if bool(shutil.which("sbatch")):
+    Plugins = ["cf", "slurm"]
+else:
+    Plugins = ["cf"]
 
 
 @pytest.fixture(scope="module")
