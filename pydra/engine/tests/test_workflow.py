@@ -1501,7 +1501,7 @@ def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
 
     # checking execution time
     assert t1 > 3
-    assert t2 < 0.1
+    assert t2 < 0.3
 
     # checking all directories
     assert wf1.output_dir
@@ -1878,7 +1878,6 @@ def create_tasks():
     return wf, t1, t2
 
 
-@pytest.mark.xfail(platform.system() == "Darwin", reason="fails on osx, see #108")
 def test_cache_propagation1(tmpdir, create_tasks):
     """No cache set, all independent"""
     wf, t1, t2 = create_tasks
