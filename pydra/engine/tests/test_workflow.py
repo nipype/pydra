@@ -6,6 +6,7 @@ import platform
 from .utils import add2, add2_wait, multiply
 from ..submitter import Submitter
 from ..core import Workflow
+from ...utils.messenger import AuditFlag, PrintMessenger, FileMessenger
 from ... import mark
 
 
@@ -969,7 +970,12 @@ def test_wfasnd_wfinp_2(plugin, nr_proc):
     wf2.add(add2_wait(name="sleep", x=wf2.lzin.a))
     wf2.set_output([("out", wf2.sleep.lzout.out)])
 
-    wf = Workflow(name="outer", input_spec=["a"])
+    wf = Workflow(
+        name="outer",
+        input_spec=["a"],
+        audit_flags=AuditFlag.ALL,
+        messengers=PrintMessenger(),
+    )
     wf.inputs.a = 4
     wf.add(wf1)
     wf.add(wf2)
