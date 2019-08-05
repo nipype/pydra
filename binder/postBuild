@@ -1,2 +1,2 @@
-pip install -e .[test]
+pip3 install -e .[test]
 sleep 20
