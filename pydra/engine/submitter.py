@@ -2,7 +2,7 @@ import asyncio
 
 from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker
 from .core import is_workflow
-from .helpers import ensure_list, get_open_loop
+from .helpers import get_open_loop
 
 import logging
 
@@ -11,16 +11,16 @@ logger = logging.getLogger("pydra.submitter")
 
 class Submitter:
     # TODO: runnable in init or run
-    def __init__(self, plugin="cf", **wargs):
+    def __init__(self, plugin="cf", **kwargs):
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
         self.plugin = plugin
         if self.plugin == "serial":
             self.worker = SerialWorker()
         elif self.plugin == "cf":
-            self.worker = ConcurrentFuturesWorker(**wargs)
+            self.worker = ConcurrentFuturesWorker(**kwargs)
         elif self.plugin == "slurm":
-            self.worker = SlurmWorker(**wargs)
+            self.worker = SlurmWorker(**kwargs)
         else:
             raise Exception("plugin {} not available".format(self.plugin))
         self.worker.loop = self.loop
@@ -45,40 +45,32 @@ class Submitter:
 
     async def submit_workflow(self, workflow):
         """Distributes or initiates workflow execution"""
-        if self.worker._distributed and not workflow._submitted:
-            # submit job to be executed on different machine
-            workflow._submitted = True
-            if workflow.plugin is None:
-                workflow.plugin = self.plugin
+        if workflow.plugin and workflow.plugin != self.plugin:
             await self.worker.run_el(workflow)
         else:
-            # trigger execution
             await workflow._run(self)
 
     async def submit(self, runnable, wait=False):
         """
         Coroutine entrypoint for task submission.
 
-        Removes state from task and adds one or more
-        asyncio ``Task``s to the running loop.
-
-         Possible routes for the runnable
-         1. ``Workflow`` w/ state: separate states into individual jobs and run() each
-         2. ``Workflow`` w/o state: await graph expansion
-         3. ``Task`` w/ state: separate states and submit to worker
-         4. ``Task`` w/o state: submit to worker
+        Removes any states from `runnable`. If `wait` is
+        set to False (default), aggregates all worker
+        execution coroutines and returns them. If `wait` is
+        True, waits for all coroutines to complete / error
+        and returns None.
 
         Parameters
         ----------
-        runnable : Task
-            Task instance (``Task``, ``Workflow``)
+        runnable : pydra Task
+            Task instance (`Task`, `Workflow`)
         wait : bool (False)
             Await all futures before completing
 
         Returns
         -------
         futures : set or None
-            Tasks yet to be awaited
+            Coroutines for `Task` execution
         """
         futures = set()
         if runnable.state:
@@ -96,8 +88,7 @@ class Submitter:
                 )
                 if is_workflow(runnable):
                     # job has no state anymore
-                    # futures.add(asyncio.create_task(job._run(self)))
-                    futures.add(asyncio.create_task(self.submit_workflow(job)))
+                    futures.add(self.submit_workflow(job))
                 else:
                     # tasks are submitted to worker for execution
                     futures.add(self.worker.run_el(job))
@@ -134,7 +125,7 @@ class Submitter:
         # creating a copy of the graph that will be modified
         # the copy contains new lists with original runnable objects
         graph_copy = wf.graph.copy()
-        # keep track of local futures
+        # keep track of pending futures
         task_futures = set()
         while not wf.done_all_tasks:
             tasks = get_runnable_tasks(graph_copy)
@@ -148,17 +139,10 @@ class Submitter:
                 # checksum has to be updated, so resetting
                 task._checksum = None
                 if is_workflow(task) and not task.state:
-                    # allow overriding of submitter
-                    if task.plugin is not None and task.plugin != self.plugin:
-                        submitter = Submitter(task.plugin)
-                    else:
-                        task.plugin = self.plugin
-                        submitter = self
-                    await task._run(submitter)
+                    await self.submit_workflow(task)
                 else:
                     for fut in await self.submit(task):
                         task_futures.add(fut)
-
             task_futures = await self.worker.fetch_finished(task_futures)
         return wf
 
