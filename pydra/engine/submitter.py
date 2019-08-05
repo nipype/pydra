@@ -91,7 +91,7 @@ class Submitter:
                 )
                 if is_workflow(runnable):
                     # job has no state anymore
-                    futures.add(asyncio.create_task(self.submit_workflow(job)))
+                    futures.add(self.submit_workflow(job))
                 else:
                     # tasks are submitted to worker for execution
                     futures.add(self.worker.run_el(job))
@@ -146,8 +146,8 @@ class Submitter:
                 else:
                     for fut in await self.submit(task):
                         task_futures.add(fut)
-
             task_futures = await self.worker.fetch_finished(task_futures)
+
         return wf
 
     def __enter__(self):

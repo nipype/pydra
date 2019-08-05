@@ -18,6 +18,7 @@ class Worker:
         self.loop = loop
 
     def run_el(self, interface, **kwargs):
+        """Returns coroutine for task execution"""
         raise NotImplementedError
 
     def close(self):
@@ -44,10 +45,6 @@ class Worker:
         except ValueError:
             # nothing pending!
             pending = set()
-
-        assert (
-            done.union(pending) == futures
-        ), "all tasks from futures should be either in done or pending"
         logger.debug(f"Tasks finished: {len(done)}")
         return pending
 
@@ -99,9 +96,9 @@ class DistributedWorker(Worker):
         job_slots = self.max_jobs - self._jobs if self.max_jobs else float("inf")
         if len(futures) > job_slots:
             # convert to list to simplify indexing
+            logger.warning(f"Reducing queued jobs due to max jobs ({self.max_jobs})")
             futures = list(futures)
             futures, unqueued = set(futures[:job_slots]), set(futures[job_slots:])
-        # breakpoint()
         try:
             self._jobs += len(futures)
             done, pending = await asyncio.wait(
@@ -110,7 +107,6 @@ class DistributedWorker(Worker):
         except ValueError:
             # nothing pending!
             pending = set()
-        breakpoint()
         self._jobs -= len(done)
         logger.debug(f"Tasks finished: {len(done)}")
         # ensure pending + unqueued tasks persist
@@ -154,8 +150,7 @@ class ConcurrentFuturesWorker(Worker):
 
     def run_el(self, runnable, **kwargs):
         assert self.loop, "No event loop available to submit tasks"
-        task = asyncio.create_task(self.exec_as_coro(runnable))
-        return task
+        return self.exec_as_coro(runnable)
 
     async def exec_as_coro(self, runnable):
         res = await self.loop.run_in_executor(self.pool, runnable._run)
@@ -198,8 +193,7 @@ class SlurmWorker(DistributedWorker):
         script_dir, _, batch_script = self._prepare_runscripts(runnable)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
-        task = asyncio.create_task(self._submit_job(runnable, batch_script))
-        return task
+        return self._submit_job(runnable, batch_script)
 
     async def _submit_job(self, task, batchscript):
         """Coroutine that submits task runscript and polls job until completion or error."""
@@ -227,7 +221,7 @@ class SlurmWorker(DistributedWorker):
             # Exception: Polling / job failure
             done = await self._poll_job(jobid)
             if done:
-                return True
+                return task
             await asyncio.sleep(self.poll_delay)
 
     async def _poll_job(self, jobid):
