@@ -1,1 +1,4 @@
+echo $PWD
+ls
 pip install -e .[test_requires]
+sleep 30
