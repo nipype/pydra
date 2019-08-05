@@ -1,5 +1,8 @@
-import time
+from dateutil import parser
+import re
 import shutil
+import subprocess as sp
+import time
 
 import pytest
 
@@ -203,8 +206,29 @@ def test_slurm_max_jobs(tmpdir):
     wf.add(sleep_add_one(name="taskc", x=wf.taska.lzout.out))
     wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
     wf.set_output([("out1", wf.taskc.lzout.out), ("out2", wf.taskd.lzout.out)])
-
     with Submitter("slurm", max_jobs=1) as sub:
         sub(wf)
 
-    # TODO: verify behavior
+    jobids = []
+    for fl in (tmpdir / "SlurmWorker_scripts").visit("slurm-*.out"):
+        jid = re.search(r"(?<=slurm-)\d+", fl.strpath)
+        assert jid.group()
+        jobids.append(jid.group())
+        del jid
+
+    # query sacct for job eligibility timings
+    time.sleep(1)  # allow time for sacct to collect itself
+    queued = []
+    for jid in sorted(jobids):
+        out = sp.run(["sacct", "-Xnj", jid, "-o", "Eligible"], capture_output=True)
+        et = out.stdout.decode().strip()
+        queued.append(parser.parse(et))
+        del out, et
+
+    # compare timing between queued jobs
+    prev = None
+    for et in sorted(queued, reverse=True):
+        if prev is None:
+            prev = et
+            continue
+        assert (prev - et).seconds >= 2
