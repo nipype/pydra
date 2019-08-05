@@ -96,7 +96,7 @@ class DistributedWorker(Worker):
             Finished or cancelled tasks
         """
         done, unqueued = set(), set()
-        job_slots = self.max_jobs - self._jobs if self.max_jobs else float('inf')
+        job_slots = self.max_jobs - self._jobs if self.max_jobs else float("inf")
         if len(futures) > job_slots:
             # convert to list to simplify indexing
             futures = list(futures)
@@ -110,6 +110,7 @@ class DistributedWorker(Worker):
         except ValueError:
             # nothing pending!
             pending = set()
+        breakpoint()
         self._jobs -= len(done)
         logger.debug(f"Tasks finished: {len(done)}")
         # ensure pending + unqueued tasks persist
@@ -167,10 +168,12 @@ class ConcurrentFuturesWorker(Worker):
 class SlurmWorker(DistributedWorker):
     _cmd = "sbatch"
     _sacct_re = re.compile(
-            "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
-        )
+        "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
+    )
 
-    def __init__(self, loop=None, max_jobs=None, poll_delay=1, sbatch_args=None, **kwargs):
+    def __init__(
+        self, loop=None, max_jobs=None, poll_delay=1, sbatch_args=None, **kwargs
+    ):
         """Initialize Slurm Worker
 
         Parameters
