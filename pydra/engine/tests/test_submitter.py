@@ -210,14 +210,15 @@ def test_slurm_max_jobs(tmpdir):
         sub(wf)
 
     jobids = []
+    time.sleep(0.5)  # allow time for sacct to collect itself
     for fl in (tmpdir / "SlurmWorker_scripts").visit("slurm-*.out"):
         jid = re.search(r"(?<=slurm-)\d+", fl.strpath)
         assert jid.group()
         jobids.append(jid.group())
+        time.sleep(0.2)
         del jid
 
     # query sacct for job eligibility timings
-    time.sleep(1)  # allow time for sacct to collect itself
     queued = []
     for jid in sorted(jobids):
         out = sp.run(["sacct", "-Xnj", jid, "-o", "Eligible"], capture_output=True)
