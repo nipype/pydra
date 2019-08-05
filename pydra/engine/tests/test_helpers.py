@@ -43,6 +43,9 @@ def test_create_pyscript(tmpdir):
 
 def test_hash_file(tmpdir):
     outdir = Path(tmpdir)
-    with open(outdir / 'test.file', 'wt') as fp:
-        fp.write('test')
-    assert helpers.hash_file(outdir / 'test.file') == '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08'
+    with open(outdir / "test.file", "wt") as fp:
+        fp.write("test")
+    assert (
+        helpers.hash_file(outdir / "test.file")
+        == "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    )

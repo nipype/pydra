@@ -244,8 +244,7 @@ def hash_function(obj):
     return sha256(str(obj).encode()).hexdigest()
 
 
-def hash_file(afile, chunk_len=8192, crypto=sha256,
-              raise_notfound=False):
+def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=False):
     """
     Computes hash of a file using 'crypto' module
     """
@@ -255,7 +254,7 @@ def hash_file(afile, chunk_len=8192, crypto=sha256,
         return None
 
     crypto_obj = crypto()
-    with open(afile, 'rb') as fp:
+    with open(afile, "rb") as fp:
         while True:
             data = fp.read(chunk_len)
             if not data:

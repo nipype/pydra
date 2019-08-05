@@ -28,7 +28,9 @@ class BaseSpec:
         from .helpers import hash_function, hash_file
 
         inp_dict = {
-            field.name: hash_file(getattr(self, field.name)) if field.type == File else getattr(self, field.name)
+            field.name: hash_file(getattr(self, field.name))
+            if field.type == File
+            else getattr(self, field.name)
             for field in dc.fields(self)
             if field.name not in ["_graph_checksums"]
         }
