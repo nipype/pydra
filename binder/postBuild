@@ -1,4 +1,2 @@
-echo $PWD
-ls
-pip install -e .[test_requires]
+pip install -e .[test]
 sleep 30
