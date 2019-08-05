@@ -242,3 +242,22 @@ task_pkl.unlink()
 
 def hash_function(obj):
     return sha256(str(obj).encode()).hexdigest()
+
+
+def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=False):
+    """
+    Computes hash of a file using 'crypto' module
+    """
+    if not os.path.isfile(afile):
+        if raise_notfound:
+            raise RuntimeError('File "%s" not found.' % afile)
+        return None
+
+    crypto_obj = crypto()
+    with open(afile, "rb") as fp:
+        while True:
+            data = fp.read(chunk_len)
+            if not data:
+                break
+            crypto_obj.update(data)
+    return crypto_obj.hexdigest()
