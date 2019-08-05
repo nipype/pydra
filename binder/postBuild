@@ -1,2 +1,1 @@
 pip install -e .[test]
-sleep 20
