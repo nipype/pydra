@@ -155,7 +155,7 @@ def test_slurm_wf(tmpdir):
     script_dir = tmpdir / "SlurmWorker_scripts"
     assert script_dir.exists()
     # ensure each task was executed with slurm
-    assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 3
+    assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 2
 
 
 @pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
@@ -190,4 +190,21 @@ def test_slurm_wf_state(tmpdir):
     script_dir = tmpdir / "SlurmWorker_scripts"
     assert script_dir.exists()
     sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
-    assert len(sdirs) == 3 * len(wf.inputs.x)
+    assert len(sdirs) == 2 * len(wf.inputs.x)
+
+
+@pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
+def test_slurm_max_jobs(tmpdir):
+    wf = Workflow("new_wf", input_spec=["x", "y"], cache_dir=tmpdir)
+    wf.inputs.x = 5
+    wf.inputs.y = 10
+    wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
+    wf.add(sleep_add_one(name="taskb", x=wf.lzin.y))
+    wf.add(sleep_add_one(name="taskc", x=wf.taska.lzout.out))
+    wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
+    wf.set_output([("out1", wf.taskc.lzout.out), ("out2", wf.taskd.lzout.out)])
+
+    with Submitter("slurm", max_jobs=1) as sub:
+        sub(wf)
+
+    # TODO: verify behavior
