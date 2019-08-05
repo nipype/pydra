@@ -2,7 +2,7 @@ import asyncio
 
 from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker
 from .core import is_workflow
-from .helpers import ensure_list, get_open_loop
+from .helpers import get_open_loop
 
 import logging
 
@@ -54,26 +54,23 @@ class Submitter:
         """
         Coroutine entrypoint for task submission.
 
-        Removes state from task and adds one or more
-        asyncio ``Task``s to the running loop.
-
-         Possible routes for the runnable
-         1. ``Workflow`` w/ state: separate states into individual jobs and run() each
-         2. ``Workflow`` w/o state: await graph expansion
-         3. ``Task`` w/ state: separate states and submit to worker
-         4. ``Task`` w/o state: submit to worker
+        Removes any states from `runnable`. If `wait` is
+        set to False (default), aggregates all worker
+        execution coroutines and returns them. If `wait` is
+        True, waits for all coroutines to complete / error
+        and returns None.
 
         Parameters
         ----------
-        runnable : Task
-            Task instance (``Task``, ``Workflow``)
+        runnable : pydra Task
+            Task instance (`Task`, `Workflow`)
         wait : bool (False)
             Await all futures before completing
 
         Returns
         -------
         futures : set or None
-            Tasks yet to be awaited
+            Coroutines for `Task` execution
         """
         futures = set()
         if runnable.state:
@@ -147,7 +144,6 @@ class Submitter:
                     for fut in await self.submit(task):
                         task_futures.add(fut)
             task_futures = await self.worker.fetch_finished(task_futures)
-
         return wf
 
     def __enter__(self):

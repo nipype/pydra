@@ -25,17 +25,18 @@ class Worker:
         pass
 
     async def fetch_finished(self, futures):
-        """Awaits asyncio ``Tasks`` until one is finished
+        """
+        Awaits asyncio `Tasks` until one is finished.
 
         Parameters
         ----------
-        futures : set of ``Futures``
-            Pending tasks
+        futures : set of asyncio awaitables
+            Task execution coroutines or asyncio `Tasks`
 
         Returns
         -------
-        done : set
-            Finished or cancelled tasks
+        pending : set
+            Pending asyncio `Task`s
         """
         done = set()
         try:
@@ -79,18 +80,18 @@ class DistributedWorker(Worker):
 
     async def fetch_finished(self, futures):
         """
-        Awaits asyncio ``Tasks`` until one is finished.
+        Awaits asyncio `Task`s until one is finished.
         Limits number of submissions based on max_jobs attr.
 
         Parameters
         ----------
-        futures : set of ``Futures``
-            Pending tasks
+        futures : set of asyncio awaitables
+            Task execution coroutines or asyncio `Task`s
 
         Returns
         -------
-        done : set
-            Finished or cancelled tasks
+        pending : set
+            Pending asyncio `Task`s
         """
         done, unqueued = set(), set()
         job_slots = self.max_jobs - self._jobs if self.max_jobs else float("inf")
