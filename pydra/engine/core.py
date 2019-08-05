@@ -475,7 +475,6 @@ class Workflow(TaskBase):
 
         self.graph = DiGraph()
         self.name2obj = {}
-        self._submitted = False
 
         # store output connections
         self._connections = None
@@ -596,8 +595,6 @@ class Workflow(TaskBase):
         if not submitter:
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
-        if submitter.worker._distributed:
-            self._submitted = True
         await submitter.submit(self)
 
     def set_output(self, connections):

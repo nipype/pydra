@@ -16,7 +16,6 @@ class Worker:
     def __init__(self, loop=None):
         logger.debug(f"Initializing {self.__class__.__name__}")
         self.loop = loop
-        self._distributed = False
 
     def run_el(self, interface, **kwargs):
         raise NotImplementedError
@@ -56,9 +55,10 @@ class Worker:
 class DistributedWorker(Worker):
     """Base Worker for distributed execution"""
 
-    def __init__(self, loop=None):
-        super(DistributedWorker, self).__init__(loop)
-        self._distributed = True
+    def __init__(self, loop=None, max_jobs=None):
+        super().__init__(loop=loop)
+        self.max_jobs = max_jobs
+        self._jobs = 0
 
     def _prepare_runscripts(self, task, interpreter="/bin/sh"):
         script_dir = (
@@ -80,10 +80,40 @@ class DistributedWorker(Worker):
             fp.writelines(bcmd)
         return script_dir, pyscript, batchscript
 
-    @staticmethod
-    async def _awaitable(jobid):
-        """Readily available coroutine"""
-        return jobid
+    async def fetch_finished(self, futures):
+        """
+        Awaits asyncio ``Tasks`` until one is finished.
+        Limits number of submissions based on max_jobs attr.
+
+        Parameters
+        ----------
+        futures : set of ``Futures``
+            Pending tasks
+
+        Returns
+        -------
+        done : set
+            Finished or cancelled tasks
+        """
+        done, unqueued = set(), set()
+        job_slots = self.max_jobs - self._jobs if self.max_jobs else float('inf')
+        if len(futures) > job_slots:
+            # convert to list to simplify indexing
+            futures = list(futures)
+            futures, unqueued = set(futures[:job_slots]), set(futures[job_slots:])
+        # breakpoint()
+        try:
+            self._jobs += len(futures)
+            done, pending = await asyncio.wait(
+                futures, return_when=asyncio.FIRST_COMPLETED
+            )
+        except ValueError:
+            # nothing pending!
+            pending = set()
+        self._jobs -= len(done)
+        logger.debug(f"Tasks finished: {len(done)}")
+        # ensure pending + unqueued tasks persist
+        return pending.union(unqueued)
 
 
 class SerialPool:
@@ -136,8 +166,11 @@ class ConcurrentFuturesWorker(Worker):
 
 class SlurmWorker(DistributedWorker):
     _cmd = "sbatch"
+    _sacct_re = re.compile(
+            "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
+        )
 
-    def __init__(self, poll_delay=1, sbatch_args=None, **kwargs):
+    def __init__(self, loop=None, max_jobs=None, poll_delay=1, sbatch_args=None, **kwargs):
         """Initialize Slurm Worker
 
         Parameters
@@ -146,15 +179,14 @@ class SlurmWorker(DistributedWorker):
             Delay between polls to slurmd
         sbatch_args : str
             Additional sbatch arguments
+        max_jobs : int
+            Maximum number of submitted jobs
         """
-        super(SlurmWorker, self).__init__()
+        super().__init__(loop=loop, max_jobs=max_jobs)
         if not poll_delay or poll_delay < 0:
             poll_delay = 0
         self.poll_delay = poll_delay
         self.sbatch_args = sbatch_args or ""
-        self.sacct_re = re.compile(
-            "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
-        )
 
     def run_el(self, runnable):
         """
@@ -210,7 +242,7 @@ class SlurmWorker(DistributedWorker):
         _, stdout, _ = await read_and_display(*cmd, hide_display=True)
         if not stdout:
             raise RuntimeError("Job information not found")
-        m = self.sacct_re.search(stdout)
+        m = self._sacct_re.search(stdout)
         if int(m.group("exit_code")) != 0 or m.group("status") != "COMPLETED":
             if m.group("status") in ["RUNNING", "PENDING"]:
                 return False

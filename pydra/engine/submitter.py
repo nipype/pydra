@@ -11,16 +11,16 @@ logger = logging.getLogger("pydra.submitter")
 
 class Submitter:
     # TODO: runnable in init or run
-    def __init__(self, plugin="cf", **wargs):
+    def __init__(self, plugin="cf", **kwargs):
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
         self.plugin = plugin
         if self.plugin == "serial":
             self.worker = SerialWorker()
         elif self.plugin == "cf":
-            self.worker = ConcurrentFuturesWorker(**wargs)
+            self.worker = ConcurrentFuturesWorker(**kwargs)
         elif self.plugin == "slurm":
-            self.worker = SlurmWorker(**wargs)
+            self.worker = SlurmWorker(**kwargs)
         else:
             raise Exception("plugin {} not available".format(self.plugin))
         self.worker.loop = self.loop
@@ -45,14 +45,9 @@ class Submitter:
 
     async def submit_workflow(self, workflow):
         """Distributes or initiates workflow execution"""
-        if self.worker._distributed and not workflow._submitted:
-            # submit job to be executed on different machine
-            workflow._submitted = True
-            if workflow.plugin is None:
-                workflow.plugin = self.plugin
+        if workflow.plugin and workflow.plugin != self.plugin:
             await self.worker.run_el(workflow)
         else:
-            # trigger execution
             await workflow._run(self)
 
     async def submit(self, runnable, wait=False):
@@ -96,7 +91,6 @@ class Submitter:
                 )
                 if is_workflow(runnable):
                     # job has no state anymore
-                    # futures.add(asyncio.create_task(job._run(self)))
                     futures.add(asyncio.create_task(self.submit_workflow(job)))
                 else:
                     # tasks are submitted to worker for execution
@@ -134,7 +128,7 @@ class Submitter:
         # creating a copy of the graph that will be modified
         # the copy contains new lists with original runnable objects
         graph_copy = wf.graph.copy()
-        # keep track of local futures
+        # keep track of pending futures
         task_futures = set()
         while not wf.done_all_tasks:
             tasks = get_runnable_tasks(graph_copy)
@@ -148,13 +142,7 @@ class Submitter:
                 # checksum has to be updated, so resetting
                 task._checksum = None
                 if is_workflow(task) and not task.state:
-                    # allow overriding of submitter
-                    if task.plugin is not None and task.plugin != self.plugin:
-                        submitter = Submitter(task.plugin)
-                    else:
-                        task.plugin = self.plugin
-                        submitter = self
-                    await task._run(submitter)
+                    await self.submit_workflow(task)
                 else:
                     for fut in await self.submit(task):
                         task_futures.add(fut)
