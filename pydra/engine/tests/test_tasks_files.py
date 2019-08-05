@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import numpy as np
 import pytest
+import typing as ty
 
 from ..submitter import Submitter
 from ..core import Workflow
@@ -31,7 +32,7 @@ def file_mult(file):
 
 
 @mark.task
-def file_add2_annot(file: File) -> File:
+def file_add2_annot(file: File) -> ty.NamedTuple("Output", [("out", File)]):
     array_inp = np.load(file)
     array_out = array_inp + 2
     cwd = os.getcwd()
@@ -42,7 +43,7 @@ def file_add2_annot(file: File) -> File:
 
 
 @mark.task
-def file_mult_annot(file: File) -> File:
+def file_mult_annot(file: File) -> ty.NamedTuple("Output", [("out", File)]):
     array_inp = np.load(file)
     array_out = 10 * array_inp
     cwd = os.getcwd()
