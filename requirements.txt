@@ -1,8 +1,0 @@
-filelock >= 3.0.0
-cloudpickle >= 0.8.0
-psutil
-pyld
-numpy
-tornado==4.5.3
-jupyter
-jupyter_contrib_nbextensions
