@@ -1,11 +1,12 @@
 
-# Pydra <img src="pydra_logo.png" width="50"> 
+# Pydra <img src="pydra_logo.png" width="50">
 
-A simple dataflow engine with scalable semantics. 
+A simple dataflow engine with scalable semantics.
 
 [![Build Status](https://travis-ci.org/nipype/pydra.svg?branch=master)](https://travis-ci.org/nipype/pydra)
+[![codecov](https://codecov.io/gh/nipype/pydra/branch/master/graph/badge.svg)](https://codecov.io/gh/nipype/pydra)
 
-The goal of pydra is to provide a lightweight Python dataflow engine for DAG construction, manipulation, and distributed execution. 
+The goal of pydra is to provide a lightweight Python dataflow engine for DAG construction, manipulation, and distributed execution.
 
 Feature list:
 1. Python 3.7+ using type annotation and dataclasses
