@@ -93,7 +93,6 @@ class Submitter:
                     # tasks are submitted to worker for execution
                     futures.add(self.worker.run_el(job))
         else:
-            runnable.results_dict[None] = (None, runnable.checksum)
             if is_workflow(runnable):
                 await self._run_workflow(runnable)
             else:
@@ -127,7 +126,7 @@ class Submitter:
         graph_copy = wf.graph.copy()
         # keep track of pending futures
         task_futures = set()
-        while not wf.done_all_tasks:
+        while not wf.done_all_tasks or len(task_futures):
             tasks = get_runnable_tasks(graph_copy)
             if not tasks and not task_futures:
                 raise Exception("Nothing queued or todo - something went wrong")
