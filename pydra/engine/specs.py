@@ -191,3 +191,24 @@ class LazyField:
                     return [getattr(res.output, self.field) for res in result]
             else:
                 return getattr(result.output, self.field)
+
+
+@dc.dataclass
+class TaskHook:
+    """Callable task hooks"""
+
+    def none(*args, **kwargs):
+        return None
+
+    pre_run_task: ty.Callable = none
+    post_run_task: ty.Callable = none
+    pre_run: ty.Callable = none
+    post_run: ty.Callable = none
+
+    def __setattr__(cls, attr, val):
+        if not hasattr(cls, attr):
+            raise AttributeError("Cannot set unknown hook")
+        super().__setattr__(attr, val)
+
+    def reset(self):
+        self.__dict__ = TaskHook().__dict__
