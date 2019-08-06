@@ -601,7 +601,8 @@ class Workflow(TaskBase):
         if not submitter:
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
-        await submitter.submit(self)
+        self.results_dict[None] = (None, self.checksum)
+        await submitter._run_workflow(self)
 
     def set_output(self, connections):
         if isinstance(connections, tuple) and len(connections) == 2:
