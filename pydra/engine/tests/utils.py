@@ -48,6 +48,16 @@ def add2(x):
 
 
 @mark.task
+def power(a, b):
+    return a ** b
+
+
+@mark.task
+def identity(x):
+    return x
+
+
+@mark.task
 def add2_wait(x):
     time.sleep(3)
     return x + 2
