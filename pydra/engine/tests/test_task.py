@@ -231,6 +231,31 @@ def test_notannotated_func():
     assert result.output.out == 20.2
 
 
+def test_notannotated_func_returnlist():
+    @mark.task
+    def no_annots(c, d):
+        return [c, d]
+
+    natask = no_annots(c=17, d=3.2)
+    result = natask._run()
+    assert hasattr(result.output, "out")
+    assert result.output.out == [17, 3.2]
+
+
+def test_halfannotated_func_multrun_returnlist():
+    @mark.task
+    def no_annots(c, d) -> (list, float):
+        return [c, d], c + d
+
+    natask = no_annots(c=17, d=3.2)
+    result = natask._run()
+
+    assert hasattr(result.output, "out1")
+    assert hasattr(result.output, "out2")
+    assert result.output.out1 == [17, 3.2]
+    assert result.output.out2 == 20.2
+
+
 def test_notannotated_func_multreturn():
     """ no annotation and multiple values are returned
         all elements should be returned as a tuple ans set to "out"
