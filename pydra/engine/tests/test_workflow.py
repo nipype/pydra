@@ -1907,22 +1907,24 @@ def test_cache_propagation3(tmpdir, create_tasks):
 def test_workflow_combine1(tmpdir):
     wf1 = Workflow(name="wf1", input_spec=["a", "b"], a=[1, 2], b=[2, 3])
     wf1.add(power(name="power", a=wf1.lzin.a, b=wf1.lzin.b).split(["a", "b"]))
-    wf1.add(
-        identity(name="identity1", x=wf1.power.lzout.out).combine("power.a"))
-    wf1.add(identity(name="identity2", x=wf1.identity1.lzout.out).combine(
-        "power.b"))
-    wf1.set_output({'out': wf1.identity2.lzout.out})
+    wf1.add(identity(name="identity1", x=wf1.power.lzout.out).combine("power.a"))
+    wf1.add(identity(name="identity2", x=wf1.identity1.lzout.out).combine("power.b"))
+    wf1.set_output({"out": wf1.identity2.lzout.out})
     wf1.cache_dir = tmpdir
-    result = wf1(plugin='cf')
-    assert result.output.out == [[1, 1], [4, 8]]
+    result = wf1(plugin="cf")
+    assert result.output.out == [[1, 4], [1, 8]]
 
 
 def test_workflow_combine2(tmpdir):
     wf1 = Workflow(name="wf1", input_spec=["a", "b"], a=[1, 2], b=[2, 3])
-    wf1.add(power(name="power", a=wf1.lzin.a, b=wf1.lzin.b).split(["a", "b"]).combine("a"))
-    wf1.add(identity(name="identity", x=wf1.power.lzout.out).combine(
-        "power.b"))
-    wf1.set_output({'out': wf1.identity.lzout.out})
+    wf1.add(
+        power(name="power", a=wf1.lzin.a, b=wf1.lzin.b).split(["a", "b"]).combine("a")
+    )
+    wf1.add(identity(name="identity", x=wf1.power.lzout.out).combine("power.b"))
+    wf1.set_output({"out_pow": wf1.power.lzout.out, "out_iden": wf1.identity.lzout.out})
     wf1.cache_dir = tmpdir
-    result = wf1(plugin='cf')
-    assert result.output.out == [[1, 1], [4, 8]]
+    result = wf1(plugin="cf")
+    wf1.identity.result()
+
+    assert result.output.out_pow == [[1, 4], [1, 8]]
+    assert result.output.out_iden == [[[1, 4], [1, 8]]]

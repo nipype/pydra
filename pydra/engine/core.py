@@ -305,16 +305,25 @@ class TaskBase:
         self.hooks.post_run(self, result)
         return result
 
-    # TODO: Decide if the following two functions should be separated
-    @abc.abstractmethod
     def _list_outputs(self):
-        pass
+        output_dict = {}
+        if len(self.output_names) == 1:
+            output_dict[self.output_names[0]] = self.output_
+        else:
+            if len(self.output_names) != len(self.output_):
+                raise Exception(
+                    f"output names, {self.output_names}, "
+                    f"has to be the same length as output, {self.output_}"
+                )
+            for ii, out_nm in enumerate(self.output_names):
+                output_dict[out_nm] = self.output_[ii]
+        return output_dict
 
     def _collect_outputs(self):
-        run_output = ensure_list(self._list_outputs())
+        run_output = self._list_outputs()
         output_klass = make_klass(self.output_spec)
         output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
-        return dc.replace(output, **dict(zip(self.output_names, run_output)))
+        return dc.replace(output, **run_output)
 
     def split(self, splitter, **kwargs):
         if kwargs:
@@ -622,11 +631,11 @@ class Workflow(TaskBase):
         logger.info("Added %s to %s", self.output_spec, self)
 
     def _list_outputs(self):
-        output = []
+        output = {}
         for name, val in self._connections:
             if not isinstance(val, LazyField):
                 raise ValueError("all connections must be lazy")
-            output.append(val.get_value(self))
+            output[name] = val.get_value(self)
         return output
 
 
