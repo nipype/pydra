@@ -13,10 +13,10 @@ class State:
         self.combiner = combiner
         if not self.other_states:
             self.other_states = {}
-        self.inner_inputs = {
-            "{}.{}".format(self.name, inp): st
-            for name, (st, inp) in self.other_states.items()
-        }
+        self.inner_inputs = {}
+        for name, (st, inp) in self.other_states.items():
+            if f"_{st.name}" in self.splitter_rpn_nost:
+                self.inner_inputs[f"{self.name}.{inp}"] = st
         self.set_input_groups()
         self.set_splitter_final()
         self.states_val = []
