@@ -7,6 +7,7 @@ import pytest
 from ... import mark
 from ..task import AuditFlag, ShellCommandTask, ContainerTask, DockerTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
+from .utils import gen_basic_wf
 
 
 @mark.task
@@ -362,3 +363,57 @@ def test_functask_callable(tmpdir):
     res = foo2()
     assert res.output.out == 5
     assert foo2.plugin == "cf"
+
+
+def test_taskhooks(tmpdir, capsys):
+    foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
+    assert foo.hooks
+    # ensure all hooks are defined
+    for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):
+        hook = getattr(foo.hooks, attr)
+        assert hook() is None
+
+    def myhook(task, *args):
+        print("I was called")
+
+    foo.hooks.pre_run = myhook
+    foo()
+    captured = capsys.readouterr()
+    assert captured.out == "I was called\n"
+    del captured
+
+    # setting unknown hook should not be allowed
+    with pytest.raises(AttributeError):
+        foo.hooks.mid_run = myhook
+
+    # set all hooks
+    foo.hooks.post_run = myhook
+    foo.hooks.pre_run_task = myhook
+    foo.hooks.post_run_task = myhook
+    foo.inputs.a = 2  # ensure not pre-cached
+    foo()
+    captured = capsys.readouterr()
+    assert captured.out == "".join(["I was called\n"] * 4)
+    del captured
+
+    # hooks are independent across tasks by default
+    bar = funaddtwo(name="bar", a=3, cache_dir=tmpdir)
+    assert bar.hooks is not foo.hooks
+    # but can be shared across tasks
+    bar.hooks = foo.hooks
+    # and workflows
+    wf = gen_basic_wf()
+    wf.tmpdir = tmpdir
+    wf.hooks = bar.hooks
+    assert foo.hooks == bar.hooks == wf.hooks
+
+    wf(plugin="cf")
+    captured = capsys.readouterr()
+    assert captured.out == "".join(["I was called\n"] * 4)
+    del captured
+
+    # reset all hooks
+    foo.hooks.reset()
+    for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):
+        hook = getattr(foo.hooks, attr)
+        assert hook() is None

@@ -53,7 +53,7 @@ def add2_wait(x):
     return x + 2
 
 
-def gen_basic_wf():
+def gen_basic_wf(name="basic-wf"):
     """
     Generates `Workflow` of two tasks
 
@@ -65,9 +65,9 @@ def gen_basic_wf():
     -----------
     out : int (9)
     """
-    wf = Workflow(name="basic-wf", input_spec=["x"])
+    wf = Workflow(name=name, input_spec=["x"])
     wf.inputs.x = 5
-    wf.add(fun_addtwo(name="task1", a=wf.lzin.x))
+    wf.add(fun_addtwo(name="task1", a=wf.lzin.x, b=0))
     wf.add(fun_addvar(name="task2", a=wf.task1.lzout.out, b=2))
     wf.set_output([("out", wf.task2.lzout.out)])
     return wf
