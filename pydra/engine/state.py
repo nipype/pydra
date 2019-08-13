@@ -22,6 +22,9 @@ class State:
         self.states_val = []
         self.final_groups_mapping = {}
 
+    def __str__(self):
+        return f"State for {self.name} with a splitter: {self.splitter} and combiner: {self.combiner}"
+
     @property
     def splitter(self):
         return self._splitter
