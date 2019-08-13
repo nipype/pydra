@@ -2,8 +2,13 @@ import dataclasses as dc
 from pathlib import Path
 import typing as ty
 
-File = ty.NewType("File", Path)
-Directory = ty.NewType("Directory", Path)
+
+class File(Path):
+    pass
+
+
+class Directory(Path):
+    pass
 
 
 @dc.dataclass
@@ -20,10 +25,12 @@ class BaseSpec:
     @property
     def hash(self):
         """Compute a basic hash for any given set of fields"""
-        from .helpers import hash_function
+        from .helpers import hash_function, hash_file
 
         inp_dict = {
-            field.name: getattr(self, field.name)
+            field.name: hash_file(getattr(self, field.name))
+            if field.type == File
+            else getattr(self, field.name)
             for field in dc.fields(self)
             if field.name not in ["_graph_checksums"]
         }
@@ -184,3 +191,24 @@ class LazyField:
                     return [getattr(res.output, self.field) for res in result]
             else:
                 return getattr(result.output, self.field)
+
+
+@dc.dataclass
+class TaskHook:
+    """Callable task hooks"""
+
+    def none(*args, **kwargs):
+        return None
+
+    pre_run_task: ty.Callable = none
+    post_run_task: ty.Callable = none
+    pre_run: ty.Callable = none
+    post_run: ty.Callable = none
+
+    def __setattr__(cls, attr, val):
+        if not hasattr(cls, attr):
+            raise AttributeError("Cannot set unknown hook")
+        super().__setattr__(attr, val)
+
+    def reset(self):
+        self.__dict__ = TaskHook().__dict__

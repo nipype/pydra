@@ -15,7 +15,7 @@ from tempfile import mkdtemp
 
 from . import state
 from . import auxiliary as aux
-from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo, LazyField
+from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo, LazyField, TaskHook
 from .helpers import (
     make_klass,
     create_checksum,
@@ -127,6 +127,7 @@ class TaskBase:
         # dictionary of results from tasks
         self.results_dict = {}
         self.plugin = None
+        self.hooks = TaskHook()
 
     def __repr__(self):
         return self.name
@@ -241,11 +242,8 @@ class TaskBase:
 
         if submitter and plugin:
             raise Exception("Specify submitter OR plugin, not both")
-
         plugin = plugin or self.plugin
         if plugin:
-            from .submitter import Submitter
-
             submitter = Submitter(plugin=plugin)
         elif self.state:
             submitter = Submitter()
@@ -265,6 +263,7 @@ class TaskBase:
         self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
+        # Eagerly retrieve cached
         """
         Concurrent execution scenarios
 
@@ -275,13 +274,13 @@ class TaskBase:
         3. no cache or other process -> start
         4. two or more concurrent new processes get to start
         """
+        self.hooks.pre_run(self)
         # TODO add signal handler for processes killed after lock acquisition
         with SoftFileLock(lockfile):
-            # Let only one equivalent process run
-            # Eagerly retrieve cached
             result = self.result()
             if result is not None:
                 return result
+            # Let only one equivalent process run
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
@@ -289,6 +288,7 @@ class TaskBase:
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
             self.audit.start_audit(odir)
             result = Result(output=None, runtime=None, errored=False)
+            self.hooks.pre_run_task(self)
             try:
                 self.audit.monitor()
                 self._run_task()
@@ -298,10 +298,12 @@ class TaskBase:
                 result.errored = True
                 raise
             finally:
+                self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
                 save(odir, result=result, task=self)
                 os.chdir(cwd)
-            return result
+        self.hooks.post_run(self, result)
+        return result
 
     # TODO: Decide if the following two functions should be separated
     @abc.abstractmethod
@@ -475,7 +477,6 @@ class Workflow(TaskBase):
 
         self.graph = DiGraph()
         self.name2obj = {}
-        self._submitted = False
 
         # store output connections
         self._connections = None
@@ -569,6 +570,7 @@ class Workflow(TaskBase):
         4. two or more concurrent new processes get to start
         """
         # TODO add signal handler for processes killed after lock acquisition
+        self.hooks.pre_run(self)
         with SoftFileLock(lockfile):
             # # Let only one equivalent process run
             odir = self.output_dir
@@ -578,6 +580,7 @@ class Workflow(TaskBase):
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
             self.audit.start_audit(odir=odir)
             result = Result(output=None, runtime=None, errored=False)
+            self.hooks.pre_run_task(self)
             try:
                 self.audit.monitor()
                 await self._run_task(submitter)
@@ -587,18 +590,19 @@ class Workflow(TaskBase):
                 result.errored = True
                 raise
             finally:
+                self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
                 save(odir, result=result, task=self)
                 os.chdir(cwd)
-            return result
+        self.hooks.post_run(self, result)
+        return result
 
     async def _run_task(self, submitter):
         if not submitter:
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
-        if submitter.worker._distributed:
-            self._submitted = True
-        await submitter.submit(self)
+        self.results_dict[None] = (None, self.checksum)
+        await submitter._run_workflow(self)
 
     def set_output(self, connections):
         if isinstance(connections, tuple) and len(connections) == 2:
