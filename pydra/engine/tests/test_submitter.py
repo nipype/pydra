@@ -58,9 +58,9 @@ def test_concurrent_wf():
     assert res.output.out2 == 12
 
 
-def test_concurrent_wf_nr_proc():
+def test_concurrent_wf_nprocs():
     # concurrent workflow
-    # setting nr_proc in Submitter that is passed to the worker
+    # setting n_procs in Submitter that is passed to the worker
     # A --> C
     # B --> D
     wf = Workflow("new_wf", input_spec=["x", "y"])
@@ -73,7 +73,7 @@ def test_concurrent_wf_nr_proc():
     wf.set_output([("out1", wf.taskc.lzout.out), ("out2", wf.taskd.lzout.out)])
     # wf.plugin = 'cf'
     # res = wf.run()
-    with Submitter("cf", nr_proc=2) as sub:
+    with Submitter("cf", n_procs=2) as sub:
         sub(wf)
 
     res = wf.result()
