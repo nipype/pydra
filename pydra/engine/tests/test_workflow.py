@@ -9,7 +9,10 @@ from ..core import Workflow
 from ... import mark
 
 
-Plugins = ["cf"]
+if bool(shutil.which("sbatch")):
+    Plugins = ["cf", "slurm"]
+else:
+    Plugins = ["cf"]
 
 
 @pytest.mark.parametrize("plugin", Plugins)
