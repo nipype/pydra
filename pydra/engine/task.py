@@ -149,9 +149,6 @@ class FunctionTask(TaskBase):
         else:  # if only one element in the fields, everything should be returned together
             self.output_ = output
 
-    def _list_outputs(self):
-        return self.output_
-
 
 class ShellCommandTask(TaskBase):
     def __init__(
@@ -207,9 +204,6 @@ class ShellCommandTask(TaskBase):
         args = self.command_args
         if args:
             self.output_ = execute(args)
-
-    def _list_outputs(self):
-        return list(self.output_)
 
 
 class ContainerTask(ShellCommandTask):
