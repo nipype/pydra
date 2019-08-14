@@ -141,11 +141,11 @@ class SerialWorker(Worker):
 
 
 class ConcurrentFuturesWorker(Worker):
-    def __init__(self, nr_proc=None):
+    def __init__(self, n_procs=None):
         super(ConcurrentFuturesWorker, self).__init__()
-        self.nr_proc = nr_proc
+        self.n_procs = n_procs
         # added cpu_count to verify, remove once confident and let PPE handle
-        self.pool = cf.ProcessPoolExecutor(self.nr_proc)
+        self.pool = cf.ProcessPoolExecutor(self.n_procs)
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
