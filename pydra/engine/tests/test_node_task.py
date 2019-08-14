@@ -649,6 +649,62 @@ def test_task_state_comb_singl_1(plugin):
         assert odir.exists()
 
 
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_state_comb_order(plugin):
+    """ tasks with an outer splitter and various combiner;
+        showing the order of results
+    """
+
+    # single combiner "a" - will create two lists, first one for b=3, second for b=5
+    nn_a = (
+        fun_addvar(name="NA")
+        .split(splitter=["a", "b"], a=[10, 20], b=[3, 5])
+        .combine(combiner="a")
+    )
+    assert nn_a.state.combiner == ["NA.a"]
+
+    results_a = nn_a()
+    combined_results_a = [[res.output.out for res in res_l] for res_l in results_a]
+    assert combined_results_a == [[13, 23], [15, 25]]
+
+    # single combiner "b" - will create two lists, first one for a=10, second for a=20
+    nn_b = (
+        fun_addvar(name="NA")
+        .split(splitter=["a", "b"], a=[10, 20], b=[3, 5])
+        .combine(combiner="b")
+    )
+    assert nn_b.state.combiner == ["NA.b"]
+
+    results_b = nn_b()
+    combined_results_b = [[res.output.out for res in res_l] for res_l in results_b]
+    assert combined_results_b == [[13, 15], [23, 25]]
+
+    # combiner with both fields ["a", "b"] - will create one list
+    nn_ab = (
+        fun_addvar(name="NA")
+        .split(splitter=["a", "b"], a=[10, 20], b=[3, 5])
+        .combine(combiner=["a", "b"])
+    )
+    assert nn_ab.state.combiner == ["NA.a", "NA.b"]
+
+    results_ab = nn_ab()
+    combined_results_ab = [res.output.out for res in results_ab[0]]
+    assert combined_results_ab == [13, 15, 23, 25]
+
+    # combiner with both fields ["b", "a"] - will create the same list as nn_ab
+    # no difference in the order for setting combiner
+    nn_ba = (
+        fun_addvar(name="NA")
+        .split(splitter=["a", "b"], a=[10, 20], b=[3, 5])
+        .combine(combiner=["b", "a"])
+    )
+    assert nn_ba.state.combiner == ["NA.b", "NA.a"]
+
+    results_ba = nn_ba()
+    combined_results_ba = [res.output.out for res in results_ba[0]]
+    assert combined_results_ba == [13, 15, 23, 25]
+
+
 # Testing caching for tasks with states
 
 
