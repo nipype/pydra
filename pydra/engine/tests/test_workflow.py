@@ -906,6 +906,49 @@ def test_wf_ndst_singl_2(plugin):
     assert wf.output_dir.exists()
 
 
+# multi-step combiner, lists as outputs
+
+
+def test_wf_st_outlist_1(tmpdir):
+    """ workflow with three task and multi-step combiner,
+        output of some tasks are lists
+    """
+    wf1 = Workflow(name="wf1", input_spec=["a", "b"], a=[1, 2], b=[2, 3])
+    wf1.add(power(name="power", a=wf1.lzin.a, b=wf1.lzin.b).split(["a", "b"]))
+    wf1.add(identity(name="identity1", x=wf1.power.lzout.out).combine("power.a"))
+    wf1.add(identity(name="identity2", x=wf1.identity1.lzout.out).combine("power.b"))
+    wf1.set_output(
+        {
+            "out_pow": wf1.power.lzout.out,
+            "out_iden1": wf1.identity1.lzout.out,
+            "out_iden2": wf1.identity2.lzout.out,
+        }
+    )
+    wf1.cache_dir = tmpdir
+    result = wf1(plugin="cf")
+
+    assert result.output.out_pow == [1, 1, 4, 8]
+    assert result.output.out_iden1 == [[1, 4], [1, 8]]
+    assert result.output.out_iden2 == [[[1, 4], [1, 8]]]
+
+
+def test_wf_st_outlist_2(tmpdir):
+    """ workflow with three task and multi-step combiner,
+        output of some tasks are lists
+    """
+    wf1 = Workflow(name="wf1", input_spec=["a", "b"], a=[1, 2], b=[2, 3])
+    wf1.add(
+        power(name="power", a=wf1.lzin.a, b=wf1.lzin.b).split(["a", "b"]).combine("a")
+    )
+    wf1.add(identity(name="identity", x=wf1.power.lzout.out).combine("power.b"))
+    wf1.set_output({"out_pow": wf1.power.lzout.out, "out_iden": wf1.identity.lzout.out})
+    wf1.cache_dir = tmpdir
+    result = wf1(plugin="cf")
+
+    assert result.output.out_pow == [[1, 4], [1, 8]]
+    assert result.output.out_iden == [[[1, 4], [1, 8]]]
+
+
 # workflows with structures wf(A)
 
 
@@ -1905,37 +1948,3 @@ def test_cache_propagation3(tmpdir, create_tasks):
     wf.cache_dir = (tmpdir / "shared").strpath
     wf(plugin="cf")
     assert wf.cache_dir == t1.cache_dir == t2.cache_dir
-
-
-def test_workflow_combine1(tmpdir):
-    wf1 = Workflow(name="wf1", input_spec=["a", "b"], a=[1, 2], b=[2, 3])
-    wf1.add(power(name="power", a=wf1.lzin.a, b=wf1.lzin.b).split(["a", "b"]))
-    wf1.add(identity(name="identity1", x=wf1.power.lzout.out).combine("power.a"))
-    wf1.add(identity(name="identity2", x=wf1.identity1.lzout.out).combine("power.b"))
-    wf1.set_output(
-        {
-            "out_pow": wf1.power.lzout.out,
-            "out_iden1": wf1.identity1.lzout.out,
-            "out_iden2": wf1.identity2.lzout.out,
-        }
-    )
-    wf1.cache_dir = tmpdir
-    result = wf1(plugin="cf")
-
-    assert result.output.out_pow == [1, 1, 4, 8]
-    assert result.output.out_iden1 == [[1, 4], [1, 8]]
-    assert result.output.out_iden2 == [[[1, 4], [1, 8]]]
-
-
-def test_workflow_combine2(tmpdir):
-    wf1 = Workflow(name="wf1", input_spec=["a", "b"], a=[1, 2], b=[2, 3])
-    wf1.add(
-        power(name="power", a=wf1.lzin.a, b=wf1.lzin.b).split(["a", "b"]).combine("a")
-    )
-    wf1.add(identity(name="identity", x=wf1.power.lzout.out).combine("power.b"))
-    wf1.set_output({"out_pow": wf1.power.lzout.out, "out_iden": wf1.identity.lzout.out})
-    wf1.cache_dir = tmpdir
-    result = wf1(plugin="cf")
-
-    assert result.output.out_pow == [[1, 4], [1, 8]]
-    assert result.output.out_iden == [[[1, 4], [1, 8]]]
