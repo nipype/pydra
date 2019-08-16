@@ -1909,6 +1909,39 @@ def test_wf_ndstate_cachelocations_recompute(plugin, tmpdir):
     assert wf2.output_dir.exists()
 
 
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
+    """
+    running worflow twice, the new output_dir  should not be created
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+
+    wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.inputs.x = 2
+    wf1.inputs.y = 3
+    wf1.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+
+    results1 = wf1.result()
+    assert 8 == results1.output.out
+    # checkoing output_dir after the first run
+    assert wf1.output_dir.exists()
+
+    # running workflow second time
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+
+    results1 = wf1.result()
+    assert 8 == results1.output.out
+    # checking if the second output dir not created
+    assert not wf1.output_dir.exists()
+
+
 @pytest.fixture
 def create_tasks():
     wf = Workflow(name="wf", input_spec=["x"])
