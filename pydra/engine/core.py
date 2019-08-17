@@ -95,6 +95,8 @@ class TaskBase:
             for field in dc.fields(klass)
             if field.name not in ["_func", "_graph_checksums"]
         ]
+        # dictionary to save the connections with lazy fields
+        self.inp_lf = {}
         self.state = None
         self._output = {}
         self._result = {}
@@ -454,6 +456,15 @@ class TaskBase:
             result = load_result(checksum, self.cache_locations)
             return result
 
+    def _reset(self):
+        """resetting the connections between inputs and LazyFields"""
+        for field in dc.fields(self.inputs):
+            if field.name in self.inp_lf:
+                setattr(self.inputs, field.name, self.inp_lf[field.name])
+        if is_workflow(self):
+            for task in self.graph.nodes:
+                task._reset()
+
 
 class Workflow(TaskBase):
     def __init__(
@@ -532,6 +543,7 @@ class Workflow(TaskBase):
         """adding a task to the workflow"""
         if not is_task(task):
             raise ValueError("Unknown workflow element: {!r}".format(task))
+        task._reset()
         self.graph.add_nodes(task)
         self.name2obj[task.name] = task
         self._last_added = task
@@ -544,6 +556,8 @@ class Workflow(TaskBase):
         for field in dc.fields(task.inputs):
             val = getattr(task.inputs, field.name)
             if isinstance(val, LazyField):
+                # saving all connections with LazyFields
+                task.inp_lf[field.name] = val
                 # adding an edge to the graph if task id expecting output from a different task
                 if val.name != self.name:
                     # checking if the connection is already in the graph

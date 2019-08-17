@@ -983,7 +983,6 @@ def test_wfasnd_wfndupdate(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.xfail(reason="wfnd is not updating input for it's nodes")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_wfndupdate_rerun(plugin):
     """ workflow as a node
@@ -1013,6 +1012,20 @@ def test_wfasnd_wfndupdate_rerun(plugin):
     results = wf.result()
     assert results.output.out == 5
     assert wf.output_dir.exists()
+
+    # adding another layer of workflow
+    wf_o = Workflow(name="wf_o", input_spec=["x"], x=4)
+    wf.inputs.x = wf_o.lzin.x
+    wf_o.add(wf)
+    wf_o.set_output([("out", wf_o.wf.lzout.out)])
+    wf_o.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf_o)
+
+    results = wf_o.result()
+    assert results.output.out == 6
+    assert wf_o.output_dir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
