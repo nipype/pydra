@@ -20,6 +20,7 @@ class State:
         self.set_input_groups()
         self.set_splitter_final()
         self.states_val = []
+        self.inputs_ind = []
         self.final_groups_mapping = {}
 
     def __str__(self):

@@ -81,8 +81,6 @@ class Submitter:
             )
             for sidx in range(len(runnable.state.states_val)):
                 job = runnable.to_job(sidx)
-                job.results_dict[None] = (sidx, job.checksum)
-                runnable.results_dict[sidx] = (None, job.checksum)
                 logger.debug(
                     f'Submitting runnable {job}{str(sidx) if sidx is not None else ""}'
                 )
