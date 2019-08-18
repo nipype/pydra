@@ -543,7 +543,6 @@ class Workflow(TaskBase):
         """adding a task to the workflow"""
         if not is_task(task):
             raise ValueError("Unknown workflow element: {!r}".format(task))
-        task._reset()
         self.graph.add_nodes(task)
         self.name2obj[task.name] = task
         self._last_added = task
