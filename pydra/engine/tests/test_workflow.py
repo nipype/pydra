@@ -24,9 +24,11 @@ def test_wf_1(plugin):
     wf.inputs.x = 2
     wf.plugin = plugin
 
+    checksum_before = wf.checksum
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    assert wf.checksum == checksum_before
     results = wf.result()
     assert 4 == results.output.out
     assert wf.output_dir.exists()
@@ -229,9 +231,11 @@ def test_wf_st_1(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
+    checksum_before = wf.checksum
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    assert wf.checksum == checksum_before
     results = wf.result()
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results[0].output.out == 3
@@ -298,9 +302,11 @@ def test_wf_ndst_1(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
+    checksum_before = wf.checksum
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    assert wf.checksum == checksum_before
     results = wf.result()
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results.output.out == [3, 4]
@@ -949,9 +955,11 @@ def test_wfasnd_wfinp_1(plugin):
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
 
+    checksum_before = wf.checksum
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    assert wf.checksum == checksum_before
     results = wf.result()
     assert results.output.out == 4
     # checking the output directory
@@ -1045,9 +1053,11 @@ def test_wfasnd_st_1(plugin):
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
 
+    checksum_before = wf.checksum
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    assert wf.checksum == checksum_before
     results = wf.result()
     assert results.output.out == [4, 6]
     # checking the output directory

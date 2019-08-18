@@ -165,6 +165,10 @@ class TaskBase:
     def checksum(self):
         """calculating checksum
         """
+        # if checksum is called before run the _graph_checksums is not ready
+        if is_workflow(self) and self.inputs._graph_checksums is None:
+            self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
+
         input_hash = self.inputs.hash
         if self.state is None:
             self._checksum = create_checksum(self.__class__.__name__, input_hash)
