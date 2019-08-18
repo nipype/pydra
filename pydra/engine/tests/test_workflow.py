@@ -1,5 +1,5 @@
 import pytest
-import shutil
+import shutil, os
 import time
 import platform
 
@@ -24,9 +24,11 @@ def test_wf_1(plugin):
     wf.inputs.x = 2
     wf.plugin = plugin
 
+    checksum_before = wf.checksum
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    assert wf.checksum == checksum_before
     results = wf.result()
     assert 4 == results.output.out
     assert wf.output_dir.exists()
@@ -229,9 +231,11 @@ def test_wf_st_1(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
+    checksum_before = wf.checksum
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    assert wf.checksum == checksum_before
     results = wf.result()
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results[0].output.out == 3
@@ -298,9 +302,11 @@ def test_wf_ndst_1(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
+    checksum_before = wf.checksum
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    assert wf.checksum == checksum_before
     results = wf.result()
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results.output.out == [3, 4]
@@ -949,9 +955,11 @@ def test_wfasnd_wfinp_1(plugin):
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
 
+    checksum_before = wf.checksum
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    assert wf.checksum == checksum_before
     results = wf.result()
     assert results.output.out == 4
     # checking the output directory
@@ -983,7 +991,6 @@ def test_wfasnd_wfndupdate(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.xfail(reason="wfnd is not updating input for it's nodes")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_wfndupdate_rerun(plugin):
     """ workflow as a node
@@ -1014,6 +1021,20 @@ def test_wfasnd_wfndupdate_rerun(plugin):
     assert results.output.out == 5
     assert wf.output_dir.exists()
 
+    # adding another layer of workflow
+    wf_o = Workflow(name="wf_o", input_spec=["x"], x=4)
+    wf.inputs.x = wf_o.lzin.x
+    wf_o.add(wf)
+    wf_o.set_output([("out", wf_o.wf.lzout.out)])
+    wf_o.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf_o)
+
+    results = wf_o.result()
+    assert results.output.out == 6
+    assert wf_o.output_dir.exists()
+
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_st_1(plugin):
@@ -1032,9 +1053,11 @@ def test_wfasnd_st_1(plugin):
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
 
+    checksum_before = wf.checksum
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    assert wf.checksum == checksum_before
     results = wf.result()
     assert results.output.out == [4, 6]
     # checking the output directory
@@ -1864,6 +1887,84 @@ def test_wf_ndstate_cachelocations_recompute(plugin, tmpdir):
     # checking if the second wf didn't run again
     # checking all directories
     assert wf2.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
+    """
+    running worflow (without state) twice,
+    the second run should use the results from the first one
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+
+    wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.inputs.x = 2
+    wf1.inputs.y = 3
+    wf1.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+
+    results1 = wf1.result()
+    assert 8 == results1.output.out
+    # checkoing output_dir after the first run
+    assert wf1.output_dir.exists()
+
+    # saving the content of the cache dit after the first run
+    cache_dir_content = os.listdir(wf1.cache_dir)
+
+    # running workflow the second time
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+
+    results1 = wf1.result()
+    assert 8 == results1.output.out
+    # checking if no new directory is not created
+    assert cache_dir_content == os.listdir(wf1.cache_dir)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_state_runtwice_usecache(plugin, tmpdir):
+    """
+    running worflow with a state twice,
+    the second run should use the results from the first one
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+
+    wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.split(splitter=("x", "y"))
+    wf1.inputs.x = [2, 20]
+    wf1.inputs.y = [3, 30]
+    wf1.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+
+    results1 = wf1.result()
+    assert 8 == results1[0].output.out
+    assert 602 == results1[1].output.out
+
+    # checkoing output_dir after the first run
+    assert [odir.exists() for odir in wf1.output_dir]
+
+    # saving the content of the cache dit after the first run
+    cache_dir_content = os.listdir(wf1.cache_dir)
+
+    # running workflow the second time
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+
+    results1 = wf1.result()
+    assert 8 == results1[0].output.out
+    assert 602 == results1[1].output.out
+    # checking if no new directory is not created
+    assert cache_dir_content == os.listdir(wf1.cache_dir)
 
 
 @pytest.fixture

@@ -160,17 +160,6 @@ def test_odir_init():
     assert nn.output_dir
 
 
-def test_odir_init_error():
-    """ checking if output_dir raises an error for task with a state
-        if the task doesn't have result (before running)
-    """
-    nn = fun_addtwo(name="NA").split(splitter="a", a=[3, 5])
-
-    with pytest.raises(Exception) as excinfo:
-        assert nn.output_dir
-    assert "output_dir not available" in str(excinfo.value)
-
-
 # Tests for tasks without state (i.e. no splitter)
 
 
@@ -216,6 +205,19 @@ def test_task_nostate_1_call_plug(plugin):
     assert nn.state is None
 
     nn(plugin=plugin)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+    # checking the output_dir
+    assert nn.output_dir.exists()
+
+
+def test_task_nostate_1_call_updateinp():
+    """ task without splitter"""
+    nn = fun_addtwo(name="NA", a=30)
+    # updating input when calling the node
+    nn(a=3)
 
     # checking the results
     results = nn.result()

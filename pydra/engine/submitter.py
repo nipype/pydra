@@ -41,11 +41,15 @@ class Submitter:
             self.loop.run_until_complete(self.submit_workflow(runnable))
         else:
             self.loop.run_until_complete(self.submit(runnable, wait=True))
+        if is_workflow(runnable):
+            # resetting all connections with LazyFields
+            runnable._reset()
         return runnable.result()
 
     async def submit_workflow(self, workflow):
         """Distributes or initiates workflow execution"""
         if workflow.plugin and workflow.plugin != self.plugin:
+            # dj: this is not tested!!!
             await self.worker.run_el(workflow)
         else:
             await workflow._run(self)
@@ -81,8 +85,6 @@ class Submitter:
             )
             for sidx in range(len(runnable.state.states_val)):
                 job = runnable.to_job(sidx)
-                job.results_dict[None] = (sidx, job.checksum)
-                runnable.results_dict[sidx] = (None, job.checksum)
                 logger.debug(
                     f'Submitting runnable {job}{str(sidx) if sidx is not None else ""}'
                 )

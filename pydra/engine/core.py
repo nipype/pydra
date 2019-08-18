@@ -95,6 +95,8 @@ class TaskBase:
             for field in dc.fields(klass)
             if field.name not in ["_func", "_graph_checksums"]
         ]
+        # dictionary to save the connections with lazy fields
+        self.inp_lf = {}
         self.state = None
         self._output = {}
         self._result = {}
@@ -124,8 +126,6 @@ class TaskBase:
         self.allow_cache_override = True
         self._checksum = None
 
-        # dictionary of results from tasks
-        self.results_dict = {}
         self.plugin = None
         self.hooks = TaskHook()
 
@@ -165,6 +165,10 @@ class TaskBase:
     def checksum(self):
         """calculating checksum
         """
+        # if checksum is called before run the _graph_checksums is not ready
+        if is_workflow(self) and self.inputs._graph_checksums is None:
+            self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
+
         input_hash = self.inputs.hash
         if self.state is None:
             self._checksum = create_checksum(self.__class__.__name__, input_hash)
@@ -175,6 +179,30 @@ class TaskBase:
                 self.__class__.__name__, hash_function([input_hash, splitter_hash])
             )
         return self._checksum
+
+    def checksum_states(self, state_index=None):
+        """ calculating checksum for the specific state or all of the states
+            replace lists in the inputs fields with a specific values for states
+            can be used only for tasks with a state
+        """
+        if state_index is not None:
+            if self.state is None:
+                raise Exception("can't use state_index if no splitter is used")
+            inputs_copy = deepcopy(self.inputs)
+            for key, ind in self.state.inputs_ind[state_index].items():
+                setattr(
+                    inputs_copy,
+                    key.split(".")[1],
+                    getattr(inputs_copy, key.split(".")[1])[ind],
+                )
+            input_hash = inputs_copy.hash
+            checksum_ind = create_checksum(self.__class__.__name__, input_hash)
+            return checksum_ind
+        else:
+            checksum_list = []
+            for ind in range(len(self.state.inputs_ind)):
+                checksum_list.append(self.checksum_states(state_index=ind))
+            return checksum_list
 
     def set_state(self, splitter, combiner=None):
         if splitter is not None:
@@ -226,14 +254,7 @@ class TaskBase:
     @property
     def output_dir(self):
         if self.state:
-            if self.results_dict:
-                return [
-                    self._cache_dir / res[1] for (_, res) in self.results_dict.items()
-                ]
-            else:
-                raise Exception(
-                    f"output_dir not available, will be ready after running {self.name}"
-                )
+            return [self._cache_dir / checksum for checksum in self.checksum_states()]
         else:
             return self._cache_dir / self.checksum
 
@@ -399,7 +420,7 @@ class TaskBase:
         for (gr, ind_l) in self.state.final_groups_mapping.items():
             combined_results.append([])
             for ind in ind_l:
-                result = load_result(self.results_dict[ind][1], self.cache_locations)
+                result = load_result(self.checksum_states(ind), self.cache_locations)
                 if result is None:
                     return None
                 combined_results[gr].append(result)
@@ -419,10 +440,8 @@ class TaskBase:
                     return self._combined_output()
                 else:
                     results = []
-                    for (ii, val) in enumerate(self.state.states_val):
-                        result = load_result(
-                            self.results_dict[ii][1], self.cache_locations
-                        )
+                    for checksum in self.checksum_states():
+                        result = load_result(checksum, self.cache_locations)
                         if result is None:
                             return None
                         results.append(result)
@@ -431,18 +450,24 @@ class TaskBase:
                 if self.state.combiner:
                     return self._combined_output()[state_index]
                 result = load_result(
-                    self.results_dict[state_index][1], self.cache_locations
+                    self.checksum_states(state_index), self.cache_locations
                 )
                 return result
         else:
             if state_index is not None:
                 raise ValueError("Task does not have a state")
-            if self.results_dict:
-                checksum = self.results_dict[None][1]
-            else:
-                checksum = self.checksum
+            checksum = self.checksum
             result = load_result(checksum, self.cache_locations)
             return result
+
+    def _reset(self):
+        """resetting the connections between inputs and LazyFields"""
+        for field in dc.fields(self.inputs):
+            if field.name in self.inp_lf:
+                setattr(self.inputs, field.name, self.inp_lf[field.name])
+        if is_workflow(self):
+            for task in self.graph.nodes:
+                task._reset()
 
 
 class Workflow(TaskBase):
@@ -534,6 +559,8 @@ class Workflow(TaskBase):
         for field in dc.fields(task.inputs):
             val = getattr(task.inputs, field.name)
             if isinstance(val, LazyField):
+                # saving all connections with LazyFields
+                task.inp_lf[field.name] = val
                 # adding an edge to the graph if task id expecting output from a different task
                 if val.name != self.name:
                     # checking if the connection is already in the graph
@@ -558,7 +585,7 @@ class Workflow(TaskBase):
                 task.state = state.State(task.name, other_states=other_states)
 
     async def _run(self, submitter=None, **kwargs):
-        self.inputs = dc.replace(self.inputs, **kwargs)
+        # self.inputs = dc.replace(self.inputs, **kwargs) don't need it?
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
@@ -610,7 +637,6 @@ class Workflow(TaskBase):
         if not submitter:
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
-        self.results_dict[None] = (None, self.checksum)
         await submitter._run_workflow(self)
 
     def set_output(self, connections):
