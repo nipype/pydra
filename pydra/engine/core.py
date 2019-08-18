@@ -281,7 +281,7 @@ class TaskBase:
         return res
 
     def _run(self, **kwargs):
-        # self.inputs = dc.replace(self.inputs, **kwargs) don't need it?
+        self.inputs = dc.replace(self.inputs, **kwargs)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached

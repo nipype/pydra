@@ -213,6 +213,19 @@ def test_task_nostate_1_call_plug(plugin):
     assert nn.output_dir.exists()
 
 
+def test_task_nostate_1_call_updateinp():
+    """ task without splitter"""
+    nn = fun_addtwo(name="NA", a=30)
+    # updating input when calling the node
+    nn(a=3)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+    # checking the output_dir
+    assert nn.output_dir.exists()
+
+
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_2(plugin):
     """ task with a list as an input, but no splitter"""
