@@ -1397,7 +1397,7 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
 
     # checking execution time
     assert t1 > 3
-    assert t2 < 0.1
+    assert t2 < 0.5
 
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
@@ -1456,7 +1456,7 @@ def test_wf_state_cachelocations(plugin, tmpdir):
 
     # checking execution time
     assert t1 > 3
-    assert t2 < 0.1
+    assert t2 < 0.5
 
     # checking all directories
     assert wf1.output_dir
@@ -1524,7 +1524,7 @@ def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
 
     # checking execution time
     assert t1 > 3
-    assert t2 < 0.3
+    assert t2 < 0.5
 
     # checking all directories
     assert wf1.output_dir
@@ -1755,7 +1755,7 @@ def test_wf_ndstate_cachelocations(plugin, tmpdir):
 
     # checking execution time
     assert t1 > 3
-    assert t2 < 0.1
+    assert t2 < 0.5
 
     # checking all directories
     assert wf1.output_dir.exists()
@@ -1817,7 +1817,7 @@ def test_wf_ndstate_cachelocations_updatespl(plugin, tmpdir):
 
     # checking execution time
     assert t1 > 3
-    assert t2 < 0.1
+    assert t2 < 0.5
 
     # checking all directories
     assert wf1.output_dir.exists()

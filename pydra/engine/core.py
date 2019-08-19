@@ -14,7 +14,7 @@ import shutil
 from tempfile import mkdtemp
 
 from . import state
-from . import auxiliary as aux
+from . import helpers_state as hlpst
 from .specs import File, BaseSpec, RuntimeSpec, Result, SpecInfo, LazyField, TaskHook
 from .helpers import (
     make_klass,
@@ -54,11 +54,6 @@ class TaskBase:
     _cache_dir = None  # Working directory in which to operate
     _references = None  # List of references for a task
 
-    # dj: do we need it??
-    input_spec = BaseSpec
-    output_spec = BaseSpec
-
-    # TODO: write state should be removed
     def __init__(
         self,
         name: str,
@@ -351,7 +346,7 @@ class TaskBase:
             self.inputs = dc.replace(self.inputs, **kwargs)
             # dj:??, check if I need it
             self.state_inputs = kwargs
-        splitter = aux.change_splitter(splitter, self.name)
+        splitter = hlpst.add_name_splitter(splitter, self.name)
         if self.state:
             raise Exception("splitter has been already set")
         else:
@@ -376,7 +371,7 @@ class TaskBase:
     def get_input_el(self, ind):
         """collecting all inputs required to run the node (for specific state element)"""
         if ind is not None:
-            # TODO: doesnt work properly for more cmplicated wf
+            # TODO: doesnt work properly for more cmplicated wf (check if still an issue)
             state_dict = self.state.states_val[ind]
             input_ind = self.state.inputs_ind[ind]
             inputs_dict = {}
@@ -417,7 +412,7 @@ class TaskBase:
 
     def _combined_output(self):
         combined_results = []
-        for (gr, ind_l) in self.state.final_groups_mapping.items():
+        for (gr, ind_l) in self.state.final_combined_ind_mapping.items():
             combined_results.append([])
             for ind in ind_l:
                 result = load_result(self.checksum_states(ind), self.cache_locations)

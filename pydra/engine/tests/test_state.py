@@ -1023,12 +1023,12 @@ def test_state_connect_combine_1():
     ]
     assert st1.states_ind_final == [{"NA.b": 0}, {"NA.b": 1}]
     assert st1.keys_final == ["NA.b"]
-    assert st1.final_groups_mapping == {0: [0, 2], 1: [1, 3]}
+    assert st1.final_combined_ind_mapping == {0: [0, 2], 1: [1, 3]}
 
     assert st2.states_ind == [{"NA.b": 0}, {"NA.b": 1}]
     assert st2.states_val == [{"NA.b": 10}, {"NA.b": 20}]
     assert st2.keys_final == ["NA.b"]
-    assert st2.final_groups_mapping == {0: [0], 1: [1]}
+    assert st2.final_combined_ind_mapping == {0: [0], 1: [1]}
 
     st2.prepare_inputs()
     assert st2.inputs_ind == [{"NB.c": 0}, {"NB.c": 1}]
@@ -1070,7 +1070,7 @@ def test_state_connect_combine_2():
     ]
     assert st1.states_ind_final == [{"NA.b": 0}, {"NA.b": 1}]
     assert st1.keys_final == ["NA.b"]
-    assert st1.final_groups_mapping == {0: [0, 2], 1: [1, 3]}
+    assert st1.final_combined_ind_mapping == {0: [0, 2], 1: [1, 3]}
 
     assert st2.states_ind == [
         {"NA.b": 0, "NB.d": 0},
@@ -1085,7 +1085,7 @@ def test_state_connect_combine_2():
         {"NA.b": 20, "NB.d": 1},
     ]
     assert st2.keys_final == ["NA.b", "NB.d"]
-    assert st2.final_groups_mapping == {0: [0], 1: [1], 2: [2], 3: [3]}
+    assert st2.final_combined_ind_mapping == {0: [0], 1: [1], 2: [2], 3: [3]}
 
     st2.prepare_inputs()
     assert st2.inputs_ind == [
@@ -1134,7 +1134,7 @@ def test_state_connect_combine_3():
     ]
     assert st1.states_ind_final == [{"NA.b": 0}, {"NA.b": 1}]
     assert st1.keys_final == ["NA.b"]
-    assert st1.final_groups_mapping == {0: [0, 2], 1: [1, 3]}
+    assert st1.final_combined_ind_mapping == {0: [0, 2], 1: [1, 3]}
 
     assert st2.states_ind == [
         {"NA.b": 0, "NB.d": 0},
@@ -1150,7 +1150,7 @@ def test_state_connect_combine_3():
     ]
     assert st2.states_ind_final == [{"NA.b": 0}, {"NA.b": 1}]
     assert st2.keys_final == ["NA.b"]
-    assert st2.final_groups_mapping == {0: [0, 1], 1: [2, 3]}
+    assert st2.final_combined_ind_mapping == {0: [0, 1], 1: [2, 3]}
 
     st2.prepare_inputs()
     assert st2.inputs_ind == [
