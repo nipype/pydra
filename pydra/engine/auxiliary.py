@@ -39,7 +39,7 @@ def _ordering(
                         node_nm, other_states.keys()
                     )
                 )
-            splitter_mod = change_splitter(
+            splitter_mod = add_name_splitter(
                 splitter=other_states[node_nm][0].splitter_final, name=node_nm
             )
             if state_fields:
@@ -54,7 +54,7 @@ def _ordering(
                         node_nm, other_states.keys()
                     )
                 )
-            splitter_mod = change_splitter(
+            splitter_mod = add_name_splitter(
                 splitter=other_states[node_nm][0].splitter_final, name=node_nm
             )
             if state_fields:
@@ -77,7 +77,7 @@ def _ordering(
                         node_nm, other_states.keys()
                     )
                 )
-            splitter_mod = change_splitter(
+            splitter_mod = add_name_splitter(
                 splitter=other_states[node_nm][0].splitter_final, name=node_nm
             )
             if state_fields:
@@ -92,7 +92,7 @@ def _ordering(
                         node_nm, other_states.keys()
                     )
                 )
-            splitter_mod = change_splitter(
+            splitter_mod = add_name_splitter(
                 splitter=other_states[node_nm][0].splitter_final, name=node_nm
             )
             if state_fields:
@@ -115,7 +115,7 @@ def _ordering(
                         node_nm, other_states.keys()
                     )
                 )
-            splitter_mod = change_splitter(
+            splitter_mod = add_name_splitter(
                 splitter=other_states[node_nm][0].splitter_final, name=node_nm
             )
             if state_fields:
@@ -162,148 +162,6 @@ def _iterate_list(element, sign, other_states, output_splitter, state_fields=Tru
 # functions used in State to know which element should be used for a specific axis
 
 
-def splitting_axis(state_inputs, splitter_rpn):
-    """Having inputs and splitter (in rpn notation), functions returns the axes of output for every input."""
-    axis_for_input = {}
-    stack = []
-    # to remember current axis
-    current_axis = None
-    # to remember shapes and axes for partial results
-    out_shape = {}
-    out_axes = {}
-    # to remember imput names for partial results
-    out_inputname = {}
-    for el in splitter_rpn:
-        # scalar splitter
-        if el == ".":
-            right = stack.pop()
-            left = stack.pop()
-            # when both, left and right, are already products of partial splitter
-            if left.startswith("OUT") and right.startswith("OUT"):
-                if out_shape[left] != out_shape[right]:
-                    raise Exception(
-                        "arrays for scalar operations should have the same size"
-                    )
-                current_inputs = out_inputname[left] + out_inputname[right]
-            # when left is already product of partial splitter
-            elif left.startswith("OUT"):
-                if (
-                    state_inputs[right].shape == out_shape[left]
-                ):  # todo:should we allow for one-element array?
-                    axis_for_input[right] = out_axes[left]
-                else:
-                    raise Exception(
-                        "arrays for scalar operations should have the same size"
-                    )
-                current_inputs = out_inputname[left] + [right]
-            # when right is already product of partial splitter
-            elif right.startswith("OUT"):
-                if state_inputs[left].shape == out_shape[right]:
-                    axis_for_input[left] = out_axes[right]
-                else:
-                    raise Exception(
-                        "arrays for scalar operations should have the same size"
-                    )
-                current_inputs = out_inputname[right] + [left]
-
-            else:
-                if state_inputs[right].shape == state_inputs[left].shape:
-                    current_axis = list(range(state_inputs[right].ndim))
-                    current_shape = state_inputs[left].shape
-                    axis_for_input[left] = current_axis
-                    axis_for_input[right] = current_axis
-                    current_inputs = [left, right]
-                else:
-                    raise Exception(
-                        "arrays for scalar operations should have the same size"
-                    )
-            # adding partial output to the stack
-            stack.append("OUT_{}".format(len(out_shape)))
-            out_inputname["OUT_{}".format(len(out_shape))] = current_inputs
-            out_axes["OUT_{}".format(len(out_shape))] = current_axis
-            out_shape["OUT_{}".format(len(out_shape))] = current_shape
-
-        # outer splitter
-        elif el == "*":
-            right = stack.pop()
-            left = stack.pop()
-            # when both, left and right, are already products of partial splitter
-            if left.startswith("OUT") and right.startswith("OUT"):
-                # changing all axis_for_input for inputs from right
-                for key in out_inputname[right]:
-                    axis_for_input[key] = [
-                        i + len(out_axes[left]) for i in axis_for_input[key]
-                    ]
-                current_axis = out_axes[left] + [
-                    i + (out_axes[left][-1] + 1) for i in out_axes[right]
-                ]
-                current_shape = tuple([i for i in out_shape[left] + out_shape[right]])
-                current_inputs = out_inputname[left] + out_inputname[right]
-            # when left is already product of partial splitter
-            elif left.startswith("OUT"):
-                axis_for_input[right] = [
-                    i + (out_axes[left][-1] + 1)
-                    for i in range(state_inputs[right].ndim)
-                ]
-                current_axis = out_axes[left] + axis_for_input[right]
-                current_shape = tuple(
-                    [i for i in out_shape[left] + state_inputs[right].shape]
-                )
-                current_inputs = out_inputname[left] + [right]
-            # when right is already product of partial splitter
-            elif right.startswith("OUT"):
-                # changing all axis_for_input for inputs from right
-                for key in out_inputname[right]:
-                    axis_for_input[key] = [
-                        i + state_inputs[left].ndim for i in axis_for_input[key]
-                    ]
-                axis_for_input[left] = [
-                    i - len(out_shape[right]) + (out_axes[right][-1] + 1)
-                    for i in range(state_inputs[left].ndim)
-                ]
-                current_axis = out_axes[right] + [
-                    i + (out_axes[right][-1] + 1)
-                    for i in range(state_inputs[left].ndim)
-                ]
-                current_shape = tuple(
-                    [i for i in state_inputs[left].shape + out_shape[right]]
-                )
-                current_inputs = out_inputname[right] + [left]
-            else:
-                axis_for_input[left] = list(range(state_inputs[left].ndim))
-                axis_for_input[right] = [
-                    i + state_inputs[left].ndim for i in range(state_inputs[right].ndim)
-                ]
-                current_axis = axis_for_input[left] + axis_for_input[right]
-                current_shape = tuple(
-                    [i for i in state_inputs[left].shape + state_inputs[right].shape]
-                )
-                current_inputs = [left, right]
-            # adding partial output to the stack
-            stack.append("OUT_{}".format(len(out_shape)))
-            out_inputname["OUT_{}".format(len(out_shape))] = current_inputs
-            out_axes["OUT_{}".format(len(out_shape))] = current_axis
-            out_shape["OUT_{}".format(len(out_shape))] = current_shape
-
-        # just a name of input
-        else:
-            stack.append(el)
-
-    if len(stack) == 0:
-        pass
-    elif len(stack) > 1:
-        raise Exception("exception from splitting_axis")
-    elif not stack[0].startswith("OUT"):
-        current_axis = [i for i in range(state_inputs[stack[0]].ndim)]
-        axis_for_input[stack[0]] = current_axis
-
-    if current_axis:
-        ndim = max(current_axis) + 1
-    else:
-        ndim = 0
-    return axis_for_input, ndim
-
-
 def converter_groups_to_input(group_for_inputs):
     """
     Having axes for all the input fields,
@@ -321,132 +179,7 @@ def converter_groups_to_input(group_for_inputs):
     return input_for_axis, ngr
 
 
-# TODO: currently not used
-def groups_stack_input(group_for_inputs, groups_stack):
-    """ function that helps testing groups_stack_final
-        returns groups_stack_final with input names
-    """
-    inputs_for_groups = converter_groups_to_input(group_for_inputs)[0]
-    groups_stack_input = []
-    for stack_el in groups_stack:
-        stack_el_inp = []
-        for gr in stack_el:
-            stack_el_inp += inputs_for_groups[gr]
-        groups_stack_input.append(stack_el_inp)
-    return groups_stack_input
-
-
-# TODO: not used currently, think if I need it
-def converting_axis2input(axis_for_input, ndim, state_inputs=None):
-    """ Having axes for all the input fields, the function returns fields for each axis. """
-    input_for_axis = []
-    shape = []
-    for i in range(ndim):
-        input_for_axis.append([])
-        shape.append(0)
-
-    for inp, axis in axis_for_input.items():
-        for (i, ax) in enumerate(axis):
-            input_for_axis[ax].append(inp)
-            if state_inputs is not None:
-                shape[ax] = state_inputs[inp].shape[i]
-
-    if state_inputs is not None:
-        return input_for_axis, shape
-    else:
-        return input_for_axis
-
-
 # function used in State if combiner
-
-# TODO: not used currently, think if I need it
-def matching_input_from_splitter(splitter_rpn):
-    """similar to splitting_axis, but without state_input,
-        finding inputs that are for the same axes.
-        can't find the final dimensions without inputs.
-    """
-    axes_for_inputs = {}
-    output_inputs = {}
-    stack_inp = []
-    for el in splitter_rpn:
-        if el == ".":
-            right, left = stack_inp.pop(), stack_inp.pop()
-            out_nm = "OUT{}".format(len(output_inputs))
-            if left.startswith("OUT") and right.startswith("OUT"):
-                output_inputs[out_nm] = output_inputs[left] + output_inputs[right]
-                axes_for_inputs[out_nm] = axes_for_inputs[left].copy()
-            elif right.startswith("OUT"):
-                output_inputs[out_nm] = output_inputs[right] + [left]
-                axes_for_inputs[out_nm] = axes_for_inputs[right].copy()
-                axes_for_inputs[left] = axes_for_inputs[right].copy()
-            elif left.startswith("OUT"):
-                output_inputs[out_nm] = output_inputs[left] + [right]
-                axes_for_inputs[out_nm] = axes_for_inputs[left].copy()
-                axes_for_inputs[right] = axes_for_inputs[left].copy()
-            else:
-                output_inputs[out_nm] = [left, right]
-                axes_for_inputs[left] = [0]
-                axes_for_inputs[out_nm] = [0]
-                axes_for_inputs[right] = [0]
-            stack_inp.append(out_nm)
-        elif el == "*":
-            right, left = stack_inp.pop(), stack_inp.pop()
-            out_nm = "OUT{}".format(len(output_inputs))
-            if left.startswith("OUT") and right.startswith("OUT"):
-                output_inputs[out_nm] = output_inputs[left] + output_inputs[right]
-                for inp in output_inputs[right] + [right]:
-                    axes_for_inputs[inp] = [
-                        i + len(axes_for_inputs[left]) for i in axes_for_inputs[inp]
-                    ]
-                axes_for_inputs[out_nm] = axes_for_inputs[left] + axes_for_inputs[right]
-            elif right.startswith("OUT"):
-                output_inputs[out_nm] = output_inputs[right] + [left]
-                axes_for_inputs[left] = [min(axes_for_inputs[right]) - 1]
-                axes_for_inputs[out_nm] = axes_for_inputs[left] + axes_for_inputs[right]
-            elif left.startswith("OUT"):
-                output_inputs[out_nm] = output_inputs[left] + [right]
-                axes_for_inputs[right] = [max(axes_for_inputs[left]) + 1]
-                axes_for_inputs[out_nm] = axes_for_inputs[left] + axes_for_inputs[right]
-            else:
-                output_inputs[out_nm] = [left, right]
-                axes_for_inputs[left] = [0]
-                axes_for_inputs[right] = [1]
-                axes_for_inputs[out_nm] = [0, 1]
-            stack_inp.append(out_nm)
-        else:
-            stack_inp.append(el)
-
-    # checking if at the end I have only one element
-    if len(stack_inp) == 1 and stack_inp[0].startswith("OUT"):
-        pass
-    elif len(stack_inp) == 1:
-        axes_for_inputs[stack_inp[0]] = [0]
-    else:
-        raise Exception("something wrong with the splittper")
-
-    # removing "OUT*" elements
-    axes_for_inputs = dict(
-        (key, val)
-        for (key, val) in axes_for_inputs.items()
-        if not key.startswith("OUT")
-    )
-
-    # checking if I have any axes below 0
-    all_axes = []
-    for _, val in axes_for_inputs.items():
-        all_axes += val
-    min_ax = min(all_axes)
-    # moving all axes in case min_ax <0 , so everything starts from 0
-    if min_ax < 0:
-        axes_for_inputs = dict(
-            (key, [v + abs(min_ax) for v in val])
-            for (key, val) in axes_for_inputs.items()
-        )
-
-    # dimensions
-    ndim = len(set(all_axes))
-
-    return axes_for_inputs, ndim
 
 
 def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
@@ -524,7 +257,7 @@ def rpn2splitter(splitter_rpn):
 # used in the Node to change names in a splitter and combiner
 
 
-def change_combiner(combiner, name):
+def add_name_combiner(combiner, name):
     combiner_changed = []
     for comb in combiner:
         if "." not in comb:
@@ -534,7 +267,7 @@ def change_combiner(combiner, name):
     return combiner_changed
 
 
-def change_splitter(splitter, name):
+def add_name_splitter(splitter, name):
     """changing names of splitter: adding names of the node"""
     if isinstance(splitter, str):
         return _add_name([splitter], name)[0]
@@ -604,7 +337,6 @@ def input_shape(in1):
     return tuple(shape)
 
 
-# dj: changing the function so it takes splitter_rpn
 def _splits(splitter_rpn, inputs, inner_inputs=None):
     """ Process splitter rpn from left to right
     """
@@ -859,8 +591,6 @@ def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
 def _single_op_splits(
     op_single, inputs, inner_inputs, shapes_var, previous_states_ind, keys_fromLeftSpl
 ):
-    import numpy as np
-
     if op_single.startswith("_"):
         return (
             previous_states_ind[op_single][0],
@@ -954,9 +684,7 @@ def map_splits(split_iter, inputs):
         yield {k: list(flatten(ensure_list(inputs[k])))[v] for k, v in split.items()}
 
 
-""" Functions for merging and completing splitters in states.
- Used only in State, could be moved to that class
-"""
+# Functions for merging and completing splitters in states.
 
 
 def connect_splitters(splitter, other_states):
