@@ -1,6 +1,5 @@
-from .. import auxiliary as aux
+from .. import helpers_state as hlpst
 
-import numpy as np
 import pytest
 
 
@@ -46,8 +45,8 @@ class other_states_to_tests:
     ],
 )
 def test_splits_groups(splitter, keys_exp, groups_exp, grstack_exp):
-    splitter_rpn = aux.splitter2rpn(splitter)
-    keys_f, groups_f, grstack_f, _ = aux._splits_groups(splitter_rpn)
+    splitter_rpn = hlpst.splitter2rpn(splitter)
+    keys_f, groups_f, grstack_f, _ = hlpst.splits_groups(splitter_rpn)
 
     assert set(keys_f) == set(keys_exp)
     assert groups_f == groups_exp
@@ -80,8 +79,8 @@ def test_splits_groups_comb(
     grstack_final_exp,
     combiner_all_exp,
 ):
-    splitter_rpn = aux.splitter2rpn(splitter)
-    keys_final, groups_final, grstack_final, combiner_all = aux._splits_groups(
+    splitter_rpn = hlpst.splitter2rpn(splitter)
+    keys_final, groups_final, grstack_final, combiner_all = hlpst.splits_groups(
         splitter_rpn, combiner
     )
     assert keys_final == keys_final_exp
@@ -274,12 +273,12 @@ def test_splits_1b(splitter, values, keys, splits):
         "z": [7, 8],
         "x": [[10, 100], [20, 200]],
     }
-    splitter_rpn = aux.splitter2rpn(splitter)
-    values_out, keys_out, _, _ = aux._splits(splitter_rpn, inputs)
+    splitter_rpn = hlpst.splitter2rpn(splitter)
+    values_out, keys_out, _, _ = hlpst.splits(splitter_rpn, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
-    splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out), inputs))
+    splits_out = list(hlpst.map_splits(hlpst.iter_splits(value_list, keys_out), inputs))
     assert splits_out == splits
 
 
@@ -296,12 +295,12 @@ def test_splits_1b(splitter, values, keys, splits):
     ],
 )
 def test_splits_1c(splitter, inputs, mismatch):
-    splitter_rpn = aux.splitter2rpn(splitter)
+    splitter_rpn = hlpst.splitter2rpn(splitter)
     if mismatch:
         with pytest.raises(ValueError):
-            aux._splits(splitter_rpn, inputs)
+            hlpst.splits(splitter_rpn, inputs)
     else:
-        aux._splits(splitter_rpn, inputs)
+        hlpst.splits(splitter_rpn, inputs)
 
 
 @pytest.mark.parametrize(
@@ -335,13 +334,13 @@ def test_splits_1c(splitter, inputs, mismatch):
 )
 def test_splits_1d(splitter, values, keys, shapes, splits):
     inputs = {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], [5, 6]]}
-    splitter_rpn = aux.splitter2rpn(splitter)
-    values_out, keys_out, shapes_out, _ = aux._splits(splitter_rpn, inputs)
+    splitter_rpn = hlpst.splitter2rpn(splitter)
+    values_out, keys_out, shapes_out, _ = hlpst.splits(splitter_rpn, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
     assert shapes == shapes_out
-    splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out), inputs))
+    splits_out = list(hlpst.map_splits(hlpst.iter_splits(value_list, keys_out), inputs))
     assert splits_out == splits
 
 
@@ -371,12 +370,12 @@ def test_splits_1e(splitter, values, keys, splits):
     # dj?: not sure if I like that this example works
     # c - is like an inner splitter
     inputs = {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], 5]}
-    splitter_rpn = aux.splitter2rpn(splitter)
-    values_out, keys_out, _, _ = aux._splits(splitter_rpn, inputs)
+    splitter_rpn = hlpst.splitter2rpn(splitter)
+    values_out, keys_out, _, _ = hlpst.splits(splitter_rpn, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
-    splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out), inputs))
+    splits_out = list(hlpst.map_splits(hlpst.iter_splits(value_list, keys_out), inputs))
     assert splits_out == splits
 
 
@@ -413,12 +412,12 @@ def test_splits_2(splitter_rpn, inner_inputs, values, keys, splits):
             [["d211", "d212"], ["d221", "d222"]],
         ],
     }
-    values_out, keys_out, _, _ = aux._splits(
+    values_out, keys_out, _, _ = hlpst.splits(
         splitter_rpn, inputs, inner_inputs=inner_inputs
     )
     value_list = list(values_out)
     assert keys == keys_out
-    splits_out = list(aux.map_splits(aux.iter_splits(value_list, keys_out), inputs))
+    splits_out = list(hlpst.map_splits(hlpst.iter_splits(value_list, keys_out), inputs))
     assert splits_out == splits
 
 
@@ -438,7 +437,7 @@ def test_splits_2(splitter_rpn, inner_inputs, values, keys, splits):
     ],
 )
 def test_splitter2rpn(splitter, rpn):
-    assert aux.splitter2rpn(splitter) == rpn
+    assert hlpst.splitter2rpn(splitter) == rpn
 
 
 @pytest.mark.parametrize(
@@ -451,7 +450,7 @@ def test_splitter2rpn(splitter, rpn):
     ],
 )
 def test_splitter2rpn_2(splitter, rpn):
-    assert aux.splitter2rpn(splitter) == rpn
+    assert hlpst.splitter2rpn(splitter) == rpn
 
 
 @pytest.mark.parametrize(
@@ -470,7 +469,7 @@ def test_splitter2rpn_2(splitter, rpn):
     ],
 )
 def test_rpn2splitter(splitter, rpn):
-    assert aux.rpn2splitter(rpn) == splitter
+    assert hlpst.rpn2splitter(rpn) == splitter
 
 
 @pytest.mark.parametrize(
@@ -494,7 +493,7 @@ def test_rpn2splitter(splitter, rpn):
     ],
 )
 def test_splitter2rpn_wf_splitter_1(splitter, other_states, rpn):
-    assert aux.splitter2rpn(splitter, other_states=other_states) == rpn
+    assert hlpst.splitter2rpn(splitter, other_states=other_states) == rpn
 
 
 @pytest.mark.parametrize(
@@ -519,7 +518,8 @@ def test_splitter2rpn_wf_splitter_1(splitter, other_states, rpn):
 )
 def test_splitter2rpn_wf_splitter_3(splitter, other_states, rpn):
     assert (
-        aux.splitter2rpn(splitter, other_states=other_states, state_fields=False) == rpn
+        hlpst.splitter2rpn(splitter, other_states=other_states, state_fields=False)
+        == rpn
     )
 
 
@@ -532,7 +532,7 @@ def test_splitter2rpn_wf_splitter_3(splitter, other_states, rpn):
     ],
 )
 def test_addname_splitter(splitter, splitter_changed):
-    assert aux.add_name_splitter(splitter, "Node") == splitter_changed
+    assert hlpst.add_name_splitter(splitter, "Node") == splitter_changed
 
 
 @pytest.mark.parametrize(
@@ -555,7 +555,7 @@ def test_remove_inp_from_splitter_rpn(
     splitter_rpn, input_to_remove, final_splitter_rpn
 ):
     assert (
-        aux.remove_inp_from_splitter_rpn(splitter_rpn, input_to_remove)
+        hlpst.remove_inp_from_splitter_rpn(splitter_rpn, input_to_remove)
         == final_splitter_rpn
     )
 
@@ -568,7 +568,7 @@ def test_remove_inp_from_splitter_rpn(
     ],
 )
 def test_groups_to_input(group_for_inputs, input_for_groups, ndim):
-    res = aux.converter_groups_to_input(group_for_inputs)
+    res = hlpst.converter_groups_to_input(group_for_inputs)
     assert res[0] == input_for_groups
     assert res[1] == ndim
 
@@ -632,7 +632,7 @@ def test_groups_to_input(group_for_inputs, input_for_groups, ndim):
 def test_connect_splitters(
     splitter, other_states, expected_splitter, expected_left, expected_right
 ):
-    updated_splitter, left_splitter, right_splitter = aux.connect_splitters(
+    updated_splitter, left_splitter, right_splitter = hlpst.connect_splitters(
         splitter, other_states
     )
     assert updated_splitter == expected_splitter
@@ -657,4 +657,4 @@ def test_connect_splitters(
 )
 def test_connect_splitters_exception(splitter, other_states):
     with pytest.raises(Exception):
-        aux.connect_splitters(splitter, other_states)
+        hlpst.connect_splitters(splitter, other_states)

@@ -1,3 +1,5 @@
+""" additional functions used mostly by the State class """
+
 import itertools
 from functools import reduce
 from copy import deepcopy
@@ -5,8 +7,6 @@ import logging
 from .helpers import ensure_list
 
 logger = logging.getLogger("pydra")
-
-# dj: might create a new class or move to State
 
 
 # Function to change user provided splitter to "reverse polish notation" used in State
@@ -337,7 +337,7 @@ def input_shape(in1):
     return tuple(shape)
 
 
-def _splits(splitter_rpn, inputs, inner_inputs=None):
+def splits(splitter_rpn, inputs, inner_inputs=None):
     """ Process splitter rpn from left to right
     """
     stack = []
@@ -456,7 +456,7 @@ def _splits(splitter_rpn, inputs, inner_inputs=None):
 
 
 # dj: TODO: do I need keys?
-def _splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
+def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     """ Process splitter rpn from left to right
     """
     if not splitter_rpn:
