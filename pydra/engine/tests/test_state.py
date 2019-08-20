@@ -90,6 +90,24 @@ def test_state_1(
     assert st.inputs_ind == states_ind
 
 
+def test_state_2_err():
+    with pytest.raises(Exception) as exinfo:
+        st = State("NA", splitter={"a"})
+    assert "splitter has to be a string, a tuple or a list" == str(exinfo.value)
+
+
+def test_state_3_err():
+    with pytest.raises(Exception) as exinfo:
+        st = State("NA", splitter=["a", "b"], combiner=("a", "b"))
+    assert "combiner has to be a string or a list" == str(exinfo.value)
+
+
+def test_state_4_err():
+    with pytest.raises(Exception) as exinfo:
+        st = State("NA", splitter="a", combiner=["a", "b"])
+    assert "all combiners have to be in the splitter" == str(exinfo.value)
+
+
 def test_state_connect_1():
     """ two 'connected' states: testing groups, prepare_states and prepare_inputs
         no explicit splitter for the second state

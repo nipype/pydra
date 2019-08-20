@@ -358,7 +358,7 @@ class TaskBase:
 
     def combine(self, combiner, overwrite=False):
         if not isinstance(combiner, (str, list)):
-            raise Exception("combiner has to be a string or list")
+            raise Exception("combiner has to be a string or a list")
         combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
         if (
             self.state
