@@ -119,8 +119,8 @@ def test_task_init_4():
     assert nn.state.splitter_rpn == ["NA.a"]
 
     nn.state.prepare_states(nn.inputs)
-    nn.state.states_ind = [{"NA.a": 0}, {"NA.a": 1}]
-    nn.state.states_val = [{"NA.a": 3}, {"NA.a": 5}]
+    assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert nn.state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
 
 
 def test_task_init_4a():
@@ -133,16 +133,140 @@ def test_task_init_4a():
     assert nn.state.splitter_rpn == ["NA.a"]
 
     nn.state.prepare_states(nn.inputs)
-    nn.state.states_ind = [{"NA.a": 0}, {"NA.a": 1}]
-    nn.state.states_val = [{"NA.a": 3}, {"NA.a": 5}]
+    assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert nn.state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
 
 
 def test_task_init_4b():
-    """ trying to set splitter twice"""
-    nn = fun_addtwo(name="NA").split(splitter="a", a=[3, 5])
+    """ updating splitter using overwrite=True"""
+    nn = fun_addtwo(name="NA")
+    nn.split(splitter="b", a=[3, 5])
+    nn.split(splitter="a", overwrite=True)
+    assert np.allclose(nn.inputs.a, [3, 5])
+
+    assert nn.state.splitter == "NA.a"
+    assert nn.state.splitter_rpn == ["NA.a"]
+
+    nn.state.prepare_states(nn.inputs)
+    assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert nn.state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
+
+
+def test_task_init_4c():
+    """ trying to set splitter twice without using overwrite"""
+    nn = fun_addtwo(name="NA").split(splitter="b", a=[3, 5])
     with pytest.raises(Exception) as excinfo:
         nn.split(splitter="a")
-    assert str(excinfo.value) == "splitter has been already set"
+    assert "splitter has been already set" in str(excinfo.value)
+
+    assert nn.state.splitter == "NA.b"
+
+
+def test_task_init_4d():
+    """ trying to set the same splitter twice without using overwrite
+        if the splitter is the same, the exception shouldn't be raised
+    """
+    nn = fun_addtwo(name="NA").split(splitter="a", a=[3, 5])
+    nn.split(splitter="a")
+    assert nn.state.splitter == "NA.a"
+
+
+def test_task_init_5():
+    """ task with inputs, splitter and combiner"""
+    nn = (
+        fun_addvar(name="NA")
+        .split(splitter=["a", "b"], a=[3, 5], b=[1, 2])
+        .combine("b")
+    )
+
+    assert nn.state.splitter == ["NA.a", "NA.b"]
+    assert nn.state.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert nn.state.combiner == ["NA.b"]
+
+    assert nn.state.splitter_final == "NA.a"
+    assert nn.state.splitter_rpn_final == ["NA.a"]
+
+    nn.state.prepare_states(nn.inputs)
+    assert nn.state.states_ind == [
+        {"NA.a": 0, "NA.b": 0},
+        {"NA.a": 0, "NA.b": 1},
+        {"NA.a": 1, "NA.b": 0},
+        {"NA.a": 1, "NA.b": 1},
+    ]
+    assert nn.state.states_val == [
+        {"NA.a": 3, "NA.b": 1},
+        {"NA.a": 3, "NA.b": 2},
+        {"NA.a": 5, "NA.b": 1},
+        {"NA.a": 5, "NA.b": 2},
+    ]
+
+    assert nn.state.final_combined_ind_mapping == {0: [0, 1], 1: [2, 3]}
+
+
+def test_task_init_5a():
+    """ updating combiner using overwrite=True"""
+    nn = (
+        fun_addvar(name="NA")
+        .split(splitter=["a", "b"], a=[3, 5], b=[1, 2])
+        .combine("b")
+    )
+    nn.combine("a", overwrite=True)
+
+    assert nn.state.splitter == ["NA.a", "NA.b"]
+    assert nn.state.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert nn.state.combiner == ["NA.a"]
+
+    assert nn.state.splitter_final == "NA.b"
+    assert nn.state.splitter_rpn_final == ["NA.b"]
+
+    nn.state.prepare_states(nn.inputs)
+    assert nn.state.states_ind == [
+        {"NA.a": 0, "NA.b": 0},
+        {"NA.a": 0, "NA.b": 1},
+        {"NA.a": 1, "NA.b": 0},
+        {"NA.a": 1, "NA.b": 1},
+    ]
+    assert nn.state.states_val == [
+        {"NA.a": 3, "NA.b": 1},
+        {"NA.a": 3, "NA.b": 2},
+        {"NA.a": 5, "NA.b": 1},
+        {"NA.a": 5, "NA.b": 2},
+    ]
+
+    assert nn.state.final_combined_ind_mapping == {0: [0, 2], 1: [1, 3]}
+
+
+def test_task_init_5b():
+    """ updating combiner without using overwrite"""
+    nn = (
+        fun_addvar(name="NA")
+        .split(splitter=["a", "b"], a=[3, 5], b=[1, 2])
+        .combine("b")
+    )
+    with pytest.raises(Exception) as excinfo:
+        nn.combine("a")
+    assert "combiner has been already set" in str(excinfo.value)
+
+    assert nn.state.combiner == ["NA.b"]
+
+
+def test_task_init_5c():
+    """ trying to set the same combiner twice without using overwrite
+        if the combiner is the same, the exception shouldn't be raised
+    """
+    nn = (
+        fun_addvar(name="NA")
+        .split(splitter=["a", "b"], a=[3, 5], b=[1, 2])
+        .combine("b")
+    )
+    nn.combine("b")
+
+    assert nn.state.splitter == ["NA.a", "NA.b"]
+    assert nn.state.splitter_rpn == ["NA.a", "NA.b", "*"]
+    assert nn.state.combiner == ["NA.b"]
+
+    assert nn.state.splitter_final == "NA.a"
+    assert nn.state.splitter_rpn_final == ["NA.a"]
 
 
 def test_task_error():
