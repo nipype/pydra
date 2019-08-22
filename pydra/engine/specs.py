@@ -67,7 +67,7 @@ class Result:
     def __getstate__(self):
         state = self.__dict__.copy()
         if state["output"] is not None:
-            fields = tuple(state["output"].__annotations__.items())
+            fields = tuple((el.name, el.type) for el in dc.fields(state["output"]))
             state["output_spec"] = (state["output"].__class__.__name__, fields)
             state["output"] = dc.asdict(state["output"])
         return state
