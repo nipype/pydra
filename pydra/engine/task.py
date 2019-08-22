@@ -160,6 +160,7 @@ class ShellCommandTask(TaskBase):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
+        strip=False,
         **kwargs,
     ):
         if input_spec is None:
@@ -179,6 +180,7 @@ class ShellCommandTask(TaskBase):
         if output_spec is None:
             output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
         self.output_spec = output_spec
+        self.strip = strip
 
     @property
     def command_args(self):
@@ -203,7 +205,7 @@ class ShellCommandTask(TaskBase):
         self.output_ = None
         args = self.command_args
         if args:
-            self.output_ = execute(args)
+            self.output_ = execute(args, strip=self.strip)
 
 
 class ContainerTask(ShellCommandTask):
