@@ -5,7 +5,7 @@ from tempfile import gettempdir
 
 import concurrent.futures as cf
 
-from .helpers import create_pyscript, read_and_display, save
+from .helpers import create_pyscript, read_and_display_async, save
 
 import logging
 
@@ -209,7 +209,7 @@ class SlurmWorker(DistributedWorker):
             sargs.append(f"--output={output}")
         sargs.append(str(batchscript))
         # TO CONSIDER: add random sleep to avoid overloading calls
-        _, stdout, _ = await read_and_display("sbatch", *sargs, hide_display=True)
+        _, stdout, _ = await read_and_display_async("sbatch", *sargs, hide_display=True)
         jobid = re.search(r"\d+", stdout)
         if not jobid:
             raise RuntimeError("Could not extract job ID")
