@@ -70,7 +70,7 @@ def test_shell_cmd_2_nosubm():
     shelly = ShellCommandTask(name="shelly", executable=cmd)
     assert shelly.cmdline == " ".join(cmd)
     res = shelly()
-    assert res.output.stdout == " ".join(cmd[1:]) + "\n"
+    assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 
@@ -86,7 +86,7 @@ def test_shell_cmd_2(plugin):
     with Submitter(plugin=plugin) as sub:
         shelly(submitter=sub)
     res = shelly.result()
-    assert res.output.stdout == " ".join(cmd[1:]) + "\n"
+    assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 
@@ -102,7 +102,7 @@ def test_shell_cmd_2a_nosubm():
     assert shelly.inputs.executable == "echo"
     assert shelly.cmdline == "echo " + " ".join(cmd_args)
     res = shelly()
-    assert res.output.stdout == " ".join(cmd_args) + "\n"
+    assert res.output.stdout.strip() == " ".join(cmd_args)
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 
@@ -121,7 +121,7 @@ def test_shell_cmd_2a(plugin):
     with Submitter(plugin=plugin) as sub:
         shelly(submitter=sub)
     res = shelly.result()
-    assert res.output.stdout == " ".join(cmd_args) + "\n"
+    assert res.output.stdout.strip() == " ".join(cmd_args)
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 

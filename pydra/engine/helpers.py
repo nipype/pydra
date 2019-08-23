@@ -160,7 +160,7 @@ async def read_and_display_async(*cmd, hide_display=False, strip=False):
         # wait for the process to exit
         rc = await process.wait()
     if strip:
-        return rc, stdout.rstrip(), stderr
+        return rc, stdout.strip(), stderr
     else:
         return rc, stdout, stderr
 
@@ -178,7 +178,7 @@ def read_and_display(*cmd, strip=False, hide_display=False):
     if strip:
         return (
             process.returncode,
-            process.stdout.decode("utf-8").rstrip(),
+            process.stdout.decode("utf-8").strip(),
             process.stderr.decode("utf-8"),
         )
     else:
