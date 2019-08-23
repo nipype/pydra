@@ -228,7 +228,7 @@ class SlurmWorker(DistributedWorker):
     async def _poll_job(self, jobid):
         cmd = ("squeue", "-h", "-j", jobid)
         logger.debug(f"Polling job {jobid}")
-        rc, stdout, stderr = await read_and_display(*cmd, hide_display=True)
+        rc, stdout, stderr = await read_and_display_async(*cmd, hide_display=True)
         if not stdout or "slurm_load_jobs error" in stderr:
             # job is no longer running - check exit code
             status = await self._verify_exit_code(jobid)
@@ -237,7 +237,7 @@ class SlurmWorker(DistributedWorker):
 
     async def _verify_exit_code(self, jobid):
         cmd = ("sacct", "-n", "-X", "-j", jobid, "-o", "JobID,State,ExitCode")
-        _, stdout, _ = await read_and_display(*cmd, hide_display=True)
+        _, stdout, _ = await read_and_display_async(*cmd, hide_display=True)
         if not stdout:
             raise RuntimeError("Job information not found")
         m = self._sacct_re.search(stdout)
