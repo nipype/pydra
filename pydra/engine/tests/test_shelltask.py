@@ -115,7 +115,7 @@ def test_shell_cmd_2a(plugin):
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
-    shelly = ShellCommandTask(executable=cmd_exec, args=cmd_args)
+    shelly = ShellCommandTask(name="shelly", executable=cmd_exec, args=cmd_args)
     assert shelly.inputs.executable == "echo"
     assert shelly.cmdline == "echo " + " ".join(cmd_args)
     with Submitter(plugin=plugin) as sub:
@@ -150,7 +150,7 @@ def test_shell_cmd_2b(plugin):
     cmd_exec = "echo"
     cmd_args = "pydra"
     # separate command into exec + args
-    shelly = ShellCommandTask(executable=cmd_exec, args=cmd_args)
+    shelly = ShellCommandTask(name="shelly", executable=cmd_exec, args=cmd_args)
     assert shelly.inputs.executable == "echo"
     assert shelly.cmdline == "echo pydra"
     with Submitter(plugin=plugin) as sub:
@@ -177,8 +177,10 @@ def test_shell_cmd_3(plugin):
     #    assert shelly.cmdline == " ".join(cmd)
     res = shelly(plugin=plugin)
     assert res[0].output.stdout == f"{str(shelly.output_dir[0])}\n"
-    assert res[1].output.stdout == f"{os.environ['USER']}\n"
-
+    if "USER" in os.environ:
+        assert res[1].output.stdout == f"{os.environ['USER']}\n"
+    else:
+        assert res[1].output.stdout
     assert res[0].output.return_code == res[1].output.return_code == 0
     assert res[0].output.stderr == res[1].output.stderr == ""
 
