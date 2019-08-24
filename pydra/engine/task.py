@@ -218,6 +218,7 @@ class ContainerTask(ShellCommandTask):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
+        strip=False,
         **kwargs,
     ):
 
@@ -233,6 +234,7 @@ class ContainerTask(ShellCommandTask):
             messengers=messengers,
             messenger_args=messenger_args,
             cache_dir=cache_dir,
+            strip=strip,
             **kwargs,
         )
 
@@ -269,7 +271,7 @@ class ContainerTask(ShellCommandTask):
         self.output_ = None
         args = self.container_args + self.command_args
         if args:
-            self.output_ = execute(args)
+            self.output_ = execute(args, strip=self.strip)
 
 
 class DockerTask(ContainerTask):
@@ -282,6 +284,7 @@ class DockerTask(ContainerTask):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
+        strip=False,
         **kwargs,
     ):
         if input_spec is None:
@@ -296,6 +299,7 @@ class DockerTask(ContainerTask):
             messengers=messengers,
             messenger_args=messenger_args,
             cache_dir=cache_dir,
+            strip=strip,
             **kwargs,
         )
 
@@ -319,6 +323,7 @@ class SingularityTask(ContainerTask):
         messengers=None,
         messenger_args=None,
         cache_dir=None,
+        strip=False,
         **kwargs,
     ):
         if input_spec is None:
@@ -334,6 +339,7 @@ class SingularityTask(ContainerTask):
             messengers=messengers,
             messenger_args=messenger_args,
             cache_dir=cache_dir,
+            strip=strip,
             **kwargs,
         )
 
