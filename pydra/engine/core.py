@@ -341,19 +341,35 @@ class TaskBase:
         output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
         return dc.replace(output, **run_output)
 
-    def split(self, splitter, **kwargs):
+    def split(self, splitter, overwrite=False, **kwargs):
+        splitter = hlpst.add_name_splitter(splitter, self.name)
+        # if user want to update the splitter, overwrite has to be True
+        if self.state and not overwrite and self.state.splitter != splitter:
+            raise Exception(
+                "splitter has been already set, "
+                "if you want to overwrite it - use overwrite=True"
+            )
         if kwargs:
             self.inputs = dc.replace(self.inputs, **kwargs)
-            # dj:??, check if I need it
             self.state_inputs = kwargs
-        splitter = hlpst.add_name_splitter(splitter, self.name)
-        if self.state:
-            raise Exception("splitter has been already set")
-        else:
+        if not self.state or splitter != self.state.splitter:
             self.set_state(splitter)
         return self
 
-    def combine(self, combiner):
+    def combine(self, combiner, overwrite=False):
+        if not isinstance(combiner, (str, list)):
+            raise Exception("combiner has to be a string or a list")
+        combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
+        if (
+            self.state
+            and self.state.combiner
+            and combiner != self.state.combiner
+            and not overwrite
+        ):
+            raise Exception(
+                "combiner has been already set, "
+                "if you want to overwrite it - use overwrite=True"
+            )
         if not self.state:
             self.split(splitter=None)
             # a task can have a combiner without a splitter
@@ -361,8 +377,6 @@ class TaskBase:
             # self.fut_combiner will be used later as a combiner
             self.fut_combiner = combiner
             return self
-        elif self.state.combiner:
-            raise Exception("combiner has been already set")
         else:  # self.state and not self.state.combiner
             self.combiner = combiner
             self.set_state(splitter=self.state.splitter, combiner=self.combiner)

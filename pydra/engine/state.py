@@ -1,6 +1,7 @@
 from copy import deepcopy
 
 from . import helpers_state as hlpst
+from .helpers import ensure_list
 from .specs import BaseSpec
 
 
@@ -81,6 +82,8 @@ class State:
 
     @splitter.setter
     def splitter(self, splitter):
+        if splitter and not isinstance(splitter, (str, tuple, list)):
+            raise Exception("splitter has to be a string, a tuple or a list")
         if splitter:
             self._splitter = hlpst.add_name_splitter(splitter, self.name)
             self.splitter_rpn = hlpst.splitter2rpn(
@@ -122,13 +125,11 @@ class State:
         if combiner:
             if not self.splitter:
                 raise Exception("splitter has to be set before setting combiner")
-            if type(combiner) is str:
-                combiner = [combiner]
-            elif type(combiner) is not list:
-                raise Exception("combiner should be a string or a list")
-            self._combiner = hlpst.add_name_combiner(combiner, self.name)
+            if not isinstance(combiner, (str, list)):
+                raise Exception("combiner has to be a string or a list")
+            self._combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
             if set(self._combiner) - set(self.splitter_rpn):
-                raise Exception("all combiners should be in the splitter")
+                raise Exception("all combiners have to be in the splitter")
             # combiners from the current fields: i.e. {self.name}.input
             self._right_combiner = [
                 comb for comb in self._combiner if self.name in comb
