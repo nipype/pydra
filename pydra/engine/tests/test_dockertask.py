@@ -32,7 +32,8 @@ def test_docker_1_nosubm():
     res = docky()
     assert res.output.stdout == "root\n"
     assert res.output.return_code == 0
-    assert res.output.stderr == ""
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
 
 
 @need_docker
@@ -50,7 +51,8 @@ def test_docker_1(plugin):
     res = docky.result()
     assert res.output.stdout == "root\n"
     assert res.output.return_code == 0
-    assert res.output.stderr == ""
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
 
 
 @need_docker
@@ -65,7 +67,8 @@ def test_docker_2_nosubm():
     res = docky()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
-    assert res.output.stderr == ""
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
 
 
 @need_docker
@@ -83,7 +86,8 @@ def test_docker_2(plugin):
     res = docky.result()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
-    assert res.output.stderr == ""
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
 
 
 @need_docker
@@ -106,7 +110,8 @@ def test_docker_2a_nosubm():
     res = docky()
     assert res.output.stdout.strip() == " ".join(cmd_args)
     assert res.output.return_code == 0
-    assert res.output.stderr == ""
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
 
 
 @need_docker
@@ -132,7 +137,8 @@ def test_docker_2a(plugin):
     res = docky.result()
     assert res.output.stdout.strip() == " ".join(cmd_args)
     assert res.output.return_code == 0
-    assert res.output.stderr == ""
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
 
 
 @need_docker
@@ -154,7 +160,8 @@ def test_docker_3(plugin, tmpdir):
     res = docky.result()
     assert res.output.stdout == "new_dir\n"
     assert res.output.return_code == 0
-    assert res.output.stderr == ""
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
 
 
 # tests with State
@@ -176,7 +183,6 @@ def test_docker_st_1(plugin):
     assert res[0].output.stdout == "/\n"
     assert res[1].output.stdout == "root\n"
     assert res[0].output.return_code == res[1].output.return_code == 0
-    assert res[0].output.stderr == res[1].output.stderr == ""
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -194,7 +200,6 @@ def test_docker_st_2(plugin):
     assert "Debian" in res[0].output.stdout
     assert "Ubuntu" in res[1].output.stdout
     assert res[0].output.return_code == res[1].output.return_code == 0
-    assert res[0].output.stderr == res[1].output.stderr == ""
 
 
 @pytest.mark.parametrize("plugin", Plugins)
