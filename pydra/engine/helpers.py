@@ -6,6 +6,7 @@ from pathlib import Path
 import os
 import sys
 from hashlib import sha256
+import subprocess as sp
 
 from .specs import Runtime
 
@@ -134,7 +135,7 @@ async def read_stream_and_display(stream, display):
     return b"".join(output).decode()
 
 
-async def read_and_display(*cmd, hide_display=False):
+async def read_and_display_async(*cmd, hide_display=False, strip=False):
     """Capture cmd's stdout, stderr while displaying them as they arrive
     (line by line).
 
@@ -158,13 +159,46 @@ async def read_and_display(*cmd, hide_display=False):
     finally:
         # wait for the process to exit
         rc = await process.wait()
-    return rc, stdout, stderr
+    if strip:
+        return rc, stdout.strip(), stderr
+    else:
+        return rc, stdout, stderr
 
 
-# run the event loop
-def execute(cmd):
+def read_and_display(*cmd, strip=False, hide_display=False):
+    """Capture cmd's stdout
+
+    """
+    try:
+        process = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+    except Exception:
+        # TODO editing some tracing?
+        raise
+
+    if strip:
+        return (
+            process.returncode,
+            process.stdout.decode("utf-8").strip(),
+            process.stderr.decode("utf-8"),
+        )
+    else:
+        return (
+            process.returncode,
+            process.stdout.decode("utf-8"),
+            process.stderr.decode("utf-8"),
+        )
+
+
+# run the event loop with coroutine read_and_display_async
+# or run read_and_display if a loop is already running
+def execute(cmd, strip=False):
     loop = get_open_loop()
-    rc, stdout, stderr = loop.run_until_complete(read_and_display(*cmd))
+    if loop.is_running():
+        rc, stdout, stderr = read_and_display(*cmd, strip=strip)
+    else:
+        rc, stdout, stderr = loop.run_until_complete(
+            read_and_display_async(*cmd, strip=strip)
+        )
     return rc, stdout, stderr
 
 
