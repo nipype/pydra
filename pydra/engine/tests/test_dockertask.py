@@ -185,6 +185,7 @@ def test_docker_st_1(plugin):
     assert res[0].output.return_code == res[1].output.return_code == 0
 
 
+@need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_st_2(plugin):
     """ command with arguments in docker, checking the distribution
@@ -202,6 +203,7 @@ def test_docker_st_2(plugin):
     assert res[0].output.return_code == res[1].output.return_code == 0
 
 
+@need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_st_3(plugin):
     """ outer splitter image and executable
@@ -219,6 +221,7 @@ def test_docker_st_3(plugin):
     assert "Ubuntu" in res[3].output.stdout
 
 
+@need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_st_4(plugin):
     """ outer splitter image and executable, combining with images
@@ -249,6 +252,7 @@ def test_docker_st_4(plugin):
 # tests with workflows
 
 
+@need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_docker_1(plugin, tmpdir):
     """ a workflow with two connected task
