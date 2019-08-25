@@ -290,3 +290,4 @@ def test_wf_docker_1(plugin, tmpdir):
 
     res = wf.result()
     assert res.output.out == "message from the previous task: hello from pydra"
+    # just testing
