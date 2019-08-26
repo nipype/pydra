@@ -290,3 +290,43 @@ def test_wf_docker_1(plugin, tmpdir):
 
     res = wf.result()
     assert res.output.out == "message from the previous task: hello from pydra"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_docker_2(plugin, tmpdir):
+    """ a workflow with two connected task that run python scripts
+        the first one creates a text file and the second one reads the file
+    """
+
+    scripts_dir = os.path.join(os.path.dirname(__file__), "data_tests")
+
+    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
+    wf.inputs.cmd1 = ["python", "/scripts/saving.py", "-f", "/outputs/tmp.txt"]
+    wf.inputs.cmd2 = ["python", "/scripts/loading.py", "-f"]
+    wf.add(
+        DockerTask(
+            name="save",
+            image="python:3.7-alpine",
+            executable=wf.lzin.cmd1,
+            bindings=[(str(tmpdir), "/outputs", None), (scripts_dir, "/scripts", "ro")],
+            strip=True,
+        )
+    )
+    wf.add(
+        DockerTask(
+            name="load",
+            image="python:3.7-alpine",
+            executable=wf.lzin.cmd2,
+            args=wf.save.lzout.stdout,
+            bindings=[(str(tmpdir), "/outputs", None), (scripts_dir, "/scripts", "ro")],
+            strip=True,
+        )
+    )
+    wf.set_output([("out", wf.load.lzout.stdout)])
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res.output.out == "Hello!"
