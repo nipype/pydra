@@ -132,6 +132,7 @@ class FunctionTask(TaskBase):
         elif "return" in func.__annotations__:
             raise NotImplementedError("Branch not implemented")
         self.output_spec = output_spec
+        self.output_files_spec = {}
 
     def _run_task(self):
         inputs = dc.asdict(self.inputs)
@@ -156,6 +157,7 @@ class ShellCommandTask(TaskBase):
         name=None,
         input_spec: ty.Optional[SpecInfo] = None,
         output_spec: ty.Optional[SpecInfo] = None,
+        output_files_spec: ty.Optional[ty.Dict] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
         messenger_args=None,
@@ -177,8 +179,17 @@ class ShellCommandTask(TaskBase):
             messenger_args=messenger_args,
             cache_dir=cache_dir,
         )
+        # TOOD: output_file_spec could be with output_spec
+        if output_files_spec:
+            self.output_files_spec = output_files_spec
+        else:
+            self.output_files_spec = {}
         if output_spec is None:
-            output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
+            output_spec = SpecInfo(
+                name="Output",
+                fields=list(self.output_files_spec),
+                bases=(ShellOutSpec,),
+            )
         self.output_spec = output_spec
         self.strip = strip
 
@@ -206,6 +217,7 @@ class ShellCommandTask(TaskBase):
         args = self.command_args
         if args:
             self.output_ = execute(args, strip=self.strip)
+        self.output_ = list(self.output_) + list(self.output_files_spec.values())
 
 
 class ContainerTask(ShellCommandTask):
@@ -230,6 +242,7 @@ class ContainerTask(ShellCommandTask):
         super(ContainerTask, self).__init__(
             name=name,
             input_spec=input_spec,
+            output_spec=output_spec,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
@@ -272,6 +285,7 @@ class ContainerTask(ShellCommandTask):
         args = self.container_args + self.command_args
         if args:
             self.output_ = execute(args, strip=self.strip)
+        self.output_ = list(self.output_) + list(self.output_files_spec.values())
 
 
 class DockerTask(ContainerTask):
@@ -295,6 +309,7 @@ class DockerTask(ContainerTask):
         super(ContainerTask, self).__init__(
             name=name,
             input_spec=input_spec,
+            output_spec=output_spec,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
@@ -335,6 +350,7 @@ class SingularityTask(ContainerTask):
             )
         super(ContainerTask, self).__init__(
             input_spec=input_spec,
+            output_spec=output_spec,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,

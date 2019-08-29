@@ -164,6 +164,34 @@ def test_docker_3(plugin, tmpdir):
         assert "Unable to find image" in res.output.stderr
 
 
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_4(plugin, tmpdir):
+    """ creating a file in a container with bindings,
+        using output_file_spec to save the file in the Results
+    """
+    # creating a new directory
+    cmd = ["touch", "/tmp_dir/a.txt"]
+    docky = DockerTask(
+        name="docky",
+        executable=cmd,
+        image="busybox",
+        output_files_spec={"file": str(tmpdir / "a.txt")},
+    )
+    # binding tmp directory to the container
+    docky.inputs.bindings = [(str(tmpdir), "/tmp_dir", None)]
+
+    with Submitter(plugin=plugin) as sub:
+        docky(submitter=sub)
+
+    res = docky.result()
+    assert res.output.stdout == ""
+    assert res.output.return_code == 0
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
+    assert res.output.file.name == "a.txt"
+
+
 # tests with State
 
 

@@ -333,12 +333,17 @@ class TaskBase:
                 )
             for ii, out_nm in enumerate(self.output_names):
                 output_dict[out_nm] = self.output_[ii]
+        for (key, file) in self.output_files_spec.items():
+            output_dict[key] = Path(file).absolute()
         return output_dict
 
     def _collect_outputs(self):
         run_output = self._list_outputs()
         output_klass = make_klass(self.output_spec)
         output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
+        for (key, file) in self.output_files_spec.items():
+            if not Path(file).exists():
+                raise Exception(f"file from Output.{key} does not exist")
         return dc.replace(output, **run_output)
 
     def split(self, splitter, overwrite=False, **kwargs):
@@ -507,6 +512,7 @@ class Workflow(TaskBase):
                 name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
             )
         self.output_spec = output_spec
+        self.output_files_spec = {}
 
         super(Workflow, self).__init__(
             name=name,

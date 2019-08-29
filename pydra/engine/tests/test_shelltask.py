@@ -296,6 +296,27 @@ def test_shell_cmd_7(plugin):
     assert res[1][1].output.stdout == "pydra"
 
 
+# saving files
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_8(plugin):
+    """ creating a file and using output_files_spec to save with Results
+    """
+    cmd = ["touch", "a.txt"]
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, output_files_spec={"file": "a.txt"}
+    )
+    assert shelly.cmdline == " ".join(cmd)
+    with Submitter(plugin=plugin) as sub:
+        shelly(submitter=sub)
+    res = shelly.result()
+    assert res.output.stdout == ""
+    assert res.output.return_code == 0
+    assert res.output.stderr == ""
+    assert res.output.file.name == "a.txt"
+
+
 # tests with workflows
 
 
