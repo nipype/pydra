@@ -201,6 +201,8 @@ class ShellCommandTask(TaskBase):
                 continue
             value = getattr(self.inputs, f.name)
             if value is not None:
+                if isinstance(value, tuple):
+                    value = list(value)
                 args.extend(ensure_list(value))
         return args
 

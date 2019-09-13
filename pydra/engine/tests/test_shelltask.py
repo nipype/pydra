@@ -296,6 +296,29 @@ def test_shell_cmd_7(plugin):
     assert res[1][1].output.stdout == "pydra"
 
 
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_7a(plugin):
+    """ a command with arguments,
+        outer splitter for executable and args, and combiner=args
+        using tuple for an executable
+    """
+    cmd_exec = ["echo", ("echo", "-n")]
+    cmd_args = ["nipype", "pydra"]
+    # separate command into exec + args
+    shelly = (
+        ShellCommandTask(name="shelly", executable=cmd_exec, args=cmd_args)
+        .split(splitter=["executable", "args"])
+        .combine("args")
+    )
+    res = shelly(plugin=plugin)
+
+    assert res[0][0].output.stdout == "nipype\n"
+    assert res[0][1].output.stdout == "pydra\n"
+
+    assert res[1][0].output.stdout == "nipype"
+    assert res[1][1].output.stdout == "pydra"
+
+
 # saving files
 
 

@@ -1,12 +1,10 @@
 import pytest
 import shutil, os
 import time
-import platform
 
 from .utils import add2, add2_wait, multiply, power, identity
 from ..submitter import Submitter
 from ..core import Workflow
-from ... import mark
 
 
 if bool(shutil.which("sbatch")):
