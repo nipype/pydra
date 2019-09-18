@@ -21,6 +21,11 @@ def fun_addvar(a, b):
 
 
 @mark.task
+def fun_addvar3(a, b, c):
+    return a + b + c
+
+
+@mark.task
 def fun_addvar4(a, b, c, d):
     return a + b + c + d
 
@@ -61,6 +66,11 @@ def identity(x):
 def add2_wait(x):
     time.sleep(3)
     return x + 2
+
+
+@mark.task
+def list_output(x):
+    return [x, 2 * x, 3 * x]
 
 
 def gen_basic_wf(name="basic-wf"):
