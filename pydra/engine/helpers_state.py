@@ -33,31 +33,31 @@ def _ordering(
         # checking if the splitter dont contain splitter from previous nodes, i.e. has str "_NA", etc.
         if type(el[0]) is str and el[0].startswith("_"):
             node_nm = el[0][1:]
-            if node_nm not in other_states:
+            if node_nm not in other_states and state_fields:
                 raise Exception(
                     "can't ask for splitter from {}, other nodes that are connected: ".format(
                         node_nm, other_states.keys()
                     )
                 )
-            splitter_mod = add_name_splitter(
-                splitter=other_states[node_nm][0].splitter_final, name=node_nm
-            )
-            if state_fields:
+            elif state_fields:
+                splitter_mod = add_name_splitter(
+                    splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                )
                 el = (splitter_mod, el[1])
             if other_states[node_nm][0].other_states:
                 other_states.update(other_states[node_nm][0].other_states)
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
-            if node_nm not in other_states:
+            if node_nm not in other_states and state_fields:
                 raise Exception(
                     "can't ask for splitter from {}, other nodes that are connected: ".format(
                         node_nm, other_states.keys()
                     )
                 )
-            splitter_mod = add_name_splitter(
-                splitter=other_states[node_nm][0].splitter_final, name=node_nm
-            )
-            if state_fields:
+            elif state_fields:
+                splitter_mod = add_name_splitter(
+                    splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                )
                 el = (el[0], splitter_mod)
             if other_states[node_nm][0].other_states:
                 other_states.update(other_states[node_nm][0].other_states)
@@ -71,34 +71,34 @@ def _ordering(
     elif type(el) is list:
         if type(el[0]) is str and el[0].startswith("_"):
             node_nm = el[0][1:]
-            if node_nm not in other_states:
+            if node_nm not in other_states and state_fields:
                 raise Exception(
                     "can't ask for splitter from {}, other nodes that are connected: ".format(
                         node_nm, other_states.keys()
                     )
                 )
-            splitter_mod = add_name_splitter(
-                splitter=other_states[node_nm][0].splitter_final, name=node_nm
-            )
-            if state_fields:
+            elif state_fields:
+                splitter_mod = add_name_splitter(
+                    splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                )
                 el[0] = splitter_mod
-            if other_states[node_nm][0].other_states:
-                other_states.update(other_states[node_nm][0].other_states)
+                if other_states[node_nm][0].other_states:
+                    other_states.update(other_states[node_nm][0].other_states)
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
-            if node_nm not in other_states:
+            if node_nm not in other_states and state_fields:
                 raise Exception(
                     "can't ask for splitter from {}, other nodes that are connected: ".format(
                         node_nm, other_states.keys()
                     )
                 )
-            splitter_mod = add_name_splitter(
-                splitter=other_states[node_nm][0].splitter_final, name=node_nm
-            )
-            if state_fields:
+            elif state_fields:
+                splitter_mod = add_name_splitter(
+                    splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                )
                 el[1] = splitter_mod
-            if other_states[node_nm][0].other_states:
-                other_states.update(other_states[node_nm][0].other_states)
+                if other_states[node_nm][0].other_states:
+                    other_states.update(other_states[node_nm][0].other_states)
         _iterate_list(
             el,
             "*",
@@ -109,19 +109,19 @@ def _ordering(
     elif type(el) is str:
         if el.startswith("_"):
             node_nm = el[1:]
-            if node_nm not in other_states:
+            if node_nm not in other_states and state_fields:
                 raise Exception(
                     "can't ask for splitter from {}, other nodes that are connected: ".format(
                         node_nm, other_states.keys()
                     )
                 )
-            splitter_mod = add_name_splitter(
-                splitter=other_states[node_nm][0].splitter_final, name=node_nm
-            )
-            if state_fields:
+            elif state_fields:
+                splitter_mod = add_name_splitter(
+                    splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                )
                 el = splitter_mod
-            if other_states[node_nm][0].other_states:
-                other_states.update(other_states[node_nm][0].other_states)
+                if other_states[node_nm][0].other_states:
+                    other_states.update(other_states[node_nm][0].other_states)
         if type(el) is str:
             output_splitter.append(el)
         elif type(el) is tuple:
@@ -687,16 +687,20 @@ def map_splits(split_iter, inputs):
 # Functions for merging and completing splitters in states.
 
 
-def connect_splitters(splitter, other_states):
+def connect_splitters(splitter, other_states, state_fields=False):
     if splitter:
         # if splitter is string, have to check if this is Left or Right part (Left is required)
         if isinstance(splitter, str):
             # so this is the Left part
             if splitter.startswith("_"):
-                left_part = _complete_left(left=splitter, other_states=other_states)
+                left_part = _complete_left(
+                    left=splitter, other_states=other_states, state_fields=state_fields
+                )
                 right_part = None
             else:  # this is Right part
-                left_part = _complete_left(other_states=other_states)
+                left_part = _complete_left(
+                    other_states=other_states, state_fields=state_fields
+                )
                 right_part = splitter
         # if splitter is tuple, it has to be either Left or Right part, you can't have (Left, Right)
         elif isinstance(splitter, tuple):
@@ -712,16 +716,24 @@ def connect_splitters(splitter, other_states):
         elif isinstance(splitter, list):
             lr_flag = _left_right_check(splitter, other_states=other_states)
             if lr_flag == "Left":
-                left_part = _complete_left(left=splitter, other_states=other_states)
+                left_part = _complete_left(
+                    left=splitter, other_states=other_states, state_fields=state_fields
+                )
                 right_part = None
             elif lr_flag == "Right":
-                left_part = _complete_left(other_states=other_states)
+                left_part = _complete_left(
+                    other_states=other_states, state_fields=state_fields
+                )
                 right_part = splitter
             elif (
                 _left_right_check(splitter[0], other_states=other_states) == "Left"
                 and _left_right_check(splitter[1], other_states=other_states) == "Right"
             ):
-                left_part = _complete_left(left=splitter[0], other_states=other_states)
+                left_part = _complete_left(
+                    left=splitter[0],
+                    other_states=other_states,
+                    state_fields=state_fields,
+                )
                 right_part = splitter[1]
             else:
                 raise Exception("splitter doesn't have separated Left and Right parts")
@@ -732,7 +744,7 @@ def connect_splitters(splitter, other_states):
             )
     else:
         # if there is no splitter, I create the Left part
-        left_part = _complete_left(other_states=other_states)
+        left_part = _complete_left(other_states=other_states, state_fields=state_fields)
         right_part = None
     if right_part:
         splitter = [deepcopy(left_part), deepcopy(right_part)]
@@ -741,10 +753,12 @@ def connect_splitters(splitter, other_states):
     return splitter, left_part, right_part
 
 
-def _complete_left(other_states, left=None):
+def _complete_left(other_states, left=None, state_fields=False):
     """completing Left part: adding all splitters from previous nodes"""
     if left:
-        rpn_left = splitter2rpn(left, other_states=other_states, state_fields=False)
+        rpn_left = splitter2rpn(
+            left, other_states=other_states, state_fields=state_fields
+        )
         for name, (st, inp) in list(other_states.items())[::-1]:
             if "_{}".format(name) not in rpn_left and st.splitter_final:
                 left = ["_{}".format(name), left]

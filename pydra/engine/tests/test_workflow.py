@@ -841,7 +841,6 @@ def test_wf_ndstLR_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.xfail(reason="splitter with Left part doesnt work")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstLR_1a(plugin):
     """ Test workflow with 2 tasks, splitters on tasks levels
@@ -884,6 +883,56 @@ def test_wf_ndstLR_2(plugin):
     wf.add(
         fun_addvar3(name="addvar", a=wf.add2.lzout.out, b=wf.lzin.y, c=wf.lzin.z).split(
             ["b", "c"]
+        )
+    )
+    wf.inputs.x = [1, 2, 3]
+    wf.inputs.y = [10, 20]
+    wf.inputs.z = [100, 200]
+    wf.set_output([("out", wf.addvar.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    # checking if the splitter is created properly
+    assert wf.addvar.state.splitter == ["_add2", ["addvar.b", "addvar.c"]]
+    assert wf.addvar.state.splitter_rpn == ["add2.x", "addvar.b", "addvar.c", "*", "*"]
+
+    results = wf.result()
+    # expected: [({"add2.x": 1, "mult.b": 10, "mult.c": 100}, 113),
+    #            ({"add2.x": 1, "mult.b": 10, "mult.c": 200}, 213),
+    #            ({"add2.x": 1, "mult.b": 20, "mult.c": 100}, 123),
+    #            ({"add2.x": 1, "mult.b": 20, "mult.c": 200}, 223),
+    #            ...]
+    assert results.output.out == [
+        113,
+        213,
+        123,
+        223,
+        114,
+        214,
+        124,
+        224,
+        115,
+        215,
+        125,
+        225,
+    ]
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstLR_2a(plugin):
+    """ Test workflow with 2 tasks, splitters on tasks levels
+        The second task has splitter that has Left part (from previous state)
+        and the Right part (it's onw outer splitter)
+    """
+    wf = Workflow(name="wf_ndst_3", input_spec=["x", "y", "z"])
+    wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
+    wf.add(
+        fun_addvar3(name="addvar", a=wf.add2.lzout.out, b=wf.lzin.y, c=wf.lzin.z).split(
+            ["_add2", ["b", "c"]]
         )
     )
     wf.inputs.x = [1, 2, 3]

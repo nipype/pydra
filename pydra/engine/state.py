@@ -56,22 +56,27 @@ class State:
             (prefious state, input from current state needed the connection)}
         """
         self.name = name
-        if not other_states:
+        if other_states is None:
+            # if other_states not provided, we should expect some missing connections
+            self.missing_connections = True
             self.other_states = {}
         else:
+            self.missing_connections = False
             self.other_states = other_states
         self.splitter = splitter
-        self.connect_splitters()
-        self.combiner = combiner
-        self.inner_inputs = {}
-        for name, (st, inp) in self.other_states.items():
-            if f"_{st.name}" in self.splitter_rpn_compact:
-                self.inner_inputs[f"{self.name}.{inp}"] = st
-        self.set_input_groups()
-        self.set_splitter_final()
-        self.states_val = []
-        self.inputs_ind = []
-        self.final_combined_ind_mapping = {}
+        # if missing_connections, we can't continue, should wait for updates
+        if not self.missing_connections:
+            self.connect_splitters()
+            self.combiner = combiner
+            self.inner_inputs = {}
+            for name, (st, inp) in self.other_states.items():
+                if f"_{st.name}" in self.splitter_rpn_compact:
+                    self.inner_inputs[f"{self.name}.{inp}"] = st
+            self.set_input_groups()
+            self.set_splitter_final()
+            self.states_val = []
+            self.inputs_ind = []
+            self.final_combined_ind_mapping = {}
 
     def __str__(self):
         return f"State for {self.name} with a splitter: {self.splitter} and combiner: {self.combiner}"
@@ -86,30 +91,39 @@ class State:
             raise Exception("splitter has to be a string, a tuple or a list")
         if splitter:
             self._splitter = hlpst.add_name_splitter(splitter, self.name)
-            self.splitter_rpn = hlpst.splitter2rpn(
-                deepcopy(self._splitter), other_states=self.other_states
-            )
             self.splitter_rpn_compact = hlpst.splitter2rpn(
                 deepcopy(self._splitter),
                 other_states=self.other_states,
                 state_fields=False,
             )
-            # checking that all fields in splitter are either fields of current state,
-            # i.e. {self.name}.input
-            # or entire splitter from previous state, e.g. _NA
-            for spl in self.splitter_rpn_compact:
-                if not (
-                    spl in [".", "*"]
-                    or spl.startswith("_")
-                    or spl.split(".")[0] == self.name
-                ):
-                    raise Exception(
-                        "can't include {} in the splitter, consider using _{}".format(
-                            spl, spl.split(".")[0]
+            if self.missing_connections and [
+                el for el in self.splitter_rpn_compact if el.startswith("_")
+            ]:
+                # if we have splitters from previous states and missing_connections,
+                # we can't continue, we should wait for updates with connections
+                pass
+            else:
+                # if no splitters from previous states, connections are not needed
+                self.missing_connections = False
+                self.splitter_rpn = hlpst.splitter2rpn(
+                    deepcopy(self._splitter), other_states=self.other_states
+                )
+                # checking that all fields in splitter are either fields of current state,
+                # i.e. {self.name}.input
+                # or entire splitter from previous state, e.g. _NA
+                for spl in self.splitter_rpn_compact:
+                    if not (
+                        spl in [".", "*"]
+                        or spl.startswith("_")
+                        or spl.split(".")[0] == self.name
+                    ):
+                        raise Exception(
+                            "can't include {} in the splitter, consider using _{}".format(
+                                spl, spl.split(".")[0]
+                            )
                         )
-                    )
-            # splitter_final will take into account a combiner
-            self.splitter_final = self._splitter
+                # splitter_final will take into account a combiner
+                self.splitter_final = self._splitter
         else:
             self._splitter = None
             self.splitter_final = None
