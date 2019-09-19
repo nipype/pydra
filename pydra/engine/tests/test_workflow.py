@@ -972,6 +972,116 @@ def test_wf_ndstLR_2a(plugin):
     assert wf.output_dir.exists()
 
 
+# workflows with inner splitters A -> B (inner spl)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstinner_1(plugin):
+    """ workflow with 2 tasks,
+        the second task has inner splitter
+    """
+    wf = Workflow(name="wf_st_3", input_spec=["x"])
+    wf.add(list_output(name="list", x=wf.lzin.x))
+    wf.add(add2(name="add2", x=wf.list.lzout.out).split("x"))
+    wf.inputs.x = 1
+    wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.add2.state.splitter == "add2.x"
+    assert wf.add2.state.splitter_rpn == ["add2.x"]
+
+    results = wf.result()
+    assert results.output.out_list == [1, 2, 3]
+    assert results.output.out == [3, 4, 5]
+
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstinner_2(plugin):
+    """ workflow with 2 tasks,
+        the second task has two inputs and inner splitter from one of the input
+    """
+    wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
+    wf.add(list_output(name="list", x=wf.lzin.x))
+    wf.add(multiply(name="mult", x=wf.list.lzout.out, y=wf.lzin.y).split("x"))
+    wf.inputs.x = 1
+    wf.inputs.y = 10
+    wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.mult.state.splitter == "mult.x"
+    assert wf.mult.state.splitter_rpn == ["mult.x"]
+
+    results = wf.result()
+    assert results.output.out_list == [1, 2, 3]
+    assert results.output.out == [10, 20, 30]
+
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstinner_3(plugin):
+    """ workflow with 2 tasks,
+        the second task has two inputs and outer splitter that includes an inner field
+    """
+    wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
+    wf.add(list_output(name="list", x=wf.lzin.x))
+    wf.add(multiply(name="mult", x=wf.list.lzout.out, y=wf.lzin.y).split(["x", "y"]))
+    wf.inputs.x = 1
+    wf.inputs.y = [10, 100]
+    wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.mult.state.splitter == ["mult.x", "mult.y"]
+    assert wf.mult.state.splitter_rpn == ["mult.x", "mult.y", "*"]
+
+    results = wf.result()
+    assert results.output.out_list == [1, 2, 3]
+    assert results.output.out == [10, 100, 20, 200, 30, 300]
+
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstinner_4(plugin):
+    """ workflow with 3 tasks,
+        the second task has two inputs and inner splitter from one of the input,
+        the third task has no its own splitter
+    """
+    wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
+    wf.add(list_output(name="list", x=wf.lzin.x))
+    wf.add(multiply(name="mult", x=wf.list.lzout.out, y=wf.lzin.y).split("x"))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out))
+    wf.inputs.x = 1
+    wf.inputs.y = 10
+    wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.mult.state.splitter == "mult.x"
+    assert wf.mult.state.splitter_rpn == ["mult.x"]
+    assert wf.add2.state.splitter == "_mult"
+    assert wf.add2.state.splitter_rpn == ["mult.x"]
+
+    results = wf.result()
+    assert results.output.out_list == [1, 2, 3]
+    assert results.output.out == [12, 22, 32]
+
+    assert wf.output_dir.exists()
+
+
 # workflow that have some single values as the input
 
 
