@@ -3,11 +3,12 @@
 import typing as ty
 import os, shutil
 import pytest
-
+import dataclasses as dc
 
 from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
+from ..specs import ShellOutSpec, SpecInfo
 
 if bool(shutil.which("sbatch")):
     Plugins = ["cf", "slurm"]
@@ -15,7 +16,7 @@ else:
     Plugins = ["cf"]
 
 
-def test_shell_cmd_1_nosubm(tmpdir):
+def test_shell_cmd_1_nosubm():
     """ simple command, no arguments
         no submitter
     """
@@ -320,3 +321,30 @@ def test_wf_shell_cmd_1(plugin):
     res = wf.result()
     assert "_result.pklz" in res.output.out
     assert "_task.pklz" in res.output.out
+
+
+# tests with new OutputSpec
+
+
+def test_shell_cmd_outputspec_1(tmpdir):
+    """
+        customised OutputSpec
+    """
+    cmd = ["touch"]
+    args = ["newfile_tmp.txt"]
+
+    @dc.dataclass
+    class MyOutput(ShellOutSpec):
+        newfile: str = "newfile_tmp.txt"
+
+    output_spec = SpecInfo(name="Output", fields=[], bases=(MyOutput,))
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, output_spec=output_spec
+    )
+    assert shelly.cmdline == " ".join(cmd + args)
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.return_code == 0
+    assert res.output.stderr == ""
+    assert res.output.newfile.exists()

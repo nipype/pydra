@@ -52,7 +52,7 @@ from .specs import (
     DockerSpec,
     SingularitySpec,
 )
-from .helpers import ensure_list, execute
+from .helpers import ensure_list, execute, make_klass
 
 
 class FunctionTask(TaskBase):
@@ -206,6 +206,13 @@ class ShellCommandTask(TaskBase):
         args = self.command_args
         if args:
             self.output_ = execute(args, strip=self.strip)
+        file_out = [
+            self.output_dir / el.default
+            for el in dc.fields(make_klass(self.output_spec))
+            if el.name not in ["return_code", "stdout", "stderr"]
+        ]
+        if file_out:
+            self.output_ = self.output_ + tuple(file_out)
 
 
 class ContainerTask(ShellCommandTask):
