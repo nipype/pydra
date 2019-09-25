@@ -40,10 +40,12 @@ import cloudpickle as cp
 import dataclasses as dc
 import inspect
 import typing as ty
+from pathlib import Path
 
 from .core import TaskBase
 from ..utils.messenger import AuditFlag
 from .specs import (
+    File,
     BaseSpec,
     SpecInfo,
     ShellSpec,
@@ -52,7 +54,7 @@ from .specs import (
     DockerSpec,
     SingularitySpec,
 )
-from .helpers import ensure_list, execute
+from .helpers import ensure_list, execute, make_klass
 
 
 class FunctionTask(TaskBase):
@@ -206,6 +208,42 @@ class ShellCommandTask(TaskBase):
         args = self.command_args
         if args:
             self.output_ = execute(args, strip=self.strip)
+
+        additional_out = []
+        for fld in dc.fields(make_klass(self.output_spec)):
+            if fld.name not in ["return_code", "stdout", "stderr"]:
+                if fld.type is File:
+                    if not isinstance(fld.default, (str, Path)):
+                        # should be moved somewhere?
+                        raise Exception(
+                            f"{fld.name} is a File, so default value"
+                            f"should be string or Path, "
+                            f"{fld.default} provided"
+                        )
+                    if isinstance(fld.default, str):
+                        fld.default = Path(fld.default)
+
+                    fld.default = self.output_dir / fld.default
+
+                    if "*" not in fld.default.name:
+                        if fld.default.exists():
+                            additional_out.append(fld.default)
+                        else:
+                            raise Exception(f"file {fld.default.name} does not exist")
+                    else:
+                        all_files = list(
+                            Path(fld.default.parent).expanduser().glob(fld.default.name)
+                        )
+                        if len(all_files) > 1:
+                            additional_out.append(all_files)
+                        elif len(all_files) == 1:
+                            additional_out.append(all_files[0])
+                        else:
+                            raise Exception(f"no file matches {fld.default.name}")
+                else:
+                    raise Exception("not implemented")
+        if additional_out:
+            self.output_ = self.output_ + tuple(additional_out)
 
 
 class ContainerTask(ShellCommandTask):

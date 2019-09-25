@@ -2,12 +2,14 @@
 
 import typing as ty
 import os, shutil
+import dataclasses as dc
 import pytest
 
 
 from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
+from ..specs import ShellOutSpec, SpecInfo, File
 
 if bool(shutil.which("sbatch")):
     Plugins = ["cf", "slurm"]
@@ -320,3 +322,207 @@ def test_wf_shell_cmd_1(plugin):
     res = wf.result()
     assert "_result.pklz" in res.output.out
     assert "_task.pklz" in res.output.out
+
+
+# customised output spec
+
+
+def test_shell_cmd_outputspec_1_nosubm():
+    """
+        customised output_spec, adding files to the output, providing specific pathname
+        no submitter
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "newfile_tmp.txt")],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_1(plugin):
+    """
+        customised output_spec, adding files to the output, providing specific pathname
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "newfile_tmp.txt")],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+
+    with Submitter(plugin=plugin) as sub:
+        shelly(submitter=sub)
+
+    res = shelly.result()
+    assert res.output.stdout == ""
+    assert res.output.newfile.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_1a(plugin):
+    """
+        customised output_spec, adding files to the output, providing specific pathname
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, dc.field(default="newfile_tmp.txt"))],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+
+    with Submitter(plugin=plugin) as sub:
+        shelly(submitter=sub)
+
+    res = shelly.result()
+    assert res.output.stdout == ""
+    assert res.output.newfile.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_1b_exception(plugin):
+    """
+        customised output_spec, adding files to the output, providing specific pathname
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "newfile_tmp_.txt")],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+
+    with pytest.raises(Exception) as exinfo:
+        with Submitter(plugin=plugin) as sub:
+            shelly(submitter=sub)
+    assert "does not exist" in str(exinfo.value)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_2_nosubm(plugin):
+    """
+        customised output_spec, adding files to the output,
+        using a wildcard in default
+        no submitter
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "newfile_*.txt")],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_2(plugin):
+    """
+        customised output_spec, adding files to the output,
+        using a wildcard in default
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "newfile_*.txt")],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+
+    with Submitter(plugin=plugin) as sub:
+        shelly(submitter=sub)
+
+    res = shelly.result()
+    assert res.output.stdout == ""
+    assert res.output.newfile.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_2a_exception(plugin):
+    """
+        customised output_spec, adding files to the output,
+        using a wildcard in default
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "newfile_*K.txt")],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+
+    with pytest.raises(Exception) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            shelly(submitter=sub)
+    assert "no file matches" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_3(plugin):
+    """
+        customised output_spec, adding files to the output,
+        using a wildcard in default, should collect two files
+    """
+    cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "newfile_*.txt")],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+
+    with Submitter(plugin=plugin) as sub:
+        shelly(submitter=sub)
+
+    res = shelly.result()
+    assert res.output.stdout == ""
+    # newfile is a list
+    assert len(res.output.newfile) == 2
+    assert all([file.exists for file in res.output.newfile])
+
+
+# customised output_spec for tasks in workflows
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_wf_1(plugin):
+    """
+        customised output_spec for tasks within a Workflow,
+        adding files to the output, providing specific pathname
+    """
+
+    cmd = ["touch", "newfile_tmp.txt"]
+    wf = Workflow(name="wf", input_spec=["cmd"])
+    wf.inputs.cmd = cmd
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "newfile_tmp.txt")],
+        bases=(ShellOutSpec,),
+    )
+    wf.add(
+        ShellCommandTask(
+            name="shelly", executable=wf.lzin.cmd, output_spec=my_output_spec
+        )
+    )
+    wf.set_output(
+        [("stdout", wf.shelly.lzout.stdout), ("newfile", wf.shelly.lzout.newfile)]
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res.output.stdout == ""
+    assert res.output.newfile.exists()
