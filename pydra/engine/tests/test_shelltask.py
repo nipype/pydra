@@ -4,6 +4,7 @@ import typing as ty
 import os, shutil
 import dataclasses as dc
 import pytest
+from pathlib import Path
 
 
 from ..task import ShellCommandTask
@@ -478,6 +479,35 @@ def test_shell_cmd_outputspec_3(plugin):
     my_output_spec = SpecInfo(
         name="Output",
         fields=[("newfile", File, "newfile_*.txt")],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+
+    with Submitter(plugin=plugin) as sub:
+        shelly(submitter=sub)
+
+    res = shelly.result()
+    assert res.output.stdout == ""
+    # newfile is a list
+    assert len(res.output.newfile) == 2
+    assert all([file.exists for file in res.output.newfile])
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_4(plugin):
+    """
+        customised output_spec, adding files to the output,
+        using a wildcard in default, should collect two files
+    """
+    cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
+
+    def gather_output(keyname, output_dir):
+        if keyname == "newfile":
+            return list(Path(output_dir).expanduser().glob("newfile*.txt"))
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, dc.field(metadata={"callable": gather_output}))],
         bases=(ShellOutSpec,),
     )
     shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)

@@ -8,7 +8,7 @@ import sys
 from hashlib import sha256
 import subprocess as sp
 
-from .specs import Runtime
+from .specs import Runtime, File
 
 
 def ensure_list(obj):
@@ -295,3 +295,59 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=False):
                 break
             crypto_obj.update(data)
     return crypto_obj.hexdigest()
+
+
+def shelltask_additional_outputs(output_spec, output_dir):
+    """collecting additional outputs from shelltask output_spec"""
+    additional_out = []
+    for fld in dc.fields(make_klass(output_spec)):
+        if fld.name not in ["return_code", "stdout", "stderr"]:
+            if fld.type is File:
+                # assuming that field should have either default or metadata, but not both
+                if (not fld.default and isinstance(fld.default, dc._MISSING_TYPE)) or (
+                    not isinstance(fld.default, dc._MISSING_TYPE) and fld.metadata
+                ):
+                    raise Exception("File has to have default value or metadata")
+                elif not isinstance(fld.default, dc._MISSING_TYPE):
+                    additional_out.append(_field_defaultvalue(fld, output_dir))
+                elif fld.metadata:
+                    additional_out.append(_field_metadata(fld, output_dir))
+            else:
+                raise Exception("not implemented")
+    return additional_out
+
+
+def _field_defaultvalue(fld, output_dir):
+    """collecting output file if the default value specified"""
+    if not isinstance(fld.default, (str, Path)):
+        raise Exception(
+            f"{fld.name} is a File, so default value"
+            f"should be string or Path, "
+            f"{fld.default} provided"
+        )
+    if isinstance(fld.default, str):
+        fld.default = Path(fld.default)
+
+    fld.default = output_dir / fld.default
+
+    if "*" not in fld.default.name:
+        if fld.default.exists():
+            return fld.default
+        else:
+            raise Exception(f"file {fld.default.name} does not exist")
+    else:
+        all_files = list(Path(fld.default.parent).expanduser().glob(fld.default.name))
+        if len(all_files) > 1:
+            return all_files
+        elif len(all_files) == 1:
+            return all_files[0]
+        else:
+            raise Exception(f"no file matches {fld.default.name}")
+
+
+def _field_metadata(fld, output_dir):
+    """collecting output file if metadata specified"""
+    if "callable" in fld.metadata:
+        return fld.metadata["callable"](fld.name, output_dir)
+    else:
+        raise Exception("not implemented")
