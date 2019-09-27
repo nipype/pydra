@@ -10,7 +10,7 @@ from pathlib import Path
 from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, SpecInfo, File
+from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
 
 if bool(shutil.which("sbatch")):
     Plugins = ["cf", "slurm"]
@@ -325,6 +325,111 @@ def test_wf_shell_cmd_1(plugin):
     assert "_task.pklz" in res.output.out
 
 
+# customised input spec
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_1_nosubm(plugin):
+    """ a command with executable, args and one command opt,
+        using a customized input_spec to add the opt to the command
+        in the right place that is specified in metadata["cmd_pos"]
+    """
+    cmd_exec = "echo"
+    cmd_opt = "-n"
+    cmd_args = "hello from pydra"
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("opt", str, dc.field(metadata={"cmd_pos": 1}))],
+        bases=(ShellSpec,),
+    )
+
+    # separate command into exec + args
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd_exec,
+        args=cmd_args,
+        opt=cmd_opt,
+        input_spec=my_input_spec,
+    )
+    assert shelly.inputs.executable == cmd_exec
+    assert shelly.inputs.args == cmd_args
+    assert shelly.cmdline == "echo -n hello from pydra"
+    res = shelly(plugin=plugin)
+
+    assert res.output.stdout == "hello from pydra"
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_1(plugin):
+    """ a command with executable, args and one command opt,
+        using a customized input_spec to add the opt to the command
+        in the right place that is specified in metadata["cmd_pos"]
+        using submitter
+    """
+    cmd_exec = "echo"
+    cmd_opt = "-n"
+    cmd_args = "hello from pydra"
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("opt", str, dc.field(metadata={"cmd_pos": 1}))],
+        bases=(ShellSpec,),
+    )
+
+    # separate command into exec + args
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd_exec,
+        args=cmd_args,
+        opt=cmd_opt,
+        input_spec=my_input_spec,
+    )
+    assert shelly.inputs.executable == cmd_exec
+    assert shelly.inputs.args == cmd_args
+    assert shelly.cmdline == "echo -n hello from pydra"
+
+    with Submitter(plugin=plugin) as sub:
+        shelly(submitter=sub)
+
+    res = shelly.result()
+    assert res.output.stdout == "hello from pydra"
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_2_nosubm(plugin):
+    """ a command with executable, args and two command options,
+        using a customized input_spec to add the opt to the command
+        in the right place that is specified in metadata["cmd_pos"]
+    """
+    cmd_exec = "echo"
+    cmd_opt = "-n"
+    cmd_opt_hello = "HELLO"
+    cmd_args = "from pydra"
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            ("opt_hello", str, dc.field(metadata={"cmd_pos": 3})),
+            ("opt", str, dc.field(metadata={"cmd_pos": 1})),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    # separate command into exec + args
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd_exec,
+        args=cmd_args,
+        opt=cmd_opt,
+        opt_hello=cmd_opt_hello,
+        input_spec=my_input_spec,
+    )
+    assert shelly.inputs.executable == cmd_exec
+    assert shelly.inputs.args == cmd_args
+    assert shelly.cmdline == "echo -n HELLO from pydra"
+    res = shelly(plugin=plugin)
+
+    assert res.output.stdout == "HELLO from pydra"
+
+
 # customised output spec
 
 
@@ -497,7 +602,7 @@ def test_shell_cmd_outputspec_3(plugin):
 def test_shell_cmd_outputspec_4(plugin):
     """
         customised output_spec, adding files to the output,
-        using a wildcard in default, should collect two files
+        using a function to collect output, the function is saved in the field metadata
     """
     cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
 

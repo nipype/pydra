@@ -166,10 +166,7 @@ class ShellCommandTask(TaskBase):
         **kwargs,
     ):
         if input_spec is None:
-            field = dc.field(default_factory=list)
-            field.metadata = {}
-            fields = [("args", ty.List[str], field)]
-            input_spec = SpecInfo(name="Inputs", fields=fields, bases=(ShellSpec,))
+            input_spec = SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
         self.input_spec = input_spec
         super(ShellCommandTask, self).__init__(
             name=name,
@@ -186,14 +183,34 @@ class ShellCommandTask(TaskBase):
 
     @property
     def command_args(self):
-        args = []
+        pos_args = []  # list for (position, command arg)
         for f in dc.fields(self.inputs):
-            if f.name not in ["executable", "args"]:
+            if f.name == "executable":
+                pos = 0  # executable should be the first el. of the command
+            elif f.name == "args":
+                pos = -1  # assuming that args is the last el. of the command
+            # if inp has cmd_pos than it should be treated as a part of the command
+            # metadata["cmd_pos"] is the position in the command
+            elif "cmd_pos" in f.metadata:
+                pos = f.metadata["cmd_pos"]
+                if not isinstance(pos, int) or pos < 1:
+                    raise Exception(
+                        f"position should be an integer > 0, but {pos} given"
+                    )
+            else:
                 continue
             value = getattr(self.inputs, f.name)
             if value is not None:
-                args.extend(ensure_list(value))
-        return args
+                pos_args.append((pos, ensure_list(value)))
+        # sorting all elements of the command
+        pos_args.sort()
+        # if args available, they should be moved at the of the list
+        if pos_args[0][0] == -1:
+            pos_args.append(pos_args.pop(0))
+        # dropping the position index
+        cmd_args = []
+        [cmd_args.extend(el[1]) for el in pos_args]
+        return cmd_args
 
     @command_args.setter
     def command_args(self, args: ty.Dict):
@@ -231,10 +248,7 @@ class ContainerTask(ShellCommandTask):
     ):
 
         if input_spec is None:
-            field = dc.field(default_factory=list)
-            field.metadata = {}
-            fields = [("args", ty.List[str], field)]
-            input_spec = SpecInfo(name="Inputs", fields=fields, bases=(ContainerSpec,))
+            input_spec = SpecInfo(name="Inputs", fields=[], bases=(ContainerSpec,))
         super(ContainerTask, self).__init__(
             name=name,
             input_spec=input_spec,
@@ -296,10 +310,8 @@ class DockerTask(ContainerTask):
         **kwargs,
     ):
         if input_spec is None:
-            field = dc.field(default_factory=list)
-            field.metadata = {}
-            fields = [("args", ty.List[str], field)]
-            input_spec = SpecInfo(name="Inputs", fields=fields, bases=(DockerSpec,))
+            input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
+            input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
         super(ContainerTask, self).__init__(
             name=name,
             input_spec=input_spec,

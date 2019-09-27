@@ -104,6 +104,7 @@ class RuntimeSpec:
 @dc.dataclass
 class ShellSpec(BaseSpec):
     executable: ty.Union[str, ty.List[str]]
+    args: ty.Union[str, ty.List[str], None]
 
 
 @dc.dataclass
