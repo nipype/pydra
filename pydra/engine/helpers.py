@@ -314,7 +314,7 @@ def shelltask_additional_outputs(output_spec, input_spec, inputs, output_dir):
                 elif not isinstance(fld.default, dc._MISSING_TYPE):
                     additional_out.append(_field_defaultvalue(fld, output_dir))
                 elif fld.metadata:
-                    additional_out.append(_field_metadata(fld, output_dir))
+                    additional_out.append(_field_metadata(fld, inputs, output_dir))
             else:
                 raise Exception("not implemented")
     return additional_out
@@ -361,10 +361,12 @@ def _field_defaultvalue(fld, output_dir):
             raise Exception(f"no file matches {fld.default.name}")
 
 
-def _field_metadata(fld, output_dir):
+def _field_metadata(fld, inputs, output_dir):
     """collecting output file if metadata specified"""
     if "value" in fld.metadata:
         return output_dir / fld.metadata["value"]
+    elif "name_template" in fld.metadata:
+        return output_dir / fld.metadata["name_template"].format(**inputs.__dict__)
     elif "callable" in fld.metadata:
         return fld.metadata["callable"](fld.name, output_dir)
     else:
