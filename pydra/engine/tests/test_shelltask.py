@@ -627,6 +627,70 @@ def test_shell_cmd_outputspec_4(plugin):
     assert all([file.exists for file in res.output.newfile])
 
 
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_5_nosubm(plugin):
+    """
+        providing output name using input_spec,
+        specify in metadata output=True and provide name_tamplate
+        no submitter
+    """
+    cmd = "touch"
+    args = "newfile_tmp.txt"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out1",
+                File,
+                dc.field(metadata={"output": True, "name_template": "{args}"}),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, input_spec=my_input_spec
+    )
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.out1.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_5(plugin):
+    """
+        providing output name using input_spec,
+        specify in metadata output=True and provide name_tamplate
+    """
+    cmd = "touch"
+    args = "newfile_tmp.txt"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out1",
+                File,
+                dc.field(metadata={"output": True, "name_template": "{args}"}),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, input_spec=my_input_spec
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        shelly(submitter=sub)
+
+    res = shelly.result()
+    assert res.output.stdout == ""
+    assert res.output.out1.exists()
+
+
 # customised output_spec for tasks in workflows
 
 

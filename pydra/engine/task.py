@@ -227,7 +227,7 @@ class ShellCommandTask(TaskBase):
             self.output_ = execute(args, strip=self.strip)
 
         additional_outputs = shelltask_additional_outputs(
-            self.output_spec, self.output_dir
+            self.output_spec, self.input_spec, self.inputs, self.output_dir
         )
         if additional_outputs:
             self.output_ = self.output_ + tuple(additional_outputs)

@@ -282,6 +282,8 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=False):
     """
     Computes hash of a file using 'crypto' module
     """
+    if afile is None:
+        return None
     if not os.path.isfile(afile):
         if raise_notfound:
             raise RuntimeError('File "%s" not found.' % afile)
@@ -297,8 +299,9 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=False):
     return crypto_obj.hexdigest()
 
 
-def shelltask_additional_outputs(output_spec, output_dir):
+def shelltask_additional_outputs(output_spec, input_spec, inputs, output_dir):
     """collecting additional outputs from shelltask output_spec"""
+    output_spec = _output_from_inputfields(output_spec, input_spec, inputs)
     additional_out = []
     for fld in dc.fields(make_klass(output_spec)):
         if fld.name not in ["return_code", "stdout", "stderr"]:
@@ -315,6 +318,19 @@ def shelltask_additional_outputs(output_spec, output_dir):
             else:
                 raise Exception("not implemented")
     return additional_out
+
+
+def _output_from_inputfields(output_spec, input_spec, inputs):
+    for fld in dc.fields(make_klass(input_spec)):
+        if "output" in fld.metadata and fld.metadata["output"]:
+            if "name_template" in fld.metadata:
+                value = fld.metadata["name_template"].format(**inputs.__dict__)
+                output_spec.fields.append(
+                    (fld.name, fld.type, dc.field(metadata={"value": value}))
+                )
+            else:
+                raise Exception("if output=True, the name template has to be provided")
+    return output_spec
 
 
 def _field_defaultvalue(fld, output_dir):
@@ -347,7 +363,9 @@ def _field_defaultvalue(fld, output_dir):
 
 def _field_metadata(fld, output_dir):
     """collecting output file if metadata specified"""
-    if "callable" in fld.metadata:
+    if "value" in fld.metadata:
+        return output_dir / fld.metadata["value"]
+    elif "callable" in fld.metadata:
         return fld.metadata["callable"](fld.name, output_dir)
     else:
         raise Exception("not implemented")
