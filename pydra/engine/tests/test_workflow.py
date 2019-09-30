@@ -3,7 +3,7 @@ import shutil, os
 import time
 import platform
 
-from .utils import add2, add2_wait, multiply, power, identity
+from .utils import add2, add2_wait, multiply, power, identity, list_output, fun_addvar3
 from ..submitter import Submitter
 from ..core import Workflow
 from ... import mark
@@ -806,6 +806,279 @@ def test_wf_ndst_9(plugin):
     assert len(results.output.out) == 1
     assert results.output.out == [[39, 42, 52, 56, 65, 70]]
     # checking the output directory
+    assert wf.output_dir.exists()
+
+
+# workflows with Left and Right part in splitters A -> B (L&R parts of the splitter)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstLR_1(plugin):
+    """ Test workflow with 2 tasks, splitters on tasks levels
+        The second task has its own simple splitter
+        and the  Left part from the first task should be added
+    """
+    wf = Workflow(name="wf_ndst_3", input_spec=["x", "y"])
+    wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
+    wf.add(multiply(name="mult", x=wf.add2.lzout.out, y=wf.lzin.y).split("y"))
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [11, 12]
+    wf.set_output([("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    # checking if the splitter is created properly
+    assert wf.mult.state.splitter == ["_add2", "mult.y"]
+    assert wf.mult.state.splitter_rpn == ["add2.x", "mult.y", "*"]
+
+    results = wf.result()
+    # expected: [({"add2.x": 1, "mult.y": 11}, 33), ({"add2.x": 1, "mult.y": 12}, 36),
+    #            ({"add2.x": 2, "mult.y": 11}, 44), ({"add2.x": 2, "mult.y": 12}, 48)]
+    assert results.output.out == [33, 36, 44, 48]
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstLR_1a(plugin):
+    """ Test workflow with 2 tasks, splitters on tasks levels
+        The second task has splitter that has Left part (from previous state)
+        and the Right part (it's onw splitter)
+    """
+    wf = Workflow(name="wf_ndst_3", input_spec=["x", "y"])
+    wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
+    wf.add(
+        multiply(name="mult", x=wf.add2.lzout.out, y=wf.lzin.y).split(["_add2", "y"])
+    )
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [11, 12]
+    wf.set_output([("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    # checking if the splitter is created properly
+    assert wf.mult.state.splitter == ["_add2", "mult.y"]
+    assert wf.mult.state.splitter_rpn == ["add2.x", "mult.y", "*"]
+
+    results = wf.result()
+    # expected: [({"add2.x": 1, "mult.y": 11}, 33), ({"add2.x": 1, "mult.y": 12}, 36),
+    #            ({"add2.x": 2, "mult.y": 11}, 44), ({"add2.x": 2, "mult.y": 12}, 48)]
+    assert results.output.out == [33, 36, 44, 48]
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstLR_2(plugin):
+    """ Test workflow with 2 tasks, splitters on tasks levels
+        The second task has its own outer splitter
+        and the  Left part from the first task should be added
+    """
+    wf = Workflow(name="wf_ndst_3", input_spec=["x", "y", "z"])
+    wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
+    wf.add(
+        fun_addvar3(name="addvar", a=wf.add2.lzout.out, b=wf.lzin.y, c=wf.lzin.z).split(
+            ["b", "c"]
+        )
+    )
+    wf.inputs.x = [1, 2, 3]
+    wf.inputs.y = [10, 20]
+    wf.inputs.z = [100, 200]
+    wf.set_output([("out", wf.addvar.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    # checking if the splitter is created properly
+    assert wf.addvar.state.splitter == ["_add2", ["addvar.b", "addvar.c"]]
+    assert wf.addvar.state.splitter_rpn == ["add2.x", "addvar.b", "addvar.c", "*", "*"]
+
+    results = wf.result()
+    # expected: [({"add2.x": 1, "mult.b": 10, "mult.c": 100}, 113),
+    #            ({"add2.x": 1, "mult.b": 10, "mult.c": 200}, 213),
+    #            ({"add2.x": 1, "mult.b": 20, "mult.c": 100}, 123),
+    #            ({"add2.x": 1, "mult.b": 20, "mult.c": 200}, 223),
+    #            ...]
+    assert results.output.out == [
+        113,
+        213,
+        123,
+        223,
+        114,
+        214,
+        124,
+        224,
+        115,
+        215,
+        125,
+        225,
+    ]
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstLR_2a(plugin):
+    """ Test workflow with 2 tasks, splitters on tasks levels
+        The second task has splitter that has Left part (from previous state)
+        and the Right part (it's onw outer splitter)
+    """
+    wf = Workflow(name="wf_ndst_3", input_spec=["x", "y", "z"])
+    wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
+    wf.add(
+        fun_addvar3(name="addvar", a=wf.add2.lzout.out, b=wf.lzin.y, c=wf.lzin.z).split(
+            ["_add2", ["b", "c"]]
+        )
+    )
+    wf.inputs.x = [1, 2, 3]
+    wf.inputs.y = [10, 20]
+    wf.inputs.z = [100, 200]
+    wf.set_output([("out", wf.addvar.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    # checking if the splitter is created properly
+    assert wf.addvar.state.splitter == ["_add2", ["addvar.b", "addvar.c"]]
+    assert wf.addvar.state.splitter_rpn == ["add2.x", "addvar.b", "addvar.c", "*", "*"]
+
+    results = wf.result()
+    # expected: [({"add2.x": 1, "mult.b": 10, "mult.c": 100}, 113),
+    #            ({"add2.x": 1, "mult.b": 10, "mult.c": 200}, 213),
+    #            ({"add2.x": 1, "mult.b": 20, "mult.c": 100}, 123),
+    #            ({"add2.x": 1, "mult.b": 20, "mult.c": 200}, 223),
+    #            ...]
+    assert results.output.out == [
+        113,
+        213,
+        123,
+        223,
+        114,
+        214,
+        124,
+        224,
+        115,
+        215,
+        125,
+        225,
+    ]
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
+# workflows with inner splitters A -> B (inner spl)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstinner_1(plugin):
+    """ workflow with 2 tasks,
+        the second task has inner splitter
+    """
+    wf = Workflow(name="wf_st_3", input_spec=["x"])
+    wf.add(list_output(name="list", x=wf.lzin.x))
+    wf.add(add2(name="add2", x=wf.list.lzout.out).split("x"))
+    wf.inputs.x = 1
+    wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.add2.state.splitter == "add2.x"
+    assert wf.add2.state.splitter_rpn == ["add2.x"]
+
+    results = wf.result()
+    assert results.output.out_list == [1, 2, 3]
+    assert results.output.out == [3, 4, 5]
+
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstinner_2(plugin):
+    """ workflow with 2 tasks,
+        the second task has two inputs and inner splitter from one of the input
+    """
+    wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
+    wf.add(list_output(name="list", x=wf.lzin.x))
+    wf.add(multiply(name="mult", x=wf.list.lzout.out, y=wf.lzin.y).split("x"))
+    wf.inputs.x = 1
+    wf.inputs.y = 10
+    wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.mult.state.splitter == "mult.x"
+    assert wf.mult.state.splitter_rpn == ["mult.x"]
+
+    results = wf.result()
+    assert results.output.out_list == [1, 2, 3]
+    assert results.output.out == [10, 20, 30]
+
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstinner_3(plugin):
+    """ workflow with 2 tasks,
+        the second task has two inputs and outer splitter that includes an inner field
+    """
+    wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
+    wf.add(list_output(name="list", x=wf.lzin.x))
+    wf.add(multiply(name="mult", x=wf.list.lzout.out, y=wf.lzin.y).split(["x", "y"]))
+    wf.inputs.x = 1
+    wf.inputs.y = [10, 100]
+    wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.mult.state.splitter == ["mult.x", "mult.y"]
+    assert wf.mult.state.splitter_rpn == ["mult.x", "mult.y", "*"]
+
+    results = wf.result()
+    assert results.output.out_list == [1, 2, 3]
+    assert results.output.out == [10, 100, 20, 200, 30, 300]
+
+    assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_ndstinner_4(plugin):
+    """ workflow with 3 tasks,
+        the second task has two inputs and inner splitter from one of the input,
+        the third task has no its own splitter
+    """
+    wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
+    wf.add(list_output(name="list", x=wf.lzin.x))
+    wf.add(multiply(name="mult", x=wf.list.lzout.out, y=wf.lzin.y).split("x"))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out))
+    wf.inputs.x = 1
+    wf.inputs.y = 10
+    wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.add2.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.mult.state.splitter == "mult.x"
+    assert wf.mult.state.splitter_rpn == ["mult.x"]
+    assert wf.add2.state.splitter == "_mult"
+    assert wf.add2.state.splitter_rpn == ["mult.x"]
+
+    results = wf.result()
+    assert results.output.out_list == [1, 2, 3]
+    assert results.output.out == [12, 22, 32]
+
     assert wf.output_dir.exists()
 
 

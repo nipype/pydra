@@ -148,7 +148,7 @@ def test_state_connect_1a():
 
 def test_state_connect_1b_exception():
     """can't provide explicitly NA.a (should be _NA)"""
-    st1 = State(name="NA", splitter="a")
+    st1 = State(name="NA", splitter="a", other_states={})
     with pytest.raises(Exception) as excinfo:
         st2 = State(name="NB", splitter="NA.a")
     assert "consider using _NA" in str(excinfo.value)

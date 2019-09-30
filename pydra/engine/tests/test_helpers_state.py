@@ -657,4 +657,4 @@ def test_connect_splitters(
 )
 def test_connect_splitters_exception(splitter, other_states):
     with pytest.raises(Exception):
-        hlpst.connect_splitters(splitter, other_states)
+        hlpst.connect_splitters(splitter, other_states, state_fields=True)
