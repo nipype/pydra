@@ -209,7 +209,8 @@ class ShellCommandTask(TaskBase):
             pos_args.append(pos_args.pop(0))
         # dropping the position index
         cmd_args = []
-        [cmd_args.extend(el[1]) for el in pos_args]
+        for el in pos_args:
+            cmd_args += el[1]
         return cmd_args
 
     @command_args.setter

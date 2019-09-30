@@ -642,7 +642,7 @@ def test_shell_cmd_outputspec_5_nosubm(plugin):
         fields=[
             (
                 "out1",
-                File,
+                str,
                 dc.field(metadata={"output": True, "name_template": "{args}"}),
             )
         ],
@@ -672,7 +672,7 @@ def test_shell_cmd_outputspec_5(plugin):
         fields=[
             (
                 "out1",
-                File,
+                str,
                 dc.field(metadata={"output": True, "name_template": "{args}"}),
             )
         ],

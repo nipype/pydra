@@ -323,10 +323,12 @@ def shelltask_additional_outputs(output_spec, input_spec, inputs, output_dir):
 def _output_from_inputfields(output_spec, input_spec, inputs):
     for fld in dc.fields(make_klass(input_spec)):
         if "output" in fld.metadata and fld.metadata["output"]:
+            if fld.type is not str:
+                raise Exception("output names should be a string")
             if "name_template" in fld.metadata:
                 value = fld.metadata["name_template"].format(**inputs.__dict__)
                 output_spec.fields.append(
-                    (fld.name, fld.type, dc.field(metadata={"value": value}))
+                    (fld.name, File, dc.field(metadata={"value": value}))
                 )
             else:
                 raise Exception("if output=True, the name template has to be provided")
