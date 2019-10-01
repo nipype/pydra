@@ -631,7 +631,7 @@ def test_shell_cmd_outputspec_4(plugin):
 def test_shell_cmd_outputspec_5_nosubm(plugin):
     """
         providing output name using input_spec,
-        specify in metadata output=True and provide name_tamplate
+        using name_tamplate in metadata
         no submitter
     """
     cmd = "touch"
@@ -639,13 +639,7 @@ def test_shell_cmd_outputspec_5_nosubm(plugin):
 
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[
-            (
-                "out1",
-                str,
-                dc.field(metadata={"output": True, "name_template": "{args}"}),
-            )
-        ],
+        fields=[("out1", str, dc.field(metadata={"output_file_template": "{args}"}))],
         bases=(ShellSpec,),
     )
 
@@ -662,20 +656,14 @@ def test_shell_cmd_outputspec_5_nosubm(plugin):
 def test_shell_cmd_outputspec_5(plugin):
     """
         providing output name using input_spec,
-        specify in metadata output=True and provide name_tamplate
+        using name_tamplate in metadata
     """
     cmd = "touch"
     args = "newfile_tmp.txt"
 
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[
-            (
-                "out1",
-                str,
-                dc.field(metadata={"output": True, "name_template": "{args}"}),
-            )
-        ],
+        fields=[("out1", str, dc.field(metadata={"output_file_template": "{args}"}))],
         bases=(ShellSpec,),
     )
 
@@ -692,9 +680,46 @@ def test_shell_cmd_outputspec_5(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_5a_nosubm(plugin):
+    """
+        providing output name using input_spec,
+        using name_tamplate in metadata
+        and changing the output name for output_spec using output_field_name
+        no submitter
+    """
+    cmd = "touch"
+    args = "newfile_tmp.txt"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out1",
+                str,
+                dc.field(
+                    metadata={
+                        "output_file_template": "{args}",
+                        "output_field_name": "out1_changed",
+                    }
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, input_spec=my_input_spec
+    )
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.out1_changed.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_outputspec_6_nosubm(plugin):
     """
-        providing output name by providing name_template
+        providing output name by providing output_file_template
         (similar to the previous example, but not touching input_spec)
         no submitter
     """
@@ -703,7 +728,7 @@ def test_shell_cmd_outputspec_6_nosubm(plugin):
 
     my_output_spec = SpecInfo(
         name="Output",
-        fields=[("out1", File, dc.field(metadata={"name_template": "{args}"}))],
+        fields=[("out1", File, dc.field(metadata={"output_file_template": "{args}"}))],
         bases=(ShellOutSpec,),
     )
 
@@ -719,7 +744,7 @@ def test_shell_cmd_outputspec_6_nosubm(plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_outputspec_6(plugin):
     """
-        providing output name by providing name_template
+        providing output name by providing output_file_template
         (similar to the previous example, but not touching input_spec)
     """
     cmd = "touch"
@@ -727,7 +752,7 @@ def test_shell_cmd_outputspec_6(plugin):
 
     my_output_spec = SpecInfo(
         name="Output",
-        fields=[("out1", File, dc.field(metadata={"name_template": "{args}"}))],
+        fields=[("out1", File, dc.field(metadata={"output_file_template": "{args}"}))],
         bases=(ShellOutSpec,),
     )
 

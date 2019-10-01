@@ -322,16 +322,17 @@ def shelltask_additional_outputs(output_spec, input_spec, inputs, output_dir):
 
 def _output_from_inputfields(output_spec, input_spec, inputs):
     for fld in dc.fields(make_klass(input_spec)):
-        if "output" in fld.metadata and fld.metadata["output"]:
+        if "output_file_template" in fld.metadata:
             if fld.type is not str:
                 raise Exception("output names should be a string")
-            if "name_template" in fld.metadata:
-                value = fld.metadata["name_template"].format(**inputs.__dict__)
-                output_spec.fields.append(
-                    (fld.name, File, dc.field(metadata={"value": value}))
-                )
+            value = fld.metadata["output_file_template"].format(**inputs.__dict__)
+            if "output_field_name" in fld.metadata:
+                field_name = fld.metadata["output_field_name"]
             else:
-                raise Exception("if output=True, the name template has to be provided")
+                field_name = fld.name
+            output_spec.fields.append(
+                (field_name, File, dc.field(metadata={"value": value}))
+            )
     return output_spec
 
 
@@ -367,8 +368,10 @@ def _field_metadata(fld, inputs, output_dir):
     """collecting output file if metadata specified"""
     if "value" in fld.metadata:
         return output_dir / fld.metadata["value"]
-    elif "name_template" in fld.metadata:
-        return output_dir / fld.metadata["name_template"].format(**inputs.__dict__)
+    elif "output_file_template" in fld.metadata:
+        return output_dir / fld.metadata["output_file_template"].format(
+            **inputs.__dict__
+        )
     elif "callable" in fld.metadata:
         return fld.metadata["callable"](fld.name, output_dir)
     else:
