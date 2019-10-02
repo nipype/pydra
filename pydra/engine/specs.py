@@ -152,7 +152,7 @@ class LazyField:
         self.field = None
 
     def __getattr__(self, name):
-        if name in self.fields or name == "all":
+        if name in self.fields or name == "all_":
             self.field = name
             return self
         if name in dir(self):
@@ -184,8 +184,8 @@ class LazyField:
                 if isinstance(result[0], list):
                     results_new = []
                     for res_l in result:
-                        if self.field == "all":
-                            res_l_new = [res.output.__dict__ for res in res_l]
+                        if self.field == "all_":
+                            res_l_new = [dc.asdict(res.output) for res in res_l]
                         else:
                             res_l_new = [
                                 getattr(res.output, self.field) for res in res_l
@@ -193,13 +193,13 @@ class LazyField:
                         results_new.append(res_l_new)
                     return results_new
                 else:
-                    if self.field == "all":
-                        return [res.output.__dict__ for res in result]
+                    if self.field == "all_":
+                        return [dc.asdict(res.output) for res in result]
                     else:
                         return [getattr(res.output, self.field) for res in result]
             else:
-                if self.field == "all":
-                    return result.output.__dict__
+                if self.field == "all_":
+                    return dc.asdict(result.output)
                 else:
                     return getattr(result.output, self.field)
 

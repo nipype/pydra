@@ -2335,7 +2335,7 @@ def test_wf_lzoutall_1(plugin):
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
-    wf.add(add2_res(name="add2", res=wf.mult.lzout.all))
+    wf.add(add2_res(name="add2", res=wf.mult.lzout.all_))
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.inputs.y = 3
