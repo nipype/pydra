@@ -340,7 +340,7 @@ def _field_defaultvalue(fld, output_dir):
     """collecting output file if the default value specified"""
     if not isinstance(fld.default, (str, Path)):
         raise Exception(
-            f"{fld.name} is a File, so default value"
+            f"{fld.name} is a File, so default value "
             f"should be string or Path, "
             f"{fld.default} provided"
         )

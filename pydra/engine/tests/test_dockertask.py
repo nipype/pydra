@@ -2,7 +2,7 @@
 
 import os, shutil
 import pytest
-
+from pathlib import Path
 
 from ..task import DockerTask
 from ..submitter import Submitter
@@ -310,7 +310,7 @@ def test_wf_docker_2(plugin, tmpdir):
             name="save",
             image="python:3.7-alpine",
             executable=wf.lzin.cmd1,
-            bindings=[(str(tmpdir), "/outputs", None), (scripts_dir, "/scripts", "ro")],
+            bindings=[(str(tmpdir), "/outputs"), (scripts_dir, "/scripts", "ro")],
             strip=True,
         )
     )
@@ -320,7 +320,7 @@ def test_wf_docker_2(plugin, tmpdir):
             image="python:3.7-alpine",
             executable=wf.lzin.cmd2,
             args=wf.save.lzout.stdout,
-            bindings=[(str(tmpdir), "/outputs", None), (scripts_dir, "/scripts", "ro")],
+            bindings=[(str(tmpdir), "/outputs"), (scripts_dir, "/scripts", "ro")],
             strip=True,
         )
     )
@@ -334,9 +334,11 @@ def test_wf_docker_2(plugin, tmpdir):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_shell_cmd_outputspec_1(plugin, tmpdir):
+def test_docker_outputspec_1(plugin, tmpdir):
     """
         customised output_spec, adding files to the output, providing specific pathname
+        path in bindings is a relative path to output_dir
+        (len(bind_tuple)==3, so True is added as default to the fourth place)
     """
     cmd = ["touch", "/outputs/newfile_tmp.txt"]
     my_output_spec = SpecInfo(
@@ -356,5 +358,61 @@ def test_shell_cmd_outputspec_1(plugin, tmpdir):
         docky(submitter=sub)
 
     res = docky.result()
-    # assert res.output.stdout == ""
+    assert res.output.stdout == ""
+    assert res.output.newfile.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_outputspec_1a(plugin, tmpdir):
+    """
+        customised output_spec, adding files to the output, providing specific pathname
+        path in bindings is a relative path to output_dir (True in a bind_tuple[3])
+    """
+    cmd = ["touch", "/outputs/newfile_tmp.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "newfile_tmp.txt")],
+        bases=(ShellOutSpec,),
+    )
+    docky = DockerTask(
+        name="docky",
+        image="ubuntu",
+        bindings=[(".", "/outputs", None, True)],
+        executable=cmd,
+        output_spec=my_output_spec,
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        docky(submitter=sub)
+
+    res = docky.result()
+    assert res.output.stdout == ""
+    assert res.output.newfile.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_outputspec_2(plugin, tmpdir):
+    """
+        customised output_spec, adding files to the output, providing specific pathname
+        path in bindings is an absolut path (bind_tuple[3]==False)
+    """
+    cmd = ["touch", "/outputs/newfile_tmp.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, Path(tmpdir) / "newfile_tmp.txt")],
+        bases=(ShellOutSpec,),
+    )
+    docky = DockerTask(
+        name="docky",
+        image="ubuntu",
+        bindings=[(tmpdir, "/outputs", None, False)],
+        executable=cmd,
+        output_spec=my_output_spec,
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        docky(submitter=sub)
+
+    res = docky.result()
+    assert res.output.stdout == ""
     assert res.output.newfile.exists()

@@ -285,11 +285,21 @@ class ContainerTask(ShellCommandTask):
         """
         bargs = []
         for binding in self.inputs.bindings:
-            lpath, cpath, mode = binding
+            if len(binding) == 4:
+                lpath, cpath, mode, relative = binding
+            elif len(binding) == 3:
+                lpath, cpath, mode, relative = binding + (True,)
+            elif len(binding) == 2:
+                lpath, cpath, mode, relative = binding + ("rw", True)
+            else:
+                raise Exception(
+                    f"binding should have length 2, 3, or 4, it has {len(binding)}"
+                )
             if mode is None:
                 mode = "rw"  # default
-            # # TODO: not always output_dir should be added
-            if "w" in mode:
+            if relative is None:
+                relative = True
+            if relative is True:
                 lpath = self.output_dir / lpath
             bargs.extend([opt, "{0}:{1}:{2}".format(lpath, cpath, mode)])
         return bargs
