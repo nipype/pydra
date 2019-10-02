@@ -238,8 +238,8 @@ class ContainerTask(ShellCommandTask):
     def __init__(
         self,
         name,
-        input_spec: ty.Optional[ContainerSpec] = None,
-        output_spec: ty.Optional[ShellOutSpec] = None,
+        input_spec: ty.Optional[SpecInfo] = None,
+        output_spec: ty.Optional[SpecInfo] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
         messenger_args=None,
@@ -253,6 +253,7 @@ class ContainerTask(ShellCommandTask):
         super(ContainerTask, self).__init__(
             name=name,
             input_spec=input_spec,
+            output_spec=output_spec,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
@@ -287,6 +288,9 @@ class ContainerTask(ShellCommandTask):
             lpath, cpath, mode = binding
             if mode is None:
                 mode = "rw"  # default
+            # # TODO: not always output_dir should be added
+            if "w" in mode:
+                lpath = self.output_dir / lpath
             bargs.extend([opt, "{0}:{1}:{2}".format(lpath, cpath, mode)])
         return bargs
 
@@ -296,13 +300,19 @@ class ContainerTask(ShellCommandTask):
         if args:
             self.output_ = execute(args, strip=self.strip)
 
+        additional_outputs = shelltask_additional_outputs(
+            self.output_spec, self.input_spec, self.inputs, self.output_dir
+        )
+        if additional_outputs:
+            self.output_ = self.output_ + tuple(additional_outputs)
+
 
 class DockerTask(ContainerTask):
     def __init__(
         self,
         name,
-        input_spec: ty.Optional[ContainerSpec] = None,
-        output_spec: ty.Optional[ShellOutSpec] = None,
+        input_spec: ty.Optional[SpecInfo] = None,
+        output_spec: ty.Optional[SpecInfo] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
         messenger_args=None,
@@ -312,10 +322,10 @@ class DockerTask(ContainerTask):
     ):
         if input_spec is None:
             input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
-            input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
         super(ContainerTask, self).__init__(
             name=name,
             input_spec=input_spec,
+            output_spec=output_spec,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
@@ -338,8 +348,8 @@ class DockerTask(ContainerTask):
 class SingularityTask(ContainerTask):
     def __init__(
         self,
-        input_spec: ty.Optional[ContainerSpec] = None,
-        output_spec: ty.Optional[ShellOutSpec] = None,
+        input_spec: ty.Optional[SpecInfo] = None,
+        output_spec: ty.Optional[SpecInfo] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
         messenger_args=None,

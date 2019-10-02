@@ -7,6 +7,7 @@ import pytest
 from ..task import DockerTask
 from ..submitter import Submitter
 from ..core import Workflow
+from ..specs import ShellOutSpec, SpecInfo, File
 
 if bool(shutil.which("sbatch")):
     Plugins = ["cf", "slurm"]
@@ -330,3 +331,30 @@ def test_wf_docker_2(plugin, tmpdir):
 
     res = wf.result()
     assert res.output.out == "Hello!"
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_outputspec_1(plugin, tmpdir):
+    """
+        customised output_spec, adding files to the output, providing specific pathname
+    """
+    cmd = ["touch", "/outputs/newfile_tmp.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "newfile_tmp.txt")],
+        bases=(ShellOutSpec,),
+    )
+    docky = DockerTask(
+        name="docky",
+        image="ubuntu",
+        bindings=[(".", "/outputs", None)],
+        executable=cmd,
+        output_spec=my_output_spec,
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        docky(submitter=sub)
+
+    res = docky.result()
+    # assert res.output.stdout == ""
+    assert res.output.newfile.exists()
