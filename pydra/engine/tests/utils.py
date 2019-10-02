@@ -53,6 +53,12 @@ def add2(x):
 
 
 @mark.task
+def add2_res(res):
+    """function that takes entire output as an input"""
+    return res["out"] + 2
+
+
+@mark.task
 def power(a, b):
     return a ** b
 

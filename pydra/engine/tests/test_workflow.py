@@ -3,7 +3,16 @@ import shutil, os
 import time
 import platform
 
-from .utils import add2, add2_wait, multiply, power, identity, list_output, fun_addvar3
+from .utils import (
+    add2,
+    add2_wait,
+    multiply,
+    power,
+    identity,
+    list_output,
+    fun_addvar3,
+    add2_res,
+)
 from ..submitter import Submitter
 from ..core import Workflow
 from ... import mark
@@ -2313,3 +2322,28 @@ def test_workflow_combine2(tmpdir):
 
     assert result.output.out_pow == [[1, 4], [1, 8]]
     assert result.output.out_iden == [[[1, 4], [1, 8]]]
+
+
+# testing lzout.all to collect all of the results and let FunctionTask deal with it
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_lzoutall_1(plugin):
+    """ workflow with 2 tasks, no splitter
+        passing entire result object to add2_res function
+        by using lzout.all syntax
+    """
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(add2_res(name="add2", res=wf.mult.lzout.all))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.inputs.y = 3
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.output_dir.exists()
+    results = wf.result()
+    assert 8 == results.output.out
