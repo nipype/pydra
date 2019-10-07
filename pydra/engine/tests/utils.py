@@ -53,6 +53,15 @@ def add2(x):
 
 
 @mark.task
+@mark.annotate({"return": {"out_add": float, "out_sub": float}})
+def add2_sub2_res(res):
+    """function that takes entire output as an input"""
+    if isinstance(res, list):
+        return [r["out"] + 2 for r in res], [r["out"] - 2 for r in res]
+    return res["out"] + 2, res["out"] - 2
+
+
+@mark.task
 def power(a, b):
     return a ** b
 
