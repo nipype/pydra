@@ -11,7 +11,7 @@ from .utils import (
     identity,
     list_output,
     fun_addvar3,
-    add2_res,
+    add2_sub2_res,
 )
 from ..submitter import Submitter
 from ..core import Workflow
@@ -2330,13 +2330,13 @@ def test_workflow_combine2(tmpdir):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_lzoutall_1(plugin):
     """ workflow with 2 tasks, no splitter
-        passing entire result object to add2_res function
+        passing entire result object to add2_sub2_res function
         by using lzout.all syntax
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
-    wf.add(add2_res(name="add2", res=wf.mult.lzout.all_))
-    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.add(add2_sub2_res(name="add_sub", res=wf.mult.lzout.all_))
+    wf.set_output([("out", wf.add_sub.lzout.out_add)])
     wf.inputs.x = 2
     wf.inputs.y = 3
     wf.plugin = plugin
@@ -2347,3 +2347,126 @@ def test_wf_lzoutall_1(plugin):
     assert wf.output_dir.exists()
     results = wf.result()
     assert 8 == results.output.out
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_lzoutall_1a(plugin):
+    """ workflow with 2 tasks, no splitter
+        passing entire result object to add2_res function
+        by using lzout.all syntax in the node connections and for wf output
+    """
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(add2_sub2_res(name="add_sub", res=wf.mult.lzout.all_))
+    wf.set_output([("out_all", wf.add_sub.lzout.all_)])
+    wf.inputs.x = 2
+    wf.inputs.y = 3
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.output_dir.exists()
+    results = wf.result()
+    assert results.output.out_all == {"out_add": 8, "out_sub": 4}
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_lzoutall_st_1(plugin):
+    """ workflow with 2 tasks, no splitter
+        passing entire result object to add2_res function
+        by using lzout.all syntax
+    """
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]))
+    wf.add(add2_sub2_res(name="add_sub", res=wf.mult.lzout.all_))
+    wf.set_output([("out_add", wf.add_sub.lzout.out_add)])
+    wf.inputs.x = [2, 20]
+    wf.inputs.y = [3, 30]
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.output_dir.exists()
+    results = wf.result()
+    assert results.output.out_add == [8, 62, 62, 602]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_lzoutall_st_1a(plugin):
+    """ workflow with 2 tasks, no splitter
+        passing entire result object to add2_res function
+        by using lzout.all syntax
+    """
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]))
+    wf.add(add2_sub2_res(name="add_sub", res=wf.mult.lzout.all_))
+    wf.set_output([("out_all", wf.add_sub.lzout.all_)])
+    wf.inputs.x = [2, 20]
+    wf.inputs.y = [3, 30]
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.output_dir.exists()
+    results = wf.result()
+    assert results.output.out_all == [
+        {"out_add": 8, "out_sub": 4},
+        {"out_add": 62, "out_sub": 58},
+        {"out_add": 62, "out_sub": 58},
+        {"out_add": 602, "out_sub": 598},
+    ]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_lzoutall_st_2(plugin):
+    """ workflow with 2 tasks, no splitter
+        passing entire result object to add2_res function
+        by using lzout.all syntax
+    """
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(
+        multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]).combine("x")
+    )
+    wf.add(add2_sub2_res(name="add_sub", res=wf.mult.lzout.all_))
+    wf.set_output([("out_add", wf.add_sub.lzout.out_add)])
+    wf.inputs.x = [2, 20]
+    wf.inputs.y = [3, 30]
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.output_dir.exists()
+    results = wf.result()
+    assert results.output.out_add[0] == [8, 62]
+    assert results.output.out_add[1] == [62, 602]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_lzoutall_st_2a(plugin):
+    """ workflow with 2 tasks, no splitter
+        passing entire result object to add2_res function
+        by using lzout.all syntax
+    """
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(
+        multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]).combine("x")
+    )
+    wf.add(add2_sub2_res(name="add_sub", res=wf.mult.lzout.all_))
+    wf.set_output([("out_all", wf.add_sub.lzout.all_)])
+    wf.inputs.x = [2, 20]
+    wf.inputs.y = [3, 30]
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.output_dir.exists()
+    results = wf.result()
+    assert results.output.out_all == [
+        {"out_add": [8, 62], "out_sub": [4, 58]},
+        {"out_add": [62, 602], "out_sub": [58, 598]},
+    ]
