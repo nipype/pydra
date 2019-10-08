@@ -333,6 +333,7 @@ def test_wf_docker_2(plugin, tmpdir):
     assert res.output.out == "Hello!"
 
 
+@need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_outputspec_1(plugin, tmpdir):
     """
@@ -362,6 +363,7 @@ def test_docker_outputspec_1(plugin, tmpdir):
     assert res.output.newfile.exists()
 
 
+@need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_outputspec_1a(plugin, tmpdir):
     """
@@ -390,6 +392,7 @@ def test_docker_outputspec_1a(plugin, tmpdir):
     assert res.output.newfile.exists()
 
 
+@need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_outputspec_2(plugin, tmpdir):
     """
