@@ -25,6 +25,8 @@ from .helpers import (
     ensure_list,
     record_error,
     hash_function,
+    output_from_inputfields,
+    output_names_from_inputfields,
 )
 from .graph import DiGraph
 from .audit import Audit
@@ -79,6 +81,7 @@ class TaskBase:
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
         klass = make_klass(self.input_spec)
+        # todo should be used to input_check in spec??
         self.inputs = klass(
             **{
                 f.name: (None if f.default is dc.MISSING else f.default)
@@ -109,7 +112,9 @@ class TaskBase:
                     raise ValueError("Unknown input set {!r}".format(inputs))
                 inputs = self._input_sets[inputs]
             self.inputs = dc.replace(self.inputs, **inputs)
+            self.inputs.check_input_spec()
             self.state_inputs = inputs
+
         self.audit = Audit(
             audit_flags=audit_flags,
             messengers=messengers,
@@ -210,7 +215,9 @@ class TaskBase:
 
     @property
     def output_names(self):
-        return [f.name for f in dc.fields(make_klass(self.output_spec))]
+        output_spec_names = [f.name for f in dc.fields(make_klass(self.output_spec))]
+        from_input_spec_names = output_names_from_inputfields(self.input_spec)
+        return output_spec_names + from_input_spec_names
 
     @property
     def can_resume(self):
@@ -277,6 +284,8 @@ class TaskBase:
 
     def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
+        # TODO: don't have to run entire check_input_spec again
+        self.inputs.check_input_spec(update_template=False)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
@@ -321,25 +330,34 @@ class TaskBase:
         self.hooks.post_run(self, result)
         return result
 
+    # todo: check foe workflow, can i remove it??
     def _list_outputs(self):
-        output_dict = {}
-        if len(self.output_names) == 1:
-            output_dict[self.output_names[0]] = self.output_
-        else:
-            if len(self.output_names) != len(self.output_):
-                raise Exception(
-                    f"output names, {self.output_names}, "
-                    f"has to be the same length as output, {self.output_}"
-                )
-            for ii, out_nm in enumerate(self.output_names):
-                output_dict[out_nm] = self.output_[ii]
-        return output_dict
+        return self.output_
+        # output_dict = {}
+        # if len(self.output_names) == 1:
+        #     output_dict[self.output_names[0]] = self.output_
+        # else:
+        #     if len(self.output_names) != len(self.output_):
+        #         raise Exception(
+        #             f"output names, {self.output_names}, "
+        #             f"has to be the same length as output, {self.output_}"
+        #         )
+        #     for ii, out_nm in enumerate(self.output_names):
+        #         output_dict[out_nm] = self.output_[ii]
+        # return output_dict
 
+    # TODO think what exactly should be here
     def _collect_outputs(self):
         run_output = self._list_outputs()
+        self.output_spec = output_from_inputfields(
+            self.output_spec, self.input_spec, self.inputs
+        )
         output_klass = make_klass(self.output_spec)
         output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
-        return dc.replace(output, **run_output)
+        other_output = output.collect_additional_outputs(
+            self.input_spec, self.inputs, self.output_dir
+        )
+        return dc.replace(output, **run_output, **other_output)
 
     def split(self, splitter, overwrite=False, **kwargs):
         splitter = hlpst.add_name_splitter(splitter, self.name)
@@ -467,6 +485,7 @@ class TaskBase:
                 raise ValueError("Task does not have a state")
             checksum = self.checksum
             result = load_result(checksum, self.cache_locations)
+            print("RESULT", result)
             return result
 
     def _reset(self):
@@ -680,6 +699,7 @@ class Workflow(TaskBase):
             if not isinstance(val, LazyField):
                 raise ValueError("all connections must be lazy")
             output[name] = val.get_value(self)
+        print("\n WF output", output)
         return output
 
 

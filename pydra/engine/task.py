@@ -54,7 +54,7 @@ from .specs import (
     DockerSpec,
     SingularitySpec,
 )
-from .helpers import ensure_list, execute, shelltask_additional_outputs
+from .helpers import ensure_list, execute
 
 
 class FunctionTask(TaskBase):
@@ -140,16 +140,19 @@ class FunctionTask(TaskBase):
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
-        if len(self.output_spec.fields) > 1:
-            if len(self.output_spec.fields) == len(output):
-                self.output_ = list(output)
-            else:
-                raise Exception(
-                    f"expected {len(self.output_spec.fields)} elements, "
-                    f"but {len(output)} were returned"
-                )
-        else:  # if only one element in the fields, everything should be returned together
-            self.output_ = output
+        if output:
+            output_names = [el[0] for el in self.output_spec.fields]
+            self.output_ = {}
+            if len(output_names) > 1:
+                if len(output_names) == len(output):
+                    self.output_ = dict(zip(output_names, output))
+                else:
+                    raise Exception(
+                        f"expected {len(self.output_spec.fields)} elements, "
+                        f"but {len(output)} were returned"
+                    )
+            else:  # if only one element in the fields, everything should be returned together
+                self.output_[output_names[0]] = output
 
 
 class ShellCommandTask(TaskBase):
@@ -168,6 +171,11 @@ class ShellCommandTask(TaskBase):
         if input_spec is None:
             input_spec = SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
         self.input_spec = input_spec
+        if output_spec is None:
+            output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
+
+        self.output_spec = output_spec
+
         super(ShellCommandTask, self).__init__(
             name=name,
             inputs=kwargs,
@@ -176,9 +184,8 @@ class ShellCommandTask(TaskBase):
             messenger_args=messenger_args,
             cache_dir=cache_dir,
         )
-        if output_spec is None:
-            output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
-        self.output_spec = output_spec
+        # TODO: should I run it here?
+        # self.output_spec = output_from_inputfields(self.output_spec, self.input_spec, self.inputs)
         self.strip = strip
 
     @property
@@ -189,19 +196,27 @@ class ShellCommandTask(TaskBase):
                 pos = 0  # executable should be the first el. of the command
             elif f.name == "args":
                 pos = -1  # assuming that args is the last el. of the command
-            # if inp has cmd_pos than it should be treated as a part of the command
-            # metadata["cmd_pos"] is the position in the command
-            elif "cmd_pos" in f.metadata:
-                pos = f.metadata["cmd_pos"]
+            # if inp has position than it should be treated as a part of the command
+            # metadata["position"] is the position in the command
+            elif "position" in f.metadata:
+                pos = f.metadata["position"]
                 if not isinstance(pos, int) or pos < 1:
                     raise Exception(
                         f"position should be an integer > 0, but {pos} given"
                     )
             else:
                 continue
+            cmd_add = []
+            if "argstr" in f.metadata:
+                cmd_add.append(f.metadata["argstr"])
             value = getattr(self.inputs, f.name)
-            if value is not None:
-                pos_args.append((pos, ensure_list(value)))
+            if f.type is bool:
+                if value is not True:
+                    break
+            else:
+                cmd_add += ensure_list(value)
+            if cmd_add is not None:
+                pos_args.append((pos, cmd_add))
         # sorting all elements of the command
         pos_args.sort()
         # if args available, they should be moved at the of the list
@@ -225,13 +240,16 @@ class ShellCommandTask(TaskBase):
         self.output_ = None
         args = self.command_args
         if args:
-            self.output_ = execute(args, strip=self.strip)
+            keys = ["return_code", "stdout", "stderr"]
+            values = execute(args, strip=self.strip)
+            self.output_ = dict(zip(keys, values))
 
-        additional_outputs = shelltask_additional_outputs(
-            self.output_spec, self.input_spec, self.inputs, self.output_dir
-        )
-        if additional_outputs:
-            self.output_ = self.output_ + tuple(additional_outputs)
+        # TODO: I moved it to collect output, likely can be removed from here for good
+        # additional_outputs = shelltask_additional_outputs(
+        #     self.output_spec, self.input_spec, self.inputs, self.output_dir
+        # )
+        # if additional_outputs:
+        #     self.output_ = self.output_ + tuple(additional_outputs)
 
 
 class ContainerTask(ShellCommandTask):
@@ -310,11 +328,12 @@ class ContainerTask(ShellCommandTask):
         if args:
             self.output_ = execute(args, strip=self.strip)
 
-        additional_outputs = shelltask_additional_outputs(
-            self.output_spec, self.input_spec, self.inputs, self.output_dir
-        )
-        if additional_outputs:
-            self.output_ = self.output_ + tuple(additional_outputs)
+    # TODO: should be similar to ShellTask
+    #     additional_outputs = shelltask_additional_outputs(
+    #         self.output_spec, self.input_spec, self.inputs, self.output_dir
+    #     )
+    #     if additional_outputs:
+    #         self.output_ = self.output_ + tuple(additional_outputs)
 
 
 class DockerTask(ContainerTask):

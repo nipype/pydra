@@ -404,7 +404,7 @@ def test_taskhooks(tmpdir, capsys):
     foo.hooks.pre_run = myhook
     foo()
     captured = capsys.readouterr()
-    assert captured.out == "I was called\n"
+    assert "I was called\n" in captured.out
     del captured
 
     # setting unknown hook should not be allowed
@@ -418,7 +418,7 @@ def test_taskhooks(tmpdir, capsys):
     foo.inputs.a = 2  # ensure not pre-cached
     foo()
     captured = capsys.readouterr()
-    assert captured.out == "".join(["I was called\n"] * 4)
+    assert captured.out.count("I was called\n") == 4
     del captured
 
     # hooks are independent across tasks by default
@@ -434,7 +434,7 @@ def test_taskhooks(tmpdir, capsys):
 
     wf(plugin="cf")
     captured = capsys.readouterr()
-    assert captured.out == "".join(["I was called\n"] * 4)
+    assert captured.out.count("I was called\n") == 4
     del captured
 
     # reset all hooks

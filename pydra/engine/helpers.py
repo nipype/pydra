@@ -299,33 +299,24 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=False):
     return crypto_obj.hexdigest()
 
 
-def shelltask_additional_outputs(output_spec, input_spec, inputs, output_dir):
-    """collecting additional outputs from shelltask output_spec"""
-    output_spec = _output_from_inputfields(output_spec, input_spec, inputs)
-    additional_out = []
-    for fld in dc.fields(make_klass(output_spec)):
-        if fld.name not in ["return_code", "stdout", "stderr"]:
-            if fld.type is File:
-                # assuming that field should have either default or metadata, but not both
-                if (not fld.default and isinstance(fld.default, dc._MISSING_TYPE)) or (
-                    not isinstance(fld.default, dc._MISSING_TYPE) and fld.metadata
-                ):
-                    raise Exception("File has to have default value or metadata")
-                elif not isinstance(fld.default, dc._MISSING_TYPE):
-                    additional_out.append(_field_defaultvalue(fld, output_dir))
-                elif fld.metadata:
-                    additional_out.append(_field_metadata(fld, inputs, output_dir))
-            else:
-                raise Exception("not implemented")
-    return additional_out
-
-
-def _output_from_inputfields(output_spec, input_spec, inputs):
+def output_names_from_inputfields(input_spec):
+    output_names = []
     for fld in dc.fields(make_klass(input_spec)):
         if "output_file_template" in fld.metadata:
-            if fld.type is not str:
-                raise Exception("output names should be a string")
-            value = fld.metadata["output_file_template"].format(**inputs.__dict__)
+            if "output_field_name" in fld.metadata:
+                field_name = fld.metadata["output_field_name"]
+            else:
+                field_name = fld.name
+            output_names.append(field_name)
+    return output_names
+
+
+def output_from_inputfields(output_spec, input_spec, inputs):
+    for fld in dc.fields(make_klass(input_spec)):
+        if "output_file_template" in fld.metadata:
+            # likely can just take from the input
+            # value = fld.metadata["output_file_template"].format(**inputs.__dict__)
+            value = getattr(inputs, fld.name)
             if "output_field_name" in fld.metadata:
                 field_name = fld.metadata["output_field_name"]
             else:
@@ -334,45 +325,3 @@ def _output_from_inputfields(output_spec, input_spec, inputs):
                 (field_name, File, dc.field(metadata={"value": value}))
             )
     return output_spec
-
-
-def _field_defaultvalue(fld, output_dir):
-    """collecting output file if the default value specified"""
-    if not isinstance(fld.default, (str, Path)):
-        raise Exception(
-            f"{fld.name} is a File, so default value "
-            f"should be string or Path, "
-            f"{fld.default} provided"
-        )
-    if isinstance(fld.default, str):
-        fld.default = Path(fld.default)
-
-    fld.default = output_dir / fld.default
-
-    if "*" not in fld.default.name:
-        if fld.default.exists():
-            return fld.default
-        else:
-            raise Exception(f"file {fld.default.name} does not exist")
-    else:
-        all_files = list(Path(fld.default.parent).expanduser().glob(fld.default.name))
-        if len(all_files) > 1:
-            return all_files
-        elif len(all_files) == 1:
-            return all_files[0]
-        else:
-            raise Exception(f"no file matches {fld.default.name}")
-
-
-def _field_metadata(fld, inputs, output_dir):
-    """collecting output file if metadata specified"""
-    if "value" in fld.metadata:
-        return output_dir / fld.metadata["value"]
-    elif "output_file_template" in fld.metadata:
-        return output_dir / fld.metadata["output_file_template"].format(
-            **inputs.__dict__
-        )
-    elif "callable" in fld.metadata:
-        return fld.metadata["callable"](fld.name, output_dir)
-    else:
-        raise Exception("not implemented")
