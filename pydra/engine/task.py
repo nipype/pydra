@@ -326,7 +326,9 @@ class ContainerTask(ShellCommandTask):
         self.output_ = None
         args = self.container_args + self.command_args
         if args:
-            self.output_ = execute(args, strip=self.strip)
+            keys = ["return_code", "stdout", "stderr"]
+            values = execute(args, strip=self.strip)
+            self.output_ = dict(zip(keys, values))
 
     # TODO: should be similar to ShellTask
     #     additional_outputs = shelltask_additional_outputs(

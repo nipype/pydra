@@ -313,7 +313,9 @@ class ContainerSpec(ShellSpec):
     container: ty.Union[File, str, None] = dc.field(
         metadata={"help_string": "container"}
     )
-    container_xargs: ty.Optional[ty.List[str]] = None
+    container_xargs: ty.Optional[ty.List[str]] = dc.field(
+        default=None, metadata={"help_string": "todo"}
+    )
     bindings: ty.Optional[
         ty.List[
             ty.Tuple[
@@ -322,7 +324,7 @@ class ContainerSpec(ShellSpec):
                 ty.Optional[str],  # mount mode
             ]
         ]
-    ] = None
+    ] = dc.field(default=None, metadata={"help_string": "bindings"})
 
 
 @dc.dataclass
