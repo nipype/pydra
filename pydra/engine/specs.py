@@ -26,7 +26,7 @@ class BaseSpec:
     def collect_additional_outputs(self, input_spec, inputs, output_dir):
         return {}
 
-    def check_input_spec(self, update_template=False):
+    def check_input_spec(self):
         pass  # TODO
 
     @property
@@ -57,7 +57,7 @@ class BaseSpec:
         for field, value in temp_values.items():
             setattr(self, field, value)
 
-    def check_input_spec(self, update_template=False):
+    def check_input_spec(self):
         pass  # TODO
 
 
@@ -126,7 +126,7 @@ class ShellSpec(BaseSpec):
         }
     )
 
-    def check_input_spec(self, update_template=False):
+    def check_input_spec(self):
         supported_keys = [
             "mandatory",
             "xor",
@@ -169,29 +169,11 @@ class ShellSpec(BaseSpec):
                     "default value should not be set when the field is mandatory"
                 )
 
-            if dc.asdict(self)[fld.name] is None or update_template:
+            if dc.asdict(self)[fld.name] is None:
                 if mdata.get("mandatory"):
                     raise Exception(f"{fld.name} is mandatory, but no value provided")
                 elif mdata.get("default_value"):
                     setattr(self, fld.name, mdata["default_value"])
-                elif mdata.get("output_file_template"):
-                    if fld.type is str:
-                        # TODO: this has to be done after LF fields are replaced with the final values
-                        value = fld.metadata["output_file_template"].format(
-                            **self.__dict__
-                        )
-                    elif fld.type is tuple:  # TODO tu tez trzeba wywalic
-                        name, ext = os.path.splitext(
-                            fld.metadata["output_file_template"][0].format(
-                                **self.__dict__
-                            )
-                        )
-                        value = f"{name}{fld.metadata['output_file_template'][1]}{ext}"
-                    else:
-                        raise Exception(
-                            "output names should be a string or a tuple of two strings"
-                        )
-                    setattr(self, fld.name, value)
                 else:
                     continue
             names.append(fld.name)
@@ -218,19 +200,91 @@ class ShellSpec(BaseSpec):
                     # will check after adding all fields to names
                     require_to_check[fld.name] = mdata["requires"]
 
-            # TODO: types might be checked here
-            self._type_checking(fld)
+        self._template_update()
 
         for nm, required in require_to_check.items():
             required_notfound = [el for el in required if el not in names]
             if required_notfound:
                 raise Exception(f"{nm} requires {required_notfound}")
 
-    def _type_checking(self, field):
+        # TODO: types might be checked here
+        self._type_checking()
 
+    def _template_update(self):
+        fields = dc.fields(self)
+        for fld in fields:
+            if fld.metadata.get("output_file_template"):
+                from string import Formatter
+
+                if fld.type is str:
+                    needed_args = [
+                        el[1]
+                        for el in Formatter().parse(
+                            fld.metadata["output_file_template"]
+                        )
+                    ]
+                    if all([self.__dict__.get(el) for el in needed_args]):
+                        value = fld.metadata["output_file_template"].format(
+                            **self.__dict__
+                        )
+                        setattr(self, fld.name, value)
+                elif fld.type is tuple:
+                    needed_args = [
+                        el[1]
+                        for el in Formatter().parse(
+                            fld.metadata["output_file_template"][0]
+                        )
+                    ]
+                    if all([self.__dict__.get(el) for el in needed_args]):
+                        name, ext = os.path.splitext(
+                            fld.metadata["output_file_template"][0].format(
+                                **self.__dict__
+                            )
+                        )
+                        value = f"{name}{fld.metadata['output_file_template'][1]}{ext}"
+                        setattr(self, fld.name, value)
+                else:
+                    raise Exception(
+                        "output names should be a string or a tuple of two strings"
+                    )
+
+    def _type_checking(self):
+        fields = dc.fields(self)
         allowed_keys = ["min_val", "max_val", "range", "enum"]
-        # TODO
-        pass
+        for fld in fields:
+            # TODO
+            pass
+
+    def retrieve_values(self, wf, state_index=None):
+        temp_values = {}
+        for field in dc.fields(self):
+            # retrieving values that do not have templats
+            if not field.metadata.get("output_file_template"):
+                value = getattr(self, field.name)
+                if isinstance(value, LazyField):
+                    value = value.get_value(wf, state_index=state_index)
+                    temp_values[field.name] = value
+        for field, value in temp_values.items():
+            setattr(self, field, value)
+
+        # retrieving values that have specified templates (and require other fields to be set first)
+        for field in dc.fields(self):
+            if field.metadata.get("output_file_template"):
+                if field.type is str:
+                    value = field.metadata["output_file_template"].format(**temp_values)
+                    setattr(self, field.name, value)
+                elif field.type is tuple:
+                    name, ext = os.path.splitext(
+                        field.metadata["output_file_template"][0].format(
+                            **self.__dict__
+                        )
+                    )
+                    value = f"{name}{field.metadata['output_file_template'][1]}{ext}"
+                    setattr(self, field.name, value)
+                else:
+                    raise Exception(
+                        "output names should be a string or a tuple of two strings"
+                    )
 
 
 @dc.dataclass

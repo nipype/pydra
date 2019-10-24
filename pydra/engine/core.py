@@ -284,8 +284,6 @@ class TaskBase:
 
     def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
-        # TODO: don't have to run entire check_input_spec again
-        self.inputs.check_input_spec(update_template=False)
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
@@ -485,7 +483,7 @@ class TaskBase:
                 raise ValueError("Task does not have a state")
             checksum = self.checksum
             result = load_result(checksum, self.cache_locations)
-            print("RESULT", result)
+            print("\n RESULT", result)
             return result
 
     def _reset(self):

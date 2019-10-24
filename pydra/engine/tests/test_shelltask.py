@@ -796,14 +796,15 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
 # customised input_spec in Workflow
 
 
-@pytest.mark.xfail(reason="template with LF still don't work very well")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_shell_cmd_2(plugin):
-    """ a workflow with two connected commands"""
+    """ a workflow with input with defined output_file_template (str)
+        that requires wf.lzin
+    """
     wf = Workflow(name="wf", input_spec=["cmd", "args"])
 
     wf.inputs.cmd = "touch"
-    wf.inputs.args = "newfile_tmp.txt"
+    wf.inputs.args = "newfile.txt"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -829,7 +830,7 @@ def test_wf_shell_cmd_2(plugin):
             executable=wf.lzin.cmd,
             args=wf.lzin.args,
         )
-    )  # , args=wf.lzin.args, strip=True))
+    )
 
     wf.set_output([("out_f", wf.shelly.lzout.out1), ("out", wf.shelly.lzout.stdout)])
 
@@ -837,8 +838,54 @@ def test_wf_shell_cmd_2(plugin):
         wf(submitter=sub)
 
     res = wf.result()
-    assert "_result.pklz" in res.output.out
-    assert "_task.pklz" in res.output.out
+    assert res.output.out == ""
+    assert res.output.out_f.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_shell_cmd_2a(plugin):
+    """ a workflow with input with defined output_file_template (tuple)
+        that requires wf.lzin
+    """
+    wf = Workflow(name="wf", input_spec=["cmd", "args"])
+
+    wf.inputs.cmd = "touch"
+    wf.inputs.args = "newfile.txt"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out1",
+                tuple,
+                dc.field(
+                    metadata={
+                        "output_file_template": ("{args}", ""),
+                        "help_string": "output file",
+                    }
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    wf.add(
+        ShellCommandTask(
+            name="shelly",
+            input_spec=my_input_spec,
+            executable=wf.lzin.cmd,
+            args=wf.lzin.args,
+        )
+    )
+
+    wf.set_output([("out_f", wf.shelly.lzout.out1), ("out", wf.shelly.lzout.stdout)])
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res.output.out == ""
+    assert res.output.out_f.exists()
 
 
 # customised output spec
