@@ -39,7 +39,10 @@ class BaseSpec:
             if field.type == File
             else getattr(self, field.name)
             for field in dc.fields(self)
-            if field.name not in ["_graph_checksums"]
+            if (
+                field.name not in ["_graph_checksums"]
+                and not field.metadata.get("output_file_template")
+            )
         }
         inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph_checksums"):

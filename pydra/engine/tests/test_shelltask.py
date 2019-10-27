@@ -867,6 +867,74 @@ def test_shell_cmd_inputspec_7a(plugin, results_function):
     assert res.output.out1_changed.exists()
 
 
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_state_1(plugin, results_function):
+    """  adding state to the input from input_spec """
+    cmd_exec = "echo"
+    hello = ["HELLO", "hi"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "text",
+                str,
+                dc.field(
+                    metadata={"position": 1, "help_string": "text", "mandatory": True}
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    # separate command into exec + args
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd_exec, text=hello, input_spec=my_input_spec
+    ).split("text")
+    assert shelly.inputs.executable == cmd_exec
+    # todo: this doesn't work when state
+    # assert shelly.cmdline == "echo HELLO"
+    res = results_function(shelly, plugin)
+    assert res[0].output.stdout == "HELLO\n"
+    assert res[1].output.stdout == "hi\n"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_state_2(plugin, results_function):
+    """
+        adding splitter to input tha is used in the output_file_tamplate
+    """
+    cmd = "touch"
+    args = ["newfile_1.txt", "newfile_2.txt"]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out1",
+                str,
+                dc.field(
+                    metadata={
+                        "output_file_template": "{args}",
+                        "help_string": "output file",
+                    }
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, input_spec=my_input_spec
+    ).split("args")
+
+    res = results_function(shelly, plugin)
+    for i in range(len(args)):
+        assert res[i].output.stdout == ""
+        assert res[i].output.out1.exists()
+
+
 # customised input_spec in Workflow
 
 

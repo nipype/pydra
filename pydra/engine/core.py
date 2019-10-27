@@ -279,6 +279,7 @@ class TaskBase:
                 raise NotImplementedError(
                     "TODO: linear workflow execution - assign submitter or plugin for now"
                 )
+            self.inputs.check_input_spec()
             res = self._run(**kwargs)
         return res
 
@@ -414,6 +415,8 @@ class TaskBase:
                     inputs_dict[inp] = getattr(self.inputs, inp)
             return state_dict, inputs_dict
         else:
+            # todo it never gets here
+            breakpoint()
             inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
             return None, inputs_dict
 
@@ -426,6 +429,7 @@ class TaskBase:
         # el._checksum = None
         _, inputs_dict = self.get_input_el(ind)
         el.inputs = dc.replace(el.inputs, **inputs_dict)
+        el.inputs.check_input_spec()
         return el
 
     # checking if all outputs are saved
