@@ -1206,6 +1206,183 @@ def test_wf_shell_cmd_3a(plugin):
     assert res.output.cp_file.exists()
 
 
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_shell_cmd_state_1(plugin):
+    """ a workflow with 2 tasks and splitter on the wf level,
+        first one has input with output_file_template (str, uses wf.lzin),
+        that is passed to the second task
+    """
+    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2", "args"]).split("args")
+
+    wf.inputs.cmd1 = "touch"
+    wf.inputs.cmd2 = "cp"
+    wf.inputs.args = ["newfile_1.txt", "newfile_2.txt"]
+
+    my_input_spec1 = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                str,
+                dc.field(
+                    metadata={
+                        "output_file_template": "{args}",
+                        "help_string": "output file",
+                    }
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_input_spec2 = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "orig_file",
+                str,
+                dc.field(metadata={"position": 1, "help_string": "output file"}),
+            ),
+            (
+                "out_file",
+                str,
+                dc.field(
+                    metadata={
+                        "position": 2,
+                        "output_file_template": "{orig_file}",
+                        "help_string": "output file",
+                    }
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    wf.add(
+        ShellCommandTask(
+            name="shelly1",
+            input_spec=my_input_spec1,
+            executable=wf.lzin.cmd1,
+            args=wf.lzin.args,
+        )
+    )
+    wf.add(
+        ShellCommandTask(
+            name="shelly2",
+            input_spec=my_input_spec2,
+            executable=wf.lzin.cmd2,
+            orig_file=wf.shelly1.lzout.file,
+        )
+    )
+
+    wf.set_output(
+        [
+            ("touch_file", wf.shelly1.lzout.file),
+            ("out1", wf.shelly1.lzout.stdout),
+            ("cp_file", wf.shelly2.lzout.out_file),
+            ("out2", wf.shelly2.lzout.stdout),
+        ]
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res_l = wf.result()
+    for res in res_l:
+        assert res.output.out1 == ""
+        assert res.output.touch_file.exists()
+        assert res.output.out2 == ""
+        assert res.output.cp_file.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_shell_cmd_ndst_1(plugin):
+    """ a workflow with 2 tasks and a splitter on the node level,
+        first one has input with output_file_template (str, uses wf.lzin),
+        that is passed to the second task
+    """
+    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2", "args"])
+
+    wf.inputs.cmd1 = "touch"
+    wf.inputs.cmd2 = "cp"
+    wf.inputs.args = ["newfile_1.txt", "newfile_2.txt"]
+
+    my_input_spec1 = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                str,
+                dc.field(
+                    metadata={
+                        "output_file_template": "{args}",
+                        "help_string": "output file",
+                    }
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_input_spec2 = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "orig_file",
+                str,
+                dc.field(metadata={"position": 1, "help_string": "output file"}),
+            ),
+            (
+                "out_file",
+                str,
+                dc.field(
+                    metadata={
+                        "position": 2,
+                        "output_file_template": "{orig_file}",
+                        "help_string": "output file",
+                    }
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    wf.add(
+        ShellCommandTask(
+            name="shelly1",
+            input_spec=my_input_spec1,
+            executable=wf.lzin.cmd1,
+            args=wf.lzin.args,
+        ).split("args")
+    )
+    wf.add(
+        ShellCommandTask(
+            name="shelly2",
+            input_spec=my_input_spec2,
+            executable=wf.lzin.cmd2,
+            orig_file=wf.shelly1.lzout.file,
+        )
+    )
+
+    wf.set_output(
+        [
+            ("touch_file", wf.shelly1.lzout.file),
+            ("out1", wf.shelly1.lzout.stdout),
+            ("cp_file", wf.shelly2.lzout.out_file),
+            ("out2", wf.shelly2.lzout.stdout),
+        ]
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res.output.out1 == ["", ""]
+    assert all([file.exists() for file in res.output.touch_file])
+    assert res.output.out2 == ["", ""]
+    assert all([file.exists() for file in res.output.cp_file])
+
+
 # customised output spec
 
 
@@ -1389,6 +1566,43 @@ def test_shell_cmd_outputspec_5(plugin, results_function):
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_state_outputspec_1(plugin, results_function):
+    """
+        providing output name by providing output_file_template
+        splitter for a field that is used in the template
+    """
+    cmd = "touch"
+    args = ["newfile_1.txt", "newfile_2.txt"]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out1",
+                File,
+                dc.field(
+                    metadata={
+                        "output_file_template": "{args}",
+                        "help_string": "output file",
+                    }
+                ),
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
+    ).split("args")
+
+    res = results_function(shelly, plugin)
+    for i in range(len(args)):
+        assert res[i].output.stdout == ""
+        assert res[i].output.out1.exists()
 
 
 # customised output_spec for tasks in workflows
