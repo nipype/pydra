@@ -184,8 +184,6 @@ class ShellCommandTask(TaskBase):
             messenger_args=messenger_args,
             cache_dir=cache_dir,
         )
-        # TODO: should I run it here?
-        # self.output_spec = output_from_inputfields(self.output_spec, self.input_spec, self.inputs)
         self.strip = strip
 
     @property
@@ -243,13 +241,6 @@ class ShellCommandTask(TaskBase):
             keys = ["return_code", "stdout", "stderr"]
             values = execute(args, strip=self.strip)
             self.output_ = dict(zip(keys, values))
-
-        # TODO: I moved it to collect output, likely can be removed from here for good
-        # additional_outputs = shelltask_additional_outputs(
-        #     self.output_spec, self.input_spec, self.inputs, self.output_dir
-        # )
-        # if additional_outputs:
-        #     self.output_ = self.output_ + tuple(additional_outputs)
 
 
 class ContainerTask(ShellCommandTask):
@@ -329,13 +320,6 @@ class ContainerTask(ShellCommandTask):
             keys = ["return_code", "stdout", "stderr"]
             values = execute(args, strip=self.strip)
             self.output_ = dict(zip(keys, values))
-
-    # TODO: should be similar to ShellTask
-    #     additional_outputs = shelltask_additional_outputs(
-    #         self.output_spec, self.input_spec, self.inputs, self.output_dir
-    #     )
-    #     if additional_outputs:
-    #         self.output_ = self.output_ + tuple(additional_outputs)
 
 
 class DockerTask(ContainerTask):
