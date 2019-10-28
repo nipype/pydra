@@ -3,8 +3,6 @@ from pathlib import Path
 import os
 import typing as ty
 
-from .helpers import path_to_string
-
 
 class File(Path):
     pass
@@ -482,3 +480,11 @@ class TaskHook:
 
     def reset(self):
         self.__dict__ = TaskHook().__dict__
+
+
+def path_to_string(value):
+    if isinstance(value, Path):
+        value = str(value)
+    elif isinstance(value, list) and isinstance(value[0], Path):
+        value = [str(val) for val in value]
+    return value

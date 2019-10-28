@@ -325,11 +325,3 @@ def output_from_inputfields(output_spec, input_spec, inputs):
                 (field_name, File, dc.field(metadata={"value": value}))
             )
     return output_spec
-
-
-def path_to_string(value):
-    if isinstance(value, Path):
-        value = str(value)
-    elif isinstance(value, list) and isinstance(value[0], Path):
-        value = [str(val) for val in value]
-    return value
