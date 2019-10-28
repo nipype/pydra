@@ -3,6 +3,8 @@ from pathlib import Path
 import os
 import typing as ty
 
+from .helpers import path_to_string
+
 
 class File(Path):
     pass
@@ -268,13 +270,14 @@ class ShellSpec(BaseSpec):
                     value = value.get_value(wf, state_index=state_index)
                     temp_values[field.name] = value
         for field, value in temp_values.items():
+            value = path_to_string(value)
             setattr(self, field, value)
-
         # retrieving values that have specified templates (and require other fields to be set first)
         for field in dc.fields(self):
             if field.metadata.get("output_file_template"):
                 if field.type is str:
                     value = field.metadata["output_file_template"].format(**temp_values)
+                    value = path_to_string(value)
                     setattr(self, field.name, value)
                 elif field.type is tuple:
                     name, ext = os.path.splitext(
@@ -283,6 +286,7 @@ class ShellSpec(BaseSpec):
                         )
                     )
                     value = f"{name}{field.metadata['output_file_template'][1]}{ext}"
+                    value = path_to_string(value)
                     setattr(self, field.name, value)
                 else:
                     raise Exception(
