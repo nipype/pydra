@@ -300,6 +300,7 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=False):
 
 
 def output_names_from_inputfields(input_spec):
+    """ collecting outputs from input fields with output_file_template"""
     output_names = []
     for fld in dc.fields(make_klass(input_spec)):
         if "output_file_template" in fld.metadata:
@@ -312,10 +313,9 @@ def output_names_from_inputfields(input_spec):
 
 
 def output_from_inputfields(output_spec, input_spec, inputs):
+    """ collecting values from output from input fields"""
     for fld in dc.fields(make_klass(input_spec)):
         if "output_file_template" in fld.metadata:
-            # likely can just take from the input
-            # value = fld.metadata["output_file_template"].format(**inputs.__dict__)
             value = getattr(inputs, fld.name)
             if "output_field_name" in fld.metadata:
                 field_name = fld.metadata["output_field_name"]

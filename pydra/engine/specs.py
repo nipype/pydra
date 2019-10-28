@@ -2,6 +2,7 @@ import dataclasses as dc
 from pathlib import Path
 import os
 import typing as ty
+from string import Formatter
 
 
 class File(Path):
@@ -130,6 +131,7 @@ class ShellSpec(BaseSpec):
     )
 
     def check_input_spec(self):
+        """ checking the input spec and fields"""
         supported_keys = [
             "mandatory",
             "xor",
@@ -149,6 +151,17 @@ class ShellSpec(BaseSpec):
         require_to_check = {}
         for fld in fields:
             mdata = fld.metadata
+            # checking keys from metadata
+            if set(mdata.keys()) - set(supported_keys):
+                raise Exception(
+                    f"only these keys are supported {supported_keys}, but "
+                    f"{set(mdata.keys()) - set(supported_keys)} provided"
+                )
+            # checking if the help string is provided (required field)
+            if "help_string" not in mdata:
+                raise Exception(f"{fld.name} doesn't have help_string field")
+
+            # fld.default can't be different than default_value when both set
             if (
                 not isinstance(fld.default, dc._MISSING_TYPE)
                 and mdata.get("default_value")
@@ -157,6 +170,7 @@ class ShellSpec(BaseSpec):
                 raise Exception(
                     "field.default and metadata[default_value] are both set and differ"
                 )
+            # assuming that fields with output_file_template shouldn't have default
             if (
                 not isinstance(fld.default, dc._MISSING_TYPE)
                 or mdata.get("default_value")
@@ -164,6 +178,7 @@ class ShellSpec(BaseSpec):
                 raise Exception(
                     "default value should not be set together with output_file_template"
                 )
+            # not allowing for default if the field is mandatory
             if (
                 not isinstance(fld.default, dc._MISSING_TYPE)
                 or mdata.get("default_value")
@@ -171,7 +186,7 @@ class ShellSpec(BaseSpec):
                 raise Exception(
                     "default value should not be set when the field is mandatory"
                 )
-
+            # checking if the mandatory field is provided
             if dc.asdict(self)[fld.name] is None:
                 if mdata.get("mandatory"):
                     raise Exception(f"{fld.name} is mandatory, but no value provided")
@@ -181,17 +196,10 @@ class ShellSpec(BaseSpec):
                     continue
             names.append(fld.name)
 
-            if set(mdata.keys()) - set(supported_keys):
-                raise Exception(
-                    f"only these keys are supported {supported_keys}, but "
-                    f"{set(mdata.keys()) - set(supported_keys)} provided"
-                )
-            # checking if the help string is provided (required field)
-            if "help_string" not in mdata:
-                raise Exception(f"{fld.name} doesn't have help_string field")
-            # checking if field has set value if mandatory=True
-            # or (set value or default) if not mandatory
+            # updating the template fields if possible
+            self._template_update()
 
+            # checking if fields meet the xor and requires are
             if "xor" in mdata:
                 if [el for el in mdata["xor"] if el in names]:
                     raise Exception(
@@ -203,8 +211,6 @@ class ShellSpec(BaseSpec):
                     # will check after adding all fields to names
                     require_to_check[fld.name] = mdata["requires"]
 
-        self._template_update()
-
         for nm, required in require_to_check.items():
             required_notfound = [el for el in required if el not in names]
             if required_notfound:
@@ -214,11 +220,12 @@ class ShellSpec(BaseSpec):
         self._type_checking()
 
     def _template_update(self):
+        """ updating all templates that are ready
+            i.e. all inputs used in teh template are already set
+        """
         fields = dc.fields(self)
         for fld in fields:
             if fld.metadata.get("output_file_template"):
-                from string import Formatter
-
                 if fld.type is str:
                     needed_args = [
                         el[1]
@@ -252,6 +259,7 @@ class ShellSpec(BaseSpec):
                     )
 
     def _type_checking(self):
+        """ using fld.type to check the types TODO"""
         fields = dc.fields(self)
         allowed_keys = ["min_val", "max_val", "range", "enum"]
         for fld in fields:
@@ -261,7 +269,7 @@ class ShellSpec(BaseSpec):
     def retrieve_values(self, wf, state_index=None):
         temp_values = {}
         for field in dc.fields(self):
-            # retrieving values that do not have templats
+            # retrieving values that do not have templates
             if not field.metadata.get("output_file_template"):
                 value = getattr(self, field.name)
                 if isinstance(value, LazyField):
@@ -270,11 +278,19 @@ class ShellSpec(BaseSpec):
         for field, value in temp_values.items():
             value = path_to_string(value)
             setattr(self, field, value)
-        # retrieving values that have specified templates (and require other fields to be set first)
+        # retrieving values for templates
+        self._retrieve_values_from_templates()
+
+    def _retrieve_values_from_templates(self):
+        """retrieving values that have specified templates
+           and have to wait for other arguments to be set first
+        """
         for field in dc.fields(self):
             if field.metadata.get("output_file_template"):
                 if field.type is str:
-                    value = field.metadata["output_file_template"].format(**temp_values)
+                    value = field.metadata["output_file_template"].format(
+                        **self.__dict__
+                    )
                     value = path_to_string(value)
                     setattr(self, field.name, value)
                 elif field.type is tuple:
@@ -306,9 +322,11 @@ class ShellOutSpec(BaseSpec):
                 if fld.type is File:
                     # assuming that field should have either default or metadata, but not both
                     if (
-                        not fld.default and isinstance(fld.default, dc._MISSING_TYPE)
-                    ) or (
-                        not isinstance(fld.default, dc._MISSING_TYPE) and fld.metadata
+                        not (
+                            fld.default is None
+                            or isinstance(fld.default, dc._MISSING_TYPE)
+                        )
+                        and fld.metadata
                     ):
                         raise Exception("File has to have default value or metadata")
                     elif not isinstance(fld.default, dc._MISSING_TYPE):
@@ -328,7 +346,7 @@ class ShellOutSpec(BaseSpec):
         if not isinstance(fld.default, (str, Path)):
             raise Exception(
                 f"{fld.name} is a File, so default value "
-                f"should be string or Path, "
+                f"should be a string or a Path, "
                 f"{fld.default} provided"
             )
         if isinstance(fld.default, str):

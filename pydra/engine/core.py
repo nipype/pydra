@@ -329,25 +329,8 @@ class TaskBase:
         self.hooks.post_run(self, result)
         return result
 
-    # todo: check foe workflow, can i remove it??
-    def _list_outputs(self):
-        return self.output_
-        # output_dict = {}
-        # if len(self.output_names) == 1:
-        #     output_dict[self.output_names[0]] = self.output_
-        # else:
-        #     if len(self.output_names) != len(self.output_):
-        #         raise Exception(
-        #             f"output names, {self.output_names}, "
-        #             f"has to be the same length as output, {self.output_}"
-        #         )
-        #     for ii, out_nm in enumerate(self.output_names):
-        #         output_dict[out_nm] = self.output_[ii]
-        # return output_dict
-
-    # TODO think what exactly should be here
     def _collect_outputs(self):
-        run_output = self._list_outputs()
+        run_output = self.output_
         self.output_spec = output_from_inputfields(
             self.output_spec, self.input_spec, self.inputs
         )
@@ -487,7 +470,6 @@ class TaskBase:
                 raise ValueError("Task does not have a state")
             checksum = self.checksum
             result = load_result(checksum, self.cache_locations)
-            print("\n RESULT", result)
             return result
 
     def _reset(self):
@@ -695,14 +677,16 @@ class Workflow(TaskBase):
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
         logger.info("Added %s to %s", self.output_spec, self)
 
-    def _list_outputs(self):
-        output = {}
+    def _collect_outputs(self):
+        output_klass = make_klass(self.output_spec)
+        output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
+        # collecting outputs from tasks
+        output_wf = {}
         for name, val in self._connections:
             if not isinstance(val, LazyField):
                 raise ValueError("all connections must be lazy")
-            output[name] = val.get_value(self)
-        print("\n WF output", output)
-        return output
+            output_wf[name] = val.get_value(self)
+        return dc.replace(output, **output_wf)
 
 
 def is_task(obj):
