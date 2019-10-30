@@ -812,3 +812,169 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
     res = docky()
     assert res[0].output.stdout == "hello from pydra"
     assert res[1].output.stdout == "have a nice one"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_wf_inputspec_1(plugin, tmpdir):
+    """ a customized input spec for workflow with docker tasks """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra")
+
+    cmd = "cat"
+    filename = "/tmp_dir/file_pydra.txt"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(DockerSpec,),
+    )
+
+    wf = Workflow(name="wf", input_spec=["cmd", "file"])
+    wf.inputs.cmd = cmd
+    wf.inputs.file = filename
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=wf.lzin.cmd,
+        file=wf.lzin.file,
+        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+        input_spec=my_input_spec,
+        strip=True,
+    )
+    wf.add(docky)
+
+    wf.set_output([("out", wf.docky.lzout.stdout)])
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res.output.out == "hello from pydra"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_wf_state_inputspec_1(plugin, tmpdir):
+    """ a customized input spec for workflow with docker tasks that has a state"""
+    file_1 = tmpdir.join("file_pydra.txt")
+    file_2 = tmpdir.join("file_nice.txt")
+    with open(file_1, "w") as f:
+        f.write("hello from pydra")
+    with open(file_2, "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename = [str(file_1), str(file_2)]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(DockerSpec,),
+    )
+
+    wf = Workflow(name="wf", input_spec=["cmd", "file"])
+    wf.inputs.cmd = cmd
+    wf.inputs.file = filename
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=wf.lzin.cmd,
+        file=wf.lzin.file,
+        bindings=[(str(tmpdir), str(tmpdir), "ro")],
+        input_spec=my_input_spec,
+        strip=True,
+    )
+    wf.add(docky)
+    wf.split("file")
+
+    wf.set_output([("out", wf.docky.lzout.stdout)])
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res[0].output.out == "hello from pydra"
+    assert res[1].output.out == "have a nice one"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
+    """ a customized input spec for workflow with docker tasks with states"""
+    file_1 = tmpdir.join("file_pydra.txt")
+    file_2 = tmpdir.join("file_nice.txt")
+    with open(file_1, "w") as f:
+        f.write("hello from pydra")
+    with open(file_2, "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename = [str(file_1), str(file_2)]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(DockerSpec,),
+    )
+
+    wf = Workflow(name="wf", input_spec=["cmd", "file"])
+    wf.inputs.cmd = cmd
+    wf.inputs.file = filename
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=wf.lzin.cmd,
+        file=wf.lzin.file,
+        bindings=[(str(tmpdir), str(tmpdir), "ro")],
+        input_spec=my_input_spec,
+        strip=True,
+    ).split("file")
+    wf.add(docky)
+
+    wf.set_output([("out", wf.docky.lzout.stdout)])
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res.output.out == ["hello from pydra", "have a nice one"]
