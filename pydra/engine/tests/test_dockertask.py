@@ -3,11 +3,12 @@
 import os, shutil
 import pytest
 from pathlib import Path
+import dataclasses as dc
 
 from ..task import DockerTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, SpecInfo, File
+from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec
 
 if bool(shutil.which("sbatch")):
     Plugins = ["cf", "slurm"]
@@ -419,3 +420,395 @@ def test_docker_outputspec_2(plugin, tmpdir):
     res = docky.result()
     assert res.output.stdout == ""
     assert res.output.newfile.exists()
+
+
+# tests with customised input_spec
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_inputspec_1(plugin, tmpdir):
+    """ a simple customized input spec for docker task """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra")
+
+    cmd = "cat"
+    filename = "/tmp_dir/file_pydra.txt"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(DockerSpec,),
+    )
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=cmd,
+        file=filename,
+        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+        input_spec=my_input_spec,
+        strip=True,
+    )
+
+    res = docky()
+
+    assert res.output.stdout == "hello from pydra"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_inputspec_1a(plugin, tmpdir):
+    """ a simple customized input spec for docker task
+        a default value is used
+    """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra")
+
+    cmd = "cat"
+    filename = "/tmp_dir/file_pydra.txt"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    default=filename,
+                    metadata={"position": 1, "help_string": "input file"},
+                ),
+            )
+        ],
+        bases=(DockerSpec,),
+    )
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=cmd,
+        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+        input_spec=my_input_spec,
+        strip=True,
+    )
+
+    res = docky()
+
+    assert res.output.stdout == "hello from pydra"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_inputspec_2(plugin, tmpdir):
+    """ a customized input spec with two fields for docker task """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra\n")
+
+    with open(tmpdir.join("file_nice.txt"), "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename_1 = "/tmp_dir/file_pydra.txt"
+    filename_2 = "/tmp_dir/file_nice.txt"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                File,
+                dc.field(metadata={"position": 1, "help_string": "input file 1"}),
+            ),
+            (
+                "file2",
+                File,
+                dc.field(
+                    default=filename_2,
+                    metadata={"position": 2, "help_string": "input file 2"},
+                ),
+            ),
+        ],
+        bases=(DockerSpec,),
+    )
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=cmd,
+        file1=filename_1,
+        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+        input_spec=my_input_spec,
+        strip=True,
+    )
+
+    res = docky()
+    assert res.output.stdout == "hello from pydra\nhave a nice one"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_inputspec_2a_except(plugin, tmpdir):
+    """ a customized input spec with two fields
+        first one uses a default, and second doesn't - raises a dataclass exception
+    """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra\n")
+
+    with open(tmpdir.join("file_nice.txt"), "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename_1 = "/tmp_dir/file_pydra.txt"
+    filename_2 = "/tmp_dir/file_nice.txt"
+
+    # the field with default value can't be before value without default
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                File,
+                dc.field(
+                    default=filename_1,
+                    metadata={"position": 1, "help_string": "input file 1"},
+                ),
+            ),
+            (
+                "file2",
+                File,
+                dc.field(metadata={"position": 2, "help_string": "input file 2"}),
+            ),
+        ],
+        bases=(DockerSpec,),
+    )
+
+    with pytest.raises(TypeError) as excinfo:
+        docky = DockerTask(
+            name="docky",
+            image="busybox",
+            executable=cmd,
+            file2=filename_2,
+            bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+            input_spec=my_input_spec,
+            strip=True,
+        )
+    assert "non-default argument 'file2' follows default argument" == str(excinfo.value)
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_inputspec_2a(plugin, tmpdir):
+    """ a customized input spec with two fields
+        first one uses a default by using metadata['default_value'],
+        this is fine even if the second field is not using any defaults
+    """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra\n")
+
+    with open(tmpdir.join("file_nice.txt"), "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename_1 = "/tmp_dir/file_pydra.txt"
+    filename_2 = "/tmp_dir/file_nice.txt"
+
+    # if you want set default in the first field you can use default_value in metadata
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                File,
+                dc.field(
+                    metadata={
+                        "default_value": filename_1,
+                        "position": 1,
+                        "help_string": "input file 1",
+                    }
+                ),
+            ),
+            (
+                "file2",
+                File,
+                dc.field(metadata={"position": 2, "help_string": "input file 2"}),
+            ),
+        ],
+        bases=(DockerSpec,),
+    )
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=cmd,
+        file2=filename_2,
+        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+        input_spec=my_input_spec,
+        strip=True,
+    )
+
+    res = docky()
+    assert res.output.stdout == "hello from pydra\nhave a nice one"
+
+
+@pytest.mark.xfail(
+    reason="the file hash is not calculated, "
+    "since the files can't be found (container path provided)"
+    "so at the end both states give the same cheksum"
+    "and the second item is not run..."
+)
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_inputspec_state_1(plugin, tmpdir):
+    """ a customised input spec for a docker file with a splitter,
+        splitter is on files - causes issues in a docker task (see xfail reason) TODO
+    """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra")
+    with open(tmpdir.join("file_nice.txt"), "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename = ["/tmp_dir/file_pydra.txt", "/tmp_dir/file_nice.txt"]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(DockerSpec,),
+    )
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=cmd,
+        file=filename,
+        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+        input_spec=my_input_spec,
+        strip=True,
+    ).split("file")
+
+    res = docky()
+    assert res[0].output.stdout == "hello from pydra"
+    assert res[1].output.stdout == "have a nice one"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_inputspec_state_1a_tmp(plugin, tmpdir):
+    """ a customised input spec for a docker file with a splitter,
+        files from the input spec represented as string to avoid problems...
+        this is probably just a temporary solution
+    """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra")
+    with open(tmpdir.join("file_nice.txt"), "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename = ["/tmp_dir/file_pydra.txt", "/tmp_dir/file_nice.txt"]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                str,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(DockerSpec,),
+    )
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=cmd,
+        file=filename,
+        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+        input_spec=my_input_spec,
+        strip=True,
+    ).split("file")
+
+    res = docky()
+    assert res[0].output.stdout == "hello from pydra"
+    assert res[1].output.stdout == "have a nice one"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_inputspec_state_1b(plugin, tmpdir):
+    """ a customised input spec for a docker file with a splitter,
+        files from the input spec have the same path in the local os and the container,
+        so hash is calculated and the test works fine
+    """
+    file_1 = tmpdir.join("file_pydra.txt")
+    file_2 = tmpdir.join("file_nice.txt")
+    with open(file_1, "w") as f:
+        f.write("hello from pydra")
+    with open(file_2, "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename = [str(file_1), str(file_2)]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(DockerSpec,),
+    )
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=cmd,
+        file=filename,
+        # recreates the same directory
+        bindings=[(str(tmpdir), str(tmpdir), "ro")],
+        input_spec=my_input_spec,
+        strip=True,
+    ).split("file")
+
+    res = docky()
+    assert res[0].output.stdout == "hello from pydra"
+    assert res[1].output.stdout == "have a nice one"

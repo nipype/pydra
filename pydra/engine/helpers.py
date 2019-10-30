@@ -285,7 +285,7 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=False):
     if afile is None:
         return None
     if not os.path.isfile(afile):
-        if raise_notfound:
+        if raise_notfound:  # WHY??
             raise RuntimeError('File "%s" not found.' % afile)
         return None
 

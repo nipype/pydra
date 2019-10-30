@@ -391,7 +391,7 @@ class ContainerSpec(ShellSpec):
         metadata={"help_string": "container"}
     )
     container_xargs: ty.Optional[ty.List[str]] = dc.field(
-        default=None, metadata={"help_string": "todo"}
+        metadata={"help_string": "todo"}
     )
     bindings: ty.Optional[
         ty.List[
@@ -401,17 +401,21 @@ class ContainerSpec(ShellSpec):
                 ty.Optional[str],  # mount mode
             ]
         ]
-    ] = dc.field(default=None, metadata={"help_string": "bindings"})
+    ] = dc.field(metadata={"help_string": "bindings"})
 
 
 @dc.dataclass
 class DockerSpec(ContainerSpec):
-    container: str = dc.field(default="docker", metadata={"help_string": "container"})
+    container: str = dc.field(
+        metadata={"default_value": "docker", "help_string": "container"}
+    )
 
 
 @dc.dataclass
 class SingularitySpec(ContainerSpec):
-    container: str = "singularity"
+    container: str = dc.field(
+        metadata={"default_value": "singularity", "help_string": "container type"}
+    )
 
 
 class LazyField:

@@ -935,6 +935,47 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function):
         assert res[i].output.out1.exists()
 
 
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_state_3(plugin, results_function, tmpdir):
+    """  adding state to the File-input from input_spec """
+
+    file_1 = tmpdir.join("file_pydra.txt")
+    file_2 = tmpdir.join("file_nice.txt")
+    with open(file_1, "w") as f:
+        f.write("hello from pydra")
+    with open(file_2, "w") as f:
+        f.write("have a nice one")
+
+    cmd_exec = "cat"
+    files = [file_1, file_2]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={"position": 1, "help_string": "files", "mandatory": True}
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd_exec, file=files, input_spec=my_input_spec
+    ).split("file")
+
+    assert shelly.inputs.executable == cmd_exec
+    # todo: this doesn't work when state
+    # assert shelly.cmdline == "echo HELLO"
+    res = results_function(shelly, plugin)
+    assert res[0].output.stdout == "hello from pydra"
+    assert res[1].output.stdout == "have a nice one"
+
+
 # customised input_spec in Workflow
 
 
