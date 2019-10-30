@@ -51,6 +51,8 @@ def test_shellspec():
 container_attrs = ["image", "container", "container_xargs", "bindings"]
 
 
+# TODO: these 3 tests won't work after my changes related to the data class inherit issues
+# TypeError: __init__() missing 2 required positional arguments: 'container_xargs' and 'bindings'
 def test_container():
     with pytest.raises(TypeError):
         spec = ContainerSpec()
