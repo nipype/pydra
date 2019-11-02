@@ -112,7 +112,7 @@ class TaskBase:
                     raise ValueError("Unknown input set {!r}".format(inputs))
                 inputs = self._input_sets[inputs]
             self.inputs = dc.replace(self.inputs, **inputs)
-            self.inputs.check_input_spec()
+            self.inputs.check_metadata()
             self.state_inputs = inputs
 
         self.audit = Audit(
@@ -279,12 +279,13 @@ class TaskBase:
                 raise NotImplementedError(
                     "TODO: linear workflow execution - assign submitter or plugin for now"
                 )
-            self.inputs.check_input_spec()
             res = self._run(**kwargs)
         return res
 
     def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
+        self.inputs.check_fields_input_spec()
+        self.inputs.template_update()
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
@@ -412,7 +413,6 @@ class TaskBase:
         # el._checksum = None
         _, inputs_dict = self.get_input_el(ind)
         el.inputs = dc.replace(el.inputs, **inputs_dict)
-        el.inputs.check_input_spec()
         return el
 
     # checking if all outputs are saved

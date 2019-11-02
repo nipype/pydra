@@ -27,8 +27,14 @@ class BaseSpec:
     def collect_additional_outputs(self, input_spec, inputs, output_dir):
         return {}
 
-    def check_input_spec(self):
+    def check_metadata(self):
         pass  # TODO
+
+    def check_fields_input_spec(self):
+        pass
+
+    def template_update(self):
+        pass
 
     @property
     def hash(self):
@@ -60,9 +66,6 @@ class BaseSpec:
                 temp_values[field.name] = value
         for field, value in temp_values.items():
             setattr(self, field, value)
-
-    def check_input_spec(self):
-        pass  # TODO
 
 
 @dc.dataclass
@@ -130,8 +133,10 @@ class ShellSpec(BaseSpec):
         }
     )
 
-    def check_input_spec(self):
-        """ checking the input spec and fields"""
+    def check_metadata(self):
+        """ checking the metadata for fields in input_spec and fields,
+            setting the default values when available and needed
+        """
         supported_keys = [
             "mandatory",
             "xor",
@@ -147,8 +152,6 @@ class ShellSpec(BaseSpec):
         ]
 
         fields = dc.fields(self)
-        names = []
-        require_to_check = {}
         for fld in fields:
             mdata = fld.metadata
             # checking keys from metadata
@@ -186,6 +189,22 @@ class ShellSpec(BaseSpec):
                 raise Exception(
                     "default value should not be set when the field is mandatory"
                 )
+            # setting default if value not provided and default is available
+            if dc.asdict(self)[fld.name] is None:
+                if mdata.get("default_value"):
+                    setattr(self, fld.name, mdata["default_value"])
+                elif not isinstance(fld.default, dc._MISSING_TYPE):
+                    setattr(self, fld.name, fld.default)
+
+    def check_fields_input_spec(self):
+        """ checking fields from input spec based on the medatada
+            e.g., if xor, requires are fulfilled, if value provided when mandatory
+        """
+        fields = dc.fields(self)
+        names = []
+        require_to_check = {}
+        for fld in fields:
+            mdata = fld.metadata
             # checking if the mandatory field is provided
             if dc.asdict(self)[fld.name] is None:
                 if mdata.get("mandatory"):
@@ -195,9 +214,6 @@ class ShellSpec(BaseSpec):
                 else:
                     continue
             names.append(fld.name)
-
-            # updating the template fields if possible
-            self._template_update()
 
             # checking if fields meet the xor and requires are
             if "xor" in mdata:
@@ -216,47 +232,8 @@ class ShellSpec(BaseSpec):
             if required_notfound:
                 raise Exception(f"{nm} requires {required_notfound}")
 
-        # TODO: types might be checked here
+            # TODO: types might be checked here
         self._type_checking()
-
-    def _template_update(self):
-        """ updating all templates that are ready
-            i.e. all inputs used in teh template are already set
-        """
-        fields = dc.fields(self)
-        for fld in fields:
-            if fld.metadata.get("output_file_template"):
-                if fld.type is str:
-                    needed_args = [
-                        el[1]
-                        for el in Formatter().parse(
-                            fld.metadata["output_file_template"]
-                        )
-                    ]
-                    if all([self.__dict__.get(el) for el in needed_args]):
-                        value = fld.metadata["output_file_template"].format(
-                            **self.__dict__
-                        )
-                        setattr(self, fld.name, value)
-                elif fld.type is tuple:
-                    needed_args = [
-                        el[1]
-                        for el in Formatter().parse(
-                            fld.metadata["output_file_template"][0]
-                        )
-                    ]
-                    if all([self.__dict__.get(el) for el in needed_args]):
-                        name, ext = os.path.splitext(
-                            fld.metadata["output_file_template"][0].format(
-                                **self.__dict__
-                            )
-                        )
-                        value = f"{name}{fld.metadata['output_file_template'][1]}{ext}"
-                        setattr(self, fld.name, value)
-                else:
-                    raise Exception(
-                        "output names should be a string or a tuple of two strings"
-                    )
 
     def _type_checking(self):
         """ using fld.type to check the types TODO"""
@@ -265,6 +242,27 @@ class ShellSpec(BaseSpec):
         for fld in fields:
             # TODO
             pass
+
+    def template_update(self):
+        """ updating all templates that are present in the input spec
+            should be run when all inputs used in the templates are already set
+        """
+        fields = dc.fields(self)
+        for fld in fields:
+            if fld.metadata.get("output_file_template"):
+                if fld.type is str:
+                    value = fld.metadata["output_file_template"].format(**self.__dict__)
+                    setattr(self, fld.name, value)
+                elif fld.type is tuple:
+                    name, ext = os.path.splitext(
+                        fld.metadata["output_file_template"][0].format(**self.__dict__)
+                    )
+                    value = f"{name}{fld.metadata['output_file_template'][1]}{ext}"
+                    setattr(self, fld.name, value)
+                else:
+                    raise Exception(
+                        "output names should be a string or a tuple of two strings"
+                    )
 
     def retrieve_values(self, wf, state_index=None):
         temp_values = {}
@@ -278,34 +276,6 @@ class ShellSpec(BaseSpec):
         for field, value in temp_values.items():
             value = path_to_string(value)
             setattr(self, field, value)
-        # retrieving values for templates
-        self._retrieve_values_from_templates()
-
-    def _retrieve_values_from_templates(self):
-        """retrieving values that have specified templates
-           and have to wait for other arguments to be set first
-        """
-        for field in dc.fields(self):
-            if field.metadata.get("output_file_template"):
-                if field.type is str:
-                    value = field.metadata["output_file_template"].format(
-                        **self.__dict__
-                    )
-                    value = path_to_string(value)
-                    setattr(self, field.name, value)
-                elif field.type is tuple:
-                    name, ext = os.path.splitext(
-                        field.metadata["output_file_template"][0].format(
-                            **self.__dict__
-                        )
-                    )
-                    value = f"{name}{field.metadata['output_file_template'][1]}{ext}"
-                    value = path_to_string(value)
-                    setattr(self, field.name, value)
-                else:
-                    raise Exception(
-                        "output names should be a string or a tuple of two strings"
-                    )
 
 
 @dc.dataclass

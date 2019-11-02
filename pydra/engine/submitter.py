@@ -99,7 +99,6 @@ class Submitter:
                 await self._run_workflow(runnable)
             else:
                 # submit task to worker
-                runnable.inputs.check_input_spec()
                 futures.add(self.worker.run_el(runnable))
 
         if wait and futures:

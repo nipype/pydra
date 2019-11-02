@@ -398,7 +398,7 @@ def test_docker_outputspec_1a(plugin, tmpdir):
 def test_docker_outputspec_2(plugin, tmpdir):
     """
         customised output_spec, adding files to the output, providing specific pathname
-        path in bindings is an absolut path (bind_tuple[3]==False)
+        path in bindings is an absolute path (bind_tuple[3]==False)
     """
     cmd = ["touch", "/outputs/newfile_tmp.txt"]
     my_output_spec = SpecInfo(

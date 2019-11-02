@@ -390,8 +390,39 @@ def test_shell_cmd_inputspec_3(plugin, results_function):
     assert res.output.stdout == "HELLO\n"
 
 
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 @pytest.mark.parametrize("plugin", Plugins)
-def test_shell_cmd_inputspec_3a_exception(plugin):
+def test_shell_cmd_inputspec_3a(plugin, results_function):
+    """  mandatory field added to fields, value provided after init"""
+    cmd_exec = "echo"
+    hello = "HELLO"
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "text",
+                str,
+                dc.field(
+                    metadata={"position": 1, "help_string": "text", "mandatory": True}
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    # separate command into exec + args
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec
+    )
+    shelly.inputs.text = hello
+    assert shelly.inputs.executable == cmd_exec
+    assert shelly.cmdline == "echo HELLO"
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == "HELLO\n"
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_3b_exception(plugin):
     """  mandatory field added to fields, value is not provided, so exception is raised """
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
@@ -408,17 +439,17 @@ def test_shell_cmd_inputspec_3a_exception(plugin):
         bases=(ShellSpec,),
     )
 
-    # separate command into exec + args
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec
+    )
     with pytest.raises(Exception) as excinfo:
-        shelly = ShellCommandTask(
-            name="shelly", executable=cmd_exec, input_spec=my_input_spec
-        )
+        shelly()
     assert "mandatory" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 @pytest.mark.parametrize("plugin", Plugins)
-def test_shell_cmd_inputspec_3b(plugin, results_function):
+def test_shell_cmd_inputspec_3c(plugin, results_function):
     """  mandatory=False, so tasks runs fine even without the value """
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
@@ -694,14 +725,15 @@ def test_shell_cmd_inputspec_5a_exception(plugin):
         bases=(ShellSpec,),
     )
 
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd_exec,
+        opt_t=cmd_t,
+        opt_S=cmd_S,
+        input_spec=my_input_spec,
+    )
     with pytest.raises(Exception) as excinfo:
-        shelly = ShellCommandTask(
-            name="shelly",
-            executable=cmd_exec,
-            opt_t=cmd_t,
-            opt_S=cmd_S,
-            input_spec=my_input_spec,
-        )
+        shelly()
     assert "is mutually exclusive" in str(excinfo.value)
 
 
@@ -709,7 +741,7 @@ def test_shell_cmd_inputspec_5a_exception(plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_6(plugin, results_function):
     """ checking requires in metadata:
-    the required option is also True, so the task works fine
+        the required field is set in the init, so the task works fine
     """
     cmd_exec = "ls"
     cmd_l = True
@@ -756,7 +788,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_6a_exception(plugin):
     """ checking requires in metadata:
-    the required option is None, so the task works raises exception
+        the required field is None, so the task works raises exception
     """
     cmd_exec = "ls"
     cmd_t = True
@@ -786,11 +818,61 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
         bases=(ShellSpec,),
     )
 
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd_exec, opt_t=cmd_t, input_spec=my_input_spec
+    )
     with pytest.raises(Exception) as excinfo:
-        shelly = ShellCommandTask(
-            name="shelly", executable=cmd_exec, opt_t=cmd_t, input_spec=my_input_spec
-        )
+        shelly()
     assert "requires" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_6b(plugin, results_function):
+    """ checking requires in metadata:
+        the required field set after the init
+    """
+    cmd_exec = "ls"
+    cmd_l = True
+    cmd_t = True
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "opt_t",
+                bool,
+                dc.field(
+                    metadata={
+                        "position": 2,
+                        "help_string": "opt t",
+                        "argstr": "-t",
+                        "requires": ["opt_l"],
+                    }
+                ),
+            ),
+            (
+                "opt_l",
+                bool,
+                dc.field(
+                    metadata={"position": 1, "help_string": "opt l", "argstr": "-l"}
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    # separate command into exec + args
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd_exec,
+        opt_t=cmd_t,
+        # opt_l=cmd_l,
+        input_spec=my_input_spec,
+    )
+    shelly.inputs.opt_l = cmd_l
+    assert shelly.inputs.executable == cmd_exec
+    assert shelly.cmdline == "ls -l -t"
+    res = results_function(shelly, plugin)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
