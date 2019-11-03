@@ -27,15 +27,6 @@ class BaseSpec:
     def collect_additional_outputs(self, input_spec, inputs, output_dir):
         return {}
 
-    def check_metadata(self):
-        pass  # TODO
-
-    def check_fields_input_spec(self):
-        pass
-
-    def template_update(self):
-        pass
-
     @property
     def hash(self):
         """Compute a basic hash for any given set of fields"""
@@ -67,72 +58,6 @@ class BaseSpec:
         for field, value in temp_values.items():
             setattr(self, field, value)
 
-
-@dc.dataclass
-class Runtime:
-    rss_peak_gb: ty.Optional[float] = None
-    vms_peak_gb: ty.Optional[float] = None
-    cpu_peak_percent: ty.Optional[float] = None
-
-
-@dc.dataclass
-class Result:
-    output: ty.Optional[ty.Any] = None
-    runtime: ty.Optional[Runtime] = None
-    errored: bool = False
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        if state["output"] is not None:
-            fields = tuple((el.name, el.type) for el in dc.fields(state["output"]))
-            state["output_spec"] = (state["output"].__class__.__name__, fields)
-            state["output"] = dc.asdict(state["output"])
-        return state
-
-    def __setstate__(self, state):
-        if "output_spec" in state:
-            spec = list(state["output_spec"])
-            del state["output_spec"]
-            klass = dc.make_dataclass(spec[0], list(spec[1]))
-            state["output"] = klass(**state["output"])
-        self.__dict__.update(state)
-
-
-@dc.dataclass
-class RuntimeSpec:
-    outdir: ty.Optional[str] = None
-    container: ty.Optional[str] = "shell"
-    network: bool = False
-    """
-    from CWL:
-    InlineJavascriptRequirement
-    SchemaDefRequirement
-    DockerRequirement
-    SoftwareRequirement
-    InitialWorkDirRequirement
-    EnvVarRequirement
-    ShellCommandRequirement
-    ResourceRequirement
-
-    InlineScriptRequirement
-    """
-
-
-@dc.dataclass
-class ShellSpec(BaseSpec):
-    executable: ty.Union[str, ty.List[str]] = dc.field(
-        metadata={
-            "help_string": "the first part of the command, can be a string, "
-            "e.g. 'ls', or a list, e.g. ['ls', '-l', 'dirname']"
-        }
-    )
-    args: ty.Union[str, ty.List[str]] = dc.field(
-        metadata={
-            "help_string": "the last part of the command, can be a string, "
-            "e.g. <file_name>, or a list"
-        }
-    )
-
     def check_metadata(self):
         """ checking the metadata for fields in input_spec and fields,
             setting the default values when available and needed
@@ -150,8 +75,10 @@ class ShellSpec(BaseSpec):
             "argstr",
             "allowed_values",
         ]
+        # special inputs, don't have to follow rules for standard inputs
+        special_input = ["_func", "_graph_checksums"]
 
-        fields = dc.fields(self)
+        fields = [fld for fld in dc.fields(self) if fld.name not in special_input]
         for fld in fields:
             mdata = fld.metadata
             # checking keys from metadata
@@ -263,6 +190,72 @@ class ShellSpec(BaseSpec):
                     raise Exception(
                         "output names should be a string or a tuple of two strings"
                     )
+
+
+@dc.dataclass
+class Runtime:
+    rss_peak_gb: ty.Optional[float] = None
+    vms_peak_gb: ty.Optional[float] = None
+    cpu_peak_percent: ty.Optional[float] = None
+
+
+@dc.dataclass
+class Result:
+    output: ty.Optional[ty.Any] = None
+    runtime: ty.Optional[Runtime] = None
+    errored: bool = False
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if state["output"] is not None:
+            fields = tuple((el.name, el.type) for el in dc.fields(state["output"]))
+            state["output_spec"] = (state["output"].__class__.__name__, fields)
+            state["output"] = dc.asdict(state["output"])
+        return state
+
+    def __setstate__(self, state):
+        if "output_spec" in state:
+            spec = list(state["output_spec"])
+            del state["output_spec"]
+            klass = dc.make_dataclass(spec[0], list(spec[1]))
+            state["output"] = klass(**state["output"])
+        self.__dict__.update(state)
+
+
+@dc.dataclass
+class RuntimeSpec:
+    outdir: ty.Optional[str] = None
+    container: ty.Optional[str] = "shell"
+    network: bool = False
+    """
+    from CWL:
+    InlineJavascriptRequirement
+    SchemaDefRequirement
+    DockerRequirement
+    SoftwareRequirement
+    InitialWorkDirRequirement
+    EnvVarRequirement
+    ShellCommandRequirement
+    ResourceRequirement
+
+    InlineScriptRequirement
+    """
+
+
+@dc.dataclass
+class ShellSpec(BaseSpec):
+    executable: ty.Union[str, ty.List[str]] = dc.field(
+        metadata={
+            "help_string": "the first part of the command, can be a string, "
+            "e.g. 'ls', or a list, e.g. ['ls', '-l', 'dirname']"
+        }
+    )
+    args: ty.Union[str, ty.List[str]] = dc.field(
+        metadata={
+            "help_string": "the last part of the command, can be a string, "
+            "e.g. <file_name>, or a list"
+        }
+    )
 
     def retrieve_values(self, wf, state_index=None):
         temp_values = {}

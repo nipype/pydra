@@ -61,6 +61,7 @@ class FunctionTask(TaskBase):
     def __init__(
         self,
         func: ty.Callable,
+        input_spec: ty.Optional[SpecInfo] = None,
         output_spec: ty.Optional[BaseSpec] = None,
         name=None,
         audit_flags: AuditFlag = AuditFlag.NONE,
@@ -70,17 +71,33 @@ class FunctionTask(TaskBase):
         cache_locations=None,
         **kwargs,
     ):
-        self.input_spec = SpecInfo(
-            name="Inputs",
-            fields=[
-                (val.name, val.annotation, val.default)
-                if val.default is not inspect.Signature.empty
-                else (val.name, val.annotation)
-                for val in inspect.signature(func).parameters.values()
-            ]
-            + [("_func", str, cp.dumps(func))],
-            bases=(BaseSpec,),
-        )
+
+        if input_spec is None:
+            input_spec = SpecInfo(
+                name="Inputs",
+                fields=[
+                    (
+                        val.name,
+                        val.annotation,
+                        dc.field(
+                            default=val.default,
+                            metadata={
+                                "help_string": f"{val.name} parameter from {func.__name__}"
+                            },
+                        ),
+                    )
+                    if val.default is not inspect.Signature.empty
+                    else (
+                        val.name,
+                        val.annotation,
+                        dc.field(metadata={"help_string": val.name}),
+                    )
+                    for val in inspect.signature(func).parameters.values()
+                ]
+                + [("_func", str, cp.dumps(func))],
+                bases=(BaseSpec,),
+            )
+        self.input_spec = input_spec
         if name is None:
             name = func.__name__
         super(FunctionTask, self).__init__(

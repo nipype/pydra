@@ -501,8 +501,19 @@ class Workflow(TaskBase):
             else:
                 self.input_spec = SpecInfo(
                     name="Inputs",
-                    fields=[(name, ty.Any) for name in input_spec]
-                    + [("_graph_checksums", ty.Any)],
+                    fields=[("_graph_checksums", ty.Any)]
+                    + [
+                        (
+                            nm,
+                            ty.Any,
+                            dc.field(
+                                metadata={
+                                    "help_string": f"{nm} input from {name} workflow"
+                                }
+                            ),
+                        )
+                        for nm in input_spec
+                    ],
                     bases=(BaseSpec,),
                 )
         if output_spec is None:
