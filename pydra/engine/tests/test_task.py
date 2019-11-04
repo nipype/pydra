@@ -4,7 +4,6 @@ import typing as ty
 import os
 import pytest
 import dataclasses as dc
-import cloudpickle as cp
 
 from ... import mark
 from ..specs import BaseSpec, SpecInfo
