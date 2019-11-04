@@ -3,8 +3,11 @@
 import typing as ty
 import os
 import pytest
+import dataclasses as dc
+import cloudpickle as cp
 
 from ... import mark
+from ..specs import BaseSpec, SpecInfo
 from ..task import AuditFlag, ShellCommandTask, ContainerTask, DockerTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from .utils import gen_basic_wf
@@ -274,6 +277,97 @@ def test_notannotated_func_multreturn():
     assert hasattr(result, "output")
     assert hasattr(result.output, "out")
     assert result.output.out == (20.2, 13.8)
+
+
+def test_inputspec_func_1():
+    @mark.task
+    def testfunc(a, b=2) -> int:
+        return a / b
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            ("a", int, dc.field(metadata={"help_string": "dividend"})),
+            ("b", int, dc.field(metadata={"help_string": "divisor"})),
+        ],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(input_spec=my_input_spec, a=10, b=5)
+    assert hasattr(funky.inputs, "a")
+    assert hasattr(funky.inputs, "b")
+    assert hasattr(funky.inputs, "_func")
+    assert getattr(funky.inputs, "a") == 10
+    assert getattr(funky.inputs, "b") == 5
+    assert getattr(funky.inputs, "_func") is not None
+
+    result = funky()
+    assert hasattr(result, "output")
+    assert hasattr(result.output, "out1")
+    assert result.output.out1 == 2
+
+
+@pytest.mark.xfail(
+    reason="pydra sets b=None, if b is not provided, "
+    "not sure how input_spec should work for FunctionTask"
+)
+def test_inputspec_func_1a():
+    @mark.task
+    def testfunc(a, b=2) -> int:
+        return a / b
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            ("a", int, dc.field(metadata={"help_string": "dividend"})),
+            ("b", int, dc.field(metadata={"help_string": "divisor"})),
+        ],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(input_spec=my_input_spec, a=10)
+    assert hasattr(funky.inputs, "a")
+    assert hasattr(funky.inputs, "b")
+    assert hasattr(funky.inputs, "_func")
+    assert getattr(funky.inputs, "a") == 10
+    assert getattr(funky.inputs, "b") is None
+    assert getattr(funky.inputs, "_func") is not None
+
+    result = funky()
+    assert hasattr(result, "output")
+    assert hasattr(result.output, "out1")
+    assert result.output.out1 == 5
+
+
+def test_inputspec_func_1b_except():
+    @mark.task
+    def testfunc(a, b=2) -> int:
+        return a / b
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            ("a", int, dc.field(metadata={"help_string": "dividend"})),
+            (
+                "b",
+                int,
+                dc.field(metadata={"help_string": "divisor", "mandatory": True}),
+            ),
+        ],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(input_spec=my_input_spec, a=10)
+    assert hasattr(funky.inputs, "a")
+    assert hasattr(funky.inputs, "b")
+    assert hasattr(funky.inputs, "_func")
+    assert getattr(funky.inputs, "a") == 10
+    assert getattr(funky.inputs, "b") is None
+    assert getattr(funky.inputs, "_func") is not None
+
+    with pytest.raises(Exception) as excinfo:
+        result = funky()
+    assert "mandatory, but no value provided" in str(excinfo.value)
 
 
 def test_exception_func():

@@ -97,6 +97,8 @@ class FunctionTask(TaskBase):
                 + [("_func", str, cp.dumps(func))],
                 bases=(BaseSpec,),
             )
+        else:
+            input_spec.fields.append(("_func", str, cp.dumps(func)))
         self.input_spec = input_spec
         if name is None:
             name = func.__name__
