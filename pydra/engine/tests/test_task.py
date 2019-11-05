@@ -450,16 +450,22 @@ def test_container_cmds(tmpdir):
 
 def test_docker_cmd(tmpdir):
     docky = DockerTask(name="docky", executable="pwd", image="busybox")
-    assert docky.cmdline == "docker run busybox pwd"
+    assert (
+        docky.cmdline
+        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
+    )
     docky.inputs.container_xargs = ["--rm -it"]
-    assert docky.cmdline == "docker run --rm -it busybox pwd"
+    assert (
+        docky.cmdline
+        == f"docker run --rm -it -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
+    )
     docky.inputs.bindings = [
         ("/local/path", "/container/path", "ro"),
         ("/local2", "/container2", None),
     ]
     assert docky.cmdline == (
         "docker run --rm -it -v /local/path:/container/path:ro"
-        " -v /local2:/container2:rw busybox pwd"
+        f" -v /local2:/container2:rw -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
     )
 
 

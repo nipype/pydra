@@ -22,14 +22,17 @@ need_docker = pytest.mark.skipif(
 
 @need_docker
 def test_docker_1_nosubm():
-    """ simple command in a container, no arguments
+    """ simple command in a container, a default bindings and working directory is added
         no submitter
     """
     cmd = "whoami"
     docky = DockerTask(name="docky", executable=cmd, image="busybox")
     assert docky.inputs.image == "busybox"
     assert docky.inputs.container == "docker"
-    assert docky.cmdline == f"docker run {docky.inputs.image} {cmd}"
+    assert (
+        docky.cmdline
+        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd}"
+    )
 
     res = docky()
     assert res.output.stdout == "root\n"
@@ -41,7 +44,7 @@ def test_docker_1_nosubm():
 @need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_1(plugin):
-    """ simple command in a container, no arguments
+    """ simple command in a container, a default bindings and working directory is added
         using submitter
     """
     cmd = "whoami"
@@ -64,7 +67,10 @@ def test_docker_2_nosubm():
     """
     cmd = ["echo", "hail", "pydra"]
     docky = DockerTask(name="docky", executable=cmd, image="busybox")
-    assert docky.cmdline == f"docker run {docky.inputs.image} {' '.join(cmd)}"
+    assert (
+        docky.cmdline
+        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {' '.join(cmd)}"
+    )
 
     res = docky()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
@@ -81,7 +87,10 @@ def test_docker_2(plugin):
     """
     cmd = ["echo", "hail", "pydra"]
     docky = DockerTask(name="docky", executable=cmd, image="busybox")
-    assert docky.cmdline == f"docker run {docky.inputs.image} {' '.join(cmd)}"
+    assert (
+        docky.cmdline
+        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {' '.join(cmd)}"
+    )
 
     with Submitter(plugin=plugin) as sub:
         docky(submitter=sub)
@@ -106,7 +115,7 @@ def test_docker_2a_nosubm():
     assert docky.inputs.executable == "echo"
     assert (
         docky.cmdline
-        == f"docker run {docky.inputs.image} {cmd_exec} {' '.join(cmd_args)}"
+        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd_exec} {' '.join(cmd_args)}"
     )
 
     res = docky()
@@ -131,7 +140,7 @@ def test_docker_2a(plugin):
     assert docky.inputs.executable == "echo"
     assert (
         docky.cmdline
-        == f"docker run {docky.inputs.image} {cmd_exec} {' '.join(cmd_args)}"
+        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd_exec} {' '.join(cmd_args)}"
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -182,7 +191,7 @@ def test_docker_st_1(plugin):
     assert docky.state.splitter == "docky.executable"
 
     res = docky(plugin=plugin)
-    assert res[0].output.stdout == "/\n"
+    assert res[0].output.stdout == "/output_pydra\n"
     assert res[1].output.stdout == "root\n"
     assert res[0].output.return_code == res[1].output.return_code == 0
 
@@ -339,79 +348,16 @@ def test_wf_docker_2(plugin, tmpdir):
 def test_docker_outputspec_1(plugin, tmpdir):
     """
         customised output_spec, adding files to the output, providing specific pathname
-        path in bindings is a relative path to output_dir
-        (len(bind_tuple)==3, so True is added as default to the fourth place)
+        output_path is automatically added to the bindings
     """
-    cmd = ["touch", "/outputs/newfile_tmp.txt"]
+    cmd = ["touch", "newfile_tmp.txt"]
     my_output_spec = SpecInfo(
         name="Output",
         fields=[("newfile", File, "newfile_tmp.txt")],
         bases=(ShellOutSpec,),
     )
     docky = DockerTask(
-        name="docky",
-        image="ubuntu",
-        bindings=[(".", "/outputs", None)],
-        executable=cmd,
-        output_spec=my_output_spec,
-    )
-
-    with Submitter(plugin=plugin) as sub:
-        docky(submitter=sub)
-
-    res = docky.result()
-    assert res.output.stdout == ""
-    assert res.output.newfile.exists()
-
-
-@need_docker
-@pytest.mark.parametrize("plugin", Plugins)
-def test_docker_outputspec_1a(plugin, tmpdir):
-    """
-        customised output_spec, adding files to the output, providing specific pathname
-        path in bindings is a relative path to output_dir (True in a bind_tuple[3])
-    """
-    cmd = ["touch", "/outputs/newfile_tmp.txt"]
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[("newfile", File, "newfile_tmp.txt")],
-        bases=(ShellOutSpec,),
-    )
-    docky = DockerTask(
-        name="docky",
-        image="ubuntu",
-        bindings=[(".", "/outputs", None, True)],
-        executable=cmd,
-        output_spec=my_output_spec,
-    )
-
-    with Submitter(plugin=plugin) as sub:
-        docky(submitter=sub)
-
-    res = docky.result()
-    assert res.output.stdout == ""
-    assert res.output.newfile.exists()
-
-
-@need_docker
-@pytest.mark.parametrize("plugin", Plugins)
-def test_docker_outputspec_2(plugin, tmpdir):
-    """
-        customised output_spec, adding files to the output, providing specific pathname
-        path in bindings is an absolute path (bind_tuple[3]==False)
-    """
-    cmd = ["touch", "/outputs/newfile_tmp.txt"]
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[("newfile", File, Path(tmpdir) / "newfile_tmp.txt")],
-        bases=(ShellOutSpec,),
-    )
-    docky = DockerTask(
-        name="docky",
-        image="ubuntu",
-        bindings=[(tmpdir, "/outputs", None, False)],
-        executable=cmd,
-        output_spec=my_output_spec,
+        name="docky", image="ubuntu", executable=cmd, output_spec=my_output_spec
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -464,7 +410,6 @@ def test_docker_inputspec_1(plugin, tmpdir):
     )
 
     res = docky()
-
     assert res.output.stdout == "hello from pydra"
 
 
@@ -505,7 +450,6 @@ def test_docker_inputspec_1a(plugin, tmpdir):
     )
 
     res = docky()
-
     assert res.output.stdout == "hello from pydra"
 
 

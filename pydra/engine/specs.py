@@ -94,7 +94,7 @@ class BaseSpec:
             # fld.default can't be different than default_value when both set
             if (
                 not isinstance(fld.default, dc._MISSING_TYPE)
-                and mdata.get("default_value")
+                and mdata.get("default_value") is not None
                 and mdata.get("default_value") != fld.default
             ):
                 raise Exception(
@@ -103,7 +103,7 @@ class BaseSpec:
             # assuming that fields with output_file_template shouldn't have default
             if (
                 not isinstance(fld.default, dc._MISSING_TYPE)
-                or mdata.get("default_value")
+                or mdata.get("default_value") is not None
             ) and mdata.get("output_file_template"):
                 raise Exception(
                     "default value should not be set together with output_file_template"
@@ -111,14 +111,14 @@ class BaseSpec:
             # not allowing for default if the field is mandatory
             if (
                 not isinstance(fld.default, dc._MISSING_TYPE)
-                or mdata.get("default_value")
+                or mdata.get("default_value") is not None
             ) and mdata.get("mandatory"):
                 raise Exception(
                     "default value should not be set when the field is mandatory"
                 )
             # setting default if value not provided and default is available
             if dc.asdict(self)[fld.name] is None:
-                if mdata.get("default_value"):
+                if mdata.get("default_value") is not None:
                     setattr(self, fld.name, mdata["default_value"])
                 elif not isinstance(fld.default, dc._MISSING_TYPE):
                     setattr(self, fld.name, fld.default)
@@ -136,7 +136,7 @@ class BaseSpec:
             if dc.asdict(self)[fld.name] is None:
                 if mdata.get("mandatory"):
                     raise Exception(f"{fld.name} is mandatory, but no value provided")
-                elif mdata.get("default_value"):
+                elif mdata.get("default_value") is not None:
                     setattr(self, fld.name, mdata["default_value"])
                 else:
                     continue
@@ -364,7 +364,7 @@ class ContainerSpec(ShellSpec):
                 ty.Optional[str],  # mount mode
             ]
         ]
-    ] = dc.field(metadata={"help_string": "bindings"})
+    ] = dc.field(metadata={"help_string": "bindings", "default_value": []})
 
 
 @dc.dataclass

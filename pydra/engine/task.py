@@ -306,30 +306,39 @@ class ContainerTask(ShellCommandTask):
         cargs.append(self.inputs.image)
         return cargs
 
-    def binds(self, opt):
+    def binds(self, opt, output_cpath="/output_pydra"):
         """Specify mounts to bind from local filesystems to container
 
         `bindings` are tuples of (local path, container path, bind mode)
         """
         bargs = []
+        output_dir_cpath = None
         for binding in self.inputs.bindings:
-            if len(binding) == 4:
-                lpath, cpath, mode, relative = binding
-            elif len(binding) == 3:
-                lpath, cpath, mode, relative = binding + (True,)
+            if len(binding) == 3:
+                lpath, cpath, mode = binding
             elif len(binding) == 2:
-                lpath, cpath, mode, relative = binding + ("rw", True)
+                lpath, cpath, mode = binding + ("rw",)
             else:
                 raise Exception(
                     f"binding should have length 2, 3, or 4, it has {len(binding)}"
                 )
+            if str(lpath) == str(self.output_dir):
+                output_dir_cpath = cpath
             if mode is None:
                 mode = "rw"  # default
-            if relative is None:
-                relative = True
-            if relative is True:
-                lpath = self.output_dir / lpath
             bargs.extend([opt, "{0}:{1}:{2}".format(lpath, cpath, mode)])
+
+        # output_dir is added to the bindings if not part of self.inputs.bindings
+        if not output_dir_cpath:
+            output_dir_cpath = output_cpath
+            bargs.extend(
+                [
+                    opt,
+                    "{0}:{1}:{2}".format(str(self.output_dir), output_dir_cpath, "rw"),
+                ]
+            )
+        # TODO: would need changes for singularity
+        bargs.extend(["-w", output_dir_cpath])
         return bargs
 
     def _run_task(self):
@@ -372,10 +381,9 @@ class DockerTask(ContainerTask):
     def container_args(self):
         cargs = super().container_args
         assert self.inputs.container == "docker"
-        if self.inputs.bindings:
-            # insert bindings before image
-            idx = len(cargs) - 1
-            cargs[idx:-1] = self.binds("-v")
+        # insert bindings before image
+        idx = len(cargs) - 1
+        cargs[idx:-1] = self.binds("-v")
         return cargs
 
 
@@ -412,8 +420,7 @@ class SingularityTask(ContainerTask):
     def container_args(self):
         cargs = super().container_args
         assert self.inputs.container == "singularity"
-        if self.inputs.bindings:
-            # insert bindings before image
-            idx = len(cargs) - 1
-            cargs[idx:-1] = self.binds("-B")
+        # insert bindings before image
+        idx = len(cargs) - 1
+        cargs[idx:-1] = self.binds("-B")
         return cargs
