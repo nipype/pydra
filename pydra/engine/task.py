@@ -227,6 +227,9 @@ class ShellCommandTask(TaskBase):
             if "argstr" in f.metadata:
                 cmd_add.append(f.metadata["argstr"])
             value = getattr(self.inputs, f.name)
+            # updating path when copyfile is used
+            if f.metadata.get("copyfile") in [True, False]:
+                value = str(self.output_dir.joinpath(Path(value).name))
             if f.type is bool:
                 if value is not True:
                     break

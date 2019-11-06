@@ -951,6 +951,186 @@ def test_shell_cmd_inputspec_7a(plugin, results_function):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 @pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
+    """ shelltask changes a file in place,
+        adding copyfile=True to the file-input from input_spec
+        hardlink or copy in the output_dir should be created
+    """
+    file = tmpdir.join("file_pydra.txt")
+    with open(file, "w") as f:
+        f.write("hello from pydra\n")
+
+    cmd = ["sed", "-is", "s/hello/hi/"]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "orig_file",
+                str,
+                dc.field(
+                    metadata={
+                        "position": 1,
+                        "help_string": "orig file",
+                        "mandatory": True,
+                        "copyfile": True,
+                    }
+                ),
+            ),
+            (
+                "out_file",
+                str,
+                dc.field(
+                    metadata={
+                        "output_file_template": "{orig_file}",
+                        "help_string": "output file",
+                    }
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.out_file.exists()
+    # the file is  copied, and than it is changed in place
+    assert res.output.out_file.parent == shelly.output_dir
+    with open(res.output.out_file, "r") as f:
+        assert "hi from pydra\n" == f.read()
+    # the original file is unchanged
+    with open(file, "r") as f:
+        assert "hello from pydra\n" == f.read()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
+    """ shelltask changes a file in place,
+        adding copyfile=False to the File-input from input_spec
+        hardlink or softlink in the output_dir is created
+    """
+    file = tmpdir.join("file_pydra.txt")
+    with open(file, "w") as f:
+        f.write("hello from pydra\n")
+
+    cmd = ["sed", "-is", "s/hello/hi/"]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "orig_file",
+                str,
+                dc.field(
+                    metadata={
+                        "position": 1,
+                        "help_string": "orig file",
+                        "mandatory": True,
+                        "copyfile": False,
+                    }
+                ),
+            ),
+            (
+                "out_file",
+                str,
+                dc.field(
+                    metadata={
+                        "output_file_template": "{orig_file}",
+                        "help_string": "output file",
+                    }
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.out_file.exists()
+    # the file is uses a soft link, but it creates and an extra copy before modifying
+    assert res.output.out_file.parent == shelly.output_dir
+
+    assert res.output.out_file.parent.joinpath(res.output.out_file.name + "s").exists()
+    with open(res.output.out_file, "r") as f:
+        assert "hi from pydra\n" == f.read()
+    # the file is uses a soft link, but it creates and an extra copy
+    # it might depend on the OS
+    linked_file_copy = res.output.out_file.parent.joinpath(
+        res.output.out_file.name + "s"
+    )
+    if linked_file_copy.exists():
+        with open(linked_file_copy, "r") as f:
+            assert "hello from pydra\n" == f.read()
+
+    # the original file is unchanged
+    with open(file, "r") as f:
+        assert "hello from pydra\n" == f.read()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
+    """ shelltask changes a file in place,
+        copyfile is None for the file-input, so oryginal filed is changed
+    """
+    file = tmpdir.join("file_pydra.txt")
+    with open(file, "w") as f:
+        f.write("hello from pydra\n")
+
+    cmd = ["sed", "-is", "s/hello/hi/"]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "orig_file",
+                str,
+                dc.field(
+                    metadata={
+                        "position": 1,
+                        "help_string": "orig file",
+                        "mandatory": True,
+                    }
+                ),
+            ),
+            (
+                "out_file",
+                str,
+                dc.field(
+                    metadata={
+                        "output_file_template": "{orig_file}",
+                        "help_string": "output file",
+                    }
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.out_file.exists()
+    # the file is  not copied, it is changed in place
+    assert res.output.out_file == file
+    with open(res.output.out_file, "r") as f:
+        assert "hi from pydra\n" == f.read()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_state_1(plugin, results_function):
     """  adding state to the input from input_spec """
     cmd_exec = "echo"
@@ -1056,6 +1236,69 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmpdir):
     res = results_function(shelly, plugin)
     assert res[0].output.stdout == "hello from pydra"
     assert res[1].output.stdout == "have a nice one"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
+    """  adding state to the File-input from input_spec """
+
+    file1 = tmpdir.join("file1.txt")
+    with open(file1, "w") as f:
+        f.write("hello from pydra\n")
+
+    file2 = tmpdir.join("file2.txt")
+    with open(file2, "w") as f:
+        f.write("hello world\n")
+
+    files = [str(file1), str(file2)]
+    cmd = ["sed", "-is", "s/hello/hi/"]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "orig_file",
+                str,
+                dc.field(
+                    metadata={
+                        "position": 1,
+                        "help_string": "orig file",
+                        "mandatory": True,
+                        "copyfile": True,
+                    }
+                ),
+            ),
+            (
+                "out_file",
+                str,
+                dc.field(
+                    metadata={
+                        "output_file_template": "{orig_file}",
+                        "help_string": "output file",
+                    }
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=files
+    ).split("orig_file")
+
+    txt_l = ["from pydra", "world"]
+    res_l = results_function(shelly, plugin)
+    for i, res in enumerate(res_l):
+        assert res.output.stdout == ""
+        assert res.output.out_file.exists()
+        # the file is  copied, and than it is changed in place
+        assert res.output.out_file.parent == shelly.output_dir[i]
+        with open(res.output.out_file, "r") as f:
+            assert f"hi {txt_l[i]}\n" == f.read()
+        # the original file is unchanged
+        with open(files[i], "r") as f:
+            assert f"hello {txt_l[i]}\n" == f.read()
 
 
 # customised input_spec in Workflow

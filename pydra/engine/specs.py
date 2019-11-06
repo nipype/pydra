@@ -2,7 +2,10 @@ import dataclasses as dc
 from pathlib import Path
 import os
 import typing as ty
+from copy import deepcopy
 from string import Formatter
+
+from .helpers_file import copyfile
 
 
 class File(Path):
@@ -74,6 +77,7 @@ class BaseSpec:
             "separate_ext",
             "argstr",
             "allowed_values",
+            "copyfile",
         ]
         # special inputs, don't have to follow rules for standard inputs
         special_input = ["_func", "_graph_checksums"]
@@ -174,15 +178,18 @@ class BaseSpec:
         """ updating all templates that are present in the input spec
             should be run when all inputs used in the templates are already set
         """
+        dict_ = deepcopy(self.__dict__)
+        dict_.update(self.map_copyfiles)
+
         fields = dc.fields(self)
         for fld in fields:
             if fld.metadata.get("output_file_template"):
                 if fld.type is str:
-                    value = fld.metadata["output_file_template"].format(**self.__dict__)
+                    value = fld.metadata["output_file_template"].format(**dict_)
                     setattr(self, fld.name, value)
                 elif fld.type is tuple:
                     name, ext = os.path.splitext(
-                        fld.metadata["output_file_template"][0].format(**self.__dict__)
+                        fld.metadata["output_file_template"][0].format(**dict_)
                     )
                     value = f"{name}{fld.metadata['output_file_template'][1]}{ext}"
                     setattr(self, fld.name, value)
@@ -190,6 +197,21 @@ class BaseSpec:
                     raise Exception(
                         "output names should be a string or a tuple of two strings"
                     )
+
+    def copyfile_input(self, output_dir):
+        self.map_copyfiles = {}
+        for fld in dc.fields(self):
+            copy = fld.metadata.get("copyfile")
+            if copy is not None and fld.type not in [str, File]:
+                raise Exception(
+                    f"if copyfile set, field has to be a File or a string, "
+                    f"but {fld.type} provided"
+                )
+            if copy in [True, False]:
+                file = getattr(self, fld.name)
+                newfile = output_dir.joinpath(Path(getattr(self, fld.name)).name)
+                copyfile(file, newfile, copy=copy)
+                self.map_copyfiles[fld.name] = newfile
 
 
 @dc.dataclass

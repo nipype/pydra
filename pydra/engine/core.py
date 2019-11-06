@@ -285,7 +285,8 @@ class TaskBase:
     def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
         self.inputs.check_fields_input_spec()
-        self.inputs.template_update()
+        # dj: for now, I moved it to the with block (think about it)
+        # self.inputs.template_update()
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
@@ -311,6 +312,8 @@ class TaskBase:
                 shutil.rmtree(odir)
             cwd = os.getcwd()
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
+            self.inputs.copyfile_input(self.output_dir)
+            self.inputs.template_update()
             self.audit.start_audit(odir)
             result = Result(output=None, runtime=None, errored=False)
             self.hooks.pre_run_task(self)
