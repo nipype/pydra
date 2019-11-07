@@ -278,14 +278,14 @@ def hash_function(obj):
     return sha256(str(obj).encode()).hexdigest()
 
 
-def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=False):
+def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
     """
     Computes hash of a file using 'crypto' module
     """
     if afile is None or isinstance(afile, LazyField):
         return None
     if not os.path.isfile(afile):
-        if raise_notfound:  # WHY??
+        if raise_notfound:
             raise RuntimeError('File "%s" not found.' % afile)
         return None
 

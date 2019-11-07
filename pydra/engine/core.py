@@ -285,8 +285,6 @@ class TaskBase:
     def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
         self.inputs.check_fields_input_spec()
-        # dj: for now, I moved it to the with block (think about it)
-        # self.inputs.template_update()
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
