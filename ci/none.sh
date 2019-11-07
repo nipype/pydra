@@ -47,7 +47,7 @@ function travis_before_script {
 
 function travis_script {
     if [ "$CHECK_TYPE" = "test" ]; then
-        pytest -vs -n auto --cov pydra tutorial --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+        pytest -vs -n auto --cov pydra tutorial --cov-config .coveragerc --cov-report xml:cov.xml pydra
     elif [ "$CHECK_TYPE" = "style" ]; then
         black --check pydra tools setup.py
     fi
