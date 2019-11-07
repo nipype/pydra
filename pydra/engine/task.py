@@ -226,10 +226,19 @@ class ShellCommandTask(TaskBase):
             cmd_add = []
             if "argstr" in f.metadata:
                 cmd_add.append(f.metadata["argstr"])
-            value = getattr(self.inputs, f.name)
-            # updating path when copyfile is used
             if f.metadata.get("copyfile") in [True, False]:
-                value = str(self.output_dir.joinpath(Path(value).name))
+                value = str(self.inputs.map_copyfiles[f.name])
+            else:
+                value = getattr(self.inputs, f.name)
+            # changing path to file if dir is part of the bindings
+            if getattr(self, "bind_paths", None) and f.type is File:
+                inters = list(
+                    set(self.bind_paths.keys()).intersection(set(Path(value).parents))
+                )
+                if inters and len(inters) == 1:
+                    lpath = str(inters[0])
+                    cpath = str(self.bind_paths[inters[0]][0])
+                    value = str(value).replace(lpath, cpath)
             if f.type is bool:
                 if value is not True:
                     break
@@ -276,11 +285,13 @@ class ContainerTask(ShellCommandTask):
         messenger_args=None,
         cache_dir=None,
         strip=False,
+        output_cpath=None,
         **kwargs,
     ):
 
         if input_spec is None:
             input_spec = SpecInfo(name="Inputs", fields=[], bases=(ContainerSpec,))
+        self.output_cpath = output_cpath
         super(ContainerTask, self).__init__(
             name=name,
             input_spec=input_spec,
@@ -309,12 +320,10 @@ class ContainerTask(ShellCommandTask):
         cargs.append(self.inputs.image)
         return cargs
 
-    def binds(self, opt, output_cpath="/output_pydra"):
-        """Specify mounts to bind from local filesystems to container
-
-        `bindings` are tuples of (local path, container path, bind mode)
-        """
-        bargs = []
+    @property
+    def bind_paths(self):
+        """returns bindings: dict(lpath: (cpath, mode))"""
+        bind_paths = {}
         output_dir_cpath = None
         for binding in self.inputs.bindings:
             if len(binding) == 3:
@@ -325,23 +334,26 @@ class ContainerTask(ShellCommandTask):
                 raise Exception(
                     f"binding should have length 2, 3, or 4, it has {len(binding)}"
                 )
-            if str(lpath) == str(self.output_dir):
+
+            if Path(lpath) == self.output_dir:
                 output_dir_cpath = cpath
             if mode is None:
                 mode = "rw"  # default
-            bargs.extend([opt, "{0}:{1}:{2}".format(lpath, cpath, mode)])
-
+            bind_paths[Path(lpath)] = (cpath, mode)
         # output_dir is added to the bindings if not part of self.inputs.bindings
         if not output_dir_cpath:
-            output_dir_cpath = output_cpath
-            bargs.extend(
-                [
-                    opt,
-                    "{0}:{1}:{2}".format(str(self.output_dir), output_dir_cpath, "rw"),
-                ]
-            )
+            bind_paths[self.output_dir] = (self.output_cpath, "rw")
+        return bind_paths
+
+    def binds(self, opt):
+        """ Specify mounts to bind from local filesystems to container,
+            and working directory, uses binds_paths
+        """
+        bargs = []
+        for (key, val) in self.bind_paths.items():
+            bargs.extend([opt, "{0}:{1}:{2}".format(key, val[0], val[1])])
         # TODO: would need changes for singularity
-        bargs.extend(["-w", output_dir_cpath])
+        bargs.extend(["-w", self.output_cpath])
         return bargs
 
     def _run_task(self):
@@ -364,11 +376,13 @@ class DockerTask(ContainerTask):
         messenger_args=None,
         cache_dir=None,
         strip=False,
+        output_cpath="/output_pydra",
         **kwargs,
     ):
         if input_spec is None:
             input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
-        super(ContainerTask, self).__init__(
+
+        super(DockerTask, self).__init__(
             name=name,
             input_spec=input_spec,
             output_spec=output_spec,
@@ -377,6 +391,7 @@ class DockerTask(ContainerTask):
             messenger_args=messenger_args,
             cache_dir=cache_dir,
             strip=strip,
+            output_cpath=output_cpath,
             **kwargs,
         )
 

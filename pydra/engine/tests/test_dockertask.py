@@ -375,11 +375,11 @@ def test_docker_outputspec_1(plugin, tmpdir):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_1(plugin, tmpdir):
     """ a simple customized input spec for docker task """
-    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+    filename = str(tmpdir.join("file_pydra.txt"))
+    with open(filename, "w") as f:
         f.write("hello from pydra")
 
     cmd = "cat"
-    filename = "/tmp_dir/file_pydra.txt"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -419,11 +419,11 @@ def test_docker_inputspec_1a(plugin, tmpdir):
     """ a simple customized input spec for docker task
         a default value is used
     """
-    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+    filename = str(tmpdir.join("file_pydra.txt"))
+    with open(filename, "w") as f:
         f.write("hello from pydra")
 
     cmd = "cat"
-    filename = "/tmp_dir/file_pydra.txt"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -457,15 +457,15 @@ def test_docker_inputspec_1a(plugin, tmpdir):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_2(plugin, tmpdir):
     """ a customized input spec with two fields for docker task """
-    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+    filename_1 = tmpdir.join("file_pydra.txt")
+    with open(filename_1, "w") as f:
         f.write("hello from pydra\n")
 
-    with open(tmpdir.join("file_nice.txt"), "w") as f:
+    filename_2 = tmpdir.join("file_nice.txt")
+    with open(filename_2, "w") as f:
         f.write("have a nice one")
 
     cmd = "cat"
-    filename_1 = "/tmp_dir/file_pydra.txt"
-    filename_2 = "/tmp_dir/file_nice.txt"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -507,15 +507,14 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
     """ a customized input spec with two fields
         first one uses a default, and second doesn't - raises a dataclass exception
     """
-    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+    filename_1 = tmpdir.join("file_pydra.txt")
+    with open(filename_1, "w") as f:
         f.write("hello from pydra\n")
-
-    with open(tmpdir.join("file_nice.txt"), "w") as f:
+    filename_2 = tmpdir.join("file_nice.txt")
+    with open(filename_2, "w") as f:
         f.write("have a nice one")
 
     cmd = "cat"
-    filename_1 = "/tmp_dir/file_pydra.txt"
-    filename_2 = "/tmp_dir/file_nice.txt"
 
     # the field with default value can't be before value without default
     my_input_spec = SpecInfo(
@@ -558,15 +557,14 @@ def test_docker_inputspec_2a(plugin, tmpdir):
         first one uses a default by using metadata['default_value'],
         this is fine even if the second field is not using any defaults
     """
-    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+    filename_1 = tmpdir.join("file_pydra.txt")
+    with open(filename_1, "w") as f:
         f.write("hello from pydra\n")
-
-    with open(tmpdir.join("file_nice.txt"), "w") as f:
+    filename_2 = tmpdir.join("file_nice.txt")
+    with open(filename_2, "w") as f:
         f.write("have a nice one")
 
     cmd = "cat"
-    filename_1 = "/tmp_dir/file_pydra.txt"
-    filename_2 = "/tmp_dir/file_nice.txt"
 
     # if you want set default in the first field you can use default_value in metadata
     my_input_spec = SpecInfo(
@@ -606,40 +604,43 @@ def test_docker_inputspec_2a(plugin, tmpdir):
     assert res.output.stdout == "hello from pydra\nhave a nice one"
 
 
-@pytest.mark.xfail(
-    reason="the file hash is not calculated, "
-    "since the files can't be found (container path provided)"
-    "so at the end both states give the same cheksum"
-    "and the second item is not run..."
-)
-@need_docker
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_inputspec_state_1(plugin, tmpdir):
-    """ a customised input spec for a docker file with a splitter,
-        splitter is on files - causes issues in a docker task (see xfail reason) TODO
+def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
+    """ shelltask changes a file in place,
+        adding copyfile=True to the file-input from input_spec
+        hardlink or copy in the output_dir should be created
     """
-    with open(tmpdir.join("file_pydra.txt"), "w") as f:
-        f.write("hello from pydra")
-    with open(tmpdir.join("file_nice.txt"), "w") as f:
-        f.write("have a nice one")
+    file = tmpdir.join("file_pydra.txt")
+    with open(file, "w") as f:
+        f.write("hello from pydra\n")
 
-    cmd = "cat"
-    filename = ["/tmp_dir/file_pydra.txt", "/tmp_dir/file_nice.txt"]
+    cmd = ["sed", "-is", "s/hello/hi/"]
 
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
             (
-                "file",
+                "orig_file",
                 File,
                 dc.field(
                     metadata={
-                        "mandatory": True,
                         "position": 1,
-                        "help_string": "input file",
+                        "help_string": "orig file",
+                        "mandatory": True,
+                        "copyfile": True,
                     }
                 ),
-            )
+            ),
+            (
+                "out_file",
+                str,
+                dc.field(
+                    metadata={
+                        "output_file_template": "{orig_file}",
+                        "help_string": "output file",
+                    }
+                ),
+            ),
         ],
         bases=(DockerSpec,),
     )
@@ -648,38 +649,44 @@ def test_docker_inputspec_state_1(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=cmd,
-        file=filename,
-        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
         input_spec=my_input_spec,
-        strip=True,
-    ).split("file")
+        orig_file=str(file),
+    )
 
     res = docky()
-    assert res[0].output.stdout == "hello from pydra"
-    assert res[1].output.stdout == "have a nice one"
+    assert res.output.stdout == ""
+    assert res.output.out_file.exists()
+    # the file is  copied, and than it is changed in place
+    assert res.output.out_file.parent == docky.output_dir
+    with open(res.output.out_file, "r") as f:
+        assert "hi from pydra\n" == f.read()
+    # the original file is unchanged
+    with open(file, "r") as f:
+        assert "hello from pydra\n" == f.read()
 
 
 @need_docker
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_inputspec_state_1a_tmp(plugin, tmpdir):
+def test_docker_inputspec_state_1(plugin, tmpdir):
     """ a customised input spec for a docker file with a splitter,
-        files from the input spec represented as string to avoid problems...
-        this is probably just a temporary solution
+        splitter is on files
     """
-    with open(tmpdir.join("file_pydra.txt"), "w") as f:
-        f.write("hello from pydra")
-    with open(tmpdir.join("file_nice.txt"), "w") as f:
+    filename_1 = tmpdir.join("file_pydra.txt")
+    with open(filename_1, "w") as f:
+        f.write("hello from pydra\n")
+    filename_2 = tmpdir.join("file_nice.txt")
+    with open(filename_2, "w") as f:
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = ["/tmp_dir/file_pydra.txt", "/tmp_dir/file_nice.txt"]
+    filename = [str(filename_1), str(filename_2)]
 
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
             (
                 "file",
-                str,
+                File,
                 dc.field(
                     metadata={
                         "mandatory": True,
@@ -762,11 +769,11 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_wf_inputspec_1(plugin, tmpdir):
     """ a customized input spec for workflow with docker tasks """
-    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+    filename = tmpdir.join("file_pydra.txt")
+    with open(filename, "w") as f:
         f.write("hello from pydra")
 
     cmd = "cat"
-    filename = "/tmp_dir/file_pydra.txt"
 
     my_input_spec = SpecInfo(
         name="Input",
