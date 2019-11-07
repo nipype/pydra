@@ -604,6 +604,7 @@ def test_docker_inputspec_2a(plugin, tmpdir):
     assert res.output.stdout == "hello from pydra\nhave a nice one"
 
 
+@need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
     """ shelltask changes a file in place,
