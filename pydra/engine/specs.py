@@ -169,6 +169,7 @@ class ShellSpec(BaseSpec):
             "argstr",
             "allowed_values",
             "copyfile",
+            "container_path",
         ]
         # special inputs, don't have to follow rules for standard inputs
         special_input = ["_func", "_graph_checksums"]
@@ -412,15 +413,21 @@ class ContainerSpec(ShellSpec):
 
     def _file_check(self, field):
         file = Path(getattr(self, field.name))
-        if file.exists():
+        if field.metadata.get("container_path"):
+            # if the path is in a container the input should be treated as a str (hash as a str)
+            field.type = "str"
+            setattr(self, field.name, str(file))
+        # if this is a local path, checking if the path exists
+        elif file.exists():
             if self.bindings is None:
                 self.bindings = []
             self.bindings.append((file.parent, f"/pydra_inp_{field.name}", "ro"))
         else:
-            # if the file doesn't exist, it is assumed that it exists
-            # in the container and should be treated as a str (hash as a str)
-            field.type = "str"
-            setattr(self, field.name, str(file))
+            raise Exception(
+                f"the file from {field.name} input does not exist, "
+                f"if the file comes from the container, "
+                f"use field.metadata['container_path']=True"
+            )
 
 
 @dc.dataclass

@@ -602,8 +602,52 @@ def test_docker_inputspec_2a(plugin, tmpdir):
 @need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_3(plugin, tmpdir):
-    """ input file is in the container, so no bindigs is created and teh input is treated as a str """
+    """ input file is in the container, so metadata["container_path"]: True,
+        the input will be treated as a str """
     filename = "/proc/1/cgroup"
+
+    cmd = "cat"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                        "container_path": True,
+                    }
+                ),
+            )
+        ],
+        bases=(DockerSpec,),
+    )
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=cmd,
+        file=filename,
+        input_spec=my_input_spec,
+        strip=True,
+    )
+
+    res = docky()
+    assert "docker" in res.output.stdout
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_inputspec_3a(plugin, tmpdir):
+    """ input file does not exist in the local file system,
+        but metadata["container_path"] is not used,
+        so exception is raised
+    """
+    filename = "/_proc/1/cgroup"
 
     cmd = "cat"
 
@@ -634,8 +678,9 @@ def test_docker_inputspec_3(plugin, tmpdir):
         strip=True,
     )
 
-    res = docky()
-    assert "docker" in res.output.stdout
+    with pytest.raises(Exception) as excinfo:
+        res = docky()
+    assert "use field.metadata['container_path']=True" in str(excinfo.value)
 
 
 @need_docker
