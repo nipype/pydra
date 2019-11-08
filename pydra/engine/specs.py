@@ -41,7 +41,7 @@ class BaseSpec:
             else getattr(self, field.name)
             for field in dc.fields(self)
             if (
-                field.name not in ["_graph_checksums"]
+                field.name not in ["_graph_checksums", "bindings"]
                 and not field.metadata.get("output_file_template")
             )
         }
