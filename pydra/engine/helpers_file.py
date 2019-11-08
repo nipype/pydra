@@ -114,17 +114,17 @@ def hash_infile(afile, chunk_len=8192, crypto=hashlib.md5, raise_notfound=False)
     """
     Computes hash of a file using 'crypto' module
 
-    >>> hash_infile('smri_ants_registration_settings.json')
-    'f225785dfb0db9032aa5a0e4f2c730ad'
-
-    >>> hash_infile('surf01.vtk')
-    'fdf1cf359b4e346034372cdeb58f9a88'
-
-    >>> hash_infile('spminfo')
-    '0dc55e3888c98a182dab179b976dfffc'
-
-    >>> hash_infile('fsl_motion_outliers_fd.txt')
-    'defd1812c22405b1ee4431aac5bbdd73'
+    # >>> hash_infile('smri_ants_registration_settings.json')
+    # 'f225785dfb0db9032aa5a0e4f2c730ad'
+    #
+    # >>> hash_infile('surf01.vtk')
+    # 'fdf1cf359b4e346034372cdeb58f9a88'
+    #
+    # >>> hash_infile('spminfo')
+    # '0dc55e3888c98a182dab179b976dfffc'
+    #
+    # >>> hash_infile('fsl_motion_outliers_fd.txt')
+    # 'defd1812c22405b1ee4431aac5bbdd73'
 
 
     """
