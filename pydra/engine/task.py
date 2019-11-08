@@ -230,15 +230,12 @@ class ShellCommandTask(TaskBase):
                 value = str(self.inputs.map_copyfiles[f.name])
             else:
                 value = getattr(self.inputs, f.name)
-            # changing path to file if dir is part of the bindings
+            # changing path to the cpath (the directory should be mounted)
             if getattr(self, "bind_paths", None) and f.type is File:
-                inters = list(
-                    set(self.bind_paths.keys()).intersection(set(Path(value).parents))
-                )
-                if inters and len(inters) == 1:
-                    lpath = str(inters[0])
-                    cpath = str(self.bind_paths[inters[0]][0])
-                    value = str(value).replace(lpath, cpath)
+                lpath = Path(value)
+                cdir = Path(self.bind_paths[lpath.parent][0])
+                cpath = cdir.joinpath(lpath.name)
+                value = str(cpath)
             if f.type is bool:
                 if value is not True:
                     break
@@ -325,6 +322,8 @@ class ContainerTask(ShellCommandTask):
         """returns bindings: dict(lpath: (cpath, mode))"""
         bind_paths = {}
         output_dir_cpath = None
+        if self.inputs.bindings is None:
+            self.inputs.bindings = []
         for binding in self.inputs.bindings:
             if len(binding) == 3:
                 lpath, cpath, mode = binding

@@ -216,7 +216,7 @@ class TaskBase:
     @property
     def output_names(self):
         output_spec_names = [f.name for f in dc.fields(make_klass(self.output_spec))]
-        from_input_spec_names = output_names_from_inputfields(self.input_spec)
+        from_input_spec_names = output_names_from_inputfields(self.inputs)
         return output_spec_names + from_input_spec_names
 
     @property
@@ -333,9 +333,7 @@ class TaskBase:
 
     def _collect_outputs(self):
         run_output = self.output_
-        self.output_spec = output_from_inputfields(
-            self.output_spec, self.input_spec, self.inputs
-        )
+        self.output_spec = output_from_inputfields(self.output_spec, self.inputs)
         output_klass = make_klass(self.output_spec)
         output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
         other_output = output.collect_additional_outputs(

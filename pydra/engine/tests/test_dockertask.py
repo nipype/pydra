@@ -404,7 +404,6 @@ def test_docker_inputspec_1(plugin, tmpdir):
         image="busybox",
         executable=cmd,
         file=filename,
-        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
         input_spec=my_input_spec,
         strip=True,
     )
@@ -444,7 +443,6 @@ def test_docker_inputspec_1a(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=cmd,
-        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
         input_spec=my_input_spec,
         strip=True,
     )
@@ -492,7 +490,6 @@ def test_docker_inputspec_2(plugin, tmpdir):
         image="busybox",
         executable=cmd,
         file1=filename_1,
-        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
         input_spec=my_input_spec,
         strip=True,
     )
@@ -543,7 +540,6 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
             image="busybox",
             executable=cmd,
             file2=filename_2,
-            bindings=[(str(tmpdir), "/tmp_dir", "ro")],
             input_spec=my_input_spec,
             strip=True,
         )
@@ -595,13 +591,51 @@ def test_docker_inputspec_2a(plugin, tmpdir):
         image="busybox",
         executable=cmd,
         file2=filename_2,
-        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
         input_spec=my_input_spec,
         strip=True,
     )
 
     res = docky()
     assert res.output.stdout == "hello from pydra\nhave a nice one"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_inputspec_3(plugin, tmpdir):
+    """ input file is in the container, so no bindigs is created and teh input is treated as a str """
+    filename = "/proc/1/cgroup"
+
+    cmd = "cat"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(DockerSpec,),
+    )
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=cmd,
+        file=filename,
+        input_spec=my_input_spec,
+        strip=True,
+    )
+
+    res = docky()
+    assert "docker" in res.output.stdout
 
 
 @need_docker
@@ -705,7 +739,6 @@ def test_docker_inputspec_state_1(plugin, tmpdir):
         image="busybox",
         executable=cmd,
         file=filename,
-        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
         input_spec=my_input_spec,
         strip=True,
     ).split("file")
@@ -755,8 +788,6 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
         image="busybox",
         executable=cmd,
         file=filename,
-        # recreates the same directory
-        bindings=[(str(tmpdir), str(tmpdir), "ro")],
         input_spec=my_input_spec,
         strip=True,
     ).split("file")
@@ -803,7 +834,6 @@ def test_docker_wf_inputspec_1(plugin, tmpdir):
         image="busybox",
         executable=wf.lzin.cmd,
         file=wf.lzin.file,
-        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
         input_spec=my_input_spec,
         strip=True,
     )
@@ -859,7 +889,6 @@ def test_docker_wf_state_inputspec_1(plugin, tmpdir):
         image="busybox",
         executable=wf.lzin.cmd,
         file=wf.lzin.file,
-        bindings=[(str(tmpdir), str(tmpdir), "ro")],
         input_spec=my_input_spec,
         strip=True,
     )
@@ -917,7 +946,6 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
         image="busybox",
         executable=wf.lzin.cmd,
         file=wf.lzin.file,
-        bindings=[(str(tmpdir), str(tmpdir), "ro")],
         input_spec=my_input_spec,
         strip=True,
     ).split("file")

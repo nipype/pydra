@@ -290,6 +290,9 @@ class ShellSpec(BaseSpec):
                     # will check after adding all fields to names
                     require_to_check[fld.name] = mdata["requires"]
 
+            if fld.type is File:
+                self._file_check(fld)
+
         for nm, required in require_to_check.items():
             required_notfound = [el for el in required if el not in names]
             if required_notfound:
@@ -297,6 +300,11 @@ class ShellSpec(BaseSpec):
 
             # TODO: types might be checked here
         self._type_checking()
+
+    def _file_check(self, field):
+        file = Path(getattr(self, field.name))
+        if not file.exists():
+            raise Exception(f"the file from the {field.name} input does not exist")
 
     def _type_checking(self):
         """ using fld.type to check the types TODO"""
@@ -400,7 +408,19 @@ class ContainerSpec(ShellSpec):
                 ty.Optional[str],  # mount mode
             ]
         ]
-    ] = dc.field(metadata={"help_string": "bindings", "default_value": []})
+    ] = dc.field(metadata={"help_string": "bindings"})
+
+    def _file_check(self, field):
+        file = Path(getattr(self, field.name))
+        if file.exists():
+            if self.bindings is None:
+                self.bindings = []
+            self.bindings.append((file.parent, f"/pydra_inp_{field.name}", "ro"))
+        else:
+            # if the file doesn't exist, it is assumed that it exists
+            # in the container and should be treated as a str (hash as a str)
+            field.type = "str"
+            setattr(self, field.name, str(file))
 
 
 @dc.dataclass

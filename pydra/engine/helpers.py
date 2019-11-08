@@ -299,10 +299,10 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
     return crypto_obj.hexdigest()
 
 
-def output_names_from_inputfields(input_spec):
+def output_names_from_inputfields(inputs):
     """ collecting outputs from input fields with output_file_template"""
     output_names = []
-    for fld in dc.fields(make_klass(input_spec)):
+    for fld in dc.fields(inputs):
         if "output_file_template" in fld.metadata:
             if "output_field_name" in fld.metadata:
                 field_name = fld.metadata["output_field_name"]
@@ -312,9 +312,9 @@ def output_names_from_inputfields(input_spec):
     return output_names
 
 
-def output_from_inputfields(output_spec, input_spec, inputs):
+def output_from_inputfields(output_spec, inputs):
     """ collecting values from output from input fields"""
-    for fld in dc.fields(make_klass(input_spec)):
+    for fld in dc.fields(inputs):
         if "output_file_template" in fld.metadata:
             value = getattr(inputs, fld.name)
             if "output_field_name" in fld.metadata:
