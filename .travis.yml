@@ -39,6 +39,8 @@ matrix:
   allow_failures:
   - python: 3.7
     env: INSTALL_DEPENDS="pip==10.0.1 setuptools==30.3.0"
+  - python: 3.8
+    env: INSTALL_DEPENDS="pip==10.0.1 setuptools==30.3.0"
 
 
 before_install:
