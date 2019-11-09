@@ -41,7 +41,7 @@ function travis_before_script {
             pip install ".[test]"
         fi
     elif [ "$CHECK_TYPE" = "style" ]; then
-        pip install black
+        pip install black==19.3b0
     fi
 }
 
