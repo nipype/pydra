@@ -5,8 +5,7 @@
 """ functions copied from nipype, removed parts that were related to py2"""
 
 import subprocess as sp
-import hashlib
-from hashlib import md5
+from hashlib import sha256
 import os
 import os.path as op
 import re
@@ -110,25 +109,15 @@ def fname_presuffix(fname, prefix="", suffix="", newpath=None, use_ext=True):
     return op.join(pth, prefix + fname + suffix + ext)
 
 
-def hash_infile(afile, chunk_len=8192, crypto=hashlib.md5, raise_notfound=False):
+def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
     """
     Computes hash of a file using 'crypto' module
-
-    # >>> hash_infile('smri_ants_registration_settings.json')
-    # 'f225785dfb0db9032aa5a0e4f2c730ad'
-    #
-    # >>> hash_infile('surf01.vtk')
-    # 'fdf1cf359b4e346034372cdeb58f9a88'
-    #
-    # >>> hash_infile('spminfo')
-    # '0dc55e3888c98a182dab179b976dfffc'
-    #
-    # >>> hash_infile('fsl_motion_outliers_fd.txt')
-    # 'defd1812c22405b1ee4431aac5bbdd73'
-
-
     """
-    if not op.isfile(afile):
+    from .specs import LazyField
+
+    if afile is None or isinstance(afile, LazyField):
+        return None
+    if not os.path.isfile(afile):
         if raise_notfound:
             raise RuntimeError('File "%s" not found.' % afile)
         return None
@@ -141,18 +130,6 @@ def hash_infile(afile, chunk_len=8192, crypto=hashlib.md5, raise_notfound=False)
                 break
             crypto_obj.update(data)
     return crypto_obj.hexdigest()
-
-
-def hash_timestamp(afile):
-    """ Computes md5 hash of the timestamp of a file """
-    md5hex = None
-    if op.isfile(afile):
-        md5obj = md5()
-        stat = os.stat(afile)
-        md5obj.update(str(stat.st_size).encode())
-        md5obj.update(str(stat.st_mtime).encode())
-        md5hex = md5obj.hexdigest()
-    return md5hex
 
 
 def _parse_mount_table(exit_code, output):
@@ -237,7 +214,6 @@ def copyfile(
     newfile,
     copy=False,
     create_new=False,
-    hashmethod="content",
     use_hardlink=True,
     copy_related_files=True,
 ):
@@ -286,9 +262,6 @@ def copyfile(
                 fname += "_c%04d" % i
             newfile = base + os.sep + fname + ext
 
-    # if hashmethod is None:
-    # hashmethod = config.get('execution', 'hash_method').lower()
-
     # Don't try creating symlinks on CIFS
     if copy is False and on_cifs(newfile):
         copy = True
@@ -318,15 +291,9 @@ def copyfile(
         elif posixpath.samefile(newfile, originalfile):
             keep = True
         else:
-            if hashmethod == "timestamp":
-                hashfn = hash_timestamp
-            elif hashmethod == "content":
-                hashfn = hash_infile
-            else:
-                raise AttributeError("Unknown hash method found:", hashmethod)
-            newhash = hashfn(newfile)
+            newhash = hash_file(newfile)
             logger.debug("File: %s already exists,%s, copy:%d", newfile, newhash, copy)
-            orighash = hashfn(originalfile)
+            orighash = hash_file(originalfile)
             keep = newhash == orighash
         if keep:
             logger.debug(
@@ -378,7 +345,6 @@ def copyfile(
                     alt_ofile,
                     alt_nfile,
                     copy,
-                    hashmethod=hashmethod,
                     use_hardlink=use_hardlink,
                     copy_related_files=False,
                 )

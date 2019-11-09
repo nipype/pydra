@@ -8,7 +8,7 @@ import sys
 from hashlib import sha256
 import subprocess as sp
 
-from .specs import Runtime, File, LazyField
+from .specs import Runtime, File
 
 
 def ensure_list(obj):
@@ -276,27 +276,6 @@ task_pkl.unlink()
 
 def hash_function(obj):
     return sha256(str(obj).encode()).hexdigest()
-
-
-def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
-    """
-    Computes hash of a file using 'crypto' module
-    """
-    if afile is None or isinstance(afile, LazyField):
-        return None
-    if not os.path.isfile(afile):
-        if raise_notfound:
-            raise RuntimeError('File "%s" not found.' % afile)
-        return None
-
-    crypto_obj = crypto()
-    with open(afile, "rb") as fp:
-        while True:
-            data = fp.read(chunk_len)
-            if not data:
-                break
-            crypto_obj.update(data)
-    return crypto_obj.hexdigest()
 
 
 def output_names_from_inputfields(inputs):
