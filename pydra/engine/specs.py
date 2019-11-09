@@ -250,9 +250,9 @@ class ShellSpec(BaseSpec):
         self.map_copyfiles = {}
         for fld in dc.fields(self):
             copy = fld.metadata.get("copyfile")
-            if copy is not None and fld.type not in [str, File]:
+            if copy is not None and fld.type is not File:
                 raise Exception(
-                    f"if copyfile set, field has to be a File or a string, "
+                    f"if copyfile set, field has to be a File "
                     f"but {fld.type} provided"
                 )
             if copy in [True, False]:

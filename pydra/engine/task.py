@@ -233,7 +233,7 @@ class ShellCommandTask(TaskBase):
             # changing path to the cpath (the directory should be mounted)
             if getattr(self, "bind_paths", None) and f.type is File:
                 lpath = Path(value)
-                cdir = Path(self.bind_paths[lpath.parent][0])
+                cdir = self.bind_paths[lpath.parent][0]
                 cpath = cdir.joinpath(lpath.name)
                 value = str(cpath)
             if f.type is bool:
@@ -282,13 +282,13 @@ class ContainerTask(ShellCommandTask):
         messenger_args=None,
         cache_dir=None,
         strip=False,
-        output_cpath=None,
+        output_cpath="/output_pydra",
         **kwargs,
     ):
 
         if input_spec is None:
             input_spec = SpecInfo(name="Inputs", fields=[], bases=(ContainerSpec,))
-        self.output_cpath = output_cpath
+        self.output_cpath = Path(output_cpath)
         super(ContainerTask, self).__init__(
             name=name,
             input_spec=input_spec,
@@ -333,12 +333,11 @@ class ContainerTask(ShellCommandTask):
                 raise Exception(
                     f"binding should have length 2, 3, or 4, it has {len(binding)}"
                 )
-
             if Path(lpath) == self.output_dir:
                 output_dir_cpath = cpath
             if mode is None:
                 mode = "rw"  # default
-            bind_paths[Path(lpath)] = (cpath, mode)
+            bind_paths[Path(lpath)] = (Path(cpath), mode)
         # output_dir is added to the bindings if not part of self.inputs.bindings
         if not output_dir_cpath:
             bind_paths[self.output_dir] = (self.output_cpath, "rw")
@@ -352,7 +351,7 @@ class ContainerTask(ShellCommandTask):
         for (key, val) in self.bind_paths.items():
             bargs.extend([opt, "{0}:{1}:{2}".format(key, val[0], val[1])])
         # TODO: would need changes for singularity
-        bargs.extend(["-w", self.output_cpath])
+        bargs.extend(["-w", str(self.output_cpath)])
         return bargs
 
     def _run_task(self):

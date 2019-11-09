@@ -967,7 +967,7 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
         fields=[
             (
                 "orig_file",
-                str,
+                File,
                 dc.field(
                     metadata={
                         "position": 1,
@@ -1025,7 +1025,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
         fields=[
             (
                 "orig_file",
-                str,
+                File,
                 dc.field(
                     metadata={
                         "position": 1,
@@ -1076,11 +1076,16 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
         assert "hello from pydra\n" == f.read()
 
 
+@pytest.mark.xfail(
+    reason="not sure if we want to support input overwrite,"
+    "if we allow for this orig_file is changing, so does checksum,"
+    " and the results cant be found"
+)
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 @pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
     """ shelltask changes a file in place,
-        copyfile is None for the file-input, so oryginal filed is changed
+        copyfile is None for the file-input, so original filed is changed
     """
     file = tmpdir.join("file_pydra.txt")
     with open(file, "w") as f:
@@ -1093,7 +1098,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
         fields=[
             (
                 "orig_file",
-                str,
+                File,
                 dc.field(
                     metadata={
                         "position": 1,
@@ -1259,7 +1264,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
         fields=[
             (
                 "orig_file",
-                str,
+                File,
                 dc.field(
                     metadata={
                         "position": 1,
@@ -1430,7 +1435,7 @@ def test_wf_shell_cmd_3(plugin):
         fields=[
             (
                 "orig_file",
-                str,
+                File,
                 dc.field(metadata={"position": 1, "help_string": "output file"}),
             ),
             (
