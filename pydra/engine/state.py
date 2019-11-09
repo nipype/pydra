@@ -99,7 +99,7 @@ class State:
             if self.missing_connections and [
                 el for el in self.splitter_rpn_compact if el.startswith("_")
             ]:
-                # if we have splitters from previous states and missing_connections,
+                # if we have splitters from previous states and missing_connections
                 # we can't continue, we should wait for updates with connections
                 pass
             else:

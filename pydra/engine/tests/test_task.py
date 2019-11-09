@@ -73,7 +73,7 @@ def test_annotated_func():
 
 
 def test_annotated_func_multreturn():
-    """function has two elements in the return statement"""
+    """ the function has two elements in the return statement"""
 
     @mark.task
     def testfunc(

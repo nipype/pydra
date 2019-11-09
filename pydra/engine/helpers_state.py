@@ -787,7 +787,7 @@ def _left_right_check(splitter_part, other_states):
 
 
 def inputs_types_to_dict(name, inputs):
-    """converting type.Inputs to dictionary"""
+    """converting type.Inputs to a dictionary"""
     # dj: any better option?
     input_names = [nm for nm in inputs.__dataclass_fields__.keys() if nm != "_func"]
     inputs_dict = {}
