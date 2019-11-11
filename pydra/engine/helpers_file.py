@@ -114,8 +114,13 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
     Computes hash of a file using 'crypto' module
     """
     from .specs import LazyField
+    from .helpers import hash_function
 
-    if afile is None or isinstance(afile, LazyField):
+    # adding option for tasks with splitter over list of files
+    if isinstance(afile, list):
+        return hash_function([hash_file(el) for el in afile])
+
+    if afile is None or isinstance(afile, LazyField) or isinstance(afile, list):
         return None
     if not os.path.isfile(afile):
         if raise_notfound:
