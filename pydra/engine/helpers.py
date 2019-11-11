@@ -8,7 +8,7 @@ import sys
 from hashlib import sha256
 import subprocess as sp
 
-from .specs import Runtime
+from .specs import Runtime, File
 
 
 def ensure_list(obj):
@@ -278,20 +278,29 @@ def hash_function(obj):
     return sha256(str(obj).encode()).hexdigest()
 
 
-def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=False):
-    """
-    Computes hash of a file using 'crypto' module
-    """
-    if not os.path.isfile(afile):
-        if raise_notfound:
-            raise RuntimeError('File "%s" not found.' % afile)
-        return None
+def output_names_from_inputfields(inputs):
+    """ collecting outputs from input fields with output_file_template"""
+    output_names = []
+    for fld in dc.fields(inputs):
+        if "output_file_template" in fld.metadata:
+            if "output_field_name" in fld.metadata:
+                field_name = fld.metadata["output_field_name"]
+            else:
+                field_name = fld.name
+            output_names.append(field_name)
+    return output_names
 
-    crypto_obj = crypto()
-    with open(afile, "rb") as fp:
-        while True:
-            data = fp.read(chunk_len)
-            if not data:
-                break
-            crypto_obj.update(data)
-    return crypto_obj.hexdigest()
+
+def output_from_inputfields(output_spec, inputs):
+    """ collecting values from output from input fields"""
+    for fld in dc.fields(inputs):
+        if "output_file_template" in fld.metadata:
+            value = getattr(inputs, fld.name)
+            if "output_field_name" in fld.metadata:
+                field_name = fld.metadata["output_field_name"]
+            else:
+                field_name = fld.name
+            output_spec.fields.append(
+                (field_name, File, dc.field(metadata={"value": value}))
+            )
+    return output_spec

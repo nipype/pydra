@@ -40,10 +40,12 @@ import cloudpickle as cp
 import dataclasses as dc
 import inspect
 import typing as ty
+from pathlib import Path
 
 from .core import TaskBase
 from ..utils.messenger import AuditFlag
 from .specs import (
+    File,
     BaseSpec,
     SpecInfo,
     ShellSpec,
@@ -59,6 +61,7 @@ class FunctionTask(TaskBase):
     def __init__(
         self,
         func: ty.Callable,
+        input_spec: ty.Optional[SpecInfo] = None,
         output_spec: ty.Optional[BaseSpec] = None,
         name=None,
         audit_flags: AuditFlag = AuditFlag.NONE,
@@ -68,17 +71,35 @@ class FunctionTask(TaskBase):
         cache_locations=None,
         **kwargs,
     ):
-        self.input_spec = SpecInfo(
-            name="Inputs",
-            fields=[
-                (val.name, val.annotation, val.default)
-                if val.default is not inspect.Signature.empty
-                else (val.name, val.annotation)
-                for val in inspect.signature(func).parameters.values()
-            ]
-            + [("_func", str, cp.dumps(func))],
-            bases=(BaseSpec,),
-        )
+
+        if input_spec is None:
+            input_spec = SpecInfo(
+                name="Inputs",
+                fields=[
+                    (
+                        val.name,
+                        val.annotation,
+                        dc.field(
+                            default=val.default,
+                            metadata={
+                                "help_string": f"{val.name} parameter from {func.__name__}"
+                            },
+                        ),
+                    )
+                    if val.default is not inspect.Signature.empty
+                    else (
+                        val.name,
+                        val.annotation,
+                        dc.field(metadata={"help_string": val.name}),
+                    )
+                    for val in inspect.signature(func).parameters.values()
+                ]
+                + [("_func", str, cp.dumps(func))],
+                bases=(BaseSpec,),
+            )
+        else:
+            input_spec.fields.append(("_func", str, cp.dumps(func)))
+        self.input_spec = input_spec
         if name is None:
             name = func.__name__
         super(FunctionTask, self).__init__(
@@ -138,16 +159,19 @@ class FunctionTask(TaskBase):
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
-        if len(self.output_spec.fields) > 1:
-            if len(self.output_spec.fields) == len(output):
-                self.output_ = list(output)
-            else:
-                raise Exception(
-                    f"expected {len(self.output_spec.fields)} elements, "
-                    f"but {len(output)} were returned"
-                )
-        else:  # if only one element in the fields, everything should be returned together
-            self.output_ = output
+        if output:
+            output_names = [el[0] for el in self.output_spec.fields]
+            self.output_ = {}
+            if len(output_names) > 1:
+                if len(output_names) == len(output):
+                    self.output_ = dict(zip(output_names, output))
+                else:
+                    raise Exception(
+                        f"expected {len(self.output_spec.fields)} elements, "
+                        f"but {len(output)} were returned"
+                    )
+            else:  # if only one element in the fields, everything should be returned together
+                self.output_[output_names[0]] = output
 
 
 class ShellCommandTask(TaskBase):
@@ -164,11 +188,13 @@ class ShellCommandTask(TaskBase):
         **kwargs,
     ):
         if input_spec is None:
-            field = dc.field(default_factory=list)
-            field.metadata = {}
-            fields = [("args", ty.List[str], field)]
-            input_spec = SpecInfo(name="Inputs", fields=fields, bases=(ShellSpec,))
+            input_spec = SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
         self.input_spec = input_spec
+        if output_spec is None:
+            output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
+
+        self.output_spec = output_spec
+
         super(ShellCommandTask, self).__init__(
             name=name,
             inputs=kwargs,
@@ -177,21 +203,56 @@ class ShellCommandTask(TaskBase):
             messenger_args=messenger_args,
             cache_dir=cache_dir,
         )
-        if output_spec is None:
-            output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
-        self.output_spec = output_spec
         self.strip = strip
 
     @property
     def command_args(self):
-        args = []
+        pos_args = []  # list for (position, command arg)
         for f in dc.fields(self.inputs):
-            if f.name not in ["executable", "args"]:
+            if f.name == "executable":
+                pos = 0  # executable should be the first el. of the command
+            elif f.name == "args":
+                pos = -1  # assuming that args is the last el. of the command
+            # if inp has position than it should be treated as a part of the command
+            # metadata["position"] is the position in the command
+            elif "position" in f.metadata:
+                pos = f.metadata["position"]
+                if not isinstance(pos, int) or pos < 1:
+                    raise Exception(
+                        f"position should be an integer > 0, but {pos} given"
+                    )
+            else:
                 continue
-            value = getattr(self.inputs, f.name)
-            if value is not None:
-                args.extend(ensure_list(value))
-        return args
+            cmd_add = []
+            if "argstr" in f.metadata:
+                cmd_add.append(f.metadata["argstr"])
+            if f.metadata.get("copyfile") in [True, False]:
+                value = str(self.inputs.map_copyfiles[f.name])
+            else:
+                value = getattr(self.inputs, f.name)
+            # changing path to the cpath (the directory should be mounted)
+            if getattr(self, "bind_paths", None) and f.type is File:
+                lpath = Path(value)
+                cdir = self.bind_paths[lpath.parent][0]
+                cpath = cdir.joinpath(lpath.name)
+                value = str(cpath)
+            if f.type is bool:
+                if value is not True:
+                    break
+            else:
+                cmd_add += ensure_list(value)
+            if cmd_add is not None:
+                pos_args.append((pos, cmd_add))
+        # sorting all elements of the command
+        pos_args.sort()
+        # if args available, they should be moved at the of the list
+        if pos_args[0][0] == -1:
+            pos_args.append(pos_args.pop(0))
+        # dropping the position index
+        cmd_args = []
+        for el in pos_args:
+            cmd_args += el[1]
+        return cmd_args
 
     @command_args.setter
     def command_args(self, args: ty.Dict):
@@ -205,31 +266,33 @@ class ShellCommandTask(TaskBase):
         self.output_ = None
         args = self.command_args
         if args:
-            self.output_ = execute(args, strip=self.strip)
+            keys = ["return_code", "stdout", "stderr"]
+            values = execute(args, strip=self.strip)
+            self.output_ = dict(zip(keys, values))
 
 
 class ContainerTask(ShellCommandTask):
     def __init__(
         self,
         name,
-        input_spec: ty.Optional[ContainerSpec] = None,
-        output_spec: ty.Optional[ShellOutSpec] = None,
+        input_spec: ty.Optional[SpecInfo] = None,
+        output_spec: ty.Optional[SpecInfo] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
         messenger_args=None,
         cache_dir=None,
         strip=False,
+        output_cpath="/output_pydra",
         **kwargs,
     ):
 
         if input_spec is None:
-            field = dc.field(default_factory=list)
-            field.metadata = {}
-            fields = [("args", ty.List[str], field)]
-            input_spec = SpecInfo(name="Inputs", fields=fields, bases=(ContainerSpec,))
+            input_spec = SpecInfo(name="Inputs", fields=[], bases=(ContainerSpec,))
+        self.output_cpath = Path(output_cpath)
         super(ContainerTask, self).__init__(
             name=name,
             input_spec=input_spec,
+            output_spec=output_spec,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
@@ -254,52 +317,79 @@ class ContainerTask(ShellCommandTask):
         cargs.append(self.inputs.image)
         return cargs
 
-    def binds(self, opt):
-        """Specify mounts to bind from local filesystems to container
-
-        `bindings` are tuples of (local path, container path, bind mode)
-        """
-        bargs = []
+    @property
+    def bind_paths(self):
+        """returns bindings: dict(lpath: (cpath, mode))"""
+        bind_paths = {}
+        output_dir_cpath = None
+        if self.inputs.bindings is None:
+            self.inputs.bindings = []
         for binding in self.inputs.bindings:
-            lpath, cpath, mode = binding
+            if len(binding) == 3:
+                lpath, cpath, mode = binding
+            elif len(binding) == 2:
+                lpath, cpath, mode = binding + ("rw",)
+            else:
+                raise Exception(
+                    f"binding should have length 2, 3, or 4, it has {len(binding)}"
+                )
+            if Path(lpath) == self.output_dir:
+                output_dir_cpath = cpath
             if mode is None:
                 mode = "rw"  # default
-            bargs.extend([opt, "{0}:{1}:{2}".format(lpath, cpath, mode)])
+            bind_paths[Path(lpath)] = (Path(cpath), mode)
+        # output_dir is added to the bindings if not part of self.inputs.bindings
+        if not output_dir_cpath:
+            bind_paths[self.output_dir] = (self.output_cpath, "rw")
+        return bind_paths
+
+    def binds(self, opt):
+        """ Specify mounts to bind from local filesystems to container,
+            and working directory, uses binds_paths
+        """
+        bargs = []
+        for (key, val) in self.bind_paths.items():
+            bargs.extend([opt, "{0}:{1}:{2}".format(key, val[0], val[1])])
+        # TODO: would need changes for singularity
+        bargs.extend(["-w", str(self.output_cpath)])
         return bargs
 
     def _run_task(self):
         self.output_ = None
         args = self.container_args + self.command_args
         if args:
-            self.output_ = execute(args, strip=self.strip)
+            keys = ["return_code", "stdout", "stderr"]
+            values = execute(args, strip=self.strip)
+            self.output_ = dict(zip(keys, values))
 
 
 class DockerTask(ContainerTask):
     def __init__(
         self,
         name,
-        input_spec: ty.Optional[ContainerSpec] = None,
-        output_spec: ty.Optional[ShellOutSpec] = None,
+        input_spec: ty.Optional[SpecInfo] = None,
+        output_spec: ty.Optional[SpecInfo] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
         messenger_args=None,
         cache_dir=None,
         strip=False,
+        output_cpath="/output_pydra",
         **kwargs,
     ):
         if input_spec is None:
-            field = dc.field(default_factory=list)
-            field.metadata = {}
-            fields = [("args", ty.List[str], field)]
-            input_spec = SpecInfo(name="Inputs", fields=fields, bases=(DockerSpec,))
-        super(ContainerTask, self).__init__(
+            input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
+
+        super(DockerTask, self).__init__(
             name=name,
             input_spec=input_spec,
+            output_spec=output_spec,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
             cache_dir=cache_dir,
             strip=strip,
+            output_cpath=output_cpath,
             **kwargs,
         )
 
@@ -307,18 +397,17 @@ class DockerTask(ContainerTask):
     def container_args(self):
         cargs = super().container_args
         assert self.inputs.container == "docker"
-        if self.inputs.bindings:
-            # insert bindings before image
-            idx = len(cargs) - 1
-            cargs[idx:-1] = self.binds("-v")
+        # insert bindings before image
+        idx = len(cargs) - 1
+        cargs[idx:-1] = self.binds("-v")
         return cargs
 
 
 class SingularityTask(ContainerTask):
     def __init__(
         self,
-        input_spec: ty.Optional[ContainerSpec] = None,
-        output_spec: ty.Optional[ShellOutSpec] = None,
+        input_spec: ty.Optional[SpecInfo] = None,
+        output_spec: ty.Optional[SpecInfo] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers=None,
         messenger_args=None,
@@ -347,8 +436,7 @@ class SingularityTask(ContainerTask):
     def container_args(self):
         cargs = super().container_args
         assert self.inputs.container == "singularity"
-        if self.inputs.bindings:
-            # insert bindings before image
-            idx = len(cargs) - 1
-            cargs[idx:-1] = self.binds("-B")
+        # insert bindings before image
+        idx = len(cargs) - 1
+        cargs[idx:-1] = self.binds("-B")
         return cargs

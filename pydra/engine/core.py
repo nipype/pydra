@@ -25,6 +25,8 @@ from .helpers import (
     ensure_list,
     record_error,
     hash_function,
+    output_from_inputfields,
+    output_names_from_inputfields,
 )
 from .graph import DiGraph
 from .audit import Audit
@@ -79,6 +81,7 @@ class TaskBase:
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
         klass = make_klass(self.input_spec)
+        # todo should be used to input_check in spec??
         self.inputs = klass(
             **{
                 f.name: (None if f.default is dc.MISSING else f.default)
@@ -109,7 +112,9 @@ class TaskBase:
                     raise ValueError("Unknown input set {!r}".format(inputs))
                 inputs = self._input_sets[inputs]
             self.inputs = dc.replace(self.inputs, **inputs)
+            self.inputs.check_metadata()
             self.state_inputs = inputs
+
         self.audit = Audit(
             audit_flags=audit_flags,
             messengers=messengers,
@@ -210,7 +215,9 @@ class TaskBase:
 
     @property
     def output_names(self):
-        return [f.name for f in dc.fields(make_klass(self.output_spec))]
+        output_spec_names = [f.name for f in dc.fields(make_klass(self.output_spec))]
+        from_input_spec_names = output_names_from_inputfields(self.inputs)
+        return output_spec_names + from_input_spec_names
 
     @property
     def can_resume(self):
@@ -277,6 +284,7 @@ class TaskBase:
 
     def _run(self, **kwargs):
         self.inputs = dc.replace(self.inputs, **kwargs)
+        self.inputs.check_fields_input_spec()
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
@@ -302,6 +310,8 @@ class TaskBase:
                 shutil.rmtree(odir)
             cwd = os.getcwd()
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
+            self.inputs.copyfile_input(self.output_dir)
+            self.inputs.template_update()
             self.audit.start_audit(odir)
             result = Result(output=None, runtime=None, errored=False)
             self.hooks.pre_run_task(self)
@@ -321,25 +331,15 @@ class TaskBase:
         self.hooks.post_run(self, result)
         return result
 
-    def _list_outputs(self):
-        output_dict = {}
-        if len(self.output_names) == 1:
-            output_dict[self.output_names[0]] = self.output_
-        else:
-            if len(self.output_names) != len(self.output_):
-                raise Exception(
-                    f"output names, {self.output_names}, "
-                    f"has to be the same length as output, {self.output_}"
-                )
-            for ii, out_nm in enumerate(self.output_names):
-                output_dict[out_nm] = self.output_[ii]
-        return output_dict
-
     def _collect_outputs(self):
-        run_output = self._list_outputs()
+        run_output = self.output_
+        self.output_spec = output_from_inputfields(self.output_spec, self.inputs)
         output_klass = make_klass(self.output_spec)
         output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
-        return dc.replace(output, **run_output)
+        other_output = output.collect_additional_outputs(
+            self.input_spec, self.inputs, self.output_dir
+        )
+        return dc.replace(output, **run_output, **other_output)
 
     def split(self, splitter, overwrite=False, **kwargs):
         splitter = hlpst.add_name_splitter(splitter, self.name)
@@ -398,6 +398,8 @@ class TaskBase:
                     inputs_dict[inp] = getattr(self.inputs, inp)
             return state_dict, inputs_dict
         else:
+            # todo it never gets here
+            breakpoint()
             inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
             return None, inputs_dict
 
@@ -498,8 +500,19 @@ class Workflow(TaskBase):
             else:
                 self.input_spec = SpecInfo(
                     name="Inputs",
-                    fields=[(name, ty.Any) for name in input_spec]
-                    + [("_graph_checksums", ty.Any)],
+                    fields=[("_graph_checksums", ty.Any)]
+                    + [
+                        (
+                            nm,
+                            ty.Any,
+                            dc.field(
+                                metadata={
+                                    "help_string": f"{nm} input from {name} workflow"
+                                }
+                            ),
+                        )
+                        for nm in input_spec
+                    ],
                     bases=(BaseSpec,),
                 )
         if output_spec is None:
@@ -674,13 +687,16 @@ class Workflow(TaskBase):
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
         logger.info("Added %s to %s", self.output_spec, self)
 
-    def _list_outputs(self):
-        output = {}
+    def _collect_outputs(self):
+        output_klass = make_klass(self.output_spec)
+        output = output_klass(**{f.name: None for f in dc.fields(output_klass)})
+        # collecting outputs from tasks
+        output_wf = {}
         for name, val in self._connections:
             if not isinstance(val, LazyField):
                 raise ValueError("all connections must be lazy")
-            output[name] = val.get_value(self)
-        return output
+            output_wf[name] = val.get_value(self)
+        return dc.replace(output, **output_wf)
 
 
 def is_task(obj):

@@ -2,6 +2,7 @@ import asyncio
 import sys
 import re
 from tempfile import gettempdir
+from pathlib import Path
 
 import concurrent.futures as cf
 
@@ -205,8 +206,12 @@ class SlurmWorker(DistributedWorker):
             sargs.append(f"--job-name={jobname}")
         output = re.search(r"(?<=-o )\S+|(?<=--output=)\S+", self.sbatch_args)
         if not output:
-            output = str(batchscript.parent / "slurm-%j.out")
-            sargs.append(f"--output={output}")
+            self.output = str(batchscript.parent / "slurm-%j.out")
+            sargs.append(f"--output={self.output}")
+        error = re.search(r"(?<=-e )\S+|(?<=--error=)\S+", self.sbatch_args)
+        if not error:
+            self.error = str(batchscript.parent / "slurm-%j.err")
+            sargs.append(f"--error={self.error}")
         sargs.append(str(batchscript))
         # TO CONSIDER: add random sleep to avoid overloading calls
         _, stdout, _ = await read_and_display_async("sbatch", *sargs, hide_display=True)
@@ -214,6 +219,8 @@ class SlurmWorker(DistributedWorker):
         if not jobid:
             raise RuntimeError("Could not extract job ID")
         jobid = jobid.group()
+        self.output = self.output.replace("%j", jobid)
+        self.error = self.error.replace("%j", jobid)
         # intermittent polling
         while True:
             # 3 possibilities
@@ -245,5 +252,13 @@ class SlurmWorker(DistributedWorker):
             if m.group("status") in ["RUNNING", "PENDING"]:
                 return False
             # TODO: potential for requeuing
-            raise Exception("Job failed")
+            # parsing the error message
+            error_line = Path(self.error).read_text().split("\n")[-2]
+            if "Exception" in error_line:
+                error_message = error_line.replace("Exception: ", "")
+            elif "Error" in error_line:
+                error_message = error_line.replace("Exception: ", "")
+            else:
+                error_message = "Job failed (unknown reason - TODO)"
+            raise Exception(error_message)
         return True

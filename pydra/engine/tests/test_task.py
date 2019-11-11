@@ -73,7 +73,7 @@ def test_annotated_func():
 
 
 def test_annotated_func_multreturn():
-    """function has two elements in the return statement"""
+    """ the function has two elements in the return statement"""
 
     @mark.task
     def testfunc(
@@ -357,16 +357,22 @@ def test_container_cmds(tmpdir):
 
 def test_docker_cmd(tmpdir):
     docky = DockerTask(name="docky", executable="pwd", image="busybox")
-    assert docky.cmdline == "docker run busybox pwd"
+    assert (
+        docky.cmdline
+        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
+    )
     docky.inputs.container_xargs = ["--rm -it"]
-    assert docky.cmdline == "docker run --rm -it busybox pwd"
+    assert (
+        docky.cmdline
+        == f"docker run --rm -it -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
+    )
     docky.inputs.bindings = [
         ("/local/path", "/container/path", "ro"),
         ("/local2", "/container2", None),
     ]
     assert docky.cmdline == (
         "docker run --rm -it -v /local/path:/container/path:ro"
-        " -v /local2:/container2:rw busybox pwd"
+        f" -v /local2:/container2:rw -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
     )
 
 
@@ -404,7 +410,7 @@ def test_taskhooks(tmpdir, capsys):
     foo.hooks.pre_run = myhook
     foo()
     captured = capsys.readouterr()
-    assert captured.out == "I was called\n"
+    assert "I was called\n" in captured.out
     del captured
 
     # setting unknown hook should not be allowed
@@ -418,7 +424,7 @@ def test_taskhooks(tmpdir, capsys):
     foo.inputs.a = 2  # ensure not pre-cached
     foo()
     captured = capsys.readouterr()
-    assert captured.out == "".join(["I was called\n"] * 4)
+    assert captured.out.count("I was called\n") == 4
     del captured
 
     # hooks are independent across tasks by default
@@ -434,7 +440,7 @@ def test_taskhooks(tmpdir, capsys):
 
     wf(plugin="cf")
     captured = capsys.readouterr()
-    assert captured.out == "".join(["I was called\n"] * 4)
+    assert captured.out.count("I was called\n") == 4
     del captured
 
     # reset all hooks
