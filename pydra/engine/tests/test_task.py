@@ -5,7 +5,13 @@ import os
 import pytest
 
 from ... import mark
-from ..task import AuditFlag, ShellCommandTask, ContainerTask, DockerTask
+from ..task import (
+    AuditFlag,
+    ShellCommandTask,
+    ContainerTask,
+    DockerTask,
+    SingularityTask,
+)
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from .utils import gen_basic_wf
 
@@ -373,6 +379,24 @@ def test_docker_cmd(tmpdir):
     assert docky.cmdline == (
         "docker run --rm -it -v /local/path:/container/path:ro"
         f" -v /local2:/container2:rw -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
+    )
+
+
+def test_singularity_cmd(tmpdir):
+    # todo how this should be done?
+    image = "library://sylabsed/linux/alpine"
+    singu = SingularityTask(name="singi", executable="pwd", image=image)
+    assert (
+        singu.cmdline
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} pwd"
+    )
+    singu.inputs.bindings = [
+        ("/local/path", "/container/path", "ro"),
+        ("/local2", "/container2", None),
+    ]
+    assert singu.cmdline == (
+        "singularity exec -B /local/path:/container/path:ro"
+        f" -B /local2:/container2:rw -B {singu.output_dir}:/output_pydra:rw {image} pwd"
     )
 
 
