@@ -2,7 +2,6 @@
 
 import os, shutil
 import pytest
-from pathlib import Path
 import dataclasses as dc
 
 from ..task import SingularityTask, DockerTask
@@ -256,17 +255,607 @@ def test_wf_singularity_1a(plugin, tmpdir):
     )
     wf.add(
         DockerTask(
-            name="docky_echo",
+            name="singu_echo",
             image=image_doc,
             executable=wf.lzin.cmd2,
             args=wf.singu_cat.lzout.stdout,
             strip=True,
         )
     )
-    wf.set_output([("out", wf.docky_echo.lzout.stdout)])
+    wf.set_output([("out", wf.singu_echo.lzout.stdout)])
 
     with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()
     assert res.output.out == "message from the previous task: hello from pydra"
+
+
+# tests with customized output_spec
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_outputspec_1(plugin, tmpdir):
+    """
+        customised output_spec, adding files to the output, providing specific pathname
+        output_path is automatically added to the bindings
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    image = "library://sylabsed/linux/alpine"
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "newfile_tmp.txt")],
+        bases=(ShellOutSpec,),
+    )
+    singu = SingularityTask(
+        name="singu", image=image, executable=cmd, output_spec=my_output_spec
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        singu(submitter=sub)
+
+    res = singu.result()
+    assert res.output.stdout == ""
+    assert res.output.newfile.exists()
+
+
+# tests with customised input_spec
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_inputspec_1(plugin, tmpdir):
+    """ a simple customized input spec for singularity task """
+    filename = str(tmpdir.join("file_pydra.txt"))
+    with open(filename, "w") as f:
+        f.write("hello from pydra")
+
+    cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(SingularitySpec,),
+    )
+
+    singu = SingularityTask(
+        name="singu",
+        image=image,
+        executable=cmd,
+        file=filename,
+        input_spec=my_input_spec,
+        strip=True,
+    )
+
+    res = singu()
+    assert res.output.stdout == "hello from pydra"
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_inputspec_1a(plugin, tmpdir):
+    """ a simple customized input spec for singularity task
+        a default value is used
+    """
+    filename = str(tmpdir.join("file_pydra.txt"))
+    with open(filename, "w") as f:
+        f.write("hello from pydra")
+
+    cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    default=filename,
+                    metadata={"position": 1, "help_string": "input file"},
+                ),
+            )
+        ],
+        bases=(SingularitySpec,),
+    )
+
+    singu = SingularityTask(
+        name="singu", image=image, executable=cmd, input_spec=my_input_spec, strip=True
+    )
+
+    res = singu()
+    assert res.output.stdout == "hello from pydra"
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_inputspec_2(plugin, tmpdir):
+    """ a customized input spec with two fields for singularity task """
+    filename_1 = tmpdir.join("file_pydra.txt")
+    with open(filename_1, "w") as f:
+        f.write("hello from pydra\n")
+
+    filename_2 = tmpdir.join("file_nice.txt")
+    with open(filename_2, "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                File,
+                dc.field(metadata={"position": 1, "help_string": "input file 1"}),
+            ),
+            (
+                "file2",
+                File,
+                dc.field(
+                    default=filename_2,
+                    metadata={"position": 2, "help_string": "input file 2"},
+                ),
+            ),
+        ],
+        bases=(SingularitySpec,),
+    )
+
+    singu = SingularityTask(
+        name="singu",
+        image=image,
+        executable=cmd,
+        file1=filename_1,
+        input_spec=my_input_spec,
+        strip=True,
+    )
+
+    res = singu()
+    assert res.output.stdout == "hello from pydra\nhave a nice one"
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_inputspec_2a_except(plugin, tmpdir):
+    """ a customized input spec with two fields
+        first one uses a default, and second doesn't - raises a dataclass exception
+    """
+    filename_1 = tmpdir.join("file_pydra.txt")
+    with open(filename_1, "w") as f:
+        f.write("hello from pydra\n")
+    filename_2 = tmpdir.join("file_nice.txt")
+    with open(filename_2, "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
+
+    # the field with default value can't be before value without default
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                File,
+                dc.field(
+                    default=filename_1,
+                    metadata={"position": 1, "help_string": "input file 1"},
+                ),
+            ),
+            (
+                "file2",
+                File,
+                dc.field(metadata={"position": 2, "help_string": "input file 2"}),
+            ),
+        ],
+        bases=(SingularitySpec,),
+    )
+
+    with pytest.raises(TypeError) as excinfo:
+        singu = SingularityTask(
+            name="singu",
+            image=image,
+            executable=cmd,
+            file2=filename_2,
+            input_spec=my_input_spec,
+            strip=True,
+        )
+    assert "non-default argument 'file2' follows default argument" == str(excinfo.value)
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_inputspec_2a(plugin, tmpdir):
+    """ a customized input spec with two fields
+        first one uses a default by using metadata['default_value'],
+        this is fine even if the second field is not using any defaults
+    """
+    filename_1 = tmpdir.join("file_pydra.txt")
+    with open(filename_1, "w") as f:
+        f.write("hello from pydra\n")
+    filename_2 = tmpdir.join("file_nice.txt")
+    with open(filename_2, "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
+
+    # if you want set default in the first field you can use default_value in metadata
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                File,
+                dc.field(
+                    metadata={
+                        "default_value": filename_1,
+                        "position": 1,
+                        "help_string": "input file 1",
+                    }
+                ),
+            ),
+            (
+                "file2",
+                File,
+                dc.field(metadata={"position": 2, "help_string": "input file 2"}),
+            ),
+        ],
+        bases=(SingularitySpec,),
+    )
+
+    singu = SingularityTask(
+        name="singu",
+        image=image,
+        executable=cmd,
+        file2=filename_2,
+        input_spec=my_input_spec,
+        strip=True,
+    )
+
+    res = singu()
+    assert res.output.stdout == "hello from pydra\nhave a nice one"
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
+    """ shelltask changes a file in place,
+        adding copyfile=True to the file-input from input_spec
+        hardlink or copy in the output_dir should be created
+    """
+    file = tmpdir.join("file_pydra.txt")
+    with open(file, "w") as f:
+        f.write("hello from pydra\n")
+
+    cmd = ["sed", "-is", "s/hello/hi/"]
+    image = "library://sylabsed/linux/alpine"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "orig_file",
+                File,
+                dc.field(
+                    metadata={
+                        "position": 1,
+                        "help_string": "orig file",
+                        "mandatory": True,
+                        "copyfile": True,
+                    }
+                ),
+            ),
+            (
+                "out_file",
+                str,
+                dc.field(
+                    metadata={
+                        "output_file_template": "{orig_file}",
+                        "help_string": "output file",
+                    }
+                ),
+            ),
+        ],
+        bases=(SingularitySpec,),
+    )
+
+    singu = SingularityTask(
+        name="singu",
+        image=image,
+        executable=cmd,
+        input_spec=my_input_spec,
+        orig_file=str(file),
+    )
+
+    res = singu()
+    assert res.output.stdout == ""
+    assert res.output.out_file.exists()
+    # the file is  copied, and than it is changed in place
+    assert res.output.out_file.parent == singu.output_dir
+    with open(res.output.out_file, "r") as f:
+        assert "hi from pydra\n" == f.read()
+    # the original file is unchanged
+    with open(file, "r") as f:
+        assert "hello from pydra\n" == f.read()
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_inputspec_state_1(plugin, tmpdir):
+    """ a customised input spec for a singularity file with a splitter,
+        splitter is on files
+    """
+    filename_1 = tmpdir.join("file_pydra.txt")
+    with open(filename_1, "w") as f:
+        f.write("hello from pydra\n")
+    filename_2 = tmpdir.join("file_nice.txt")
+    with open(filename_2, "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename = [str(filename_1), str(filename_2)]
+    image = "library://sylabsed/linux/alpine"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(SingularitySpec,),
+    )
+
+    singu = SingularityTask(
+        name="singu",
+        image=image,
+        executable=cmd,
+        file=filename,
+        input_spec=my_input_spec,
+        strip=True,
+    ).split("file")
+
+    res = singu()
+    assert res[0].output.stdout == "hello from pydra"
+    assert res[1].output.stdout == "have a nice one"
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_inputspec_state_1b(plugin, tmpdir):
+    """ a customised input spec for a singularity file with a splitter,
+        files from the input spec have the same path in the local os and the container,
+        so hash is calculated and the test works fine
+    """
+    file_1 = tmpdir.join("file_pydra.txt")
+    file_2 = tmpdir.join("file_nice.txt")
+    with open(file_1, "w") as f:
+        f.write("hello from pydra")
+    with open(file_2, "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename = [str(file_1), str(file_2)]
+    image = "library://sylabsed/linux/alpine"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(SingularitySpec,),
+    )
+
+    singu = SingularityTask(
+        name="singu",
+        image=image,
+        executable=cmd,
+        file=filename,
+        input_spec=my_input_spec,
+        strip=True,
+    ).split("file")
+
+    res = singu()
+    assert res[0].output.stdout == "hello from pydra"
+    assert res[1].output.stdout == "have a nice one"
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_wf_inputspec_1(plugin, tmpdir):
+    """ a customized input spec for workflow with singularity tasks """
+    filename = tmpdir.join("file_pydra.txt")
+    with open(filename, "w") as f:
+        f.write("hello from pydra")
+
+    cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(SingularitySpec,),
+    )
+
+    wf = Workflow(name="wf", input_spec=["cmd", "file"])
+    wf.inputs.cmd = cmd
+    wf.inputs.file = filename
+
+    singu = SingularityTask(
+        name="singu",
+        image=image,
+        executable=wf.lzin.cmd,
+        file=wf.lzin.file,
+        input_spec=my_input_spec,
+        strip=True,
+    )
+    wf.add(singu)
+
+    wf.set_output([("out", wf.singu.lzout.stdout)])
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res.output.out == "hello from pydra"
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_wf_state_inputspec_1(plugin, tmpdir):
+    """ a customized input spec for workflow with singularity tasks that has a state"""
+    file_1 = tmpdir.join("file_pydra.txt")
+    file_2 = tmpdir.join("file_nice.txt")
+    with open(file_1, "w") as f:
+        f.write("hello from pydra")
+    with open(file_2, "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename = [str(file_1), str(file_2)]
+    image = "library://sylabsed/linux/alpine"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(SingularitySpec,),
+    )
+
+    wf = Workflow(name="wf", input_spec=["cmd", "file"])
+    wf.inputs.cmd = cmd
+    wf.inputs.file = filename
+
+    singu = SingularityTask(
+        name="singu",
+        image=image,
+        executable=wf.lzin.cmd,
+        file=wf.lzin.file,
+        input_spec=my_input_spec,
+        strip=True,
+    )
+    wf.add(singu)
+    wf.split("file")
+
+    wf.set_output([("out", wf.singu.lzout.stdout)])
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res[0].output.out == "hello from pydra"
+    assert res[1].output.out == "have a nice one"
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_wf_ndst_inputspec_1(plugin, tmpdir):
+    """ a customized input spec for workflow with singularity tasks with states"""
+    file_1 = tmpdir.join("file_pydra.txt")
+    file_2 = tmpdir.join("file_nice.txt")
+    with open(file_1, "w") as f:
+        f.write("hello from pydra")
+    with open(file_2, "w") as f:
+        f.write("have a nice one")
+
+    cmd = "cat"
+    filename = [str(file_1), str(file_2)]
+    image = "library://sylabsed/linux/alpine"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                File,
+                dc.field(
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "help_string": "input file",
+                    }
+                ),
+            )
+        ],
+        bases=(SingularitySpec,),
+    )
+
+    wf = Workflow(name="wf", input_spec=["cmd", "file"])
+    wf.inputs.cmd = cmd
+    wf.inputs.file = filename
+
+    singu = SingularityTask(
+        name="singu",
+        image=image,
+        executable=wf.lzin.cmd,
+        file=wf.lzin.file,
+        input_spec=my_input_spec,
+        strip=True,
+    ).split("file")
+    wf.add(singu)
+
+    wf.set_output([("out", wf.singu.lzout.stdout)])
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res.output.out == ["hello from pydra", "have a nice one"]

@@ -343,6 +343,9 @@ def test_wf_docker_2(plugin, tmpdir):
     assert res.output.out == "Hello!"
 
 
+# tests with customized output_spec
+
+
 @need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_outputspec_1(plugin, tmpdir):

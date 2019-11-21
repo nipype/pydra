@@ -422,6 +422,7 @@ class SingularityTask(ContainerTask):
             input_spec = SpecInfo(name="Inputs", fields=[], bases=(SingularitySpec,))
         super(SingularityTask, self).__init__(
             input_spec=input_spec,
+            output_spec=output_spec,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
