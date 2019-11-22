@@ -1,7 +1,14 @@
 coverage:
-  range: "0...100"
+  range: "50...100"
   ignore:          # files and folders that will be removed during processing
     - "**/tests"
     - "pydra/_version.py"
     - "setup.py"
     - "versioneer.py"
+  status:
+    project:
+      default:
+        threshold: 1
+    patch:
+      default:
+        target: 80
