@@ -39,6 +39,7 @@ develop = False
 
 class TaskBase:
     _api_version: str = "0.0.1"  # Should generally not be touched by subclasses
+    _etelemetry_version_data = None  # class variable to store etelemetry information
     _version: str  # Version of tool being wrapped
     _task_version: ty.Optional[
         str
@@ -77,6 +78,11 @@ class TaskBase:
         inputs : dictionary (input name, input value or list of values)
             States this node's input names
         """
+        from .. import check_latest_version
+
+        if TaskBase._etelemetry_version_data is None:
+            TaskBase._etelemetry_version_data = check_latest_version()
+
         self.name = name
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
