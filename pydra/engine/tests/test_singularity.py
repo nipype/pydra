@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os, shutil
+import subprocess as sp
 import pytest
 import dataclasses as dc
 
@@ -16,7 +17,8 @@ else:
 
 
 need_docker = pytest.mark.skipif(
-    shutil.which("docker") is None, reason="no docker available"
+    shutil.which("docker") is None or sp.call(["docker", "info"]),
+    reason="no docker available",
 )
 need_singularity = pytest.mark.skipif(
     shutil.which("singularity") is None, reason="no singularity available"

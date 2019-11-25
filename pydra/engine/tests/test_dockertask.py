@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import os, shutil
+import subprocess as sp
 import pytest
-from pathlib import Path
 import dataclasses as dc
 
 from ..task import DockerTask
@@ -16,7 +16,8 @@ else:
     Plugins = ["cf"]
 
 need_docker = pytest.mark.skipif(
-    shutil.which("docker") is None, reason="no docker within the container"
+    shutil.which("docker") is None or sp.call(["docker", "info"]),
+    reason="no docker within the container",
 )
 
 
