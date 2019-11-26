@@ -5,268 +5,193 @@ import subprocess as sp
 import pytest
 import dataclasses as dc
 
-from ..task import DockerTask
+from ..task import SingularityTask, DockerTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec
+from ..specs import ShellOutSpec, SpecInfo, File, SingularitySpec
 
 if bool(shutil.which("sbatch")):
     Plugins = ["cf", "slurm"]
 else:
     Plugins = ["cf"]
 
+
 need_docker = pytest.mark.skipif(
     shutil.which("docker") is None or sp.call(["docker", "info"]),
-    reason="no docker within the container",
+    reason="no docker available",
+)
+need_singularity = pytest.mark.skipif(
+    shutil.which("singularity") is None, reason="no singularity available"
 )
 
 
-@need_docker
-def test_docker_1_nosubm():
+@need_singularity
+def test_singularity_1_nosubm():
     """ simple command in a container, a default bindings and working directory is added
         no submitter
     """
-    cmd = "whoami"
-    docky = DockerTask(name="docky", executable=cmd, image="busybox")
-    assert docky.inputs.image == "busybox"
-    assert docky.inputs.container == "docker"
+    cmd = "pwd"
+    image = "library://sylabsed/linux/alpine"
+    singu = SingularityTask(name="singu", executable=cmd, image=image)
+    assert singu.inputs.image == "library://sylabsed/linux/alpine"
+    assert singu.inputs.container == "singularity"
     assert (
-        docky.cmdline
-        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd}"
+        singu.cmdline
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {cmd}"
     )
 
-    res = docky()
-    assert res.output.stdout == "root\n"
+    res = singu()
+    assert "SingularityTask" in res.output.stdout
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
-@need_docker
-@pytest.mark.parametrize("plugin", Plugins)
-def test_docker_1(plugin):
-    """ simple command in a container, a default bindings and working directory is added
-        using submitter
-    """
-    cmd = "whoami"
-    docky = DockerTask(name="docky", executable=cmd, image="busybox")
-
-    with Submitter(plugin=plugin) as sub:
-        docky(submitter=sub)
-
-    res = docky.result()
-    assert res.output.stdout == "root\n"
-    assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
-
-
-@need_docker
-def test_docker_2_nosubm():
+@need_singularity
+def test_singularity_2_nosubm():
     """ a command with arguments, cmd and args given as executable
         no submitter
     """
     cmd = ["echo", "hail", "pydra"]
-    docky = DockerTask(name="docky", executable=cmd, image="busybox")
+    image = "library://sylabsed/linux/alpine"
+    singu = SingularityTask(name="singu", executable=cmd, image=image)
     assert (
-        docky.cmdline
-        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {' '.join(cmd)}"
+        singu.cmdline
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {' '.join(cmd)}"
     )
 
-    res = docky()
+    res = singu()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_2(plugin):
+def test_singularity_2(plugin):
     """ a command with arguments, cmd and args given as executable
         using submitter
     """
     cmd = ["echo", "hail", "pydra"]
-    docky = DockerTask(name="docky", executable=cmd, image="busybox")
+    image = "library://sylabsed/linux/alpine"
+    singu = SingularityTask(name="singu", executable=cmd, image=image)
     assert (
-        docky.cmdline
-        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {' '.join(cmd)}"
+        singu.cmdline
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {' '.join(cmd)}"
     )
 
     with Submitter(plugin=plugin) as sub:
-        docky(submitter=sub)
-    res = docky.result()
+        singu(submitter=sub)
+    res = singu.result()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
-@need_docker
-def test_docker_2a_nosubm():
-    """ a command with arguments, using executable and args
-        no submitter
-    """
-    cmd_exec = "echo"
-    cmd_args = ["hail", "pydra"]
-    # separate command into exec + args
-    docky = DockerTask(
-        name="docky", executable=cmd_exec, args=cmd_args, image="busybox"
-    )
-    assert docky.inputs.executable == "echo"
-    assert (
-        docky.cmdline
-        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd_exec} {' '.join(cmd_args)}"
-    )
-
-    res = docky()
-    assert res.output.stdout.strip() == " ".join(cmd_args)
-    assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
-
-
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_2a(plugin):
+def test_singularity_2a(plugin):
     """ a command with arguments, using executable and args
         using submitter
     """
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
-    docky = DockerTask(
-        name="docky", executable=cmd_exec, args=cmd_args, image="busybox"
+    image = "library://sylabsed/linux/alpine"
+    singu = SingularityTask(
+        name="singu", executable=cmd_exec, args=cmd_args, image=image
     )
-    assert docky.inputs.executable == "echo"
     assert (
-        docky.cmdline
-        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd_exec} {' '.join(cmd_args)}"
+        singu.cmdline
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {cmd_exec} {' '.join(cmd_args)}"
     )
 
     with Submitter(plugin=plugin) as sub:
-        docky(submitter=sub)
-    res = docky.result()
+        singu(submitter=sub)
+    res = singu.result()
     assert res.output.stdout.strip() == " ".join(cmd_args)
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_3(plugin, tmpdir):
+def test_singularity_3(plugin, tmpdir):
     """ a simple command in container with bindings,
         creating directory in tmp dir and checking if it is in the container
     """
     # creating a new directory
     tmpdir.mkdir("new_dir")
     cmd = ["ls", "/tmp_dir"]
-    docky = DockerTask(name="docky", executable=cmd, image="busybox")
+    image = "library://sylabsed/linux/alpine"
+    singu = SingularityTask(name="singu", executable=cmd, image=image)
     # binding tmp directory to the container
-    docky.inputs.bindings = [(str(tmpdir), "/tmp_dir", "ro")]
+    singu.inputs.bindings = [(str(tmpdir), "/tmp_dir", "ro")]
 
     with Submitter(plugin=plugin) as sub:
-        docky(submitter=sub)
+        singu(submitter=sub)
 
-    res = docky.result()
+    res = singu.result()
     assert res.output.stdout == "new_dir\n"
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 # tests with State
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_st_1(plugin):
+def test_singularity_st_1(plugin):
     """ commands without arguments in container
         splitter = executable
     """
-    cmd = ["pwd", "whoami"]
-    docky = DockerTask(name="docky", executable=cmd, image="busybox").split(
+    cmd = ["pwd", "ls"]
+    image = "library://sylabsed/linux/alpine"
+    singu = SingularityTask(name="singu", executable=cmd, image=image).split(
         "executable"
     )
-    assert docky.state.splitter == "docky.executable"
+    assert singu.state.splitter == "singu.executable"
 
-    res = docky(plugin=plugin)
-    assert res[0].output.stdout == "/output_pydra\n"
-    assert res[1].output.stdout == "root\n"
+    res = singu(plugin=plugin)
+    assert "SingularityTask" in res[0].output.stdout
+    assert res[1].output.stdout == ""
     assert res[0].output.return_code == res[1].output.return_code == 0
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_st_2(plugin):
+def test_singularity_st_2(plugin):
     """ command with arguments in docker, checking the distribution
         splitter = image
     """
     cmd = ["cat", "/etc/issue"]
-    docky = DockerTask(name="docky", executable=cmd, image=["debian", "ubuntu"]).split(
-        "image"
-    )
-    assert docky.state.splitter == "docky.image"
+    image = ["library://sylabsed/linux/alpine", "library://sylabsed/examples/lolcow"]
+    singu = SingularityTask(name="singu", executable=cmd, image=image).split("image")
+    assert singu.state.splitter == "singu.image"
 
-    res = docky(plugin=plugin)
-    assert "Debian" in res[0].output.stdout
+    res = singu(plugin=plugin)
+    assert "Alpine" in res[0].output.stdout
     assert "Ubuntu" in res[1].output.stdout
     assert res[0].output.return_code == res[1].output.return_code == 0
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_st_3(plugin):
+def test_singularity_st_3(plugin):
     """ outer splitter image and executable
     """
-    cmd = ["whoami", ["cat", "/etc/issue"]]
-    docky = DockerTask(name="docky", executable=cmd, image=["debian", "ubuntu"]).split(
+    cmd = ["pwd", ["cat", "/etc/issue"]]
+    image = ["library://sylabsed/linux/alpine", "library://sylabsed/examples/lolcow"]
+    singu = SingularityTask(name="singu", executable=cmd, image=image).split(
         ["image", "executable"]
     )
-    assert docky.state.splitter == ["docky.image", "docky.executable"]
-    res = docky(plugin=plugin)
+    assert singu.state.splitter == ["singu.image", "singu.executable"]
+    res = singu(plugin=plugin)
 
-    assert res[0].output.stdout == "root\n"
-    assert "Debian" in res[1].output.stdout
-    assert res[2].output.stdout == "root\n"
+    assert "SingularityTask" in res[0].output.stdout
+    assert "Alpine" in res[1].output.stdout
+    assert "SingularityTask" in res[2].output.stdout
     assert "Ubuntu" in res[3].output.stdout
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_st_4(plugin):
-    """ outer splitter image and executable, combining with images
-    """
-    cmd = ["whoami", ["cat", "/etc/issue"]]
-    docky = (
-        DockerTask(name="docky", executable=cmd, image=["debian", "ubuntu"])
-        .split(["image", "executable"])
-        .combine("image")
-    )
-    assert docky.state.splitter == ["docky.image", "docky.executable"]
-    assert docky.state.combiner == ["docky.image"]
-    assert docky.state.splitter_final == "docky.executable"
-
-    res = docky(plugin=plugin)
-
-    # checking the first command
-    res_cmd1 = res[0]
-    assert res_cmd1[0].output.stdout == "root\n"
-    assert res_cmd1[1].output.stdout == "root\n"
-
-    # checking the second command
-    res_cmd2 = res[1]
-    assert "Debian" in res_cmd2[0].output.stdout
-    assert "Ubuntu" in res_cmd2[1].output.stdout
-
-
-# tests with workflows
-
-
-@need_docker
-@pytest.mark.parametrize("plugin", Plugins)
-def test_wf_docker_1(plugin, tmpdir):
+def test_wf_singularity_1(plugin, tmpdir):
     """ a workflow with two connected task
         the first one read the file that is bounded to the container,
         the second uses echo
@@ -274,28 +199,29 @@ def test_wf_docker_1(plugin, tmpdir):
     with open(tmpdir.join("file_pydra.txt"), "w") as f:
         f.write("hello from pydra")
 
+    image = "library://sylabsed/linux/alpine"
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
     wf.inputs.cmd1 = ["cat", "/tmp_dir/file_pydra.txt"]
     wf.inputs.cmd2 = ["echo", "message from the previous task:"]
     wf.add(
-        DockerTask(
-            name="docky_cat",
-            image="busybox",
+        SingularityTask(
+            name="singu_cat",
+            image=image,
             executable=wf.lzin.cmd1,
             bindings=[(str(tmpdir), "/tmp_dir", "ro")],
             strip=True,
         )
     )
     wf.add(
-        DockerTask(
-            name="docky_echo",
-            image="ubuntu",
+        SingularityTask(
+            name="singu_echo",
+            image=image,
             executable=wf.lzin.cmd2,
-            args=wf.docky_cat.lzout.stdout,
+            args=wf.singu_cat.lzout.stdout,
             strip=True,
         )
     )
-    wf.set_output([("out", wf.docky_echo.lzout.stdout)])
+    wf.set_output([("out", wf.singu_echo.lzout.stdout)])
 
     with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
@@ -305,69 +231,74 @@ def test_wf_docker_1(plugin, tmpdir):
 
 
 @need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_wf_docker_2(plugin, tmpdir):
-    """ a workflow with two connected task that run python scripts
-        the first one creates a text file and the second one reads the file
+def test_wf_singularity_1a(plugin, tmpdir):
+    """ a workflow with two connected task - using both containers: Docker and Singul.
+        the first one read the file that is bounded to the container,
+        the second uses echo
     """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra")
 
-    scripts_dir = os.path.join(os.path.dirname(__file__), "data_tests")
-
+    image_sing = "library://sylabsed/linux/alpine"
+    image_doc = "ubuntu"
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
-    wf.inputs.cmd1 = ["python", "/scripts/saving.py", "-f", "/outputs/tmp.txt"]
-    wf.inputs.cmd2 = ["python", "/scripts/loading.py", "-f"]
+    wf.inputs.cmd1 = ["cat", "/tmp_dir/file_pydra.txt"]
+    wf.inputs.cmd2 = ["echo", "message from the previous task:"]
     wf.add(
-        DockerTask(
-            name="save",
-            image="python:3.7-alpine",
+        SingularityTask(
+            name="singu_cat",
+            image=image_sing,
             executable=wf.lzin.cmd1,
-            bindings=[(str(tmpdir), "/outputs"), (scripts_dir, "/scripts", "ro")],
+            bindings=[(str(tmpdir), "/tmp_dir", "ro")],
             strip=True,
         )
     )
     wf.add(
         DockerTask(
-            name="load",
-            image="python:3.7-alpine",
+            name="singu_echo",
+            image=image_doc,
             executable=wf.lzin.cmd2,
-            args=wf.save.lzout.stdout,
-            bindings=[(str(tmpdir), "/outputs"), (scripts_dir, "/scripts", "ro")],
+            args=wf.singu_cat.lzout.stdout,
             strip=True,
         )
     )
-    wf.set_output([("out", wf.load.lzout.stdout)])
+    wf.set_output([("out", wf.singu_echo.lzout.stdout)])
 
     with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()
-    assert res.output.out == "Hello!"
+    assert res.output.out == "message from the previous task: hello from pydra"
 
 
 # tests with customized output_spec
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_outputspec_1(plugin, tmpdir):
+def test_singularity_outputspec_1(plugin, tmpdir):
     """
         customised output_spec, adding files to the output, providing specific pathname
         output_path is automatically added to the bindings
     """
     cmd = ["touch", "newfile_tmp.txt"]
+    image = "library://sylabsed/linux/alpine"
+
     my_output_spec = SpecInfo(
         name="Output",
         fields=[("newfile", File, "newfile_tmp.txt")],
         bases=(ShellOutSpec,),
     )
-    docky = DockerTask(
-        name="docky", image="ubuntu", executable=cmd, output_spec=my_output_spec
+    singu = SingularityTask(
+        name="singu", image=image, executable=cmd, output_spec=my_output_spec
     )
 
     with Submitter(plugin=plugin) as sub:
-        docky(submitter=sub)
+        singu(submitter=sub)
 
-    res = docky.result()
+    res = singu.result()
     assert res.output.stdout == ""
     assert res.output.newfile.exists()
 
@@ -375,15 +306,16 @@ def test_docker_outputspec_1(plugin, tmpdir):
 # tests with customised input_spec
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_inputspec_1(plugin, tmpdir):
-    """ a simple customized input spec for docker task """
+def test_singularity_inputspec_1(plugin, tmpdir):
+    """ a simple customized input spec for singularity task """
     filename = str(tmpdir.join("file_pydra.txt"))
     with open(filename, "w") as f:
         f.write("hello from pydra")
 
     cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -400,26 +332,26 @@ def test_docker_inputspec_1(plugin, tmpdir):
                 ),
             )
         ],
-        bases=(DockerSpec,),
+        bases=(SingularitySpec,),
     )
 
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
+    singu = SingularityTask(
+        name="singu",
+        image=image,
         executable=cmd,
         file=filename,
         input_spec=my_input_spec,
         strip=True,
     )
 
-    res = docky()
+    res = singu()
     assert res.output.stdout == "hello from pydra"
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_inputspec_1a(plugin, tmpdir):
-    """ a simple customized input spec for docker task
+def test_singularity_inputspec_1a(plugin, tmpdir):
+    """ a simple customized input spec for singularity task
         a default value is used
     """
     filename = str(tmpdir.join("file_pydra.txt"))
@@ -427,6 +359,7 @@ def test_docker_inputspec_1a(plugin, tmpdir):
         f.write("hello from pydra")
 
     cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -440,25 +373,21 @@ def test_docker_inputspec_1a(plugin, tmpdir):
                 ),
             )
         ],
-        bases=(DockerSpec,),
+        bases=(SingularitySpec,),
     )
 
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
-        executable=cmd,
-        input_spec=my_input_spec,
-        strip=True,
+    singu = SingularityTask(
+        name="singu", image=image, executable=cmd, input_spec=my_input_spec, strip=True
     )
 
-    res = docky()
+    res = singu()
     assert res.output.stdout == "hello from pydra"
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_inputspec_2(plugin, tmpdir):
-    """ a customized input spec with two fields for docker task """
+def test_singularity_inputspec_2(plugin, tmpdir):
+    """ a customized input spec with two fields for singularity task """
     filename_1 = tmpdir.join("file_pydra.txt")
     with open(filename_1, "w") as f:
         f.write("hello from pydra\n")
@@ -468,6 +397,7 @@ def test_docker_inputspec_2(plugin, tmpdir):
         f.write("have a nice one")
 
     cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -486,25 +416,25 @@ def test_docker_inputspec_2(plugin, tmpdir):
                 ),
             ),
         ],
-        bases=(DockerSpec,),
+        bases=(SingularitySpec,),
     )
 
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
+    singu = SingularityTask(
+        name="singu",
+        image=image,
         executable=cmd,
         file1=filename_1,
         input_spec=my_input_spec,
         strip=True,
     )
 
-    res = docky()
+    res = singu()
     assert res.output.stdout == "hello from pydra\nhave a nice one"
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_inputspec_2a_except(plugin, tmpdir):
+def test_singularity_inputspec_2a_except(plugin, tmpdir):
     """ a customized input spec with two fields
         first one uses a default, and second doesn't - raises a dataclass exception
     """
@@ -516,6 +446,7 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
         f.write("have a nice one")
 
     cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
 
     # the field with default value can't be before value without default
     my_input_spec = SpecInfo(
@@ -535,13 +466,13 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
                 dc.field(metadata={"position": 2, "help_string": "input file 2"}),
             ),
         ],
-        bases=(DockerSpec,),
+        bases=(SingularitySpec,),
     )
 
     with pytest.raises(TypeError) as excinfo:
-        docky = DockerTask(
-            name="docky",
-            image="busybox",
+        singu = SingularityTask(
+            name="singu",
+            image=image,
             executable=cmd,
             file2=filename_2,
             input_spec=my_input_spec,
@@ -550,9 +481,9 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
     assert "non-default argument 'file2' follows default argument" == str(excinfo.value)
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_inputspec_2a(plugin, tmpdir):
+def test_singularity_inputspec_2a(plugin, tmpdir):
     """ a customized input spec with two fields
         first one uses a default by using metadata['default_value'],
         this is fine even if the second field is not using any defaults
@@ -565,6 +496,7 @@ def test_docker_inputspec_2a(plugin, tmpdir):
         f.write("have a nice one")
 
     cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
 
     # if you want set default in the first field you can use default_value in metadata
     my_input_spec = SpecInfo(
@@ -587,109 +519,25 @@ def test_docker_inputspec_2a(plugin, tmpdir):
                 dc.field(metadata={"position": 2, "help_string": "input file 2"}),
             ),
         ],
-        bases=(DockerSpec,),
+        bases=(SingularitySpec,),
     )
 
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
+    singu = SingularityTask(
+        name="singu",
+        image=image,
         executable=cmd,
         file2=filename_2,
         input_spec=my_input_spec,
         strip=True,
     )
 
-    res = docky()
+    res = singu()
     assert res.output.stdout == "hello from pydra\nhave a nice one"
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_inputspec_3(plugin, tmpdir):
-    """ input file is in the container, so metadata["container_path"]: True,
-        the input will be treated as a str """
-    filename = "/proc/1/cgroup"
-
-    cmd = "cat"
-
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                File,
-                dc.field(
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "help_string": "input file",
-                        "container_path": True,
-                    }
-                ),
-            )
-        ],
-        bases=(DockerSpec,),
-    )
-
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
-        executable=cmd,
-        file=filename,
-        input_spec=my_input_spec,
-        strip=True,
-    )
-
-    res = docky()
-    assert "docker" in res.output.stdout
-
-
-@need_docker
-@pytest.mark.parametrize("plugin", Plugins)
-def test_docker_inputspec_3a(plugin, tmpdir):
-    """ input file does not exist in the local file system,
-        but metadata["container_path"] is not used,
-        so exception is raised
-    """
-    filename = "/_proc/1/cgroup"
-
-    cmd = "cat"
-
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                File,
-                dc.field(
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "help_string": "input file",
-                    }
-                ),
-            )
-        ],
-        bases=(DockerSpec,),
-    )
-
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
-        executable=cmd,
-        file=filename,
-        input_spec=my_input_spec,
-        strip=True,
-    )
-
-    with pytest.raises(Exception) as excinfo:
-        res = docky()
-    assert "use field.metadata['container_path']=True" in str(excinfo.value)
-
-
-@need_docker
-@pytest.mark.parametrize("plugin", Plugins)
-def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
+def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
     """ shelltask changes a file in place,
         adding copyfile=True to the file-input from input_spec
         hardlink or copy in the output_dir should be created
@@ -699,6 +547,7 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
         f.write("hello from pydra\n")
 
     cmd = ["sed", "-is", "s/hello/hi/"]
+    image = "library://sylabsed/linux/alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -726,22 +575,22 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
                 ),
             ),
         ],
-        bases=(DockerSpec,),
+        bases=(SingularitySpec,),
     )
 
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
+    singu = SingularityTask(
+        name="singu",
+        image=image,
         executable=cmd,
         input_spec=my_input_spec,
         orig_file=str(file),
     )
 
-    res = docky()
+    res = singu()
     assert res.output.stdout == ""
     assert res.output.out_file.exists()
     # the file is  copied, and than it is changed in place
-    assert res.output.out_file.parent == docky.output_dir
+    assert res.output.out_file.parent == singu.output_dir
     with open(res.output.out_file, "r") as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
@@ -749,10 +598,10 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
         assert "hello from pydra\n" == f.read()
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_inputspec_state_1(plugin, tmpdir):
-    """ a customised input spec for a docker file with a splitter,
+def test_singularity_inputspec_state_1(plugin, tmpdir):
+    """ a customised input spec for a singularity file with a splitter,
         splitter is on files
     """
     filename_1 = tmpdir.join("file_pydra.txt")
@@ -764,6 +613,7 @@ def test_docker_inputspec_state_1(plugin, tmpdir):
 
     cmd = "cat"
     filename = [str(filename_1), str(filename_2)]
+    image = "library://sylabsed/linux/alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -780,27 +630,27 @@ def test_docker_inputspec_state_1(plugin, tmpdir):
                 ),
             )
         ],
-        bases=(DockerSpec,),
+        bases=(SingularitySpec,),
     )
 
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
+    singu = SingularityTask(
+        name="singu",
+        image=image,
         executable=cmd,
         file=filename,
         input_spec=my_input_spec,
         strip=True,
     ).split("file")
 
-    res = docky()
+    res = singu()
     assert res[0].output.stdout == "hello from pydra"
     assert res[1].output.stdout == "have a nice one"
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_inputspec_state_1b(plugin, tmpdir):
-    """ a customised input spec for a docker file with a splitter,
+def test_singularity_inputspec_state_1b(plugin, tmpdir):
+    """ a customised input spec for a singularity file with a splitter,
         files from the input spec have the same path in the local os and the container,
         so hash is calculated and the test works fine
     """
@@ -813,6 +663,7 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
 
     cmd = "cat"
     filename = [str(file_1), str(file_2)]
+    image = "library://sylabsed/linux/alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -829,32 +680,33 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
                 ),
             )
         ],
-        bases=(DockerSpec,),
+        bases=(SingularitySpec,),
     )
 
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
+    singu = SingularityTask(
+        name="singu",
+        image=image,
         executable=cmd,
         file=filename,
         input_spec=my_input_spec,
         strip=True,
     ).split("file")
 
-    res = docky()
+    res = singu()
     assert res[0].output.stdout == "hello from pydra"
     assert res[1].output.stdout == "have a nice one"
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_wf_inputspec_1(plugin, tmpdir):
-    """ a customized input spec for workflow with docker tasks """
+def test_singularity_wf_inputspec_1(plugin, tmpdir):
+    """ a customized input spec for workflow with singularity tasks """
     filename = tmpdir.join("file_pydra.txt")
     with open(filename, "w") as f:
         f.write("hello from pydra")
 
     cmd = "cat"
+    image = "library://sylabsed/linux/alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -871,24 +723,24 @@ def test_docker_wf_inputspec_1(plugin, tmpdir):
                 ),
             )
         ],
-        bases=(DockerSpec,),
+        bases=(SingularitySpec,),
     )
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"])
     wf.inputs.cmd = cmd
     wf.inputs.file = filename
 
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
+    singu = SingularityTask(
+        name="singu",
+        image=image,
         executable=wf.lzin.cmd,
         file=wf.lzin.file,
         input_spec=my_input_spec,
         strip=True,
     )
-    wf.add(docky)
+    wf.add(singu)
 
-    wf.set_output([("out", wf.docky.lzout.stdout)])
+    wf.set_output([("out", wf.singu.lzout.stdout)])
 
     with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
@@ -897,10 +749,10 @@ def test_docker_wf_inputspec_1(plugin, tmpdir):
     assert res.output.out == "hello from pydra"
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_wf_state_inputspec_1(plugin, tmpdir):
-    """ a customized input spec for workflow with docker tasks that has a state"""
+def test_singularity_wf_state_inputspec_1(plugin, tmpdir):
+    """ a customized input spec for workflow with singularity tasks that has a state"""
     file_1 = tmpdir.join("file_pydra.txt")
     file_2 = tmpdir.join("file_nice.txt")
     with open(file_1, "w") as f:
@@ -910,6 +762,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmpdir):
 
     cmd = "cat"
     filename = [str(file_1), str(file_2)]
+    image = "library://sylabsed/linux/alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -926,25 +779,25 @@ def test_docker_wf_state_inputspec_1(plugin, tmpdir):
                 ),
             )
         ],
-        bases=(DockerSpec,),
+        bases=(SingularitySpec,),
     )
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"])
     wf.inputs.cmd = cmd
     wf.inputs.file = filename
 
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
+    singu = SingularityTask(
+        name="singu",
+        image=image,
         executable=wf.lzin.cmd,
         file=wf.lzin.file,
         input_spec=my_input_spec,
         strip=True,
     )
-    wf.add(docky)
+    wf.add(singu)
     wf.split("file")
 
-    wf.set_output([("out", wf.docky.lzout.stdout)])
+    wf.set_output([("out", wf.singu.lzout.stdout)])
 
     with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
@@ -954,10 +807,10 @@ def test_docker_wf_state_inputspec_1(plugin, tmpdir):
     assert res[1].output.out == "have a nice one"
 
 
-@need_docker
+@need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
-    """ a customized input spec for workflow with docker tasks with states"""
+def test_singularity_wf_ndst_inputspec_1(plugin, tmpdir):
+    """ a customized input spec for workflow with singularity tasks with states"""
     file_1 = tmpdir.join("file_pydra.txt")
     file_2 = tmpdir.join("file_nice.txt")
     with open(file_1, "w") as f:
@@ -967,6 +820,7 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
 
     cmd = "cat"
     filename = [str(file_1), str(file_2)]
+    image = "library://sylabsed/linux/alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -983,24 +837,24 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
                 ),
             )
         ],
-        bases=(DockerSpec,),
+        bases=(SingularitySpec,),
     )
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"])
     wf.inputs.cmd = cmd
     wf.inputs.file = filename
 
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
+    singu = SingularityTask(
+        name="singu",
+        image=image,
         executable=wf.lzin.cmd,
         file=wf.lzin.file,
         input_spec=my_input_spec,
         strip=True,
     ).split("file")
-    wf.add(docky)
+    wf.add(singu)
 
-    wf.set_output([("out", wf.docky.lzout.stdout)])
+    wf.set_output([("out", wf.singu.lzout.stdout)])
 
     with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)

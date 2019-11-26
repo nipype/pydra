@@ -309,12 +309,9 @@ class ContainerTask(ShellCommandTask):
     def container_args(self):
         if self.inputs.container is None:
             raise AttributeError("Container software is not specified")
-        cargs = [self.inputs.container, "run"]
-        if self.inputs.container_xargs is not None:
-            cargs.extend(self.inputs.container_xargs)
+        cargs = [self.inputs.container]
         if self.inputs.image is None:
             raise AttributeError("Container image is not specified")
-        cargs.append(self.inputs.image)
         return cargs
 
     @property
@@ -351,7 +348,6 @@ class ContainerTask(ShellCommandTask):
         for (key, val) in self.bind_paths.items():
             bargs.extend([opt, "{0}:{1}:{2}".format(key, val[0], val[1])])
         # TODO: would need changes for singularity
-        bargs.extend(["-w", str(self.output_cpath)])
         return bargs
 
     def _run_task(self):
@@ -399,9 +395,14 @@ class DockerTask(ContainerTask):
     def container_args(self):
         cargs = super().container_args
         assert self.inputs.container == "docker"
-        # insert bindings before image
-        idx = len(cargs) - 1
-        cargs[idx:-1] = self.binds("-v")
+        cargs.append("run")
+        if self.inputs.container_xargs is not None:
+            cargs.extend(self.inputs.container_xargs)
+
+        cargs.extend(self.binds("-v"))
+        cargs.extend(["-w", str(self.output_cpath)])
+        cargs.append(self.inputs.image)
+
         return cargs
 
 
@@ -418,14 +419,10 @@ class SingularityTask(ContainerTask):
         **kwargs,
     ):
         if input_spec is None:
-            field = dc.field(default_factory=list)
-            field.metadata = {}
-            fields = [("args", ty.List[str], field)]
-            input_spec = SpecInfo(
-                name="Inputs", fields=fields, bases=(SingularitySpec,)
-            )
-        super(ContainerTask, self).__init__(
+            input_spec = SpecInfo(name="Inputs", fields=[], bases=(SingularitySpec,))
+        super(SingularityTask, self).__init__(
             input_spec=input_spec,
+            output_spec=output_spec,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
@@ -438,6 +435,11 @@ class SingularityTask(ContainerTask):
     def container_args(self):
         cargs = super().container_args
         assert self.inputs.container == "singularity"
+        cargs.append("exec")
+        if self.inputs.container_xargs is not None:
+            cargs.extend(self.inputs.container_xargs)
+        cargs.append(self.inputs.image)
+
         # insert bindings before image
         idx = len(cargs) - 1
         cargs[idx:-1] = self.binds("-B")
