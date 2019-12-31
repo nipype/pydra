@@ -487,7 +487,7 @@ class LazyField:
             node = getattr(wf, self.name)
             result = node.result(state_index=state_index)
             if isinstance(result, list):
-                if isinstance(result[0], list):
+                if len(result) and isinstance(result[0], list):
                     results_new = []
                     for res_l in result:
                         if self.field == "all_":
@@ -534,6 +534,6 @@ class TaskHook:
 def path_to_string(value):
     if isinstance(value, Path):
         value = str(value)
-    elif isinstance(value, list) and isinstance(value[0], Path):
+    elif isinstance(value, list) and len(value) and isinstance(value[0], Path):
         value = [str(val) for val in value]
     return value
