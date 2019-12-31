@@ -159,7 +159,7 @@ class FunctionTask(TaskBase):
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
-        if output:
+        if output is not None:
             output_names = [el[0] for el in self.output_spec.fields]
             self.output_ = {}
             if len(output_names) > 1:

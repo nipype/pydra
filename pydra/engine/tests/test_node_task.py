@@ -269,6 +269,20 @@ def test_task_init_5c():
     assert nn.state.splitter_rpn_final == ["NA.a"]
 
 
+def test_task_init_6():
+    """ task with splitter, but the input is an empty list"""
+    nn = fun_addtwo(name="NA", a=[])
+    nn.split(splitter="a")
+    assert nn.inputs.a == []
+
+    assert nn.state.splitter == "NA.a"
+    assert nn.state.splitter_rpn == ["NA.a"]
+
+    nn.state.prepare_states(nn.inputs)
+    assert nn.state.states_ind == []
+    assert nn.state.states_val == []
+
+
 def test_task_error():
     func = fun_div(name="div", a=1, b=0)
     with pytest.raises(ZeroDivisionError):
@@ -608,6 +622,27 @@ def test_task_state_singl_1(plugin):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
+def test_task_state_2(plugin):
+    """ task with the simplest splitter, the input is an empty list"""
+    nn = fun_addtwo(name="NA").split(splitter="a", a=[])
+
+    assert nn.state.splitter == "NA.a"
+    assert nn.state.splitter_rpn == ["NA.a"]
+    assert nn.inputs.a == []
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    expected = []
+    for i, res in enumerate(expected):
+        assert results[i].output.out == res[1]
+    # checking the output_dir
+    assert nn.output_dir == []
+
+
+@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_comb_1(plugin):
     """ task with the simplest splitter and combiner"""
     nn = fun_addtwo(name="NA").split(a=[3, 5], splitter="a").combine(combiner="a")
@@ -773,6 +808,27 @@ def test_task_state_comb_singl_1(plugin):
     assert nn.output_dir
     for odir in nn.output_dir:
         assert odir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_state_comb_2(plugin):
+    """ task with the simplest splitter, the input is an empty list"""
+    nn = fun_addtwo(name="NA").split(splitter="a", a=[]).combine(combiner=["a"])
+
+    assert nn.state.splitter == "NA.a"
+    assert nn.state.splitter_rpn == ["NA.a"]
+    assert nn.inputs.a == []
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    expected = []
+    for i, res in enumerate(expected):
+        assert results[i].output.out == res[1]
+    # checking the output_dir
+    assert nn.output_dir == []
 
 
 @pytest.mark.parametrize("plugin", Plugins)

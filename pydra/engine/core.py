@@ -427,6 +427,14 @@ class TaskBase:
             # TODO: only check for needed state result
             if self.result() and all(self.result()):
                 return True
+            # checking if self.result() is not an empty list only because
+            # the states_ind is an empty list (input field might be an empty list)
+            elif (
+                self.result() == []
+                and hasattr(self.state, "states_ind")
+                and self.state.states_ind == []
+            ):
+                return True
         else:
             if self.result():
                 return True
