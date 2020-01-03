@@ -19,13 +19,13 @@ def ensure_list(obj, tuple2list=False):
     Examples
     --------
     >>> ensure_list(list("abc"))
-    ["a", "b", "c"]
+    ['a', 'b', 'c']
     >>> ensure_list("abc")
-    ["abc"]
+    ['abc']
     >>> ensure_list(tuple("abc"))
-    [("a", "b", "c")]
+    [('a', 'b', 'c')]
     >>> ensure_list(tuple("abc"), tuple2list=True)
-    ["a", "b", "c"]
+    ['a', 'b', 'c']
     >>> ensure_list(None)
     []
     >>> ensure_list(5.0)

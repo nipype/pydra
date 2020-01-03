@@ -97,10 +97,8 @@ class FileMessenger(Messenger):
         else:
             message_dir = Path(os.getcwd()) / "messages"
         message_dir.mkdir(parents=True, exist_ok=True)
-        (message_dir / ("%s.jsonld" % mid)).write_text(
-            json.dumps(message, ensure_ascii=False, indent=2, sort_keys=False),
-            mode=["w", "a"][append],
-        )
+        with (message_dir / ("%s.jsonld" % mid)).open("wa"[append]) as fp:
+            json.dump(message, fp, ensure_ascii=False, indent=2, sort_keys=False)
         return mid
 
 
