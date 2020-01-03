@@ -19,6 +19,7 @@ class Directory(Path):
 @dc.dataclass
 class SpecInfo:
     """Base data structure for metadata of specifications."""
+
     name: str
     """A name for the specification."""
     fields: ty.List[ty.Tuple] = dc.field(default_factory=list)

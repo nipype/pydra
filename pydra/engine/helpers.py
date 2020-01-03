@@ -191,7 +191,7 @@ async def read_stream_and_display(stream, display):
     See Also
     --------
     This `discussion on StackOverflow
-    <https://stackoverflow.com/questions/17190221)`__.
+    <https://stackoverflow.com/questions/17190221>`__.
 
     """
     output = []

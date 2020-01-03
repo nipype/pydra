@@ -201,7 +201,7 @@ def on_cifs(fname):
     the CIFS driver exposes to the OS as symlinks.
     We have found that under concurrent access to the filesystem, this feature
     can result in failures to create or read recently-created symlinks,
-    leading to inconsistent behavior and ``FileNotFoundError``s.
+    leading to inconsistent behavior and ``FileNotFoundError`` errors.
 
     This check is written to support disabling symlinks on CIFS shares.
 
