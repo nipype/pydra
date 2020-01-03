@@ -11,11 +11,13 @@ import subprocess as sp
 from .specs import Runtime, File
 
 
-def ensure_list(obj):
+def ensure_list(obj, tuple2list=False):
     if obj is None:
         return []
     if isinstance(obj, list):
         return obj
+    elif tuple2list and isinstance(obj, tuple):
+        return list(obj)
     return [obj]
 
 

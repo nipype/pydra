@@ -240,7 +240,7 @@ class ShellCommandTask(TaskBase):
                 if value is not True:
                     break
             else:
-                cmd_add += ensure_list(value)
+                cmd_add += ensure_list(value, tuple2list=True)
             if cmd_add is not None:
                 pos_args.append((pos, cmd_add))
         # sorting all elements of the command
