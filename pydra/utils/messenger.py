@@ -1,3 +1,4 @@
+"""Messaging of states."""
 import abc
 import datetime as dt
 import enum
@@ -6,27 +7,33 @@ import os
 
 
 def gen_uuid():
+    """Generate a unique identifier."""
     import uuid
-
     return uuid.uuid4().hex
 
 
 def now():
+    """Get a formatted timestamp."""
     return dt.datetime.utcnow().isoformat(timespec="microseconds")
 
 
 class AuditFlag(enum.Flag):
+    """Auditing flags."""
+
     NONE = 0
+    """Do not track provenance or monitor resources."""
     PROV = enum.auto()  # 0x01
+    """Track provenance only."""
     RESOURCE = enum.auto()  # 0x02
+    """Monitor resource utilization only."""
     ALL = PROV | RESOURCE
+    """Track provenance and resource utilization."""
 
 
 class RuntimeHooks(enum.IntEnum):
-    """Allowed points to hook into the process
-    """
+    """Allowed points to hook into the process."""
 
-    """TODO: Convert all messenger actions to hooks at the following stages"""
+    # TODO: Convert all messenger actions to hooks at the following stages
     task_run_entry = enum.auto()
     task_run_exit = enum.auto()
     resource_monitor_pre_start = enum.auto()
@@ -36,13 +43,26 @@ class RuntimeHooks(enum.IntEnum):
 
 
 class Messenger:
+    """Base messenger class."""
+
     @abc.abstractmethod
     def send(self, message, **kwargs):
-        pass
+        """Send a message."""
 
 
 class PrintMessenger(Messenger):
+    """A messenger that redirects to standard output."""
+
     def send(self, message, **kwargs):
+        """
+        Send to standard output.
+
+        Parameters
+        ----------
+        message : :obj:`dict`
+            The message to be printed.
+
+        """
         import json
 
         mid = gen_uuid()
@@ -54,7 +74,20 @@ class PrintMessenger(Messenger):
 
 
 class FileMessenger(Messenger):
-    def send(self, message, **kwargs):
+    """A messenger that redirects to a file."""
+
+    def send(self, message, append=True, **kwargs):
+        """
+        Append message to file.
+
+        Parameters
+        ----------
+        message : :obj:`dict`
+            The message to be printed.
+        append : :obj:`bool`
+            Do not truncate file when opening (i.e. append to it).
+
+        """
         import json
 
         mid = gen_uuid()
@@ -63,13 +96,26 @@ class FileMessenger(Messenger):
         else:
             message_dir = Path(os.getcwd()) / "messages"
         message_dir.mkdir(parents=True, exist_ok=True)
-        with open(message_dir / (mid + ".jsonld"), "wt") as fp:
-            json.dump(message, fp, ensure_ascii=False, indent=2, sort_keys=False)
+        (message_dir / ("%s.jsonld" % mid)).write_text(
+            json.dumps(message, ensure_ascii=False, indent=2, sort_keys=False),
+            mode=['w', 'a'][append]
+        )
         return mid
 
 
 class RemoteRESTMessenger(Messenger):
+    """A messenger that redirects to remote REST endpoint."""
+
     def send(self, message, **kwargs):
+        """
+        Append message to file.
+
+        Parameters
+        ----------
+        message : :obj:`dict`
+            The message to be printed.
+
+        """
         import requests
 
         r = requests.post(
@@ -83,16 +129,17 @@ class RemoteRESTMessenger(Messenger):
 
 
 def send_message(message, messengers=None, **kwargs):
-    """Send nidm messages for logging provenance and auditing
-    """
+    """Send NIDM messages for logging provenance and auditing."""
     for messenger in messengers:
         messenger.send(message, **kwargs)
 
 
 def make_message(obj, context=None):
+    """Build a message."""
     if context is None:
         context = {
-            "@context": "https://raw.githubusercontent.com/nipype/pydra/enh/task/pydra/schema/context.jsonld"
+            "@context": "https://raw.githubusercontent.com/"
+                        "nipype/pydra/enh/task/pydra/schema/context.jsonld"
         }
     message = context.copy()
     message.update(**obj)
@@ -100,6 +147,7 @@ def make_message(obj, context=None):
 
 
 def collect_messages(collected_path, message_path, ld_op="compact"):
+    """Gather messages."""
     import pyld as pld
     import json
     from glob import glob

@@ -1,4 +1,4 @@
-""" additional functions used mostly by the State class """
+"""Additional functions used mostly by the State class."""
 
 import itertools
 from functools import reduce
@@ -9,9 +9,22 @@ from .helpers import ensure_list
 logger = logging.getLogger("pydra")
 
 
-# Function to change user provided splitter to "reverse polish notation" used in State
 def splitter2rpn(splitter, other_states=None, state_fields=True):
-    """ Functions that translate splitter to "reverse polish notation."""
+    """
+    Translate user-provided splitter into *reverse polish notation*.
+
+    The reverse polish notation is imposed by :class:`~pydra.engine.state.State`.
+
+    Parameters
+    ----------
+    splitter :
+        TODO
+    other_states :
+        TODO
+    state_fields : :obj:`bool`
+        TODO
+
+    """
     if not splitter:
         return []
     output_splitter = []
@@ -28,7 +41,7 @@ def splitter2rpn(splitter, other_states=None, state_fields=True):
 def _ordering(
     el, i, output_splitter, current_sign=None, other_states=None, state_fields=True
 ):
-    """ Used in the splitter2rpn to get a proper order of fields and signs. """
+    """Get a proper order of fields and signs (used by splitter2rpn)."""
     if type(el) is tuple:
         # checking if the splitter dont contain splitter from previous nodes, i.e. has str "_NA", etc.
         if type(el[0]) is str and el[0].startswith("_"):
@@ -147,7 +160,7 @@ def _ordering(
 
 
 def _iterate_list(element, sign, other_states, output_splitter, state_fields=True):
-    """ Used in the splitter2rpn to get recursion. """
+    """Iterate over list (used in the splitter2rpn to get recursion)."""
     for i, el in enumerate(element):
         _ordering(
             deepcopy(el),
@@ -160,12 +173,17 @@ def _iterate_list(element, sign, other_states, output_splitter, state_fields=Tru
 
 
 # functions used in State to know which element should be used for a specific axis
-
-
 def converter_groups_to_input(group_for_inputs):
     """
-    Having axes for all the input fields,
-    the function returns fields for each axis and number of all groups.
+    Return fields for each axis and number of all groups.
+
+    Requires having axes for all the input fields.
+
+    Parameters
+    ----------
+    group_for_inputs :
+        TODO
+
     """
     input_for_axis = {}
     ngr = 0
@@ -180,10 +198,20 @@ def converter_groups_to_input(group_for_inputs):
 
 
 # function used in State if combiner
-
-
 def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
-    """modifying splitter_rpn: removing inputs due to combining"""
+    """
+    Remove inputs due to combining.
+
+    Mutates a splitter.
+
+    Parameters
+    ----------
+    splitter_rpn :
+        The splitter in reverse polish notation
+    inputs_to_remove :
+        TODO
+
+    """
     splitter_rpn_copy = splitter_rpn.copy()
     # reverting order
     splitter_rpn_copy.reverse()
@@ -218,10 +246,24 @@ def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
 
 
 def rpn2splitter(splitter_rpn):
-    """recurrent algorithm to move from splitter_rpn to splitter.
-       every time combines pairs of input in one input,
-       ends when the length is one
-     """
+    """
+    Convert from splitter_rpn to splitter.
+
+    Recurrent algorithm to perform the conversion.
+    Every time combines pairs of input in one input,
+    ends when the length is one.
+
+    Parameters
+    ----------
+    splitter_rpn :
+        TODO
+
+    Returns
+    -------
+    splitter :
+        TODO
+
+    """
     if splitter_rpn == []:
         return None
     if len(splitter_rpn) == 1:
@@ -255,9 +297,8 @@ def rpn2splitter(splitter_rpn):
 
 
 # used in the Node to change names in a splitter and combiner
-
-
 def add_name_combiner(combiner, name):
+    """Add a combiner."""
     combiner_changed = []
     for comb in combiner:
         if "." not in comb:
@@ -268,7 +309,7 @@ def add_name_combiner(combiner, name):
 
 
 def add_name_splitter(splitter, name):
-    """changing names of splitter: adding names of the node"""
+    """Change names of splitter: adding names of the node."""
     if isinstance(splitter, str):
         return _add_name([splitter], name)[0]
     elif isinstance(splitter, list):
@@ -298,6 +339,7 @@ op = {".": zip, "*": itertools.product}
 
 
 def flatten(vals, cur_depth=0, max_depth=None):
+    """Flatten a list of values."""
     if max_depth is None:
         max_depth = len(list(input_shape(vals)))
     values = []
@@ -313,11 +355,13 @@ def flatten(vals, cur_depth=0, max_depth=None):
 
 
 def iter_splits(iterable, keys):
+    """Generate splits."""
     for iter in list(iterable):
         yield dict(zip(keys, list(flatten(iter, max_depth=1000))))
 
 
 def input_shape(in1):
+    """Get input shape."""
     # TODO: have to be changed for inner splitter (sometimes different length)
     shape = [len(in1)]
     last_shape = None
@@ -338,8 +382,7 @@ def input_shape(in1):
 
 
 def splits(splitter_rpn, inputs, inner_inputs=None):
-    """ Process splitter rpn from left to right
-    """
+    """Split process as specified by an rpn splitter, from left to right."""
     stack = []
     keys = []
     shapes_var = {}
@@ -457,8 +500,7 @@ def splits(splitter_rpn, inputs, inner_inputs=None):
 
 # dj: TODO: do I need keys?
 def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
-    """ Process splitter rpn from left to right
-    """
+    """Process splitter rpn from left to right."""
     if not splitter_rpn:
         return [], {}, [], []
     stack = []
@@ -643,6 +685,7 @@ def _single_op_splits_groups(
 
 
 def combine_final_groups(combiner, groups, groups_stack, keys):
+    """Combine the final groups."""
     input_for_groups, _ = converter_groups_to_input(groups)
     combiner_all = []
     for comb in combiner:
@@ -680,14 +723,14 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
 
 
 def map_splits(split_iter, inputs):
+    """Get a dictionary of prescribed splits."""
     for split in split_iter:
         yield {k: list(flatten(ensure_list(inputs[k])))[v] for k, v in split.items()}
 
 
 # Functions for merging and completing splitters in states.
-
-
 def connect_splitters(splitter, other_states, state_fields=False):
+    """Link splitters."""
     if splitter:
         # if splitter is string, have to check if this is Left or Right part (Left is required)
         if isinstance(splitter, str):
@@ -754,7 +797,7 @@ def connect_splitters(splitter, other_states, state_fields=False):
 
 
 def _complete_left(other_states, left=None, state_fields=False):
-    """completing Left part: adding all splitters from previous nodes"""
+    """Add all splitters from previous nodes (completing left part)."""
     if left:
         rpn_left = splitter2rpn(
             left, other_states=other_states, state_fields=state_fields
@@ -770,8 +813,11 @@ def _complete_left(other_states, left=None, state_fields=False):
 
 
 def _left_right_check(splitter_part, other_states):
-    """checking if splitter_part is purely Left or Right - string is returned.
-    If the splitter_part is mixed None is returned.
+    """
+    Check if splitter_part is purely Left or Right.
+
+    String is returned. If the splitter_part is mixed None is returned.
+
     """
     rpn_part = splitter2rpn(
         splitter_part, other_states=other_states, state_fields=False
@@ -787,7 +833,7 @@ def _left_right_check(splitter_part, other_states):
 
 
 def inputs_types_to_dict(name, inputs):
-    """converting type.Inputs to a dictionary"""
+    """Convert type.Inputs to dictionary."""
     # dj: any better option?
     input_names = [nm for nm in inputs.__dataclass_fields__.keys() if nm != "_func"]
     inputs_dict = {}

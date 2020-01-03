@@ -1,4 +1,4 @@
-"""Basic compute graph elements"""
+"""Basic processing graph elements."""
 import abc
 import dataclasses as dc
 import json
@@ -38,6 +38,14 @@ develop = False
 
 
 class TaskBase:
+    """
+    A base structure for the nodes in the processing graph.
+
+    Tasks are a generic compute step from which both elemntary tasks and
+    :class:`Workflow` instances inherit.
+
+    """
+
     _api_version: str = "0.0.1"  # Should generally not be touched by subclasses
     _etelemetry_version_data = None  # class variable to store etelemetry information
     _version: str  # Version of tool being wrapped
@@ -46,7 +54,8 @@ class TaskBase:
     ] = None  # Task writers encouraged to define and increment when implementation changes sufficiently
     _input_sets = None  # Dictionaries of predefined input settings
 
-    audit_flags: AuditFlag = AuditFlag.NONE  # What to audit. See audit flags for details
+    audit_flags: AuditFlag = AuditFlag.NONE
+    """What to audit -- available flags: :class:`~pydra.utils.messenger.AuditFlag`."""
 
     _can_resume = False  # Does the task allow resuming from previous state
     _redirect_x = False  # Whether an X session should be created/directed
@@ -60,23 +69,47 @@ class TaskBase:
     def __init__(
         self,
         name: str,
-        inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
-        messengers=None,
-        messenger_args=None,
         cache_dir=None,
         cache_locations=None,
+        inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
+        messenger_args=None,
+        messengers=None,
     ):
-        """A base structure for nodes in the computational graph (i.e. both
-        ``Node`` and ``Workflow``).
+        """
+        Initialize a task.
+
+        Tasks allow for caching (retrieving a previous result of the same
+        task definition and inputs), and concurrent execution.
+        Running tasks follows a decision flow:
+
+            1. Check whether prior cache exists --
+               if ``True``, return cached result
+            2. Check whether other process is running this task --
+               wait if ``True``:
+               a. Finishes (with or without exception) -> return result
+               b. Gets killed -> restart
+            3. No cache or other process -> start
+            4. Two or more concurrent new processes get to start
 
         Parameters
         ----------
-
-        name : str
+        name : :obj:`str`
             Unique name of this node
-        inputs : dictionary (input name, input value or list of values)
-            States this node's input names
+        audit_flags : :class:`AuditFlag`, optional
+            Configure provenance tracking. Default is no provenance tracking.
+            See available flags at :class:`~pydra.utils.messenger.AuditFlag`.
+        cache_dir : :obj:`os.pathlike`
+            Set a custom directory of previously computed nodes.
+        cache_locations :
+            TODO
+        inputs : :obj:`typing.Text`, or :class:`File`, or :obj:`dict`, or `None`.
+            Set particular inputs to this node.
+        messenger_args :
+            TODO
+        messengers :
+            TODO
+
         """
         from .. import check_latest_version
 
@@ -135,7 +168,7 @@ class TaskBase:
         self.plugin = None
         self.hooks = TaskHook()
 
-    def __repr__(self):
+    def __str__(self):
         return self.name
 
     def __getstate__(self):
@@ -157,20 +190,19 @@ class TaskBase:
         return self.__getattribute__(name)
 
     def help(self, returnhelp=False):
-        """ Prints class help
-        """
+        """Print class help."""
         help_obj = print_help(self)
         if returnhelp:
             return help_obj
 
     @property
     def version(self):
+        """Get version of this task structure."""
         return self._version
 
     @property
     def checksum(self):
-        """calculating checksum
-        """
+        """Calculate a unique checksum of this task."""
         # if checksum is called before run the _graph_checksums is not ready
         if is_workflow(self) and self.inputs._graph_checksums is None:
             self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
@@ -187,9 +219,17 @@ class TaskBase:
         return self._checksum
 
     def checksum_states(self, state_index=None):
-        """ calculating checksum for the specific state or all of the states
-            replace lists in the inputs fields with a specific values for states
-            can be used only for tasks with a state
+        """
+        Calculate a checksum for the specific state or all of the states.
+
+        Replaces lists in the inputs fields with a specific values for states.
+        Can be used only for tasks with a state.
+
+        Parameters
+        ----------
+        state_index :
+            TODO
+
         """
         if state_index is not None:
             if self.state is None:
@@ -211,6 +251,17 @@ class TaskBase:
             return checksum_list
 
     def set_state(self, splitter, combiner=None):
+        """
+        Set a particular state on this task.
+
+        Parameters
+        ----------
+        splitter :
+            TODO
+        combiner :
+            TODO
+
+        """
         if splitter is not None:
             self.state = state.State(
                 name=self.name, splitter=splitter, combiner=combiner
@@ -221,14 +272,14 @@ class TaskBase:
 
     @property
     def output_names(self):
+        """Get the names of the parameters generated by the task."""
         output_spec_names = [f.name for f in dc.fields(make_klass(self.output_spec))]
         from_input_spec_names = output_names_from_inputfields(self.inputs)
         return output_spec_names + from_input_spec_names
 
     @property
     def can_resume(self):
-        """Task can reuse partial results after interruption
-        """
+        """Whether the task accepts checkpoint-restart."""
         return self._can_resume
 
     @abc.abstractmethod
@@ -237,6 +288,7 @@ class TaskBase:
 
     @property
     def cache_dir(self):
+        """Get the location of the cache directory."""
         return self._cache_dir
 
     @cache_dir.setter
@@ -250,6 +302,7 @@ class TaskBase:
 
     @property
     def cache_locations(self):
+        """Get the list of cache sources."""
         return self._cache_locations + ensure_list(self._cache_dir)
 
     @cache_locations.setter
@@ -261,12 +314,13 @@ class TaskBase:
 
     @property
     def output_dir(self):
+        """Get the filesystem path where outputs will be written."""
         if self.state:
             return [self._cache_dir / checksum for checksum in self.checksum_states()]
-        else:
-            return self._cache_dir / self.checksum
+        return self._cache_dir / self.checksum
 
     def __call__(self, submitter=None, plugin=None, **kwargs):
+        """Make tasks callable themselves."""
         from .submitter import Submitter
 
         if submitter and plugin:
@@ -293,17 +347,7 @@ class TaskBase:
         self.inputs.check_fields_input_spec()
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
-        # Eagerly retrieve cached
-        """
-        Concurrent execution scenarios
-
-        1. prior cache exists -> return result
-        2. other process running -> wait
-           a. finishes (with or without exception) -> return result
-           b. gets killed -> restart
-        3. no cache or other process -> start
-        4. two or more concurrent new processes get to start
-        """
+        # Eagerly retrieve cached - see scenarios in __init__()
         self.hooks.pre_run(self)
         # TODO add signal handler for processes killed after lock acquisition
         with SoftFileLock(lockfile):
@@ -348,6 +392,17 @@ class TaskBase:
         return dc.replace(output, **run_output, **other_output)
 
     def split(self, splitter, overwrite=False, **kwargs):
+        """
+        Run this task parametrically over lists of splitted inputs.
+
+        Parameters
+        ----------
+        splitter :
+            TODO
+        overwrite : :obj:`bool`
+            TODO
+
+        """
         splitter = hlpst.add_name_splitter(splitter, self.name)
         # if user want to update the splitter, overwrite has to be True
         if self.state and not overwrite and self.state.splitter != splitter:
@@ -363,6 +418,17 @@ class TaskBase:
         return self
 
     def combine(self, combiner, overwrite=False):
+        """
+        Combine inputs parameterized by one or more previous tasks.
+
+        Parameters
+        ----------
+        combiner :
+            TODO
+        overwrite : :obj:`bool`
+            TODO
+
+        """
         if not isinstance(combiner, (str, list)):
             raise Exception("combiner has to be a string or a list")
         combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
@@ -389,7 +455,7 @@ class TaskBase:
             return self
 
     def get_input_el(self, ind):
-        """collecting all inputs required to run the node (for specific state element)"""
+        """Collect all inputs required to run the node (for specific state element)."""
         if ind is not None:
             # TODO: doesnt work properly for more cmplicated wf (check if still an issue)
             state_dict = self.state.states_val[ind]
@@ -410,7 +476,7 @@ class TaskBase:
             return None, inputs_dict
 
     def to_job(self, ind):
-        """ running interface one element generated from node_state."""
+        """Run interface one element generated from node_state."""
         # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
         el = deepcopy(self)
         el.state = None
@@ -420,9 +486,9 @@ class TaskBase:
         el.inputs = dc.replace(el.inputs, **inputs_dict)
         return el
 
-    # checking if all outputs are saved
     @property
     def done(self):
+        """Check whether the tasks has been finalized and all outputs are stored."""
         if self.state:
             # TODO: only check for needed state result
             if self.result() and all(self.result()):
@@ -453,8 +519,17 @@ class TaskBase:
 
     def result(self, state_index=None):
         """
-        :param state_index:
-        :return:
+        Retrieve the outcomes of this particular task.
+
+        Parameters
+        ----------
+        state_index :
+            TODO
+
+        Returns
+        -------
+        result :
+
         """
         # TODO: check if result is available in load_result and
         # return a future if not
@@ -486,7 +561,7 @@ class TaskBase:
             return result
 
     def _reset(self):
-        """resetting the connections between inputs and LazyFields"""
+        """Reset the connections between inputs and LazyFields."""
         for field in dc.fields(self.inputs):
             if field.name in self.inp_lf:
                 setattr(self.inputs, field.name, self.inp_lf[field.name])
@@ -496,18 +571,44 @@ class TaskBase:
 
 
 class Workflow(TaskBase):
+    """A composite task with structure of computational graph."""
+
     def __init__(
         self,
         name,
-        input_spec: ty.Union[ty.List[ty.Text], BaseSpec, None] = None,
-        output_spec: ty.Optional[BaseSpec] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
-        messengers=None,
-        messenger_args=None,
         cache_dir=None,
         cache_locations=None,
+        input_spec: ty.Union[ty.List[ty.Text], BaseSpec, None] = None,
+        messenger_args=None,
+        messengers=None,
+        output_spec: ty.Optional[BaseSpec] = None,
         **kwargs,
     ):
+        """
+        Initialize a workflow.
+
+        Parameters
+        ----------
+        name : :obj:`str`
+            Unique name of this node
+        audit_flags : :class:`AuditFlag`, optional
+            Configure provenance tracking. Default is no provenance tracking.
+            See available flags at :class:`~pydra.utils.messenger.AuditFlag`.
+        cache_dir : :obj:`os.pathlike`
+            Set a custom directory of previously computed nodes.
+        cache_locations :
+            TODO
+        inputs : :obj:`typing.Text`, or :class:`File`, or :obj:`dict`, or `None`.
+            Set particular inputs to this node.
+        messenger_args :
+            TODO
+        messengers :
+            TODO
+        output_spec :
+            TODO
+
+        """
         if input_spec:
             if isinstance(input_spec, BaseSpec):
                 self.input_spec = input_spec
@@ -562,9 +663,15 @@ class Workflow(TaskBase):
 
     @property
     def done_all_tasks(self):
-        """ checking if all tasks from the graph are done;
-            (it doesn't mean that results of the wf are available,
-            this can be checked with self.done)
+        """
+        Check if all tasks from the graph are done.
+
+        .. important ::
+            The fact that all tasks are reported as done
+            doesn't mean that results of the workflow
+            are available.
+            That can be checked with :py:meth:`~Workflow.done`.
+
         """
         for task in self.graph.nodes:
             if not task.done:
@@ -573,14 +680,24 @@ class Workflow(TaskBase):
 
     @property
     def nodes(self):
+        """Get the list of node names."""
         return self.name2obj.values()
 
     @property
     def graph_sorted(self):
+        """Get a sorted graph representation of the workflow."""
         return self.graph.sorted_nodes
 
     def add(self, task):
-        """adding a task to the workflow"""
+        """
+        Add a task to the workflow.
+
+        Parameters
+        ----------
+        task : :class:`TaskBase`
+            The task to be added.
+
+        """
         if not is_task(task):
             raise ValueError("Unknown workflow element: {!r}".format(task))
         self.graph.add_nodes(task)
@@ -590,7 +707,15 @@ class Workflow(TaskBase):
         return self
 
     def create_connections(self, task):
-        """creating connections between tasks"""
+        """
+        Add and connect a particular task to existing nodes in the workflow.
+
+        Parameters
+        ----------
+        task : :class:`TaskBase`
+            The task to be added.
+
+        """
         other_states = {}
         for field in dc.fields(task.inputs):
             val = getattr(task.inputs, field.name)
@@ -640,16 +765,6 @@ class Workflow(TaskBase):
         # creating connections that were defined after adding tasks to the wf
         for task in self.graph.nodes:
             self.create_connections(task)
-        """
-        Concurrent execution scenarios
-
-        1. prior cache exists -> return result
-        2. other process running -> wait
-           a. finishes (with or without exception) -> return result
-           b. gets killed -> restart
-        3. no cache or other process -> start
-        4. two or more concurrent new processes get to start
-        """
         # TODO add signal handler for processes killed after lock acquisition
         self.hooks.pre_run(self)
         with SoftFileLock(lockfile):
@@ -685,6 +800,15 @@ class Workflow(TaskBase):
         await submitter._run_workflow(self)
 
     def set_output(self, connections):
+        """
+        Write outputs.
+
+        Parameters
+        ----------
+        connections :
+            TODO
+
+        """
         if isinstance(connections, tuple) and len(connections) == 2:
             self._connections = [connections]
         elif isinstance(connections, list) and all(
@@ -714,8 +838,10 @@ class Workflow(TaskBase):
 
 
 def is_task(obj):
+    """Check whether an object looks like a task."""
     return hasattr(obj, "_run_task")
 
 
 def is_workflow(obj):
+    """Check whether an object is a :class:`Workflow` instance."""
     return isinstance(obj, Workflow)

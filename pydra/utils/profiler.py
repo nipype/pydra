@@ -1,9 +1,4 @@
-# -*- coding: utf-8 -*-
-# emacs: -*- mode: python; py-indent-offset: 4; indent-tabs-mode: nil -*-
-# vi: set ft=python sts=4 ts=4 sw=4 et:
-"""
-Utilities to keep track of performance
-"""
+"""Utilities to keep track of performance and resource utilization."""
 import os
 from pathlib import Path
 import psutil
@@ -15,18 +10,24 @@ _MB = 1024.0 ** 2
 
 
 class ResourceMonitor(threading.Thread):
-    """
-    A ``Thread`` to monitor a specific PID with a certain frequence
-    to a file
-    """
+    """A thread to monitor a specific PID with a certain frequence to a file."""
 
-    def __init__(self, pid, interval=5, logdir=None, fname=None, python=True):
+    def __init__(self, pid, interval=5, logdir=None, fname=None):
         """
-        if freq < 0.2:
-            raise RuntimeError(
-                'Frequency (%0.2fs) cannot be lower than 0.2s' % freq)
-        """
+        Initialize this monitor.
 
+        Parameters
+        ----------
+        pid : :obj:`int`
+            The process id (PID)
+        interval : :obj:`float`
+            Frequency with with the resources will be estimated.
+        logdir : :obj:`os.pathlike`
+            Filesystem location of the logging folder.
+        fname : :obj:`str`
+            Filename for the log file.
+
+        """
         if fname is None:
             fname = "proc-%d_time-%s_freq-%0.2f.log" % (pid, time(), interval)
         if logdir is None:
@@ -34,7 +35,6 @@ class ResourceMonitor(threading.Thread):
         self._fname = logdir / fname
         self._logfile = open(self._fname, "w")
         self._interval = interval
-        self._python = python
 
         # Leave process initialized and make first sample
         self._process = psutil.Process(pid)
@@ -46,11 +46,11 @@ class ResourceMonitor(threading.Thread):
 
     @property
     def fname(self):
-        """Get/set the internal filename"""
+        """Get/set the internal filename."""
         return self._fname
 
     def stop(self):
-        """Stop monitoring"""
+        """Stop monitoring."""
         if not self._event.is_set():
             self._event.set()
             self.join()
@@ -91,7 +91,7 @@ class ResourceMonitor(threading.Thread):
         self._logfile.flush()
 
     def run(self):
-        """Core monitoring function, called by start()"""
+        """Core monitoring function, called by start()."""
         start_time = time()
         wait_til = start_time
         while not self._event.is_set():
@@ -102,8 +102,8 @@ class ResourceMonitor(threading.Thread):
 
 # Log node stats function
 def log_nodes_cb(node, status):
-    """Function to record node run statistics to a log file as json
-    dictionaries
+    """
+    Record node run statistics to a log file as json dictionaries.
 
     Parameters
     ----------
@@ -118,8 +118,8 @@ def log_nodes_cb(node, status):
     None
         this function does not return any values, it logs the node
         status info to the callback logger
-    """
 
+    """
     if status != "end":
         return
 
@@ -146,12 +146,8 @@ def log_nodes_cb(node, status):
     logging.getLogger("callback").debug(json.dumps(status_dict))
 
 
-# Get total system RAM
 def get_system_total_memory_gb():
-    """
-    Function to get the total RAM of the running system in GB
-    """
-
+    """Get the total RAM of the running system, in GB."""
     # Import packages
     import os
     import sys
@@ -174,10 +170,9 @@ def get_system_total_memory_gb():
     return memory_gb
 
 
-# Get max resources used for process
 def get_max_resources_used(pid, mem_mb, num_threads, pyfunc=False):
     """
-    Function to get the RAM and threads utilized by a given process
+    Get the RAM and threads utilized by a given process.
 
     Parameters
     ----------
@@ -194,8 +189,8 @@ def get_max_resources_used(pid, mem_mb, num_threads, pyfunc=False):
         the new high memory watermark of process (MB)
     num_threads : float
         the new high thread watermark of process
-    """
 
+    """
     try:
         mem_mb = max(mem_mb, _get_ram_mb(pid, pyfunc=pyfunc))
         num_threads = max(num_threads, _get_num_threads(pid))
@@ -208,7 +203,7 @@ def get_max_resources_used(pid, mem_mb, num_threads, pyfunc=False):
 # Get number of threads for process
 def _get_num_threads(pid):
     """
-    Function to get the number of threads a process is using
+    Get the number of threads a process is using.
 
     Parameters
     ----------
@@ -221,7 +216,6 @@ def _get_num_threads(pid):
         the number of threads that the process is using
 
     """
-
     try:
         proc = psutil.Process(pid)
         # If process is running
@@ -272,9 +266,7 @@ def _get_num_threads(pid):
 # Get ram usage of process
 def _get_ram_mb(pid, pyfunc=False):
     """
-    Function to get the RAM usage of a process and its children
-    Reference: http://ftp.dev411.com/t/python/python-list/095thexx8g/\
-multiprocessing-forking-memory-usage
+    Get the RAM usage of a process and its children.
 
     Parameters
     ----------
@@ -291,6 +283,11 @@ multiprocessing-forking-memory-usage
     -------
     mem_mb : float
         the memory RAM in MB utilized by the process PID
+
+    See Also
+    --------
+    See `this thread
+    <http://ftp.dev411.com/t/python/python-list/095thexx8g/multiprocessing-forking-memory-usage>`__.
 
     """
     try:

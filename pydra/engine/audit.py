@@ -1,20 +1,49 @@
-import os, json
+"""Module to keep track of provenance information."""
+import os
 from pathlib import Path
+import json
 import dataclasses as dc
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from .helpers import ensure_list, gather_runtime_info
 
 
 class Audit:
+    """Handle provenance tracking and resource utilization."""
+
     def __init__(self, audit_flags, messengers, messenger_args, develop=None):
+        """
+        Initialize the auditing functionality.
+
+        Parameters
+        ----------
+        audit_flags : :class:`AuditFlag`
+            Base configuration of auditing.
+        messengers :
+            TODO
+        messenger_args :
+            TODO
+        develop :
+            TODO
+
+        """
         self.audit_flags = audit_flags
         self.messengers = ensure_list(messengers)
         self.messenger_args = messenger_args
         self.develop = develop
 
     def start_audit(self, odir):
-        # start recording provenance, but don't send till directory is created
-        # in case message directory is inside task output directory
+        """
+        Start recording provenance.
+
+        Monitored information is not sent until directory is created,
+        in case message directory is inside task output directory.
+
+        Parameters
+        ----------
+        odir : :obj:`os.pathlike`
+            Message output directory.
+
+        """
         self.odir = odir
         if self.audit_check(AuditFlag.PROV):
             self.aid = "uid:{}".format(gen_uuid())
@@ -28,6 +57,7 @@ class Audit:
             self.resource_monitor = ResourceMonitor(os.getpid(), logdir=self.odir)
 
     def monitor(self):
+        """Start resource monitoring."""
         if self.audit_check(AuditFlag.RESOURCE):
             self.resource_monitor.start()
             if self.audit_check(AuditFlag.PROV):
@@ -43,6 +73,7 @@ class Audit:
                 )
 
     def finalize_audit(self, result):
+        """End auditing."""
         if self.audit_check(AuditFlag.RESOURCE):
             self.resource_monitor.stop()
             result.runtime = gather_runtime_info(self.resource_monitor.fname)
@@ -79,6 +110,17 @@ class Audit:
             )
 
     def audit_message(self, message, flags=None):
+        """
+        Send auditing message.
+
+        Parameters
+        ----------
+        message :
+            TODO
+        flags :
+            TODO
+
+        """
         if self.develop:
             with open(
                 Path(os.path.dirname(__file__)) / ".." / "schema/context.jsonld", "rt"
@@ -86,7 +128,8 @@ class Audit:
                 context = json.load(fp)
         else:
             context = {
-                "@context": "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld"
+                "@context": "https://raw.githubusercontent.com/nipype/pydra"
+                            "/master/pydra/schema/context.jsonld"
             }
         if self.audit_flags & flags:
             if self.messenger_args:
@@ -101,4 +144,13 @@ class Audit:
                 )
 
     def audit_check(self, flag):
+        """
+        Determine whether auditing is enabled for a particular flag.
+
+        Parameters
+        ----------
+        flag :
+            TODO
+
+        """
         return self.audit_flags & flag

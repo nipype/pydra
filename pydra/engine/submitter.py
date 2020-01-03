@@ -1,5 +1,5 @@
+"""Handle execution backends."""
 import asyncio
-
 from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker
 from .core import is_workflow
 from .helpers import get_open_loop
@@ -9,9 +9,21 @@ import logging
 logger = logging.getLogger("pydra.submitter")
 
 
+# TODO: runnable in init or run
 class Submitter:
-    # TODO: runnable in init or run
+    """Send a task to the execution backend."""
+
     def __init__(self, plugin="cf", **kwargs):
+        """
+        Initialize task submission.
+
+        Parameters
+        ----------
+        plugin : :obj:`str`
+            The identifier of the execution backend.
+            Default is ``cf`` (Concurrent Futures).
+
+        """
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
         self.plugin = plugin
@@ -26,6 +38,7 @@ class Submitter:
         self.worker.loop = self.loop
 
     def __call__(self, runnable, cache_locations=None):
+        """Submit."""
         if cache_locations is not None:
             runnable.cache_locations = cache_locations
         # creating all connections and calculating the checksum of the graph before running
@@ -47,7 +60,7 @@ class Submitter:
         return runnable.result()
 
     async def submit_workflow(self, workflow):
-        """Distributes or initiates workflow execution"""
+        """Distribute or initiate workflow execution."""
         if workflow.plugin and workflow.plugin != self.plugin:
             # dj: this is not tested!!!
             await self.worker.run_el(workflow)
@@ -74,7 +87,8 @@ class Submitter:
         Returns
         -------
         futures : set or None
-            Coroutines for `Task` execution
+            Coroutines for :class:`~pydra.engine.core.TaskBase` execution.
+
         """
         futures = set()
         if runnable.state:
@@ -111,17 +125,18 @@ class Submitter:
 
     async def _run_workflow(self, wf):
         """
-        Expands and executes a stateless ``Workflow``.
+        Expand and execute a stateless :class:`~pydra.engine.core.Workflow`.
 
         Parameters
         ----------
-        wf : Workflow
+        wf : :obj:`~pydra.engine.core.Workflow`
             Workflow Task object
 
         Returns
         -------
-        wf : Workflow
+        wf : :obj:`pydra.engine.core.Workflow`
             The computed workflow
+
         """
         # creating a copy of the graph that will be modified
         # the copy contains new lists with original runnable objects
@@ -154,14 +169,19 @@ class Submitter:
         self.close()
 
     def close(self):
-        # do not close previously running loop
+        """
+        Close submitter.
+
+        Do not close previously running loop.
+
+        """
         if self._own_loop:
             self.loop.close()
         self.worker.close()
 
 
 def get_runnable_tasks(graph):
-    """Parse a graph and return all runnable tasks"""
+    """Parse a graph and return all runnable tasks."""
     tasks = []
     to_remove = []
     for tsk in graph.sorted_nodes:
@@ -179,7 +199,7 @@ def get_runnable_tasks(graph):
 
 
 def is_runnable(graph, obj):
-    """Check if a task within a graph is runnable"""
+    """Check if a task within a graph is runnable."""
     connections_to_remove = []
     for pred in graph.predecessors[obj.name]:
         is_done = pred.done
