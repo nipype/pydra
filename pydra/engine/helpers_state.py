@@ -43,7 +43,8 @@ def _ordering(
 ):
     """Get a proper order of fields and signs (used by splitter2rpn)."""
     if type(el) is tuple:
-        # checking if the splitter dont contain splitter from previous nodes, i.e. has str "_NA", etc.
+        # checking if the splitter dont contain splitter from previous nodes
+        # i.e. has str "_NA", etc.
         if type(el[0]) is str and el[0].startswith("_"):
             node_nm = el[0][1:]
             if node_nm not in other_states and state_fields:
@@ -748,7 +749,7 @@ def connect_splitters(splitter, other_states, state_fields=False):
                     other_states=other_states, state_fields=state_fields
                 )
                 right_part = splitter
-        # if splitter is tuple, it has to be either Left or Right part, you can't have (Left, Right)
+        # if splitter is tuple, it has to be either Left or Right part
         elif isinstance(splitter, tuple):
             lr_flag = _left_right_check(splitter, other_states=other_states)
             if lr_flag == "Left":

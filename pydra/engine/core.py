@@ -49,9 +49,8 @@ class TaskBase:
     _api_version: str = "0.0.1"  # Should generally not be touched by subclasses
     _etelemetry_version_data = None  # class variable to store etelemetry information
     _version: str  # Version of tool being wrapped
-    _task_version: ty.Optional[
-        str
-    ] = None  # Task writers encouraged to define and increment when implementation changes sufficiently
+    _task_version: ty.Optional[str] = None
+    # Task writers encouraged to define and increment when implementation changes sufficiently
     _input_sets = None  # Dictionaries of predefined input settings
 
     audit_flags: AuditFlag = AuditFlag.NONE

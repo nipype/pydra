@@ -1,5 +1,4 @@
 """Utilities to keep track of performance and resource utilization."""
-import os
 from pathlib import Path
 import psutil
 import threading

@@ -343,7 +343,7 @@ class ShellSpec(BaseSpec):
     def _type_checking(self):
         """Use fld.type to check the types TODO."""
         fields = dc.fields(self)
-        allowed_keys = ["min_val", "max_val", "range", "enum"]
+        allowed_keys = ["min_val", "max_val", "range", "enum"]  # noqa
         for fld in fields:
             # TODO
             pass
