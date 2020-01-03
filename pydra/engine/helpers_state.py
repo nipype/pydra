@@ -622,9 +622,12 @@ def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
         groups_stack = [groups_stack]
 
     if combiner:
-        keys_final, groups_final, groups_stack_final, combiner_all = combine_final_groups(
-            combiner, groups, groups_stack, keys
-        )
+        (
+            keys_final,
+            groups_final,
+            groups_stack_final,
+            combiner_all,
+        ) = combine_final_groups(combiner, groups, groups_stack, keys)
         return keys_final, groups_final, groups_stack_final, combiner_all
     else:
         return keys, groups, groups_stack, []

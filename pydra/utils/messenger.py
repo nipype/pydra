@@ -9,6 +9,7 @@ import os
 def gen_uuid():
     """Generate a unique identifier."""
     import uuid
+
     return uuid.uuid4().hex
 
 
@@ -98,7 +99,7 @@ class FileMessenger(Messenger):
         message_dir.mkdir(parents=True, exist_ok=True)
         (message_dir / ("%s.jsonld" % mid)).write_text(
             json.dumps(message, ensure_ascii=False, indent=2, sort_keys=False),
-            mode=['w', 'a'][append]
+            mode=["w", "a"][append],
         )
         return mid
 
@@ -139,7 +140,7 @@ def make_message(obj, context=None):
     if context is None:
         context = {
             "@context": "https://raw.githubusercontent.com/"
-                        "nipype/pydra/enh/task/pydra/schema/context.jsonld"
+            "nipype/pydra/enh/task/pydra/schema/context.jsonld"
         }
     message = context.copy()
     message.update(**obj)

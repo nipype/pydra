@@ -5,10 +5,10 @@ from .task import AuditFlag, ShellCommandTask, DockerTask
 from . import specs
 
 __all__ = [
-    'AuditFlag',
-    'DockerTask',
-    'ShellCommandTask',
-    'Submitter',
-    'Workflow',
-    'specs',
+    "AuditFlag",
+    "DockerTask",
+    "ShellCommandTask",
+    "Submitter",
+    "Workflow",
+    "specs",
 ]

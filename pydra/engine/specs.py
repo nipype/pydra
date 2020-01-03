@@ -85,6 +85,7 @@ class BaseSpec:
 @dc.dataclass
 class Runtime:
     """Represent run time metadata."""
+
     rss_peak_gb: ty.Optional[float] = None
     """Peak in consumption of physical RAM."""
     vms_peak_gb: ty.Optional[float] = None
@@ -96,6 +97,7 @@ class Runtime:
 @dc.dataclass
 class Result:
     """Metadata regarding the outputs of processing."""
+
     output: ty.Optional[ty.Any] = None
     runtime: ty.Optional[Runtime] = None
     errored: bool = False
@@ -136,6 +138,7 @@ class RuntimeSpec:
         InlineScriptRequirement
 
     """
+
     outdir: ty.Optional[str] = None
     container: ty.Optional[str] = "shell"
     network: bool = False
@@ -144,6 +147,7 @@ class RuntimeSpec:
 @dc.dataclass
 class ShellSpec(BaseSpec):
     """Specification for a process invoked from a shell."""
+
     executable: ty.Union[str, ty.List[str]] = dc.field(
         metadata={
             "help_string": "the first part of the command, can be a string, "

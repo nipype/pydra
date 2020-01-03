@@ -129,7 +129,7 @@ class Audit:
         else:
             context = {
                 "@context": "https://raw.githubusercontent.com/nipype/pydra"
-                            "/master/pydra/schema/context.jsonld"
+                "/master/pydra/schema/context.jsonld"
             }
         if self.audit_flags & flags:
             if self.messenger_args:

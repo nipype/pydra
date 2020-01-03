@@ -112,8 +112,10 @@ class State:
 
     def __str__(self):
         """Generate a string representation of the object."""
-        return (f"State for {self.name} with a splitter: {self.splitter} "
-                f"and combiner: {self.combiner}")
+        return (
+            f"State for {self.name} with a splitter: {self.splitter} "
+            f"and combiner: {self.combiner}"
+        )
 
     @property
     def splitter(self):
@@ -199,7 +201,11 @@ class State:
 
         """
         if self.other_states:
-            self.splitter, self._left_splitter, self._right_splitter = hlpst.connect_splitters(
+            (
+                self.splitter,
+                self._left_splitter,
+                self._right_splitter,
+            ) = hlpst.connect_splitters(
                 splitter=self.splitter, other_states=self.other_states
             )
             # left rpn part, but keeping the names of the nodes, e.g. [_NA, _NB, *]
@@ -284,7 +290,12 @@ class State:
             if st_combiner:
                 # keys and groups from previous states
                 # after taking into account combiner from current state
-                keys_f_st, group_for_inputs_f_st, groups_stack_f_st, combiner_all_st = hlpst.splits_groups(
+                (
+                    keys_f_st,
+                    group_for_inputs_f_st,
+                    groups_stack_f_st,
+                    combiner_all_st,
+                ) = hlpst.splits_groups(
                     st.splitter_rpn_final,
                     combiner=st_combiner,
                     inner_inputs=st.inner_inputs,

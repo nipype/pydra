@@ -151,8 +151,10 @@ def gather_runtime_info(fname):
     runtime = Runtime(rss_peak_gb=None, vms_peak_gb=None, cpu_peak_percent=None)
 
     # Read .prof file in and set runtime values
-    data = [[float(el) for el in line.strip().split(",")]
-            for line in Path(fname).read_text().splitlines()]
+    data = [
+        [float(el) for el in line.strip().split(",")]
+        for line in Path(fname).read_text().splitlines()
+    ]
     if data:
         runtime.rss_peak_gb = max([val[2] for val in data]) / 1024
         runtime.vms_peak_gb = max([val[3] for val in data]) / 1024
