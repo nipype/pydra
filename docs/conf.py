@@ -22,7 +22,7 @@ from github_link import make_linkcode_resolve
 # -- Project information -----------------------------------------------------
 
 project = 'Pydra: A simple dataflow engine with scalable semantics'
-copyright = '2020, The Nipype Developers team'
+copyright = '2019 - 2020, The Nipype Developers team'
 author = 'The Nipype Developers team'
 
 # The full version, including alpha/beta/rc tags
