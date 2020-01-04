@@ -55,7 +55,7 @@ clean:
 	rm -rf docs/api
 
 html:
-	mkdir -p $(BUILDDIR)/{_static,_templates}
+	mkdir -p _static _templates
 	PYTHONPATH=$(PYTHONPATH) $(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
