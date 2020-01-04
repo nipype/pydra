@@ -15,6 +15,8 @@ Feature list:
 4. Cached execution with support for a global cache across dataflows and users
 5. Distributed execution (presently via ConcurrentFutures and SLURM, more on their way)
 
+[[API Documentation](https://nipype.github.io/pydra/)]
+
 ### Tutorial
 This tutorial will walk you through the main concepts of Pydra!
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/nipype/pydra/master?filepath=tutorial%2Fnotebooks)
