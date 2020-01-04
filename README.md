@@ -4,6 +4,7 @@
 A simple dataflow engine with scalable semantics.
 
 [![Build Status](https://travis-ci.org/nipype/pydra.svg?branch=master)](https://travis-ci.org/nipype/pydra)
+[![CircleCI](https://circleci.com/gh/nipype/pydra.svg?style=svg)](https://circleci.com/gh/nipype/pydra)
 [![codecov](https://codecov.io/gh/nipype/pydra/branch/master/graph/badge.svg)](https://codecov.io/gh/nipype/pydra)
 
 The goal of pydra is to provide a lightweight Python dataflow engine for DAG construction, manipulation, and distributed execution.
