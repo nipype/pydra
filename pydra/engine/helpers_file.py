@@ -1,9 +1,4 @@
-# -*- coding: utf-8 -*-
-# emacs: -*- mode: python; py-indent-offset: 4; indent-tabs-mode: nil -*-
-# vi: set ft=python sts=4 ts=4 sw=4 et:
-
-""" functions copied from nipype, removed parts that were related to py2"""
-
+"""Functions ported from Nipype 1, after removing parts that were related to py2."""
 import subprocess as sp
 from hashlib import sha256
 import os
@@ -12,36 +7,34 @@ import re
 import shutil
 import posixpath
 from builtins import str, bytes, open
-
+import logging
 
 related_filetype_sets = [(".hdr", ".img", ".mat"), (".nii", ".mat"), (".BRIK", ".HEAD")]
-
-
-import logging
+"""List of neuroimaging file types that are to be interpreted together."""
 
 logger = logging.getLogger("pydra")
 
 
 def split_filename(fname):
-    """Split a filename into parts: path, base filename and extension.
+    """
+    Split a filename into parts: path, base filename and extension.
 
     Parameters
     ----------
-    fname : str
+    fname : :obj:`str`
         file or path name
 
     Returns
     -------
-    pth : str
+    pth : :obj:`str`
         base path from fname
-    fname : str
+    fname : :obj:`str`
         filename from fname, without extension
-    ext : str
+    ext : :obj:`str`
         file extension from fname
 
     Examples
     --------
-    >>> from pydra.engine.helpers_file import split_filename
     >>> pth, fname, ext = split_filename('/home/data/subject.nii.gz')
     >>> pth
     '/home/data'
@@ -53,7 +46,6 @@ def split_filename(fname):
     '.nii.gz'
 
     """
-
     special_extensions = [".nii.gz", ".tar.gz", ".niml.dset"]
 
     pth = op.dirname(fname)
@@ -73,26 +65,30 @@ def split_filename(fname):
 
 
 def fname_presuffix(fname, prefix="", suffix="", newpath=None, use_ext=True):
-    """Manipulates path and name of input filename
+    """
+    Manipulate path and name of input filename.
 
     Parameters
     ----------
-    fname : string
+    fname : :obj:`str`
         A filename (may or may not include path)
-    prefix : string
+    prefix : :obj:`str`
         Characters to prepend to the filename
-    suffix : string
+    suffix : :obj:`str`
         Characters to append to the filename
-    newpath : string
+    newpath : :obj:`str`
         Path to replace the path of the input fname
-    use_ext : boolean
+    use_ext : :obj:`bool`
         If True (default), appends the extension of the original file
         to the output name.
 
-    Returns
-    -------
-    Absolute path of the modified filename
+    Return
+    ------
+    path : :obj:`str`
+        Absolute path of the modified filename
 
+    Examples
+    --------
     >>> from pydra.engine.helpers_file import fname_presuffix
     >>> fname = 'foo.nii.gz'
     >>> fname_presuffix(fname,'pre','post','/tmp')
@@ -110,9 +106,7 @@ def fname_presuffix(fname, prefix="", suffix="", newpath=None, use_ext=True):
 
 
 def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
-    """
-    Computes hash of a file using 'crypto' module
-    """
+    """Compute hash of a file using 'crypto' module."""
     from .specs import LazyField
     from .helpers import hash_function
 
@@ -138,10 +132,12 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
 
 
 def _parse_mount_table(exit_code, output):
-    """Parses the output of ``mount`` to produce (path, fs_type) pairs
+    """
+    Parse the output of ``mount`` to produce (path, fs_type) pairs.
 
     Separated from _generate_cifs_table to enable testing logic with real
     outputs
+
     """
     # Not POSIX
     if exit_code != 0:
@@ -178,14 +174,14 @@ def _parse_mount_table(exit_code, output):
 
 
 def _generate_cifs_table():
-    """Construct a reverse-length-ordered list of mount points that
-    fall under a CIFS mount.
+    """
+    Construct a reverse-length-ordered list of mount points that fall under a CIFS mount.
 
     This precomputation allows efficient checking for whether a given path
     would be on a CIFS filesystem.
-
     On systems without a ``mount`` command, or with no CIFS mounts, returns an
     empty list.
+
     """
     exit_code, output = sp.getstatusoutput("mount")
     return _parse_mount_table(exit_code, output)
@@ -195,17 +191,20 @@ _cifs_table = _generate_cifs_table()
 
 
 def on_cifs(fname):
-    """ Checks whether a file path is on a CIFS filesystem mounted in a POSIX
-    host (i.e., has the ``mount`` command).
+    """
+    Check whether a file path is on a CIFS filesystem mounted in a POSIX host.
+
+    POSIX hosts are assumed to have the ``mount`` command.
 
     On Windows, Docker mounts host directories into containers through CIFS
     shares, which has support for Minshall+French symlinks, or text files that
     the CIFS driver exposes to the OS as symlinks.
     We have found that under concurrent access to the filesystem, this feature
     can result in failures to create or read recently-created symlinks,
-    leading to inconsistent behavior and ``FileNotFoundError``s.
+    leading to inconsistent behavior and ``FileNotFoundError`` errors.
 
     This check is written to support disabling symlinks on CIFS shares.
+
     """
     # Only the first match (most recent parent) counts
     for fspath, fstype in _cifs_table:
@@ -222,7 +221,8 @@ def copyfile(
     use_hardlink=True,
     copy_related_files=True,
 ):
-    """Copy or link ``originalfile`` to ``newfile``.
+    """
+    Copy or link files.
 
     If ``use_hardlink`` is True, and the file can be hard-linked, then a
     link is created, instead of copying the file.
@@ -230,11 +230,31 @@ def copyfile(
     If a hard link is not created and ``copy`` is False, then a symbolic
     link is created.
 
+    .. admonition:: Copy options for existing files
+
+        * symlink
+
+            * to regular file originalfile            (keep if symlinking)
+            * to same dest as symlink originalfile    (keep if symlinking)
+            * to other file                           (unlink)
+
+        * regular file
+
+            * hard link to originalfile               (keep)
+            * copy of file (same hash)                (keep)
+            * different file (diff hash)              (unlink)
+
+    .. admonition:: Copy options for new files
+
+        * ``use_hardlink`` & ``can_hardlink`` => hardlink
+        * ``~hardlink`` & ``~copy`` & ``can_symlink`` => symlink
+        * ``~hardlink`` & ``~symlink`` => copy
+
     Parameters
     ----------
-    originalfile : str
+    originalfile : :obj:`str`
         full path to original file
-    newfile : str
+    newfile : :obj:`str`
         full path to new file
     copy : Bool
         specifies whether to copy or symlink files
@@ -271,17 +291,6 @@ def copyfile(
     if copy is False and on_cifs(newfile):
         copy = True
 
-    # Existing file
-    # -------------
-    # Options:
-    #   symlink
-    #       to regular file originalfile            (keep if symlinking)
-    #       to same dest as symlink originalfile    (keep if symlinking)
-    #       to other file                           (unlink)
-    #   regular file
-    #       hard link to originalfile               (keep)
-    #       copy of file (same hash)                (keep)
-    #       different file (diff hash)              (unlink)
     keep = False
     if op.lexists(newfile):
         if op.islink(newfile):
@@ -307,11 +316,6 @@ def copyfile(
         else:
             os.unlink(newfile)
 
-    # New file
-    # --------
-    # use_hardlink & can_hardlink => hardlink
-    # ~hardlink & ~copy & can_symlink => symlink
-    # ~hardlink & ~symlink => copy
     if not keep and use_hardlink:
         try:
             logger.debug("Linking File: %s->%s", newfile, originalfile)
@@ -358,16 +362,19 @@ def copyfile(
 
 
 def get_related_files(filename, include_this_file=True):
-    """Returns a list of related files, as defined in
-    ``related_filetype_sets``, for a filename. (e.g., Nifti-Pair, Analyze (SPM)
-    and AFNI files).
+    """
+    Return a list of related files.
+
+    As defined in :attr:`related_filetype_sets`, for a filename
+    (e.g., Nifti-Pair, Analyze (SPM), and AFNI files).
 
     Parameters
     ----------
-    filename : str
+    filename : :obj:`str`
         File name to find related filetypes of.
     include_this_file : bool
         If true, output includes the input filename.
+
     """
     related_files = []
     path, name, this_type = split_filename(filename)
@@ -382,7 +389,8 @@ def get_related_files(filename, include_this_file=True):
 
 
 def copyfiles(filelist, dest, copy=False, create_new=False):
-    """Copy or symlink files in ``filelist`` to ``dest`` directory.
+    """
+    Copy or symlink files in ``filelist`` to ``dest`` directory.
 
     Parameters
     ----------
@@ -418,33 +426,35 @@ def copyfiles(filelist, dest, copy=False, create_new=False):
 
 # dj: copied from misc
 def is_container(item):
-    """Checks if item is a container (list, tuple, dict, set)
+    """
+    Check if item is a container (list, tuple, dict, set).
+
     Parameters
     ----------
-    item : object
-        object to check for .__iter__
+    item : :obj:`object`
+        Input object to check.
+
     Returns
     -------
-    output : Boolean
-        True if container
-        False if not (eg string)
+    output : :obj:`bool`
+        ``True`` if container ``False`` otherwise.
+
     """
     if isinstance(item, str):
         return False
     elif hasattr(item, "__iter__"):
         return True
-    else:
-        return False
+
+    return False
 
 
 def ensure_list(filename):
-    """Returns a list given either a string or a list
-    """
+    """Return a list given either a string or a list."""
     if isinstance(filename, (str, bytes)):
         return [filename]
     elif isinstance(filename, list):
         return filename
     elif is_container(filename):
         return [x for x in filename]
-    else:
-        return None
+
+    return None

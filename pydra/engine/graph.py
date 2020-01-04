@@ -1,23 +1,39 @@
-from copy import copy, deepcopy
+"""Data structure to support :class:`~pydra.engine.core.Workflow` tasks."""
+from copy import copy
 from .helpers import ensure_list
 
 
 class DiGraph:
-    """
-    A simple Directed Graph object
-
-    """
+    """A simple Directed Graph object."""
 
     def __init__(self, nodes=None, edges=None):
+        """
+        Initialize a directed graph.
+
+        Parameters
+        ----------
+        nodes :
+            Tasks are represented by the nodes of the graph.
+        edges :
+            Connections of inputs and outputs between tasks in
+            the graph.
+
+        """
+        self._nodes = []
         self.nodes = nodes
+        self._edges = []
         self.edges = edges
         self._create_connections()
         self._sorted_nodes = None
         self._node_wip = []
 
     def copy(self):
-        """ creating a copy that contains new lists and dictionaries,
-            but runnable objects are the same
+        """
+        Duplicate this graph.
+
+        Create a copy that contains new lists and dictionaries,
+        but runnable objects are the same.
+
         """
         cls = self.__class__
         new_graph = cls.__new__(cls)
@@ -38,31 +54,30 @@ class DiGraph:
 
     @property
     def nodes(self):
+        """Get a list of the nodes currently contained in the graph."""
         return self._nodes
 
     @nodes.setter
     def nodes(self, nodes):
-        """ returns a list of all nodes or an empty list"""
         if nodes:
             nodes = ensure_list(nodes)
             if len(set(nodes)) != len(nodes):
                 raise Exception("nodes have repeated elements")
             self._nodes = nodes
-        else:
-            self._nodes = []
 
     @property
     def nodes_names_map(self):
-        """mapping node names to objects"""
+        """Get a map of node names to nodes."""
         return {nd.name: nd for nd in self.nodes}
 
     @property
     def edges(self):
+        """Get a list of the links between nodes."""
         return self._edges
 
     @edges.setter
     def edges(self, edges):
-        """adding edges to the graph (nodes has to be already in self.nodes)"""
+        """Add edges to the graph (nodes should be already set)."""
         if edges:
             edges = ensure_list(edges)
             for (nd_out, nd_in) in edges:
@@ -71,28 +86,26 @@ class DiGraph:
                         f"edge {(nd_out, nd_in)} can't be added to the graph"
                     )
             self._edges = edges
-        else:
-            self._edges = []
 
     @property
     def edges_names(self):
-        """returns edges using the nodes names"""
+        """Get edges as pairs of the nodes they connect."""
         return [(edg[0].name, edg[1].name) for edg in self._edges]
 
     @property
     def sorted_nodes(self):
-        """ returns sorted nodes (runs sorting if needed)"""
+        """Return sorted nodes (runs sorting if needed)."""
         if self._sorted_nodes is None:
             self.sorting()
         return self._sorted_nodes
 
     @property
     def sorted_nodes_names(self):
-        """returns sorted nodes names"""
+        """Return a list of sorted nodes names."""
         return [nd.name for nd in self._sorted_nodes]
 
     def _create_connections(self):
-        """creates connections between nodes"""
+        """Create connections between nodes."""
         self.predecessors = {}
         self.successors = {}
         for nd in self.nodes:
@@ -104,7 +117,7 @@ class DiGraph:
             self.successors[nd_out.name].append(nd_in)
 
     def add_nodes(self, new_nodes):
-        """adding new nodes and sorting the graph"""
+        """Insert new nodes and sort the new graph."""
         self.nodes = self._nodes + ensure_list(new_nodes)
         for nd in ensure_list(new_nodes):
             self.predecessors[nd.name] = []
@@ -114,7 +127,7 @@ class DiGraph:
             self.sorting(presorted=self.sorted_nodes + ensure_list(new_nodes))
 
     def add_edges(self, new_edges):
-        """ adding new edges and sorting the graph"""
+        """Add new edges and sort the new graph."""
         self.edges = self._edges + ensure_list(new_edges)
         for (nd_out, nd_in) in ensure_list(new_edges):
             self.predecessors[nd_in.name].append(nd_out)
@@ -124,7 +137,18 @@ class DiGraph:
             self.sorting(presorted=self.sorted_nodes + [])
 
     def sorting(self, presorted=None):
-        """sorting the graph, starting either from self.nodes or the previously sorted list"""
+        """
+        Sort this graph.
+
+        Sorting starts either from self.nodes or the
+        previously sorted list.
+
+        Parameters
+        ----------
+        presorted : :obj:`list`
+            A list of previously sorted nodes.
+
+        """
         self._sorted_nodes = []
         if presorted:
             notsorted_nodes = copy(presorted)
@@ -146,8 +170,12 @@ class DiGraph:
                     predecessors[nd_in.name].remove(nd_out)
 
     def _sorting(self, notsorted_list, predecessors):
-        """ adding nodes that don't have predecessors to the sorted_parts,
-            returns sorted part and remaining nodes
+        """
+        Sort implementation.
+
+        Adding nodes that don't have predecessors to the sorted_parts,
+        returns sorted part and remaining nodes.
+
         """
         remaining_nodes = []
         sorted_part = []
@@ -159,10 +187,21 @@ class DiGraph:
         return sorted_part, remaining_nodes
 
     def remove_nodes(self, nodes):
-        """ remove nodes from the graph, re-sorting if needed,
-            does not remove connections, see remove_node_connections,
-            nodes are added to _node_wip (will be removed completely
-            when the connections are removed)
+        """
+        Mark nodes for removal from the graph, re-sorting if needed.
+
+        .. important ::
+            This method does not remove connections, see
+            :py:meth:`~DiGraph.remove_node_connections`.
+            Nodes are added to the ``_node_wip`` list, marking
+            them for removal when all referring connections
+            are removed.
+
+        Parameters
+        ----------
+        nodes : :obj:`list`
+            List of nodes to be marked for removal.
+
         """
         nodes = ensure_list(nodes)
         for nd in nodes:
@@ -185,8 +224,16 @@ class DiGraph:
                 self.sorting(presorted=self.sorted_nodes)
 
     def remove_nodes_connections(self, nodes):
-        """ removes nodes from the connections
-            removes also the nodes from _node_wip
+        """
+        Remove connections between nodes.
+
+        Also prunes the nodes from ``_node_wip``.
+
+        Parameters
+        ----------
+        nodes : :obj:`list`
+            List of nodes which connections are to be removed.
+
         """
         nodes = ensure_list(nodes)
         for nd in nodes:
@@ -198,7 +245,7 @@ class DiGraph:
             self._node_wip.remove(nd)
 
     def _checking_path(self, node_name, first_name, path=0):
-        """recursive function to calculate all paths using connections list"""
+        """Calculate all paths using connections list (re-entering function)."""
         if not self.successors[node_name]:
             return True
         for nd_in in self.successors[node_name]:
@@ -214,8 +261,12 @@ class DiGraph:
             )
 
     def calculate_max_paths(self):
-        """ calculate maximum paths between any node without "history" (no predecessors)
-        and all of the connections
+        """
+        Calculate maximum paths.
+
+        Maximum paths are calculated between any node without "history" (no predecessors)
+        and all of the connections.
+
         """
         self.max_paths = {}
         first_nodes = [key for (key, val) in self.predecessors.items() if not val]

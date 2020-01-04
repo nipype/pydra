@@ -1,59 +1,91 @@
+"""Keeping track of mapping and reduce operations over tasks."""
 from copy import deepcopy
-
 from . import helpers_state as hlpst
 from .helpers import ensure_list
 from .specs import BaseSpec
 
 
 class State:
-    """ A class that specifies a State of all tasks,
-        it's only used when a task have a splitter.
-        It contains all information about splitter, combiner, final splitter,
+    """
+    A class that specifies a State of all tasks.
+
+      * It's only used when a task have a splitter.
+      * It contains all information about splitter, combiner, final splitter,
         and input values for specific task states
         (specified by the splitter and the input).
-        I also contains information about the final groups and the final splitter
-        if combiner is available.
+      * It also contains information about the final groups and the final splitter
+        if combiner is available..
 
-        Attributes:
-            name (str): name of the state that is the same as name of the task
-            splitter (str, tuple, list): can be a str (name of a single input),
-                tuple for scalar splitter, or list for outer splitter
-            splitter_rpn_compact (list): splitter in RPN notation, using a compact
-                notation for splitter from previous states, e.g. _NA
-            splitter_rpn (list): splitter represented in RPN (Reverse Polish Not.),
-                unwrapping splitters from previous states
-            combiner (list): list of fields that should be combined
-                (order is not important)
-            splitter_final: final splitter that includes the combining process
-            other_states (dict): used to create connections with previous states
-                {name of a previous state:
-                 (prefious state, input from current state needed the connection)}
-            inner_inputs (dict): used to create connections with previous states
-                {"{self.name}.input name for current inp": previous state}
-            states_ind (list(dict)): dictionary for every state that contains
-                indices for all state inputs (i.e. inputs that are part of the splitter)
-            states_val (list(dict)): dictionary for every state that contains
-                values for all state inputs (i.e. inputs that are part of the splitter)
-            inputs_ind (list(dict)): dictionary for every state that contains
-                indices for all task inputs (i.e. inputs that are relevant
-                for current task, can be outputs from previous nodes)
-            group_for_inputs (dict): specifying groups (axes) for each input field
-                (depends on the splitter)
-            group_for_inputs_final (dict): specifying final groups (axes)
-                for each input field (depends on the splitter and combiner)
-            groups_stack_final (list): specify stack of groups/axes (used to
-                determine which field could be combined)
-            final_combined_ind_mapping (dict): mapping between final indices
-                after combining and partial indices of the results
+    Attributes
+    ----------
+    name : :obj:`str`
+        name of the state that is the same as name of the task
+    splitter : :obj:`str`, :obj:`tuple`, :obj:`list`
+        can be a str (name of a single input),
+        tuple for scalar splitter, or list for outer splitter
+    splitter_rpn_compact : :obj:`list`
+        splitter in :abbr:`RPN (reverse Polish notation)`, using a compact
+        notation for splitter from previous states, e.g. _NA
+    splitter_rpn : :obj:`list`
+        splitter represented in RPN,
+        unwrapping splitters from previous states
+    combiner : :obj:`list`
+        list of fields that should be combined
+        (order is not important)
+    splitter_final :
+        final splitter that includes the combining process
+    other_states : :obj:`dict`
+        used to create connections with previous states::
+
+            {
+              name of a previous state:
+                (previous state, input from current state needed the connection)
+            }
+
+    inner_inputs : :obj:`dict`
+        used to create connections with previous states
+        ``{"{self.name}.input name for current inp": previous state}``
+    states_ind : :obj:`list` of :obj:`dict`
+        dictionary for every state that contains
+        indices for all state inputs (i.e. inputs that are part of the splitter)
+    states_val : :obj:`list` of :obj:`dict`
+        dictionary for every state that contains
+        values for all state inputs (i.e. inputs that are part of the splitter)
+    inputs_ind : :obj:`list` of :obj:`dict`
+        dictionary for every state that contains
+        indices for all task inputs (i.e. inputs that are relevant
+        for current task, can be outputs from previous nodes)
+    group_for_inputs : :obj:`dict`
+        specifying groups (axes) for each input field
+        (depends on the splitter)
+    group_for_inputs_final : :obj:`dict`
+        specifying final groups (axes)
+        for each input field (depends on the splitter and combiner)
+    groups_stack_final : :obj:`list`
+        specify stack of groups/axes (used to
+        determine which field could be combined)
+    final_combined_ind_mapping : :obj:`dict`
+        mapping between final indices
+        after combining and partial indices of the results
+
     """
 
     def __init__(self, name, splitter=None, combiner=None, other_states=None):
         """
-        :param name (str): name (should be the same as task name)
-        :param splitter (str, tuple or list): splitter of a task
-        :param combiner (str, list): field/fields used to combine results
-        :param other_states (dict): {name of a previous state:
-            (prefious state, input from current state needed the connection)}
+        Initialize state.
+
+        Parameters
+        ----------
+        name : :obj:`str`
+            name (should be the same as task name)
+        splitter : :obj:`str`, or :obj:`tuple`, or :obj:`list`
+            splitter of a task
+        combiner : :obj:`str`, or :obj:`list`)
+            field/fields used to combine results
+        other_states :obj:`dict`:
+            ``{name of a previous state: (prefious state,
+            input from current state needed the connection)}``
+
         """
         self.name = name
         if other_states is None:
@@ -79,10 +111,15 @@ class State:
             self.final_combined_ind_mapping = {}
 
     def __str__(self):
-        return f"State for {self.name} with a splitter: {self.splitter} and combiner: {self.combiner}"
+        """Generate a string representation of the object."""
+        return (
+            f"State for {self.name} with a splitter: {self.splitter} "
+            f"and combiner: {self.combiner}"
+        )
 
     @property
     def splitter(self):
+        """Get the splitter of the state."""
         return self._splitter
 
     @splitter.setter
@@ -132,6 +169,7 @@ class State:
 
     @property
     def combiner(self):
+        """Get the combiner associated to the state."""
         return self._combiner
 
     @combiner.setter
@@ -157,11 +195,17 @@ class State:
 
     def connect_splitters(self):
         """
-        connect splitters from previous nodes,
-        evaluate Left (the part from previous states) and Right (current state) parts
+        Connect splitters from previous nodes.
+
+        Evaluates Left (the part from previous states) and Right (current state) parts.
+
         """
         if self.other_states:
-            self.splitter, self._left_splitter, self._right_splitter = hlpst.connect_splitters(
+            (
+                self.splitter,
+                self._left_splitter,
+                self._right_splitter,
+            ) = hlpst.connect_splitters(
                 splitter=self.splitter, other_states=self.other_states
             )
             # left rpn part, but keeping the names of the nodes, e.g. [_NA, _NB, *]
@@ -183,7 +227,7 @@ class State:
         )
 
     def set_splitter_final(self):
-        """evaluate a final splitter after combining"""
+        """Evaluate a final splitter after combining."""
         _splitter_rpn_final = hlpst.remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn),
             self.right_combiner_all + self.left_combiner_all,
@@ -194,7 +238,7 @@ class State:
         )
 
     def set_input_groups(self):
-        """evaluate groups, especially the final groups that address the combiner"""
+        """Evaluate groups, especially the final groups that address the combiner."""
         keys_f, group_for_inputs_f, groups_stack_f, combiner_all = hlpst.splits_groups(
             self._right_splitter_rpn,
             combiner=self._right_combiner,
@@ -213,13 +257,13 @@ class State:
             self.left_combiner_all = []
 
     def connect_groups(self):
-        """"connect previous states and evaluate the final groups"""
+        """"Connect previous states and evaluate the final groups."""
         self.merge_previous_states()
         if self._right_splitter:  # if Right part, adding groups from current st
             self.push_new_states()
 
     def merge_previous_states(self):
-        """ merging groups from  all previous nodes"""
+        """Merge groups from  all previous nodes."""
         last_gr = 0
         self.groups_stack_final = []
         self.group_for_inputs_final = {}
@@ -246,7 +290,12 @@ class State:
             if st_combiner:
                 # keys and groups from previous states
                 # after taking into account combiner from current state
-                keys_f_st, group_for_inputs_f_st, groups_stack_f_st, combiner_all_st = hlpst.splits_groups(
+                (
+                    keys_f_st,
+                    group_for_inputs_f_st,
+                    groups_stack_f_st,
+                    combiner_all_st,
+                ) = hlpst.splits_groups(
                     st.splitter_rpn_final,
                     combiner=st_combiner,
                     inner_inputs=st.inner_inputs,
@@ -280,7 +329,7 @@ class State:
             last_gr += nmb_gr
 
     def push_new_states(self):
-        """adding additional groups from the current state"""
+        """Add additional groups from the current state."""
         self.keys_final += self._right_keys_final
         nr_gr_f = max(self.group_for_inputs_final.values()) + 1
         for inp, grs in self._right_group_for_inputs_final.items():
@@ -299,8 +348,14 @@ class State:
 
     def prepare_states(self, inputs):
         """
-        preparing a full list of state indices (number of elements depends on the splitter)
-        and state values (specific elements from inputs that can be used running interfaces)
+        Prepare a full list of state indices and state values.
+
+        State Indices
+            number of elements depends on the splitter
+
+        State Values
+            specific elements from inputs that can be used running interfaces
+
         """
         if isinstance(inputs, BaseSpec):
             self.inputs = hlpst.inputs_types_to_dict(self.name, inputs)
@@ -317,8 +372,12 @@ class State:
         self.prepare_states_val()
 
     def prepare_states_ind(self):
-        """using hlpst.splits to calculate a list of dictionaries with state indices"""
+        """
+        Calculate a list of dictionaries with state indices.
 
+        Uses hlpst.splits.
+
+        """
         # removing elements that are connected to inner splitter
         # (they will be taken into account in hlpst.splits anyway)
         # _comb part will be used in prepare_states_combined_ind
@@ -357,7 +416,7 @@ class State:
         return self.states_ind
 
     def prepare_states_combined_ind(self, elements_to_remove_comb):
-        """preparing the final list of dictionaries with indices after combiner"""
+        """Prepare the final list of dictionaries with indices after combiner."""
         partial_rpn_compact = hlpst.remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn_compact), elements_to_remove_comb
         )
@@ -404,11 +463,19 @@ class State:
         )
 
     def prepare_states_val(self):
-        """evaluate states values having states indices"""
+        """Evaluate states values having states indices."""
         self.states_val = list(hlpst.map_splits(self.states_ind, self.inputs))
         return self.states_val
 
     def prepare_inputs(self):
+        """
+        Get inputs ready.
+
+        1. Remove elements that come from connected states.
+        2. Merge elements that come from outputs of previous nodes.
+        3. Remove elements connected to the inner splitter.
+
+        """
         if not self.other_states:
             self.inputs_ind = self.states_ind
         else:
@@ -430,7 +497,7 @@ class State:
                 keys_inp = []
                 inputs_ind = []
 
-            # merging elements that comes from previous nodes outputs
+            # merging elements that come from previous nodes outputs
             # states that are connected to inner splitters are treated differently
             # (already included in inputs_ind)
             keys_inp_prev = []

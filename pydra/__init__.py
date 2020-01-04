@@ -1,3 +1,10 @@
+"""
+The Pydra workflow engine.
+
+Pydra is a rewrite of the Nipype engine with mapping and joining as
+first-class operations. It forms the core of the Nipype 2.0 ecosystem.
+
+"""
 from ._version import get_versions
 
 __version__ = get_versions()["version"]
@@ -8,11 +15,14 @@ from . import mark
 
 
 def check_latest_version(raise_exception=False):
-    """Check for the latest version of the library
+    """
+    Check for the latest version of the library.
 
-    parameters:
-    raise_exception: boolean
+    Parameters
+    ----------
+    raise_exception: :obj:`bool`
         Raise a RuntimeError if a bad version is being used
+
     """
     import etelemetry
     import logging

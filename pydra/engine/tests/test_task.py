@@ -83,7 +83,7 @@ def test_annotated_func_multreturn():
 
     @mark.task
     def testfunc(
-        a: float
+        a: float,
     ) -> ty.NamedTuple("Output", [("fractional", float), ("integer", int)]):
         import math
 
@@ -124,7 +124,7 @@ def test_annotated_func_multreturn_exception():
 
     @mark.task
     def testfunc(
-        a: float
+        a: float,
     ) -> ty.NamedTuple(
         "Output", [("fractional", float), ("integer", int), ("whoknows", int)]
     ):

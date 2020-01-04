@@ -1,3 +1,4 @@
+"""Execution workers."""
 import asyncio
 import sys
 import re
@@ -14,30 +15,34 @@ logger = logging.getLogger("pydra.worker")
 
 
 class Worker:
+    """A base class for execution of tasks."""
+
     def __init__(self, loop=None):
+        """Initialize the worker."""
         logger.debug(f"Initializing {self.__class__.__name__}")
         self.loop = loop
 
     def run_el(self, interface, **kwargs):
-        """Returns coroutine for task execution"""
+        """Return coroutine for task execution."""
         raise NotImplementedError
 
     def close(self):
-        pass
+        """Close this worker."""
 
     async def fetch_finished(self, futures):
         """
-        Awaits asyncio `Tasks` until one is finished.
+        Awaits asyncio's :class:`asyncio.Task` until one is finished.
 
         Parameters
         ----------
         futures : set of asyncio awaitables
-            Task execution coroutines or asyncio `Tasks`
+            Task execution coroutines or asyncio :class:`asyncio.Task`
 
         Returns
         -------
         pending : set
-            Pending asyncio `Task`s
+            Pending asyncio :class:`asyncio.Task`.
+
         """
         done = set()
         try:
@@ -52,11 +57,13 @@ class Worker:
 
 
 class DistributedWorker(Worker):
-    """Base Worker for distributed execution"""
+    """Base Worker for distributed execution."""
 
     def __init__(self, loop=None, max_jobs=None):
+        """Initialize the worker."""
         super().__init__(loop=loop)
         self.max_jobs = max_jobs
+        """Maximum number of concurrently running jobs."""
         self._jobs = 0
 
     def _prepare_runscripts(self, task, interpreter="/bin/sh"):
@@ -81,18 +88,21 @@ class DistributedWorker(Worker):
 
     async def fetch_finished(self, futures):
         """
-        Awaits asyncio `Task`s until one is finished.
-        Limits number of submissions based on max_jobs attr.
+        Awaits asyncio's :class:`asyncio.Task` until one is finished.
+
+        Limits number of submissions based on
+        py:attr:`DistributedWorker.max_jobs`.
 
         Parameters
         ----------
         futures : set of asyncio awaitables
-            Task execution coroutines or asyncio `Task`s
+            Task execution coroutines or asyncio :class:`asyncio.Task`
 
         Returns
         -------
         pending : set
-            Pending asyncio `Task`s
+            Pending asyncio :class:`asyncio.Task`.
+
         """
         done, unqueued = set(), set()
         job_slots = self.max_jobs - self._jobs if self.max_jobs else float("inf")
@@ -116,33 +126,43 @@ class DistributedWorker(Worker):
 
 
 class SerialPool:
-    """ a simply class to imitate a pool like in cf"""
+    """A simple class to imitate a pool executor of concurrent futures."""
 
     def submit(self, interface, **kwargs):
+        """Send new task."""
         self.res = interface(**kwargs)
 
     def result(self):
+        """Get the result of a task."""
         return self.res
 
     def done(self):
+        """Return whether the task is finished."""
         return True
 
 
 class SerialWorker(Worker):
+    """A worker to execute linearly."""
+
     def __init__(self):
+        """Initialize worker."""
         logger.debug("Initialize SerialWorker")
         self.pool = SerialPool()
 
     def run_el(self, interface, **kwargs):
+        """Run a task."""
         self.pool.submit(interface=interface, **kwargs)
         return self.pool
 
     def close(self):
-        pass
+        """Return whether the task is finished."""
 
 
 class ConcurrentFuturesWorker(Worker):
+    """A worker to execute in parallel using Python's concurrent futures."""
+
     def __init__(self, n_procs=None):
+        """Initialize Worker."""
         super(ConcurrentFuturesWorker, self).__init__()
         self.n_procs = n_procs
         # added cpu_count to verify, remove once confident and let PPE handle
@@ -151,18 +171,23 @@ class ConcurrentFuturesWorker(Worker):
         logger.debug("Initialize ConcurrentFuture")
 
     def run_el(self, runnable, **kwargs):
+        """Run a task."""
         assert self.loop, "No event loop available to submit tasks"
         return self.exec_as_coro(runnable)
 
     async def exec_as_coro(self, runnable):
+        """Run a task (coroutine wrapper)."""
         res = await self.loop.run_in_executor(self.pool, runnable._run)
         return res
 
     def close(self):
+        """Finalize the internal pool of tasks."""
         self.pool.shutdown()
 
 
 class SlurmWorker(DistributedWorker):
+    """A worker to execute tasks on SLURM systems."""
+
     _cmd = "sbatch"
     _sacct_re = re.compile(
         "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
@@ -171,7 +196,8 @@ class SlurmWorker(DistributedWorker):
     def __init__(
         self, loop=None, max_jobs=None, poll_delay=1, sbatch_args=None, **kwargs
     ):
-        """Initialize Slurm Worker
+        """
+        Initialize SLURM Worker.
 
         Parameters
         ----------
@@ -181,6 +207,7 @@ class SlurmWorker(DistributedWorker):
             Additional sbatch arguments
         max_jobs : int
             Maximum number of submitted jobs
+
         """
         super().__init__(loop=loop, max_jobs=max_jobs)
         if not poll_delay or poll_delay < 0:
@@ -189,9 +216,7 @@ class SlurmWorker(DistributedWorker):
         self.sbatch_args = sbatch_args or ""
 
     def run_el(self, runnable):
-        """
-        Worker submission API
-        """
+        """Worker submission API."""
         script_dir, _, batch_script = self._prepare_runscripts(runnable)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")

@@ -1,38 +1,44 @@
+"""Task I/O specifications."""
 import dataclasses as dc
 from pathlib import Path
 import os
 import typing as ty
 from copy import deepcopy
-from string import Formatter
 
 from .helpers_file import copyfile
 
 
 class File(Path):
-    pass
+    """An :obj:`os.pathlike` object, designating a file."""
 
 
 class Directory(Path):
-    pass
+    """An :obj:`os.pathlike` object, designating a folder."""
 
 
 @dc.dataclass
 class SpecInfo:
+    """Base data structure for metadata of specifications."""
+
     name: str
+    """A name for the specification."""
     fields: ty.List[ty.Tuple] = dc.field(default_factory=list)
+    """List of names of fields (inputs or outputs)."""
     bases: ty.Tuple[dc.dataclass] = dc.field(default_factory=tuple)
+    """Keeps track of this specification inheritance."""
 
 
 @dc.dataclass(order=True)
 class BaseSpec:
-    """The base dataclass specs for all inputs and outputs"""
+    """The base dataclass specs for all inputs and outputs."""
 
     def collect_additional_outputs(self, input_spec, inputs, output_dir):
+        """Get additional outputs."""
         return {}
 
     @property
     def hash(self):
-        """Compute a basic hash for any given set of fields"""
+        """Compute a basic hash for any given set of fields."""
         from .helpers import hash_function
         from .helpers_file import hash_file
 
@@ -53,6 +59,7 @@ class BaseSpec:
             return inp_hash
 
     def retrieve_values(self, wf, state_index=None):
+        """Get values contained by this spec."""
         temp_values = {}
         for field in dc.fields(self):
             value = getattr(self, field.name)
@@ -63,27 +70,34 @@ class BaseSpec:
             setattr(self, field, value)
 
     def check_metadata(self):
-        pass
+        """Check contained metadata."""
 
     def check_fields_input_spec(self):
-        pass
+        """Check input fields."""
 
     def template_update(self):
-        pass
+        """Update template."""
 
     def copyfile_input(self, output_dir):
-        pass
+        """Copy the file pointed by a :class:`File` input."""
 
 
 @dc.dataclass
 class Runtime:
+    """Represent run time metadata."""
+
     rss_peak_gb: ty.Optional[float] = None
+    """Peak in consumption of physical RAM."""
     vms_peak_gb: ty.Optional[float] = None
+    """Peak in consumption of virtual memory."""
     cpu_peak_percent: ty.Optional[float] = None
+    """Peak in cpu consumption."""
 
 
 @dc.dataclass
 class Result:
+    """Metadata regarding the outputs of processing."""
+
     output: ty.Optional[ty.Any] = None
     runtime: ty.Optional[Runtime] = None
     errored: bool = False
@@ -107,26 +121,33 @@ class Result:
 
 @dc.dataclass
 class RuntimeSpec:
+    """
+    Specification for a task.
+
+    From CWL::
+
+        InlineJavascriptRequirement
+        SchemaDefRequirement
+        DockerRequirement
+        SoftwareRequirement
+        InitialWorkDirRequirement
+        EnvVarRequirement
+        ShellCommandRequirement
+        ResourceRequirement
+
+        InlineScriptRequirement
+
+    """
+
     outdir: ty.Optional[str] = None
     container: ty.Optional[str] = "shell"
     network: bool = False
-    """
-    from CWL:
-    InlineJavascriptRequirement
-    SchemaDefRequirement
-    DockerRequirement
-    SoftwareRequirement
-    InitialWorkDirRequirement
-    EnvVarRequirement
-    ShellCommandRequirement
-    ResourceRequirement
-
-    InlineScriptRequirement
-    """
 
 
 @dc.dataclass
 class ShellSpec(BaseSpec):
+    """Specification for a process invoked from a shell."""
+
     executable: ty.Union[str, ty.List[str]] = dc.field(
         metadata={
             "help_string": "the first part of the command, can be a string, "
@@ -141,6 +162,7 @@ class ShellSpec(BaseSpec):
     )
 
     def retrieve_values(self, wf, state_index=None):
+        """Parse output results."""
         temp_values = {}
         for field in dc.fields(self):
             # retrieving values that do not have templates
@@ -154,24 +176,27 @@ class ShellSpec(BaseSpec):
             setattr(self, field, value)
 
     def check_metadata(self):
-        """ checking the metadata for fields in input_spec and fields,
-            setting the default values when available and needed
         """
-        supported_keys = [
-            "mandatory",
-            "xor",
-            "requires",
-            "default_value",
-            "position",
-            "help_string",
-            "output_file_template",
-            "output_field_name",
-            "separate_ext",
-            "argstr",
+        Check the metadata for fields in input_spec and fields.
+
+        Also sets the default values when available and needed.
+
+        """
+        supported_keys = {
             "allowed_values",
-            "copyfile",
+            "argstr",
             "container_path",
-        ]
+            "copyfile",
+            "default_value",
+            "help_string",
+            "mandatory",
+            "output_field_name",
+            "output_file_template",
+            "position",
+            "requires",
+            "separate_ext",
+            "xor",
+        }
         # special inputs, don't have to follow rules for standard inputs
         special_input = ["_func", "_graph_checksums"]
 
@@ -179,10 +204,10 @@ class ShellSpec(BaseSpec):
         for fld in fields:
             mdata = fld.metadata
             # checking keys from metadata
-            if set(mdata.keys()) - set(supported_keys):
+            if set(mdata.keys()) - supported_keys:
                 raise Exception(
                     f"only these keys are supported {supported_keys}, but "
-                    f"{set(mdata.keys()) - set(supported_keys)} provided"
+                    f"{set(mdata.keys()) - supported_keys} provided"
                 )
             # checking if the help string is provided (required field)
             if "help_string" not in mdata:
@@ -220,10 +245,13 @@ class ShellSpec(BaseSpec):
                 elif not isinstance(fld.default, dc._MISSING_TYPE):
                     setattr(self, fld.name, fld.default)
 
-    # not sure if this might be useful for Functin Task
+    # not sure if this might be useful for Function Task
     def template_update(self):
-        """ updating all templates that are present in the input spec
-            should be run when all inputs used in the templates are already set
+        """
+        Update all templates that are present in the input spec.
+
+        Should be run when all inputs used in the templates are already set.
+
         """
         dict_ = deepcopy(self.__dict__)
         dict_.update(self.map_copyfiles)
@@ -245,8 +273,9 @@ class ShellSpec(BaseSpec):
                         "output names should be a string or a tuple of two strings"
                     )
 
-    # not sure if this might be useful for Functin Task
+    # not sure if this might be useful for Function Task
     def copyfile_input(self, output_dir):
+        """Implement the base class method."""
         self.map_copyfiles = {}
         for fld in dc.fields(self):
             copy = fld.metadata.get("copyfile")
@@ -262,8 +291,11 @@ class ShellSpec(BaseSpec):
                 self.map_copyfiles[fld.name] = newfile
 
     def check_fields_input_spec(self):
-        """ checking fields from input spec based on the medatada
-            e.g., if xor, requires are fulfilled, if value provided when mandatory
+        """
+        Check fields from input spec based on the medatada.
+
+        e.g., if xor, requires are fulfilled, if value provided when mandatory.
+
         """
         fields = dc.fields(self)
         names = []
@@ -309,9 +341,9 @@ class ShellSpec(BaseSpec):
             raise Exception(f"the file from the {field.name} input does not exist")
 
     def _type_checking(self):
-        """ using fld.type to check the types TODO"""
+        """Use fld.type to check the types TODO."""
         fields = dc.fields(self)
-        allowed_keys = ["min_val", "max_val", "range", "enum"]
+        allowed_keys = ["min_val", "max_val", "range", "enum"]  # noqa
         for fld in fields:
             # TODO
             pass
@@ -319,12 +351,17 @@ class ShellSpec(BaseSpec):
 
 @dc.dataclass
 class ShellOutSpec(BaseSpec):
+    """Output specification of a generic shell process."""
+
     return_code: int
+    """The process' exit code."""
     stdout: ty.Union[File, str]
+    """The process' standard output."""
     stderr: ty.Union[File, str]
+    """The process' standard input."""
 
     def collect_additional_outputs(self, input_spec, inputs, output_dir):
-        """collecting additional outputs from shelltask output_spec"""
+        """Collect additional outputs from shelltask output_spec."""
         additional_out = {}
         for fld in dc.fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:
@@ -351,7 +388,7 @@ class ShellOutSpec(BaseSpec):
         return additional_out
 
     def _field_defaultvalue(self, fld, output_dir):
-        """collecting output file if the default value specified"""
+        """Collect output file if the default value specified."""
         if not isinstance(fld.default, (str, Path)):
             raise Exception(
                 f"{fld.name} is a File, so default value "
@@ -380,7 +417,7 @@ class ShellOutSpec(BaseSpec):
                 raise Exception(f"no file matches {fld.default.name}")
 
     def _field_metadata(self, fld, inputs, output_dir):
-        """collecting output file if metadata specified"""
+        """Collect output file if metadata specified."""
         if "value" in fld.metadata:
             return output_dir / fld.metadata["value"]
         elif "output_file_template" in fld.metadata:
@@ -395,13 +432,18 @@ class ShellOutSpec(BaseSpec):
 
 @dc.dataclass
 class ContainerSpec(ShellSpec):
+    """Refine the generic command-line specification to container execution."""
+
     image: ty.Union[File, str] = dc.field(metadata={"help_string": "image"})
+    """The image to be containerized."""
     container: ty.Union[File, str, None] = dc.field(
         metadata={"help_string": "container"}
     )
+    """The container."""
     container_xargs: ty.Optional[ty.List[str]] = dc.field(
         metadata={"help_string": "todo"}
     )
+    """Execution arguments to run the image."""
     bindings: ty.Optional[
         ty.List[
             ty.Tuple[
@@ -411,6 +453,7 @@ class ContainerSpec(ShellSpec):
             ]
         ]
     ] = dc.field(metadata={"help_string": "bindings"})
+    """Mount points to be bound into the container."""
 
     def _file_check(self, field):
         file = Path(getattr(self, field.name))
@@ -433,6 +476,8 @@ class ContainerSpec(ShellSpec):
 
 @dc.dataclass
 class DockerSpec(ContainerSpec):
+    """Particularize container specifications to the Docker engine."""
+
     container: str = dc.field(
         metadata={"default_value": "docker", "help_string": "container"}
     )
@@ -440,13 +485,18 @@ class DockerSpec(ContainerSpec):
 
 @dc.dataclass
 class SingularitySpec(ContainerSpec):
+    """Particularize container specifications to Singularity."""
+
     container: str = dc.field(
         metadata={"default_value": "singularity", "help_string": "container type"}
     )
 
 
 class LazyField:
+    """Lazy fields implement promises."""
+
     def __init__(self, node, attr_type):
+        """Initialize a lazy field."""
         self.name = node.name
         if attr_type == "input":
             self.fields = [field[0] for field in node.input_spec.fields]
@@ -481,6 +531,7 @@ class LazyField:
         return "LF('{0}', '{1}')".format(self.name, self.field)
 
     def get_value(self, wf, state_index=None):
+        """Return the value of a lazy field."""
         if self.attr_type == "input":
             return getattr(wf.inputs, self.field)
         elif self.attr_type == "output":
@@ -512,9 +563,10 @@ class LazyField:
 
 @dc.dataclass
 class TaskHook:
-    """Callable task hooks"""
+    """Callable task hooks."""
 
     def none(*args, **kwargs):
+        """Return ``None``."""
         return None
 
     pre_run_task: ty.Callable = none
@@ -532,6 +584,7 @@ class TaskHook:
 
 
 def path_to_string(value):
+    """Convert paths to strings."""
     if isinstance(value, Path):
         value = str(value)
     elif isinstance(value, list) and len(value) and isinstance(value[0], Path):

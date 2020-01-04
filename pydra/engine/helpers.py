@@ -1,3 +1,4 @@
+"""Administrative support for the engine framework."""
 import asyncio
 import asyncio.subprocess as asp
 import dataclasses as dc
@@ -12,6 +13,25 @@ from .specs import Runtime, File
 
 
 def ensure_list(obj, tuple2list=False):
+    """
+    Return a list whatever the input object is.
+
+    Examples
+    --------
+    >>> ensure_list(list("abc"))
+    ['a', 'b', 'c']
+    >>> ensure_list("abc")
+    ['abc']
+    >>> ensure_list(tuple("abc"))
+    [('a', 'b', 'c')]
+    >>> ensure_list(tuple("abc"), tuple2list=True)
+    ['a', 'b', 'c']
+    >>> ensure_list(None)
+    []
+    >>> ensure_list(5.0)
+    [5.0]
+
+    """
     if obj is None:
         return []
     if isinstance(obj, list):
@@ -22,10 +42,11 @@ def ensure_list(obj, tuple2list=False):
 
 
 def print_help(obj):
-    help = ["Help for {}".format(obj.__class__.__name__)]
+    """Visit a task object and print its input/output interface."""
+    lines = ["Help for {}".format(obj.__class__.__name__)]
     input_klass = make_klass(obj.input_spec)
     if dc.fields(input_klass):
-        help += ["Input Parameters:"]
+        lines += ["Input Parameters:"]
     for f in dc.fields(input_klass):
         default = ""
         if f.default is not dc.MISSING and not f.name.startswith("_"):
@@ -34,21 +55,33 @@ def print_help(obj):
             name = f.type.__name__
         except AttributeError:
             name = str(f.type)
-        help += ["- {}: {}{}".format(f.name, name, default)]
+        lines += ["- {}: {}{}".format(f.name, name, default)]
     output_klass = make_klass(obj.output_spec)
     if dc.fields(output_klass):
-        help += ["Output Parameters:"]
+        lines += ["Output Parameters:"]
     for f in dc.fields(output_klass):
         try:
             name = f.type.__name__
         except AttributeError:
             name = str(f.type)
-        help += ["- {}: {}".format(f.name, name)]
-    print("\n".join(help))
-    return help
+        lines += ["- {}: {}".format(f.name, name)]
+    print("\n".join(lines))
+    return lines
 
 
 def load_result(checksum, cache_locations):
+    """
+    Restore a result from the cache.
+
+    Parameters
+    ----------
+    checksum : :obj:`str`
+        Unique identifier of the task to be loaded.
+    cache_locations : :obj:`list` of :obj:`os.pathlike`
+        List of cache directories, in order of priority, where
+        the checksum will be looked for.
+
+    """
     if not cache_locations:
         return None
     for location in cache_locations:
@@ -62,16 +95,17 @@ def load_result(checksum, cache_locations):
 
 def save(task_path: Path, result=None, task=None):
     """
-    Save ``Task`` object and/or results.
+    Save a :class:`~pydra.engine.core.TaskBase` object and/or results.
 
     Parameters
     ----------
-    task_path : Path
+    task_path : :obj:`Path`
         Write directory
-    result : Result
+    result : :obj:`Result`
         Result to pickle and write
-    task : Task
+    task : :class:`~pydra.engine.core.TaskBase`
         Task to pickle and write
+
     """
     if task is None and result is None:
         raise ValueError("Nothing to be saved")
@@ -84,46 +118,82 @@ def save(task_path: Path, result=None, task=None):
             cp.dump(task, fp)
 
 
-def task_hash(task_obj):
+def task_hash(task):
     """
+    Calculate the checksum of a task.
+
     input hash, output hash, environment hash
 
-    :param task_obj:
-    :return:
+    Parameters
+    ----------
+    task : :class:`~pydra.engine.core.TaskBase`
+        The input task.
+
     """
     return NotImplementedError
 
 
 def gather_runtime_info(fname):
+    """
+    Extract runtime information from a file.
+
+    Parameters
+    ----------
+    fname : :obj:`os.pathlike`
+        The file containing runtime information
+
+    Returns
+    -------
+    runtime : :obj:`Runtime`
+        A runtime object containing the collected information.
+
+    """
     runtime = Runtime(rss_peak_gb=None, vms_peak_gb=None, cpu_peak_percent=None)
 
     # Read .prof file in and set runtime values
-    with open(fname, "rt") as fp:
-        data = [[float(el) for el in val.strip().split(",")] for val in fp.readlines()]
-        if data:
-            runtime.rss_peak_gb = max([val[2] for val in data]) / 1024
-            runtime.vms_peak_gb = max([val[3] for val in data]) / 1024
-            runtime.cpu_peak_percent = max([val[1] for val in data])
-        """
-        runtime.prof_dict = {
-            'time': vals[:, 0].tolist(),
-            'cpus': vals[:, 1].tolist(),
-            'rss_GiB': (vals[:, 2] / 1024).tolist(),
-            'vms_GiB': (vals[:, 3] / 1024).tolist(),
-        }
-        """
+    data = [
+        [float(el) for el in line.strip().split(",")]
+        for line in Path(fname).read_text().splitlines()
+    ]
+    if data:
+        runtime.rss_peak_gb = max([val[2] for val in data]) / 1024
+        runtime.vms_peak_gb = max([val[3] for val in data]) / 1024
+        runtime.cpu_peak_percent = max([val[1] for val in data])
+
+    """
+    runtime.prof_dict = {
+        'time': vals[:, 0].tolist(),
+        'cpus': vals[:, 1].tolist(),
+        'rss_GiB': (vals[:, 2] / 1024).tolist(),
+        'vms_GiB': (vals[:, 3] / 1024).tolist(),
+    }
+    """
     return runtime
 
 
 def make_klass(spec):
+    """
+    Create a data class given a spec.
+
+    Parameters
+    ----------
+    spec :
+        TODO
+
+    """
     if spec is None:
         return None
     return dc.make_dataclass(spec.name, spec.fields, bases=spec.bases)
 
 
-# https://stackoverflow.com/questions/17190221
 async def read_stream_and_display(stream, display):
-    """Read from stream line by line until EOF, display, and capture the lines.
+    """
+    Read from stream line by line until EOF, display, and capture the lines.
+
+    See Also
+    --------
+    This `discussion on StackOverflow
+    <https://stackoverflow.com/questions/17190221>`__.
 
     """
     output = []
@@ -138,8 +208,10 @@ async def read_stream_and_display(stream, display):
 
 
 async def read_and_display_async(*cmd, hide_display=False, strip=False):
-    """Capture cmd's stdout, stderr while displaying them as they arrive
-    (line by line).
+    """
+    Capture standard input and output of a process, displaying them as they arrive.
+
+    Works line-by-line.
 
     """
     # start process
@@ -168,9 +240,7 @@ async def read_and_display_async(*cmd, hide_display=False, strip=False):
 
 
 def read_and_display(*cmd, strip=False, hide_display=False):
-    """Capture cmd's stdout
-
-    """
+    """Capture a process' standard output."""
     try:
         process = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
     except Exception:
@@ -191,9 +261,22 @@ def read_and_display(*cmd, strip=False, hide_display=False):
         )
 
 
-# run the event loop with coroutine read_and_display_async
-# or run read_and_display if a loop is already running
 def execute(cmd, strip=False):
+    """
+    Run the event loop with coroutine.
+
+    Uses :func:`read_and_display_async` unless a loop is
+    already running, in which case :func:`read_and_display`
+    is used.
+
+    Parameters
+    ----------
+    cmd : :obj:`list` or :obj:`tuple`
+        The command line to be executed.
+    strip : :obj:`bool`
+        TODO
+
+    """
     loop = get_open_loop()
     if loop.is_running():
         rc, stdout, stderr = read_and_display(*cmd, strip=strip)
@@ -205,23 +288,38 @@ def execute(cmd, strip=False):
 
 
 def create_checksum(name, inputs):
+    """
+    Generate a checksum name for a given combination of task name and inputs.
+
+    Parameters
+    ----------
+    name : :obj:`str`
+        Task name.
+    inputs : :obj:`str`
+        String of inputs.
+
+    """
     return "_".join((name, inputs))
 
 
 def record_error(error_path, error):
+    """Write an error file."""
     with (error_path / "_error.pklz").open("wb") as fp:
         cp.dump(error, fp)
 
 
 def get_open_loop():
     """
-    Gets current event loop. If the loop is closed, a new
+    Get current event loop.
+
+    If the loop is closed, a new
     loop is created and set as the current event loop.
 
     Returns
     -------
-    loop : EventLoop
+    loop : :obj:`asyncio.EventLoop`
         The current event loop
+
     """
     if os.name == "nt":
         loop = asyncio.ProactorEventLoop()  # for subprocess' pipes on Windows
@@ -236,19 +334,20 @@ def get_open_loop():
 
 def create_pyscript(script_path, checksum):
     """
-    Create standalone script for task execution in
-    a different environment.
+    Create standalone script for task execution in a different environment.
 
     Parameters
     ----------
-    script_path : Path
+    script_path : :obj:`os.pathlike`
+        Path to the script.
     checksum : str
-        ``Task``'s checksum
+        Task checksum.
 
     Returns
     -------
-    pyscript : File
+    pyscript : :obj:`File`
         Execution script
+
     """
     task_pkl = script_path / "_task.pklz"
     if not task_pkl.exists() or not task_pkl.stat().st_size:
@@ -277,11 +376,20 @@ task_pkl.unlink()
 
 
 def hash_function(obj):
+    """Generate hash of object."""
     return sha256(str(obj).encode()).hexdigest()
 
 
 def output_names_from_inputfields(inputs):
-    """ collecting outputs from input fields with output_file_template"""
+    """
+    Collect outputs from input fields with output_file_template.
+
+    Parameters
+    ----------
+    inputs :
+        TODO
+
+    """
     output_names = []
     for fld in dc.fields(inputs):
         if "output_file_template" in fld.metadata:
@@ -294,7 +402,17 @@ def output_names_from_inputfields(inputs):
 
 
 def output_from_inputfields(output_spec, inputs):
-    """ collecting values from output from input fields"""
+    """
+    Collect values from output from input fields.
+
+    Parameters
+    ----------
+    output_spec :
+        TODO
+    inputs :
+        TODO
+
+    """
     for fld in dc.fields(inputs):
         if "output_file_template" in fld.metadata:
             value = getattr(inputs, fld.name)

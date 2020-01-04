@@ -2,12 +2,16 @@
 
 
 def annotate(annotation):
-    """ Update the annotation of a function
+    """
+    Update the annotation of a function.
 
+    Example
+    -------
     >>> import pydra
     >>> @pydra.mark.annotate({'a': int, 'return': float})
     ... def square(a):
     ...     return a ** 2.0
+
     """
     import inspect
 
@@ -23,12 +27,16 @@ def annotate(annotation):
 
 
 def task(func):
-    """ Promote a function to a Pydra Task
+    """
+    Promote a function to a :class:`~pydra.engine.task.FunctionTask`.
 
+    Example
+    -------
     >>> import pydra
     >>> @pydra.mark.task
     ... def square(a: int) -> float:
     ...     return a ** 2.0
+
     """
     from ..engine.task import FunctionTask
 
