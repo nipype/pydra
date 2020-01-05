@@ -1,4 +1,5 @@
 """Task I/O specifications."""
+from hashlib import sha256
 import dataclasses as dc
 from pathlib import Path
 import os
@@ -10,6 +11,23 @@ from .helpers_file import copyfile
 
 class File(Path):
     """An :obj:`os.pathlike` object, designating a file."""
+
+    hash_chunk_length = 8192
+
+    def __hash__(self):
+        """Calculate the hash of the file based on its content."""
+        if not self.is_file():
+            raise FileNotFoundError(
+                "Path %s does not point to a file or is a broken symlink" % self)
+
+        hashed = sha256()
+        with self.open("rb") as fp:
+            while True:
+                data = fp.read(self.hash_chunk_length)
+                if not data:
+                    break
+                hashed.update(data)
+        return int(hashed.hexdigest(), 16)
 
 
 class Directory(Path):
@@ -43,7 +61,7 @@ class BaseSpec:
         from .helpers_file import hash_file
 
         inp_dict = {
-            field.name: hash_file(getattr(self, field.name))
+            field.name: hex(hash(getattr(self, field.name)))[2:]
             if field.type == File
             else getattr(self, field.name)
             for field in dc.fields(self)
