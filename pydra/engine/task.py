@@ -38,8 +38,8 @@ Implement processing nodes.
       <https://colab.research.google.com/drive/1RRV1gHbGJs49qQB1q1d5tQEycVRtuhw6>`__
 
 """
+import attr
 import cloudpickle as cp
-import dataclasses as dc
 import inspect
 import typing as ty
 from pathlib import Path
@@ -55,6 +55,7 @@ from .specs import (
     ContainerSpec,
     DockerSpec,
     SingularitySpec,
+    attr_fields,
 )
 from .helpers import ensure_list, execute
 
@@ -107,7 +108,7 @@ class FunctionTask(TaskBase):
                     (
                         val.name,
                         val.annotation,
-                        dc.field(
+                        attr.ib(
                             default=val.default,
                             metadata={
                                 "help_string": f"{val.name} parameter from {func.__name__}"
@@ -118,7 +119,7 @@ class FunctionTask(TaskBase):
                     else (
                         val.name,
                         val.annotation,
-                        dc.field(metadata={"help_string": val.name}),
+                        attr.ib(metadata={"help_string": val.name}),
                     )
                     for val in inspect.signature(func).parameters.values()
                 ]
@@ -183,7 +184,7 @@ class FunctionTask(TaskBase):
         self.output_spec = output_spec
 
     def _run_task(self):
-        inputs = dc.asdict(self.inputs)
+        inputs = attr.asdict(self.inputs)
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
@@ -262,7 +263,7 @@ class ShellCommandTask(TaskBase):
     def command_args(self):
         """Get command line arguments."""
         pos_args = []  # list for (position, command arg)
-        for f in dc.fields(self.inputs):
+        for f in attr_fields(self.inputs):
             if f.name == "executable":
                 pos = 0  # executable should be the first el. of the command
             elif f.name == "args":
@@ -310,7 +311,7 @@ class ShellCommandTask(TaskBase):
 
     @command_args.setter
     def command_args(self, args: ty.Dict):
-        self.inputs = dc.replace(self.inputs, **args)
+        self.inputs = attr.evolve(self.inputs, **args)
 
     @property
     def cmdline(self):

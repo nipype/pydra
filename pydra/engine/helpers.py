@@ -1,7 +1,7 @@
 """Administrative support for the engine framework."""
 import asyncio
 import asyncio.subprocess as asp
-import dataclasses as dc
+import attr
 import cloudpickle as cp
 from pathlib import Path
 import os
@@ -9,7 +9,7 @@ import sys
 from hashlib import sha256
 import subprocess as sp
 
-from .specs import Runtime, File
+from .specs import Runtime, File, attr_fields
 
 
 def ensure_list(obj, tuple2list=False):
@@ -45,11 +45,11 @@ def print_help(obj):
     """Visit a task object and print its input/output interface."""
     lines = ["Help for {}".format(obj.__class__.__name__)]
     input_klass = make_klass(obj.input_spec)
-    if dc.fields(input_klass):
+    if attr.fields(input_klass):
         lines += ["Input Parameters:"]
-    for f in dc.fields(input_klass):
+    for f in attr.fields(input_klass):
         default = ""
-        if f.default is not dc.MISSING and not f.name.startswith("_"):
+        if f.default != attr.NOTHING and not f.name.startswith("_"):
             default = " (default: {})".format(f.default)
         try:
             name = f.type.__name__
@@ -57,9 +57,9 @@ def print_help(obj):
             name = str(f.type)
         lines += ["- {}: {}{}".format(f.name, name, default)]
     output_klass = make_klass(obj.output_spec)
-    if dc.fields(output_klass):
+    if attr.fields(output_klass):
         lines += ["Output Parameters:"]
-    for f in dc.fields(output_klass):
+    for f in attr.fields(output_klass):
         try:
             name = f.type.__name__
         except AttributeError:
@@ -183,7 +183,11 @@ def make_klass(spec):
     """
     if spec is None:
         return None
-    return dc.make_dataclass(spec.name, spec.fields, bases=spec.bases)
+    fields = spec.fields
+    if fields:
+        if not isinstance(fields[0], attr._make._CountingAttr):
+            fields = {k: attr.ib(type=v) for k, v in fields}
+    return attr.make_class(spec.name, fields, bases=spec.bases)
 
 
 async def read_stream_and_display(stream, display):
@@ -391,7 +395,7 @@ def output_names_from_inputfields(inputs):
 
     """
     output_names = []
-    for fld in dc.fields(inputs):
+    for fld in attr_fields(inputs):
         if "output_file_template" in fld.metadata:
             if "output_field_name" in fld.metadata:
                 field_name = fld.metadata["output_field_name"]
@@ -413,7 +417,7 @@ def output_from_inputfields(output_spec, inputs):
         TODO
 
     """
-    for fld in dc.fields(inputs):
+    for fld in attr_fields(inputs):
         if "output_file_template" in fld.metadata:
             value = getattr(inputs, fld.name)
             if "output_field_name" in fld.metadata:
@@ -421,6 +425,6 @@ def output_from_inputfields(output_spec, inputs):
             else:
                 field_name = fld.name
             output_spec.fields.append(
-                (field_name, File, dc.field(metadata={"value": value}))
+                (field_name, File, attr.ib(metadata={"value": value}))
             )
     return output_spec

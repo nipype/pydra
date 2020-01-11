@@ -43,7 +43,7 @@ def test_result():
 def test_shellspec():
     with pytest.raises(TypeError):
         spec = ShellSpec()
-    spec = ShellSpec("ls", None)  # (executable, args)
+    spec = ShellSpec(executable="ls")  # (executable, args)
     assert hasattr(spec, "executable")
     assert hasattr(spec, "args")
 
@@ -51,38 +51,28 @@ def test_shellspec():
 container_attrs = ["image", "container", "container_xargs", "bindings"]
 
 
-@pytest.mark.xfail(
-    reason="won't work after changes in input_spec, "
-    "all fields would have to be provided"
-)
 def test_container():
     with pytest.raises(TypeError):
         spec = ContainerSpec()
-    spec = ContainerSpec("ls", None, "busybox", None)  # (execut., args, image, cont)
+    spec = ContainerSpec(
+        executable="ls", image="busybox", container="docker"
+    )  # (execut., args, image, cont)
     assert all([hasattr(spec, attr) for attr in container_attrs])
     assert hasattr(spec, "executable")
 
 
-@pytest.mark.xfail(
-    reason="won't work after changes in input_spec, "
-    "all fields would have to be provided"
-)
 def test_docker():
     with pytest.raises(TypeError):
-        spec = DockerSpec("ls", None)
-    spec = DockerSpec("ls", None, "busybox")
+        spec = DockerSpec(executable="ls")
+    spec = DockerSpec(executable="ls", image="busybox")
     assert all(hasattr(spec, attr) for attr in container_attrs)
     assert getattr(spec, "container") == "docker"
 
 
-@pytest.mark.xfail(
-    reason="won't work after changes in input_spec, "
-    "all fields would have to be provided"
-)
 def test_singularity():
     with pytest.raises(TypeError):
         spec = SingularitySpec()
-    spec = SingularitySpec("ls", None, "busybox")
+    spec = SingularitySpec(executable="ls", image="busybox")
     assert all(hasattr(spec, attr) for attr in container_attrs)
     assert getattr(spec, "container") == "singularity"
 
