@@ -322,13 +322,13 @@ def test_singularity_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -366,8 +366,8 @@ def test_singularity_inputspec_1a(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     default=filename,
                     metadata={"position": 1, "help_string": "input file"},
                 ),
@@ -404,13 +404,14 @@ def test_singularity_inputspec_2(plugin, tmpdir):
         fields=[
             (
                 "file1",
-                File,
-                attr.ib(metadata={"position": 1, "help_string": "input file 1"}),
+                attr.ib(
+                    type=File, metadata={"position": 1, "help_string": "input file 1"}
+                ),
             ),
             (
                 "file2",
-                File,
                 attr.ib(
+                    type=File,
                     default=filename_2,
                     metadata={"position": 2, "help_string": "input file 2"},
                 ),
@@ -454,16 +455,17 @@ def test_singularity_inputspec_2a_except(plugin, tmpdir):
         fields=[
             (
                 "file1",
-                File,
                 attr.ib(
+                    type=File,
                     default=filename_1,
                     metadata={"position": 1, "help_string": "input file 1"},
                 ),
             ),
             (
                 "file2",
-                File,
-                attr.ib(metadata={"position": 2, "help_string": "input file 2"}),
+                attr.ib(
+                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                ),
             ),
         ],
         bases=(SingularitySpec,),
@@ -504,19 +506,20 @@ def test_singularity_inputspec_2a(plugin, tmpdir):
         fields=[
             (
                 "file1",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "default_value": filename_1,
                         "position": 1,
                         "help_string": "input file 1",
-                    }
+                    },
                 ),
             ),
             (
                 "file2",
-                File,
-                attr.ib(metadata={"position": 2, "help_string": "input file 2"}),
+                attr.ib(
+                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                ),
             ),
         ],
         bases=(SingularitySpec,),
@@ -554,24 +557,24 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
         fields=[
             (
                 "orig_file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "position": 1,
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": True,
-                    }
+                    },
                 ),
             ),
             (
                 "out_file",
-                str,
                 attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             ),
         ],
@@ -620,13 +623,13 @@ def test_singularity_inputspec_state_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -670,13 +673,13 @@ def test_singularity_inputspec_state_1b(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -713,13 +716,13 @@ def test_singularity_wf_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -769,13 +772,13 @@ def test_singularity_wf_state_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -827,13 +830,13 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
