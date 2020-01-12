@@ -131,7 +131,9 @@ class TaskBase:
         # todo should be used to input_check in spec??
         self.inputs = klass(
             **{
-                f.name: (None if f.default == attr.NOTHING else f.default)
+                (f.name[1:] if f.name.startswith("_") else f.name): (
+                    None if f.default == attr.NOTHING else f.default
+                )
                 for f in attr.fields(klass)
             }
         )
@@ -183,7 +185,12 @@ class TaskBase:
         state = self.__dict__.copy()
         state["input_spec"] = cp.dumps(state["input_spec"])
         state["output_spec"] = cp.dumps(state["output_spec"])
-        state["inputs"] = attr.asdict(state["inputs"])
+        inputs = {}
+        for k, v in attr.asdict(state["inputs"]).items():
+            if k.startswith("_"):
+                k = k[1:]
+            inputs[k] = v
+        state["inputs"] = inputs
         return state
 
     def __setstate__(self, state):

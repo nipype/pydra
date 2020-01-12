@@ -118,7 +118,9 @@ class Result:
         if "output_spec" in state:
             spec = list(state["output_spec"])
             del state["output_spec"]
-            klass = attr.make_class(spec[0], list(spec[1]))
+            klass = attr.make_class(
+                spec[0], {k: attr.ib(type=v) for k, v in list(spec[1])}
+            )
             state["output"] = klass(**state["output"])
         self.__dict__.update(state)
 
@@ -563,19 +565,20 @@ class LazyField:
                     return getattr(result.output, self.field)
 
 
+def donothing(*args, **kwargs):
+    return None
+
+
 @attr.s(auto_attribs=True, kw_only=True)
 class TaskHook:
     """Callable task hooks."""
 
-    def none(*args, **kwargs):
-        """Return ``None``."""
-        return None
+    pre_run_task: ty.Callable = donothing
+    post_run_task: ty.Callable = donothing
+    pre_run: ty.Callable = donothing
+    post_run: ty.Callable = donothing
 
-    pre_run_task: ty.Callable = none
-    post_run_task: ty.Callable = none
-    pre_run: ty.Callable = none
-    post_run: ty.Callable = none
-
+    """
     def __setattr__(cls, attr, val):
         if not hasattr(cls, attr):
             raise AttributeError("Cannot set unknown hook")
@@ -583,6 +586,7 @@ class TaskHook:
 
     def reset(self):
         self.__dict__ = TaskHook().__dict__
+    """
 
 
 def path_to_string(value):
