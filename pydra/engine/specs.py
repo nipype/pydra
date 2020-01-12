@@ -578,15 +578,14 @@ class TaskHook:
     pre_run: ty.Callable = donothing
     post_run: ty.Callable = donothing
 
-    """
     def __setattr__(cls, attr, val):
-        if not hasattr(cls, attr):
+        if attr not in ["pre_run_task", "post_run_task", "pre_run", "post_run"]:
             raise AttributeError("Cannot set unknown hook")
         super().__setattr__(attr, val)
 
     def reset(self):
-        self.__dict__ = TaskHook().__dict__
-    """
+        for val in ["pre_run_task", "post_run_task", "pre_run", "post_run"]:
+            setattr(self, val, donothing)
 
 
 def path_to_string(value):

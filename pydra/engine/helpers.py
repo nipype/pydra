@@ -185,16 +185,16 @@ def make_klass(spec):
         return None
     fields = spec.fields
     if fields:
-        if len(fields[0]) == 2:
-            fields = {k: attr.ib(type=v) for k, v in fields}
-        else:
-            newfields = dict()
-            for item in fields:
+        newfields = dict()
+        for item in fields:
+            if len(item) == 2:
+                newfields[item[0]] = attr.ib(type=item[1])
+            else:
                 if isinstance(item[2], attr._make._CountingAttr):
                     newfields[item[0]] = item[2]
                 else:
                     newfields[item[0]] = attr.ib(item[2], type=item[1])
-            fields = newfields
+        fields = newfields
     return attr.make_class(spec.name, fields, bases=spec.bases)
 
 

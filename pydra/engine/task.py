@@ -110,6 +110,7 @@ class FunctionTask(TaskBase):
                         val.annotation,
                         attr.ib(
                             default=val.default,
+                            type=val.annotation,
                             metadata={
                                 "help_string": f"{val.name} parameter from {func.__name__}"
                             },
@@ -119,15 +120,19 @@ class FunctionTask(TaskBase):
                     else (
                         val.name,
                         val.annotation,
-                        attr.ib(metadata={"help_string": val.name}),
+                        attr.ib(
+                            type=val.annotation, metadata={"help_string": val.name}
+                        ),
                     )
                     for val in inspect.signature(func).parameters.values()
                 ]
-                + [("_func", str, cp.dumps(func))],
+                + [("_func", str, attr.ib(default=cp.dumps(func), type=str))],
                 bases=(BaseSpec,),
             )
         else:
-            input_spec.fields.append(("_func", str, cp.dumps(func)))
+            input_spec.fields.append(
+                ("_func", str, attr.ib(default=cp.dumps(func), type=str))
+            )
         self.input_spec = input_spec
         if name is None:
             name = func.__name__
