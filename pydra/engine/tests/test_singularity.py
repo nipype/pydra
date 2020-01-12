@@ -127,7 +127,7 @@ def test_singularity_3(plugin, tmpdir):
         singu(submitter=sub)
 
     res = singu.result()
-    assert res.output.stdout == "new_dir\n"
+    assert "new_dir\n" in res.output.stdout
     assert res.output.return_code == 0
 
 
