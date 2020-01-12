@@ -484,17 +484,17 @@ def test_singularity_inputspec_2a_except(plugin, tmpdir):
         bases=(SingularitySpec,),
     )
 
-    with pytest.raises(TypeError) as excinfo:
-        singu = SingularityTask(
-            name="singu",
-            image=image,
-            executable=cmd,
-            file2=filename_2,
-            input_spec=my_input_spec,
-            strip=True,
-            cache_dir=tmpdir,
-        )
-    assert "non-default argument 'file2' follows default argument" == str(excinfo.value)
+    singu = SingularityTask(
+        name="singu",
+        image=image,
+        executable=cmd,
+        file2=filename_2,
+        input_spec=my_input_spec,
+        strip=True,
+        cache_dir=tmpdir,
+    )
+    res = singu()
+    assert res.output.stdout == "hello from pydra\nhave a nice one"
 
 
 @need_singularity
