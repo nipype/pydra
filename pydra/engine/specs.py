@@ -252,51 +252,6 @@ class ShellSpec(BaseSpec):
                 elif not fld.default == attr.NOTHING:
                     setattr(self, fld.name, fld.default)
 
-    # not sure if this might be useful for Function Task
-    def template_update(self):
-        """
-        Update all templates that are present in the input spec.
-
-        Should be run when all inputs used in the templates are already set.
-
-        """
-        dict_ = deepcopy(self.__dict__)
-        dict_.update(self.map_copyfiles)
-
-        fields = attr_fields(self)
-        for fld in fields:
-            if fld.metadata.get("output_file_template"):
-                if fld.type is str:
-                    value = fld.metadata["output_file_template"].format(**dict_)
-                    setattr(self, fld.name, value)
-                elif fld.type is tuple:
-                    name, ext = os.path.splitext(
-                        fld.metadata["output_file_template"][0].format(**dict_)
-                    )
-                    value = f"{name}{fld.metadata['output_file_template'][1]}{ext}"
-                    setattr(self, fld.name, value)
-                else:
-                    raise Exception(
-                        "output names should be a string or a tuple of two strings"
-                    )
-
-    # not sure if this might be useful for Function Task
-    def copyfile_input(self, output_dir):
-        """Implement the base class method."""
-        self.map_copyfiles = {}
-        for fld in attr_fields(self):
-            copy = fld.metadata.get("copyfile")
-            if copy is not None and fld.type is not File:
-                raise Exception(
-                    f"if copyfile set, field has to be a File "
-                    f"but {fld.type} provided"
-                )
-            if copy in [True, False]:
-                file = getattr(self, fld.name)
-                newfile = output_dir.joinpath(Path(getattr(self, fld.name)).name)
-                copyfile(file, newfile, copy=copy)
-                self.map_copyfiles[fld.name] = newfile
-
     def check_fields_input_spec(self):
         """
         Check fields from input spec based on the medatada.
@@ -403,26 +358,25 @@ class ShellOutSpec(BaseSpec):
                 f"should be a string or a Path, "
                 f"{fld.default} provided"
             )
-        if isinstance(fld.default, str):
-            fld.default = Path(fld.default)
+        default = fld.default
+        if isinstance(default, str):
+            default = Path(default)
 
-        fld.default = output_dir / fld.default
+        default = output_dir / default
 
-        if "*" not in fld.default.name:
-            if fld.default.exists():
-                return fld.default
+        if "*" not in default.name:
+            if default.exists():
+                return default
             else:
-                raise Exception(f"file {fld.default.name} does not exist")
+                raise Exception(f"file {default} does not exist")
         else:
-            all_files = list(
-                Path(fld.default.parent).expanduser().glob(fld.default.name)
-            )
+            all_files = list(Path(default.parent).expanduser().glob(default.name))
             if len(all_files) > 1:
                 return all_files
             elif len(all_files) == 1:
                 return all_files[0]
             else:
-                raise Exception(f"no file matches {fld.default.name}")
+                raise Exception(f"no file matches {default.name}")
 
     def _field_metadata(self, fld, inputs, output_dir):
         """Collect output file if metadata specified."""

@@ -1,4 +1,5 @@
 """Functions ported from Nipype 1, after removing parts that were related to py2."""
+import attr
 import subprocess as sp
 from hashlib import sha256
 import os
@@ -8,6 +9,7 @@ import shutil
 import posixpath
 from builtins import str, bytes, open
 import logging
+from pathlib import Path
 
 related_filetype_sets = [(".hdr", ".img", ".mat"), (".nii", ".mat"), (".BRIK", ".HEAD")]
 """List of neuroimaging file types that are to be interpreted together."""
@@ -458,3 +460,54 @@ def ensure_list(filename):
         return [x for x in filename]
 
     return None
+
+
+# not sure if this might be useful for Function Task
+def copyfile_input(inputs, output_dir):
+    """Implement the base class method."""
+    from .specs import attr_fields, File
+
+    map_copyfiles = {}
+    for fld in attr_fields(inputs):
+        copy = fld.metadata.get("copyfile")
+        if copy is not None and fld.type is not File:
+            raise Exception(
+                f"if copyfile set, field has to be a File " f"but {fld.type} provided"
+            )
+        if copy in [True, False]:
+            file = getattr(inputs, fld.name)
+            newfile = output_dir.joinpath(Path(getattr(inputs, fld.name)).name)
+            copyfile(file, newfile, copy=copy)
+            map_copyfiles[fld.name] = str(newfile)
+    return map_copyfiles or None
+
+
+# not sure if this might be useful for Function Task
+def template_update(inputs, map_copyfiles=None):
+    """
+    Update all templates that are present in the input spec.
+
+    Should be run when all inputs used in the templates are already set.
+
+    """
+    dict_ = attr.asdict(inputs)
+    if map_copyfiles is not None:
+        dict_.update(map_copyfiles)
+
+    from .specs import attr_fields
+
+    fields = attr_fields(inputs)
+    # TODO: Create a dependency graph first and then traverse it
+    for fld in fields:
+        if getattr(inputs, fld.name) is not None:
+            continue
+        if fld.metadata.get("output_file_template"):
+            if fld.type is str:
+                value = fld.metadata["output_file_template"].format(**dict_)
+                dict_[fld.name] = str(value)
+            else:
+                raise Exception(
+                    f"output_file_template metadata for "
+                    "{fld.name} should be a string"
+                )
+    return {k: v for k, v in dict_.items() if getattr(inputs, k) != v}

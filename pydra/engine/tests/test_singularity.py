@@ -3,7 +3,7 @@
 import os, shutil
 import subprocess as sp
 import pytest
-import dataclasses as dc
+import attr
 
 from ..task import SingularityTask, DockerTask
 from ..submitter import Submitter
@@ -323,7 +323,7 @@ def test_singularity_inputspec_1(plugin, tmpdir):
             (
                 "file",
                 File,
-                dc.field(
+                attr.ib(
                     metadata={
                         "mandatory": True,
                         "position": 1,
@@ -367,7 +367,7 @@ def test_singularity_inputspec_1a(plugin, tmpdir):
             (
                 "file",
                 File,
-                dc.field(
+                attr.ib(
                     default=filename,
                     metadata={"position": 1, "help_string": "input file"},
                 ),
@@ -405,12 +405,12 @@ def test_singularity_inputspec_2(plugin, tmpdir):
             (
                 "file1",
                 File,
-                dc.field(metadata={"position": 1, "help_string": "input file 1"}),
+                attr.ib(metadata={"position": 1, "help_string": "input file 1"}),
             ),
             (
                 "file2",
                 File,
-                dc.field(
+                attr.ib(
                     default=filename_2,
                     metadata={"position": 2, "help_string": "input file 2"},
                 ),
@@ -455,7 +455,7 @@ def test_singularity_inputspec_2a_except(plugin, tmpdir):
             (
                 "file1",
                 File,
-                dc.field(
+                attr.ib(
                     default=filename_1,
                     metadata={"position": 1, "help_string": "input file 1"},
                 ),
@@ -463,7 +463,7 @@ def test_singularity_inputspec_2a_except(plugin, tmpdir):
             (
                 "file2",
                 File,
-                dc.field(metadata={"position": 2, "help_string": "input file 2"}),
+                attr.ib(metadata={"position": 2, "help_string": "input file 2"}),
             ),
         ],
         bases=(SingularitySpec,),
@@ -505,7 +505,7 @@ def test_singularity_inputspec_2a(plugin, tmpdir):
             (
                 "file1",
                 File,
-                dc.field(
+                attr.ib(
                     metadata={
                         "default_value": filename_1,
                         "position": 1,
@@ -516,7 +516,7 @@ def test_singularity_inputspec_2a(plugin, tmpdir):
             (
                 "file2",
                 File,
-                dc.field(metadata={"position": 2, "help_string": "input file 2"}),
+                attr.ib(metadata={"position": 2, "help_string": "input file 2"}),
             ),
         ],
         bases=(SingularitySpec,),
@@ -555,7 +555,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
             (
                 "orig_file",
                 File,
-                dc.field(
+                attr.ib(
                     metadata={
                         "position": 1,
                         "help_string": "orig file",
@@ -567,7 +567,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
             (
                 "out_file",
                 str,
-                dc.field(
+                attr.ib(
                     metadata={
                         "output_file_template": "{orig_file}",
                         "help_string": "output file",
@@ -621,7 +621,7 @@ def test_singularity_inputspec_state_1(plugin, tmpdir):
             (
                 "file",
                 File,
-                dc.field(
+                attr.ib(
                     metadata={
                         "mandatory": True,
                         "position": 1,
@@ -671,7 +671,7 @@ def test_singularity_inputspec_state_1b(plugin, tmpdir):
             (
                 "file",
                 File,
-                dc.field(
+                attr.ib(
                     metadata={
                         "mandatory": True,
                         "position": 1,
@@ -714,7 +714,7 @@ def test_singularity_wf_inputspec_1(plugin, tmpdir):
             (
                 "file",
                 File,
-                dc.field(
+                attr.ib(
                     metadata={
                         "mandatory": True,
                         "position": 1,
@@ -770,7 +770,7 @@ def test_singularity_wf_state_inputspec_1(plugin, tmpdir):
             (
                 "file",
                 File,
-                dc.field(
+                attr.ib(
                     metadata={
                         "mandatory": True,
                         "position": 1,
@@ -828,7 +828,7 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmpdir):
             (
                 "file",
                 File,
-                dc.field(
+                attr.ib(
                     metadata={
                         "mandatory": True,
                         "position": 1,

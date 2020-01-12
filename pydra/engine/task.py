@@ -58,6 +58,7 @@ from .specs import (
     attr_fields,
 )
 from .helpers import ensure_list, execute
+from .helpers_file import template_update
 
 
 class FunctionTask(TaskBase):
@@ -107,7 +108,6 @@ class FunctionTask(TaskBase):
                 fields=[
                     (
                         val.name,
-                        val.annotation,
                         attr.ib(
                             default=val.default,
                             type=val.annotation,
@@ -119,19 +119,18 @@ class FunctionTask(TaskBase):
                     if val.default is not inspect.Signature.empty
                     else (
                         val.name,
-                        val.annotation,
                         attr.ib(
                             type=val.annotation, metadata={"help_string": val.name}
                         ),
                     )
                     for val in inspect.signature(func).parameters.values()
                 ]
-                + [("_func", str, attr.ib(default=cp.dumps(func), type=str))],
+                + [("_func", attr.ib(default=cp.dumps(func), type=str))],
                 bases=(BaseSpec,),
             )
         else:
             input_spec.fields.append(
-                ("_func", str, attr.ib(default=cp.dumps(func), type=str))
+                ("_func", attr.ib(default=cp.dumps(func), type=str))
             )
         self.input_spec = input_spec
         if name is None:
@@ -286,10 +285,12 @@ class ShellCommandTask(TaskBase):
             cmd_add = []
             if "argstr" in f.metadata:
                 cmd_add.append(f.metadata["argstr"])
-            if f.metadata.get("copyfile") in [True, False]:
-                value = str(self.inputs.map_copyfiles[f.name])
-            else:
-                value = getattr(self.inputs, f.name)
+            # if f.metadata.get("copyfile") in [True, False]:
+            #    value = str(self.inputs.map_copyfiles[f.name])
+            # else:
+            value = getattr(self.inputs, f.name)
+            if f.type is File:
+                value = str(value)
             # changing path to the cpath (the directory should be mounted)
             if getattr(self, "bind_paths", None) and f.type is File:
                 lpath = Path(value)
@@ -321,7 +322,13 @@ class ShellCommandTask(TaskBase):
     @property
     def cmdline(self):
         """Get the actual command line that will be submitted."""
-        return " ".join(self.command_args)
+        orig_inputs = attr.asdict(self.inputs)
+        modified_inputs = template_update(self.inputs)
+        if modified_inputs is not None:
+            self.inputs = attr.evolve(self.inputs, **modified_inputs)
+        cmdline = " ".join(self.command_args)
+        self.inputs = attr.evolve(self.inputs, **orig_inputs)
+        return cmdline
 
     def _run_task(self,):
         self.output_ = None
@@ -330,6 +337,8 @@ class ShellCommandTask(TaskBase):
             keys = ["return_code", "stdout", "stderr"]
             values = execute(args, strip=self.strip)
             self.output_ = dict(zip(keys, values))
+            if self.output_["return_code"]:
+                raise RuntimeError(self.output_["stderr"])
 
 
 class ContainerTask(ShellCommandTask):
@@ -391,7 +400,13 @@ class ContainerTask(ShellCommandTask):
     @property
     def cmdline(self):
         """Get the actual command line that will be submitted."""
-        return " ".join(self.container_args + self.command_args)
+        orig_inputs = attr.asdict(self.inputs)
+        modified_inputs = template_update(self.inputs)
+        if modified_inputs is not None:
+            self.inputs = attr.evolve(self.inputs, **modified_inputs)
+        cmdline = " ".join(self.container_args + self.command_args)
+        self.inputs = attr.evolve(self.inputs, **orig_inputs)
+        return cmdline
 
     @property
     def container_args(self):
@@ -451,6 +466,8 @@ class ContainerTask(ShellCommandTask):
             keys = ["return_code", "stdout", "stderr"]
             values = execute(args, strip=self.strip)
             self.output_ = dict(zip(keys, values))
+            if self.output_["return_code"]:
+                raise RuntimeError(self.output_["stderr"])
 
 
 class DockerTask(ContainerTask):

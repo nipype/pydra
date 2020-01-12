@@ -188,7 +188,10 @@ def make_klass(spec):
         newfields = dict()
         for item in fields:
             if len(item) == 2:
-                newfields[item[0]] = attr.ib(type=item[1])
+                if isinstance(item[1], attr._make._CountingAttr):
+                    newfields[item[0]] = item[1]
+                else:
+                    newfields[item[0]] = attr.ib(type=item[1])
             else:
                 if isinstance(item[2], attr._make._CountingAttr):
                     newfields[item[0]] = item[2]
@@ -433,6 +436,6 @@ def output_from_inputfields(output_spec, inputs):
             else:
                 field_name = fld.name
             output_spec.fields.append(
-                (field_name, File, attr.ib(metadata={"value": value}))
+                (field_name, attr.ib(type=File, metadata={"value": value}))
             )
     return output_spec

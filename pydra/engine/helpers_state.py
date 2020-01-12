@@ -839,17 +839,9 @@ def _left_right_check(splitter_part, other_states):
 
 def inputs_types_to_dict(name, inputs):
     """Convert type.Inputs to dictionary."""
-    val = attr.asdict(inputs)
-    if "_func" in val:
-        del val["_func"]
-    return val
-
-
-"""
     # dj: any better option?
-    input_names = [field.name for field in attr_fields(inputs) if field.name != "_func"]
+    input_names = [field for field in attr.asdict(inputs) if field != "_func"]
     inputs_dict = {}
     for field in input_names:
         inputs_dict["{}.{}".format(name, field)] = getattr(inputs, field)
     return inputs_dict
-"""

@@ -37,6 +37,7 @@ from .helpers import (
     output_from_inputfields,
     output_names_from_inputfields,
 )
+from .helpers_file import copyfile_input, template_update
 from .graph import DiGraph
 from .audit import Audit
 from ..utils.messenger import AuditFlag
@@ -375,8 +376,11 @@ class TaskBase:
                 shutil.rmtree(odir)
             cwd = os.getcwd()
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-            self.inputs.copyfile_input(self.output_dir)
-            self.inputs.template_update()
+            orig_inputs = attr.asdict(self.inputs)
+            map_copyfiles = copyfile_input(self.inputs, self.output_dir)
+            modified_inputs = template_update(self.inputs, map_copyfiles)
+            if modified_inputs is not None:
+                self.inputs = attr.evolve(self.inputs, **modified_inputs)
             self.audit.start_audit(odir)
             result = Result(output=None, runtime=None, errored=False)
             self.hooks.pre_run_task(self)
@@ -392,6 +396,8 @@ class TaskBase:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
                 save(odir, result=result, task=self)
+                for k, v in orig_inputs.items():
+                    setattr(self.inputs, k, v)
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         return result
