@@ -640,11 +640,11 @@ class Workflow(TaskBase):
                     + [
                         (
                             nm,
-                            ty.Any,
                             attr.ib(
+                                type=ty.Any,
                                 metadata={
                                     "help_string": f"{nm} input from {name} workflow"
-                                }
+                                },
                             ),
                         )
                         for nm in input_spec

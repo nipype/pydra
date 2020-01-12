@@ -365,7 +365,7 @@ def test_docker_cmd(tmpdir):
     docky = DockerTask(name="docky", executable="pwd", image="busybox")
     assert (
         docky.cmdline
-        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
+        == f"docker run --rm -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
     )
     docky.inputs.container_xargs = ["--rm -it"]
     assert (

@@ -1,11 +1,7 @@
 """Task I/O specifications."""
 import attr
 from pathlib import Path
-import os
 import typing as ty
-from copy import deepcopy
-
-from .helpers_file import copyfile
 
 
 def attr_fields(x):
@@ -48,7 +44,7 @@ class BaseSpec:
 
         inp_dict = {
             field.name: hash_file(getattr(self, field.name))
-            if field.type == File
+            if (field.type == File and "container_path" not in field.metadata)
             else getattr(self, field.name)
             for field in attr_fields(self)
             if (
@@ -421,8 +417,9 @@ class ContainerSpec(ShellSpec):
         file = Path(getattr(self, field.name))
         if field.metadata.get("container_path"):
             # if the path is in a container the input should be treated as a str (hash as a str)
-            field.type = "str"
-            setattr(self, field.name, str(file))
+            # field.type = "str"
+            # setattr(self, field.name, str(file))
+            pass
         # if this is a local path, checking if the path exists
         elif file.exists():
             if self.bindings is None:

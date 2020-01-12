@@ -160,7 +160,7 @@ def test_file_hash(tmpdir):
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
     inputs = make_klass(input_spec)
     assert (
-        inputs(str(outfile)).hash
+        inputs(in_file=outfile).hash
         == "1384a1eb11cd94a5b826a82b948313b9237a0956d406ccff59e79ec92b3c935f"
     )
     with open(outfile, "wt") as fp:
@@ -169,6 +169,6 @@ def test_file_hash(tmpdir):
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
     inputs = make_klass(input_spec)
     assert (
-        inputs(outfile).hash
+        inputs(in_file=outfile).hash
         == "088625131e6718a00170ad445a9c295244dffd4e5d847c8ee4b1606d623dacb1"
     )

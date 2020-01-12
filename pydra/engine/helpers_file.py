@@ -511,3 +511,9 @@ def template_update(inputs, map_copyfiles=None):
                     "{fld.name} should be a string"
                 )
     return {k: v for k, v in dict_.items() if getattr(inputs, k) != v}
+
+
+def is_local_file(f):
+    from .specs import File
+
+    return f.type is File and "container_path" not in f.metadata

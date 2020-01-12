@@ -58,7 +58,7 @@ from .specs import (
     attr_fields,
 )
 from .helpers import ensure_list, execute
-from .helpers_file import template_update
+from .helpers_file import template_update, is_local_file
 
 
 class FunctionTask(TaskBase):
@@ -289,10 +289,10 @@ class ShellCommandTask(TaskBase):
             #    value = str(self.inputs.map_copyfiles[f.name])
             # else:
             value = getattr(self.inputs, f.name)
-            if f.type is File:
+            if is_local_file(f):
                 value = str(value)
             # changing path to the cpath (the directory should be mounted)
-            if getattr(self, "bind_paths", None) and f.type is File:
+            if getattr(self, "bind_paths", None) and is_local_file(f):
                 lpath = Path(value)
                 cdir = self.bind_paths[lpath.parent][0]
                 cpath = cdir.joinpath(lpath.name)
@@ -429,7 +429,7 @@ class ContainerTask(ShellCommandTask):
             if len(binding) == 3:
                 lpath, cpath, mode = binding
             elif len(binding) == 2:
-                lpath, cpath, mode = binding + ("rw",)
+                lpath, cpath, mode = binding + ["rw"]
             else:
                 raise Exception(
                     f"binding should have length 2, 3, or 4, it has {len(binding)}"
@@ -526,6 +526,7 @@ class DockerTask(ContainerTask):
             output_cpath=output_cpath,
             **kwargs,
         )
+        self.inputs.container_xargs = ["--rm"]
 
     @property
     def container_args(self):

@@ -32,7 +32,7 @@ def test_docker_1_nosubm():
     assert docky.inputs.container == "docker"
     assert (
         docky.cmdline
-        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd}"
+        == f"docker run --rm -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd}"
     )
 
     res = docky()
@@ -70,7 +70,7 @@ def test_docker_2_nosubm():
     docky = DockerTask(name="docky", executable=cmd, image="busybox")
     assert (
         docky.cmdline
-        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {' '.join(cmd)}"
+        == f"docker run --rm -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {' '.join(cmd)}"
     )
 
     res = docky()
@@ -90,7 +90,7 @@ def test_docker_2(plugin):
     docky = DockerTask(name="docky", executable=cmd, image="busybox")
     assert (
         docky.cmdline
-        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {' '.join(cmd)}"
+        == f"docker run --rm -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {' '.join(cmd)}"
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -116,7 +116,7 @@ def test_docker_2a_nosubm():
     assert docky.inputs.executable == "echo"
     assert (
         docky.cmdline
-        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd_exec} {' '.join(cmd_args)}"
+        == f"docker run --rm -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd_exec} {' '.join(cmd_args)}"
     )
 
     res = docky()
@@ -141,7 +141,7 @@ def test_docker_2a(plugin):
     assert docky.inputs.executable == "echo"
     assert (
         docky.cmdline
-        == f"docker run -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd_exec} {' '.join(cmd_args)}"
+        == f"docker run --rm -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd_exec} {' '.join(cmd_args)}"
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -306,6 +306,27 @@ def test_wf_docker_1(plugin, tmpdir):
 
 @need_docker
 @pytest.mark.parametrize("plugin", Plugins)
+def test_wf_docker_2pre(plugin, tmpdir):
+    """ a workflow with two connected task that run python scripts
+        the first one creates a text file and the second one reads the file
+    """
+
+    scripts_dir = os.path.join(os.path.dirname(__file__), "data_tests")
+
+    cmd1 = ["python", "/scripts/saving.py", "-f", "/outputs/tmp.txt"]
+    dt = DockerTask(
+        name="save",
+        image="python:3.7-alpine",
+        executable=cmd1,
+        bindings=[(str(tmpdir), "/outputs"), (scripts_dir, "/scripts", "ro")],
+        strip=True,
+    )
+    res = dt(plugin=plugin)
+    assert res.output.stdout == "/outputs/tmp.txt"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_docker_2(plugin, tmpdir):
     """ a workflow with two connected task that run python scripts
         the first one creates a text file and the second one reads the file
@@ -390,13 +411,13 @@ def test_docker_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -433,8 +454,8 @@ def test_docker_inputspec_1a(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     default=filename,
                     metadata={"position": 1, "help_string": "input file"},
                 ),
@@ -474,13 +495,14 @@ def test_docker_inputspec_2(plugin, tmpdir):
         fields=[
             (
                 "file1",
-                File,
-                attr.ib(metadata={"position": 1, "help_string": "input file 1"}),
+                attr.ib(
+                    type=File, metadata={"position": 1, "help_string": "input file 1"}
+                ),
             ),
             (
                 "file2",
-                File,
                 attr.ib(
+                    type=File,
                     default=filename_2,
                     metadata={"position": 2, "help_string": "input file 2"},
                 ),
@@ -523,31 +545,34 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
         fields=[
             (
                 "file1",
-                File,
                 attr.ib(
+                    type=File,
                     default=filename_1,
                     metadata={"position": 1, "help_string": "input file 1"},
                 ),
             ),
             (
                 "file2",
-                File,
-                attr.ib(metadata={"position": 2, "help_string": "input file 2"}),
+                attr.ib(
+                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                ),
             ),
         ],
         bases=(DockerSpec,),
     )
 
-    with pytest.raises(TypeError) as excinfo:
-        docky = DockerTask(
-            name="docky",
-            image="busybox",
-            executable=cmd,
-            file2=filename_2,
-            input_spec=my_input_spec,
-            strip=True,
-        )
-    assert "non-default argument 'file2' follows default argument" == str(excinfo.value)
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=cmd,
+        file2=filename_2,
+        input_spec=my_input_spec,
+        strip=True,
+    )
+    assert docky.inputs.file2 == filename_2
+
+    res = docky()
+    assert res.output.stdout == "hello from pydra\nhave a nice one"
 
 
 @need_docker
@@ -572,19 +597,20 @@ def test_docker_inputspec_2a(plugin, tmpdir):
         fields=[
             (
                 "file1",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "default_value": filename_1,
                         "position": 1,
                         "help_string": "input file 1",
-                    }
+                    },
                 ),
             ),
             (
                 "file2",
-                File,
-                attr.ib(metadata={"position": 2, "help_string": "input file 2"}),
+                attr.ib(
+                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                ),
             ),
         ],
         bases=(DockerSpec,),
@@ -617,14 +643,14 @@ def test_docker_inputspec_3(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
                         "container_path": True,
-                    }
+                    },
                 ),
             )
         ],
@@ -660,13 +686,13 @@ def test_docker_inputspec_3a(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -705,24 +731,24 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
         fields=[
             (
                 "orig_file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "position": 1,
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": True,
-                    }
+                    },
                 ),
             ),
             (
                 "out_file",
-                str,
                 attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             ),
         ],
@@ -770,13 +796,13 @@ def test_docker_inputspec_state_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -819,13 +845,13 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -861,13 +887,13 @@ def test_docker_wf_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -916,13 +942,13 @@ def test_docker_wf_state_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -973,13 +999,13 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
                 attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],

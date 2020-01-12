@@ -194,11 +194,12 @@ def make_klass(spec):
                     newfields[item[0]] = attr.ib(type=item[1])
             else:
                 if isinstance(item[2], attr._make._CountingAttr):
-                    newfields[item[0]] = item[2]
+                    raise ValueError("Three part should not have attr")
+                    # newfields[item[0]] = item[2]
                 else:
                     newfields[item[0]] = attr.ib(item[2], type=item[1])
         fields = newfields
-    return attr.make_class(spec.name, fields, bases=spec.bases)
+    return attr.make_class(spec.name, fields, bases=spec.bases, kw_only=True)
 
 
 async def read_stream_and_display(stream, display):
