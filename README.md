@@ -10,7 +10,7 @@ A simple dataflow engine with scalable semantics.
 The goal of pydra is to provide a lightweight Python dataflow engine for DAG construction, manipulation, and distributed execution.
 
 Feature list:
-1. Python 3.7+ using type annotation and dataclasses
+1. Python 3.7+ using type annotation and [attrs](https://www.attrs.org/en/stable/)
 2. Composable dataflows with simple node semantics. A dataflow can be a node of another dataflow.
 3. `splitter` and `combiner` provides many ways of compressing complex loop semantics
 4. Cached execution with support for a global cache across dataflows and users
