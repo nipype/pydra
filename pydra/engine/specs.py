@@ -39,7 +39,7 @@ class BaseSpec:
     @property
     def hash(self):
         """Compute a basic hash for any given set of fields."""
-        from .helpers import hash_function, ensure_list
+        from .helpers import hash_function
         from .helpers_file import hash_file
 
         inp_dict = {}
