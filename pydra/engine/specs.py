@@ -39,13 +39,13 @@ class BaseSpec:
     @property
     def hash(self):
         """Compute a basic hash for any given set of fields."""
-        from .helpers import hash_function
+        from .helpers import hash_function, ensure_list
         from .helpers_file import hash_file
 
         inp_dict = {
             field.name: hash_file(getattr(self, field.name))
             if (field.type == File and "container_path" not in field.metadata)
-            else getattr(self, field.name)
+            else ensure_list(getattr(self, field.name), tuple2list=True)
             for field in attr_fields(self)
             if (
                 field.name not in ["_graph_checksums", "bindings"]

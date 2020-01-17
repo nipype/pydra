@@ -161,7 +161,7 @@ def test_file_hash(tmpdir):
     inputs = make_klass(input_spec)
     assert (
         inputs(in_file=outfile).hash
-        == "1384a1eb11cd94a5b826a82b948313b9237a0956d406ccff59e79ec92b3c935f"
+        == "d4dc839034f90419ce528e992f5bf9cecf876da14d81ec5a19d0d03271d90e02"
     )
     with open(outfile, "wt") as fp:
         fp.write("test")
