@@ -42,16 +42,18 @@ class BaseSpec:
         from .helpers import hash_function, ensure_list
         from .helpers_file import hash_file
 
-        inp_dict = {
-            field.name: hash_file(getattr(self, field.name))
-            if (field.type == File and "container_path" not in field.metadata)
-            else ensure_list(getattr(self, field.name), tuple2list=True)
-            for field in attr_fields(self)
-            if (
-                field.name not in ["_graph_checksums", "bindings"]
-                and not field.metadata.get("output_file_template")
-            )
-        }
+        inp_dict = {}
+        for field in attr_fields(self):
+            if field.name not in [
+                "_graph_checksums",
+                "bindings",
+            ] and not field.metadata.get("output_file_template"):
+                if field.type == File and "container_path" not in field.metadata:
+                    inp_dict[field.name] = hash_file(getattr(self, field.name))
+                elif isinstance(getattr(self, field.name), tuple):
+                    inp_dict[field.name] = list(getattr(self, field.name))
+                else:
+                    inp_dict[field.name] = getattr(self, field.name)
         inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph_checksums"):
             return hash_function((inp_hash, self._graph_checksums))
