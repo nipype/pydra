@@ -666,8 +666,10 @@ def test_docker_inputspec_3(plugin, tmpdir):
         strip=True,
     )
 
+    cmdline = docky.cmdline
     res = docky()
     assert "docker" in res.output.stdout
+    assert cmdline == docky.cmdline
 
 
 @need_docker
