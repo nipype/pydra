@@ -3,7 +3,7 @@
 import os, shutil
 import subprocess as sp
 import pytest
-import dataclasses as dc
+import attr
 
 from ..task import SingularityTask, DockerTask
 from ..submitter import Submitter
@@ -26,13 +26,13 @@ need_singularity = pytest.mark.skipif(
 
 
 @need_singularity
-def test_singularity_1_nosubm():
+def test_singularity_1_nosubm(tmpdir):
     """ simple command in a container, a default bindings and working directory is added
         no submitter
     """
     cmd = "pwd"
     image = "library://sylabsed/linux/alpine"
-    singu = SingularityTask(name="singu", executable=cmd, image=image)
+    singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
     assert singu.inputs.image == "library://sylabsed/linux/alpine"
     assert singu.inputs.container == "singularity"
     assert (
@@ -46,13 +46,13 @@ def test_singularity_1_nosubm():
 
 
 @need_singularity
-def test_singularity_2_nosubm():
+def test_singularity_2_nosubm(tmpdir):
     """ a command with arguments, cmd and args given as executable
         no submitter
     """
     cmd = ["echo", "hail", "pydra"]
     image = "library://sylabsed/linux/alpine"
-    singu = SingularityTask(name="singu", executable=cmd, image=image)
+    singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
     assert (
         singu.cmdline
         == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {' '.join(cmd)}"
@@ -65,13 +65,13 @@ def test_singularity_2_nosubm():
 
 @need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_singularity_2(plugin):
+def test_singularity_2(plugin, tmpdir):
     """ a command with arguments, cmd and args given as executable
         using submitter
     """
     cmd = ["echo", "hail", "pydra"]
     image = "library://sylabsed/linux/alpine"
-    singu = SingularityTask(name="singu", executable=cmd, image=image)
+    singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
     assert (
         singu.cmdline
         == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {' '.join(cmd)}"
@@ -86,7 +86,7 @@ def test_singularity_2(plugin):
 
 @need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_singularity_2a(plugin):
+def test_singularity_2a(plugin, tmpdir):
     """ a command with arguments, using executable and args
         using submitter
     """
@@ -95,7 +95,7 @@ def test_singularity_2a(plugin):
     # separate command into exec + args
     image = "library://sylabsed/linux/alpine"
     singu = SingularityTask(
-        name="singu", executable=cmd_exec, args=cmd_args, image=image
+        name="singu", executable=cmd_exec, args=cmd_args, image=image, cache_dir=tmpdir
     )
     assert (
         singu.cmdline
@@ -119,7 +119,7 @@ def test_singularity_3(plugin, tmpdir):
     tmpdir.mkdir("new_dir")
     cmd = ["ls", "/tmp_dir"]
     image = "library://sylabsed/linux/alpine"
-    singu = SingularityTask(name="singu", executable=cmd, image=image)
+    singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
     # binding tmp directory to the container
     singu.inputs.bindings = [(str(tmpdir), "/tmp_dir", "ro")]
 
@@ -127,7 +127,7 @@ def test_singularity_3(plugin, tmpdir):
         singu(submitter=sub)
 
     res = singu.result()
-    assert res.output.stdout == "new_dir\n"
+    assert "new_dir\n" in res.output.stdout
     assert res.output.return_code == 0
 
 
@@ -136,15 +136,15 @@ def test_singularity_3(plugin, tmpdir):
 
 @need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_singularity_st_1(plugin):
+def test_singularity_st_1(plugin, tmpdir):
     """ commands without arguments in container
         splitter = executable
     """
     cmd = ["pwd", "ls"]
     image = "library://sylabsed/linux/alpine"
-    singu = SingularityTask(name="singu", executable=cmd, image=image).split(
-        "executable"
-    )
+    singu = SingularityTask(
+        name="singu", executable=cmd, image=image, cache_dir=tmpdir
+    ).split("executable")
     assert singu.state.splitter == "singu.executable"
 
     res = singu(plugin=plugin)
@@ -155,13 +155,15 @@ def test_singularity_st_1(plugin):
 
 @need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_singularity_st_2(plugin):
+def test_singularity_st_2(plugin, tmpdir):
     """ command with arguments in docker, checking the distribution
         splitter = image
     """
     cmd = ["cat", "/etc/issue"]
     image = ["library://sylabsed/linux/alpine", "library://sylabsed/examples/lolcow"]
-    singu = SingularityTask(name="singu", executable=cmd, image=image).split("image")
+    singu = SingularityTask(
+        name="singu", executable=cmd, image=image, cache_dir=tmpdir
+    ).split("image")
     assert singu.state.splitter == "singu.image"
 
     res = singu(plugin=plugin)
@@ -172,14 +174,14 @@ def test_singularity_st_2(plugin):
 
 @need_singularity
 @pytest.mark.parametrize("plugin", Plugins)
-def test_singularity_st_3(plugin):
+def test_singularity_st_3(plugin, tmpdir):
     """ outer splitter image and executable
     """
     cmd = ["pwd", ["cat", "/etc/issue"]]
     image = ["library://sylabsed/linux/alpine", "library://sylabsed/examples/lolcow"]
-    singu = SingularityTask(name="singu", executable=cmd, image=image).split(
-        ["image", "executable"]
-    )
+    singu = SingularityTask(
+        name="singu", executable=cmd, image=image, cache_dir=tmpdir
+    ).split(["image", "executable"])
     assert singu.state.splitter == ["singu.image", "singu.executable"]
     res = singu(plugin=plugin)
 
@@ -200,7 +202,7 @@ def test_wf_singularity_1(plugin, tmpdir):
         f.write("hello from pydra")
 
     image = "library://sylabsed/linux/alpine"
-    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
+    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"], cache_dir=tmpdir)
     wf.inputs.cmd1 = ["cat", "/tmp_dir/file_pydra.txt"]
     wf.inputs.cmd2 = ["echo", "message from the previous task:"]
     wf.add(
@@ -243,7 +245,7 @@ def test_wf_singularity_1a(plugin, tmpdir):
 
     image_sing = "library://sylabsed/linux/alpine"
     image_doc = "ubuntu"
-    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
+    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"], cache_dir=tmpdir)
     wf.inputs.cmd1 = ["cat", "/tmp_dir/file_pydra.txt"]
     wf.inputs.cmd2 = ["echo", "message from the previous task:"]
     wf.add(
@@ -292,7 +294,11 @@ def test_singularity_outputspec_1(plugin, tmpdir):
         bases=(ShellOutSpec,),
     )
     singu = SingularityTask(
-        name="singu", image=image, executable=cmd, output_spec=my_output_spec
+        name="singu",
+        image=image,
+        executable=cmd,
+        output_spec=my_output_spec,
+        cache_dir=tmpdir,
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -322,13 +328,13 @@ def test_singularity_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -342,6 +348,7 @@ def test_singularity_inputspec_1(plugin, tmpdir):
         file=filename,
         input_spec=my_input_spec,
         strip=True,
+        cache_dir=tmpdir,
     )
 
     res = singu()
@@ -366,8 +373,8 @@ def test_singularity_inputspec_1a(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     default=filename,
                     metadata={"position": 1, "help_string": "input file"},
                 ),
@@ -377,7 +384,12 @@ def test_singularity_inputspec_1a(plugin, tmpdir):
     )
 
     singu = SingularityTask(
-        name="singu", image=image, executable=cmd, input_spec=my_input_spec, strip=True
+        name="singu",
+        image=image,
+        executable=cmd,
+        input_spec=my_input_spec,
+        strip=True,
+        cache_dir=tmpdir,
     )
 
     res = singu()
@@ -404,13 +416,14 @@ def test_singularity_inputspec_2(plugin, tmpdir):
         fields=[
             (
                 "file1",
-                File,
-                dc.field(metadata={"position": 1, "help_string": "input file 1"}),
+                attr.ib(
+                    type=File, metadata={"position": 1, "help_string": "input file 1"}
+                ),
             ),
             (
                 "file2",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     default=filename_2,
                     metadata={"position": 2, "help_string": "input file 2"},
                 ),
@@ -426,6 +439,7 @@ def test_singularity_inputspec_2(plugin, tmpdir):
         file1=filename_1,
         input_spec=my_input_spec,
         strip=True,
+        cache_dir=tmpdir,
     )
 
     res = singu()
@@ -454,31 +468,33 @@ def test_singularity_inputspec_2a_except(plugin, tmpdir):
         fields=[
             (
                 "file1",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     default=filename_1,
                     metadata={"position": 1, "help_string": "input file 1"},
                 ),
             ),
             (
                 "file2",
-                File,
-                dc.field(metadata={"position": 2, "help_string": "input file 2"}),
+                attr.ib(
+                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                ),
             ),
         ],
         bases=(SingularitySpec,),
     )
 
-    with pytest.raises(TypeError) as excinfo:
-        singu = SingularityTask(
-            name="singu",
-            image=image,
-            executable=cmd,
-            file2=filename_2,
-            input_spec=my_input_spec,
-            strip=True,
-        )
-    assert "non-default argument 'file2' follows default argument" == str(excinfo.value)
+    singu = SingularityTask(
+        name="singu",
+        image=image,
+        executable=cmd,
+        file2=filename_2,
+        input_spec=my_input_spec,
+        strip=True,
+        cache_dir=tmpdir,
+    )
+    res = singu()
+    assert res.output.stdout == "hello from pydra\nhave a nice one"
 
 
 @need_singularity
@@ -504,19 +520,20 @@ def test_singularity_inputspec_2a(plugin, tmpdir):
         fields=[
             (
                 "file1",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "default_value": filename_1,
                         "position": 1,
                         "help_string": "input file 1",
-                    }
+                    },
                 ),
             ),
             (
                 "file2",
-                File,
-                dc.field(metadata={"position": 2, "help_string": "input file 2"}),
+                attr.ib(
+                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                ),
             ),
         ],
         bases=(SingularitySpec,),
@@ -529,6 +546,7 @@ def test_singularity_inputspec_2a(plugin, tmpdir):
         file2=filename_2,
         input_spec=my_input_spec,
         strip=True,
+        cache_dir=tmpdir,
     )
 
     res = singu()
@@ -554,24 +572,24 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
         fields=[
             (
                 "orig_file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "position": 1,
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": True,
-                    }
+                    },
                 ),
             ),
             (
                 "out_file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             ),
         ],
@@ -584,6 +602,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
         executable=cmd,
         input_spec=my_input_spec,
         orig_file=str(file),
+        cache_dir=tmpdir,
     )
 
     res = singu()
@@ -620,13 +639,13 @@ def test_singularity_inputspec_state_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -640,6 +659,7 @@ def test_singularity_inputspec_state_1(plugin, tmpdir):
         file=filename,
         input_spec=my_input_spec,
         strip=True,
+        cache_dir=tmpdir,
     ).split("file")
 
     res = singu()
@@ -670,13 +690,13 @@ def test_singularity_inputspec_state_1b(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
@@ -690,6 +710,7 @@ def test_singularity_inputspec_state_1b(plugin, tmpdir):
         file=filename,
         input_spec=my_input_spec,
         strip=True,
+        cache_dir=tmpdir,
     ).split("file")
 
     res = singu()
@@ -713,20 +734,20 @@ def test_singularity_wf_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
         bases=(SingularitySpec,),
     )
 
-    wf = Workflow(name="wf", input_spec=["cmd", "file"])
+    wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmpdir)
     wf.inputs.cmd = cmd
     wf.inputs.file = filename
 
@@ -769,20 +790,20 @@ def test_singularity_wf_state_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
         bases=(SingularitySpec,),
     )
 
-    wf = Workflow(name="wf", input_spec=["cmd", "file"])
+    wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmpdir)
     wf.inputs.cmd = cmd
     wf.inputs.file = filename
 
@@ -827,20 +848,20 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmpdir):
         fields=[
             (
                 "file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "mandatory": True,
                         "position": 1,
                         "help_string": "input file",
-                    }
+                    },
                 ),
             )
         ],
         bases=(SingularitySpec,),
     )
 
-    wf = Workflow(name="wf", input_spec=["cmd", "file"])
+    wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmpdir)
     wf.inputs.cmd = cmd
     wf.inputs.file = filename
 

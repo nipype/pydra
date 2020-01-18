@@ -38,8 +38,8 @@ Implement processing nodes.
       <https://colab.research.google.com/drive/1RRV1gHbGJs49qQB1q1d5tQEycVRtuhw6>`__
 
 """
+import attr
 import cloudpickle as cp
-import dataclasses as dc
 import inspect
 import typing as ty
 from pathlib import Path
@@ -55,8 +55,10 @@ from .specs import (
     ContainerSpec,
     DockerSpec,
     SingularitySpec,
+    attr_fields,
 )
 from .helpers import ensure_list, execute
+from .helpers_file import template_update, is_local_file
 
 
 class FunctionTask(TaskBase):
@@ -106,9 +108,9 @@ class FunctionTask(TaskBase):
                 fields=[
                     (
                         val.name,
-                        val.annotation,
-                        dc.field(
+                        attr.ib(
                             default=val.default,
+                            type=val.annotation,
                             metadata={
                                 "help_string": f"{val.name} parameter from {func.__name__}"
                             },
@@ -117,16 +119,19 @@ class FunctionTask(TaskBase):
                     if val.default is not inspect.Signature.empty
                     else (
                         val.name,
-                        val.annotation,
-                        dc.field(metadata={"help_string": val.name}),
+                        attr.ib(
+                            type=val.annotation, metadata={"help_string": val.name}
+                        ),
                     )
                     for val in inspect.signature(func).parameters.values()
                 ]
-                + [("_func", str, cp.dumps(func))],
+                + [("_func", attr.ib(default=cp.dumps(func), type=str))],
                 bases=(BaseSpec,),
             )
         else:
-            input_spec.fields.append(("_func", str, cp.dumps(func)))
+            input_spec.fields.append(
+                ("_func", attr.ib(default=cp.dumps(func), type=str))
+            )
         self.input_spec = input_spec
         if name is None:
             name = func.__name__
@@ -183,7 +188,7 @@ class FunctionTask(TaskBase):
         self.output_spec = output_spec
 
     def _run_task(self):
-        inputs = dc.asdict(self.inputs)
+        inputs = attr.asdict(self.inputs)
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
@@ -262,7 +267,7 @@ class ShellCommandTask(TaskBase):
     def command_args(self):
         """Get command line arguments."""
         pos_args = []  # list for (position, command arg)
-        for f in dc.fields(self.inputs):
+        for f in attr_fields(self.inputs):
             if f.name == "executable":
                 pos = 0  # executable should be the first el. of the command
             elif f.name == "args":
@@ -280,12 +285,14 @@ class ShellCommandTask(TaskBase):
             cmd_add = []
             if "argstr" in f.metadata:
                 cmd_add.append(f.metadata["argstr"])
-            if f.metadata.get("copyfile") in [True, False]:
-                value = str(self.inputs.map_copyfiles[f.name])
-            else:
-                value = getattr(self.inputs, f.name)
+            # if f.metadata.get("copyfile") in [True, False]:
+            #    value = str(self.inputs.map_copyfiles[f.name])
+            # else:
+            value = getattr(self.inputs, f.name)
+            if is_local_file(f):
+                value = str(value)
             # changing path to the cpath (the directory should be mounted)
-            if getattr(self, "bind_paths", None) and f.type is File:
+            if getattr(self, "bind_paths", None) and is_local_file(f):
                 lpath = Path(value)
                 cdir = self.bind_paths[lpath.parent][0]
                 cpath = cdir.joinpath(lpath.name)
@@ -310,12 +317,18 @@ class ShellCommandTask(TaskBase):
 
     @command_args.setter
     def command_args(self, args: ty.Dict):
-        self.inputs = dc.replace(self.inputs, **args)
+        self.inputs = attr.evolve(self.inputs, **args)
 
     @property
     def cmdline(self):
         """Get the actual command line that will be submitted."""
-        return " ".join(self.command_args)
+        orig_inputs = attr.asdict(self.inputs)
+        modified_inputs = template_update(self.inputs)
+        if modified_inputs is not None:
+            self.inputs = attr.evolve(self.inputs, **modified_inputs)
+        cmdline = " ".join(self.command_args)
+        self.inputs = attr.evolve(self.inputs, **orig_inputs)
+        return cmdline
 
     def _run_task(self,):
         self.output_ = None
@@ -324,6 +337,8 @@ class ShellCommandTask(TaskBase):
             keys = ["return_code", "stdout", "stderr"]
             values = execute(args, strip=self.strip)
             self.output_ = dict(zip(keys, values))
+            if self.output_["return_code"]:
+                raise RuntimeError(self.output_["stderr"])
 
 
 class ContainerTask(ShellCommandTask):
@@ -385,7 +400,13 @@ class ContainerTask(ShellCommandTask):
     @property
     def cmdline(self):
         """Get the actual command line that will be submitted."""
-        return " ".join(self.container_args + self.command_args)
+        orig_inputs = attr.asdict(self.inputs)
+        modified_inputs = template_update(self.inputs)
+        if modified_inputs is not None:
+            self.inputs = attr.evolve(self.inputs, **modified_inputs)
+        cmdline = " ".join(self.container_args + self.command_args)
+        self.inputs = attr.evolve(self.inputs, **orig_inputs)
+        return cmdline
 
     @property
     def container_args(self):
@@ -408,7 +429,7 @@ class ContainerTask(ShellCommandTask):
             if len(binding) == 3:
                 lpath, cpath, mode = binding
             elif len(binding) == 2:
-                lpath, cpath, mode = binding + ("rw",)
+                lpath, cpath, mode = binding + ["rw"]
             else:
                 raise Exception(
                     f"binding should have length 2, 3, or 4, it has {len(binding)}"
@@ -445,6 +466,8 @@ class ContainerTask(ShellCommandTask):
             keys = ["return_code", "stdout", "stderr"]
             values = execute(args, strip=self.strip)
             self.output_ = dict(zip(keys, values))
+            if self.output_["return_code"]:
+                raise RuntimeError(self.output_["stderr"])
 
 
 class DockerTask(ContainerTask):
@@ -503,6 +526,7 @@ class DockerTask(ContainerTask):
             output_cpath=output_cpath,
             **kwargs,
         )
+        self.inputs.container_xargs = ["--rm"]
 
     @property
     def container_args(self):

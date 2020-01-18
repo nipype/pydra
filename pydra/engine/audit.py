@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 import json
-import dataclasses as dc
+import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from .helpers import ensure_list, gather_runtime_info
 
@@ -84,7 +84,7 @@ class Audit:
                 )
                 # audit resources/runtime information
                 self.eid = "uid:{}".format(gen_uuid())
-                entity = dc.asdict(result.runtime)
+                entity = attr.asdict(result.runtime)
                 entity.update(
                     **{
                         "@id": self.eid,

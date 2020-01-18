@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
+import attr
 import typing as ty
 import os, shutil
-import dataclasses as dc
 import pytest
 from pathlib import Path
 
@@ -289,9 +289,9 @@ def test_shell_cmd_inputspec_1(plugin, results_function):
         fields=[
             (
                 "opt_n",
-                bool,
-                dc.field(
-                    metadata={"position": 1, "argstr": "-n", "help_string": "option"}
+                attr.ib(
+                    type=bool,
+                    metadata={"position": 1, "argstr": "-n", "help_string": "option"},
                 ),
             )
         ],
@@ -330,14 +330,13 @@ def test_shell_cmd_inputspec_2(plugin, results_function):
         fields=[
             (
                 "opt_hello",
-                str,
-                dc.field(metadata={"position": 3, "help_string": "todo"}),
+                attr.ib(type=str, metadata={"position": 3, "help_string": "todo"}),
             ),
             (
                 "opt_n",
-                bool,
-                dc.field(
-                    metadata={"position": 1, "help_string": "todo", "argstr": "-n"}
+                attr.ib(
+                    type=bool,
+                    metadata={"position": 1, "help_string": "todo", "argstr": "-n"},
                 ),
             ),
         ],
@@ -371,9 +370,9 @@ def test_shell_cmd_inputspec_3(plugin, results_function):
         fields=[
             (
                 "text",
-                str,
-                dc.field(
-                    metadata={"position": 1, "help_string": "text", "mandatory": True}
+                attr.ib(
+                    type=str,
+                    metadata={"position": 1, "help_string": "text", "mandatory": True},
                 ),
             )
         ],
@@ -401,9 +400,9 @@ def test_shell_cmd_inputspec_3a(plugin, results_function):
         fields=[
             (
                 "text",
-                str,
-                dc.field(
-                    metadata={"position": 1, "help_string": "text", "mandatory": True}
+                attr.ib(
+                    type=str,
+                    metadata={"position": 1, "help_string": "text", "mandatory": True},
                 ),
             )
         ],
@@ -430,9 +429,9 @@ def test_shell_cmd_inputspec_3b_exception(plugin):
         fields=[
             (
                 "text",
-                str,
-                dc.field(
-                    metadata={"position": 1, "help_string": "text", "mandatory": True}
+                attr.ib(
+                    type=str,
+                    metadata={"position": 1, "help_string": "text", "mandatory": True},
                 ),
             )
         ],
@@ -457,9 +456,9 @@ def test_shell_cmd_inputspec_3c(plugin, results_function):
         fields=[
             (
                 "text",
-                str,
-                dc.field(
-                    metadata={"position": 1, "help_string": "text", "mandatory": False}
+                attr.ib(
+                    type=str,
+                    metadata={"position": 1, "help_string": "text", "mandatory": False},
                 ),
             )
         ],
@@ -486,13 +485,13 @@ def test_shell_cmd_inputspec_4(plugin, results_function):
         fields=[
             (
                 "text",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "position": 1,
                         "help_string": "text",
                         "default_value": "Hello",
-                    }
+                    },
                 ),
             )
         ],
@@ -521,8 +520,11 @@ def test_shell_cmd_inputspec_4a(plugin, results_function):
         fields=[
             (
                 "text",
-                str,
-                dc.field(default="Hi", metadata={"position": 1, "help_string": "text"}),
+                attr.ib(
+                    type=str,
+                    default="Hi",
+                    metadata={"position": 1, "help_string": "text"},
+                ),
             )
         ],
         bases=(ShellSpec,),
@@ -549,8 +551,8 @@ def test_shell_cmd_inputspec_4b_exception(plugin):
         fields=[
             (
                 "text",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     default="Hi",
                     metadata={
                         "position": 1,
@@ -583,14 +585,14 @@ def test_shell_cmd_inputspec_4c_exception(plugin):
         fields=[
             (
                 "text",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "position": 1,
                         "help_string": "text",
                         "mandatory": True,
                         "default_value": "Hello",
-                    }
+                    },
                 ),
             )
         ],
@@ -617,14 +619,14 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
         fields=[
             (
                 "text",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "position": 1,
                         "help_string": "text",
                         "output_file_template": "exception",
                         "default_value": "Hello",
-                    }
+                    },
                 ),
             )
         ],
@@ -653,26 +655,26 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function):
         fields=[
             (
                 "opt_t",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "position": 1,
                         "help_string": "opt t",
                         "argstr": "-t",
                         "xor": ["opt_S"],
-                    }
+                    },
                 ),
             ),
             (
                 "opt_S",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "position": 2,
                         "help_string": "opt S",
                         "argstr": "-S",
                         "xor": ["opt_t"],
-                    }
+                    },
                 ),
             ),
         ],
@@ -699,26 +701,26 @@ def test_shell_cmd_inputspec_5a_exception(plugin):
         fields=[
             (
                 "opt_t",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "position": 1,
                         "help_string": "opt t",
                         "argstr": "-t",
                         "xor": ["opt_S"],
-                    }
+                    },
                 ),
             ),
             (
                 "opt_S",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "position": 2,
                         "help_string": "opt S",
                         "argstr": "-S",
                         "xor": ["opt_t"],
-                    }
+                    },
                 ),
             ),
         ],
@@ -751,21 +753,21 @@ def test_shell_cmd_inputspec_6(plugin, results_function):
         fields=[
             (
                 "opt_t",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "position": 2,
                         "help_string": "opt t",
                         "argstr": "-t",
                         "requires": ["opt_l"],
-                    }
+                    },
                 ),
             ),
             (
                 "opt_l",
-                bool,
-                dc.field(
-                    metadata={"position": 1, "help_string": "opt l", "argstr": "-l"}
+                attr.ib(
+                    type=bool,
+                    metadata={"position": 1, "help_string": "opt l", "argstr": "-l"},
                 ),
             ),
         ],
@@ -797,21 +799,21 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
         fields=[
             (
                 "opt_t",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "position": 2,
                         "help_string": "opt t",
                         "argstr": "-t",
                         "requires": ["opt_l"],
-                    }
+                    },
                 ),
             ),
             (
                 "opt_l",
-                bool,
-                dc.field(
-                    metadata={"position": 1, "help_string": "opt l", "argstr": "-l"}
+                attr.ib(
+                    type=bool,
+                    metadata={"position": 1, "help_string": "opt l", "argstr": "-l"},
                 ),
             ),
         ],
@@ -840,21 +842,21 @@ def test_shell_cmd_inputspec_6b(plugin, results_function):
         fields=[
             (
                 "opt_t",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "position": 2,
                         "help_string": "opt t",
                         "argstr": "-t",
                         "requires": ["opt_l"],
-                    }
+                    },
                 ),
             ),
             (
                 "opt_l",
-                bool,
-                dc.field(
-                    metadata={"position": 1, "help_string": "opt l", "argstr": "-l"}
+                attr.ib(
+                    type=bool,
+                    metadata={"position": 1, "help_string": "opt l", "argstr": "-l"},
                 ),
             ),
         ],
@@ -890,12 +892,12 @@ def test_shell_cmd_inputspec_7(plugin, results_function):
         fields=[
             (
                 "out1",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             )
         ],
@@ -927,13 +929,13 @@ def test_shell_cmd_inputspec_7a(plugin, results_function):
         fields=[
             (
                 "out1",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{args}",
                         "output_field_name": "out1_changed",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             )
         ],
@@ -967,24 +969,24 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
         fields=[
             (
                 "orig_file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "position": 1,
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": True,
-                    }
+                    },
                 ),
             ),
             (
                 "out_file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             ),
         ],
@@ -1025,24 +1027,24 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
         fields=[
             (
                 "orig_file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "position": 1,
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": False,
-                    }
+                    },
                 ),
             ),
             (
                 "out_file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             ),
         ],
@@ -1098,23 +1100,23 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
         fields=[
             (
                 "orig_file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "position": 1,
                         "help_string": "orig file",
                         "mandatory": True,
-                    }
+                    },
                 ),
             ),
             (
                 "out_file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             ),
         ],
@@ -1145,9 +1147,9 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function):
         fields=[
             (
                 "text",
-                str,
-                dc.field(
-                    metadata={"position": 1, "help_string": "text", "mandatory": True}
+                attr.ib(
+                    type=str,
+                    metadata={"position": 1, "help_string": "text", "mandatory": True},
                 ),
             )
         ],
@@ -1180,12 +1182,12 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function):
         fields=[
             (
                 "out1",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             )
         ],
@@ -1222,9 +1224,9 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmpdir):
         fields=[
             (
                 "file",
-                File,
-                dc.field(
-                    metadata={"position": 1, "help_string": "files", "mandatory": True}
+                attr.ib(
+                    type=File,
+                    metadata={"position": 1, "help_string": "files", "mandatory": True},
                 ),
             )
         ],
@@ -1264,24 +1266,24 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
         fields=[
             (
                 "orig_file",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "position": 1,
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": True,
-                    }
+                    },
                 ),
             ),
             (
                 "out_file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             ),
         ],
@@ -1324,12 +1326,12 @@ def test_wf_shell_cmd_2(plugin):
         fields=[
             (
                 "out1",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             )
         ],
@@ -1370,12 +1372,12 @@ def test_wf_shell_cmd_2a(plugin):
         fields=[
             (
                 "out1",
-                tuple,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
-                        "output_file_template": ("{args}", ""),
+                        "output_file_template": "{args}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             )
         ],
@@ -1418,12 +1420,12 @@ def test_wf_shell_cmd_3(plugin):
         fields=[
             (
                 "file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             )
         ],
@@ -1435,18 +1437,19 @@ def test_wf_shell_cmd_3(plugin):
         fields=[
             (
                 "orig_file",
-                File,
-                dc.field(metadata={"position": 1, "help_string": "output file"}),
+                attr.ib(
+                    type=File, metadata={"position": 1, "help_string": "output file"}
+                ),
             ),
             (
                 "out_file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "position": 2,
-                        "output_file_template": "{orig_file}",
+                        "output_file_template": "{orig_file}_copy",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             ),
         ],
@@ -1506,12 +1509,12 @@ def test_wf_shell_cmd_3a(plugin):
         fields=[
             (
                 "file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             )
         ],
@@ -1523,18 +1526,19 @@ def test_wf_shell_cmd_3a(plugin):
         fields=[
             (
                 "orig_file",
-                str,
-                dc.field(metadata={"position": 1, "help_string": "output file"}),
+                attr.ib(
+                    type=str, metadata={"position": 1, "help_string": "output file"}
+                ),
             ),
             (
                 "out_file",
-                tuple,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "position": 2,
-                        "output_file_template": ("{orig_file}", "_cp"),
+                        "output_file_template": "{orig_file}_cp",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             ),
         ],
@@ -1594,12 +1598,12 @@ def test_wf_shell_cmd_state_1(plugin):
         fields=[
             (
                 "file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             )
         ],
@@ -1611,18 +1615,19 @@ def test_wf_shell_cmd_state_1(plugin):
         fields=[
             (
                 "orig_file",
-                str,
-                dc.field(metadata={"position": 1, "help_string": "output file"}),
+                attr.ib(
+                    type=str, metadata={"position": 1, "help_string": "output file"}
+                ),
             ),
             (
                 "out_file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "position": 2,
-                        "output_file_template": "{orig_file}",
+                        "output_file_template": "{orig_file}_copy",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             ),
         ],
@@ -1683,12 +1688,12 @@ def test_wf_shell_cmd_ndst_1(plugin):
         fields=[
             (
                 "file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             )
         ],
@@ -1700,18 +1705,19 @@ def test_wf_shell_cmd_ndst_1(plugin):
         fields=[
             (
                 "orig_file",
-                str,
-                dc.field(metadata={"position": 1, "help_string": "output file"}),
+                attr.ib(
+                    type=str, metadata={"position": 1, "help_string": "output file"}
+                ),
             ),
             (
                 "out_file",
-                str,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "position": 2,
-                        "output_file_template": "{orig_file}",
+                        "output_file_template": "{orig_file}_copy",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             ),
         ],
@@ -1785,7 +1791,7 @@ def test_shell_cmd_outputspec_1a(plugin, results_function):
     cmd = ["touch", "newfile_tmp.txt"]
     my_output_spec = SpecInfo(
         name="Output",
-        fields=[("newfile", File, dc.field(default="newfile_tmp.txt"))],
+        fields=[("newfile", attr.ib(type=File, default="newfile_tmp.txt"))],
         bases=(ShellOutSpec,),
     )
     shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
@@ -1891,7 +1897,7 @@ def test_shell_cmd_outputspec_4(plugin, results_function):
 
     my_output_spec = SpecInfo(
         name="Output",
-        fields=[("newfile", File, dc.field(metadata={"callable": gather_output}))],
+        fields=[("newfile", attr.ib(type=File, metadata={"callable": gather_output}))],
         bases=(ShellOutSpec,),
     )
     shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
@@ -1918,12 +1924,12 @@ def test_shell_cmd_outputspec_5(plugin, results_function):
         fields=[
             (
                 "out1",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             )
         ],
@@ -1954,12 +1960,12 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function):
         fields=[
             (
                 "out1",
-                File,
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
-                    }
+                    },
                 ),
             )
         ],
@@ -2041,207 +2047,211 @@ def test_fsl():
         fields=[
             (
                 "in_file",
-                ty.Union[File, str],
-                dc.field(
+                attr.ib(
+                    type=File,
                     metadata={
                         "help_string": "input file to skull strip",
                         "position": 1,
                         "mandatory": True,
-                    }
+                    },
                 ),
             ),
             (
                 "out_file",
-                tuple,
-                dc.field(
+                attr.ib(
+                    type=str,
                     metadata={
                         "help_string": "name of output skull stripped image",
                         "position": 2,
-                        "output_file_template": ("{in_file}", "_brain"),
-                    }
+                        "output_file_template": "{in_file}_brain",
+                    },
                 ),
             ),
             (
                 "outline",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "help_string": "create surface outline image",
                         "argstr": "-o",
-                    }
+                    },
                 ),
             ),
             (
                 "mask",
-                bool,
-                dc.field(
-                    metadata={"help_string": "create binary mask image", "argstr": "-m"}
+                attr.ib(
+                    type=bool,
+                    metadata={
+                        "help_string": "create binary mask image",
+                        "argstr": "-m",
+                    },
                 ),
             ),
             (
                 "skull",
-                bool,
-                dc.field(
-                    metadata={"help_string": "create skull image", "argstr": "-s"}
+                attr.ib(
+                    type=bool,
+                    metadata={"help_string": "create skull image", "argstr": "-s"},
                 ),
             ),
             (
                 "no_output",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "help_string": "Don't generate segmented output",
                         "argstr": "-n",
-                    }
+                    },
                 ),
             ),
             (
                 "frac",
-                float,
-                dc.field(
+                attr.ib(
+                    type=float,
                     metadata={
                         "help_string": "fractional intensity threshold",
                         "argstr": "-f",
-                    }
+                    },
                 ),
             ),
             (
                 "vertical_gradient",
-                float,
-                dc.field(
+                attr.ib(
+                    type=float,
                     metadata={
                         "help_string": "vertical gradient in fractional intensity threshold (-1, 1)",
                         "argstr": "-g",
                         "allowed_values": {"min_val": -1, "max_val": 1},
-                    }
+                    },
                 ),
             ),
             (
                 "radius",
-                int,
-                dc.field(metadata={"argstr": "-r", "help_string": "head radius"}),
+                attr.ib(
+                    type=int, metadata={"argstr": "-r", "help_string": "head radius"}
+                ),
             ),
             (
                 "center",
-                ty.List[int],
-                dc.field(
+                attr.ib(
+                    type=ty.List[int],
                     metadata={
                         "help_string": "center of gravity in voxels",
                         "argstr": "-c",
                         "allowed_values": {"min_value": 0, "max_value": 3},
-                    }
+                    },
                 ),
             ),
             (
                 "threshold",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "argstr": "-t",
                         "help_string": "apply thresholding to segmented brain image and mask",
-                    }
+                    },
                 ),
             ),
             (
                 "mesh",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "argstr": "-e",
-                        "help_sting": "generate a vtk mesh brain surface",
-                    }
+                        "help_string": "generate a vtk mesh brain surface",
+                    },
                 ),
             ),
             (
                 "robust",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "help_string": "robust brain centre estimation (iterates BET several times)",
                         "argstr": "-R",
                         "xor": _xor_inputs,
-                    }
+                    },
                 ),
             ),
             (
                 "padding",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "help_string": "improve BET if FOV is very small in Z (by temporarily padding end slices",
                         "argstr": "-Z",
                         "xor": _xor_inputs,
-                    }
+                    },
                 ),
             ),
             (
                 "remove_eyes",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "help_string": "eye & optic nerve cleanup (can be useful in SIENA)",
                         "argstr": "-S",
                         "xor": _xor_inputs,
-                    }
+                    },
                 ),
             ),
             (
                 "surfaces",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "help_string": "run bet2 and then betsurf to get additional skull and scalp surfaces (includes registrations)",
                         "argstr": "-A",
                         "xor": _xor_inputs,
-                    }
+                    },
                 ),
             ),
             (
                 "t2_guided",
-                ty.Union[File, str],
-                dc.field(
+                attr.ib(
+                    type=ty.Union[File, str],
                     metadata={
                         "help_string": "as with creating surfaces, when also feeding in non-brain-extracted T2 (includes registrations)",
                         "argstr": "-A2",
                         "xor": _xor_inputs,
-                    }
+                    },
                 ),
             ),
             (
                 "functional",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "argstr": "-F",
                         "xor": _xor_inputs,
                         "help_string": "apply to 4D fMRI data",
-                    }
+                    },
                 ),
             ),
             (
                 "reduce_bias",
-                bool,
-                dc.field(
+                attr.ib(
+                    type=bool,
                     metadata={
                         "argstr": "-B",
                         "xor": _xor_inputs,
                         "help_string": "bias field and neck cleanup",
-                    }
+                    },
                 ),
             )
-            # ("number_classes", int, dc.field(metadata={"help_string": 'number of tissue-type classes', "argstr": '-n',
+            # ("number_classes", int, attr.ib(metadata={"help_string": 'number of tissue-type classes', "argstr": '-n',
             #                                            "allowed_values": {"min_val": 1, "max_val": 10}})),
             # ("output_biasfield", bool,
-            #  dc.field(metadata={"help_string": 'output estimated bias field', "argstr": '-b'})),
+            #  attr.ib(metadata={"help_string": 'output estimated bias field', "argstr": '-b'})),
             # ("output_biascorrected", bool,
-            #  dc.field(metadata={"help_string": 'output restored image (bias-corrected image)', "argstr": '-B'})),
+            #  attr.ib(metadata={"help_string": 'output restored image (bias-corrected image)', "argstr": '-B'})),
         ],
         bases=(ShellSpec,),
     )
 
     # TODO: not sure why this has to be string
-    in_file = str(Path(os.path.dirname(os.path.abspath(__file__))) / "data" / "foo.nii")
-    out_file = str(
+    in_file = Path(os.path.dirname(os.path.abspath(__file__))) / "data" / "foo.nii"
+    out_file = (
         Path(os.path.dirname(os.path.abspath(__file__))) / "data" / "foo_brain.nii"
     )
     # separate command into exec + args
@@ -2249,5 +2259,5 @@ def test_fsl():
         name="bet_task", executable="bet", in_file=in_file, input_spec=bet_input_spec
     )
     assert shelly.inputs.executable == "bet"
-    assert shelly.cmdline == f"bet {in_file} {out_file}"
-    res = shelly(plugin="cf")
+    assert shelly.cmdline == f"bet {in_file} {in_file}_brain"
+    # res = shelly(plugin="cf")

@@ -43,7 +43,7 @@ def test_result():
 def test_shellspec():
     with pytest.raises(TypeError):
         spec = ShellSpec()
-    spec = ShellSpec("ls", None)  # (executable, args)
+    spec = ShellSpec(executable="ls")  # (executable, args)
     assert hasattr(spec, "executable")
     assert hasattr(spec, "args")
 
@@ -51,38 +51,28 @@ def test_shellspec():
 container_attrs = ["image", "container", "container_xargs", "bindings"]
 
 
-@pytest.mark.xfail(
-    reason="won't work after changes in input_spec, "
-    "all fields would have to be provided"
-)
 def test_container():
     with pytest.raises(TypeError):
         spec = ContainerSpec()
-    spec = ContainerSpec("ls", None, "busybox", None)  # (execut., args, image, cont)
+    spec = ContainerSpec(
+        executable="ls", image="busybox", container="docker"
+    )  # (execut., args, image, cont)
     assert all([hasattr(spec, attr) for attr in container_attrs])
     assert hasattr(spec, "executable")
 
 
-@pytest.mark.xfail(
-    reason="won't work after changes in input_spec, "
-    "all fields would have to be provided"
-)
 def test_docker():
     with pytest.raises(TypeError):
-        spec = DockerSpec("ls", None)
-    spec = DockerSpec("ls", None, "busybox")
+        spec = DockerSpec(executable="ls")
+    spec = DockerSpec(executable="ls", image="busybox")
     assert all(hasattr(spec, attr) for attr in container_attrs)
     assert getattr(spec, "container") == "docker"
 
 
-@pytest.mark.xfail(
-    reason="won't work after changes in input_spec, "
-    "all fields would have to be provided"
-)
 def test_singularity():
     with pytest.raises(TypeError):
         spec = SingularitySpec()
-    spec = SingularitySpec("ls", None, "busybox")
+    spec = SingularitySpec(executable="ls", image="busybox")
     assert all(hasattr(spec, attr) for attr in container_attrs)
     assert getattr(spec, "container") == "singularity"
 
@@ -170,7 +160,7 @@ def test_file_hash(tmpdir):
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
     inputs = make_klass(input_spec)
     assert (
-        inputs(str(outfile)).hash
+        inputs(in_file=outfile).hash
         == "1384a1eb11cd94a5b826a82b948313b9237a0956d406ccff59e79ec92b3c935f"
     )
     with open(outfile, "wt") as fp:
@@ -179,6 +169,6 @@ def test_file_hash(tmpdir):
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
     inputs = make_klass(input_spec)
     assert (
-        inputs(outfile).hash
+        inputs(in_file=outfile).hash
         == "088625131e6718a00170ad445a9c295244dffd4e5d847c8ee4b1606d623dacb1"
     )
