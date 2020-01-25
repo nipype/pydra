@@ -320,20 +320,27 @@ class ShellCommandTask(TaskBase):
         self.inputs = attr.evolve(self.inputs, **args)
 
     @property
+    def container_args(self):
+        """ there is no container args for the Shell Task."""
+        return []
+
+    @property
     def cmdline(self):
         """Get the actual command line that will be submitted."""
         orig_inputs = attr.asdict(self.inputs)
         modified_inputs = template_update(self.inputs)
         if modified_inputs is not None:
             self.inputs = attr.evolve(self.inputs, **modified_inputs)
-        cmdline = " ".join(self.command_args)
+        cmdline = " ".join(self.container_args + self.command_args)
         self.inputs = attr.evolve(self.inputs, **orig_inputs)
         return cmdline
 
-    def _run_task(self,):
+    def _run_task(self):
         self.output_ = None
-        args = self.command_args
+        args = self.container_args + self.command_args
         if args:
+            # removing emty strings
+            args = [el for el in args if el not in ["", " "]]
             keys = ["return_code", "stdout", "stderr"]
             values = execute(args, strip=self.strip)
             self.output_ = dict(zip(keys, values))
@@ -398,17 +405,6 @@ class ContainerTask(ShellCommandTask):
         )
 
     @property
-    def cmdline(self):
-        """Get the actual command line that will be submitted."""
-        orig_inputs = attr.asdict(self.inputs)
-        modified_inputs = template_update(self.inputs)
-        if modified_inputs is not None:
-            self.inputs = attr.evolve(self.inputs, **modified_inputs)
-        cmdline = " ".join(self.container_args + self.command_args)
-        self.inputs = attr.evolve(self.inputs, **orig_inputs)
-        return cmdline
-
-    @property
     def container_args(self):
         """Get container-specific CLI arguments."""
         if self.inputs.container is None:
@@ -456,18 +452,6 @@ class ContainerTask(ShellCommandTask):
             bargs.extend([opt, "{0}:{1}:{2}".format(key, val[0], val[1])])
         # TODO: would need changes for singularity
         return bargs
-
-    def _run_task(self):
-        self.output_ = None
-        args = self.container_args + self.command_args
-        if args:
-            # removing emty strings
-            args = [el for el in args if el not in ["", " "]]
-            keys = ["return_code", "stdout", "stderr"]
-            values = execute(args, strip=self.strip)
-            self.output_ = dict(zip(keys, values))
-            if self.output_["return_code"]:
-                raise RuntimeError(self.output_["stderr"])
 
 
 class DockerTask(ContainerTask):
