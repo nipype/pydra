@@ -165,6 +165,18 @@ class ShellSpec(BaseSpec):
             "e.g. <file_name>, or a list"
         },
     )
+    image: ty.Union[File, str, None] = attr.ib(None, metadata={"help_string": "image"})
+    """The image to be containerized."""
+    bindings: ty.Optional[
+        ty.List[
+            ty.Tuple[
+                Path,  # local path
+                Path,  # container path
+                ty.Optional[str],  # mount mode
+            ]
+        ]
+    ] = attr.ib(default=None, metadata={"help_string": "bindings"})
+    """Mount points to be bound into the container."""
 
     def retrieve_values(self, wf, state_index=None):
         """Parse output results."""
@@ -394,8 +406,6 @@ class ShellOutSpec(BaseSpec):
 class ContainerSpec(ShellSpec):
     """Refine the generic command-line specification to container execution."""
 
-    image: ty.Union[File, str] = attr.ib(metadata={"help_string": "image"})
-    """The image to be containerized."""
     container: ty.Union[File, str, None] = attr.ib(
         metadata={"help_string": "container"}
     )
@@ -404,16 +414,6 @@ class ContainerSpec(ShellSpec):
         default=None, metadata={"help_string": "todo"}
     )
     """Execution arguments to run the image."""
-    bindings: ty.Optional[
-        ty.List[
-            ty.Tuple[
-                Path,  # local path
-                Path,  # container path
-                ty.Optional[str],  # mount mode
-            ]
-        ]
-    ] = attr.ib(default=None, metadata={"help_string": "bindings"})
-    """Mount points to be bound into the container."""
 
     def _file_check(self, field):
         file = Path(getattr(self, field.name))

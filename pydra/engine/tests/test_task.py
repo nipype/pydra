@@ -351,14 +351,8 @@ def test_shell_cmd(tmpdir):
 
 
 def test_container_cmds(tmpdir):
-    containy = ContainerTask(name="containy", executable="pwd")
     with pytest.raises(AttributeError):
-        containy.cmdline
-    containy.inputs.container = "docker"
-    with pytest.raises(AttributeError):
-        containy.cmdline
-    containy.inputs.image = "busybox"
-    assert containy.cmdline
+        containy = ContainerTask(name="containy", executable="pwd")
 
 
 def test_docker_cmd(tmpdir):

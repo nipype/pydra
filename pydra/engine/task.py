@@ -220,6 +220,7 @@ class ShellCommandTask(TaskBase):
         name=None,
         output_spec: ty.Optional[SpecInfo] = None,
         strip=False,
+        container=None,
         **kwargs,
     ):
         """
@@ -262,6 +263,13 @@ class ShellCommandTask(TaskBase):
             cache_dir=cache_dir,
         )
         self.strip = strip
+        self.container = container
+        if self.container:
+            if self.container not in ["docker", "singularity"]:
+                raise Exception(
+                    f"container can be either docker or singularity, "
+                    f"but {self.container} provided"
+                )
 
     @property
     def command_args(self):
@@ -319,10 +327,58 @@ class ShellCommandTask(TaskBase):
     def command_args(self, args: ty.Dict):
         self.inputs = attr.evolve(self.inputs, **args)
 
-    @property
     def container_args(self):
-        """ there is no container args for the Shell Task."""
-        return []
+        """ there is no container args for the Shell Task if container is not provided"""
+        if self.container == "docker":
+            self.inputs.container = "docker"
+            self.inputs.container_xargs = ["--rm"]
+            self.output_cpath = Path("/output_pydra")
+            cargs = DockerTask.container_args(self)
+        elif self.container == "singularity":
+            self.inputs.container = "singularity"
+            self.output_cpath = Path("/output_pydra")
+            cargs = SingularityTask.container_args(self)
+        else:
+            cargs = []
+        return cargs
+
+    @property
+    def bind_paths(self):
+        """Return bound mount points: ``dict(lpath: (cpath, mode))``."""
+        bind_paths = {}
+        output_dir_cpath = None
+        if not getattr(self.inputs, "bindings", None):
+            self.inputs.bindings = []
+        for binding in self.inputs.bindings:
+            if len(binding) == 3:
+                lpath, cpath, mode = binding
+            elif len(binding) == 2:
+                lpath, cpath, mode = binding + ["rw"]
+            else:
+                raise Exception(
+                    f"binding should have length 2, 3, or 4, it has {len(binding)}"
+                )
+            if Path(lpath) == self.output_dir:
+                output_dir_cpath = cpath
+            if mode is None:
+                mode = "rw"  # default
+            bind_paths[Path(lpath)] = (Path(cpath), mode)
+        # output_dir is added to the bindings if not part of self.inputs.bindings
+        if not output_dir_cpath:
+            bind_paths[self.output_dir] = (self.output_cpath, "rw")
+        return bind_paths
+
+    def binds(self, opt):
+        """
+        Specify mounts to bind from local filesystems to container and working directory.
+
+        Uses py:meth:`binds_paths`
+
+        """
+        bargs = []
+        for (key, val) in self.bind_paths.items():
+            bargs.extend([opt, "{0}:{1}:{2}".format(key, val[0], val[1])])
+        return bargs
 
     @property
     def cmdline(self):
@@ -331,13 +387,13 @@ class ShellCommandTask(TaskBase):
         modified_inputs = template_update(self.inputs)
         if modified_inputs is not None:
             self.inputs = attr.evolve(self.inputs, **modified_inputs)
-        cmdline = " ".join(self.container_args + self.command_args)
+        cmdline = " ".join(self.container_args() + self.command_args)
         self.inputs = attr.evolve(self.inputs, **orig_inputs)
         return cmdline
 
     def _run_task(self):
         self.output_ = None
-        args = self.container_args + self.command_args
+        args = self.container_args() + self.command_args
         if args:
             # removing emty strings
             args = [el for el in args if el not in ["", " "]]
@@ -404,54 +460,10 @@ class ContainerTask(ShellCommandTask):
             **kwargs,
         )
 
-    @property
-    def container_args(self):
-        """Get container-specific CLI arguments."""
         if self.inputs.container is None:
             raise AttributeError("Container software is not specified")
-        cargs = [self.inputs.container]
         if self.inputs.image is None:
             raise AttributeError("Container image is not specified")
-        return cargs
-
-    @property
-    def bind_paths(self):
-        """Return bound mount points: ``dict(lpath: (cpath, mode))``."""
-        bind_paths = {}
-        output_dir_cpath = None
-        if self.inputs.bindings is None:
-            self.inputs.bindings = []
-        for binding in self.inputs.bindings:
-            if len(binding) == 3:
-                lpath, cpath, mode = binding
-            elif len(binding) == 2:
-                lpath, cpath, mode = binding + ["rw"]
-            else:
-                raise Exception(
-                    f"binding should have length 2, 3, or 4, it has {len(binding)}"
-                )
-            if Path(lpath) == self.output_dir:
-                output_dir_cpath = cpath
-            if mode is None:
-                mode = "rw"  # default
-            bind_paths[Path(lpath)] = (Path(cpath), mode)
-        # output_dir is added to the bindings if not part of self.inputs.bindings
-        if not output_dir_cpath:
-            bind_paths[self.output_dir] = (self.output_cpath, "rw")
-        return bind_paths
-
-    def binds(self, opt):
-        """
-        Specify mounts to bind from local filesystems to container and working directory.
-
-        Uses py:meth:`binds_paths`
-
-        """
-        bargs = []
-        for (key, val) in self.bind_paths.items():
-            bargs.extend([opt, "{0}:{1}:{2}".format(key, val[0], val[1])])
-        # TODO: would need changes for singularity
-        return bargs
 
 
 class DockerTask(ContainerTask):
@@ -512,12 +524,10 @@ class DockerTask(ContainerTask):
         )
         self.inputs.container_xargs = ["--rm"]
 
-    @property
     def container_args(self):
         """Get container-specific CLI arguments."""
-        cargs = super().container_args
         assert self.inputs.container == "docker"
-        cargs.append("run")
+        cargs = ["docker", "run"]
         if self.inputs.container_xargs is not None:
             cargs.extend(self.inputs.container_xargs)
 
@@ -578,12 +588,10 @@ class SingularityTask(ContainerTask):
             **kwargs,
         )
 
-    @property
     def container_args(self):
         """Get container-specific CLI arguments."""
-        cargs = super().container_args
         assert self.inputs.container == "singularity"
-        cargs.append("exec")
+        cargs = ["singularity", "exec"]
         if self.inputs.container_xargs is not None:
             cargs.extend(self.inputs.container_xargs)
         cargs.append(self.inputs.image)
