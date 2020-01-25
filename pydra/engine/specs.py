@@ -406,6 +406,8 @@ class ShellOutSpec(BaseSpec):
 class ContainerSpec(ShellSpec):
     """Refine the generic command-line specification to container execution."""
 
+    image: ty.Union[File, str] = attr.ib(metadata={"help_string": "image"})
+    """The image to be containerized."""
     container: ty.Union[File, str, None] = attr.ib(
         metadata={"help_string": "container"}
     )
