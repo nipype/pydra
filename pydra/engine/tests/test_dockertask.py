@@ -235,6 +235,32 @@ def test_docker_3(plugin, tmpdir):
 
 @need_docker
 @pytest.mark.parametrize("plugin", Plugins)
+def test_docker_3_dockerflag(plugin, tmpdir):
+    """ a simple command in container with bindings,
+        creating directory in tmp dir and checking if it is in the container
+        using ShellComandTask with container="docker"
+    """
+    # creating a new directory
+    tmpdir.mkdir("new_dir")
+    cmd = ["ls", "/tmp_dir"]
+    shocky = ShellCommandTask(
+        name="shocky", container="docker", executable=cmd, image="busybox"
+    )
+    # binding tmp directory to the container
+    shocky.inputs.bindings = [(str(tmpdir), "/tmp_dir", "ro")]
+
+    with Submitter(plugin=plugin) as sub:
+        shocky(submitter=sub)
+
+    res = shocky.result()
+    assert res.output.stdout == "new_dir\n"
+    assert res.output.return_code == 0
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_4(plugin, tmpdir):
     """ task reads the file that is bounded to the container
         specifying bindings,
