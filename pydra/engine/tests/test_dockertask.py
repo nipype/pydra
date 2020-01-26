@@ -5,7 +5,7 @@ import subprocess as sp
 import pytest
 import attr
 
-from ..task import DockerTask
+from ..task import DockerTask, ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec
@@ -62,6 +62,39 @@ def test_docker_1(plugin):
 
 
 @need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_1_dockerflag(plugin):
+    """ simple command in a container, a default bindings and working directory is added
+        using ShellComandTask with container="docker"
+    """
+    cmd = "whoami"
+    shocky = ShellCommandTask(
+        name="shocky", executable=cmd, container="docker", image="busybox"
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        shocky(submitter=sub)
+
+    res = shocky.result()
+    assert res.output.stdout == "root\n"
+    assert res.output.return_code == 0
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_1_dockerflag_exception(plugin):
+    """using ShellComandTask with container="docker" without providing an emage"""
+    cmd = "whoami"
+    with pytest.raises(Exception) as excinfo:
+        shocky = ShellCommandTask(
+            name="shocky", executable=cmd, container="docker"  # , image="busybox"
+        )
+    assert "the image has to be" in str(excinfo.value)
+
+
+@need_docker
 def test_docker_2_nosubm():
     """ a command with arguments, cmd and args given as executable
         no submitter
@@ -96,6 +129,30 @@ def test_docker_2(plugin):
     with Submitter(plugin=plugin) as sub:
         docky(submitter=sub)
     res = docky.result()
+    assert res.output.stdout.strip() == " ".join(cmd[1:])
+    assert res.output.return_code == 0
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_2_dockerflag(plugin):
+    """ a command with arguments, cmd and args given as executable
+        using ShellComandTask with container="docker"
+    """
+    cmd = ["echo", "hail", "pydra"]
+    shocky = ShellCommandTask(
+        name="shocky", executable=cmd, container="docker", image="busybox"
+    )
+    assert (
+        shocky.cmdline
+        == f"docker run --rm -v {shocky.output_dir}:/output_pydra:rw -w /output_pydra {shocky.inputs.image} {' '.join(cmd)}"
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        shocky(submitter=sub)
+    res = shocky.result()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
     if res.output.stderr:
@@ -174,6 +231,60 @@ def test_docker_3(plugin, tmpdir):
     assert res.output.return_code == 0
     if res.output.stderr:
         assert "Unable to find image" in res.output.stderr
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_4(plugin, tmpdir):
+    """ task reads the file that is bounded to the container
+        specifying bindings,
+    """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra")
+
+    cmd = ["cat", "/tmp_dir/file_pydra.txt"]
+    docky = DockerTask(
+        name="docky_cat",
+        image="busybox",
+        executable=cmd,
+        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+        strip=True,
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        docky(submitter=sub)
+
+    res = docky.result()
+    assert res.output.stdout == "hello from pydra"
+    assert res.output.return_code == 0
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_4_dockerflag(plugin, tmpdir):
+    """ task reads the file that is bounded to the container
+        specifying bindings,
+        using ShellComandTask with container="docker"
+    """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra")
+
+    cmd = ["cat", "/tmp_dir/file_pydra.txt"]
+    shocky = ShellCommandTask(
+        name="shocky",
+        container="docker",
+        image="busybox",
+        executable=cmd,
+        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+        strip=True,
+    )
+
+    with Submitter(plugin=plugin) as sub:
+        shocky(submitter=sub)
+
+    res = shocky.result()
+    assert res.output.stdout == "hello from pydra"
+    assert res.output.return_code == 0
 
 
 # tests with State
@@ -296,6 +407,49 @@ def test_wf_docker_1(plugin, tmpdir):
         )
     )
     wf.set_output([("out", wf.docky_echo.lzout.stdout)])
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res.output.out == "message from the previous task: hello from pydra"
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_docker_1_dockerflag(plugin, tmpdir):
+    """ a workflow with two connected task
+        the first one read the file that is bounded to the container,
+        the second uses echo
+        using ShellComandTask with container="docker"
+    """
+    with open(tmpdir.join("file_pydra.txt"), "w") as f:
+        f.write("hello from pydra")
+
+    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
+    wf.inputs.cmd1 = ["cat", "/tmp_dir/file_pydra.txt"]
+    wf.inputs.cmd2 = ["echo", "message from the previous task:"]
+    wf.add(
+        ShellCommandTask(
+            name="shocky_cat",
+            image="busybox",
+            container="docker",
+            executable=wf.lzin.cmd1,
+            bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+            strip=True,
+        )
+    )
+    wf.add(
+        ShellCommandTask(
+            name="shocky_echo",
+            image="ubuntu",
+            executable=wf.lzin.cmd2,
+            args=wf.shocky_cat.lzout.stdout,
+            strip=True,
+            container="docker",
+        )
+    )
+    wf.set_output([("out", wf.shocky_echo.lzout.stdout)])
 
     with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
