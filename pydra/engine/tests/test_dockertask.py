@@ -69,7 +69,7 @@ def test_docker_1_dockerflag(plugin):
     """
     cmd = "whoami"
     shocky = ShellCommandTask(
-        name="shocky", executable=cmd, container="docker", image="busybox"
+        name="shocky", executable=cmd, container_info=("docker", "busybox")
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -89,9 +89,9 @@ def test_docker_1_dockerflag_exception(plugin):
     cmd = "whoami"
     with pytest.raises(Exception) as excinfo:
         shocky = ShellCommandTask(
-            name="shocky", executable=cmd, container="docker"  # , image="busybox"
+            name="shocky", executable=cmd, container_info=("docker")
         )
-    assert "the image has to be" in str(excinfo.value)
+    assert "container_info has to have 2 or 3 elements" in str(excinfo.value)
 
 
 @need_docker
@@ -143,7 +143,7 @@ def test_docker_2_dockerflag(plugin):
     """
     cmd = ["echo", "hail", "pydra"]
     shocky = ShellCommandTask(
-        name="shocky", executable=cmd, container="docker", image="busybox"
+        name="shocky", executable=cmd, container_info=("docker", "busybox")
     )
     assert (
         shocky.cmdline
@@ -244,10 +244,36 @@ def test_docker_3_dockerflag(plugin, tmpdir):
     tmpdir.mkdir("new_dir")
     cmd = ["ls", "/tmp_dir"]
     shocky = ShellCommandTask(
-        name="shocky", container="docker", executable=cmd, image="busybox"
+        name="shocky", container_info=("docker", "busybox"), executable=cmd
     )
     # binding tmp directory to the container
     shocky.inputs.bindings = [(str(tmpdir), "/tmp_dir", "ro")]
+
+    with Submitter(plugin=plugin) as sub:
+        shocky(submitter=sub)
+
+    res = shocky.result()
+    assert res.output.stdout == "new_dir\n"
+    assert res.output.return_code == 0
+    if res.output.stderr:
+        assert "Unable to find image" in res.output.stderr
+
+
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_docker_3_dockerflagbind(plugin, tmpdir):
+    """ a simple command in container with bindings,
+        creating directory in tmp dir and checking if it is in the container
+        using ShellComandTask with container="docker"
+    """
+    # creating a new directory
+    tmpdir.mkdir("new_dir")
+    cmd = ["ls", "/tmp_dir"]
+    shocky = ShellCommandTask(
+        name="shocky",
+        container_info=("docker", "busybox", [(str(tmpdir), "/tmp_dir", "ro")]),
+        executable=cmd,
+    )
 
     with Submitter(plugin=plugin) as sub:
         shocky(submitter=sub)
@@ -298,10 +324,8 @@ def test_docker_4_dockerflag(plugin, tmpdir):
     cmd = ["cat", "/tmp_dir/file_pydra.txt"]
     shocky = ShellCommandTask(
         name="shocky",
-        container="docker",
-        image="busybox",
+        container_info=("docker", "busybox", [(str(tmpdir), "/tmp_dir", "ro")]),
         executable=cmd,
-        bindings=[(str(tmpdir), "/tmp_dir", "ro")],
         strip=True,
     )
 
@@ -458,21 +482,18 @@ def test_wf_docker_1_dockerflag(plugin, tmpdir):
     wf.add(
         ShellCommandTask(
             name="shocky_cat",
-            image="busybox",
-            container="docker",
+            container_info=("docker", "busybox", [(str(tmpdir), "/tmp_dir", "ro")]),
             executable=wf.lzin.cmd1,
-            bindings=[(str(tmpdir), "/tmp_dir", "ro")],
             strip=True,
         )
     )
     wf.add(
         ShellCommandTask(
             name="shocky_echo",
-            image="ubuntu",
             executable=wf.lzin.cmd2,
             args=wf.shocky_cat.lzout.stdout,
             strip=True,
-            container="docker",
+            container_info=("docker", "ubuntu"),
         )
     )
     wf.set_output([("out", wf.shocky_echo.lzout.stdout)])

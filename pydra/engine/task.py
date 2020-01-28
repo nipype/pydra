@@ -210,21 +210,28 @@ class FunctionTask(TaskBase):
 class ShellCommandTask(TaskBase):
     """Wrap a shell command as a task element."""
 
-    def __new__(cls, container=None, *args, **kwargs):
-        if container == "docker":
-            if "image" not in kwargs:
-                raise Exception(
-                    "when task run in a container, the image has to be specified"
-                )
-            return DockerTask(*args, **kwargs)
-        elif container == "singularity":
-            if "image" not in kwargs:
-                raise Exception(
-                    "when task run in a container, the image has to be specified"
-                )
-            return SingularityTask(*args, **kwargs)
-        else:
+    def __new__(cls, container_info=None, *args, **kwargs):
+        if not container_info:
             return super(ShellCommandTask, cls).__new__(cls)
+
+        if len(container_info) == 3:
+            type, image, bind = container_info
+        elif len(container_info) == 2:
+            type, image, bind = container_info + (None,)
+        else:
+            raise Exception(
+                f"container_info has to have 2 or 3 elements, but {container_info} provided"
+            )
+
+        if type == "docker":
+            return DockerTask(image=image, bindings=bind, *args, **kwargs)
+        elif type == "singularity":
+            return SingularityTask(image=image, bindings=bind, *args, **kwargs)
+        else:
+            raise Exception(
+                f"first element of container_info has to be "
+                f"docker or singularity, but {container_info[0]} provided"
+            )
 
     def __init__(
         self,
@@ -473,6 +480,8 @@ class ContainerTask(ShellCommandTask):
 class DockerTask(ContainerTask):
     """Extend shell command task for containerized execution with the Docker Engine."""
 
+    init = False
+
     def __init__(
         self,
         name,
@@ -511,22 +520,24 @@ class DockerTask(ContainerTask):
             TODO
 
         """
-        if input_spec is None:
-            input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
+        if not self.init:
+            if input_spec is None:
+                input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
 
-        super(DockerTask, self).__init__(
-            name=name,
-            input_spec=input_spec,
-            output_spec=output_spec,
-            audit_flags=audit_flags,
-            messengers=messengers,
-            messenger_args=messenger_args,
-            cache_dir=cache_dir,
-            strip=strip,
-            output_cpath=output_cpath,
-            **kwargs,
-        )
-        self.inputs.container_xargs = ["--rm"]
+            super(DockerTask, self).__init__(
+                name=name,
+                input_spec=input_spec,
+                output_spec=output_spec,
+                audit_flags=audit_flags,
+                messengers=messengers,
+                messenger_args=messenger_args,
+                cache_dir=cache_dir,
+                strip=strip,
+                output_cpath=output_cpath,
+                **kwargs,
+            )
+            self.inputs.container_xargs = ["--rm"]
+            self.init = True
 
     @property
     def container_args(self):
@@ -546,6 +557,8 @@ class DockerTask(ContainerTask):
 
 class SingularityTask(ContainerTask):
     """Extend shell command task for containerized execution with Singularity."""
+
+    init = False
 
     def __init__(
         self,
@@ -581,18 +594,22 @@ class SingularityTask(ContainerTask):
             TODO
 
         """
-        if input_spec is None:
-            input_spec = SpecInfo(name="Inputs", fields=[], bases=(SingularitySpec,))
-        super(SingularityTask, self).__init__(
-            input_spec=input_spec,
-            output_spec=output_spec,
-            audit_flags=audit_flags,
-            messengers=messengers,
-            messenger_args=messenger_args,
-            cache_dir=cache_dir,
-            strip=strip,
-            **kwargs,
-        )
+        if not self.init:
+            if input_spec is None:
+                input_spec = SpecInfo(
+                    name="Inputs", fields=[], bases=(SingularitySpec,)
+                )
+            super(SingularityTask, self).__init__(
+                input_spec=input_spec,
+                output_spec=output_spec,
+                audit_flags=audit_flags,
+                messengers=messengers,
+                messenger_args=messenger_args,
+                cache_dir=cache_dir,
+                strip=strip,
+                **kwargs,
+            )
+            self.init = True
 
     @property
     def container_args(self):

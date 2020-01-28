@@ -95,8 +95,7 @@ def test_singularity_2_singuflag(plugin, tmpdir):
     shingu = ShellCommandTask(
         name="shingu",
         executable=cmd,
-        container="singularity",
-        image=image,
+        container_info=("singularity", image),
         cache_dir=tmpdir,
     )
     assert (
@@ -170,11 +169,7 @@ def test_singularity_3_singuflag(plugin, tmpdir):
     cmd = ["ls", "/tmp_dir"]
     image = "library://sylabsed/linux/alpine"
     shingu = SingularityTask(
-        name="singu",
-        executable=cmd,
-        container="singularity",
-        image=image,
-        cache_dir=tmpdir,
+        name="singu", executable=cmd, container=("singularity", image), cache_dir=tmpdir
     )
     # binding tmp directory to the container
     shingu.inputs.bindings = [(str(tmpdir), "/tmp_dir", "ro")]
