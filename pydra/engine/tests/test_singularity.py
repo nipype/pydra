@@ -88,7 +88,7 @@ def test_singularity_2(plugin, tmpdir):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_2_singuflag(plugin, tmpdir):
     """ a command with arguments, cmd and args given as executable
-        using ShellComandTask with container="singularity"
+        using ShellComandTask with container_info=("singularity", image)
     """
     cmd = ["echo", "hail", "pydra"]
     image = "library://sylabsed/linux/alpine"
@@ -162,17 +162,46 @@ def test_singularity_3(plugin, tmpdir):
 def test_singularity_3_singuflag(plugin, tmpdir):
     """ a simple command in container with bindings,
         creating directory in tmp dir and checking if it is in the container
-        using ShellComandTask with container="singularity"
+        using ShellComandTask with container_info=("singularity", image)
     """
     # creating a new directory
     tmpdir.mkdir("new_dir")
     cmd = ["ls", "/tmp_dir"]
     image = "library://sylabsed/linux/alpine"
     shingu = SingularityTask(
-        name="singu", executable=cmd, container=("singularity", image), cache_dir=tmpdir
+        name="singu",
+        executable=cmd,
+        container_info=("singularity", image),
+        cache_dir=tmpdir,
     )
     # binding tmp directory to the container
     shingu.inputs.bindings = [(str(tmpdir), "/tmp_dir", "ro")]
+
+    with Submitter(plugin=plugin) as sub:
+        shingu(submitter=sub)
+
+    res = shingu.result()
+    assert "new_dir\n" in res.output.stdout
+    assert res.output.return_code == 0
+
+
+@need_singularity
+@pytest.mark.parametrize("plugin", Plugins)
+def test_singularity_3_singuflagbind(plugin, tmpdir):
+    """ a simple command in container with bindings,
+        creating directory in tmp dir and checking if it is in the container
+        using ShellComandTask with container_info=("singularity", image, bindings)
+    """
+    # creating a new directory
+    tmpdir.mkdir("new_dir")
+    cmd = ["ls", "/tmp_dir"]
+    image = "library://sylabsed/linux/alpine"
+    shingu = SingularityTask(
+        name="singu",
+        executable=cmd,
+        container_info=("singularity", image, [(str(tmpdir), "/tmp_dir", "ro")]),
+        cache_dir=tmpdir,
+    )
 
     with Submitter(plugin=plugin) as sub:
         shingu(submitter=sub)

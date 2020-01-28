@@ -65,7 +65,7 @@ def test_docker_1(plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_1_dockerflag(plugin):
     """ simple command in a container, a default bindings and working directory is added
-        using ShellComandTask with container="docker"
+        using ShellComandTask with container_info=("docker", image)
     """
     cmd = "whoami"
     shocky = ShellCommandTask(
@@ -85,7 +85,7 @@ def test_docker_1_dockerflag(plugin):
 @need_docker
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_1_dockerflag_exception(plugin):
-    """using ShellComandTask with container="docker" without providing an emage"""
+    """using ShellComandTask with container_info=("docker"), no image provided"""
     cmd = "whoami"
     with pytest.raises(Exception) as excinfo:
         shocky = ShellCommandTask(
@@ -139,7 +139,7 @@ def test_docker_2(plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_docker_2_dockerflag(plugin):
     """ a command with arguments, cmd and args given as executable
-        using ShellComandTask with container="docker"
+        using ShellComandTask with container_info=("docker", image)
     """
     cmd = ["echo", "hail", "pydra"]
     shocky = ShellCommandTask(
@@ -238,7 +238,7 @@ def test_docker_3(plugin, tmpdir):
 def test_docker_3_dockerflag(plugin, tmpdir):
     """ a simple command in container with bindings,
         creating directory in tmp dir and checking if it is in the container
-        using ShellComandTask with container="docker"
+        using ShellComandTask with container_info=("docker", image)
     """
     # creating a new directory
     tmpdir.mkdir("new_dir")
@@ -264,7 +264,7 @@ def test_docker_3_dockerflag(plugin, tmpdir):
 def test_docker_3_dockerflagbind(plugin, tmpdir):
     """ a simple command in container with bindings,
         creating directory in tmp dir and checking if it is in the container
-        using ShellComandTask with container="docker"
+        using ShellComandTask with container_info=("docker", image)
     """
     # creating a new directory
     tmpdir.mkdir("new_dir")
@@ -316,7 +316,7 @@ def test_docker_4(plugin, tmpdir):
 def test_docker_4_dockerflag(plugin, tmpdir):
     """ task reads the file that is bounded to the container
         specifying bindings,
-        using ShellComandTask with container="docker"
+        using ShellComandTask with container_info=("docker", image, bindings)
     """
     with open(tmpdir.join("file_pydra.txt"), "w") as f:
         f.write("hello from pydra")
@@ -471,7 +471,7 @@ def test_wf_docker_1_dockerflag(plugin, tmpdir):
     """ a workflow with two connected task
         the first one read the file that is bounded to the container,
         the second uses echo
-        using ShellComandTask with container="docker"
+        using ShellComandTask with container_info
     """
     with open(tmpdir.join("file_pydra.txt"), "w") as f:
         f.write("hello from pydra")
