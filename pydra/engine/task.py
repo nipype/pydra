@@ -343,24 +343,25 @@ class ShellCommandTask(TaskBase):
         self.inputs = attr.evolve(self.inputs, **args)
 
     @property
-    def container_args(self):
-        """ there is no container args for the Shell Task."""
-        return []
-
-    @property
     def cmdline(self):
         """Get the actual command line that will be submitted."""
         orig_inputs = attr.asdict(self.inputs)
         modified_inputs = template_update(self.inputs)
         if modified_inputs is not None:
             self.inputs = attr.evolve(self.inputs, **modified_inputs)
-        cmdline = " ".join(self.container_args + self.command_args)
+        if isinstance(self, ContainerTask):
+            cmdline = " ".join(self.container_args + self.command_args)
+        else:
+            cmdline = " ".join(self.command_args)
         self.inputs = attr.evolve(self.inputs, **orig_inputs)
         return cmdline
 
     def _run_task(self):
         self.output_ = None
-        args = self.container_args + self.command_args
+        if isinstance(self, ContainerTask):
+            args = self.container_args + self.command_args
+        else:
+            args = self.command_args
         if args:
             # removing emty strings
             args = [el for el in args if el not in ["", " "]]
