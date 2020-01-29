@@ -215,17 +215,17 @@ class ShellCommandTask(TaskBase):
             return super(ShellCommandTask, cls).__new__(cls)
 
         if len(container_info) == 3:
-            type, image, bind = container_info
+            type_cont, image, bind = container_info
         elif len(container_info) == 2:
-            type, image, bind = container_info + (None,)
+            type_cont, image, bind = container_info + (None,)
         else:
             raise Exception(
                 f"container_info has to have 2 or 3 elements, but {container_info} provided"
             )
 
-        if type == "docker":
+        if type_cont == "docker":
             return DockerTask(image=image, bindings=bind, *args, **kwargs)
-        elif type == "singularity":
+        elif type_cont == "singularity":
             return SingularityTask(image=image, bindings=bind, *args, **kwargs)
         else:
             raise Exception(
