@@ -351,7 +351,7 @@ def test_shell_cmd(tmpdir):
 
 
 def test_container_cmds(tmpdir):
-    containy = ContainerTask(name="containy", executable="pwd")
+    containy = DockerTask(name="containy", executable="pwd")
     with pytest.raises(AttributeError):
         containy.cmdline
     containy.inputs.container = "docker"

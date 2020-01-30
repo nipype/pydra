@@ -122,8 +122,7 @@ def test_shell_cmd_3(plugin):
 
     # all args given as executable
     shelly = ShellCommandTask(name="shelly", executable=cmd).split("executable")
-    # TODO: doesnt make sense for tasks with splitter
-    #    assert shelly.cmdline == " ".join(cmd)
+    assert shelly.cmdline == ["pwd", "whoami"]
     res = shelly(plugin=plugin)
     assert res[0].output.stdout == f"{str(shelly.output_dir[0])}\n"
     if "USER" in os.environ:
@@ -147,8 +146,7 @@ def test_shell_cmd_4(plugin):
     )
     assert shelly.inputs.executable == "echo"
     assert shelly.inputs.args == ["nipype", "pydra"]
-    # this doesnt work, cmdline gives echo nipype pydra
-    # assert shelly.cmdline == "echo pydra"
+    assert shelly.cmdline == ["echo nipype", "echo pydra"]
     res = shelly(plugin=plugin)
 
     assert res[0].output.stdout == "nipype\n"
@@ -173,8 +171,7 @@ def test_shell_cmd_5(plugin):
     )
     assert shelly.inputs.executable == "echo"
     assert shelly.inputs.args == ["nipype", "pydra"]
-    # this doesnt work, cmdline gives echo nipype pydra
-    # assert shelly.cmdline == "echo pydra"
+    assert shelly.cmdline == ["echo nipype", "echo pydra"]
     res = shelly(plugin=plugin)
 
     assert res[0][0].output.stdout == "nipype\n"
@@ -194,8 +191,12 @@ def test_shell_cmd_6(plugin):
     )
     assert shelly.inputs.executable == ["echo", ["echo", "-n"]]
     assert shelly.inputs.args == ["nipype", "pydra"]
-    # this doesnt work, cmdline gives echo nipype pydra
-    # assert shelly.cmdline == "echo pydra"
+    assert shelly.cmdline == [
+        "echo nipype",
+        "echo pydra",
+        "echo -n nipype",
+        "echo -n pydra",
+    ]
     res = shelly(plugin=plugin)
 
     assert res[0].output.stdout == "nipype\n"
@@ -234,8 +235,7 @@ def test_shell_cmd_7(plugin):
     )
     assert shelly.inputs.executable == ["echo", ["echo", "-n"]]
     assert shelly.inputs.args == ["nipype", "pydra"]
-    # this doesnt work, cmdline gives echo nipype pydra
-    # assert shelly.cmdline == "echo pydra"
+
     res = shelly(plugin=plugin)
 
     assert res[0][0].output.stdout == "nipype\n"
@@ -2251,9 +2251,7 @@ def test_fsl():
 
     # TODO: not sure why this has to be string
     in_file = Path(os.path.dirname(os.path.abspath(__file__))) / "data" / "foo.nii"
-    out_file = (
-        Path(os.path.dirname(os.path.abspath(__file__))) / "data" / "foo_brain.nii"
-    )
+
     # separate command into exec + args
     shelly = ShellCommandTask(
         name="bet_task", executable="bet", in_file=in_file, input_spec=bet_input_spec

@@ -44,7 +44,7 @@ import inspect
 import typing as ty
 from pathlib import Path
 
-from .core import TaskBase
+from .core import TaskBase, is_lazy
 from ..utils.messenger import AuditFlag
 from .specs import (
     File,
@@ -288,7 +288,20 @@ class ShellCommandTask(TaskBase):
 
     @property
     def command_args(self):
-        """Get command line arguments."""
+        """Get command line arguments, returns a list if task has a state"""
+        if is_lazy(self.inputs):
+            raise Exception("can't return cmdline, self.inputs has LazyFields")
+        if self.state:
+            command_args_list = []
+            self.state.prepare_states(self.inputs)
+            for ii, el in enumerate(self.state.states_ind):
+                command_args_list.append(self._command_args_single(el, ind=ii))
+            return command_args_list
+        else:
+            return self._command_args_single(self.inputs)
+
+    def _command_args_single(self, state_ind, ind=None):
+        """Get command line arguments for a single state"""
         pos_args = []  # list for (position, command arg)
         for f in attr_fields(self.inputs):
             if f.name == "executable":
@@ -311,13 +324,16 @@ class ShellCommandTask(TaskBase):
             # if f.metadata.get("copyfile") in [True, False]:
             #    value = str(self.inputs.map_copyfiles[f.name])
             # else:
-            value = getattr(self.inputs, f.name)
+            if self.state and f"{self.name}.{f.name}" in state_ind:
+                value = getattr(self.inputs, f.name)[state_ind[f"{self.name}.{f.name}"]]
+            else:
+                value = getattr(self.inputs, f.name)
             if is_local_file(f):
                 value = str(value)
             # changing path to the cpath (the directory should be mounted)
             if getattr(self, "bind_paths", None) and is_local_file(f):
                 lpath = Path(value)
-                cdir = self.bind_paths[lpath.parent][0]
+                cdir = self.bind_paths(ind=ind)[lpath.parent][0]
                 cpath = cdir.joinpath(lpath.name)
                 value = str(cpath)
             if f.type is bool:
@@ -338,21 +354,32 @@ class ShellCommandTask(TaskBase):
             cmd_args += el[1]
         return cmd_args
 
-    @command_args.setter
-    def command_args(self, args: ty.Dict):
-        self.inputs = attr.evolve(self.inputs, **args)
-
     @property
     def cmdline(self):
-        """Get the actual command line that will be submitted."""
+        """ Get the actual command line that will be submitted
+            Returns a list if the task has a state.
+        """
+        if is_lazy(self.inputs):
+            raise Exception("can't return cmdline, self.inputs has LazyFields")
         orig_inputs = attr.asdict(self.inputs)
         modified_inputs = template_update(self.inputs)
         if modified_inputs is not None:
             self.inputs = attr.evolve(self.inputs, **modified_inputs)
         if isinstance(self, ContainerTask):
-            cmdline = " ".join(self.container_args + self.command_args)
+            if self.state:
+                cmdline = []
+                for con, com in zip(self.container_args, self.command_args):
+                    cmdline.append(" ".join(con + com))
+            else:
+                cmdline = " ".join(self.container_args + self.command_args)
         else:
-            cmdline = " ".join(self.command_args)
+            if self.state:
+                cmdline = []
+                for el in self.command_args:
+                    cmdline.append(" ".join(el))
+            else:
+                cmdline = " ".join(self.command_args)
+
         self.inputs = attr.evolve(self.inputs, **orig_inputs)
         return cmdline
 
@@ -428,23 +455,27 @@ class ContainerTask(ShellCommandTask):
             **kwargs,
         )
 
-    @property
-    def container_args(self):
+    def container_check(self, container_type):
         """Get container-specific CLI arguments."""
         if self.inputs.container is None:
             raise AttributeError("Container software is not specified")
-        cargs = [self.inputs.container]
+        elif self.inputs.container != container_type:
+            raise AttributeError(
+                f"Container type should be {container_type}, but {self.inputs.container} given"
+            )
         if self.inputs.image is None:
             raise AttributeError("Container image is not specified")
-        return cargs
 
-    @property
-    def bind_paths(self):
+    def bind_paths(self, ind=None):
         """Return bound mount points: ``dict(lpath: (cpath, mode))``."""
         bind_paths = {}
         output_dir_cpath = None
         if self.inputs.bindings is None:
             self.inputs.bindings = []
+        if ind is None:
+            output_dir = self.output_dir
+        else:
+            output_dir = self.output_dir[ind]
         for binding in self.inputs.bindings:
             if len(binding) == 3:
                 lpath, cpath, mode = binding
@@ -454,17 +485,17 @@ class ContainerTask(ShellCommandTask):
                 raise Exception(
                     f"binding should have length 2, 3, or 4, it has {len(binding)}"
                 )
-            if Path(lpath) == self.output_dir:
+            if Path(lpath) == output_dir:
                 output_dir_cpath = cpath
             if mode is None:
                 mode = "rw"  # default
             bind_paths[Path(lpath)] = (Path(cpath), mode)
         # output_dir is added to the bindings if not part of self.inputs.bindings
         if not output_dir_cpath:
-            bind_paths[self.output_dir] = (self.output_cpath, "rw")
+            bind_paths[output_dir] = (self.output_cpath, "rw")
         return bind_paths
 
-    def binds(self, opt):
+    def binds(self, opt, ind=None):
         """
         Specify mounts to bind from local filesystems to container and working directory.
 
@@ -472,9 +503,8 @@ class ContainerTask(ShellCommandTask):
 
         """
         bargs = []
-        for (key, val) in self.bind_paths.items():
+        for (key, val) in self.bind_paths(ind).items():
             bargs.extend([opt, "{0}:{1}:{2}".format(key, val[0], val[1])])
-        # TODO: would need changes for singularity
         return bargs
 
 
@@ -542,16 +572,36 @@ class DockerTask(ContainerTask):
 
     @property
     def container_args(self):
-        """Get container-specific CLI arguments."""
-        cargs = super().container_args
-        assert self.inputs.container == "docker"
-        cargs.append("run")
+        """Get container-specific CLI arguments, returns a list if the task has a state"""
+        if is_lazy(self.inputs):
+            raise Exception("can't return container_args, self.inputs has LazyFields")
+        self.container_check("docker")
+        if self.state:
+            self.state.prepare_states(self.inputs)
+            cargs_list = []
+            for ii, el in enumerate(self.state.states_ind):
+                if f"{self.name}.image" in el:
+                    cargs_list.append(
+                        self._container_args_single(
+                            self.inputs.image[el[f"{self.name}.image"]], ind=ii
+                        )
+                    )
+                else:
+                    cargs_list.append(
+                        self._container_args_single(self.inputs.image, ind=ii)
+                    )
+            return cargs_list
+        else:
+            return self._container_args_single(self.inputs.image)
+
+    def _container_args_single(self, image, ind=None):
+        cargs = ["docker", "run"]
         if self.inputs.container_xargs is not None:
             cargs.extend(self.inputs.container_xargs)
 
-        cargs.extend(self.binds("-v"))
+        cargs.extend(self.binds("-v", ind))
         cargs.extend(["-w", str(self.output_cpath)])
-        cargs.append(self.inputs.image)
+        cargs.append(image)
 
         return cargs
 
@@ -615,14 +665,35 @@ class SingularityTask(ContainerTask):
     @property
     def container_args(self):
         """Get container-specific CLI arguments."""
-        cargs = super().container_args
-        assert self.inputs.container == "singularity"
-        cargs.append("exec")
+        if is_lazy(self.inputs):
+            raise Exception("can't return container_args, self.inputs has LazyFields")
+        self.container_check("singularity")
+        if self.state:
+            self.state.prepare_states(self.inputs)
+            cargs_list = []
+            for ii, el in enumerate(self.state.states_ind):
+                if f"{self.name}.image" in el:
+                    cargs_list.append(
+                        self._container_args_single(
+                            self.inputs.image[el[f"{self.name}.image"]], ind=ii
+                        )
+                    )
+                else:
+                    cargs_list.append(
+                        self._container_args_single(self.inputs.image, ind=ii)
+                    )
+            return cargs_list
+        else:
+            return self._container_args_single(self.inputs.image)
+
+    def _container_args_single(self, image, ind=None):
+        cargs = ["singularity", "exec"]
+
         if self.inputs.container_xargs is not None:
             cargs.extend(self.inputs.container_xargs)
-        cargs.append(self.inputs.image)
+        cargs.append(image)
 
         # insert bindings before image
         idx = len(cargs) - 1
-        cargs[idx:-1] = self.binds("-B")
+        cargs[idx:-1] = self.binds("-B", ind)
         return cargs
