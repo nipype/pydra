@@ -446,6 +446,33 @@ def test_task_nostate_cachelocations(plugin, tmpdir):
     assert not nn2.output_dir.exists()
 
 
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_cachelocations_forcererun(plugin, tmpdir):
+    """
+    Two identical tasks with provided cache_dir;
+    the second task has cache_locations,
+    but submitter is called with rerun=True, so should recompute
+    """
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    cache_dir2 = tmpdir.mkdir("test_task_nostate2")
+
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    with Submitter(plugin=plugin) as sub:
+        sub(nn2, rerun=True)
+
+    # checking the results
+    results2 = nn2.result()
+    assert results2.output.out == 5
+
+    # checking if the second task rerun the interface
+    assert nn.output_dir.exists()
+    assert nn2.output_dir.exists()
+
+
 def test_task_nostate_cachelocations_nosubmitter(tmpdir):
     """
     Two identical tasks (that are run without submitter!) with provided cache_dir;
@@ -467,6 +494,30 @@ def test_task_nostate_cachelocations_nosubmitter(tmpdir):
     # checking if the second task didn't run the interface again
     assert nn.output_dir.exists()
     assert not nn2.output_dir.exists()
+
+
+def test_task_nostate_cachelocations_nosubmitter_forcererun(tmpdir):
+    """
+    Two identical tasks (that are run without submitter!) with provided cache_dir;
+    the second task has cache_locations,
+    but submitter is called with rerun=True, so should recompute
+    """
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    cache_dir2 = tmpdir.mkdir("test_task_nostate2")
+
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    nn()
+
+    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2(rerun=True)
+
+    # checking the results
+    results2 = nn2.result()
+    assert results2.output.out == 5
+
+    # checking if the second task run the interface again
+    assert nn.output_dir.exists()
+    assert nn2.output_dir.exists()
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -994,7 +1045,6 @@ def test_task_state_cachedir(plugin, tmpdir):
         assert results[i].output.out == res[1]
 
 
-@pytest.mark.xfail(reason="TODO: output_dir.exists check doesn't work when splitter")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_cachelocations(plugin, tmpdir):
     """
@@ -1020,13 +1070,41 @@ def test_task_state_cachelocations(plugin, tmpdir):
     for i, res in enumerate(expected):
         assert results2[i].output.out == res[1]
 
-    # TODO: this doesnt work properly when splitter
-    # checking if the second task didn't run the interface again
-    assert nn.output_dir.exists()
-    assert not nn2.output_dir.exists()
+    assert all([dir.exists() for dir in nn.output_dir])
+    assert not any([dir.exists() for dir in nn2.output_dir])
 
 
-@pytest.mark.xfail(reason="TODO: output_dir.exists check doesn't work when splitter")
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_state_cachelocations_forcererun(plugin, tmpdir):
+    """
+    Two identical tasks with a state and cache_dir;
+    the second task has cache_locations,
+    but submitter is called with rerun=True, so should recompute
+    """
+    cache_dir = tmpdir.mkdir("test_task_nostate")
+    cache_dir2 = tmpdir.mkdir("test_task_nostate2")
+
+    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir).split(splitter="a", a=[3, 5])
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    nn2 = fun_addtwo(
+        name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir
+    ).split(splitter="a", a=[3, 5])
+    with Submitter(plugin=plugin) as sub:
+        sub(nn2, rerun=True)
+
+    # checking the results
+    results2 = nn2.result()
+    expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
+    for i, res in enumerate(expected):
+        assert results2[i].output.out == res[1]
+
+    # both workflows should be run
+    assert all([dir.exists() for dir in nn.output_dir])
+    assert all([dir.exists() for dir in nn2.output_dir])
+
+
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_cachelocations_updated(plugin, tmpdir):
     """
@@ -1055,7 +1133,6 @@ def test_task_state_cachelocations_updated(plugin, tmpdir):
     for i, res in enumerate(expected):
         assert results2[i].output.out == res[1]
 
-    # TODO: this doesnt work properly when splitter
-    # checking if both tasks run interface
-    assert nn.output_dir.exists()
-    assert nn2.output_dir.exists()
+    # both workflows should be run
+    assert all([dir.exists() for dir in nn.output_dir])
+    assert all([dir.exists() for dir in nn2.output_dir])

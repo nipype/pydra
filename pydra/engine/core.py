@@ -335,7 +335,7 @@ class TaskBase:
             return [self._cache_dir / checksum for checksum in self.checksum_states()]
         return self._cache_dir / self.checksum
 
-    def __call__(self, submitter=None, plugin=None, **kwargs):
+    def __call__(self, submitter=None, plugin=None, rerun=False, **kwargs):
         """Make tasks callable themselves."""
         from .submitter import Submitter
 
@@ -355,10 +355,10 @@ class TaskBase:
                 raise NotImplementedError(
                     "TODO: linear workflow execution - assign submitter or plugin for now"
                 )
-            res = self._run(**kwargs)
+            res = self._run(rerun=rerun, **kwargs)
         return res
 
-    def _run(self, **kwargs):
+    def _run(self, rerun=False, **kwargs):
         self.inputs = attr.evolve(self.inputs, **kwargs)
         self.inputs.check_fields_input_spec()
         checksum = self.checksum
@@ -367,9 +367,10 @@ class TaskBase:
         self.hooks.pre_run(self)
         # TODO add signal handler for processes killed after lock acquisition
         with SoftFileLock(lockfile):
-            result = self.result()
-            if result is not None:
-                return result
+            if not rerun:
+                result = self.result()
+                if result is not None:
+                    return result
             # Let only one equivalent process run
             odir = self.output_dir
             if not self.can_resume and odir.exists():
@@ -775,14 +776,15 @@ class Workflow(TaskBase):
                     task.name, splitter=old_splitter, other_states=other_states
                 )
 
-    async def _run(self, submitter=None, **kwargs):
+    async def _run(self, submitter=None, rerun=False, **kwargs):
         # self.inputs = dc.replace(self.inputs, **kwargs) don't need it?
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
-        result = self.result()
-        if result is not None:
-            return result
+        if not rerun:
+            result = self.result()
+            if result is not None:
+                return result
         # creating connections that were defined after adding tasks to the wf
         for task in self.graph.nodes:
             self.create_connections(task)

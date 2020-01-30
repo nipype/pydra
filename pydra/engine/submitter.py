@@ -37,7 +37,7 @@ class Submitter:
             raise Exception("plugin {} not available".format(self.plugin))
         self.worker.loop = self.loop
 
-    def __call__(self, runnable, cache_locations=None):
+    def __call__(self, runnable, cache_locations=None, rerun=False):
         """Submit."""
         if cache_locations is not None:
             runnable.cache_locations = cache_locations
@@ -51,23 +51,23 @@ class Submitter:
                 nd.checksum for nd in runnable.graph_sorted
             ]
         if is_workflow(runnable) and runnable.state is None:
-            self.loop.run_until_complete(self.submit_workflow(runnable))
+            self.loop.run_until_complete(self.submit_workflow(runnable, rerun=rerun))
         else:
-            self.loop.run_until_complete(self.submit(runnable, wait=True))
+            self.loop.run_until_complete(self.submit(runnable, wait=True, rerun=rerun))
         if is_workflow(runnable):
             # resetting all connections with LazyFields
             runnable._reset()
         return runnable.result()
 
-    async def submit_workflow(self, workflow):
+    async def submit_workflow(self, workflow, rerun=False):
         """Distribute or initiate workflow execution."""
         if workflow.plugin and workflow.plugin != self.plugin:
             # dj: this is not tested!!!
-            await self.worker.run_el(workflow)
+            await self.worker.run_el(workflow, rerun=rerun)
         else:
-            await workflow._run(self)
+            await workflow._run(self, rerun=rerun)
 
-    async def submit(self, runnable, wait=False):
+    async def submit(self, runnable, wait=False, rerun=False):
         """
         Coroutine entrypoint for task submission.
 
@@ -104,16 +104,16 @@ class Submitter:
                 )
                 if is_workflow(runnable):
                     # job has no state anymore
-                    futures.add(self.submit_workflow(job))
+                    futures.add(self.submit_workflow(job, rerun=rerun))
                 else:
                     # tasks are submitted to worker for execution
-                    futures.add(self.worker.run_el(job))
+                    futures.add(self.worker.run_el(job, rerun=rerun))
         else:
             if is_workflow(runnable):
-                await self._run_workflow(runnable)
+                await self._run_workflow(runnable, rerun=rerun)
             else:
                 # submit task to worker
-                futures.add(self.worker.run_el(runnable))
+                futures.add(self.worker.run_el(runnable, rerun=rerun))
 
         if wait and futures:
             # run coroutines concurrently and wait for execution
@@ -123,7 +123,7 @@ class Submitter:
         # pass along futures to be awaited independently
         return futures
 
-    async def _run_workflow(self, wf):
+    async def _run_workflow(self, wf, rerun=False):
         """
         Expand and execute a stateless :class:`~pydra.engine.core.Workflow`.
 
@@ -155,9 +155,9 @@ class Submitter:
                 # checksum has to be updated, so resetting
                 task._checksum = None
                 if is_workflow(task) and not task.state:
-                    await self.submit_workflow(task)
+                    await self.submit_workflow(task, rerun=rerun)
                 else:
-                    for fut in await self.submit(task):
+                    for fut in await self.submit(task, rerun=rerun):
                         task_futures.add(fut)
             task_futures = await self.worker.fetch_finished(task_futures)
         return wf

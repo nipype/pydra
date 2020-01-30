@@ -149,9 +149,9 @@ class SerialWorker(Worker):
         logger.debug("Initialize SerialWorker")
         self.pool = SerialPool()
 
-    def run_el(self, interface, **kwargs):
+    def run_el(self, interface, rerun=False, **kwargs):
         """Run a task."""
-        self.pool.submit(interface=interface, **kwargs)
+        self.pool.submit(interface=interface, rerun=rerun, **kwargs)
         return self.pool
 
     def close(self):
@@ -170,14 +170,14 @@ class ConcurrentFuturesWorker(Worker):
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
-    def run_el(self, runnable, **kwargs):
+    def run_el(self, runnable, rerun=False, **kwargs):
         """Run a task."""
         assert self.loop, "No event loop available to submit tasks"
-        return self.exec_as_coro(runnable)
+        return self.exec_as_coro(runnable, rerun=rerun)
 
-    async def exec_as_coro(self, runnable):
+    async def exec_as_coro(self, runnable, rerun=False):
         """Run a task (coroutine wrapper)."""
-        res = await self.loop.run_in_executor(self.pool, runnable._run)
+        res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
         return res
 
     def close(self):
@@ -215,7 +215,7 @@ class SlurmWorker(DistributedWorker):
         self.poll_delay = poll_delay
         self.sbatch_args = sbatch_args or ""
 
-    def run_el(self, runnable):
+    def run_el(self, runnable, rerun=False):
         """Worker submission API."""
         script_dir, _, batch_script = self._prepare_runscripts(runnable)
         if (script_dir / script_dir.parts[1]) == gettempdir():
