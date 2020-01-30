@@ -41,8 +41,9 @@ Dir_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "notebooks"
 @pytest.mark.parametrize(
     "notebook",
     [
-        os.path.join(Dir_path, "intro_task.ipynb"),
+        os.path.join(Dir_path, "intro_functiontask.ipynb"),
         os.path.join(Dir_path, "intro_task_state.ipynb"),
+        os.path.join(Dir_path, "intro_shelltask.ipynb"),
         os.path.join(Dir_path, "intro_workflow.ipynb"),
     ],
 )
