@@ -66,14 +66,14 @@ class DistributedWorker(Worker):
         """Maximum number of concurrently running jobs."""
         self._jobs = 0
 
-    def _prepare_runscripts(self, task, interpreter="/bin/sh"):
+    def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
         script_dir = (
             task.cache_dir / f"{self.__class__.__name__}_scripts" / task.checksum
         )
         script_dir.mkdir(parents=True, exist_ok=True)
         if not (script_dir / "_task.pkl").exists():
             save(script_dir, task=task)
-        pyscript = create_pyscript(script_dir, task.checksum)
+        pyscript = create_pyscript(script_dir, task.checksum, rerun=rerun)
         batchscript = script_dir / f"batchscript_{task.checksum}.sh"
         bcmd = "\n".join(
             (
@@ -217,7 +217,7 @@ class SlurmWorker(DistributedWorker):
 
     def run_el(self, runnable, rerun=False):
         """Worker submission API."""
-        script_dir, _, batch_script = self._prepare_runscripts(runnable)
+        script_dir, _, batch_script = self._prepare_runscripts(runnable, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
         return self._submit_job(runnable, batch_script)
