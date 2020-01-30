@@ -66,14 +66,14 @@ class DistributedWorker(Worker):
         """Maximum number of concurrently running jobs."""
         self._jobs = 0
 
-    def _prepare_runscripts(self, task, interpreter="/bin/sh"):
+    def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
         script_dir = (
             task.cache_dir / f"{self.__class__.__name__}_scripts" / task.checksum
         )
         script_dir.mkdir(parents=True, exist_ok=True)
         if not (script_dir / "_task.pkl").exists():
             save(script_dir, task=task)
-        pyscript = create_pyscript(script_dir, task.checksum)
+        pyscript = create_pyscript(script_dir, task.checksum, rerun=rerun)
         batchscript = script_dir / f"batchscript_{task.checksum}.sh"
         bcmd = "\n".join(
             (
@@ -149,9 +149,9 @@ class SerialWorker(Worker):
         logger.debug("Initialize SerialWorker")
         self.pool = SerialPool()
 
-    def run_el(self, interface, **kwargs):
+    def run_el(self, interface, rerun=False, **kwargs):
         """Run a task."""
-        self.pool.submit(interface=interface, **kwargs)
+        self.pool.submit(interface=interface, rerun=rerun, **kwargs)
         return self.pool
 
     def close(self):
@@ -170,14 +170,14 @@ class ConcurrentFuturesWorker(Worker):
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
-    def run_el(self, runnable, **kwargs):
+    def run_el(self, runnable, rerun=False, **kwargs):
         """Run a task."""
         assert self.loop, "No event loop available to submit tasks"
-        return self.exec_as_coro(runnable)
+        return self.exec_as_coro(runnable, rerun=rerun)
 
-    async def exec_as_coro(self, runnable):
+    async def exec_as_coro(self, runnable, rerun=False):
         """Run a task (coroutine wrapper)."""
-        res = await self.loop.run_in_executor(self.pool, runnable._run)
+        res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
         return res
 
     def close(self):
@@ -215,9 +215,9 @@ class SlurmWorker(DistributedWorker):
         self.poll_delay = poll_delay
         self.sbatch_args = sbatch_args or ""
 
-    def run_el(self, runnable):
+    def run_el(self, runnable, rerun=False):
         """Worker submission API."""
-        script_dir, _, batch_script = self._prepare_runscripts(runnable)
+        script_dir, _, batch_script = self._prepare_runscripts(runnable, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
         return self._submit_job(runnable, batch_script)

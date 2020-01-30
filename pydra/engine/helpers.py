@@ -348,7 +348,7 @@ def get_open_loop():
     return loop
 
 
-def create_pyscript(script_path, checksum):
+def create_pyscript(script_path, checksum, rerun=False):
     """
     Create standalone script for task execution in a different environment.
 
@@ -378,7 +378,7 @@ task_pkl = (cache_path / "_task.pklz")
 task = cp.loads(task_pkl.read_bytes())
 
 # submit task
-task()
+task(rerun={rerun})
 
 if not task.result():
     raise Exception("Something went wrong")
