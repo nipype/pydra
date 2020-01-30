@@ -247,9 +247,9 @@ class TaskBase:
             TODO
 
         """
+        self.state.prepare_states(self.inputs)
+        self.state.prepare_inputs()
         if state_index is not None:
-            if self.state is None:
-                raise Exception("can't use state_index if no splitter is used")
             inputs_copy = deepcopy(self.inputs)
             for key, ind in self.state.inputs_ind[state_index].items():
                 setattr(
@@ -511,6 +511,9 @@ class TaskBase:
     @property
     def done(self):
         """Check whether the tasks has been finalized and all outputs are stored."""
+        # if any of the field is lazy, there is no need to check results
+        if is_lazy(self.inputs):
+            return False
         if self.state:
             # TODO: only check for needed state result
             if self.result() and all(self.result()):
@@ -868,3 +871,11 @@ def is_task(obj):
 def is_workflow(obj):
     """Check whether an object is a :class:`Workflow` instance."""
     return isinstance(obj, Workflow)
+
+
+def is_lazy(obj):
+    """Check whether an object has any field that is a Lazy Field"""
+    for f in attr_fields(obj):
+        if isinstance(getattr(obj, f.name), LazyField):
+            return True
+    return False
