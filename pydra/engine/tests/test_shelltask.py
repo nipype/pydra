@@ -487,11 +487,8 @@ def test_shell_cmd_inputspec_4(plugin, results_function):
                 "text",
                 attr.ib(
                     type=str,
-                    metadata={
-                        "position": 1,
-                        "help_string": "text",
-                        "default_value": "Hello",
-                    },
+                    default="Hello",
+                    metadata={"position": 1, "help_string": "text"},
                 ),
             )
         ],
@@ -543,40 +540,6 @@ def test_shell_cmd_inputspec_4a(plugin, results_function):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_shell_cmd_inputspec_4b_exception(plugin):
-    """  mandatory field added to fields, value provided """
-    cmd_exec = "echo"
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "text",
-                attr.ib(
-                    type=str,
-                    default="Hi",
-                    metadata={
-                        "position": 1,
-                        "help_string": "text",
-                        "default_value": "Hello",
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
-
-    # separate command into exec + args
-    with pytest.raises(Exception) as excinfo:
-        shelly = ShellCommandTask(
-            name="shelly", executable=cmd_exec, input_spec=my_input_spec
-        )
-    assert (
-        str(excinfo.value)
-        == "field.default and metadata[default_value] are both set and differ"
-    )
-
-
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_4c_exception(plugin):
     """  mandatory field added to fields, value provided """
     cmd_exec = "echo"
@@ -587,12 +550,8 @@ def test_shell_cmd_inputspec_4c_exception(plugin):
                 "text",
                 attr.ib(
                     type=str,
-                    metadata={
-                        "position": 1,
-                        "help_string": "text",
-                        "mandatory": True,
-                        "default_value": "Hello",
-                    },
+                    default="Hello",
+                    metadata={"position": 1, "help_string": "text", "mandatory": True},
                 ),
             )
         ],
@@ -621,11 +580,11 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
                 "text",
                 attr.ib(
                     type=str,
+                    default="Hello",
                     metadata={
                         "position": 1,
                         "help_string": "text",
                         "output_file_template": "exception",
-                        "default_value": "Hello",
                     },
                 ),
             )
