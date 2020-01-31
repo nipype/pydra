@@ -50,6 +50,8 @@ class BaseSpec:
                 continue
             if field.type == File and "container_path" not in field.metadata:
                 inp_dict[field.name] = hash_file(getattr(self, field.name))
+            elif field.type == ty.List[File] or field.type == ty.Tuple[File]:
+                inp_dict[field.name] = hash_file(getattr(self, field.name))
             elif isinstance(getattr(self, field.name), tuple):
                 inp_dict[field.name] = list(getattr(self, field.name))
             else:

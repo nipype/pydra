@@ -113,7 +113,7 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
     from .helpers import hash_function
 
     # adding option for tasks with splitter over list of files
-    if isinstance(afile, list):
+    if isinstance(afile, (list, tuple)):
         return hash_function([hash_file(el) for el in afile])
 
     if afile is None or isinstance(afile, LazyField) or isinstance(afile, list):
