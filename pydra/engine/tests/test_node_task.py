@@ -3,7 +3,15 @@ import shutil
 import numpy as np
 import pytest
 
-from .utils import fun_addtwo, fun_addvar, moment, fun_div
+from .utils import (
+    fun_addtwo,
+    fun_addvar,
+    moment,
+    fun_div,
+    fun_dict,
+    fun_file,
+    fun_file_list,
+)
 
 from ..core import TaskBase
 from ..submitter import Submitter
@@ -283,6 +291,32 @@ def test_task_init_6():
     assert nn.state.states_val == []
 
 
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_init_7(plugin, tmpdir):
+    """ task with a dictionary of files as an input, checking checksum"""
+    file1 = tmpdir.join("file1.txt")
+    with open(file1, "w") as f:
+        f.write("hello")
+
+    file2 = tmpdir.join("file2.txt")
+    with open(file2, "w") as f:
+        f.write("from pydra\n")
+
+    nn1 = fun_file_list(name="NA", filename_list=[file1, file2])
+    output_dir1 = nn1.output_dir
+
+    # changing the content of the file
+    file2 = tmpdir.join("file2.txt")
+    with open(file2, "w") as f:
+        f.write("from pydra")
+
+    nn2 = fun_file_list(name="NA", filename_list=[file1, file2])
+    output_dir2 = nn2.output_dir
+
+    # the checksum should be different - content of file2 is different
+    assert output_dir1.name != output_dir2.name
+
+
 def test_task_error():
     func = fun_div(name="div", a=1, b=0)
     with pytest.raises(ZeroDivisionError):
@@ -378,6 +412,64 @@ def test_task_nostate_2(plugin):
     # checking the results
     results = nn.result()
     assert results.output.out == 33
+    # checking the output_dir
+    assert nn.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_3(plugin):
+    """ task with a dictionary as an input"""
+    nn = fun_dict(name="NA", d={"a": "ala", "b": "bala"})
+    assert nn.inputs.d == {"a": "ala", "b": "bala"}
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == "a:ala_b:bala"
+    # checking the output_dir
+    assert nn.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_4(plugin, tmpdir):
+    """ task with a dictionary as an input"""
+    file1 = tmpdir.join("file.txt")
+    with open(file1, "w") as f:
+        f.write("hello from pydra\n")
+
+    nn = fun_file(name="NA", filename=file1)
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == "hello from pydra\n"
+    # checking the output_dir
+    assert nn.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_nostate_5(plugin, tmpdir):
+    """ task with a dictionary of files as an input"""
+    file1 = tmpdir.join("file1.txt")
+    with open(file1, "w") as f:
+        f.write("hello")
+
+    file2 = tmpdir.join("file2.txt")
+    with open(file2, "w") as f:
+        f.write("from pydra\n")
+
+    nn = fun_file_list(name="NA", filename_list=[file1, file2])
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    assert results.output.out == "hello from pydra\n"
     # checking the output_dir
     assert nn.output_dir.exists()
 

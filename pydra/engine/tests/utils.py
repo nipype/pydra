@@ -3,6 +3,7 @@ import time
 
 from ..core import Workflow
 from ... import mark
+from ..specs import File
 
 
 @mark.task
@@ -80,6 +81,28 @@ def add2_wait(x):
 @mark.task
 def list_output(x):
     return [x, 2 * x, 3 * x]
+
+
+@mark.task
+def fun_dict(d):
+    kv_list = [f"{k}:{v}" for (k, v) in d.items()]
+    return "_".join(kv_list)
+
+
+@mark.task
+def fun_file(filename: File):
+    with open(filename) as f:
+        txt = f.read()
+    return txt
+
+
+@mark.task
+def fun_file_list(filename_list: File):
+    txt_list = []
+    for filename in filename_list:
+        with open(filename) as f:
+            txt_list.append(f.read())
+    return " ".join(txt_list)
 
 
 def gen_basic_wf(name="basic-wf"):
