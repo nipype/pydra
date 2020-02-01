@@ -192,7 +192,6 @@ class ShellSpec(BaseSpec):
             "argstr",
             "container_path",
             "copyfile",
-            "default_value",
             "help_string",
             "mandatory",
             "output_field_name",
@@ -218,36 +217,19 @@ class ShellSpec(BaseSpec):
             if "help_string" not in mdata:
                 raise Exception(f"{fld.name} doesn't have help_string field")
 
-            # fld.default can't be different than default_value when both set
-            if (
-                not fld.default == attr.NOTHING
-                and mdata.get("default_value") is not None
-                and mdata.get("default_value") != fld.default
-            ):
-                raise Exception(
-                    "field.default and metadata[default_value] are both set and differ"
-                )
             # assuming that fields with output_file_template shouldn't have default
-            if (
-                not fld.default == attr.NOTHING
-                or mdata.get("default_value") is not None
-            ) and mdata.get("output_file_template"):
+            if not fld.default == attr.NOTHING and mdata.get("output_file_template"):
                 raise Exception(
                     "default value should not be set together with output_file_template"
                 )
             # not allowing for default if the field is mandatory
-            if (
-                not fld.default == attr.NOTHING
-                or mdata.get("default_value") is not None
-            ) and mdata.get("mandatory"):
+            if not fld.default == attr.NOTHING and mdata.get("mandatory"):
                 raise Exception(
                     "default value should not be set when the field is mandatory"
                 )
             # setting default if value not provided and default is available
             if getattr(self, fld.name) is None:
-                if mdata.get("default_value") is not None:
-                    setattr(self, fld.name, mdata["default_value"])
-                elif not fld.default == attr.NOTHING:
+                if not fld.default == attr.NOTHING:
                     setattr(self, fld.name, fld.default)
 
     def check_fields_input_spec(self):
@@ -266,8 +248,6 @@ class ShellSpec(BaseSpec):
             if getattr(self, fld.name) is None:
                 if mdata.get("mandatory"):
                     raise Exception(f"{fld.name} is mandatory, but no value provided")
-                elif mdata.get("default_value") is not None:
-                    setattr(self, fld.name, mdata["default_value"])
                 else:
                     continue
             names.append(fld.name)

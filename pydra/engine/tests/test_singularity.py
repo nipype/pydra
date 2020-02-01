@@ -581,7 +581,7 @@ def test_singularity_inputspec_2a_except(plugin, tmpdir):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_inputspec_2a(plugin, tmpdir):
     """ a customized input spec with two fields
-        first one uses a default by using metadata['default_value'],
+        first one uses a default value,
         this is fine even if the second field is not using any defaults
     """
     filename_1 = tmpdir.join("file_pydra.txt")
@@ -602,11 +602,8 @@ def test_singularity_inputspec_2a(plugin, tmpdir):
                 "file1",
                 attr.ib(
                     type=File,
-                    metadata={
-                        "default_value": filename_1,
-                        "position": 1,
-                        "help_string": "input file 1",
-                    },
+                    default=filename_1,
+                    metadata={"position": 1, "help_string": "input file 1"},
                 ),
             ),
             (
