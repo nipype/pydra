@@ -69,7 +69,9 @@ class BaseSpec:
             # returning a sorted object
             return sorted(dict_hash.items(), key=lambda x: x[0])
         else:  # not a container
-            if tp == File and "container_path" not in metadata:
+            if (
+                tp is File or "pydra.engine.specs.File" in str(tp)
+            ) and "container_path" not in metadata:
                 return hash_file(value)
             elif isinstance(value, tuple):
                 return list(value)
