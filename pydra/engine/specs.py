@@ -40,7 +40,6 @@ class BaseSpec:
     def hash(self):
         """Compute a basic hash for any given set of fields."""
         from .helpers import hash_function
-        from .helpers_file import hash_file
 
         inp_dict = {}
         for field in attr_fields(self):
@@ -49,9 +48,7 @@ class BaseSpec:
             ):
                 continue
             inp_dict[field.name] = self.hash_value(
-                value=getattr(self, field.name),
-                type=field.type,
-                metadata=field.metadata,
+                value=getattr(self, field.name), tp=field.type, metadata=field.metadata
             )
         inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph_checksums"):
@@ -59,21 +56,25 @@ class BaseSpec:
         else:
             return inp_hash
 
-    def hash_value(self, value, type=None, metadata=None):
+    def hash_value(self, value, tp=None, metadata=None):
         """calculating hash or returning values recursively"""
         from .helpers_file import hash_file
 
         if isinstance(value, (tuple, list)):
-            return [self.hash_value(el, type, metadata) for el in value]
+            return [self.hash_value(el, tp, metadata) for el in value]
         elif isinstance(value, dict):
-            return {k: self.hash_value(v, type, metadata) for (k, v) in value.items()}
-
-        if type == File and "container_path" not in metadata:
-            return hash_file(value)
-        elif isinstance(value, tuple):
-            return list(value)
-        else:
-            return value
+            dict_hash = {
+                k: self.hash_value(v, tp, metadata) for (k, v) in value.items()
+            }
+            # returning a sorted object
+            return sorted(dict_hash.items(), key=lambda x: x[0])
+        else:  # not a container
+            if tp == File and "container_path" not in metadata:
+                return hash_file(value)
+            elif isinstance(value, tuple):
+                return list(value)
+            else:
+                return value
 
     def retrieve_values(self, wf, state_index=None):
         """Get values contained by this spec."""
