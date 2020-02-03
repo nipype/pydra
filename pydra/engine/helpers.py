@@ -10,6 +10,7 @@ from hashlib import sha256
 import subprocess as sp
 
 from .specs import Runtime, File, attr_fields
+from .helpers_file import is_existing_file, hash_file
 
 
 def ensure_list(obj, tuple2list=False):
@@ -394,6 +395,27 @@ task_pkl.unlink()
 def hash_function(obj):
     """Generate hash of object."""
     return sha256(str(obj).encode()).hexdigest()
+
+
+def hash_value(value, tp=None, metadata=None):
+    """calculating hash or returning values recursively"""
+    if isinstance(value, (tuple, list)):
+        return [hash_value(el, tp, metadata) for el in value]
+    elif isinstance(value, dict):
+        dict_hash = {k: hash_value(v, tp, metadata) for (k, v) in value.items()}
+        # returning a sorted object
+        return sorted(dict_hash.items(), key=lambda x: x[0])
+    else:  # not a container
+        if (
+            (tp is File or "pydra.engine.specs.File" in str(tp))
+            and is_existing_file(value)
+            and "container_path" not in metadata
+        ):
+            return hash_file(value)
+        elif isinstance(value, tuple):
+            return list(value)
+        else:
+            return value
 
 
 def output_names_from_inputfields(inputs):

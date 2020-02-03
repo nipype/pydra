@@ -2,7 +2,6 @@
 import attr
 from pathlib import Path
 import typing as ty
-from .helpers_file import hash_file, is_existed_file
 
 
 def attr_fields(x):
@@ -40,7 +39,7 @@ class BaseSpec:
     @property
     def hash(self):
         """Compute a basic hash for any given set of fields."""
-        from .helpers import hash_function
+        from .helpers import hash_value, hash_function
 
         inp_dict = {}
         for field in attr_fields(self):
@@ -48,7 +47,7 @@ class BaseSpec:
                 "output_file_template"
             ):
                 continue
-            inp_dict[field.name] = self.hash_value(
+            inp_dict[field.name] = hash_value(
                 value=getattr(self, field.name), tp=field.type, metadata=field.metadata
             )
         inp_hash = hash_function(inp_dict)
@@ -56,28 +55,6 @@ class BaseSpec:
             return hash_function((inp_hash, self._graph_checksums))
         else:
             return inp_hash
-
-    def hash_value(self, value, tp=None, metadata=None):
-        """calculating hash or returning values recursively"""
-        if isinstance(value, (tuple, list)):
-            return [self.hash_value(el, tp, metadata) for el in value]
-        elif isinstance(value, dict):
-            dict_hash = {
-                k: self.hash_value(v, tp, metadata) for (k, v) in value.items()
-            }
-            # returning a sorted object
-            return sorted(dict_hash.items(), key=lambda x: x[0])
-        else:  # not a container
-            if (
-                (tp is File or "pydra.engine.specs.File" in str(tp))
-                and is_existed_file(value)
-                and "container_path" not in metadata
-            ):
-                return hash_file(value)
-            elif isinstance(value, tuple):
-                return list(value)
-            else:
-                return value
 
     def retrieve_values(self, wf, state_index=None):
         """Get values contained by this spec."""
