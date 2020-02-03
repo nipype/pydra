@@ -45,7 +45,7 @@ Changes here won't affect anyone else's work, so it's a safe space to explore ed
 
 You can clone your Pydra repository (from your fork!) in order to create a local copy of the code on your machine.
 
-(Make sure to keep your fork up to date with the original Nipype repository.
+(Make sure to keep your fork up to date with the original Pydra repository.
 One way to do this is to [configure a new remote named "upstream"](https://help.github.com/articles/configuring-a-remote-for-a-fork/)
  and to [sync your fork with the upstream repository][link_updateupstreamwiki].)
 
