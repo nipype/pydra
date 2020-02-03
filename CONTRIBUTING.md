@@ -32,7 +32,7 @@ Please try to follow the recommended steps, and don't hesitate to ask questions!
 
 **i. Comment on an existing issue or open a new issue describing your idea**
 
-This allows other members of the Nipype development team to confirm
+This allows other members of the Pydra development team to confirm
 that you aren't overlapping with work that's currently underway and
 that everyone is on the same page with the goal of the work you're going to carry out.
 
