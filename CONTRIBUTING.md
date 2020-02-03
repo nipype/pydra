@@ -38,7 +38,7 @@ that everyone is on the same page with the goal of the work you're going to carr
 
 **ii. [Fork][link_fork] the [Pydra repository][link_pydra] to your profile**
 
-This is now your own unique copy of the Nipype repository.
+This is now your own unique copy of the Pydra repository.
 Changes here won't affect anyone else's work, so it's a safe space to explore edits to the code!
 
 **iii. [Clone][link_clone] the repository to your local machine**
