@@ -231,8 +231,50 @@ def test_input_file_hash_2a(tmpdir):
     hash3 = inputs(in_file=file_diffcontent).hash
     assert hash1 != hash3
 
+    # checking if string is also accepted
+    hash4 = inputs(in_file="ala").hash
+    assert hash4 == "004060c4475e8874c5fa55c6fffbe67f9ec8a81d578ea1b407dd77186f4d61c2"
+
 
 def test_input_file_hash_3(tmpdir):
+    """ input spec with nested list, that contain ints and Files,
+        checking changes in checksums
+    """
+    file = tmpdir.join("in_file_1.txt")
+    with open(file, "w") as f:
+        f.write("hello")
+
+    input_spec = SpecInfo(
+        name="Inputs",
+        fields=[("in_file", ty.List[ty.List[ty.Union[int, File]]])],
+        bases=(BaseSpec,),
+    )
+    inputs = make_klass(input_spec)
+
+    # checking specific hash value
+    hash1 = inputs(in_file=[[file, 3]]).hash
+    assert hash1 == "507d81adc3f2f468e82c27ac800d16f6beae4f24f69daaab1d04f52b32b4514d"
+
+    # the same file, but int field changes
+    hash1a = inputs(in_file=[[file, 5]]).hash
+    assert hash1 != hash1a
+
+    # checking if different name doesn't affect the hash
+    file_diffname = tmpdir.join("in_file_2.txt")
+    with open(file_diffname, "w") as f:
+        f.write("hello")
+    hash2 = inputs(in_file=[[file_diffname, 3]]).hash
+    assert hash1 == hash2
+
+    # checking if different content (the same name) affects the hash
+    file_diffcontent = tmpdir.join("in_file_1.txt")
+    with open(file_diffcontent, "w") as f:
+        f.write("hi")
+    hash3 = inputs(in_file=[[file_diffcontent, 3]]).hash
+    assert hash1 != hash3
+
+
+def test_input_file_hash_4(tmpdir):
     """ input spec with File in nested containers, checking changes in checksums"""
     file = tmpdir.join("in_file_1.txt")
     with open(file, "w") as f:
