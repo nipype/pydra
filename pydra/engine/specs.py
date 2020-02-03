@@ -2,6 +2,7 @@
 import attr
 from pathlib import Path
 import typing as ty
+from .helpers_file import hash_file, is_existed_file
 
 
 def attr_fields(x):
@@ -58,8 +59,6 @@ class BaseSpec:
 
     def hash_value(self, value, tp=None, metadata=None):
         """calculating hash or returning values recursively"""
-        from .helpers_file import hash_file
-
         if isinstance(value, (tuple, list)):
             return [self.hash_value(el, tp, metadata) for el in value]
         elif isinstance(value, dict):
@@ -71,8 +70,7 @@ class BaseSpec:
         else:  # not a container
             if (
                 (tp is File or "pydra.engine.specs.File" in str(tp))
-                and getattr(value, "exists", None)
-                and value.exists()
+                and is_existed_file(value)
                 and "container_path" not in metadata
             ):
                 return hash_file(value)

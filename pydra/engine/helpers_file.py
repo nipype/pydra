@@ -512,3 +512,14 @@ def is_local_file(f):
     from .specs import File
 
     return f.type is File and "container_path" not in f.metadata
+
+
+def is_existed_file(f):
+    """ checking if object is an existed file: using multiple path classes"""
+    from py import path
+
+    # for windows might need more path options
+    if isinstance(f, (str, Path, path.local)) and Path(f).exists():
+        return True
+    else:
+        return False
