@@ -1,7 +1,7 @@
 import pytest
 import shutil, os
 import time
-import platform
+from copy import deepcopy
 
 from .utils import (
     add2,
@@ -15,7 +15,6 @@ from .utils import (
 )
 from ..submitter import Submitter
 from ..core import Workflow
-from ... import mark
 
 
 if bool(shutil.which("sbatch")):
@@ -121,12 +120,15 @@ def test_wf_2(plugin):
     wf.inputs.y = 3
     wf.plugin = plugin
 
+    wf_inputs_before = deepcopy(wf.inputs)
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     assert wf.output_dir.exists()
     results = wf.result()
     assert 8 == results.output.out
+    # checking that the input hasn't changed
+    assert wf.inputs.compare(wf_inputs_before)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -539,6 +541,7 @@ def test_wf_st_4(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
 
+    wf_inputs_before = deepcopy(wf.inputs)
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
@@ -552,6 +555,8 @@ def test_wf_st_4(plugin):
     assert wf.output_dir
     for odir in wf.output_dir:
         assert odir.exists()
+    # checking that the input hasn't changed
+    assert wf.inputs.compare(wf_inputs_before)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1141,6 +1146,7 @@ def test_wf_ndstinner_3(plugin):
     wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.mult.lzout.out)])
     wf.plugin = plugin
 
+    wf_inputs_before = deepcopy(wf.inputs)
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
@@ -1152,6 +1158,8 @@ def test_wf_ndstinner_3(plugin):
     assert results.output.out == [10, 100, 20, 200, 30, 300]
 
     assert wf.output_dir.exists()
+    # checking that the input hasn't changed
+    assert wf.inputs.compare(wf_inputs_before)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1331,6 +1339,7 @@ def test_wfasnd_wfinp_1(plugin):
     wf.plugin = plugin
 
     checksum_before = wf.checksum
+    wf_inputs_before = deepcopy(wf.inputs)
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
@@ -1339,6 +1348,8 @@ def test_wfasnd_wfinp_1(plugin):
     assert results.output.out == 4
     # checking the output directory
     assert wf.output_dir.exists()
+    # checking that the input hasn't changed
+    assert wf.inputs.compare(wf_inputs_before)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1633,6 +1644,8 @@ def test_wfasnd_ndst_3(plugin):
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
 
+    wf_inputs_before = deepcopy(wf.inputs)
+
     with Submitter(plugin=plugin) as sub:
         sub(wf)
     # assert wf.output_dir.exists()
@@ -1640,6 +1653,8 @@ def test_wfasnd_ndst_3(plugin):
     assert results.output.out == [4, 42]
     # checking the output directory
     assert wf.output_dir.exists()
+    # checking that the input hasn't changed
+    assert wf.inputs.compare(wf_inputs_before)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -1662,8 +1677,11 @@ def test_wfasnd_wfst_3(plugin):
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.plugin = plugin
 
+    wf_inputs_before = deepcopy(wf.inputs)
+
     with Submitter(plugin=plugin) as sub:
         sub(wf)
+
     # assert wf.output_dir.exists()
     results = wf.result()
     assert results[0].output.out == 4
@@ -1672,6 +1690,8 @@ def test_wfasnd_wfst_3(plugin):
     assert wf.output_dir
     for odir in wf.output_dir:
         assert odir.exists()
+    # checking that the input hasn't changed
+    assert wf.inputs.compare(wf_inputs_before)
 
 
 # Testing caching

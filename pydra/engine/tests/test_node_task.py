@@ -2,6 +2,7 @@ import os
 import shutil
 import numpy as np
 import pytest
+from copy import deepcopy
 
 from .utils import fun_addtwo, fun_addvar, moment, fun_div
 
@@ -308,6 +309,7 @@ def test_task_nostate_1(plugin):
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
+    nn_inputs_before = deepcopy(nn.inputs)
     with Submitter(plugin=plugin) as sub:
         sub(nn)
 
@@ -316,6 +318,8 @@ def test_task_nostate_1(plugin):
     assert results.output.out == 5
     # checking the output_dir
     assert nn.output_dir.exists()
+    # checking that the input hasn't changed
+    assert nn.inputs.compare(nn_inputs_before)
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -631,6 +635,7 @@ def test_task_state_2(plugin, splitter, state_splitter, state_rpn, expected):
     assert nn.state.splitter_final == state_splitter
     assert nn.state.splitter_rpn_final == state_rpn
 
+    nn_inputs_before = deepcopy(nn.inputs)
     with Submitter(plugin=plugin) as sub:
         sub(nn)
 
@@ -642,6 +647,8 @@ def test_task_state_2(plugin, splitter, state_splitter, state_rpn, expected):
     assert nn.output_dir
     for odir in nn.output_dir:
         assert odir.exists()
+    # checking that the input hasn't changed
+    assert nn.inputs.compare(nn_inputs_before)
 
 
 @pytest.mark.parametrize("plugin", Plugins)

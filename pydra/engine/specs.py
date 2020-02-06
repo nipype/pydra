@@ -71,6 +71,28 @@ class BaseSpec:
         for field, value in temp_values.items():
             setattr(self, field, value)
 
+    def compare(self, other, check_all=False):
+        """ comparing two inputs, if they have the same fields and if the values are the same,
+            if check_all=False private fields (start with _) are ignored
+        """
+        if check_all:
+            names = {el.name for el in attr_fields(self)}
+            names_other = {el.name for el in attr_fields(other)}
+        else:
+            names = {el.name for el in attr_fields(self) if not el.name.startswith("_")}
+            names_other = {
+                el.name for el in attr_fields(other) if not el.name.startswith("_")
+            }
+
+        if names != names_other:
+            return False
+
+        for nm in names:
+            if getattr(self, nm) != getattr(other, nm):
+                return False
+
+        return True
+
     def check_metadata(self):
         """Check contained metadata."""
 
