@@ -218,7 +218,7 @@ class TaskBase:
     def checksum(self):
         """Calculate a unique checksum of this task."""
         # if checksum is called before run the _graph_checksums is not ready
-        if is_workflow(self) and self.inputs._graph_checksums is None:
+        if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
             self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
 
         input_hash = self.inputs.hash
