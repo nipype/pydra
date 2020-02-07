@@ -244,7 +244,7 @@ class ShellSpec(BaseSpec):
         for fld in fields:
             mdata = fld.metadata
             # checking if the mandatory field is provided
-            if getattr(self, fld.name) is None:
+            if getattr(self, fld.name) is attr.NOTHING:
                 if mdata.get("mandatory"):
                     raise Exception(f"{fld.name} is mandatory, but no value provided")
                 else:
