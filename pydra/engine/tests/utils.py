@@ -30,6 +30,11 @@ def fun_addvar_none(a, b):
 
 
 @mark.task
+def fun_addvar_default(a, b=1):
+    return a + b
+
+
+@mark.task
 def fun_addvar3(a, b, c):
     return a + b + c
 
