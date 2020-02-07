@@ -22,6 +22,14 @@ def fun_addvar(a, b):
 
 
 @mark.task
+def fun_addvar_none(a, b):
+    if b is None:
+        return a
+    else:
+        return a + b
+
+
+@mark.task
 def fun_addvar3(a, b, c):
     return a + b + c
 

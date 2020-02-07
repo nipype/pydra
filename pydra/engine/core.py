@@ -132,9 +132,7 @@ class TaskBase:
         # todo should be used to input_check in spec??
         self.inputs = klass(
             **{
-                (f.name[1:] if f.name.startswith("_") else f.name): (
-                    None if f.default == attr.NOTHING else f.default
-                )
+                (f.name[1:] if f.name.startswith("_") else f.name): f.default
                 for f in attr.fields(klass)
             }
         )
