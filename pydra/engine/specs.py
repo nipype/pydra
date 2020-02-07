@@ -47,6 +47,9 @@ class BaseSpec:
                 "output_file_template"
             ):
                 continue
+            # removing values that are notset from hash calculation
+            if getattr(self, field.name) is attr.NOTHING:
+                continue
             inp_dict[field.name] = hash_value(
                 value=getattr(self, field.name), tp=field.type, metadata=field.metadata
             )
