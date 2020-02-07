@@ -391,7 +391,7 @@ class ShellCommandTask(TaskBase):
             args = self.command_args
         if args:
             # removing emty strings
-            args = [el for el in args if el not in ["", " "]]
+            args = [str(el) for el in args if el not in ["", " "]]
             keys = ["return_code", "stdout", "stderr"]
             values = execute(args, strip=self.strip)
             self.output_ = dict(zip(keys, values))

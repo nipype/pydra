@@ -912,6 +912,48 @@ def test_shell_cmd_inputspec_7a(plugin, results_function):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 @pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
+    """ using input_spec, providing list of files as an input """
+
+    file_1 = tmpdir.join("file_1.txt")
+    file_2 = tmpdir.join("file_2.txt")
+    with open(file_1, "w") as f:
+        f.write("hello ")
+    with open(file_2, "w") as f:
+        f.write("from boston")
+
+    cmd_exec = "cat"
+    files_list = [file_1, file_2]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "files",
+                attr.ib(
+                    type=ty.List[File],
+                    metadata={
+                        "position": 1,
+                        "help_string": "list of files",
+                        "mandatory": True,
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd_exec, files=files_list, input_spec=my_input_spec
+    )
+
+    assert shelly.inputs.executable == cmd_exec
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == "hello from boston"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
     """ shelltask changes a file in place,
         adding copyfile=True to the file-input from input_spec
