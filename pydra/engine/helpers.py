@@ -127,7 +127,7 @@ def copyfile_workflow(wf_path, result):
     for field in attr_fields(result.output):
         value = getattr(result.output, field.name)
         if is_existing_file(value):
-            new_path = wf_path / value.name
+            new_path = wf_path / Path(value).name
             copyfile(originalfile=value, newfile=new_path, copy=True, use_hardlink=True)
             setattr(result.output, field.name, new_path)
     return result
