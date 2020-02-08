@@ -47,6 +47,9 @@ class BaseSpec:
                 "output_file_template"
             ):
                 continue
+            # removing values that are notset from hash calculation
+            if getattr(self, field.name) is attr.NOTHING:
+                continue
             inp_dict[field.name] = hash_value(
                 value=getattr(self, field.name), tp=field.type, metadata=field.metadata
             )
@@ -241,7 +244,7 @@ class ShellSpec(BaseSpec):
         for fld in fields:
             mdata = fld.metadata
             # checking if the mandatory field is provided
-            if getattr(self, fld.name) is None:
+            if getattr(self, fld.name) is attr.NOTHING:
                 if mdata.get("mandatory"):
                     raise Exception(f"{fld.name} is mandatory, but no value provided")
                 else:
@@ -370,7 +373,9 @@ class ShellOutSpec(BaseSpec):
 class ContainerSpec(ShellSpec):
     """Refine the generic command-line specification to container execution."""
 
-    image: ty.Union[File, str] = attr.ib(metadata={"help_string": "image"})
+    image: ty.Union[File, str] = attr.ib(
+        metadata={"help_string": "image", "mandatory": True}
+    )
     """The image to be containerized."""
     container: ty.Union[File, str, None] = attr.ib(
         metadata={"help_string": "container"}

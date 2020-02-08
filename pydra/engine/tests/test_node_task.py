@@ -1,11 +1,14 @@
 import os
 import shutil
+import attr
 import numpy as np
 import pytest
 
 from .utils import (
     fun_addtwo,
     fun_addvar,
+    fun_addvar_none,
+    fun_addvar_default,
     moment,
     fun_div,
     fun_dict,
@@ -317,6 +320,23 @@ def test_task_init_7(plugin, tmpdir):
     assert output_dir1.name != output_dir2.name
 
 
+def test_task_init_8():
+    """ task without setting the input, the value should be set to attr.NOTHING"""
+    nn = fun_addtwo(name="NA")
+    assert nn.inputs.a is attr.NOTHING
+
+
+def test_task_init_9():
+    """ task without setting the input, but using the default avlue from function"""
+    nn1 = fun_addvar_default(name="NA", a=2)
+    assert nn1.inputs.b == 1
+
+    nn2 = fun_addvar_default(name="NA", a=2, b=1)
+    assert nn2.inputs.b == 1
+    # both tasks should have the same checksum
+    assert nn1.checksum == nn2.checksum
+
+
 def test_task_error():
     func = fun_div(name="div", a=1, b=0)
     with pytest.raises(ZeroDivisionError):
@@ -472,6 +492,31 @@ def test_task_nostate_5(plugin, tmpdir):
     assert results.output.out == "hello from pydra\n"
     # checking the output_dir
     assert nn.output_dir.exists()
+
+
+def test_task_nostate_6():
+    """ checking if the function gets the None value"""
+    nn = fun_addvar_none(name="NA", a=2, b=None)
+    assert nn.inputs.b is None
+    nn()
+    assert nn.result().output.out == 2
+
+
+def test_task_nostate_6a_exception():
+    """ checking if the function gets the attr.Nothing value"""
+    nn = fun_addvar_none(name="NA", a=2)
+    assert nn.inputs.b is attr.NOTHING
+    with pytest.raises(TypeError) as excinfo:
+        nn()
+    assert "unsupported" in str(excinfo.value)
+
+
+def test_task_nostate_7():
+    """ using the default value from the function for b input"""
+    nn = fun_addvar_default(name="NA", a=2)
+    assert nn.inputs.b == 1
+    nn()
+    assert nn.result().output.out == 3
 
 
 # Testing caching for tasks without states

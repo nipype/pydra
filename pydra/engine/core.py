@@ -132,9 +132,7 @@ class TaskBase:
         # todo should be used to input_check in spec??
         self.inputs = klass(
             **{
-                (f.name[1:] if f.name.startswith("_") else f.name): (
-                    None if f.default == attr.NOTHING else f.default
-                )
+                (f.name[1:] if f.name.startswith("_") else f.name): f.default
                 for f in attr.fields(klass)
             }
         )
@@ -220,7 +218,7 @@ class TaskBase:
     def checksum(self):
         """Calculate a unique checksum of this task."""
         # if checksum is called before run the _graph_checksums is not ready
-        if is_workflow(self) and self.inputs._graph_checksums is None:
+        if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
             self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
 
         input_hash = self.inputs.hash

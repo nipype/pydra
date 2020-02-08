@@ -494,7 +494,7 @@ def template_update(inputs, map_copyfiles=None):
     fields = attr_fields(inputs)
     # TODO: Create a dependency graph first and then traverse it
     for fld in fields:
-        if getattr(inputs, fld.name) is not None:
+        if getattr(inputs, fld.name) is not attr.NOTHING:
             continue
         if fld.metadata.get("output_file_template"):
             if fld.type is str:

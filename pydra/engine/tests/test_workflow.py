@@ -1,7 +1,7 @@
 import pytest
 import shutil, os
 import time
-import platform
+import attr
 
 from .utils import (
     add2,
@@ -12,11 +12,11 @@ from .utils import (
     list_output,
     fun_addvar3,
     add2_sub2_res,
+    fun_addvar_none,
+    fun_addvar_default,
 )
 from ..submitter import Submitter
 from ..core import Workflow
-from ... import mark
-
 
 if bool(shutil.which("sbatch")):
     Plugins = ["cf", "slurm"]
@@ -227,6 +227,84 @@ def test_wf_2d_outpasdict(plugin):
     assert 6 == results.output.out_mult
     assert 8 == results.output.out_add2
     assert wf.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_3(plugin):
+    """ testing None value for an input"""
+    wf = Workflow(name="wf_3", input_spec=["x", "y"])
+    wf.add(fun_addvar_none(name="addvar", a=wf.lzin.x, b=wf.lzin.y))
+    wf.add(add2(name="add2", x=wf.addvar.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.inputs.y = None
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.output_dir.exists()
+    results = wf.result()
+    assert 4 == results.output.out
+
+
+@pytest.mark.xfail(reason="the task error doesn't propagate")
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_3a_exception(plugin):
+    """ testinh wf without set input, attr.NOTHING should be set
+        and the function should raise an exception
+    """
+    wf = Workflow(name="wf_3", input_spec=["x", "y"])
+    wf.add(fun_addvar_none(name="addvar", a=wf.lzin.x, b=wf.lzin.y))
+    wf.add(add2(name="add2", x=wf.addvar.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.inputs.y = attr.NOTHING
+    wf.plugin = plugin
+
+    with pytest.raises(TypeError) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf)
+    assert "unsupported" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_4(plugin):
+    """wf with a task that doesn't set one input and use the function default value"""
+    wf = Workflow(name="wf_4", input_spec=["x", "y"])
+    wf.add(fun_addvar_default(name="addvar", a=wf.lzin.x))
+    wf.add(add2(name="add2", x=wf.addvar.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.output_dir.exists()
+    results = wf.result()
+    assert 5 == results.output.out
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_4a(plugin):
+    """ wf with a task that doesn't set one input,
+        the unset input is send to the task input,
+        so the task should use the function default value
+    """
+    wf = Workflow(name="wf_4a", input_spec=["x", "y"])
+    wf.add(fun_addvar_default(name="addvar", a=wf.lzin.x, y=wf.lzin.y))
+    wf.add(add2(name="add2", x=wf.addvar.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.output_dir.exists()
+    results = wf.result()
+    assert 5 == results.output.out
 
 
 @pytest.mark.parametrize("plugin", Plugins)

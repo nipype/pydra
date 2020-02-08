@@ -463,7 +463,7 @@ class ContainerTask(ShellCommandTask):
             raise AttributeError(
                 f"Container type should be {container_type}, but {self.inputs.container} given"
             )
-        if self.inputs.image is None:
+        if self.inputs.image is attr.NOTHING:
             raise AttributeError("Container image is not specified")
 
     def bind_paths(self, ind=None):
