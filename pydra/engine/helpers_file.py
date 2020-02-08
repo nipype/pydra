@@ -516,6 +516,8 @@ def is_local_file(f):
 
 def is_existing_file(f):
     """ checking if an object is an existing file"""
+    if not f:
+        return False
     try:
         return Path(f).exists()
     except TypeError:
