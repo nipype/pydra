@@ -458,6 +458,7 @@ def test_shell_cmd_inputspec_3c(plugin, results_function):
                 "text",
                 attr.ib(
                     type=str,
+                    default=None,
                     metadata={"position": 1, "help_string": "text", "mandatory": False},
                 ),
             )
