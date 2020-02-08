@@ -1,5 +1,7 @@
 # Tasks for testing
 import time
+import typing as tp
+from pathlib import Path
 
 from ..core import Workflow
 from ... import mark
@@ -100,6 +102,36 @@ def list_output(x):
 def fun_dict(d):
     kv_list = [f"{k}:{v}" for (k, v) in d.items()]
     return "_".join(kv_list)
+
+
+@mark.task
+def fun_write_file(filename: tp.Union[str, File, Path], text="hello"):
+    with open(filename, "w") as f:
+        f.write(text)
+    return Path(filename).absolute()
+
+
+@mark.task
+def fun_write_file_list(filename_list: tp.List[tp.Union[str, File, Path]], text="hi"):
+    for ii, filename in enumerate(filename_list):
+        with open(filename, "w") as f:
+            f.write(f"from file {ii}: {text}")
+    filename_list = [Path(filename).absolute() for filename in filename_list]
+    return filename_list
+
+
+@mark.task
+def fun_write_file_list2dict(
+    filename_list: tp.List[tp.Union[str, File, Path]], text="hi"
+):
+    filename_dict = {}
+    for ii, filename in enumerate(filename_list):
+        with open(filename, "w") as f:
+            f.write(f"from file {ii}: {text}")
+        filename_dict[f"file_{ii}"] = Path(filename).absolute()
+    # adding an additional field with int
+    filename_dict["random_int"] = 20
+    return filename_dict
 
 
 @mark.task

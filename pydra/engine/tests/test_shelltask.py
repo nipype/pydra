@@ -2018,6 +2018,8 @@ def test_shell_cmd_outputspec_wf_1(plugin):
     res = wf.result()
     assert res.output.stdout == ""
     assert res.output.newfile.exists()
+    # checking if the file was copied to the wf dir
+    assert res.output.newfile.parent == wf.output_dir
 
 
 def no_fsl():

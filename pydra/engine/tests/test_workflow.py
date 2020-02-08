@@ -14,6 +14,9 @@ from .utils import (
     add2_sub2_res,
     fun_addvar_none,
     fun_addvar_default,
+    fun_write_file,
+    fun_write_file_list,
+    fun_write_file_list2dict,
 )
 from ..submitter import Submitter
 from ..core import Workflow
@@ -2825,3 +2828,72 @@ def test_wf_lzoutall_st_2a(plugin):
         {"out_add": [8, 62], "out_sub": [4, 58]},
         {"out_add": [62, 602], "out_sub": [58, 598]},
     ]
+
+
+# worfklows that have files in the result, the files should be copied to the wf dir
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_resultfile_1(plugin):
+    """ workflow with a file in the result, file should be copied to the wf dir"""
+    wf = Workflow(name="wf_file_1", input_spec=["x"])
+    wf.add(fun_write_file(name="writefile", filename=wf.lzin.x))
+    wf.inputs.x = "file_1.txt"
+    wf.plugin = plugin
+    wf.set_output([("wf_out", wf.writefile.lzout.out)])
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    # checking if the file exists and if it is in the Workflow directory
+    assert results.output.wf_out.exists()
+    assert results.output.wf_out == wf.output_dir / "file_1.txt"
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_resultfile_2(plugin):
+    """ workflow with a list of files in the wf result,
+        all files should be copied to the wf dir
+    """
+    wf = Workflow(name="wf_file_1", input_spec=["x"])
+    wf.add(fun_write_file_list(name="writefile", filename_list=wf.lzin.x))
+    file_list = ["file_1.txt", "file_2.txt", "file_3.txt"]
+    wf.inputs.x = file_list
+    wf.plugin = plugin
+    wf.set_output([("wf_out", wf.writefile.lzout.out)])
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    # checking if the file exists and if it is in the Workflow directory
+    for ii, file in enumerate(results.output.wf_out):
+        assert file.exists()
+        assert file == wf.output_dir / file_list[ii]
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_resultfile_3(plugin):
+    """ workflow with a dictionaries of files in the wf result,
+        all files should be copied to the wf dir
+    """
+    wf = Workflow(name="wf_file_1", input_spec=["x"])
+    wf.add(fun_write_file_list2dict(name="writefile", filename_list=wf.lzin.x))
+    file_list = ["file_1.txt", "file_2.txt", "file_3.txt"]
+    wf.inputs.x = file_list
+    wf.plugin = plugin
+    wf.set_output([("wf_out", wf.writefile.lzout.out)])
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    # checking if the file exists and if it is in the Workflow directory
+    for key, val in results.output.wf_out.items():
+        if key == "random_int":
+            assert val == 20
+        else:
+            assert val.exists()
+            ii = int(key.split("_")[1])
+            assert val == wf.output_dir / file_list[ii]
