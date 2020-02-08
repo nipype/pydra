@@ -593,6 +593,46 @@ def test_wf_docker_2(plugin, tmpdir):
     assert res.output.out == "Hello!"
 
 
+@need_docker
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_docker_3(plugin, tmpdir):
+    """ a workflow with two connected task
+        the first one read the file that contains the name of the image,
+        the output is passed to the second task as the image used to run the task
+    """
+    with open(tmpdir.join("image.txt"), "w") as f:
+        f.write("ubuntu")
+
+    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
+    wf.inputs.cmd1 = ["cat", "/tmp_dir/image.txt"]
+    wf.inputs.cmd2 = ["echo", "image passed to the second task:"]
+    wf.add(
+        DockerTask(
+            name="docky_cat",
+            image="busybox",
+            executable=wf.lzin.cmd1,
+            bindings=[(str(tmpdir), "/tmp_dir", "ro")],
+            strip=True,
+        )
+    )
+    wf.add(
+        DockerTask(
+            name="docky_echo",
+            image=wf.docky_cat.lzout.stdout,
+            executable=wf.lzin.cmd2,
+            args=wf.docky_cat.lzout.stdout,
+            strip=True,
+        )
+    )
+    wf.set_output([("out", wf.docky_echo.lzout.stdout)])
+
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+
+    res = wf.result()
+    assert res.output.out == "image passed to the second task: ubuntu"
+
+
 # tests with customized output_spec
 
 
