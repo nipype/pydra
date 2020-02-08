@@ -126,11 +126,26 @@ def copyfile_workflow(wf_path, result):
     """ if file in the wf results, the file will be copied to the workflow directory"""
     for field in attr_fields(result.output):
         value = getattr(result.output, field.name)
-        if is_existing_file(value):
-            new_path = wf_path / Path(value).name
-            copyfile(originalfile=value, newfile=new_path, copy=True, use_hardlink=True)
-            setattr(result.output, field.name, new_path)
+        new_value = _copyfile_single_value(wf_path=wf_path, value=value)
+        if new_value != value:
+            setattr(result.output, field.name, new_value)
     return result
+
+
+def _copyfile_single_value(wf_path, value):
+    """ checking a single value for files that need to be copied to the wf dir"""
+    if isinstance(value, (tuple, list)):
+        return [_copyfile_single_value(wf_path, val) for val in value]
+    elif isinstance(value, dict):
+        return {
+            key: _copyfile_single_value(wf_path, val) for (key, val) in value.items()
+        }
+    elif is_existing_file(value):
+        new_path = wf_path / Path(value).name
+        copyfile(originalfile=value, newfile=new_path, copy=True, use_hardlink=True)
+        return new_path
+    else:
+        return value
 
 
 def task_hash(task):
