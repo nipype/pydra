@@ -10,10 +10,18 @@ from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec
 
+Plugins = ["cf"]
+
+try:
+    import dask
+    import distributed
+
+    Plugins.append("dask")
+except ModuleNotFoundError:
+    pass
+
 if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "dask", "slurm"]
-else:
-    Plugins = ["cf", "dask"]
+    Plugins.append("slurm")
 
 need_docker = pytest.mark.skipif(
     shutil.which("docker") is None or sp.call(["docker", "info"]),

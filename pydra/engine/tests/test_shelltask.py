@@ -12,10 +12,18 @@ from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
 
+Plugins = ["cf"]
+
+try:
+    import dask
+    import distributed
+
+    Plugins.append("dask")
+except ModuleNotFoundError:
+    pass
+
 if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "dask", "slurm"]
-else:
-    Plugins = ["cf", "dask"]
+    Plugins.append("slurm")
 
 
 def result_no_submitter(shell_task, plugin=None):

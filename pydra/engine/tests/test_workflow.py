@@ -21,10 +21,18 @@ from .utils import (
 from ..submitter import Submitter
 from ..core import Workflow
 
+Plugins = ["cf"]
+
+try:
+    import dask
+    import distributed
+
+    Plugins.append("dask")
+except ModuleNotFoundError:
+    pass
+
 if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "dask", "slurm"]
-else:
-    Plugins = ["cf", "dask"]
+    Plugins.append("slurm")
 
 
 @pytest.mark.parametrize("plugin", Plugins)

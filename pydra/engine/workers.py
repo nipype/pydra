@@ -6,7 +6,12 @@ from tempfile import gettempdir
 from pathlib import Path
 
 import concurrent.futures as cf
-from dask.distributed import Client
+
+try:
+    from dask.distributed import Client
+except ModuleNotFoundError:
+    pass
+
 
 from .helpers import create_pyscript, read_and_display_async, save
 

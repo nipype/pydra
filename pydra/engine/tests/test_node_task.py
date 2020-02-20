@@ -19,10 +19,18 @@ from .utils import (
 from ..core import TaskBase
 from ..submitter import Submitter
 
+Plugins = ["cf"]
+
+try:
+    import dask
+    import distributed
+
+    Plugins.append("dask")
+except ModuleNotFoundError:
+    pass
+
 if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "dask", "slurm"]
-else:
-    Plugins = ["cf", "dask"]
+    Plugins.append("slurm")
 
 
 @pytest.fixture(scope="module")
