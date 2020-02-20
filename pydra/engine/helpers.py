@@ -324,7 +324,8 @@ def execute(cmd, strip=False):
 
     """
     loop = get_open_loop()
-    if loop.is_running():
+    # TODO: should be removed (?)
+    if True:  # loop.is_running():
         rc, stdout, stderr = read_and_display(*cmd, strip=strip)
     else:
         rc, stdout, stderr = loop.run_until_complete(

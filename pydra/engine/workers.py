@@ -6,6 +6,7 @@ from tempfile import gettempdir
 from pathlib import Path
 
 import concurrent.futures as cf
+from dask.distributed import Client
 
 from .helpers import create_pyscript, read_and_display_async, save
 
@@ -125,39 +126,6 @@ class DistributedWorker(Worker):
         return pending.union(unqueued)
 
 
-class SerialPool:
-    """A simple class to imitate a pool executor of concurrent futures."""
-
-    def submit(self, interface, **kwargs):
-        """Send new task."""
-        self.res = interface(**kwargs)
-
-    def result(self):
-        """Get the result of a task."""
-        return self.res
-
-    def done(self):
-        """Return whether the task is finished."""
-        return True
-
-
-class SerialWorker(Worker):
-    """A worker to execute linearly."""
-
-    def __init__(self):
-        """Initialize worker."""
-        logger.debug("Initialize SerialWorker")
-        self.pool = SerialPool()
-
-    def run_el(self, interface, rerun=False, **kwargs):
-        """Run a task."""
-        self.pool.submit(interface=interface, rerun=rerun, **kwargs)
-        return self.pool
-
-    def close(self):
-        """Return whether the task is finished."""
-
-
 class ConcurrentFuturesWorker(Worker):
     """A worker to execute in parallel using Python's concurrent futures."""
 
@@ -166,6 +134,7 @@ class ConcurrentFuturesWorker(Worker):
         super(ConcurrentFuturesWorker, self).__init__()
         self.n_procs = n_procs
         # added cpu_count to verify, remove once confident and let PPE handle
+        # TODO remove it, set in submitter
         self.pool = cf.ProcessPoolExecutor(self.n_procs)
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
@@ -183,6 +152,28 @@ class ConcurrentFuturesWorker(Worker):
     def close(self):
         """Finalize the internal pool of tasks."""
         self.pool.shutdown()
+
+
+class DaskWorker(Worker):
+    def __init__(self):
+        logger.debug("Initialize Dask Worker")
+        super(DaskWorker, self).__init__()
+        # self.cluster = LocalCluster()
+        # self.client = Client(asynchronous=True)  # self.cluster)
+        # print("BOKEH", self.client.scheduler_info()["address"] + ":" + str(self.client.scheduler_info()["services"]["bokeh"]))
+
+    def run_el(self, runnable, rerun=False, **kwargs):
+        assert self.loop, "No event loop available to submit tasks"
+        # print("DASK, run_el: ", runnable, kwargs)#, time.time())
+        return self.exec_as_coro(runnable, rerun=rerun)
+
+    async def exec_as_coro(self, runnable, rerun=False, **kwargs):
+        """Run a task (coroutine wrapper)."""
+        # breakpoint()
+        client = await Client(asynchronous=True)
+        res = await client.submit(runnable, **kwargs)
+        await client.close()
+        return res
 
 
 class SlurmWorker(DistributedWorker):

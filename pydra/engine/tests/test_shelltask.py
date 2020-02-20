@@ -13,9 +13,9 @@ from ..core import Workflow
 from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
 
 if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "slurm"]
+    Plugins = ["cf", "dask", "slurm"]
 else:
-    Plugins = ["cf"]
+    Plugins = ["cf", "dask"]
 
 
 def result_no_submitter(shell_task, plugin=None):

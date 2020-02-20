@@ -11,9 +11,9 @@ from ..core import Workflow
 from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec
 
 if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "slurm"]
+    Plugins = ["cf", "dask", "slurm"]
 else:
-    Plugins = ["cf"]
+    Plugins = ["cf", "dask"]
 
 need_docker = pytest.mark.skipif(
     shutil.which("docker") is None or sp.call(["docker", "info"]),

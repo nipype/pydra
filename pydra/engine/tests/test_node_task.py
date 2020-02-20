@@ -20,9 +20,9 @@ from ..core import TaskBase
 from ..submitter import Submitter
 
 if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "slurm"]
+    Plugins = ["cf", "dask", "slurm"]
 else:
-    Plugins = ["cf"]
+    Plugins = ["cf", "dask"]
 
 
 @pytest.fixture(scope="module")
@@ -590,6 +590,9 @@ def test_task_nostate_cachelocations_forcererun(plugin, tmpdir):
     the second task has cache_locations,
     but submitter is called with rerun=True, so should recompute
     """
+    if plugin == "dask":
+        pytest.skip("rerun doesn't work when dask")
+
     cache_dir = tmpdir.mkdir("test_task_nostate")
     cache_dir2 = tmpdir.mkdir("test_task_nostate2")
 
@@ -1218,6 +1221,9 @@ def test_task_state_cachelocations_forcererun(plugin, tmpdir):
     the second task has cache_locations,
     but submitter is called with rerun=True, so should recompute
     """
+    if plugin == "dask":
+        pytest.skip("rerun doesn't work when dask")
+
     cache_dir = tmpdir.mkdir("test_task_nostate")
     cache_dir2 = tmpdir.mkdir("test_task_nostate2")
 

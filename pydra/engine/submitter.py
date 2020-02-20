@@ -1,6 +1,6 @@
 """Handle execution backends."""
 import asyncio
-from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker
+from .workers import DaskWorker, ConcurrentFuturesWorker, SlurmWorker
 from .core import is_workflow
 from .helpers import get_open_loop
 
@@ -27,8 +27,8 @@ class Submitter:
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
         self.plugin = plugin
-        if self.plugin == "serial":
-            self.worker = SerialWorker()
+        if self.plugin == "dask":
+            self.worker = DaskWorker()
         elif self.plugin == "cf":
             self.worker = ConcurrentFuturesWorker(**kwargs)
         elif self.plugin == "slurm":
