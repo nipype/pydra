@@ -222,7 +222,7 @@ class TaskBase:
             self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
 
         input_hash = self.inputs.hash
-        if self.state is None or self.state.splitter_rpn == []:
+        if self.state is None:
             self._checksum = create_checksum(self.__class__.__name__, input_hash)
         else:
             # including splitter in the hash
@@ -329,7 +329,7 @@ class TaskBase:
     @property
     def output_dir(self):
         """Get the filesystem path where outputs will be written."""
-        if self.state and self.state.splitter_rpn:
+        if self.state:
             return [self._cache_dir / checksum for checksum in self.checksum_states()]
         return self._cache_dir / self.checksum
 
@@ -342,7 +342,7 @@ class TaskBase:
         plugin = plugin or self.plugin
         if plugin:
             submitter = Submitter(plugin=plugin)
-        elif self.state and self.state.splitter_rpn:
+        elif self.state:
             submitter = Submitter()
 
         if submitter:
@@ -512,7 +512,7 @@ class TaskBase:
         # if any of the field is lazy, there is no need to check results
         if is_lazy(self.inputs):
             return False
-        if self.state and self.state.splitter_rpn:
+        if self.state:
             # TODO: only check for needed state result
             if self.result() and all(self.result()):
                 return True
@@ -556,7 +556,7 @@ class TaskBase:
         """
         # TODO: check if result is available in load_result and
         # return a future if not
-        if self.state and self.state.splitter_rpn:
+        if self.state:
             if state_index is None:
                 # if state_index=None, collecting all results
                 if self.state.combiner:
@@ -753,7 +753,10 @@ class Workflow(TaskBase):
                     self.graph.add_edges((getattr(self, val.name), task))
                     logger.debug("Connecting %s to %s", val.name, task.name)
 
-                    if getattr(self, val.name).state:
+                    if (
+                        getattr(self, val.name).state
+                        and getattr(self, val.name).state.splitter_rpn_final
+                    ):
                         # adding a state from the previous task to other_states
                         other_states[val.name] = (
                             getattr(self, val.name).state,
