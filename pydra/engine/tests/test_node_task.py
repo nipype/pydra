@@ -937,10 +937,10 @@ def test_task_state_comb_1(plugin):
     # checking the results
     results = nn.result()
 
-    combined_results = [[res.output.out for res in res_l] for res_l in results]
-    expected = [({}, [5, 7])]
-    for i, res in enumerate(expected):
-        assert combined_results[i] == res[1]
+    # fully combined (no nested list)
+    combined_results = [res.output.out for res in results]
+
+    assert combined_results == [5, 7]
     # checking the output_dir
     assert nn.output_dir
     for odir in nn.output_dir:
@@ -1072,11 +1072,11 @@ def test_task_state_comb_singl_1(plugin):
         sub(nn)
 
     # checking the results
-    expected = [({}, [13, 15])]
+    expected = ({}, [13, 15])
     results = nn.result()
-    combined_results = [[res.output.out for res in res_l] for res_l in results]
-    for i, res in enumerate(expected):
-        assert combined_results[i] == res[1]
+    # full combiner, no nested list
+    combined_results = [res.output.out for res in results]
+    assert combined_results == expected[1]
     # checking the output_dir
     assert nn.output_dir
     for odir in nn.output_dir:
@@ -1143,7 +1143,8 @@ def test_task_state_comb_order(plugin):
     assert nn_ab.state.combiner == ["NA.a", "NA.b"]
 
     results_ab = nn_ab()
-    combined_results_ab = [res.output.out for res in results_ab[0]]
+    # full combiner, no nested list
+    combined_results_ab = [res.output.out for res in results_ab]
     assert combined_results_ab == [13, 15, 23, 25]
 
     # combiner with both fields ["b", "a"] - will create the same list as nn_ab
@@ -1156,7 +1157,7 @@ def test_task_state_comb_order(plugin):
     assert nn_ba.state.combiner == ["NA.b", "NA.a"]
 
     results_ba = nn_ba()
-    combined_results_ba = [res.output.out for res in results_ba[0]]
+    combined_results_ba = [res.output.out for res in results_ba]
     assert combined_results_ba == [13, 15, 23, 25]
 
 

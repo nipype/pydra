@@ -538,7 +538,11 @@ class TaskBase:
                 if result is None:
                     return None
                 combined_results[gr].append(result)
-        return combined_results
+        if len(combined_results) == 1 and self.state.splitter_rpn_final == []:
+            # in case it's full combiner, removing the nested structure
+            return combined_results[0]
+        else:
+            return combined_results
 
     def result(self, state_index=None):
         """
@@ -753,7 +757,10 @@ class Workflow(TaskBase):
                     self.graph.add_edges((getattr(self, val.name), task))
                     logger.debug("Connecting %s to %s", val.name, task.name)
 
-                    if getattr(self, val.name).state:
+                    if (
+                        getattr(self, val.name).state
+                        and getattr(self, val.name).state.splitter_rpn_final
+                    ):
                         # adding a state from the previous task to other_states
                         other_states[val.name] = (
                             getattr(self, val.name).state,
