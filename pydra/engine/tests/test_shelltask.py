@@ -174,8 +174,8 @@ def test_shell_cmd_5(plugin):
     assert shelly.cmdline == ["echo nipype", "echo pydra"]
     res = shelly(plugin=plugin)
 
-    assert res[0][0].output.stdout == "nipype\n"
-    assert res[0][1].output.stdout == "pydra\n"
+    assert res[0].output.stdout == "nipype\n"
+    assert res[1].output.stdout == "pydra\n"
 
 
 @pytest.mark.parametrize("plugin", Plugins)

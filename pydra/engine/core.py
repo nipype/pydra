@@ -538,7 +538,11 @@ class TaskBase:
                 if result is None:
                     return None
                 combined_results[gr].append(result)
-        return combined_results
+        if len(combined_results) == 1 and self.state.splitter_rpn_final == []:
+            # in case it's full combiner, removing the nested structure
+            return combined_results[0]
+        else:
+            return combined_results
 
     def result(self, state_index=None):
         """

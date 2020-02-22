@@ -532,9 +532,9 @@ def test_wf_st_2(plugin):
         sub(wf)
 
     results = wf.result()
-    # expected: [[({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]]
-    assert results[0][0].output.out == 3
-    assert results[0][1].output.out == 4
+    # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
+    assert results[0].output.out == 3
+    assert results[1].output.out == 4
     # checking all directories
     assert wf.output_dir
     for odir in wf.output_dir:
@@ -554,8 +554,8 @@ def test_wf_ndst_2(plugin):
         sub(wf)
 
     results = wf.result()
-    # expected: [[({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]]
-    assert results.output.out[0] == [3, 4]
+    # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
+    assert results.output.out == [3, 4]
     assert wf.output_dir.exists()
 
 
@@ -625,10 +625,10 @@ def test_wf_st_4(plugin):
 
     results = wf.result()
     # expected: [
-    #     [({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)]
+    #     ({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)
     # ]
-    assert results[0][0].output.out == 13
-    assert results[0][1].output.out == 26
+    assert results[0].output.out == 13
+    assert results[1].output.out == 26
     # checking all directories
     assert wf.output_dir
     for odir in wf.output_dir:
@@ -652,9 +652,9 @@ def test_wf_ndst_4(plugin):
 
     results = wf.result()
     # expected: [
-    #     [({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)]
+    #     ({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)
     # ]
-    assert results.output.out[0] == [13, 26]
+    assert results.output.out == [13, 26]
     # checking the output directory
     assert wf.output_dir.exists()
 
@@ -772,7 +772,7 @@ def test_wf_ndst_7(plugin):
         sub(wf)
 
     results = wf.result()
-    assert results.output.out[0] == [11, 22, 33]
+    assert results.output.out == [11, 22, 33]
 
     # checking the output directory
     assert wf.output_dir.exists()
@@ -821,7 +821,7 @@ def test_wf_ndst_9(plugin):
         sub(wf)
 
     results = wf.result()
-    assert results.output.out[0] == [11, 12, 22, 24, 33, 36]
+    assert results.output.out == [11, 12, 22, 24, 33, 36]
 
     # checking the output directory
     assert wf.output_dir.exists()
@@ -1020,13 +1020,13 @@ def test_wf_3nd_st_4(plugin):
         sub(wf)
 
     results = wf.result()
-    assert len(results) == 1
-    assert results[0][0].output.out == 39
-    assert results[0][1].output.out == 42
-    assert results[0][2].output.out == 52
-    assert results[0][3].output.out == 56
-    assert results[0][4].output.out == 65
-    assert results[0][5].output.out == 70
+    assert len(results) == 6
+    assert results[0].output.out == 39
+    assert results[1].output.out == 42
+    assert results[2].output.out == 52
+    assert results[3].output.out == 56
+    assert results[4].output.out == 65
+    assert results[5].output.out == 70
     # checking all directories
     assert wf.output_dir
     for odir in wf.output_dir:
@@ -1056,8 +1056,8 @@ def test_wf_3nd_ndst_4(plugin):
     # assert wf.output_dir.exists()
     results = wf.result()
 
-    assert len(results.output.out) == 1
-    assert results.output.out == [[39, 42, 52, 56, 65, 70]]
+    assert len(results.output.out) == 6
+    assert results.output.out == [39, 42, 52, 56, 65, 70]
     # checking the output directory
     assert wf.output_dir.exists()
 
@@ -1354,8 +1354,8 @@ def test_wf_st_singl_1(plugin):
         sub(wf)
 
     results = wf.result()
-    assert results[0][0].output.out == 13
-    assert results[0][1].output.out == 24
+    assert results[0].output.out == 13
+    assert results[1].output.out == 24
     # checking all directories
     assert wf.output_dir
     for odir in wf.output_dir:
@@ -1379,7 +1379,7 @@ def test_wf_ndst_singl_1(plugin):
         sub(wf)
 
     results = wf.result()
-    assert results.output.out[0] == [13, 24]
+    assert results.output.out == [13, 24]
     # checking the output directory
     assert wf.output_dir.exists()
 
@@ -2735,7 +2735,7 @@ def test_workflow_combine1(tmpdir):
 
     assert result.output.out_pow == [1, 1, 4, 8]
     assert result.output.out_iden1 == [[1, 4], [1, 8]]
-    assert result.output.out_iden2 == [[[1, 4], [1, 8]]]
+    assert result.output.out_iden2 == [[1, 4], [1, 8]]
 
 
 def test_workflow_combine2(tmpdir):
@@ -2749,7 +2749,7 @@ def test_workflow_combine2(tmpdir):
     result = wf1(plugin="cf")
 
     assert result.output.out_pow == [[1, 4], [1, 8]]
-    assert result.output.out_iden == [[[1, 4], [1, 8]]]
+    assert result.output.out_iden == [[1, 4], [1, 8]]
 
 
 # testing lzout.all to collect all of the results and let FunctionTask deal with it
