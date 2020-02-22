@@ -50,7 +50,9 @@ class Submitter:
             runnable.inputs._graph_checksums = [
                 nd.checksum for nd in runnable.graph_sorted
             ]
-        if is_workflow(runnable) and runnable.state is None:
+        if is_workflow(runnable) and (
+            runnable.state is None or runnable.state.splitter_rpn == []
+        ):
             self.loop.run_until_complete(self.submit_workflow(runnable, rerun=rerun))
         else:
             self.loop.run_until_complete(self.submit(runnable, wait=True, rerun=rerun))
@@ -91,7 +93,7 @@ class Submitter:
 
         """
         futures = set()
-        if runnable.state:
+        if runnable.state and runnable.state.splitter_rpn:
             runnable.state.prepare_states(runnable.inputs)
             runnable.state.prepare_inputs()
             logger.debug(
@@ -154,7 +156,9 @@ class Submitter:
                 task.inputs.retrieve_values(wf)
                 # checksum has to be updated, so resetting
                 task._checksum = None
-                if is_workflow(task) and not task.state:
+                if is_workflow(task) and (
+                    not task.state or task.state.splitter_rpn == []
+                ):
                     await self.submit_workflow(task, rerun=rerun)
                 else:
                     for fut in await self.submit(task, rerun=rerun):

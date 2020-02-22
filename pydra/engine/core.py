@@ -222,7 +222,7 @@ class TaskBase:
             self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
 
         input_hash = self.inputs.hash
-        if self.state is None:
+        if self.state is None or self.state.splitter_rpn == []:
             self._checksum = create_checksum(self.__class__.__name__, input_hash)
         else:
             # including splitter in the hash
@@ -329,7 +329,7 @@ class TaskBase:
     @property
     def output_dir(self):
         """Get the filesystem path where outputs will be written."""
-        if self.state:
+        if self.state and self.state.splitter_rpn:
             return [self._cache_dir / checksum for checksum in self.checksum_states()]
         return self._cache_dir / self.checksum
 
@@ -342,7 +342,7 @@ class TaskBase:
         plugin = plugin or self.plugin
         if plugin:
             submitter = Submitter(plugin=plugin)
-        elif self.state:
+        elif self.state and self.state.splitter_rpn:
             submitter = Submitter()
 
         if submitter:
@@ -512,7 +512,7 @@ class TaskBase:
         # if any of the field is lazy, there is no need to check results
         if is_lazy(self.inputs):
             return False
-        if self.state:
+        if self.state and self.state.splitter_rpn:
             # TODO: only check for needed state result
             if self.result() and all(self.result()):
                 return True
@@ -556,7 +556,7 @@ class TaskBase:
         """
         # TODO: check if result is available in load_result and
         # return a future if not
-        if self.state:
+        if self.state and self.state.splitter_rpn:
             if state_index is None:
                 # if state_index=None, collecting all results
                 if self.state.combiner:
