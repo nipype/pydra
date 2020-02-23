@@ -614,6 +614,7 @@ class Workflow(TaskBase):
         messengers=None,
         output_spec: ty.Optional[BaseSpec] = None,
         rerun=False,
+        propagate_rerun=True,
         **kwargs,
     ):
         """
@@ -683,6 +684,8 @@ class Workflow(TaskBase):
 
         # store output connections
         self._connections = None
+        # propagating rerun if task_rerun=True
+        self.propagate_rerun = propagate_rerun
 
     def __getattr__(self, name):
         if name == "lzin":
@@ -800,8 +803,13 @@ class Workflow(TaskBase):
                 return result
         # creating connections that were defined after adding tasks to the wf
         for task in self.graph.nodes:
-            if self.task_rerun:
+            # if workflow has task_rerun=True and propagate_rerun=True,
+            # it should be passed to the tasks
+            if self.task_rerun and self.propagate_rerun:
                 task.task_rerun = self.task_rerun
+                # if the task is a wf, than the propagate_rerun should be also set
+                if is_workflow(task):
+                    task.propagate_rerun = self.propagate_rerun
             task.cache_locations = task._cache_locations + self.cache_locations
             self.create_connections(task)
         # TODO add signal handler for processes killed after lock acquisition

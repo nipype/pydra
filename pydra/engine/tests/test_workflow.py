@@ -1989,11 +1989,11 @@ def test_wf_nostate_cachelocations_forcererun(plugin, tmpdir):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_wf_nostate_cachelocations_wftaskrerun(plugin, tmpdir):
+def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(plugin, tmpdir):
     """
-    Two identical wfs with provided cache_dir;
-    the second wf has cache_locations and rerun=True,
-    so everything should be rerun even if Submitter doesn't have rerun
+    Two identical wfs with provided cache_dir and cache_locations for the second one;
+    submitter doesn't have rerun, but the second wf has rerun=True,
+    propagate_rerun is True as default, so everything should be rerun
     """
     cache_dir1 = tmpdir.mkdir("test_wf_cache3")
     cache_dir2 = tmpdir.mkdir("test_wf_cache4")
@@ -2019,7 +2019,7 @@ def test_wf_nostate_cachelocations_wftaskrerun(plugin, tmpdir):
         input_spec=["x", "y"],
         cache_dir=cache_dir2,
         cache_locations=cache_dir1,
-        rerun=True,  # wh has to be rerun
+        rerun=True,  # wh has to be rerun (default for propagate_rerun is True)
     )
     wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y))
     wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
@@ -2048,11 +2048,12 @@ def test_wf_nostate_cachelocations_wftaskrerun(plugin, tmpdir):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_wf_nostate_cachelocations_taskrerun_noeffect(plugin, tmpdir):
+def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(plugin, tmpdir):
     """
-    Two identical wfs with provided cache_dir;
-    submitter doesn't have rerun and wf doesn't have rerun,
-    so even if the task has rerun=True, nothing will be rerun (wf will read the result)
+    Two identical wfs with provided cache_dir and cache_locations for the second one;
+    submitter doesn't have rerun, but the second wf has rerun=True,
+    propagate_rerun is set to False, so wf will be triggered,
+    but tasks will not have rerun, so will use the previous results
     """
     cache_dir1 = tmpdir.mkdir("test_wf_cache3")
     cache_dir2 = tmpdir.mkdir("test_wf_cache4")
@@ -2078,10 +2079,11 @@ def test_wf_nostate_cachelocations_taskrerun_noeffect(plugin, tmpdir):
         input_spec=["x", "y"],
         cache_dir=cache_dir2,
         cache_locations=cache_dir1,
+        rerun=True,  # wh has to be rerun
+        propagate_rerun=False,  # but rerun doesn't propagate to the tasks
     )
     wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y))
-    # rerun on the task level will not have any effect if the wf doesn't start rerun
-    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out, rerun=True))
+    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
     wf2.set_output([("out", wf2.add2.lzout.out)])
     wf2.inputs.x = 2
     wf2.inputs.y = 3
@@ -2095,24 +2097,23 @@ def test_wf_nostate_cachelocations_taskrerun_noeffect(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out
 
-    # checking if the second wf doesn't runs again
+    # checking if the second wf runs again
     assert wf1.output_dir.exists()
-    assert not wf2.output_dir.exists()
-    # should be fast
+    assert wf2.output_dir.exists()
+
+    # tasks should not be recomputed
+    assert len(list(Path(cache_dir1).glob("F*"))) == 2
+    assert len(list(Path(cache_dir2).glob("F*"))) == 0
     assert t1 > 3
     assert t2 < 1
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_wf_nostate_cachelocations_taskrerun_wfmodif(plugin, tmpdir):
+def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(plugin, tmpdir):
     """
-    Two identical wfs with provided cache_dir;
-    the second wf has cache_locations,
-    the second task has rerun=True, but because wf and submitter doesn't have rerun
-    it wouldn't rerun anyway (see previous test),
-    so wf inputs has to be modified to force wf to start rerunning,
-    the first task will read the result (doesn't have rerun),
-    but the second will be rerun
+    Two identical wfs with provided cache_dir, and cache_locations for teh second wf;
+    submitter doesn't have rerun, but wf has rerun=True,
+    since propagate_rerun=False, only tasks that have rerun=True will be rerun
     """
     cache_dir1 = tmpdir.mkdir("test_wf_cache3")
     cache_dir2 = tmpdir.mkdir("test_wf_cache4")
@@ -2135,18 +2136,18 @@ def test_wf_nostate_cachelocations_taskrerun_wfmodif(plugin, tmpdir):
 
     wf2 = Workflow(
         name="wf",
-        input_spec=["x", "y", "fake"],
+        input_spec=["x", "y"],
         cache_dir=cache_dir2,
         cache_locations=cache_dir1,
+        rerun=True,
+        propagate_rerun=False,  # rerun will not be propagated to each task
     )
     wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y))
-    # when wf starts rerun, this task will be rerun
+    # rerun on the task level needed (wf.propagate_rerun is False)
     wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out, rerun=True))
     wf2.set_output([("out", wf2.add2.lzout.out)])
     wf2.inputs.x = 2
     wf2.inputs.y = 3
-    # adding a fake input, just to start wf rerun
-    wf2.inputs.fake = "whatever"
     wf2.plugin = plugin
 
     t0 = time.time()
@@ -2157,11 +2158,10 @@ def test_wf_nostate_cachelocations_taskrerun_wfmodif(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out
 
-    # checking if the second wf runs again
+    # checking if the second wf doesn't runs again
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
-
-    # the first task shouldn't be recomputed, but the second one should be
+    # the second task should be recomputed
     assert len(list(Path(cache_dir1).glob("F*"))) == 2
     assert len(list(Path(cache_dir2).glob("F*"))) == 1
     assert t1 > 3
