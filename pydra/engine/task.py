@@ -75,6 +75,7 @@ class FunctionTask(TaskBase):
         messengers=None,
         name=None,
         output_spec: ty.Optional[BaseSpec] = None,
+        rerun=False,
         **kwargs,
     ):
         """
@@ -143,6 +144,7 @@ class FunctionTask(TaskBase):
             messenger_args=messenger_args,
             cache_dir=cache_dir,
             cache_locations=cache_locations,
+            rerun=rerun,
         )
         if output_spec is None:
             if "return" not in func.__annotations__:
@@ -242,6 +244,7 @@ class ShellCommandTask(TaskBase):
         messengers=None,
         name=None,
         output_spec: ty.Optional[SpecInfo] = None,
+        rerun=False,
         strip=False,
         **kwargs,
     ):
@@ -283,6 +286,7 @@ class ShellCommandTask(TaskBase):
             messengers=messengers,
             messenger_args=messenger_args,
             cache_dir=cache_dir,
+            rerun=rerun,
         )
         self.strip = strip
 
@@ -412,6 +416,7 @@ class ContainerTask(ShellCommandTask):
         messengers=None,
         output_cpath="/output_pydra",
         output_spec: ty.Optional[SpecInfo] = None,
+        rerun=False,
         strip=False,
         **kwargs,
     ):
@@ -452,6 +457,7 @@ class ContainerTask(ShellCommandTask):
             messenger_args=messenger_args,
             cache_dir=cache_dir,
             strip=strip,
+            rerun=rerun,
             **kwargs,
         )
 
@@ -523,6 +529,7 @@ class DockerTask(ContainerTask):
         messengers=None,
         output_cpath="/output_pydra",
         output_spec: ty.Optional[SpecInfo] = None,
+        rerun=False,
         strip=False,
         **kwargs,
     ):
@@ -565,6 +572,7 @@ class DockerTask(ContainerTask):
                 cache_dir=cache_dir,
                 strip=strip,
                 output_cpath=output_cpath,
+                rerun=rerun,
                 **kwargs,
             )
             self.inputs.container_xargs = ["--rm"]
@@ -619,6 +627,7 @@ class SingularityTask(ContainerTask):
         messenger_args=None,
         messengers=None,
         output_spec: ty.Optional[SpecInfo] = None,
+        rerun=False,
         strip=False,
         **kwargs,
     ):
@@ -658,6 +667,7 @@ class SingularityTask(ContainerTask):
                 messenger_args=messenger_args,
                 cache_dir=cache_dir,
                 strip=strip,
+                rerun=rerun,
                 **kwargs,
             )
             self.init = True

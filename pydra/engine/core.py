@@ -84,6 +84,7 @@ class TaskBase:
         inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
         messenger_args=None,
         messengers=None,
+        rerun=False,
     ):
         """
         Initialize a task.
@@ -173,6 +174,8 @@ class TaskBase:
         self.cache_locations = cache_locations
         self.allow_cache_override = True
         self._checksum = None
+        # if True the results are not checked (does not propagate to nodes)
+        self.task_rerun = rerun
 
         self.plugin = None
         self.hooks = TaskHook()
@@ -365,7 +368,7 @@ class TaskBase:
         self.hooks.pre_run(self)
         # TODO add signal handler for processes killed after lock acquisition
         with SoftFileLock(lockfile):
-            if not rerun:
+            if not (rerun or self.task_rerun):
                 result = self.result()
                 if result is not None:
                     return result
@@ -610,6 +613,7 @@ class Workflow(TaskBase):
         messenger_args=None,
         messengers=None,
         output_spec: ty.Optional[BaseSpec] = None,
+        rerun=False,
         **kwargs,
     ):
         """
@@ -671,6 +675,7 @@ class Workflow(TaskBase):
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
+            rerun=rerun,
         )
 
         self.graph = DiGraph()
@@ -789,7 +794,7 @@ class Workflow(TaskBase):
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
-        if not rerun:
+        if not (rerun or self.task_rerun):
             result = self.result()
             if result is not None:
                 return result
