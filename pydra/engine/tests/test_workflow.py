@@ -2358,7 +2358,8 @@ def test_wf_nostate_cachelocations_updated(plugin, tmpdir):
 def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     """
     Two wfs with the same inputs but slightly different graph;
-    the second wf should recompute the results
+    the second wf should recompute the results,
+    but the second node should use the results from the first wf (has the same input)
     """
     cache_dir1 = tmpdir.mkdir("test_wf_cache3")
     cache_dir2 = tmpdir.mkdir("test_wf_cache4")
@@ -2401,13 +2402,13 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 > 3
-
     # checking if both dir exists
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
+
+    # checking execution time (second task shouldn't be recompute, t2 should be small)
+    assert t1 > 3
+    assert t2 < 0.5
 
 
 @pytest.mark.parametrize("plugin", Plugins)

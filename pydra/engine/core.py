@@ -811,7 +811,7 @@ class Workflow(TaskBase):
             self.hooks.pre_run_task(self)
             try:
                 self.audit.monitor()
-                await self._run_task(submitter)
+                await self._run_task(submitter, rerun=rerun)
                 result.output = self._collect_outputs()
             except Exception as e:
                 record_error(self.output_dir, e)
@@ -825,11 +825,11 @@ class Workflow(TaskBase):
         self.hooks.post_run(self, result)
         return result
 
-    async def _run_task(self, submitter):
+    async def _run_task(self, submitter, rerun=False):
         if not submitter:
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
-        await submitter._run_workflow(self)
+        await submitter._run_workflow(self, rerun=rerun)
 
     def set_output(self, connections):
         """
