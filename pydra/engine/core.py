@@ -795,6 +795,7 @@ class Workflow(TaskBase):
                 return result
         # creating connections that were defined after adding tasks to the wf
         for task in self.graph.nodes:
+            task.cache_locations = task._cache_locations + self.cache_locations
             self.create_connections(task)
         # TODO add signal handler for processes killed after lock acquisition
         self.hooks.pre_run(self)

@@ -2,12 +2,14 @@ import pytest
 import shutil, os
 import time
 import attr
+from pathlib import Path
 
 from .utils import (
     add2,
     add2_wait,
     multiply,
     power,
+    ten,
     identity,
     list_output,
     fun_addvar3,
@@ -1984,6 +1986,63 @@ def test_wf_nostate_cachelocations_forcererun(plugin, tmpdir):
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_nostate_nodecachelocations(plugin, tmpdir):
+    """
+    Two wfs with different input, but the second node has the same input;
+    the second wf has cache_locations and should recompute the wf,
+    but without recomputing the second node
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+    cache_dir2 = tmpdir.mkdir("test_wf_cache4")
+
+    wf1 = Workflow(name="wf", input_spec=["x"], cache_dir=cache_dir1)
+    wf1.add(ten(name="ten", x=wf1.lzin.x))
+    wf1.add(add2_wait(name="add2", x=wf1.ten.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.inputs.x = 3
+    wf1.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+    t1 = time.time() - t0
+
+    results1 = wf1.result()
+    assert 12 == results1.output.out
+
+    wf2 = Workflow(
+        name="wf",
+        input_spec=["x", "y"],
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+    )
+    wf2.add(ten(name="ten", x=wf2.lzin.x))
+    wf2.add(add2_wait(name="add2", x=wf2.ten.lzout.out))
+    wf2.set_output([("out", wf2.add2.lzout.out)])
+    wf2.inputs.x = 2
+    wf2.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf2)
+    t2 = time.time() - t0
+
+    results2 = wf2.result()
+    assert 12 == results2.output.out
+
+    # checking execution time
+    assert t1 > 3
+    assert t2 < 0.5
+
+    # checking if the second wf runs again, but runs only one task
+    assert wf1.output_dir.exists()
+    assert wf2.output_dir.exists()
+
+    assert len(list(Path(cache_dir1).glob("F*"))) == 2
+    assert len(list(Path(cache_dir2).glob("F*"))) == 1
 
 
 @pytest.mark.parametrize("plugin", Plugins)
