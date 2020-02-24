@@ -84,6 +84,7 @@ class TaskBase:
         inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
         messenger_args=None,
         messengers=None,
+        rerun=False,
     ):
         """
         Initialize a task.
@@ -173,6 +174,8 @@ class TaskBase:
         self.cache_locations = cache_locations
         self.allow_cache_override = True
         self._checksum = None
+        # if True the results are not checked (does not propagate to nodes)
+        self.task_rerun = rerun
 
         self.plugin = None
         self.hooks = TaskHook()
@@ -365,7 +368,7 @@ class TaskBase:
         self.hooks.pre_run(self)
         # TODO add signal handler for processes killed after lock acquisition
         with SoftFileLock(lockfile):
-            if not rerun:
+            if not (rerun or self.task_rerun):
                 result = self.result()
                 if result is not None:
                     return result
@@ -610,6 +613,8 @@ class Workflow(TaskBase):
         messenger_args=None,
         messengers=None,
         output_spec: ty.Optional[BaseSpec] = None,
+        rerun=False,
+        propagate_rerun=True,
         **kwargs,
     ):
         """
@@ -671,6 +676,7 @@ class Workflow(TaskBase):
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
+            rerun=rerun,
         )
 
         self.graph = DiGraph()
@@ -678,6 +684,8 @@ class Workflow(TaskBase):
 
         # store output connections
         self._connections = None
+        # propagating rerun if task_rerun=True
+        self.propagate_rerun = propagate_rerun
 
     def __getattr__(self, name):
         if name == "lzin":
@@ -789,12 +797,20 @@ class Workflow(TaskBase):
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
-        if not rerun:
+        if not (rerun or self.task_rerun):
             result = self.result()
             if result is not None:
                 return result
         # creating connections that were defined after adding tasks to the wf
         for task in self.graph.nodes:
+            # if workflow has task_rerun=True and propagate_rerun=True,
+            # it should be passed to the tasks
+            if self.task_rerun and self.propagate_rerun:
+                task.task_rerun = self.task_rerun
+                # if the task is a wf, than the propagate_rerun should be also set
+                if is_workflow(task):
+                    task.propagate_rerun = self.propagate_rerun
+            task.cache_locations = task._cache_locations + self.cache_locations
             self.create_connections(task)
         # TODO add signal handler for processes killed after lock acquisition
         self.hooks.pre_run(self)
@@ -810,7 +826,7 @@ class Workflow(TaskBase):
             self.hooks.pre_run_task(self)
             try:
                 self.audit.monitor()
-                await self._run_task(submitter)
+                await self._run_task(submitter, rerun=rerun)
                 result.output = self._collect_outputs()
             except Exception as e:
                 record_error(self.output_dir, e)
@@ -824,11 +840,11 @@ class Workflow(TaskBase):
         self.hooks.post_run(self, result)
         return result
 
-    async def _run_task(self, submitter):
+    async def _run_task(self, submitter, rerun=False):
         if not submitter:
             raise Exception("Submitter should already be set.")
         # at this point Workflow is stateless so this should be fine
-        await submitter._run_workflow(self)
+        await submitter._run_workflow(self, rerun=rerun)
 
     def set_output(self, connections):
         """

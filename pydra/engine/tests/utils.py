@@ -88,6 +88,11 @@ def identity(x):
 
 
 @mark.task
+def ten(x):
+    return 10
+
+
+@mark.task
 def add2_wait(x):
     time.sleep(3)
     return x + 2
