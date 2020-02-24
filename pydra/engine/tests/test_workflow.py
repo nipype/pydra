@@ -2104,8 +2104,6 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(plugin, tmpdir):
     # tasks should not be recomputed
     assert len(list(Path(cache_dir1).glob("F*"))) == 2
     assert len(list(Path(cache_dir2).glob("F*"))) == 0
-    assert t1 > 3
-    assert t2 < 1
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -2213,14 +2211,10 @@ def test_wf_nostate_nodecachelocations(plugin, tmpdir):
     results2 = wf2.result()
     assert 12 == results2.output.out
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 < 0.5
-
     # checking if the second wf runs again, but runs only one task
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
-
+    # the second wf should rerun one task
     assert len(list(Path(cache_dir1).glob("F*"))) == 2
     assert len(list(Path(cache_dir2).glob("F*"))) == 1
 
@@ -2270,12 +2264,9 @@ def test_wf_nostate_nodecachelocations_upd(plugin, tmpdir):
     # checking if the second wf runs again, but runs only one task
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
-
+    # the second wf should have only one task run
     assert len(list(Path(cache_dir1).glob("F*"))) == 2
     assert len(list(Path(cache_dir2).glob("F*"))) == 1
-    # checking execution time
-    assert t1 > 3
-    assert t2 < 0.5
 
 
 @pytest.mark.parametrize("plugin", Plugins)
@@ -2639,9 +2630,9 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
 
-    # checking execution time (second task shouldn't be recompute, t2 should be small)
-    assert t1 > 3
-    assert t2 < 1
+    # the second wf should have only one task run
+    assert len(list(Path(cache_dir1).glob("F*"))) == 2
+    assert len(list(Path(cache_dir2).glob("F*"))) == 1
 
 
 @pytest.mark.parametrize("plugin", Plugins)
