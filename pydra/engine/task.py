@@ -269,8 +269,6 @@ class BoutiquesTask(FunctionTask):
             List of arguments to pass to Boutiques
 
         """
-        from boutiques.descriptor2func import function
-        from types import FunctionType
 
         func = boutiques_func
         self.func = func
