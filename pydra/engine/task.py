@@ -209,6 +209,145 @@ class FunctionTask(TaskBase):
                 self.output_[output_names[0]] = output
 
 
+class BoutiquesTask(FunctionTask):
+    """Wrap a Boutiques callable as a task element."""
+
+    global boutiques_func
+    def boutiques_func(descriptor, args, **kwargs):
+        from boutiques.descriptor2func import function
+
+        tool = function(descriptor)
+        ret = tool(*args, **kwargs)
+
+        # print formatted output
+        print(ret)
+
+        if ret.exit_code:
+            raise RuntimeError(ret.stderr)
+
+        return [out.file_name for out in ret.output_files]
+
+    def __init__(
+        self,
+        descriptor: ty.Text,
+        audit_flags: AuditFlag = AuditFlag.NONE,
+        cache_dir=None,
+        cache_locations=None,
+        input_spec: ty.Optional[SpecInfo] = None,
+        messenger_args=None,
+        messengers=None,
+        name=None,
+        output_spec: ty.Optional[BaseSpec] = None,
+        rerun=False,
+        bosh_args=None,
+        **kwargs,
+    ):
+        """
+        Initialize this task.
+
+        Parameters
+        ----------
+        descriptor : :obj:`str`
+            The filename or zenodo ID of the boutiques descriptor
+        audit_flags: :obj:`pydra.utils.messenger.AuditFlag`
+            Auditing configurations
+        cache_dir : :obj:`os.pathlike`
+            Cache directory
+        cache_locations : :obj:`list` of :obj:`os.pathlike`
+            List of alternative cache locations.
+        input_spec: :obj:`pydra.engine.specs.SpecInfo`
+            Specification of inputs.
+        messenger_args :
+            TODO
+        messengers :
+            TODO
+        name : :obj:`str`
+            Name of this task.
+        output_spec : :obj:`pydra.engine.specs.BaseSpec`
+            Specification of inputs.
+        bosh_args : :object:`list` of :obj:`str`
+            List of arguments to pass to Boutiques
+
+        """
+        from boutiques.descriptor2func import function
+        from types import FunctionType
+
+        func = boutiques_func
+        self.func = func
+        self.descriptor = descriptor
+        self.bosh_args = bosh_args
+
+        if input_spec is None:
+            func_params = [val for val in inspect.signature(func).parameters.values() if val.name != 'kwargs']
+            func_params += kwargs.keys()
+            input_spec = SpecInfo(
+                name="Inputs",
+                fields=[
+                    (
+                        val.name,
+                        attr.ib(
+                            default=val.default,
+                            type=val.annotation,
+                            metadata={
+                                "help_string": f"{val.name} parameter from {func.__name__}"
+                            },
+                        ),
+                    )
+                    if hasattr(val, 'default')
+                    else (
+                        val,
+                        attr.ib(
+                            type=type(kwargs[val]), metadata={"help_string": val}
+                        ),
+                    )
+                    for val in func_params
+                ]
+                + [("_func", attr.ib(default=cp.dumps(func), type=str))],
+                bases=(BaseSpec,),
+            )
+
+        fmt_kwargs={ "descriptor": descriptor, "args": bosh_args }
+        fmt_kwargs.update(kwargs)
+
+        super(BoutiquesTask, self).__init__(
+                func,
+                name=name,
+                audit_flags=audit_flags,
+                messengers=messengers,
+                messenger_args=messenger_args,
+                cache_dir=cache_dir,
+                cache_locations=cache_locations,
+                input_spec=input_spec,
+                rerun=rerun,
+                **fmt_kwargs,
+        )
+
+        if output_spec is None:
+            output_spec = SpecInfo(name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,))
+        self.output_spec = output_spec
+
+    def _run_task(self):
+
+        inputs = attr.asdict(self.inputs)
+        del inputs["_func"]
+        self.output_ = None
+
+        output = cp.loads(self.inputs._func)(**inputs)
+        if output is not None:
+            output_names = [el[0] for el in self.output_spec.fields]
+            self.output_ = {}
+            if len(output_names) > 1:
+                if len(output_names) == len(output):
+                    self.output_ = dict(zip(output_names, output))
+                else:
+                    raise Exception(
+                        f"expected {len(self.output_spec.fields)} elements, "
+                        f"but {len(output)} were returned"
+                    )
+            else:
+                self.output_[output_names[0]] = output
+
+
 class ShellCommandTask(TaskBase):
     """Wrap a shell command as a task element."""
 
