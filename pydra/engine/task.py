@@ -213,6 +213,7 @@ class BoutiquesTask(FunctionTask):
     """Wrap a Boutiques callable as a task element."""
 
     global boutiques_func
+
     def boutiques_func(descriptor, args, **kwargs):
         from boutiques.descriptor2func import function
 
@@ -225,7 +226,7 @@ class BoutiquesTask(FunctionTask):
         if ret.exit_code:
             raise RuntimeError(ret.stderr)
 
-        return [out.file_name for out in ret.output_files]
+        return ret.output_files
 
     def __init__(
         self,
@@ -272,56 +273,61 @@ class BoutiquesTask(FunctionTask):
 
         func = boutiques_func
         self.func = func
-        self.descriptor = descriptor
-        self.bosh_args = bosh_args
 
+        default_fields = [
+            (
+                val.name,
+                attr.ib(
+                    default=val.default,
+                    type=val.annotation,
+                    metadata={
+                        "help_string": f"{val.name} parameter from {func.__name__}"
+                    },
+                ),
+            )
+            if val.default is not inspect.Signature.empty
+            else (
+                val.name,
+                attr.ib(type=val.annotation, metadata={"help_string": val.name}),
+            )
+            for val in inspect.signature(func).parameters.values()
+            if val.name != "kwargs"
+        ]
+
+        # Adding kwargs here because Boutiques also validates inputs
         if input_spec is None:
-            func_params = [val for val in inspect.signature(func).parameters.values() if val.name != 'kwargs']
-            func_params += kwargs.keys()
             input_spec = SpecInfo(
                 name="Inputs",
                 fields=[
-                    (
-                        val.name,
-                        attr.ib(
-                            default=val.default,
-                            type=val.annotation,
-                            metadata={
-                                "help_string": f"{val.name} parameter from {func.__name__}"
-                            },
-                        ),
-                    )
-                    if hasattr(val, 'default')
-                    else (
-                        val,
-                        attr.ib(
-                            type=type(kwargs[val]), metadata={"help_string": val}
-                        ),
-                    )
-                    for val in func_params
-                ]
-                + [("_func", attr.ib(default=cp.dumps(func), type=str))],
+                    (k, attr.ib(type=type(v), metadata={"help_string": k}),)
+                    for k, v in kwargs.items()
+                ],
                 bases=(BaseSpec,),
             )
 
-        fmt_kwargs={ "descriptor": descriptor, "args": bosh_args }
+        # users shouldn't have to add "descriptor" and "args" in their input_spec
+        input_spec.fields.extend(default_fields)
+
+        fmt_kwargs = {"descriptor": descriptor, "args": bosh_args}
         fmt_kwargs.update(kwargs)
 
         super(BoutiquesTask, self).__init__(
-                func,
-                name=name,
-                audit_flags=audit_flags,
-                messengers=messengers,
-                messenger_args=messenger_args,
-                cache_dir=cache_dir,
-                cache_locations=cache_locations,
-                input_spec=input_spec,
-                rerun=rerun,
-                **fmt_kwargs,
+            func,
+            name=name,
+            audit_flags=audit_flags,
+            messengers=messengers,
+            messenger_args=messenger_args,
+            cache_dir=cache_dir,
+            cache_locations=cache_locations,
+            input_spec=input_spec,
+            rerun=rerun,
+            **fmt_kwargs,
         )
 
         if output_spec is None:
-            output_spec = SpecInfo(name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,))
+            output_spec = SpecInfo(
+                name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
+            )
         self.output_spec = output_spec
 
     def _run_task(self):
@@ -334,16 +340,20 @@ class BoutiquesTask(FunctionTask):
         if output is not None:
             output_names = [el[0] for el in self.output_spec.fields]
             self.output_ = {}
-            if len(output_names) > 1:
-                if len(output_names) == len(output):
-                    self.output_ = dict(zip(output_names, output))
-                else:
+            if len(output_names) > 1 or output_names[0] != "out":
+                self.output_ = {
+                    f.boutiques_name: f.file_name
+                    for f in output
+                    if f.boutiques_name in output_names
+                }
+                if len(output_names) != len(self.output_.keys()):
                     raise Exception(
                         f"expected {len(self.output_spec.fields)} elements, "
                         f"but {len(output)} were returned"
                     )
             else:
-                self.output_[output_names[0]] = output
+                # Return all filenames if not specified by the user what to return
+                self.output_[output_names[0]] = [out.file_name for out in output]
 
 
 class ShellCommandTask(TaskBase):
