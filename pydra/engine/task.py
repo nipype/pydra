@@ -240,7 +240,7 @@ class BoutiquesTask(FunctionTask):
         name=None,
         output_spec: ty.Optional[BaseSpec] = None,
         rerun=False,
-        bosh_args=None,
+        bosh_args=[],
         **kwargs,
     ):
         """
