@@ -35,7 +35,7 @@ def test_numpy():
     arr = np.array([[1, 10], [2, 20]])
     fft.inputs.a = arr
     res = fft()
-    assert (np.fft.fft(arr) == res.output.out).all()
+    assert np.allclose(np.fft.fft(arr), res.output.out)
 
 
 @pytest.mark.xfail(reason="cp.dumps(func) depends on the system/setup, TODO!!")
