@@ -505,7 +505,7 @@ def template_update(inputs, map_copyfiles=None):
                     f"output_file_template metadata for "
                     "{fld.name} should be a string"
                 )
-    return {k: v for k, v in dict_.items() if getattr(inputs, k) != v}
+    return {k: v for k, v in dict_.items() if getattr(inputs, k) is not v}
 
 
 def is_local_file(f):

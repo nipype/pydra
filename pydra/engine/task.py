@@ -176,15 +176,20 @@ class FunctionTask(TaskBase):
                     )
                 else:
                     if not isinstance(return_info, tuple):
-                        return_info = (return_info,)
-                    output_spec = SpecInfo(
-                        name="Output",
-                        fields=[
-                            ("out{}".format(n + 1), t)
-                            for n, t in enumerate(return_info)
-                        ],
-                        bases=(BaseSpec,),
-                    )
+                        output_spec = SpecInfo(
+                            name="Output",
+                            fields=[("out", return_info)],
+                            bases=(BaseSpec,),
+                        )
+                    else:
+                        output_spec = SpecInfo(
+                            name="Output",
+                            fields=[
+                                ("out{}".format(n + 1), t)
+                                for n, t in enumerate(return_info)
+                            ],
+                            bases=(BaseSpec,),
+                        )
         elif "return" in func.__annotations__:
             raise NotImplementedError("Branch not implemented")
         self.output_spec = output_spec

@@ -87,6 +87,16 @@ def test_return_annotated_task():
     assert res.output.squared == 4.0
 
 
+def test_return_halfannotated_annotated_task():
+    @task
+    @annotate({"in_val": float, "return": float})
+    def square(in_val):
+        return in_val ** 2
+
+    res = square(in_val=2.0)()
+    assert res.output.out == 4.0
+
+
 def test_return_annotated_task_multiple_output():
     @task
     @annotate({"in_val": float, "return": {"squared": float, "cubed": float}})
