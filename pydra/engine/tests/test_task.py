@@ -27,6 +27,17 @@ def test_output():
     assert res.output.out == 5
 
 
+def test_numpy():
+    """ checking if mark.task works for numpy functions"""
+    np = pytest.importorskip("numpy")
+    fft = mark.annotate({"a": np.ndarray, "return": float})(np.fft.fft)
+    fft = mark.task(fft)()
+    arr = np.array([[1, 10], [2, 20]])
+    fft.inputs.a = arr
+    res = fft()
+    assert (np.fft.fft(arr) == res.output.out).all()
+
+
 @pytest.mark.xfail(reason="cp.dumps(func) depends on the system/setup, TODO!!")
 def test_checksum():
     nn = funaddtwo(a=3)
@@ -38,7 +49,9 @@ def test_checksum():
 
 def test_annotated_func():
     @mark.task
-    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out1", float)]):
+    def testfunc(
+        a: int, b: float = 0.1
+    ) -> ty.NamedTuple("Output", [("out_out", float)]):
         return a + b
 
     funky = testfunc(a=1)
@@ -48,14 +61,14 @@ def test_annotated_func():
     assert getattr(funky.inputs, "a") == 1
     assert getattr(funky.inputs, "b") == 0.1
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["out1"])
+    assert set(funky.output_names) == set(["out_out"])
     # assert funky.inputs.hash == '17772c3aec9540a8dd3e187eecd2301a09c9a25c6e371ddd86e31e3a1ecfeefa'
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     result = funky()
     assert hasattr(result, "output")
-    assert hasattr(result.output, "out1")
-    assert result.output.out1 == 1.1
+    assert hasattr(result.output, "out_out")
+    assert result.output.out_out == 1.1
 
     assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
     funky.result()  # should not recompute
@@ -64,7 +77,7 @@ def test_annotated_func():
     assert funky.result() is None
     funky()
     result = funky.result()
-    assert result.output.out1 == 2.1
+    assert result.output.out_out == 2.1
 
     help = funky.help(returnhelp=True)
     assert help == [
@@ -74,7 +87,7 @@ def test_annotated_func():
         "- b: float (default: 0.1)",
         "- _func: str",
         "Output Parameters:",
-        "- out1: float",
+        "- out_out: float",
     ]
 
 
@@ -150,13 +163,13 @@ def test_halfannotated_func():
     assert getattr(funky.inputs, "a") == 10
     assert getattr(funky.inputs, "b") == 20
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["out1"])
+    assert set(funky.output_names) == set(["out"])
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     result = funky()
     assert hasattr(result, "output")
-    assert hasattr(result.output, "out1")
-    assert result.output.out1 == 30
+    assert hasattr(result.output, "out")
+    assert result.output.out == 30
 
     assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
 
@@ -165,7 +178,7 @@ def test_halfannotated_func():
     assert funky.result() is None
     funky()
     result = funky.result()
-    assert result.output.out1 == 31
+    assert result.output.out == 31
     help = funky.help(returnhelp=True)
 
     assert help == [
@@ -175,7 +188,7 @@ def test_halfannotated_func():
         "- b: _empty",
         "- _func: str",
         "Output Parameters:",
-        "- out1: int",
+        "- out: int",
     ]
 
 
