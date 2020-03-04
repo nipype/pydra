@@ -381,7 +381,7 @@ class TaskBase:
             orig_inputs = attr.asdict(self.inputs)
             map_copyfiles = copyfile_input(self.inputs, self.output_dir)
             modified_inputs = template_update(self.inputs, map_copyfiles)
-            if modified_inputs is not None:
+            if modified_inputs:
                 self.inputs = attr.evolve(self.inputs, **modified_inputs)
             self.audit.start_audit(odir)
             result = Result(output=None, runtime=None, errored=False)
