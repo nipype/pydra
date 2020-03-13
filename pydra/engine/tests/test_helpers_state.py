@@ -91,17 +91,19 @@ def test_splits_groups_comb(
 
 
 @pytest.mark.parametrize(
-    "splitter, values, keys, splits",
+    "splitter, cont_dim, values, keys, splits",
     [
-        ("a", [(0,), (1,)], ["a"], [{"a": 1}, {"a": 2}]),
+        ("a", None, [(0,), (1,)], ["a"], [{"a": 1}, {"a": 2}]),
         (
             ("a", "v"),
+            None,
             [(0, 0), (1, 1)],
             ["a", "v"],
             [{"a": 1, "v": "a"}, {"a": 2, "v": "b"}],
         ),
         (
             ["a", "v"],
+            None,
             [(0, 0), (0, 1), (1, 0), (1, 1)],
             ["a", "v"],
             [
@@ -113,24 +115,28 @@ def test_splits_groups_comb(
         ),
         (
             ("a", "v", "c"),
+            None,
             [((0, 0), 0), ((1, 1), 1)],
             ["a", "v", "c"],
             [{"a": 1, "c": 3, "v": "a"}, {"a": 2, "c": 4, "v": "b"}],
         ),
         (
             (("a", "v"), "c"),
+            None,
             [((0, 0), 0), ((1, 1), 1)],
             ["a", "v", "c"],
             [{"a": 1, "c": 3, "v": "a"}, {"a": 2, "c": 4, "v": "b"}],
         ),
         (
             ("a", ("v", "c")),
+            None,
             [(0, (0, 0)), (1, (1, 1))],
             ["a", "v", "c"],
             [{"a": 1, "c": 3, "v": "a"}, {"a": 2, "c": 4, "v": "b"}],
         ),
         (
             ["a", "v", "c"],
+            None,
             [
                 ((0, 0), 0),
                 ((0, 0), 1),
@@ -155,6 +161,7 @@ def test_splits_groups_comb(
         ),
         (
             [["a", "v"], "c"],
+            None,
             [
                 ((0, 0), 0),
                 ((0, 0), 1),
@@ -179,6 +186,7 @@ def test_splits_groups_comb(
         ),
         (
             ["a", ["v", "c"]],
+            None,
             [
                 (0, (0, 0)),
                 (0, (0, 1)),
@@ -203,6 +211,7 @@ def test_splits_groups_comb(
         ),
         (
             [("a", "v"), "c"],
+            None,
             [((0, 0), 0), ((0, 0), 1), ((1, 1), 0), ((1, 1), 1)],
             ["a", "v", "c"],
             [
@@ -214,6 +223,7 @@ def test_splits_groups_comb(
         ),
         (
             ["a", ("v", "c")],
+            None,
             [(0, (0, 0)), (0, (1, 1)), (1, (0, 0)), (1, (1, 1))],
             ["a", "v", "c"],
             [
@@ -226,12 +236,14 @@ def test_splits_groups_comb(
         # TODO: check if it's ok
         (
             (("a", "v"), ("c", "z")),
+            None,
             [((0, 0), (0, 0)), ((1, 1), (1, 1))],
             ["a", "v", "c", "z"],
             [{"a": 1, "v": "a", "c": 3, "z": 7}, {"a": 2, "v": "b", "c": 4, "z": 8}],
         ),
         (
             (["a", "v"], ["c", "z"]),
+            None,
             [((0, 0), (0, 0)), ((0, 1), (0, 1)), ((1, 0), (1, 0)), ((1, 1), (1, 1))],
             ["a", "v", "c", "z"],
             [
@@ -243,6 +255,7 @@ def test_splits_groups_comb(
         ),
         (
             [("a", "v"), ("c", "z")],
+            None,
             [((0, 0), (0, 0)), ((0, 0), (1, 1)), ((1, 1), (0, 0)), ((1, 1), (1, 1))],
             ["a", "v", "c", "z"],
             [
@@ -254,6 +267,7 @@ def test_splits_groups_comb(
         ),
         (
             (["a", "v"], "x"),
+            {"x": 2},  # input x is treated as 2d container, so x will be flatten
             [((0, 0), 0), ((0, 1), 1), ((1, 0), 2), ((1, 1), 3)],
             ["a", "v", "x"],
             [
@@ -265,7 +279,7 @@ def test_splits_groups_comb(
         ),
     ],
 )
-def test_splits_1b(splitter, values, keys, splits):
+def test_splits_1b(splitter, cont_dim, values, keys, splits):
     inputs = {
         "a": [1, 2],
         "v": ["a", "b"],
@@ -274,40 +288,51 @@ def test_splits_1b(splitter, values, keys, splits):
         "x": [[10, 100], [20, 200]],
     }
     splitter_rpn = hlpst.splitter2rpn(splitter)
-    values_out, keys_out, _, _ = hlpst.splits(splitter_rpn, inputs)
+    values_out, keys_out, _ = hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
-    splits_out = list(hlpst.map_splits(hlpst.iter_splits(value_list, keys_out), inputs))
+    splits_out = list(
+        hlpst.map_splits(
+            hlpst.iter_splits(value_list, keys_out), inputs, cont_dim=cont_dim
+        )
+    )
     assert splits_out == splits
 
 
 @pytest.mark.parametrize(
-    "splitter, inputs, mismatch",
+    "splitter, cont_dim, inputs, mismatch",
     [
-        ((["a", "v"], "c"), {"a": [1, 2], "v": ["a", "b"], "c": [3, 4]}, True),
+        ((["a", "v"], "c"), None, {"a": [1, 2], "v": ["a", "b"], "c": [3, 4]}, True),
         (
             (["a", "v"], "c"),
+            {"c": 2},  # c is treated as 2d container
             {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], [5, 6]]},
             False,
         ),
-        ((["a", "v"], "c"), {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], [5]]}, True),
+        (
+            (["a", "v"], "c"),
+            None,
+            {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], [5]]},
+            True,
+        ),
     ],
 )
-def test_splits_1c(splitter, inputs, mismatch):
+def test_splits_1c(splitter, cont_dim, inputs, mismatch):
     splitter_rpn = hlpst.splitter2rpn(splitter)
     if mismatch:
         with pytest.raises(ValueError):
-            hlpst.splits(splitter_rpn, inputs)
+            hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
     else:
-        hlpst.splits(splitter_rpn, inputs)
+        hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
 
 
 @pytest.mark.parametrize(
-    "splitter, values, keys, shapes, splits",
+    "splitter, cont_dim, values, keys, shapes, splits",
     [
         (
             (["a", "v"], "c"),
+            {"c": 2},
             [((0, 0), 0), ((0, 1), 1), ((1, 0), 2), ((1, 1), 3)],
             ["a", "v", "c"],
             {"a": (2,), "v": (2,), "c": (2, 2)},
@@ -320,6 +345,7 @@ def test_splits_1c(splitter, inputs, mismatch):
         ),
         (
             ("c", ["a", "v"]),
+            {"c": 2},
             [(0, (0, 0)), (1, (0, 1)), (2, (1, 0)), (3, (1, 1))],
             ["c", "a", "v"],
             {"a": (2,), "v": (2,), "c": (2, 2)},
@@ -332,15 +358,18 @@ def test_splits_1c(splitter, inputs, mismatch):
         ),
     ],
 )
-def test_splits_1d(splitter, values, keys, shapes, splits):
+def test_splits_1d(splitter, cont_dim, values, keys, shapes, splits):
     inputs = {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], [5, 6]]}
     splitter_rpn = hlpst.splitter2rpn(splitter)
-    values_out, keys_out, shapes_out, _ = hlpst.splits(splitter_rpn, inputs)
+    values_out, keys_out, _ = hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
-    assert shapes == shapes_out
-    splits_out = list(hlpst.map_splits(hlpst.iter_splits(value_list, keys_out), inputs))
+    splits_out = list(
+        hlpst.map_splits(
+            hlpst.iter_splits(value_list, keys_out), inputs, cont_dim=cont_dim
+        )
+    )
     assert splits_out == splits
 
 
@@ -371,7 +400,7 @@ def test_splits_1e(splitter, values, keys, splits):
     # c - is like an inner splitter
     inputs = {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], 5]}
     splitter_rpn = hlpst.splitter2rpn(splitter)
-    values_out, keys_out, _, _ = hlpst.splits(splitter_rpn, inputs)
+    values_out, keys_out, _ = hlpst.splits(splitter_rpn, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
@@ -406,18 +435,24 @@ def test_splits_2(splitter_rpn, inner_inputs, values, keys, splits):
         "NA.a": ["a1", "a2"],
         "NA.b": ["b1", "b2"],
         "NB.b": [["b11", "b12"], ["b21", "b22"]],
-        "c": ["c1", "c2"],
-        "NB.d": [
-            [["d111", "d112"], ["d121", "d122"]],
-            [["d211", "d212"], ["d221", "d222"]],
-        ],
+        # needed?
+        # "c": ["c1", "c2"],
+        # "NB.d": [
+        #     [["d111", "d112"], ["d121", "d122"]],
+        #     [["d211", "d212"], ["d221", "d222"]],
+        # ],
     }
-    values_out, keys_out, _, _ = hlpst.splits(
-        splitter_rpn, inputs, inner_inputs=inner_inputs
+    cont_dim = {"NB.b": 2}  # will be treated as 2d container
+    values_out, keys_out, _ = hlpst.splits(
+        splitter_rpn, inputs, inner_inputs=inner_inputs, cont_dim=cont_dim
     )
     value_list = list(values_out)
     assert keys == keys_out
-    splits_out = list(hlpst.map_splits(hlpst.iter_splits(value_list, keys_out), inputs))
+    splits_out = list(
+        hlpst.map_splits(
+            hlpst.iter_splits(value_list, keys_out), inputs, cont_dim=cont_dim
+        )
+    )
     assert splits_out == splits
 
 

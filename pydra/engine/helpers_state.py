@@ -362,14 +362,15 @@ def iter_splits(iterable, keys):
         yield dict(zip(keys, list(flatten(iter, max_depth=1000))))
 
 
-def input_shape(in1):
-    """Get input shape."""
+def input_shape(inp, cont_dim=1):
+    """Get input shape, depends on the container dimension, if not specify it is assumed to be 1 """
     # TODO: have to be changed for inner splitter (sometimes different length)
-    shape = [len(in1)]
+    cont_dim -= 1
+    shape = [len(inp)]
     last_shape = None
-    for value in in1:
-        if isinstance(value, list):
-            cur_shape = input_shape(value)
+    for value in inp:
+        if isinstance(value, list) and cont_dim > 0:
+            cur_shape = input_shape(value, cont_dim)
             if last_shape is None:
                 last_shape = cur_shape
             elif last_shape != cur_shape:
@@ -383,11 +384,37 @@ def input_shape(in1):
     return tuple(shape)
 
 
-def splits(splitter_rpn, inputs, inner_inputs=None):
-    """Split process as specified by an rpn splitter, from left to right."""
+def splits(splitter_rpn, inputs, inner_inputs=None, cont_dim=None):
+    """
+    Splits input variable as specified by splitter
+
+    Parameters
+    ----------
+    splitter_rpn : list
+        splitter in RPN notation
+    inputs: dict
+        input variables
+    inner_inputs: dict, optional
+        inner input specification
+    cont_dim: dict, optional
+        container dimension for input variable, specifies how nested is the intput,
+        if not specified 1 will be used for all inputs (so will not be flatten)
+
+
+    Returns
+    -------
+    splitter : list
+        each element contains indices for inputs
+    keys: list
+        names of input variables
+
+    """
+
     stack = []
     keys = []
-    shapes_var = {}
+    if cont_dim is None:
+        cont_dim = {}
+    # analysing states from connected tasks if inner_inputs
     if inner_inputs:
         previous_states_ind = {
             "_{}".format(v.name): (v.ind_l_final, v.keys_final)
@@ -407,9 +434,9 @@ def splits(splitter_rpn, inputs, inner_inputs=None):
             op_single,
             inputs,
             inner_inputs,
-            shapes_var,
             previous_states_ind,
             keys_fromLeftSpl,
+            cont_dim=cont_dim,
         )
 
     terms = {}
@@ -418,7 +445,11 @@ def splits(splitter_rpn, inputs, inner_inputs=None):
     shape = {}
     # iterating splitter_rpn
     for token in splitter_rpn:
-        if token in [".", "*"]:
+        if token not in [".", "*"]:  # token is one of the input var
+            # adding variable to the stack
+            stack.append(token)
+        else:
+            # removing Right and Left var from the stack
             terms["R"] = stack.pop()
             terms["L"] = stack.pop()
             # checking if terms are strings, shapes, etc.
@@ -429,10 +460,14 @@ def splits(splitter_rpn, inputs, inner_inputs=None):
                         trm_val[lr] = previous_states_ind[term][0]
                         shape[lr] = (len(trm_val[lr]),)
                     else:
-                        shape[lr] = input_shape(inputs[term])
+                        if term in cont_dim:
+                            shape[lr] = input_shape(
+                                inputs[term], cont_dim=cont_dim[term]
+                            )
+                        else:
+                            shape[lr] = input_shape(inputs[term])
                         trm_val[lr] = range(reduce(lambda x, y: x * y, shape[lr]))
                     trm_str[lr] = True
-                    shapes_var[term] = shape[lr]
                 else:
                     trm_val[lr], shape[lr] = term
                     trm_str[lr] = False
@@ -447,6 +482,7 @@ def splits(splitter_rpn, inputs, inner_inputs=None):
                     )
                 newshape = shape["R"]
             if token == "*":
+                # TODO: pomyslec
                 newshape = tuple(list(shape["L"]) + list(shape["R"]))
 
             # creating list with keys
@@ -466,7 +502,6 @@ def splits(splitter_rpn, inputs, inner_inputs=None):
             elif trm_str["R"]:
                 keys = keys + new_keys["R"]
 
-            #
             newtrm_val = {}
             for lr in ["R", "L"]:
                 # TODO: rewrite once I have more tests
@@ -491,13 +526,11 @@ def splits(splitter_rpn, inputs, inner_inputs=None):
 
             pushval = (op[token](newtrm_val["L"], newtrm_val["R"]), newshape)
             stack.append(pushval)
-        else:  # name of one of the inputs (token not in [".", "*"])
-            stack.append(token)
 
     val = stack.pop()
     if isinstance(val, tuple):
         val = val[0]
-    return val, keys, shapes_var, keys_fromLeftSpl
+    return val, keys, keys_fromLeftSpl
 
 
 # dj: TODO: do I need keys?
@@ -636,17 +669,22 @@ def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
 
 
 def _single_op_splits(
-    op_single, inputs, inner_inputs, shapes_var, previous_states_ind, keys_fromLeftSpl
+    op_single,
+    inputs,
+    inner_inputs,
+    previous_states_ind,
+    keys_fromLeftSpl,
+    cont_dim=None,
 ):
     if op_single.startswith("_"):
         return (
             previous_states_ind[op_single][0],
             previous_states_ind[op_single][1],
-            None,
             keys_fromLeftSpl,
         )
-    shape = input_shape(inputs[op_single])
-    shapes_var[op_single] = shape
+    if cont_dim is None:
+        cont_dim = {}
+    shape = input_shape(inputs[op_single], cont_dim=cont_dim.get(op_single, 1))
     trmval = range(reduce(lambda x, y: x * y, shape))
     if op_single in inner_inputs:
         # TODO: have to be changed if differ length
@@ -659,11 +697,11 @@ def _single_op_splits(
         res = op["."](op_out, trmval)
         val = res
         keys = inner_inputs[op_single].keys_final + [op_single]
-        return val, keys, shapes_var, keys_fromLeftSpl
+        return val, keys, keys_fromLeftSpl
     else:
         val = op["*"](trmval)
         keys = [op_single]
-        return val, keys, shapes_var, keys_fromLeftSpl
+        return val, keys, keys_fromLeftSpl
 
 
 def _single_op_splits_groups(
@@ -727,10 +765,15 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
     return keys_final, groups_final, groups_stack_final, combiner_all
 
 
-def map_splits(split_iter, inputs):
+def map_splits(split_iter, inputs, cont_dim=None):
     """Get a dictionary of prescribed splits."""
+    if cont_dim is None:
+        cont_dim = {}
     for split in split_iter:
-        yield {k: list(flatten(ensure_list(inputs[k])))[v] for k, v in split.items()}
+        yield {
+            k: list(flatten(ensure_list(inputs[k]), max_depth=cont_dim.get(k, None)))[v]
+            for k, v in split.items()
+        }
 
 
 # Functions for merging and completing splitters in states.
