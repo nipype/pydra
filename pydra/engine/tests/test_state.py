@@ -202,7 +202,7 @@ def test_state_connect_2():
 
 def test_state_connect_2a():
     """ two 'connected' states: testing groups, prepare_states and prepare_inputs
-         the second state has explicit splitter that contains 
+         the second state has explicit splitter that contains
          splitter from the first node and a new field;
          adding an additional scalar field that is not part of the splitter
     """
@@ -564,7 +564,10 @@ def test_state_connect_innerspl_1():
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
     assert st2.groups_stack_final == [[0], [1]]
 
-    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]})
+    st2.prepare_states(
+        inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]},
+        cont_dim={"NB.b": 2},
+    )
 
     assert st2.states_ind == [
         {"NA.a": 0, "NB.b": 0},
@@ -608,7 +611,10 @@ def test_state_connect_innerspl_1a():
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
     assert st2.groups_stack_final == [[0], [1]]
 
-    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]})
+    st2.prepare_states(
+        inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]},
+        cont_dim={"NB.b": 2},
+    )
 
     assert st2.states_ind == [
         {"NA.a": 0, "NB.b": 0},
@@ -660,7 +666,8 @@ def test_state_connect_innerspl_2():
     assert st2.groups_stack_final == [[0], [1, 2]]
 
     st2.prepare_states(
-        inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]}
+        inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
+        cont_dim={"NB.b": 2},
     )
     assert st2.states_ind == [
         {"NB.c": 0, "NA.a": 0, "NB.b": 0},
@@ -724,7 +731,8 @@ def test_state_connect_innerspl_2a():
     assert st2.groups_stack_final == [[0], [1, 2]]
 
     st2.prepare_states(
-        inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]}
+        inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
+        cont_dim={"NB.b": 2},
     )
 
     assert st2.states_ind == [
@@ -794,7 +802,8 @@ def test_state_connect_innerspl_3():
             "NB.b": [[1, 10, 100], [2, 20, 200]],
             "NB.c": [13, 17],
             "NC.d": [33, 77],
-        }
+        },
+        cont_dim={"NB.b": 2},
     )
 
     assert st2.states_ind == [
@@ -933,7 +942,8 @@ def test_state_connect_innerspl_4():
             "NC.e": [30, 50],
             "NC.f": [[23, 27], [33, 37]],
             "NC.d": [1, 2],
-        }
+        },
+        cont_dim={"NC.f": 2},
     )
     assert st3.states_ind == [
         {"NA.a": 0, "NB.b": 0, "NB.c": 0, "NC.d": 0},
@@ -1198,7 +1208,8 @@ def test_state_connect_innerspl_combine_1():
     # assert st2.groups_stack_final == [[0, 1]]
 
     st2.prepare_states(
-        inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]}
+        inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
+        cont_dim={"NB.b": 2},
     )
     # NOW TODO: checking st2.states_ind_final!!!
     assert st2.states_ind == [
@@ -1271,7 +1282,8 @@ def test_state_connect_innerspl_combine_2():
     assert st2.groups_stack_final == [[0], [1]]
 
     st2.prepare_states(
-        inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]}
+        inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
+        cont_dim={"NB.b": 2},
     )
     assert st2.states_ind == [
         {"NB.c": 0, "NA.a": 0, "NB.b": 0},

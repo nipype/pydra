@@ -832,6 +832,27 @@ def test_task_state_2(plugin):
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_3(plugin):
+    """ task with a list as an input, and a simple splitter """
+    nn = moment(name="NA", n=3, lst=[[2, 3, 4], [1, 2, 3]]).split(splitter="lst")
+    assert np.allclose(nn.inputs.n, 3)
+    assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
+    assert nn.state.splitter == "NA.lst"
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    for i, expected in enumerate([33, 12]):
+        assert results[i].output.out == expected
+    # checking the output_dir
+    assert nn.output_dir
+    for odir in nn.output_dir:
+        assert odir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_state_3a(plugin):
     """ task with a tuple as an input, and a simple splitter """
     nn = moment(name="NA", n=3, lst=[(2, 3, 4), (1, 2, 3)]).split(splitter="lst")
     assert np.allclose(nn.inputs.n, 3)
@@ -853,8 +874,8 @@ def test_task_state_3(plugin):
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_4(plugin):
-    """ task with a tuple as an input, and the variable is part of the scalar splitter"""
-    nn = moment(name="NA", n=[1, 3], lst=[(2, 3, 4), (1, 2, 3)]).split(
+    """ task with a list as an input, and the variable is part of the scalar splitter"""
+    nn = moment(name="NA", n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]).split(
         splitter=("n", "lst")
     )
     assert np.allclose(nn.inputs.n, [1, 3])
@@ -876,10 +897,10 @@ def test_task_state_4(plugin):
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_4_exception(plugin):
-    """ task with a tuple as an input, and the variable is part of the scalar splitter
+    """ task with a list as an input, and the variable is part of the scalar splitter
         the shapes are not matching, so exception should be raised
     """
-    nn = moment(name="NA", n=[1, 3, 3], lst=[(2, 3, 4), (1, 2, 3)]).split(
+    nn = moment(name="NA", n=[1, 3, 3], lst=[[2, 3, 4], [1, 2, 3]]).split(
         splitter=("n", "lst")
     )
     assert np.allclose(nn.inputs.n, [1, 3, 3])
@@ -894,6 +915,29 @@ def test_task_state_4_exception(plugin):
 
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_5(plugin):
+    """ ask with a list as an input, and the variable is part of the outer splitter """
+    nn = moment(name="NA", n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]).split(
+        splitter=["n", "lst"]
+    )
+    assert np.allclose(nn.inputs.n, [1, 3])
+    assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
+    assert nn.state.splitter == ["NA.n", "NA.lst"]
+
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
+    # checking the results
+    results = nn.result()
+    for i, expected in enumerate([3, 2, 33, 12]):
+        assert results[i].output.out == expected
+    # checking the output_dir
+    assert nn.output_dir
+    for odir in nn.output_dir:
+        assert odir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_task_state_5a(plugin):
     """ ask with a tuple as an input, and the variable is part of the outer splitter """
     nn = moment(name="NA", n=[1, 3], lst=[(2, 3, 4), (1, 2, 3)]).split(
         splitter=["n", "lst"]

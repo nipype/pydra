@@ -346,7 +346,7 @@ class State:
                 stack = [gr + nr_gr_f for gr in stack]
                 self.groups_stack_final.append(stack)
 
-    def prepare_states(self, inputs):
+    def prepare_states(self, inputs, cont_dim=None):
         """
         Prepare a full list of state indices and state values.
 
@@ -357,6 +357,10 @@ class State:
             specific elements from inputs that can be used running interfaces
 
         """
+        if cont_dim is None:
+            self.cont_dim = {}
+        else:
+            self.cont_dim = cont_dim
         if isinstance(inputs, BaseSpec):
             self.inputs = hlpst.inputs_types_to_dict(self.name, inputs)
         else:
@@ -366,7 +370,7 @@ class State:
                 # I think now this if is never used
                 if not hasattr(st, "states_ind"):
                     # dj: should i provide different inputs?
-                    st.prepare_states(self.inputs)
+                    st.prepare_states(self.inputs, cont_dim=cont_dim)
                 self.inputs.update(st.inputs)
         self.prepare_states_ind()
         self.prepare_states_val()
@@ -395,8 +399,11 @@ class State:
         partial_rpn = hlpst.remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn_compact), elements_to_remove
         )
-        values_out_pr, keys_out_pr, _, kL = hlpst.splits(
-            partial_rpn, self.inputs, inner_inputs=self.inner_inputs
+        values_out_pr, keys_out_pr, kL = hlpst.splits(
+            partial_rpn,
+            self.inputs,
+            inner_inputs=self.inner_inputs,
+            cont_dim=self.cont_dim,
         )
         values_pr = list(values_out_pr)
 
@@ -429,8 +436,11 @@ class State:
         )
         # TODO: create a function for this!!
         if combined_rpn:
-            val_r, key_r, _, _ = hlpst.splits(
-                combined_rpn, self.inputs, inner_inputs=self.inner_inputs
+            val_r, key_r, _ = hlpst.splits(
+                combined_rpn,
+                self.inputs,
+                inner_inputs=self.inner_inputs,
+                cont_dim=self.cont_dim,
             )
             values = list(val_r)
         else:
@@ -464,7 +474,9 @@ class State:
 
     def prepare_states_val(self):
         """Evaluate states values having states indices."""
-        self.states_val = list(hlpst.map_splits(self.states_ind, self.inputs))
+        self.states_val = list(
+            hlpst.map_splits(self.states_ind, self.inputs, cont_dim=self.cont_dim)
+        )
         return self.states_val
 
     def prepare_inputs(self):
@@ -489,8 +501,11 @@ class State:
                 deepcopy(self.splitter_rpn_compact), elements_to_remove
             )
             if partial_rpn:
-                values_inp, keys_inp, _, _ = hlpst.splits(
-                    partial_rpn, self.inputs, inner_inputs=self.inner_inputs
+                values_inp, keys_inp, _ = hlpst.splits(
+                    partial_rpn,
+                    self.inputs,
+                    inner_inputs=self.inner_inputs,
+                    cont_dim=self.cont_dim,
                 )
                 inputs_ind = values_inp
             else:
