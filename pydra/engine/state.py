@@ -357,6 +357,7 @@ class State:
             specific elements from inputs that can be used running interfaces
 
         """
+        # container dimension for each input, specifies how nested the input is
         if cont_dim is None:
             self.cont_dim = {}
         else:

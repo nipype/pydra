@@ -267,7 +267,7 @@ def test_splits_groups_comb(
         ),
         (
             (["a", "v"], "x"),
-            {"x": 2},
+            {"x": 2},  # input x is treated as 2d container, so x will be flatten
             [((0, 0), 0), ((0, 1), 1), ((1, 0), 2), ((1, 1), 3)],
             ["a", "v", "x"],
             [
@@ -306,7 +306,7 @@ def test_splits_1b(splitter, cont_dim, values, keys, splits):
         ((["a", "v"], "c"), None, {"a": [1, 2], "v": ["a", "b"], "c": [3, 4]}, True),
         (
             (["a", "v"], "c"),
-            {"c": 2},
+            {"c": 2},  # c is treated as 2d container
             {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], [5, 6]]},
             False,
         ),
@@ -442,7 +442,7 @@ def test_splits_2(splitter_rpn, inner_inputs, values, keys, splits):
         #     [["d211", "d212"], ["d221", "d222"]],
         # ],
     }
-    cont_dim = {"NB.b": 2}
+    cont_dim = {"NB.b": 2}  # will be treated as 2d container
     values_out, keys_out, _ = hlpst.splits(
         splitter_rpn, inputs, inner_inputs=inner_inputs, cont_dim=cont_dim
     )

@@ -363,7 +363,7 @@ def iter_splits(iterable, keys):
 
 
 def input_shape(inp, cont_dim=1):
-    """Get input shape."""
+    """Get input shape, depends on the container dimension, if not specify it is assumed to be 1 """
     # TODO: have to be changed for inner splitter (sometimes different length)
     cont_dim -= 1
     shape = [len(inp)]
@@ -396,6 +396,9 @@ def splits(splitter_rpn, inputs, inner_inputs=None, cont_dim=None):
         input variables
     inner_inputs: dict, optional
         inner input specification
+    cont_dim: dict, optional
+        container dimension for input variable, specifies how nested is the intput,
+        if not specified 1 will be used for all inputs (so will not be flatten)
 
 
     Returns
