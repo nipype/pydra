@@ -1,5 +1,4 @@
-import sys
-import pytest, pdb
+import pytest
 
 from ..state import State
 
@@ -1567,3 +1566,93 @@ def test_state_connect_combine_left_6():
         {"NB.b": 3, "NB.c": 0},
         {"NB.b": 3, "NB.c": 1},
     ]
+
+
+@pytest.mark.parametrize(
+    "splitter, other_states, expected_splitter, expected_left, expected_right",
+    [
+        (None, {"NA": (State(name="NA", splitter="a"), "b")}, "_NA", "_NA", None),
+        (
+            "b",
+            {"NA": (State(name="NA", splitter="a"), "b")},
+            ["_NA", "CN.b"],
+            "_NA",
+            "CN.b",
+        ),
+        (
+            ("b", "c"),
+            {"NA": (State(name="NA", splitter="a"), "b")},
+            ["_NA", ("CN.b", "CN.c")],
+            "_NA",
+            ("CN.b", "CN.c"),
+        ),
+        (
+            None,
+            {
+                "NA": (State(name="NA", splitter="a"), "a"),
+                "NB": (State(name="NB", splitter="a"), "b"),
+            },
+            ["_NA", "_NB"],
+            ["_NA", "_NB"],
+            None,
+        ),
+        (
+            "b",
+            {
+                "NA": (State(name="NA", splitter="a"), "a"),
+                "NB": (State(name="NB", splitter="a"), "b"),
+            },
+            [["_NA", "_NB"], "CN.b"],
+            ["_NA", "_NB"],
+            "CN.b",
+        ),
+        (
+            ["_NA", "b"],
+            {
+                "NA": (State(name="NA", splitter="a"), "a"),
+                "NB": (State(name="NB", splitter="a"), "b"),
+            },
+            [["_NB", "_NA"], "CN.b"],
+            ["_NB", "_NA"],
+            "CN.b",
+        ),
+    ],
+)
+def test_connect_splitters(
+    splitter, other_states, expected_splitter, expected_left, expected_right
+):
+    st = State(name="CN", splitter=splitter, other_states=other_states)
+    st.connect_groups()
+    assert st.splitter == expected_splitter
+    assert st._left_splitter == expected_left
+    assert st._right_splitter == expected_right
+
+
+@pytest.mark.parametrize(
+    "splitter, other_states",
+    [
+        (("_NA", "b"), {"NA": (State(name="NA", splitter="a"), "b")}),
+        (["b", "_NA"], {"NA": (State(name="NA", splitter="a"), "b")}),
+        (
+            ["_NB", ["_NA", "b"]],
+            {
+                "NA": (State(name="NA", splitter="a"), "a"),
+                "NB": (State(name="NB", splitter="a"), "b"),
+            },
+        ),
+    ],
+)
+def test_connect_splitters_exception_1(splitter, other_states):
+    with pytest.raises(Exception) as excinfo:
+        st = State(name="CN", splitter=splitter, other_states=other_states)
+    assert "Left and Right splitters are mixed" in str(excinfo.value)
+
+
+def test_connect_splitters_exception_2():
+    with pytest.raises(Exception) as excinfo:
+        st = State(
+            name="CN",
+            splitter="_NB",
+            other_states={"NA": (State(name="NA", splitter="a"), "b")},
+        )
+    assert "can't ask for splitter from NB" in str(excinfo.value)

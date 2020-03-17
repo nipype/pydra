@@ -97,8 +97,9 @@ class State:
             self.other_states = other_states
         self.splitter = splitter
         # if missing_connections, we can't continue, should wait for updates
+        # TODO: should find a better way, so it's not in the init, but combiner complicates
         if not self.missing_connections:
-            self.connect_splitters()
+            self._connect_splitters()
             self.combiner = combiner
             self.inner_inputs = {}
             for name, (st, inp) in self.other_states.items():
@@ -193,7 +194,7 @@ class State:
             self._left_combiner = []
             self._right_combiner = []
 
-    def connect_splitters(self):
+    def _connect_splitters(self):
         """
         Connect splitters from previous nodes.
 
@@ -201,13 +202,7 @@ class State:
 
         """
         if self.other_states:
-            (
-                self.splitter,
-                self._left_splitter,
-                self._right_splitter,
-            ) = hlpst.connect_splitters(
-                splitter=self.splitter, other_states=self.other_states
-            )
+            self._merge_splitters()
             # left rpn part, but keeping the names of the nodes, e.g. [_NA, _NB, *]
             self._left_splitter_rpn_compact = hlpst.splitter2rpn(
                 deepcopy(self._left_splitter),
@@ -219,12 +214,98 @@ class State:
             )
         else:  # if other_states is empty there is only Right part
             self._left_splitter = None
-            self._left_splitter_rpn_compact = []
-            self._left_splitter_rpn = []
+            self._left_splitter_rpn_compact, self._left_splitter_rpn = [], []
             self._right_splitter = self.splitter
         self._right_splitter_rpn = hlpst.splitter2rpn(
             deepcopy(self._right_splitter), other_states=self.other_states
         )
+
+    def _merge_splitters(self):
+        """
+        Merging current splitter with the ones from other states.
+
+        If left splitter is not provided the splitter has to be completed.
+
+        """
+        if self.splitter:
+            # if splitter is string, have to check if this is Left or Right part (Left is required)
+            if isinstance(self.splitter, str):
+                # so this is the Left part
+                if self.splitter.startswith("_"):
+                    self._left_splitter = self._complete_left(left=self.splitter)
+                    self._right_splitter = None
+                else:  # this is Right part
+                    self._left_splitter = self._complete_left()
+                    self._right_splitter = self.splitter
+            elif isinstance(self.splitter, (tuple, list)):
+                lr_flag = self._left_right_check(self.splitter)
+                if lr_flag == "Left":
+                    self._left_splitter = self._complete_left(left=self.splitter)
+                    self._right_splitter = None
+                elif lr_flag == "Right":
+                    self._left_splitter = self._complete_left()
+                    self._right_splitter = self.splitter
+                elif lr_flag == "[Left, Right]":
+                    self._left_splitter = self._complete_left(left=self.splitter[0])
+                    self._right_splitter = self.splitter[1]
+        else:
+            # if there is no splitter, I create the Left part
+            self._left_splitter = self._complete_left()
+            self._right_splitter = None
+
+        if self._right_splitter:
+            self.splitter = [
+                deepcopy(self._left_splitter),
+                deepcopy(self._right_splitter),
+            ]
+        else:
+            self.splitter = deepcopy(self._left_splitter)
+
+    def _complete_left(self, left=None):
+        """Add all splitters from previous nodes (completing left part)."""
+        if left:
+            rpn_left = hlpst.splitter2rpn(
+                left, other_states=self.other_states, state_fields=False
+            )
+            for name, (st, inp) in list(self.other_states.items())[::-1]:
+                if "_{}".format(name) not in rpn_left and st.splitter_final:
+                    left = ["_{}".format(name), left]
+        else:
+            left = ["_{}".format(name) for name in self.other_states]
+            if len(left) == 1:
+                left = left[0]
+        return left
+
+    def _left_right_check(self, splitter_part, rec_lev=0):
+        """
+        Check if splitter_part is purely Left, Right
+        or [Left, Right] if the splitter_part is a list (outer splitter)
+
+        String is returned.
+
+        If the splitter_part is mixed exception is raised.
+
+        """
+        rpn_part = hlpst.splitter2rpn(
+            splitter_part, other_states=self.other_states, state_fields=False
+        )
+        inputs_in_splitter = [i for i in rpn_part if i not in ["*", "."]]
+        others_in_splitter = [
+            True if el.startswith("_") else False for el in inputs_in_splitter
+        ]
+        if all(others_in_splitter):
+            return "Left"
+        elif (not all(others_in_splitter)) and (not any(others_in_splitter)):
+            return "Right"
+        elif (
+            isinstance(self.splitter, list)
+            and rec_lev == 0
+            and self._left_right_check(self.splitter[0], rec_lev=1) == "Left"
+            and self._left_right_check(self.splitter[1], rec_lev=1) == "Right"
+        ):
+            return "[Left, Right]"  # Left and Right parts separated in outer scalar
+        else:
+            raise Exception("Left and Right splitters are mixed - splitter invalid")
 
     def set_splitter_final(self):
         """Evaluate a final splitter after combining."""
@@ -309,7 +390,8 @@ class State:
             else:
                 # if no element from st.splitter is in the current combiner,
                 # using st attributes without changes
-                self.keys_final += st.keys_final
+                if st.keys_final:
+                    self.keys_final += st.keys_final
                 group_for_inputs = st.group_for_inputs_final
                 groups_stack = st.groups_stack_final
 
