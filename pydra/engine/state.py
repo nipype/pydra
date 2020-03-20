@@ -96,20 +96,31 @@ class State:
             self.missing_connections = False
             self.other_states = other_states
         self.splitter = splitter
+        # temporary combiner
+        self._combiner = combiner
         # if missing_connections, we can't continue, should wait for updates
-        # TODO: should find a better way, so it's not in the init, but combiner complicates
         if not self.missing_connections:
-            self._connect_splitters()
-            self.combiner = combiner
-            self.inner_inputs = {}
-            for name, (st, inp) in self.other_states.items():
-                if f"_{st.name}" in self.splitter_rpn_compact:
-                    self.inner_inputs[f"{self.name}.{inp}"] = st
-            self.set_input_groups()
-            self.set_splitter_final()
-            self.states_val = []
-            self.inputs_ind = []
-            self.final_combined_ind_mapping = {}
+            self.update_connections()
+
+    def update_connections(self, new_other_states=None, new_combiner=None):
+        if new_other_states:
+            self.missing_connections = False
+            self.other_states = new_other_states
+        self.splitter = self._splitter
+        self._connect_splitters()
+        if new_combiner:
+            self.combiner = new_combiner
+        else:
+            self.combiner = self._combiner
+        self.inner_inputs = {}
+        for name, (st, inp) in self.other_states.items():
+            if f"_{st.name}" in self.splitter_rpn_compact:
+                self.inner_inputs[f"{self.name}.{inp}"] = st
+        self.set_input_groups()
+        self.set_splitter_final()
+        self.states_val = []
+        self.inputs_ind = []
+        self.final_combined_ind_mapping = {}
 
     def __str__(self):
         """Generate a string representation of the object."""
@@ -175,24 +186,31 @@ class State:
 
     @combiner.setter
     def combiner(self, combiner):
-        if combiner:
-            if not self.splitter:
-                raise Exception("splitter has to be set before setting combiner")
-            if not isinstance(combiner, (str, list)):
-                raise Exception("combiner has to be a string or a list")
-            self._combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
-            if set(self._combiner) - set(self.splitter_rpn):
-                raise Exception("all combiners have to be in the splitter")
-            # combiners from the current fields: i.e. {self.name}.input
-            self._right_combiner = [
-                comb for comb in self._combiner if self.name in comb
-            ]
-            # combiners from the previous states
-            self._left_combiner = list(set(self._combiner) - set(self._right_combiner))
+        if self.missing_connections or not self.splitter:
+            self._combiner = combiner
         else:
-            self._combiner = []
-            self._left_combiner = []
-            self._right_combiner = []
+            if combiner:
+                if not self.splitter:
+                    raise Exception("splitter has to be set before setting combiner")
+                if not isinstance(combiner, (str, list)):
+                    raise Exception("combiner has to be a string or a list")
+                self._combiner = hlpst.add_name_combiner(
+                    ensure_list(combiner), self.name
+                )
+                if set(self._combiner) - set(self.splitter_rpn):
+                    raise Exception("all combiners have to be in the splitter")
+                # combiners from the current fields: i.e. {self.name}.input
+                self._right_combiner = [
+                    comb for comb in self._combiner if self.name in comb
+                ]
+                # combiners from the previous states
+                self._left_combiner = list(
+                    set(self._combiner) - set(self._right_combiner)
+                )
+            else:
+                self._combiner = []
+                self._left_combiner = []
+                self._right_combiner = []
 
     def _connect_splitters(self):
         """
@@ -276,7 +294,7 @@ class State:
                 left = left[0]
         return left
 
-    def _left_right_check(self, splitter_part, rec_lev=0):
+    def _left_right_check(self, splitter_part, check_nested=True):
         """
         Check if splitter_part is purely Left, Right
         or [Left, Right] if the splitter_part is a list (outer splitter)
@@ -299,9 +317,9 @@ class State:
             return "Right"
         elif (
             isinstance(self.splitter, list)
-            and rec_lev == 0
-            and self._left_right_check(self.splitter[0], rec_lev=1) == "Left"
-            and self._left_right_check(self.splitter[1], rec_lev=1) == "Right"
+            and check_nested
+            and self._left_right_check(self.splitter[0], check_nested=False) == "Left"
+            and self._left_right_check(self.splitter[1], check_nested=False) == "Right"
         ):
             return "[Left, Right]"  # Left and Right parts separated in outer scalar
         else:
@@ -339,11 +357,11 @@ class State:
 
     def connect_groups(self):
         """"Connect previous states and evaluate the final groups."""
-        self.merge_previous_states()
+        self._merge_previous_states()
         if self._right_splitter:  # if Right part, adding groups from current st
             self.push_new_states()
 
-    def merge_previous_states(self):
+    def _merge_previous_states(self):
         """Merge groups from  all previous nodes."""
         last_gr = 0
         self.groups_stack_final = []

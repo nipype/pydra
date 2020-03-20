@@ -776,20 +776,21 @@ class Workflow(TaskBase):
                         )
         # if task has connections state has to be recalculated
         if other_states:
-            if task.state:
-                old_splitter = task.state.splitter
-            else:
-                old_splitter = None
             if hasattr(task, "fut_combiner"):
-                task.state = state.State(
-                    task.name,
-                    splitter=old_splitter,
-                    other_states=other_states,
-                    combiner=task.fut_combiner,
+                combiner = task.fut_combiner
+            else:
+                combiner = None
+
+            if task.state:
+                task.state.update_connections(
+                    new_other_states=other_states, new_combiner=combiner
                 )
             else:
                 task.state = state.State(
-                    task.name, splitter=old_splitter, other_states=other_states
+                    task.name,
+                    splitter=None,
+                    other_states=other_states,
+                    combiner=combiner,
                 )
 
     async def _run(self, submitter=None, rerun=False, **kwargs):
