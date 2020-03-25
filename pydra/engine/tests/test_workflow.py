@@ -848,10 +848,10 @@ def test_wf_3sernd_ndst_1(plugin):
         sub(wf)
 
     results = wf.result()
-    assert results.output.out[0] == 13
-    assert results.output.out[1] == 14
-    assert results.output.out[2] == 24
-    assert results.output.out[3] == 26
+    assert results.output.out[0] == 15
+    assert results.output.out[1] == 16
+    assert results.output.out[2] == 26
+    assert results.output.out[3] == 28
     # checking the output directory
     assert wf.output_dir.exists()
 
