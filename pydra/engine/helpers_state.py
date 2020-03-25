@@ -50,7 +50,7 @@ def _ordering(
             node_nm = el[0][1:]
             if node_nm not in other_states and state_fields:
                 raise Exception(
-                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
                 )
@@ -65,7 +65,7 @@ def _ordering(
             node_nm = el[1][1:]
             if node_nm not in other_states and state_fields:
                 raise Exception(
-                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
                 )
@@ -88,7 +88,7 @@ def _ordering(
             node_nm = el[0][1:]
             if node_nm not in other_states and state_fields:
                 raise Exception(
-                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
                 )
@@ -103,7 +103,7 @@ def _ordering(
             node_nm = el[1][1:]
             if node_nm not in other_states and state_fields:
                 raise Exception(
-                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
                 )
@@ -126,7 +126,7 @@ def _ordering(
             node_nm = el[1:]
             if node_nm not in other_states and state_fields:
                 raise Exception(
-                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
                 )
@@ -673,7 +673,7 @@ def _single_op_splits(
     inputs,
     inner_inputs,
     previous_states_ind,
-    keys_fromLeftSpl,
+    keys_fromLeftSpl,  # TODO NOW do I need it?
     cont_dim=None,
 ):
     if op_single.startswith("_"):
@@ -721,7 +721,9 @@ def _single_op_splits_groups(
             return [], {}, [], combiner
         else:
             raise Exception(
-                "combiner {} not in splitter_rpn: {}".format(combiner[0], [op_single])
+                "all fields from the combiner have to be in splitter_rpn: {}, but combiner: {} is set".format(
+                    [op_single], combiner
+                )
             )
     else:
         return keys, groups, groups_stack, []

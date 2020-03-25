@@ -1064,6 +1064,80 @@ def test_wf_3nd_ndst_4(plugin):
     assert wf.output_dir.exists()
 
 
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_3nd_st_5(plugin):
+    """ workflow with three tasks (A->C, B->C) and three fields in the splitter,
+        splitter and partial combiner (from the second task) on the workflow level
+    """
+    wf = Workflow(name="wf_st_9", input_spec=["x", "y", "z"])
+    wf.add(add2(name="add2x", x=wf.lzin.x))
+    wf.add(add2(name="add2y", x=wf.lzin.y))
+    wf.add(
+        fun_addvar3(
+            name="addvar", a=wf.add2x.lzout.out, b=wf.add2y.lzout.out, c=wf.lzin.z
+        )
+    )
+    wf.split(["x", "y", "z"], x=[2, 3], y=[11, 12], z=[10, 100]).combine("y")
+
+    wf.set_output([("out", wf.addvar.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert len(results) == 4
+    assert results[0][0].output.out == 27
+    assert results[0][1].output.out == 28
+    assert results[1][0].output.out == 117
+    assert results[1][1].output.out == 118
+    assert results[2][0].output.out == 28
+    assert results[2][1].output.out == 29
+    assert results[3][0].output.out == 118
+    assert results[3][1].output.out == 119
+
+    # checking all directories
+    assert wf.output_dir
+    for odir in wf.output_dir:
+        assert odir.exists()
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_3nd_ndst_5(plugin):
+    """ workflow with three tasks (A->C, B->C) and three fields in the splitter,
+        all tasks have splitters and the last one has a partial combiner (from the 2nd)
+    """
+    wf = Workflow(name="wf_st_9", input_spec=["x", "y", "z"])
+    wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
+    wf.add(add2(name="add2y", x=wf.lzin.y).split("x"))
+    wf.add(
+        fun_addvar3(
+            name="addvar", a=wf.add2x.lzout.out, b=wf.add2y.lzout.out, c=wf.lzin.z
+        )
+        .split("c")
+        .combine("add2x.x")
+    )
+    wf.inputs.x = [2, 3]
+    wf.inputs.y = [11, 12]
+    wf.inputs.z = [10, 100]
+
+    wf.set_output([("out", wf.addvar.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert len(results.output.out) == 4
+    assert results.output.out[0] == [27, 28]
+    assert results.output.out[1] == [117, 118]
+    assert results.output.out[2] == [28, 29]
+    assert results.output.out[3] == [118, 119]
+
+    # checking all directories
+    assert wf.output_dir.exists()
+
+
 # workflows with Left and Right part in splitters A -> B (L&R parts of the splitter)
 
 
