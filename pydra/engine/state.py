@@ -136,6 +136,7 @@ class State:
 
     @property
     def splitter_rpn(self):
+        # TODO NOW: this also changes other_states (properly, but should be explicite)
         _splitter_rpn = hlpst.splitter2rpn(
             deepcopy(self.splitter), other_states=self.other_states
         )
@@ -273,6 +274,7 @@ class State:
         if new_other_states:
             self.other_states = new_other_states
         self._connect_splitters()
+        self.splitter_rpn  # TODO: temporary fix
         if new_combiner:
             self.combiner = new_combiner
         self.set_input_groups()

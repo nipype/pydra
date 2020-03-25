@@ -829,6 +829,33 @@ def test_wf_ndst_9(plugin):
     assert wf.output_dir.exists()
 
 
+# workflows with structures A ->  B -> C
+
+
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_3sernd_ndst_1(plugin):
+    """ workflow with three "serial" tasks, checking if the splitter is propagating"""
+    wf = Workflow(name="wf_3sernd_ndst_1", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]))
+    wf.add(add2(name="add2_1st", x=wf.mult.lzout.out))
+    wf.add(add2(name="add2_2nd", x=wf.add2_1st.lzout.out))
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [11, 12]
+    wf.set_output([("out", wf.add2_2nd.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out[0] == 13
+    assert results.output.out[1] == 14
+    assert results.output.out[2] == 24
+    assert results.output.out[3] == 26
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
 # workflows with structures A -> C, B -> C
 
 
