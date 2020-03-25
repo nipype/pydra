@@ -132,10 +132,7 @@ class State:
 
     @property
     def splitter_final(self):
-        if self.combiner:
-            return hlpst.rpn2splitter(self.splitter_rpn_final)
-        else:
-            return self.splitter
+        return hlpst.rpn2splitter(self.splitter_rpn_final)
 
     @property
     def splitter_rpn(self):

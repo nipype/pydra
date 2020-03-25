@@ -1401,7 +1401,6 @@ def test_state_connect_combine_left_2():
     assert st2.inputs_ind == [{"NB.b": 0}, {"NB.b": 1}, {"NB.b": 2}, {"NB.b": 3}]
 
 
-@pytest.mark.xfail(reason="to fix")
 def test_state_connect_combine_left_3():
     """ three serially 'connected' states,
         the first one has outer splitter,
