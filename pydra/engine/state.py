@@ -138,7 +138,7 @@ class State:
     def splitter_rpn(self):
         # TODO NOW: this also changes other_states (properly, but should be explicite)
         _splitter_rpn = hlpst.splitter2rpn(
-            deepcopy(self.splitter), other_states=self.other_states
+            self.splitter, other_states=self.other_states
         )
         return _splitter_rpn
 
@@ -146,9 +146,7 @@ class State:
     def splitter_rpn_compact(self):
         if self.other_states:
             _splitter_rpn_compact = hlpst.splitter2rpn(
-                deepcopy(self.splitter),
-                other_states=self.other_states,
-                state_fields=False,
+                self.splitter, other_states=self.other_states, state_fields=False
             )
             return _splitter_rpn_compact
         else:
@@ -175,7 +173,7 @@ class State:
     def left_splitter_rpn(self):
         if self.left_splitter:
             left_splitter_rpn = hlpst.splitter2rpn(
-                deepcopy(self.left_splitter), other_states=self.other_states
+                self.left_splitter, other_states=self.other_states
             )
             return left_splitter_rpn
         else:
@@ -186,9 +184,7 @@ class State:
         # left rpn part, but keeping the names of the nodes, e.g. [_NA, _NB, *]
         if self.left_splitter:
             left_splitter_rpn_compact = hlpst.splitter2rpn(
-                deepcopy(self.left_splitter),
-                other_states=self.other_states,
-                state_fields=False,
+                self.left_splitter, other_states=self.other_states, state_fields=False
             )
             return left_splitter_rpn_compact
         else:
@@ -274,7 +270,6 @@ class State:
         if new_other_states:
             self.other_states = new_other_states
         self._connect_splitters()
-        self.splitter_rpn  # TODO: temporary fix
         if new_combiner:
             self.combiner = new_combiner
         self.set_input_groups()
@@ -367,7 +362,7 @@ class State:
     def set_input_groups(self, state_fields=True):
         """Evaluate groups, especially the final groups that address the combiner."""
         right_splitter_rpn = hlpst.splitter2rpn(
-            deepcopy(self.right_splitter),
+            self.right_splitter,
             other_states=self.other_states,
             state_fields=state_fields,
         )

@@ -33,7 +33,7 @@ def splitter2rpn(splitter, other_states=None, state_fields=True):
         deepcopy(splitter),
         i=0,
         output_splitter=output_splitter,
-        other_states=other_states,
+        other_states=deepcopy(other_states),
         state_fields=state_fields,
     )
     return output_splitter
