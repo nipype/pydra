@@ -1143,6 +1143,8 @@ def test_state_connect_combine_3():
     assert st2.splitter == ["_NA", "NB.d"]
     assert st2.splitter_rpn == ["NA.b", "NB.d", "*"]
     assert st2.splitter_rpn_final == ["NA.b"]
+    assert st2.left_combiner_all == st2.left_combiner == []
+    assert st2.right_combiner_all == st2.right_combiner == ["NB.d"]
     assert st2.group_for_inputs_final == {"NA.b": 0}
     assert st2.groups_stack_final == [[0]]
 
@@ -1203,6 +1205,8 @@ def test_state_connect_innerspl_combine_1():
     assert st2.splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*"]
     assert st2.splitter_final == ["NA.a", "NB.c"]
     assert st2.splitter_rpn_final == ["NA.a", "NB.c", "*"]
+    assert st2.left_combiner_all == st2.left_combiner == []
+    assert st2.right_combiner_all == st2.right_combiner == ["NB.b"]
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 1}
     assert st2.groups_stack_final == [[0], [1]]
     # TODO: i think at the end I should merge [0] and [1], because there are no inner splitters anymore
@@ -1377,6 +1381,8 @@ def test_state_connect_combine_left_2():
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a", "NA.b", "*"]
     assert st2.combiner == ["NA.a"]
+    assert st2.left_combiner_all == st2.left_combiner == ["NA.a"]
+    assert st2.right_combiner_all == st2.right_combiner == []
     assert st2.splitter_rpn_final == ["NA.b"]
 
     assert st2.group_for_inputs_final == {"NA.b": 0}
@@ -1454,6 +1460,8 @@ def test_state_connect_combine_left_4():
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NB.a", "*"]
     assert st3.splitter_rpn_final == ["NB.a"]
+    assert st3.left_combiner_all == st3.left_combiner == ["NA.a"]
+    assert st3.right_combiner_all == st3.right_combiner == []
     assert st3.group_for_inputs_final == {"NB.a": 0}
     assert st3.groups_stack_final == [[0]]
 
@@ -1499,6 +1507,9 @@ def test_state_connect_combine_left_5():
     assert st3.splitter == ("_NA", "_NB")
     assert st3.splitter_rpn == ["NA.a", "NB.a", "."]
     assert st3.splitter_rpn_final == []
+    assert set(st3.left_combiner_all) == set(["NA.a", "NB.a"])
+    assert st3.left_combiner == ["NA.a"]
+    assert st3.right_combiner_all == st3.right_combiner == []
     assert st3.group_for_inputs_final == {}
     assert st3.groups_stack_final == []
 
@@ -1525,6 +1536,8 @@ def test_state_connect_combine_left_6():
     assert st2.splitter == ["_NA", "NB.c"]
     assert st2.splitter_rpn == ["NA.a", "NA.b", "*", "NB.c", "*"]
     assert st2.combiner == ["NA.a"]
+    assert st2.left_combiner_all == st2.left_combiner == ["NA.a"]
+    assert st2.right_combiner_all == st2.right_combiner == []
     assert st2.splitter_rpn_final == ["NA.b", "NB.c", "*"]
 
     assert st2.group_for_inputs_final == {"NA.b": 0, "NB.c": 1}

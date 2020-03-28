@@ -136,7 +136,6 @@ class State:
 
     @property
     def splitter_rpn(self):
-        # TODO NOW: this also changes other_states (properly, but should be explicite)
         _splitter_rpn = hlpst.splitter2rpn(
             self.splitter, other_states=self.other_states
         )
@@ -215,11 +214,6 @@ class State:
         else:
             return list(set(self.combiner) - set(self.right_combiner))
 
-    # TODO: should i have setter
-    @left_combiner.setter
-    def left_combiner(self, left_combiner):
-        self._left_combiner = left_combiner
-
     @property
     def right_combiner_all(self):
         if hasattr(self, "_right_combiner_all"):
@@ -232,11 +226,11 @@ class State:
         if hasattr(self, "_left_combiner_all"):
             return self._left_combiner_all
         else:
-            return []
+            return self.left_combiner
 
     @left_combiner_all.setter
     def left_combiner_all(self, left_combiner_all):
-        self._left_combiner_all = left_combiner_all
+        self._left_combiner_all = list(set(left_combiner_all))
 
     @property
     def other_states(self):
@@ -395,8 +389,7 @@ class State:
         self.group_for_inputs_final = {}
         self.keys_final = []
         if self.left_combiner:
-            # TODO: should I update left_combiner somewhere else? (it changes when scallar splitter)
-            _, _, _, self.left_combiner = hlpst.splits_groups(
+            _, _, _, self.left_combiner_all = hlpst.splits_groups(
                 self.left_splitter_rpn, combiner=self.left_combiner
             )
         for i, left_nm in enumerate(self.left_splitter_rpn_compact):
@@ -414,7 +407,7 @@ class State:
             st = self.other_states[left_nm[1:]][0]
             # checking if left combiner contains any element from the st splitter
             st_combiner = [
-                comb for comb in self.left_combiner if comb in st.splitter_rpn_final
+                comb for comb in self.left_combiner_all if comb in st.splitter_rpn_final
             ]
             if st_combiner:
                 # keys and groups from previous states

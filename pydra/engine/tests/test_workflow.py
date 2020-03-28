@@ -1165,6 +1165,33 @@ def test_wf_3nd_ndst_5(plugin):
     assert wf.output_dir.exists()
 
 
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_3nd_ndst_6(plugin):
+    """ workflow with three tasks, third one connected to two previous tasks,
+        the third one uses scalar splitter from the previous ones and a combiner
+    """
+    wf = Workflow(name="wf_ndst_9", input_spec=["x", "y"])
+    wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
+    wf.add(add2(name="add2y", x=wf.lzin.y).split("x"))
+    wf.add(
+        multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out)
+        .split(("_add2x", "_add2y"))
+        .combine("add2y.x")
+    )
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [11, 12]
+    wf.set_output([("out", wf.mult.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out == [39, 56]
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
 # workflows with Left and Right part in splitters A -> B (L&R parts of the splitter)
 
 

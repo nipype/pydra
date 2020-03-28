@@ -59,8 +59,8 @@ def _ordering(
                     splitter=other_states[node_nm][0].splitter_final, name=node_nm
                 )
                 el = (splitter_mod, el[1])
-            if other_states[node_nm][0].other_states:
-                other_states.update(other_states[node_nm][0].other_states)
+                if other_states[node_nm][0].other_states:
+                    other_states.update(other_states[node_nm][0].other_states)
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_states and state_fields:
@@ -74,8 +74,8 @@ def _ordering(
                     splitter=other_states[node_nm][0].splitter_final, name=node_nm
                 )
                 el = (el[0], splitter_mod)
-            if other_states[node_nm][0].other_states:
-                other_states.update(other_states[node_nm][0].other_states)
+                if other_states[node_nm][0].other_states:
+                    other_states.update(other_states[node_nm][0].other_states)
         _iterate_list(
             el,
             ".",
