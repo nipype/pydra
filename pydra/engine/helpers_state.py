@@ -19,11 +19,11 @@ def splitter2rpn(splitter, other_states=None, state_fields=True):
     Parameters
     ----------
     splitter :
-        TODO
+        splitter (standard form)
     other_states :
-        TODO
+        other states that are connected to the state
     state_fields : :obj:`bool`
-        TODO
+        if False the splitter from the previous states are unwrapped
 
     """
     if not splitter:
@@ -174,7 +174,6 @@ def _iterate_list(element, sign, other_states, output_splitter, state_fields=Tru
         )
 
 
-# functions used in State to know which element should be used for a specific axis
 def converter_groups_to_input(group_for_inputs):
     """
     Return fields for each axis and number of all groups.
@@ -184,7 +183,7 @@ def converter_groups_to_input(group_for_inputs):
     Parameters
     ----------
     group_for_inputs :
-        TODO
+        specified axes (groups) for each input
 
     """
     input_for_axis = {}
@@ -199,7 +198,6 @@ def converter_groups_to_input(group_for_inputs):
     return input_for_axis, ngr
 
 
-# function used in State if combiner
 def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
     """
     Remove inputs due to combining.
@@ -211,7 +209,7 @@ def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
     splitter_rpn :
         The splitter in reverse polish notation
     inputs_to_remove :
-        TODO
+        input names that should be removed from the splitter
 
     """
     splitter_rpn_copy = splitter_rpn.copy()
@@ -258,12 +256,12 @@ def rpn2splitter(splitter_rpn):
     Parameters
     ----------
     splitter_rpn :
-        TODO
+        splitter in reverse polish notation
 
     Returns
     -------
     splitter :
-        TODO
+        splitter in the standard/original form
 
     """
     if splitter_rpn == []:
@@ -298,9 +296,8 @@ def rpn2splitter(splitter_rpn):
     return rpn2splitter(splitter_modified)
 
 
-# used in the Node to change names in a splitter and combiner
 def add_name_combiner(combiner, name):
-    """Add a combiner."""
+    """ adding a node's name to each field from the combiner"""
     combiner_changed = []
     for comb in combiner:
         if "." not in comb:
@@ -311,7 +308,7 @@ def add_name_combiner(combiner, name):
 
 
 def add_name_splitter(splitter, name):
-    """Change names of splitter: adding names of the node."""
+    """ adding a node's name to each field from the splitter"""
     if isinstance(splitter, str):
         return _add_name([splitter], name)[0]
     elif isinstance(splitter, list):
@@ -322,6 +319,7 @@ def add_name_splitter(splitter, name):
 
 
 def _add_name(mlist, name):
+    """ adding anem to each element from the list"""
     for i, elem in enumerate(mlist):
         if isinstance(elem, str):
             if "." in elem or elem.startswith("_"):
@@ -421,22 +419,15 @@ def splits(splitter_rpn, inputs, inner_inputs=None, cont_dim=None):
             for _, v in inner_inputs.items()
         }
         inner_inputs = {k: v for k, v in inner_inputs.items() if k in splitter_rpn}
-        keys_fromLeftSpl = ["_{}".format(st.name) for _, st in inner_inputs.items()]
     else:
         previous_states_ind = {}
         inner_inputs = {}
-        keys_fromLeftSpl = []
 
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
         return _single_op_splits(
-            op_single,
-            inputs,
-            inner_inputs,
-            previous_states_ind,
-            keys_fromLeftSpl,
-            cont_dim=cont_dim,
+            op_single, inputs, inner_inputs, previous_states_ind, cont_dim=cont_dim
         )
 
     terms = {}
@@ -530,12 +521,41 @@ def splits(splitter_rpn, inputs, inner_inputs=None, cont_dim=None):
     val = stack.pop()
     if isinstance(val, tuple):
         val = val[0]
-    return val, keys, keys_fromLeftSpl
+    return val, keys
 
 
-# dj: TODO: do I need keys?
+def _single_op_splits(
+    op_single, inputs, inner_inputs, previous_states_ind, cont_dim=None
+):
+    """ splits function if splitter is a singleton"""
+    if op_single.startswith("_"):
+        return (previous_states_ind[op_single][0], previous_states_ind[op_single][1])
+    if cont_dim is None:
+        cont_dim = {}
+    shape = input_shape(inputs[op_single], cont_dim=cont_dim.get(op_single, 1))
+    trmval = range(reduce(lambda x, y: x * y, shape))
+    if op_single in inner_inputs:
+        # TODO: have to be changed if differ length
+        inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
+        # this come from the previous node
+        outer_ind = inner_inputs[op_single].ind_l
+        op_out = itertools.chain.from_iterable(
+            itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
+        )
+        res = op["."](op_out, trmval)
+        val = res
+        keys = inner_inputs[op_single].keys_final + [op_single]
+        return val, keys
+    else:
+        val = op["*"](trmval)
+        keys = [op_single]
+        return val, keys
+
+
 def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
-    """Process splitter rpn from left to right."""
+    """ splits inputs to groups (axes) and creates stacks for these groups
+        This is used to specify which input can be combined.
+    """
     if not splitter_rpn:
         return [], {}, [], []
     stack = []
@@ -556,9 +576,7 @@ def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
-        return _single_op_splits_groups(
-            op_single, combiner, inner_inputs, previous_states_ind, groups
-        )
+        return _single_op_splits_groups(op_single, combiner, inner_inputs, groups)
 
     # len(splitter_rpn) > 1
     # iterating splitter_rpn
@@ -668,45 +686,8 @@ def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
         return keys, groups, groups_stack, []
 
 
-def _single_op_splits(
-    op_single,
-    inputs,
-    inner_inputs,
-    previous_states_ind,
-    keys_fromLeftSpl,  # TODO NOW do I need it?
-    cont_dim=None,
-):
-    if op_single.startswith("_"):
-        return (
-            previous_states_ind[op_single][0],
-            previous_states_ind[op_single][1],
-            keys_fromLeftSpl,
-        )
-    if cont_dim is None:
-        cont_dim = {}
-    shape = input_shape(inputs[op_single], cont_dim=cont_dim.get(op_single, 1))
-    trmval = range(reduce(lambda x, y: x * y, shape))
-    if op_single in inner_inputs:
-        # TODO: have to be changed if differ length
-        inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
-        # this come from the previous node
-        outer_ind = inner_inputs[op_single].ind_l
-        op_out = itertools.chain.from_iterable(
-            itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
-        )
-        res = op["."](op_out, trmval)
-        val = res
-        keys = inner_inputs[op_single].keys_final + [op_single]
-        return val, keys, keys_fromLeftSpl
-    else:
-        val = op["*"](trmval)
-        keys = [op_single]
-        return val, keys, keys_fromLeftSpl
-
-
-def _single_op_splits_groups(
-    op_single, combiner, inner_inputs, previous_states_ind, groups
-):
+def _single_op_splits_groups(op_single, combiner, inner_inputs, groups):
+    """ splits_groups function if splitter is a singleton"""
     if op_single in inner_inputs:
         # TODO: have to be changed if differ length
         # TODO: i think I don't want to add here from left part
@@ -768,7 +749,7 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
 
 
 def map_splits(split_iter, inputs, cont_dim=None):
-    """Get a dictionary of prescribed splits."""
+    """generate a dictionary of inputs prescribed by the splitter."""
     if cont_dim is None:
         cont_dim = {}
     for split in split_iter:

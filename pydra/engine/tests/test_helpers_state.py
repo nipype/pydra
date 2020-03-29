@@ -288,7 +288,7 @@ def test_splits_1b(splitter, cont_dim, values, keys, splits):
         "x": [[10, 100], [20, 200]],
     }
     splitter_rpn = hlpst.splitter2rpn(splitter)
-    values_out, keys_out, _ = hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
+    values_out, keys_out = hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
@@ -361,7 +361,7 @@ def test_splits_1c(splitter, cont_dim, inputs, mismatch):
 def test_splits_1d(splitter, cont_dim, values, keys, shapes, splits):
     inputs = {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], [5, 6]]}
     splitter_rpn = hlpst.splitter2rpn(splitter)
-    values_out, keys_out, _ = hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
+    values_out, keys_out = hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
@@ -400,7 +400,7 @@ def test_splits_1e(splitter, values, keys, splits):
     # c - is like an inner splitter
     inputs = {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], 5]}
     splitter_rpn = hlpst.splitter2rpn(splitter)
-    values_out, keys_out, _ = hlpst.splits(splitter_rpn, inputs)
+    values_out, keys_out = hlpst.splits(splitter_rpn, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
@@ -443,7 +443,7 @@ def test_splits_2(splitter_rpn, inner_inputs, values, keys, splits):
         # ],
     }
     cont_dim = {"NB.b": 2}  # will be treated as 2d container
-    values_out, keys_out, _ = hlpst.splits(
+    values_out, keys_out = hlpst.splits(
         splitter_rpn, inputs, inner_inputs=inner_inputs, cont_dim=cont_dim
     )
     value_list = list(values_out)

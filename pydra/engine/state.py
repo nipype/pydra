@@ -132,6 +132,7 @@ class State:
 
     @property
     def splitter_final(self):
+        """ final splitter, after removing the combined fields"""
         return hlpst.rpn2splitter(self.splitter_rpn_final)
 
     @property
@@ -153,6 +154,7 @@ class State:
 
     @property
     def right_splitter(self):
+        """ current state splitter (i.e. the Right part)"""
         lr_flag = self._left_right_check(self.splitter)
         if lr_flag == "Left":
             return None
@@ -162,7 +164,18 @@ class State:
             return self.splitter[1]
 
     @property
+    def right_splitter_rpn(self):
+        if self.right_splitter:
+            right_splitter_rpn = hlpst.splitter2rpn(
+                self.right_splitter, other_states=self.other_states
+            )
+            return right_splitter_rpn
+        else:
+            return []
+
+    @property
     def left_splitter(self):
+        """ splitters from the previous stated (i.e. the Light part)"""
         if hasattr(self, "_left_splitter"):
             return self._left_splitter
         else:
@@ -261,15 +274,13 @@ class State:
             return {}
 
     def update_connections(self, new_other_states=None, new_combiner=None):
+        """ updating states connections and input groups"""
         if new_other_states:
             self.other_states = new_other_states
         self._connect_splitters()
         if new_combiner:
             self.combiner = new_combiner
         self.set_input_groups()
-        self.states_val = []
-        self.inputs_ind = []
-        self.final_combined_ind_mapping = {}
 
     def _connect_splitters(self):
         """
@@ -308,7 +319,7 @@ class State:
             self.splitter = deepcopy(self._left_splitter)
 
     def _complete_left(self, left=None):
-        """Add all splitters from previous nodes (completing left part)."""
+        """Add all splitters from previous nodes (completing the Left part)."""
         if left:
             rpn_left = hlpst.splitter2rpn(
                 left, other_states=self.other_states, state_fields=False
@@ -470,6 +481,7 @@ class State:
                 self.groups_stack_final.append(stack)
 
     def splitter_validation(self):
+        """ validating if the splitter is correct (after all states are connected)"""
         for spl in self.splitter_rpn_compact:
             if not (
                 spl in [".", "*"]
@@ -483,6 +495,7 @@ class State:
                 )
 
     def combiner_validation(self):
+        """ validating if the combiner is correct (after all states are connected)"""
         if self.combiner:
             if not self.splitter:
                 raise Exception("splitter has to be set before setting combiner")
@@ -516,7 +529,6 @@ class State:
             for nm, (st, _) in self.other_states.items():
                 # I think now this if is never used
                 if not hasattr(st, "states_ind"):
-                    # dj: should i provide different inputs?
                     st.prepare_states(self.inputs, cont_dim=cont_dim)
                 self.inputs.update(st.inputs)
         self.prepare_states_ind()
@@ -532,6 +544,7 @@ class State:
         # removing elements that are connected to inner splitter
         # (they will be taken into account in hlpst.splits anyway)
         # _comb part will be used in prepare_states_combined_ind
+        # TODO: need tests in test_Workflow.py
         elements_to_remove = []
         elements_to_remove_comb = []
         for name, (st, inp) in self.other_states.items():
@@ -546,7 +559,7 @@ class State:
         partial_rpn = hlpst.remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn_compact), elements_to_remove
         )
-        values_out_pr, keys_out_pr, kL = hlpst.splits(
+        values_out_pr, keys_out_pr = hlpst.splits(
             partial_rpn,
             self.inputs,
             inner_inputs=self.inner_inputs,
@@ -581,9 +594,8 @@ class State:
         combined_rpn = hlpst.remove_inp_from_splitter_rpn(
             deepcopy(partial_rpn), self.right_combiner_all + self.left_combiner_all
         )
-        # TODO: create a function for this!!
         if combined_rpn:
-            val_r, key_r, _ = hlpst.splits(
+            val_r, key_r = hlpst.splits(
                 combined_rpn,
                 self.inputs,
                 inner_inputs=self.inner_inputs,
@@ -596,7 +608,6 @@ class State:
 
         keys_out = key_r
         if values:
-            # NOW TODO: move to init?
             self.ind_l_final = values
             self.keys_final = keys_out
             # groups after combiner
@@ -628,28 +639,19 @@ class State:
 
     def prepare_inputs(self):
         """
-        Get inputs ready.
+        Preparing inputs indices, merges input from previous states.
 
-        1. Remove elements that come from connected states.
-        2. Merge elements that come from outputs of previous nodes.
-        3. Remove elements connected to the inner splitter.
+        Includes indices for fields from inner splitters
+        (removes elements connected to the inner splitters fields).
 
         """
         if not self.other_states:
             self.inputs_ind = self.states_ind
         else:
-            # removing elements that come from connected states
-            elements_to_remove = [
-                spl
-                for spl in self.splitter_rpn_compact
-                if spl[1:] in self.other_states.keys()
-            ]
-            partial_rpn = hlpst.remove_inp_from_splitter_rpn(
-                deepcopy(self.splitter_rpn_compact), elements_to_remove
-            )
-            if partial_rpn:
-                values_inp, keys_inp, _ = hlpst.splits(
-                    partial_rpn,
+            # elements from the current node (the Right part)
+            if self.right_splitter_rpn:
+                values_inp, keys_inp = hlpst.splits(
+                    self.right_splitter_rpn,
                     self.inputs,
                     inner_inputs=self.inner_inputs,
                     cont_dim=self.cont_dim,
@@ -700,5 +702,6 @@ class State:
             # iter_splits using inputs from current state/node
             self.inputs_ind = list(hlpst.iter_splits(inputs_ind, keys_inp))
             # removing elements that are connected to inner splitter
+            # TODO - add tests to test_workflow.py (not sure if we want to remove it)
             for el in connected_to_inner:
                 [dict.pop(el) for dict in self.inputs_ind]
