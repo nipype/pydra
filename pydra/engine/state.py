@@ -95,8 +95,6 @@ class State:
         # if other_states, the connections have to be updated
         if self.other_states:
             self.update_connections()
-        else:
-            self.set_input_groups(state_fields=False)
 
     def __str__(self):
         """Generate a string representation of the object."""
@@ -232,7 +230,7 @@ class State:
         if hasattr(self, "_right_combiner_all"):
             return self._right_combiner_all
         else:
-            return self.combiner
+            return self.right_combiner
 
     @property
     def left_combiner_all(self):
@@ -264,6 +262,7 @@ class State:
 
     @property
     def inner_inputs(self):
+        """input fields from previous nodes"""
         if self.other_states:
             _inner_inputs = {}
             for name, (st, inp) in self.other_states.items():
@@ -280,7 +279,6 @@ class State:
         self._connect_splitters()
         if new_combiner:
             self.combiner = new_combiner
-        self.set_input_groups()
 
     def _connect_splitters(self):
         """
@@ -371,6 +369,9 @@ class State:
             other_states=self.other_states,
             state_fields=state_fields,
         )
+        # merging groups from previous nodes if any input come from previous the nodes
+        if self.inner_inputs:
+            self._merge_previous_groups()
         keys_f, group_for_inputs_f, groups_stack_f, combiner_all = hlpst.splits_groups(
             right_splitter_rpn,
             combiner=self.right_combiner,
@@ -381,19 +382,15 @@ class State:
             self._right_keys_final = keys_f
             self._right_group_for_inputs_final = group_for_inputs_f
             self._right_groups_stack_final = groups_stack_f
-            self.connect_groups()
+            if self.right_splitter:  # if Right part, adding groups from current st
+                self._add_current_groups()
+
         else:
             self.group_for_inputs_final = group_for_inputs_f
             self.groups_stack_final = groups_stack_f
             self.keys_final = keys_f
 
-    def connect_groups(self):
-        """"Connect previous states and evaluate the final groups."""
-        self._merge_previous_states()
-        if self.right_splitter:  # if Right part, adding groups from current st
-            self.push_new_states()
-
-    def _merge_previous_states(self):
+    def _merge_previous_groups(self):
         """Merge groups from  all previous nodes."""
         last_gr = 0
         self.groups_stack_final = []
@@ -420,6 +417,8 @@ class State:
             st_combiner = [
                 comb for comb in self.left_combiner_all if comb in st.splitter_rpn_final
             ]
+            if not hasattr(st, "keys_final"):
+                st.set_input_groups()
             if st_combiner:
                 # keys and groups from previous states
                 # after taking into account combiner from current state
@@ -462,7 +461,7 @@ class State:
                     nmb_gr += len(groups)
             last_gr += nmb_gr
 
-    def push_new_states(self):
+    def _add_current_groups(self):
         """Add additional groups from the current state."""
         self.keys_final += self._right_keys_final
         nr_gr_f = max(self.group_for_inputs_final.values()) + 1
@@ -516,6 +515,7 @@ class State:
         # checking if splitter and combiner have valid forms
         self.splitter_validation()
         self.combiner_validation()
+        self.set_input_groups()
         # container dimension for each input, specifies how nested the input is
         if cont_dim is None:
             self.cont_dim = {}

@@ -701,6 +701,7 @@ def _single_op_splits_groups(op_single, combiner, inner_inputs, groups):
         if combiner == [op_single]:
             return [], {}, [], combiner
         else:
+            # TODO: probably not needed, should be already check by st.combiner_validation
             raise Exception(
                 "all fields from the combiner have to be in splitter_rpn: {}, but combiner: {} is set".format(
                     [op_single], combiner
