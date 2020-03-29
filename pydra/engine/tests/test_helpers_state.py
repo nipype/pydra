@@ -288,7 +288,7 @@ def test_splits_1b(splitter, cont_dim, values, keys, splits):
         "x": [[10, 100], [20, 200]],
     }
     splitter_rpn = hlpst.splitter2rpn(splitter)
-    values_out, keys_out, _ = hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
+    values_out, keys_out = hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
@@ -361,7 +361,7 @@ def test_splits_1c(splitter, cont_dim, inputs, mismatch):
 def test_splits_1d(splitter, cont_dim, values, keys, shapes, splits):
     inputs = {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], [5, 6]]}
     splitter_rpn = hlpst.splitter2rpn(splitter)
-    values_out, keys_out, _ = hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
+    values_out, keys_out = hlpst.splits(splitter_rpn, inputs, cont_dim=cont_dim)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
@@ -400,7 +400,7 @@ def test_splits_1e(splitter, values, keys, splits):
     # c - is like an inner splitter
     inputs = {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], 5]}
     splitter_rpn = hlpst.splitter2rpn(splitter)
-    values_out, keys_out, _ = hlpst.splits(splitter_rpn, inputs)
+    values_out, keys_out = hlpst.splits(splitter_rpn, inputs)
     value_list = list(values_out)
     assert keys == keys_out
     assert values == value_list
@@ -443,7 +443,7 @@ def test_splits_2(splitter_rpn, inner_inputs, values, keys, splits):
         # ],
     }
     cont_dim = {"NB.b": 2}  # will be treated as 2d container
-    values_out, keys_out, _ = hlpst.splits(
+    values_out, keys_out = hlpst.splits(
         splitter_rpn, inputs, inner_inputs=inner_inputs, cont_dim=cont_dim
     )
     value_list = list(values_out)
@@ -606,90 +606,3 @@ def test_groups_to_input(group_for_inputs, input_for_groups, ndim):
     res = hlpst.converter_groups_to_input(group_for_inputs)
     assert res[0] == input_for_groups
     assert res[1] == ndim
-
-
-@pytest.mark.parametrize(
-    "splitter, other_states, expected_splitter, expected_left, expected_right",
-    [
-        (
-            None,
-            {"NA": (other_states_to_tests(splitter="NA.a"), "b")},
-            "_NA",
-            "_NA",
-            None,
-        ),
-        (
-            "b",
-            {"NA": (other_states_to_tests(splitter="NA.a"), "b")},
-            ["_NA", "b"],
-            "_NA",
-            "b",
-        ),
-        (
-            ("b", "c"),
-            {"NA": (other_states_to_tests(splitter="NA.a"), "b")},
-            ["_NA", ("b", "c")],
-            "_NA",
-            ("b", "c"),
-        ),
-        (
-            None,
-            {
-                "NA": (other_states_to_tests(splitter="NA.a"), "a"),
-                "NB": (other_states_to_tests(splitter="NB.a"), "b"),
-            },
-            ["_NA", "_NB"],
-            ["_NA", "_NB"],
-            None,
-        ),
-        (
-            "b",
-            {
-                "NA": (other_states_to_tests(splitter="NA.a"), "a"),
-                "NB": (other_states_to_tests(splitter="NB.a"), "b"),
-            },
-            [["_NA", "_NB"], "b"],
-            ["_NA", "_NB"],
-            "b",
-        ),
-        (
-            ["_NA", "b"],
-            {
-                "NA": (other_states_to_tests(splitter="NA.a"), "a"),
-                "NB": (other_states_to_tests(splitter="NB.a"), "b"),
-            },
-            [["_NB", "_NA"], "b"],
-            ["_NB", "_NA"],
-            "b",
-        ),
-    ],
-)
-def test_connect_splitters(
-    splitter, other_states, expected_splitter, expected_left, expected_right
-):
-    updated_splitter, left_splitter, right_splitter = hlpst.connect_splitters(
-        splitter, other_states
-    )
-    assert updated_splitter == expected_splitter
-    assert left_splitter == expected_left
-    assert right_splitter == expected_right
-
-
-@pytest.mark.parametrize(
-    "splitter, other_states",
-    [
-        ("_NB", {"NA": (other_states_to_tests(splitter="NA.a"), "b")}),
-        (("_NA", "b"), {"NA": (other_states_to_tests(splitter="NA.a"), "b")}),
-        (["b", "_NA"], {"NA": (other_states_to_tests(splitter="NA.a"), "b")}),
-        (
-            ["_NB", ["_NA", "b"]],
-            {
-                "NA": (other_states_to_tests(splitter="NA.a"), "a"),
-                "NB": (other_states_to_tests(splitter="NB.a"), "b"),
-            },
-        ),
-    ],
-)
-def test_connect_splitters_exception(splitter, other_states):
-    with pytest.raises(Exception):
-        hlpst.connect_splitters(splitter, other_states, state_fields=True)
