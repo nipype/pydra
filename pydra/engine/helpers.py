@@ -221,13 +221,29 @@ def make_klass(spec):
                 if isinstance(item[1], attr._make._CountingAttr):
                     newfields[item[0]] = item[1]
                 else:
-                    newfields[item[0]] = attr.ib(type=item[1])
+                    newfields[item[0]] = attr.ib(repr=False, type=item[1])
             else:
-                if isinstance(item[2], attr._make._CountingAttr):
-                    raise ValueError("Three part should not have attr")
-                    # newfields[item[0]] = item[2]
+                if (
+                    any([isinstance(ii, attr._make._CountingAttr) for ii in item])
+                    or len(item) > 4
+                ):
+                    raise ValueError(
+                        "syntax not valid, you can use (name, attr), "
+                        "(name, type, default), (name, type, default, metadata)"
+                        "or (name, type, metadata)"
+                    )
                 else:
-                    newfields[item[0]] = attr.ib(item[2], type=item[1])
+                    if len(item) == 3:
+                        name, tp = item[:2]
+                        if isinstance(item[-1], dict) and "help_string" in item[-1]:
+                            mdata = item[-1]
+                            newfields[name] = attr.ib(type=tp, metadata=mdata)
+                        else:
+                            dflt = item[-1]
+                            newfields[name] = attr.ib(type=tp, default=dflt)
+                    elif len(item) == 4:
+                        name, tp, dflt, mdata = item
+                        newfields[name] = attr.ib(type=tp, default=dflt, metadata=mdata)
         fields = newfields
     return attr.make_class(spec.name, fields, bases=spec.bases, kw_only=True)
 
