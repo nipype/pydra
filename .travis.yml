@@ -39,6 +39,11 @@ matrix:
     env:
       - JOBQUEUE="osx"
       - CONDA_VERSION="3.7"
+  - os: windows
+    language: sh
+    python: "3.7"
+    env:
+      - JOBQUEUE="win37"
   - python: 3.7
     env: JOBQUEUE="slurm"
   - language: go
