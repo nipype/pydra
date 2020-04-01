@@ -91,10 +91,12 @@ def fname_presuffix(fname, prefix="", suffix="", newpath=None, use_ext=True):
 
     Examples
     --------
+    >>> import pytest, sys
+    >>> if sys.platform.startswith('win'): pytest.skip()
     >>> from pydra.engine.helpers_file import fname_presuffix
     >>> fname = 'foo.nii.gz'
     >>> fname_presuffix(fname,'pre','post','/tmp')
-    str(Path('/tmp/prefoopost.nii.gz'))
+    '/tmp/prefoopost.nii.gz'
 
     """
     pth, fname, ext = split_filename(fname)
