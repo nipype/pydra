@@ -33,6 +33,12 @@ env:
 # Useful for testing un-released upstream fixes
 matrix:
   include:
+  - os: osx
+    osx_image: xcode11.2
+    language: generic
+    env:
+      - JOBQUEUE="osx"
+      - CONDA_VERSION="3.7"
   - python: 3.7
     env: JOBQUEUE="slurm"
   - language: go
