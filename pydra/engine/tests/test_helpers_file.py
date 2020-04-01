@@ -41,12 +41,12 @@ def test_split_filename(filename, split):
 def test_fname_presuffix():
     fname = "foo.nii"
     pth = fname_presuffix(fname, "pre_", "_post", "/tmp")
-    assert pth == str(Path("/tmp/pre_foo_post.nii"))
+    assert pth == Path("/tmp/pre_foo_post.nii")
     fname += ".gz"
     pth = fname_presuffix(fname, "pre_", "_post", "/tmp")
-    assert pth == str(Path("/tmp/pre_foo_post.nii.gz"))
+    assert pth == Path("/tmp/pre_foo_post.nii.gz")
     pth = fname_presuffix(fname, "pre_", "_post", "/tmp", use_ext=False)
-    assert pth == str(Path("/tmp/pre_foo_post"))
+    assert pth == Path("/tmp/pre_foo_post")
 
 
 @pytest.fixture()

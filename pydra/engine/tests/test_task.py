@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import typing as ty
-import os
+import os, sys
 import pytest
 
 from ... import mark
@@ -14,6 +14,11 @@ from ..task import (
 )
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from .utils import gen_basic_wf
+
+no_win = pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="docker/singularity command not adjusted for windows",
+)
 
 
 @mark.task
@@ -372,6 +377,7 @@ def test_container_cmds(tmpdir):
     assert containy.cmdline
 
 
+@no_win
 def test_docker_cmd(tmpdir):
     docky = DockerTask(name="docky", executable="pwd", image="busybox")
     assert (
@@ -393,6 +399,7 @@ def test_docker_cmd(tmpdir):
     )
 
 
+@no_win
 def test_singularity_cmd(tmpdir):
     # todo how this should be done?
     image = "library://sylabsed/linux/alpine"

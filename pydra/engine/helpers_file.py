@@ -94,7 +94,7 @@ def fname_presuffix(fname, prefix="", suffix="", newpath=None, use_ext=True):
     >>> from pydra.engine.helpers_file import fname_presuffix
     >>> fname = 'foo.nii.gz'
     >>> fname_presuffix(fname,'pre','post','/tmp')
-    '/tmp/prefoopost.nii.gz'
+    Path('/tmp/prefoopost.nii.gz')
 
     """
     pth, fname, ext = split_filename(fname)
@@ -104,7 +104,7 @@ def fname_presuffix(fname, prefix="", suffix="", newpath=None, use_ext=True):
     # No need for isdefined: bool(Undefined) evaluates to False
     if newpath:
         pth = op.abspath(newpath)
-    return op.join(pth, prefix + fname + suffix + ext)
+    return Path(pth) / (prefix + fname + suffix + ext)
 
 
 def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
