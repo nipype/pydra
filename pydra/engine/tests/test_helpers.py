@@ -50,3 +50,25 @@ def test_hash_file(tmpdir):
         helpers_file.hash_file(outdir / "test.file")
         == "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
     )
+
+
+def test_hashfun_float():
+    import math
+
+    pi_50 = 3.14159265358979323846264338327950288419716939937510
+    pi_15 = 3.141592653589793
+    pi_10 = 3.1415926536
+    # comparing for x that have the same x.as_integer_ratio()
+    assert (
+        math.pi.as_integer_ratio()
+        == pi_50.as_integer_ratio()
+        == pi_15.as_integer_ratio()
+    )
+    assert (
+        helpers.hash_function(math.pi)
+        == helpers.hash_function(pi_15)
+        == helpers.hash_function(pi_50)
+    )
+    # comparing for x that have different x.as_integer_ratio()
+    assert math.pi.as_integer_ratio() != pi_10.as_integer_ratio()
+    assert helpers.hash_function(math.pi) != helpers.hash_function(pi_10)
