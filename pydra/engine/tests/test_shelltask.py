@@ -57,7 +57,7 @@ def test_shell_cmd_1_strip(plugin, results_function):
     assert shelly.cmdline == " ".join(cmd)
 
     res = results_function(shelly, plugin)
-    assert res.output.stdout == str(shelly.output_dir)
+    assert res.output.stdout == str(Path(shelly.output_dir))
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 
@@ -124,7 +124,7 @@ def test_shell_cmd_3(plugin):
     shelly = ShellCommandTask(name="shelly", executable=cmd).split("executable")
     assert shelly.cmdline == ["pwd", "whoami"]
     res = shelly(plugin=plugin)
-    assert res[0].output.stdout == f"{str(shelly.output_dir[0])}\n"
+    assert res[0].output.stdout == f"{str(Path(shelly.output_dir[0]))}\n"
     if "USER" in os.environ:
         assert res[1].output.stdout == f"{os.environ['USER']}\n"
     else:
