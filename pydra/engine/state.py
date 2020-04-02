@@ -111,7 +111,9 @@ class State:
     @splitter.setter
     def splitter(self, splitter):
         if splitter and not isinstance(splitter, (str, tuple, list)):
-            raise Exception("splitter has to be a string, a tuple or a list")
+            raise hlpst.PydraStateError(
+                "splitter has to be a string, a tuple or a list"
+            )
         if splitter:
             self._splitter = hlpst.add_name_splitter(splitter, self.name)
         else:
@@ -209,7 +211,7 @@ class State:
     def combiner(self, combiner):
         if combiner:
             if not isinstance(combiner, (str, list)):
-                raise Exception("combiner has to be a string or a list")
+                raise hlpst.PydraStateError("combiner has to be a string or a list")
             self._combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
         else:
             self._combiner = []
@@ -251,11 +253,13 @@ class State:
     def other_states(self, other_states):
         if other_states:
             if not isinstance(other_states, dict):
-                raise Exception("other states has to be a dictionary")
+                raise hlpst.PydraStateError("other states has to be a dictionary")
             else:
                 for key, val in other_states.items():
                     if not val:
-                        raise Exception(f"connection from node {key} is empty")
+                        raise hlpst.PydraStateError(
+                            f"connection from node {key} is empty"
+                        )
             self._other_states = other_states
         else:
             self._other_states = {}
@@ -360,7 +364,9 @@ class State:
         ):
             return "[Left, Right]"  # Left and Right parts separated in outer scalar
         else:
-            raise Exception("Left and Right splitters are mixed - splitter invalid")
+            raise hlpst.PydraStateError(
+                "Left and Right splitters are mixed - splitter invalid"
+            )
 
     def set_input_groups(self, state_fields=True):
         """Evaluate groups, especially the final groups that address the combiner."""
@@ -409,7 +415,7 @@ class State:
             ):
                 last_gr = last_gr - 1
             if left_nm[1:] not in self.other_states:
-                raise Exception(
+                raise hlpst.PydraStateError(
                     f"can't ask for splitter from {left_nm[1:]}, other nodes that are connected: {self.other_states}"
                 )
             st = self.other_states[left_nm[1:]][0]
@@ -434,7 +440,7 @@ class State:
                 )
                 self.keys_final += keys_f_st  # st.keys_final
                 if not hasattr(st, "group_for_inputs_final"):
-                    raise Exception("previous state has to run first")
+                    raise hlpst.PydraStateError("previous state has to run first")
                 group_for_inputs = group_for_inputs_f_st
                 groups_stack = groups_stack_f_st
                 self.left_combiner_all += combiner_all_st
@@ -487,7 +493,7 @@ class State:
                 or spl.startswith("_")
                 or spl.split(".")[0] == self.name
             ):
-                raise Exception(
+                raise hlpst.PydraStateError(
                     "can't include {} in the splitter, consider using _{}".format(
                         spl, spl.split(".")[0]
                     )
@@ -497,9 +503,11 @@ class State:
         """ validating if the combiner is correct (after all states are connected)"""
         if self.combiner:
             if not self.splitter:
-                raise Exception("splitter has to be set before setting combiner")
+                raise hlpst.PydraStateError(
+                    "splitter has to be set before setting combiner"
+                )
             if set(self._combiner) - set(self.splitter_rpn):
-                raise Exception("all combiners have to be in the splitter")
+                raise hlpst.PydraStateError("all combiners have to be in the splitter")
 
     def prepare_states(self, inputs, cont_dim=None):
         """
