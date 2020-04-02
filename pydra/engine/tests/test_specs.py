@@ -289,7 +289,7 @@ def test_input_file_hash_4(tmpdir):
 
     # checking specific hash value
     hash1 = inputs(in_file=[{"file": file, "int": 3}]).hash
-    assert hash1 == "0148961a66106e15e55de3ab7e8c49e6227b6db7cdc614dcbae20406feb2548a"
+    assert hash1 == "e0555e78a40a02611674b0f48da97cdd28eee7e9885ecc17392b560c14826f06"
 
     # the same file, but int field changes
     hash1a = inputs(in_file=[{"file": file, "int": 5}]).hash
