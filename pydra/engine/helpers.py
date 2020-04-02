@@ -9,8 +9,8 @@ import sys
 from hashlib import sha256
 import subprocess as sp
 
-from .specs import Runtime, File, attr_fields
-from .helpers_file import hash_file, copyfile, is_existing_file
+from .specs import Runtime, File, Directory, attr_fields
+from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 
 
 def ensure_list(obj, tuple2list=False):
@@ -459,6 +459,12 @@ def hash_value(value, tp=None, metadata=None):
             and "container_path" not in metadata
         ):
             return hash_file(value)
+        elif (
+            (tp is File or "pydra.engine.specs.Directory" in str(tp))
+            and is_existing_file(value)
+            and "container_path" not in metadata
+        ):
+            return hash_dir(value)
         else:
             return value
 
