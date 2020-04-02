@@ -6,7 +6,7 @@ import cloudpickle as cp
 from .utils import multiply
 from ..helpers import hash_value, hash_function, save, create_pyscript
 from .. import helpers_file
-from ..specs import File
+from ..specs import File, Directory
 
 
 def test_save(tmpdir):
@@ -110,6 +110,7 @@ def test_hash_value_files(tmpdir):
     assert hash_value(file_1, tp=File) == hash_value(file_2, tp=File)
     assert hash_value(file_1, tp=str) != hash_value(file_2, tp=str)
     assert hash_value(file_1) != hash_value(file_2)
+    assert hash_value(file_1, tp=File) == helpers_file.hash_file(file_1)
 
 
 def test_hash_value_files_list(tmpdir):
@@ -124,3 +125,33 @@ def test_hash_value_files_list(tmpdir):
         hash_value(file_1, tp=File),
         hash_value(file_2, tp=File),
     ]
+
+
+def test_hash_value_dir(tmpdir):
+    file_1 = tmpdir.join("file_1.txt")
+    file_2 = tmpdir.join("file_2.txt")
+    with open(file_1, "w") as f:
+        f.write("hello")
+    with open(file_2, "w") as f:
+        f.write("hi")
+
+    assert hash_value(tmpdir, tp=Directory) == hash_value([file_1, file_2], tp=File)
+    assert hash_value(tmpdir, tp=Directory) == helpers_file.hash_dir(tmpdir)
+
+
+def test_hash_value_nested(tmpdir):
+    nested = tmpdir.mkdir("nested")
+    file_1 = tmpdir.join("file_1.txt")
+    file_2 = nested.join("file_2.txt")
+    file_3 = nested.join("file_3.txt")
+    with open(file_1, "w") as f:
+        f.write("hello")
+    with open(file_2, "w") as f:
+        f.write("hi")
+    with open(file_3, "w") as f:
+        f.write("hola")
+
+    assert hash_value(tmpdir, tp=Directory) == hash_value(
+        [file_1, [file_2, file_3]], tp=File
+    )
+    assert hash_value(tmpdir, tp=Directory) == helpers_file.hash_dir(tmpdir)
