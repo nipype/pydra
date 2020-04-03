@@ -115,7 +115,7 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
 
     if afile is None or isinstance(afile, LazyField) or isinstance(afile, list):
         return None
-    if not os.path.isfile(afile):
+    if not Path(afile).is_file():
         if raise_notfound:
             raise RuntimeError('File "%s" not found.' % afile)
         return None
@@ -128,6 +128,29 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
                 break
             crypto_obj.update(data)
     return crypto_obj.hexdigest()
+
+
+def hash_dir(dirpath, raise_notfound=True):
+    from .specs import LazyField
+
+    if dirpath is None or isinstance(dirpath, LazyField) or isinstance(dirpath, list):
+        return None
+    if not Path(dirpath).is_dir():
+        if raise_notfound:
+            raise RuntimeError(f"Directory {dirpath} not found.")
+        return None
+
+    def search_dir(path):
+        path = Path(path)
+        file_list = []
+        for el in path.iterdir():
+            if el.is_file():
+                file_list.append(hash_file(el))
+            else:
+                file_list.append(search_dir(path / el))
+        return file_list
+
+    return search_dir(dirpath)
 
 
 def _parse_mount_table(exit_code, output):

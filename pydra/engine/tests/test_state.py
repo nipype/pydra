@@ -1,6 +1,7 @@
 import pytest
 
 from ..state import State
+from ..helpers_state import PydraStateError
 
 
 @pytest.mark.parametrize(
@@ -95,27 +96,27 @@ def test_state_1(
 
 
 def test_state_2_err():
-    with pytest.raises(Exception) as exinfo:
+    with pytest.raises(PydraStateError) as exinfo:
         st = State("NA", splitter={"a"})
     assert "splitter has to be a string, a tuple or a list" == str(exinfo.value)
 
 
 def test_state_3_err():
-    with pytest.raises(Exception) as exinfo:
+    with pytest.raises(PydraStateError) as exinfo:
         st = State("NA", splitter=["a", "b"], combiner=("a", "b"))
     assert "combiner has to be a string or a list" == str(exinfo.value)
 
 
 def test_state_4_err():
     st = State("NA", splitter="a", combiner=["a", "b"])
-    with pytest.raises(Exception) as exinfo:
+    with pytest.raises(PydraStateError) as exinfo:
         st.combiner_validation()
     assert "all combiners have to be in the splitter" in str(exinfo.value)
 
 
 def test_state_5_err():
     st = State("NA", combiner="a")
-    with pytest.raises(Exception) as exinfo:
+    with pytest.raises(PydraStateError) as exinfo:
         st.combiner_validation()
     assert "splitter has to be set before" in str(exinfo.value)
 
@@ -166,7 +167,7 @@ def test_state_connect_1b_exception():
     """can't provide explicitly NA.a (should be _NA)"""
     st1 = State(name="NA", splitter="a", other_states={})
     st2 = State(name="NB", splitter="NA.a")
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(PydraStateError) as excinfo:
         st2.splitter_validation()
     assert "consider using _NA" in str(excinfo.value)
 
@@ -175,7 +176,7 @@ def test_state_connect_1b_exception():
 def test_state_connect_1c_exception(splitter2, other_states2):
     """can't ask for splitter from node that is not connected"""
     st1 = State(name="NA", splitter="a")
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(PydraStateError) as excinfo:
         st2 = State(name="NB", splitter=splitter2, other_states=other_states2)
         st2.splitter_validation()
 
@@ -691,7 +692,7 @@ def test_state_connect_innerspl_1a():
 
 def test_state_connect_innerspl_1b():
     """incorrect splitter - Right & Left parts in scalar splitter"""
-    with pytest.raises(Exception):
+    with pytest.raises(PydraStateError):
         st1 = State(name="NA", splitter="a")
         st2 = State(name="NB", splitter=("_NA", "b"), other_states={"NA": (st1, "b")})
 
@@ -1718,7 +1719,7 @@ def test_connect_splitters(
     ],
 )
 def test_connect_splitters_exception_1(splitter, other_states):
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(PydraStateError) as excinfo:
         st = State(name="CN", splitter=splitter, other_states=other_states)
     assert "Left and Right splitters are mixed" in str(excinfo.value)
 
@@ -1729,13 +1730,13 @@ def test_connect_splitters_exception_2():
         splitter="_NB",
         other_states={"NA": (State(name="NA", splitter="a"), "b")},
     )
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(PydraStateError) as excinfo:
         st.set_input_groups()
     assert "can't ask for splitter from NB" in str(excinfo.value)
 
 
 def test_connect_splitters_exception_3():
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(PydraStateError) as excinfo:
         st = State(
             name="CN",
             splitter="_NB",

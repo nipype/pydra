@@ -10,6 +10,16 @@ from .helpers import ensure_list
 logger = logging.getLogger("pydra")
 
 
+class PydraStateError(Exception):
+    """Custom error for Pydra State"""
+
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return "{}".format(self.value)
+
+
 def splitter2rpn(splitter, other_states=None, state_fields=True):
     """
     Translate user-provided splitter into *reverse polish notation*.
@@ -49,7 +59,7 @@ def _ordering(
         if type(el[0]) is str and el[0].startswith("_"):
             node_nm = el[0][1:]
             if node_nm not in other_states and state_fields:
-                raise Exception(
+                raise PydraStateError(
                     "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
@@ -64,7 +74,7 @@ def _ordering(
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_states and state_fields:
-                raise Exception(
+                raise PydraStateError(
                     "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
@@ -87,7 +97,7 @@ def _ordering(
         if type(el[0]) is str and el[0].startswith("_"):
             node_nm = el[0][1:]
             if node_nm not in other_states and state_fields:
-                raise Exception(
+                raise PydraStateError(
                     "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
@@ -102,7 +112,7 @@ def _ordering(
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_states and state_fields:
-                raise Exception(
+                raise PydraStateError(
                     "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
@@ -125,7 +135,7 @@ def _ordering(
         if el.startswith("_"):
             node_nm = el[1:]
             if node_nm not in other_states and state_fields:
-                raise Exception(
+                raise PydraStateError(
                     "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
@@ -156,7 +166,7 @@ def _ordering(
                 state_fields=state_fields,
             )
     else:
-        raise Exception("splitter has to be a string, a tuple or a list")
+        raise PydraStateError("splitter has to be a string, a tuple or a list")
     if i > 0:
         output_splitter.append(current_sign)
 
@@ -702,7 +712,7 @@ def _single_op_splits_groups(op_single, combiner, inner_inputs, groups):
             return [], {}, [], combiner
         else:
             # TODO: probably not needed, should be already check by st.combiner_validation
-            raise Exception(
+            raise PydraStateError(
                 "all fields from the combiner have to be in splitter_rpn: {}, but combiner: {} is set".format(
                     [op_single], combiner
                 )
@@ -733,7 +743,7 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
             elif gr in grs_removed:
                 pass
             else:
-                raise Exception(
+                raise PydraStateError(
                     "input {} not ready to combine, you have to combine {} "
                     "first".format(comb, groups_stack[-1])
                 )
