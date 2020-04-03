@@ -33,7 +33,6 @@ jobs:
         python -m pip install .[$(CHECK_TYPE)]
       displayName: 'Install pydra'
     - script: |
-        mkdir for_testing
-        cd for_testing
-        pytest
+        pytest -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
       displayName: 'Pytest tests'
+       
