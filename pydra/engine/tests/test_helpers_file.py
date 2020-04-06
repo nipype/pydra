@@ -107,7 +107,7 @@ def test_copyfiles(_temp_analyze_files, _temp_analyze_files_prime):
 
 
 def test_linkchain(_temp_analyze_files):
-    if os.name is not "posix":
+    if os.name != "posix":
         return
     orig_img, orig_hdr = _temp_analyze_files
     pth, fname = os.path.split(orig_img)

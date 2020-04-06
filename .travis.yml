@@ -33,6 +33,17 @@ env:
 # Useful for testing un-released upstream fixes
 matrix:
   include:
+  - os: osx
+    osx_image: xcode11.2
+    language: generic
+    env:
+      - JOBQUEUE="osx"
+      - CONDA_VERSION="3.7"
+  - os: windows
+    language: sh
+    python: "3.7"
+    env:
+      - JOBQUEUE="win37"
   - python: 3.7
     env: JOBQUEUE="slurm"
   - language: go
@@ -42,9 +53,11 @@ matrix:
       - INSTALL_TYPE="develop"
   - python: 3.7
     env: INSTALL_DEPENDS="pip==10.0.1 setuptools==30.3.0"
+
   allow_failures:
   - python: 3.7
     env: INSTALL_DEPENDS="pip==10.0.1 setuptools==30.3.0"
+  - os: windows
 
 
 before_install:

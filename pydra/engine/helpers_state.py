@@ -10,6 +10,16 @@ from .helpers import ensure_list
 logger = logging.getLogger("pydra")
 
 
+class PydraStateError(Exception):
+    """Custom error for Pydra State"""
+
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return "{}".format(self.value)
+
+
 def splitter2rpn(splitter, other_states=None, state_fields=True):
     """
     Translate user-provided splitter into *reverse polish notation*.
@@ -19,11 +29,11 @@ def splitter2rpn(splitter, other_states=None, state_fields=True):
     Parameters
     ----------
     splitter :
-        TODO
+        splitter (standard form)
     other_states :
-        TODO
+        other states that are connected to the state
     state_fields : :obj:`bool`
-        TODO
+        if False the splitter from the previous states are unwrapped
 
     """
     if not splitter:
@@ -33,7 +43,7 @@ def splitter2rpn(splitter, other_states=None, state_fields=True):
         deepcopy(splitter),
         i=0,
         output_splitter=output_splitter,
-        other_states=other_states,
+        other_states=deepcopy(other_states),
         state_fields=state_fields,
     )
     return output_splitter
@@ -49,8 +59,8 @@ def _ordering(
         if type(el[0]) is str and el[0].startswith("_"):
             node_nm = el[0][1:]
             if node_nm not in other_states and state_fields:
-                raise Exception(
-                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                raise PydraStateError(
+                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
                 )
@@ -59,13 +69,13 @@ def _ordering(
                     splitter=other_states[node_nm][0].splitter_final, name=node_nm
                 )
                 el = (splitter_mod, el[1])
-            if other_states[node_nm][0].other_states:
-                other_states.update(other_states[node_nm][0].other_states)
+                if other_states[node_nm][0].other_states:
+                    other_states.update(other_states[node_nm][0].other_states)
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_states and state_fields:
-                raise Exception(
-                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                raise PydraStateError(
+                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
                 )
@@ -74,8 +84,8 @@ def _ordering(
                     splitter=other_states[node_nm][0].splitter_final, name=node_nm
                 )
                 el = (el[0], splitter_mod)
-            if other_states[node_nm][0].other_states:
-                other_states.update(other_states[node_nm][0].other_states)
+                if other_states[node_nm][0].other_states:
+                    other_states.update(other_states[node_nm][0].other_states)
         _iterate_list(
             el,
             ".",
@@ -87,8 +97,8 @@ def _ordering(
         if type(el[0]) is str and el[0].startswith("_"):
             node_nm = el[0][1:]
             if node_nm not in other_states and state_fields:
-                raise Exception(
-                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                raise PydraStateError(
+                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
                 )
@@ -102,8 +112,8 @@ def _ordering(
         if type(el[1]) is str and el[1].startswith("_"):
             node_nm = el[1][1:]
             if node_nm not in other_states and state_fields:
-                raise Exception(
-                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                raise PydraStateError(
+                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
                 )
@@ -125,8 +135,8 @@ def _ordering(
         if el.startswith("_"):
             node_nm = el[1:]
             if node_nm not in other_states and state_fields:
-                raise Exception(
-                    "can't ask for splitter from {}, other nodes that are connected: ".format(
+                raise PydraStateError(
+                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
                         node_nm, other_states.keys()
                     )
                 )
@@ -156,7 +166,7 @@ def _ordering(
                 state_fields=state_fields,
             )
     else:
-        raise Exception("splitter has to be a string, a tuple or a list")
+        raise PydraStateError("splitter has to be a string, a tuple or a list")
     if i > 0:
         output_splitter.append(current_sign)
 
@@ -174,7 +184,6 @@ def _iterate_list(element, sign, other_states, output_splitter, state_fields=Tru
         )
 
 
-# functions used in State to know which element should be used for a specific axis
 def converter_groups_to_input(group_for_inputs):
     """
     Return fields for each axis and number of all groups.
@@ -184,7 +193,7 @@ def converter_groups_to_input(group_for_inputs):
     Parameters
     ----------
     group_for_inputs :
-        TODO
+        specified axes (groups) for each input
 
     """
     input_for_axis = {}
@@ -199,7 +208,6 @@ def converter_groups_to_input(group_for_inputs):
     return input_for_axis, ngr
 
 
-# function used in State if combiner
 def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
     """
     Remove inputs due to combining.
@@ -211,7 +219,7 @@ def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
     splitter_rpn :
         The splitter in reverse polish notation
     inputs_to_remove :
-        TODO
+        input names that should be removed from the splitter
 
     """
     splitter_rpn_copy = splitter_rpn.copy()
@@ -258,12 +266,12 @@ def rpn2splitter(splitter_rpn):
     Parameters
     ----------
     splitter_rpn :
-        TODO
+        splitter in reverse polish notation
 
     Returns
     -------
     splitter :
-        TODO
+        splitter in the standard/original form
 
     """
     if splitter_rpn == []:
@@ -298,9 +306,8 @@ def rpn2splitter(splitter_rpn):
     return rpn2splitter(splitter_modified)
 
 
-# used in the Node to change names in a splitter and combiner
 def add_name_combiner(combiner, name):
-    """Add a combiner."""
+    """ adding a node's name to each field from the combiner"""
     combiner_changed = []
     for comb in combiner:
         if "." not in comb:
@@ -311,7 +318,7 @@ def add_name_combiner(combiner, name):
 
 
 def add_name_splitter(splitter, name):
-    """Change names of splitter: adding names of the node."""
+    """ adding a node's name to each field from the splitter"""
     if isinstance(splitter, str):
         return _add_name([splitter], name)[0]
     elif isinstance(splitter, list):
@@ -322,6 +329,7 @@ def add_name_splitter(splitter, name):
 
 
 def _add_name(mlist, name):
+    """ adding anem to each element from the list"""
     for i, elem in enumerate(mlist):
         if isinstance(elem, str):
             if "." in elem or elem.startswith("_"):
@@ -421,22 +429,15 @@ def splits(splitter_rpn, inputs, inner_inputs=None, cont_dim=None):
             for _, v in inner_inputs.items()
         }
         inner_inputs = {k: v for k, v in inner_inputs.items() if k in splitter_rpn}
-        keys_fromLeftSpl = ["_{}".format(st.name) for _, st in inner_inputs.items()]
     else:
         previous_states_ind = {}
         inner_inputs = {}
-        keys_fromLeftSpl = []
 
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
         return _single_op_splits(
-            op_single,
-            inputs,
-            inner_inputs,
-            previous_states_ind,
-            keys_fromLeftSpl,
-            cont_dim=cont_dim,
+            op_single, inputs, inner_inputs, previous_states_ind, cont_dim=cont_dim
         )
 
     terms = {}
@@ -530,12 +531,41 @@ def splits(splitter_rpn, inputs, inner_inputs=None, cont_dim=None):
     val = stack.pop()
     if isinstance(val, tuple):
         val = val[0]
-    return val, keys, keys_fromLeftSpl
+    return val, keys
 
 
-# dj: TODO: do I need keys?
+def _single_op_splits(
+    op_single, inputs, inner_inputs, previous_states_ind, cont_dim=None
+):
+    """ splits function if splitter is a singleton"""
+    if op_single.startswith("_"):
+        return (previous_states_ind[op_single][0], previous_states_ind[op_single][1])
+    if cont_dim is None:
+        cont_dim = {}
+    shape = input_shape(inputs[op_single], cont_dim=cont_dim.get(op_single, 1))
+    trmval = range(reduce(lambda x, y: x * y, shape))
+    if op_single in inner_inputs:
+        # TODO: have to be changed if differ length
+        inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
+        # this come from the previous node
+        outer_ind = inner_inputs[op_single].ind_l
+        op_out = itertools.chain.from_iterable(
+            itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
+        )
+        res = op["."](op_out, trmval)
+        val = res
+        keys = inner_inputs[op_single].keys_final + [op_single]
+        return val, keys
+    else:
+        val = op["*"](trmval)
+        keys = [op_single]
+        return val, keys
+
+
 def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
-    """Process splitter rpn from left to right."""
+    """ splits inputs to groups (axes) and creates stacks for these groups
+        This is used to specify which input can be combined.
+    """
     if not splitter_rpn:
         return [], {}, [], []
     stack = []
@@ -556,9 +586,7 @@ def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
     # when splitter is a single element (no operators)
     if len(splitter_rpn) == 1:
         op_single = splitter_rpn[0]
-        return _single_op_splits_groups(
-            op_single, combiner, inner_inputs, previous_states_ind, groups
-        )
+        return _single_op_splits_groups(op_single, combiner, inner_inputs, groups)
 
     # len(splitter_rpn) > 1
     # iterating splitter_rpn
@@ -668,45 +696,8 @@ def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
         return keys, groups, groups_stack, []
 
 
-def _single_op_splits(
-    op_single,
-    inputs,
-    inner_inputs,
-    previous_states_ind,
-    keys_fromLeftSpl,
-    cont_dim=None,
-):
-    if op_single.startswith("_"):
-        return (
-            previous_states_ind[op_single][0],
-            previous_states_ind[op_single][1],
-            keys_fromLeftSpl,
-        )
-    if cont_dim is None:
-        cont_dim = {}
-    shape = input_shape(inputs[op_single], cont_dim=cont_dim.get(op_single, 1))
-    trmval = range(reduce(lambda x, y: x * y, shape))
-    if op_single in inner_inputs:
-        # TODO: have to be changed if differ length
-        inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
-        # this come from the previous node
-        outer_ind = inner_inputs[op_single].ind_l
-        op_out = itertools.chain.from_iterable(
-            itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
-        )
-        res = op["."](op_out, trmval)
-        val = res
-        keys = inner_inputs[op_single].keys_final + [op_single]
-        return val, keys, keys_fromLeftSpl
-    else:
-        val = op["*"](trmval)
-        keys = [op_single]
-        return val, keys, keys_fromLeftSpl
-
-
-def _single_op_splits_groups(
-    op_single, combiner, inner_inputs, previous_states_ind, groups
-):
+def _single_op_splits_groups(op_single, combiner, inner_inputs, groups):
+    """ splits_groups function if splitter is a singleton"""
     if op_single in inner_inputs:
         # TODO: have to be changed if differ length
         # TODO: i think I don't want to add here from left part
@@ -720,8 +711,11 @@ def _single_op_splits_groups(
         if combiner == [op_single]:
             return [], {}, [], combiner
         else:
-            raise Exception(
-                "combiner {} not in splitter_rpn: {}".format(combiner[0], [op_single])
+            # TODO: probably not needed, should be already check by st.combiner_validation
+            raise PydraStateError(
+                "all fields from the combiner have to be in splitter_rpn: {}, but combiner: {} is set".format(
+                    [op_single], combiner
+                )
             )
     else:
         return keys, groups, groups_stack, []
@@ -749,7 +743,7 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
             elif gr in grs_removed:
                 pass
             else:
-                raise Exception(
+                raise PydraStateError(
                     "input {} not ready to combine, you have to combine {} "
                     "first".format(comb, groups_stack[-1])
                 )
@@ -766,7 +760,7 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
 
 
 def map_splits(split_iter, inputs, cont_dim=None):
-    """Get a dictionary of prescribed splits."""
+    """generate a dictionary of inputs prescribed by the splitter."""
     if cont_dim is None:
         cont_dim = {}
     for split in split_iter:
@@ -774,110 +768,6 @@ def map_splits(split_iter, inputs, cont_dim=None):
             k: list(flatten(ensure_list(inputs[k]), max_depth=cont_dim.get(k, None)))[v]
             for k, v in split.items()
         }
-
-
-# Functions for merging and completing splitters in states.
-def connect_splitters(splitter, other_states, state_fields=False):
-    """Link splitters."""
-    if splitter:
-        # if splitter is string, have to check if this is Left or Right part (Left is required)
-        if isinstance(splitter, str):
-            # so this is the Left part
-            if splitter.startswith("_"):
-                left_part = _complete_left(
-                    left=splitter, other_states=other_states, state_fields=state_fields
-                )
-                right_part = None
-            else:  # this is Right part
-                left_part = _complete_left(
-                    other_states=other_states, state_fields=state_fields
-                )
-                right_part = splitter
-        # if splitter is tuple, it has to be either Left or Right part
-        elif isinstance(splitter, tuple):
-            lr_flag = _left_right_check(splitter, other_states=other_states)
-            if lr_flag == "Left":
-                left_part = _complete_left(left=splitter, other_states=other_states)
-                right_part = None
-            elif lr_flag == "Right":
-                left_part = _complete_left(other_states=other_states)
-                right_part = splitter
-            else:
-                raise Exception("splitter mix Left and Right parts in scalar splitter")
-        elif isinstance(splitter, list):
-            lr_flag = _left_right_check(splitter, other_states=other_states)
-            if lr_flag == "Left":
-                left_part = _complete_left(
-                    left=splitter, other_states=other_states, state_fields=state_fields
-                )
-                right_part = None
-            elif lr_flag == "Right":
-                left_part = _complete_left(
-                    other_states=other_states, state_fields=state_fields
-                )
-                right_part = splitter
-            elif (
-                _left_right_check(splitter[0], other_states=other_states) == "Left"
-                and _left_right_check(splitter[1], other_states=other_states) == "Right"
-            ):
-                left_part = _complete_left(
-                    left=splitter[0],
-                    other_states=other_states,
-                    state_fields=state_fields,
-                )
-                right_part = splitter[1]
-            else:
-                raise Exception("splitter doesn't have separated Left and Right parts")
-        else:
-            raise Exception(
-                "splitter has to be str, tuple or list, "
-                "{} was provided".format(type(splitter))
-            )
-    else:
-        # if there is no splitter, I create the Left part
-        left_part = _complete_left(other_states=other_states, state_fields=state_fields)
-        right_part = None
-    if right_part:
-        splitter = [deepcopy(left_part), deepcopy(right_part)]
-    else:
-        splitter = deepcopy(left_part)
-    return splitter, left_part, right_part
-
-
-def _complete_left(other_states, left=None, state_fields=False):
-    """Add all splitters from previous nodes (completing left part)."""
-    if left:
-        rpn_left = splitter2rpn(
-            left, other_states=other_states, state_fields=state_fields
-        )
-        for name, (st, inp) in list(other_states.items())[::-1]:
-            if "_{}".format(name) not in rpn_left and st.splitter_final:
-                left = ["_{}".format(name), left]
-    else:
-        left = ["_{}".format(name) for name in other_states]
-        if len(left) == 1:
-            left = left[0]
-    return left
-
-
-def _left_right_check(splitter_part, other_states):
-    """
-    Check if splitter_part is purely Left or Right.
-
-    String is returned. If the splitter_part is mixed None is returned.
-
-    """
-    rpn_part = splitter2rpn(
-        splitter_part, other_states=other_states, state_fields=False
-    )
-    inputs_in_splitter = [i for i in rpn_part if i not in ["*", "."]]
-    others_in_splitter = [
-        True if el.startswith("_") else False for el in inputs_in_splitter
-    ]
-    if all(others_in_splitter):
-        return "Left"
-    elif (not all(others_in_splitter)) and (not any(others_in_splitter)):
-        return "Right"
 
 
 def inputs_types_to_dict(name, inputs):

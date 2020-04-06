@@ -392,6 +392,32 @@ def test_shell_cmd_inputspec_3(plugin, results_function):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 @pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_3a(plugin, results_function):
+    """  mandatory field added to fields, value provided
+        using shorter syntax for input spec (no attr.ib)
+    """
+    cmd_exec = "echo"
+    hello = "HELLO"
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            ("text", str, {"position": 1, "help_string": "text", "mandatory": True})
+        ],
+        bases=(ShellSpec,),
+    )
+
+    # separate command into exec + args
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd_exec, text=hello, input_spec=my_input_spec
+    )
+    assert shelly.inputs.executable == cmd_exec
+    assert shelly.cmdline == "echo HELLO"
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == "HELLO\n"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_3b(plugin, results_function):
     """  mandatory field added to fields, value provided after init"""
     cmd_exec = "echo"
     hello = "HELLO"
@@ -421,7 +447,7 @@ def test_shell_cmd_inputspec_3a(plugin, results_function):
 
 
 @pytest.mark.parametrize("plugin", Plugins)
-def test_shell_cmd_inputspec_3b_exception(plugin):
+def test_shell_cmd_inputspec_3c_exception(plugin):
     """  mandatory field added to fields, value is not provided, so exception is raised """
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
@@ -511,6 +537,31 @@ def test_shell_cmd_inputspec_4(plugin, results_function):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 @pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_4a(plugin, results_function):
+    """  mandatory field added to fields, value provided
+        using shorter syntax for input spec (no attr.ib)
+    """
+    cmd_exec = "echo"
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("text", str, "Hello", {"position": 1, "help_string": "text"})],
+        bases=(ShellSpec,),
+    )
+
+    # separate command into exec + args
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec
+    )
+
+    assert shelly.inputs.executable == cmd_exec
+    assert shelly.cmdline == "echo Hello"
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == "Hello\n"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_4b(plugin, results_function):
     """  mandatory field added to fields, value provided """
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
@@ -1165,6 +1216,33 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function):
     assert shelly.inputs.executable == cmd_exec
     # todo: this doesn't work when state
     # assert shelly.cmdline == "echo HELLO"
+    res = results_function(shelly, plugin)
+    assert res[0].output.stdout == "HELLO\n"
+    assert res[1].output.stdout == "hi\n"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("plugin", Plugins)
+def test_shell_cmd_inputspec_state_1a(plugin, results_function):
+    """  adding state to the input from input_spec
+        using shorter syntax for input_spec (without default)
+    """
+    cmd_exec = "echo"
+    hello = ["HELLO", "hi"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            ("text", str, {"position": 1, "help_string": "text", "mandatory": True})
+        ],
+        bases=(ShellSpec,),
+    )
+
+    # separate command into exec + args
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd_exec, text=hello, input_spec=my_input_spec
+    ).split("text")
+    assert shelly.inputs.executable == cmd_exec
+
     res = results_function(shelly, plugin)
     assert res[0].output.stdout == "HELLO\n"
     assert res[1].output.stdout == "hi\n"

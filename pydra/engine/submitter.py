@@ -43,6 +43,7 @@ class Submitter:
             runnable.cache_locations = cache_locations
         # creating all connections and calculating the checksum of the graph before running
         if is_workflow(runnable):
+            # TODO: no prepare state ?
             for nd in runnable.graph.nodes:
                 runnable.create_connections(nd)
                 if nd.allow_cache_override:

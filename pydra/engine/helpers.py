@@ -9,8 +9,8 @@ import sys
 from hashlib import sha256
 import subprocess as sp
 
-from .specs import Runtime, File, attr_fields
-from .helpers_file import is_existing_file, hash_file, copyfile, is_existing_file
+from .specs import Runtime, File, Directory, attr_fields
+from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 
 
 def ensure_list(obj, tuple2list=False):
@@ -221,13 +221,29 @@ def make_klass(spec):
                 if isinstance(item[1], attr._make._CountingAttr):
                     newfields[item[0]] = item[1]
                 else:
-                    newfields[item[0]] = attr.ib(type=item[1])
+                    newfields[item[0]] = attr.ib(repr=False, type=item[1])
             else:
-                if isinstance(item[2], attr._make._CountingAttr):
-                    raise ValueError("Three part should not have attr")
-                    # newfields[item[0]] = item[2]
+                if (
+                    any([isinstance(ii, attr._make._CountingAttr) for ii in item])
+                    or len(item) > 4
+                ):
+                    raise ValueError(
+                        "syntax not valid, you can use (name, attr), "
+                        "(name, type, default), (name, type, default, metadata)"
+                        "or (name, type, metadata)"
+                    )
                 else:
-                    newfields[item[0]] = attr.ib(item[2], type=item[1])
+                    if len(item) == 3:
+                        name, tp = item[:2]
+                        if isinstance(item[-1], dict) and "help_string" in item[-1]:
+                            mdata = item[-1]
+                            newfields[name] = attr.ib(type=tp, metadata=mdata)
+                        else:
+                            dflt = item[-1]
+                            newfields[name] = attr.ib(type=tp, default=dflt)
+                    elif len(item) == 4:
+                        name, tp, dflt, mdata = item
+                        newfields[name] = attr.ib(type=tp, default=dflt, metadata=mdata)
         fields = newfields
     return attr.make_class(spec.name, fields, bases=spec.bases, kw_only=True)
 
@@ -428,12 +444,14 @@ def hash_function(obj):
 
 def hash_value(value, tp=None, metadata=None):
     """calculating hash or returning values recursively"""
+    if metadata is None:
+        metadata = {}
     if isinstance(value, (tuple, list)):
         return [hash_value(el, tp, metadata) for el in value]
     elif isinstance(value, dict):
         dict_hash = {k: hash_value(v, tp, metadata) for (k, v) in value.items()}
         # returning a sorted object
-        return sorted(dict_hash.items(), key=lambda x: x[0])
+        return [list(el) for el in sorted(dict_hash.items(), key=lambda x: x[0])]
     else:  # not a container
         if (
             (tp is File or "pydra.engine.specs.File" in str(tp))
@@ -441,8 +459,12 @@ def hash_value(value, tp=None, metadata=None):
             and "container_path" not in metadata
         ):
             return hash_file(value)
-        elif isinstance(value, tuple):
-            return list(value)
+        elif (
+            (tp is File or "pydra.engine.specs.Directory" in str(tp))
+            and is_existing_file(value)
+            and "container_path" not in metadata
+        ):
+            return hash_dir(value)
         else:
             return value
 

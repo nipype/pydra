@@ -1,7 +1,7 @@
-import sys
-import pytest, pdb
+import pytest
 
 from ..state import State
+from ..helpers_state import PydraStateError
 
 
 @pytest.mark.parametrize(
@@ -79,10 +79,15 @@ def test_state_1(
 ):
     """ single state: testing groups, prepare_states and prepare_inputs"""
     st = State(name="NA", splitter=splitter)
+    assert st.splitter == st.right_splitter
+    assert st.splitter_rpn == st.right_splitter_rpn
+    assert st.left_splitter is None
+    assert st.left_combiner_all == []
+
+    st.prepare_states(inputs)
     assert st.group_for_inputs_final == group_for_inputs
     assert st.groups_stack_final == groups_stack
 
-    st.prepare_states(inputs)
     assert st.states_ind == states_ind
     assert st.states_val == states_val
 
@@ -91,21 +96,29 @@ def test_state_1(
 
 
 def test_state_2_err():
-    with pytest.raises(Exception) as exinfo:
+    with pytest.raises(PydraStateError) as exinfo:
         st = State("NA", splitter={"a"})
     assert "splitter has to be a string, a tuple or a list" == str(exinfo.value)
 
 
 def test_state_3_err():
-    with pytest.raises(Exception) as exinfo:
+    with pytest.raises(PydraStateError) as exinfo:
         st = State("NA", splitter=["a", "b"], combiner=("a", "b"))
     assert "combiner has to be a string or a list" == str(exinfo.value)
 
 
 def test_state_4_err():
-    with pytest.raises(Exception) as exinfo:
-        st = State("NA", splitter="a", combiner=["a", "b"])
-    assert "all combiners have to be in the splitter" == str(exinfo.value)
+    st = State("NA", splitter="a", combiner=["a", "b"])
+    with pytest.raises(PydraStateError) as exinfo:
+        st.combiner_validation()
+    assert "all combiners have to be in the splitter" in str(exinfo.value)
+
+
+def test_state_5_err():
+    st = State("NA", combiner="a")
+    with pytest.raises(PydraStateError) as exinfo:
+        st.combiner_validation()
+    assert "splitter has to be set before" in str(exinfo.value)
 
 
 def test_state_connect_1():
@@ -116,10 +129,14 @@ def test_state_connect_1():
     st2 = State(name="NB", other_states={"NA": (st1, "b")})
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a"]
-    assert st2.group_for_inputs_final == {"NA.a": 0}
-    assert st2.groups_stack_final == [[0]]
+    assert st2.left_splitter == st2.splitter
+    assert st2.left_splitter_rpn == st2.splitter_rpn
+    assert st2.right_splitter is None
+    assert st2.right_splitter_rpn == []
 
     st2.prepare_states(inputs={"NA.a": [3, 5]})
+    assert st2.group_for_inputs_final == {"NA.a": 0}
+    assert st2.groups_stack_final == [[0]]
     assert st2.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
     assert st2.states_val == [{"NA.a": 3}, {"NA.a": 5}]
 
@@ -135,10 +152,10 @@ def test_state_connect_1a():
     st2 = State(name="NB", splitter="_NA", other_states={"NA": (st1, "b")})
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a"]
-    assert st2.group_for_inputs_final == {"NA.a": 0}
-    assert st2.groups_stack_final == [[0]]
 
     st2.prepare_states(inputs={"NA.a": [3, 5]})
+    assert st2.group_for_inputs_final == {"NA.a": 0}
+    assert st2.groups_stack_final == [[0]]
     assert st2.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
     assert st2.states_val == [{"NA.a": 3}, {"NA.a": 5}]
 
@@ -149,8 +166,9 @@ def test_state_connect_1a():
 def test_state_connect_1b_exception():
     """can't provide explicitly NA.a (should be _NA)"""
     st1 = State(name="NA", splitter="a", other_states={})
-    with pytest.raises(Exception) as excinfo:
-        st2 = State(name="NB", splitter="NA.a")
+    st2 = State(name="NB", splitter="NA.a")
+    with pytest.raises(PydraStateError) as excinfo:
+        st2.splitter_validation()
     assert "consider using _NA" in str(excinfo.value)
 
 
@@ -158,9 +176,9 @@ def test_state_connect_1b_exception():
 def test_state_connect_1c_exception(splitter2, other_states2):
     """can't ask for splitter from node that is not connected"""
     st1 = State(name="NA", splitter="a")
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(PydraStateError) as excinfo:
         st2 = State(name="NB", splitter=splitter2, other_states=other_states2)
-    assert "other nodes that are connected" in str(excinfo.value)
+        st2.splitter_validation()
 
 
 def test_state_connect_2():
@@ -173,11 +191,17 @@ def test_state_connect_2():
 
     assert st2.splitter == ["_NA", "NB.a"]
     assert st2.splitter_rpn == ["NA.a", "NB.a", "*"]
+    assert st2.left_splitter == "_NA"
+    assert st2.left_splitter_rpn == ["NA.a"]
+    assert st2.right_splitter == "NB.a"
+    assert st2.right_splitter_rpn == ["NB.a"]
+
+    st2.update_connections()
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [1, 2]})
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
     assert st2.groups_stack_final == [[0, 1]]
     assert st2.keys_final == ["NA.a", "NB.a"]
 
-    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [1, 2]})
     assert st2.states_ind == [
         {"NA.a": 0, "NB.a": 0},
         {"NA.a": 0, "NB.a": 1},
@@ -211,11 +235,12 @@ def test_state_connect_2a():
 
     assert st2.splitter == ["_NA", "NB.a"]
     assert st2.splitter_rpn == ["NA.a", "NB.a", "*"]
+
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [1, 2], "NB.s": 1})
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
     assert st2.groups_stack_final == [[0, 1]]
     assert st2.keys_final == ["NA.a", "NB.a"]
 
-    st2.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [1, 2], "NB.s": 1})
     assert st2.states_ind == [
         {"NA.a": 0, "NB.a": 0},
         {"NA.a": 0, "NB.a": 1},
@@ -248,12 +273,12 @@ def test_state_connect_2b():
 
     assert st2.splitter == ["_NA", "NB.a"]
     assert st2.splitter_rpn == ["NA.a", "NB.a", "*"]
-    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
-    assert st2.groups_stack_final == [[0, 1]]
+    assert st2.right_splitter == "NB.a"
+    assert st2.left_splitter == "_NA"
 
     st2.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [1, 2]})
-    assert st2._right_splitter == "NB.a"
-    assert st2._left_splitter == "_NA"
+    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
+    assert st2.groups_stack_final == [[0, 1]]
     assert st2.states_ind == [
         {"NA.a": 0, "NB.a": 0},
         {"NA.a": 0, "NB.a": 1},
@@ -287,10 +312,15 @@ def test_state_connect_3():
 
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NB.a", "*"]
-    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
-    assert st3.groups_stack_final == [[0, 1]]
+    assert st3.left_splitter == st3.splitter
+    assert st3.left_splitter_rpn == st3.splitter_rpn
+    assert st3.left_splitter_rpn_compact == ["_NA", "_NB", "*"]
+    assert st3.right_splitter is None
+    assert st3.right_splitter_rpn == []
 
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
+    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
+    assert st3.groups_stack_final == [[0, 1]]
     assert st3.states_ind == [
         {"NA.a": 0, "NB.a": 0},
         {"NA.a": 0, "NB.a": 1},
@@ -328,10 +358,10 @@ def test_state_connect_3a():
 
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NB.a", "*"]
-    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
-    assert st3.groups_stack_final == [[0, 1]]
 
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
+    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
+    assert st3.groups_stack_final == [[0, 1]]
     assert st3.states_ind == [
         {"NA.a": 0, "NB.a": 0},
         {"NA.a": 0, "NB.a": 1},
@@ -368,10 +398,10 @@ def test_state_connect_3b():
 
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NB.a", "*"]
-    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
-    assert st3.groups_stack_final == [[0, 1]]
 
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
+    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.a": 1}
+    assert st3.groups_stack_final == [[0, 1]]
     assert st3.states_ind == [
         {"NA.a": 0, "NB.a": 0},
         {"NA.a": 0, "NB.a": 1},
@@ -409,10 +439,15 @@ def test_state_connect_4():
 
     assert st3.splitter == ("_NA", "_NB")
     assert st3.splitter_rpn == ["NA.a", "NB.a", "."]
-    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.a": 0}
-    assert st3.groups_stack_final == [[0]]
+    assert st3.left_splitter == st3.splitter
+    assert st3.left_splitter_rpn == st3.splitter_rpn
+    assert st3.left_splitter_rpn_compact == ["_NA", "_NB", "."]
+    assert st3.right_splitter is None
+    assert st3.right_splitter_rpn == []
 
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [30, 50]})
+    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.a": 0}
+    assert st3.groups_stack_final == [[0]]
     assert st3.states_ind == [{"NA.a": 0, "NB.a": 0}, {"NA.a": 1, "NB.a": 1}]
     assert st3.states_val == [{"NA.a": 3, "NB.a": 30}, {"NA.a": 5, "NB.a": 50}]
 
@@ -429,10 +464,10 @@ def test_state_connect_5():
     st2 = State(name="NB", other_states={"NA": (st1, "a")})
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a", "NA.b", "*"]
-    assert st2.group_for_inputs_final == {"NA.a": 0, "NA.b": 1}
-    assert st2.groups_stack_final == [[0, 1]]
 
     st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
+    assert st2.group_for_inputs_final == {"NA.a": 0, "NA.b": 1}
+    assert st2.groups_stack_final == [[0, 1]]
     assert st2.states_ind == [
         {"NA.a": 0, "NA.b": 0},
         {"NA.a": 0, "NA.b": 1},
@@ -464,10 +499,10 @@ def test_state_connect_6():
     )
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NA.b", "*", "NB.a", "*"]
-    assert st3.group_for_inputs_final == {"NA.a": 0, "NA.b": 1, "NB.a": 2}
-    assert st3.groups_stack_final == [[0, 1, 2]]
 
     st3.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.a": [600, 700]})
+    assert st3.group_for_inputs_final == {"NA.a": 0, "NA.b": 1, "NB.a": 2}
+    assert st3.groups_stack_final == [[0, 1, 2]]
 
     assert st3.states_ind == [
         {"NA.a": 0, "NA.b": 0, "NB.a": 0},
@@ -513,10 +548,10 @@ def test_state_connect_6a():
     st3 = State(name="NC", other_states={"NA": (st1, "a"), "NB": (st2, "b")})
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NA.b", "*", "NB.a", "*"]
-    assert st3.group_for_inputs_final == {"NA.a": 0, "NA.b": 1, "NB.a": 2}
-    assert st3.groups_stack_final == [[0, 1, 2]]
 
     st3.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.a": [600, 700]})
+    assert st3.group_for_inputs_final == {"NA.a": 0, "NA.b": 1, "NB.a": 2}
+    assert st3.groups_stack_final == [[0, 1, 2]]
     assert st3.states_ind == [
         {"NA.a": 0, "NA.b": 0, "NB.a": 0},
         {"NA.a": 0, "NA.b": 0, "NB.a": 1},
@@ -560,14 +595,19 @@ def test_state_connect_innerspl_1():
 
     assert st2.splitter == ["_NA", "NB.b"]
     assert st2.splitter_rpn == ["NA.a", "NB.b", "*"]
-    assert st2.other_states["NA"][1] == "b"
-    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
-    assert st2.groups_stack_final == [[0], [1]]
+    assert st2.left_splitter == "_NA"
+    assert st2.left_splitter_rpn == ["NA.a"]
+    assert st2.left_splitter_rpn_compact == ["_NA"]
+    assert st2.right_splitter == "NB.b"
+    assert st2.right_splitter_rpn == ["NB.b"]
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]},
         cont_dim={"NB.b": 2},  # will be treated as 2d container
     )
+    assert st2.other_states["NA"][1] == "b"
+    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
+    assert st2.groups_stack_final == [[0], [1]]
 
     assert st2.states_ind == [
         {"NA.a": 0, "NB.b": 0},
@@ -607,14 +647,20 @@ def test_state_connect_innerspl_1a():
 
     assert st2.splitter == ["_NA", "NB.b"]
     assert st2.splitter_rpn == ["NA.a", "NB.b", "*"]
+    assert st2.left_splitter == "_NA"
+    assert st2.left_splitter_rpn == ["NA.a"]
+    assert st2.left_splitter_rpn_compact == ["_NA"]
+    assert st2.right_splitter == "NB.b"
+    assert st2.right_splitter_rpn == ["NB.b"]
+
     assert st2.other_states["NA"][1] == "b"
-    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
-    assert st2.groups_stack_final == [[0], [1]]
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]},
         cont_dim={"NB.b": 2},  # will be treated as 2d container
     )
+    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
+    assert st2.groups_stack_final == [[0], [1]]
 
     assert st2.states_ind == [
         {"NA.a": 0, "NB.b": 0},
@@ -646,7 +692,7 @@ def test_state_connect_innerspl_1a():
 
 def test_state_connect_innerspl_1b():
     """incorrect splitter - Right & Left parts in scalar splitter"""
-    with pytest.raises(Exception):
+    with pytest.raises(PydraStateError):
         st1 = State(name="NA", splitter="a")
         st2 = State(name="NB", splitter=("_NA", "b"), other_states={"NA": (st1, "b")})
 
@@ -661,14 +707,20 @@ def test_state_connect_innerspl_2():
 
     assert st2.splitter == ["_NA", ["NB.c", "NB.b"]]
     assert st2.splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*"]
-    assert st2.other_states["NA"][1] == "b"
-    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 1, "NB.b": 2}
-    assert st2.groups_stack_final == [[0], [1, 2]]
+    assert st2.left_splitter == "_NA"
+    assert st2.left_splitter_rpn == ["NA.a"]
+    assert st2.left_splitter_rpn_compact == ["_NA"]
+    assert st2.right_splitter == ["NB.c", "NB.b"]
+    assert st2.right_splitter_rpn == ["NB.c", "NB.b", "*"]
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
         cont_dim={"NB.b": 2},  # will be treated as 2d container
     )
+    assert st2.other_states["NA"][1] == "b"
+    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 1, "NB.b": 2}
+    assert st2.groups_stack_final == [[0], [1, 2]]
+
     assert st2.states_ind == [
         {"NB.c": 0, "NA.a": 0, "NB.b": 0},
         {"NB.c": 0, "NA.a": 0, "NB.b": 1},
@@ -727,13 +779,13 @@ def test_state_connect_innerspl_2a():
     assert st2.splitter == ["_NA", ["NB.b", "NB.c"]]
     assert st2.splitter_rpn == ["NA.a", "NB.b", "NB.c", "*", "*"]
     assert st2.other_states["NA"][1] == "b"
-    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 2, "NB.b": 1}
-    assert st2.groups_stack_final == [[0], [1, 2]]
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
         cont_dim={"NB.b": 2},  # will be treated as 2d container
     )
+    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 2, "NB.b": 1}
+    assert st2.groups_stack_final == [[0], [1, 2]]
 
     assert st2.states_ind == [
         {"NB.c": 0, "NA.a": 0, "NB.b": 0},
@@ -793,8 +845,11 @@ def test_state_connect_innerspl_3():
 
     assert st3.splitter == ["_NB", "NC.d"]
     assert st3.splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*", "NC.d", "*"]
-    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.c": 1, "NB.b": 2, "NC.d": 3}
-    assert st3.groups_stack_final == [[0], [1, 2, 3]]
+    assert st3.left_splitter == "_NB"
+    assert st3.left_splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*"]
+    assert st3.left_splitter_rpn_compact == ["_NB"]
+    assert st3.right_splitter == "NC.d"
+    assert st3.right_splitter_rpn == ["NC.d"]
 
     st3.prepare_states(
         inputs={
@@ -805,6 +860,8 @@ def test_state_connect_innerspl_3():
         },
         cont_dim={"NB.b": 2},  # will be treated as 2d container
     )
+    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.c": 1, "NB.b": 2, "NC.d": 3}
+    assert st3.groups_stack_final == [[0], [1, 2, 3]]
 
     assert st2.states_ind == [
         {"NB.c": 0, "NA.a": 0, "NB.b": 0},
@@ -931,8 +988,6 @@ def test_state_connect_innerspl_4():
     assert st3.splitter_rpn == ["NA.a", "NB.b", "NB.c", "*", "*", "NC.d", "*"]
     assert st3.other_states["NA"][1] == "e"
     assert st3.other_states["NB"][1] == "f"
-    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.c": 2, "NB.b": 1, "NC.d": 3}
-    assert st3.groups_stack_final == [[0, 1, 2, 3]]
 
     st3.prepare_states(
         inputs={
@@ -945,6 +1000,8 @@ def test_state_connect_innerspl_4():
         },
         cont_dim={"NC.f": 2},  # will be treated as 2d container
     )
+    assert st3.group_for_inputs_final == {"NA.a": 0, "NB.c": 2, "NB.b": 1, "NC.d": 3}
+    assert st3.groups_stack_final == [[0, 1, 2, 3]]
     assert st3.states_ind == [
         {"NA.a": 0, "NB.b": 0, "NB.c": 0, "NC.d": 0},
         {"NA.a": 0, "NB.b": 0, "NB.c": 0, "NC.d": 1},
@@ -1009,13 +1066,14 @@ def test_state_combine_1():
     st = State(name="NA", splitter="a", combiner="a")
     assert st.splitter == "NA.a"
     assert st.splitter_rpn == ["NA.a"]
-    assert st.combiner == ["NA.a"]
+    assert st.right_combiner == st.right_combiner_all == st.combiner == ["NA.a"]
+    assert st.left_combiner == st.left_combiner_all == []
     assert st.splitter_final == None
     assert st.splitter_rpn_final == []
-    assert st.group_for_inputs_final == {}
-    assert st.groups_stack_final == []
 
     st.prepare_states(inputs={"NA.a": [3, 5]})
+    assert st.group_for_inputs_final == {}
+    assert st.groups_stack_final == []
     assert st.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
     assert st.states_val == [{"NA.a": 3}, {"NA.a": 5}]
 
@@ -1030,13 +1088,16 @@ def test_state_connect_combine_1():
 
     assert st1.splitter == ["NA.a", "NA.b"]
     assert st1.splitter_rpn == ["NA.a", "NA.b", "*"]
-    assert st1.combiner == ["NA.a"]
+    assert st1.splitter_rpn_final == ["NA.b"]
+    assert st1.splitter_final == "NA.b"
+    assert st1.combiner == st1.right_combiner == st1.right_combiner_all == ["NA.a"]
+    assert st1.left_combiner_all == st1.left_combiner == []
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.b"]
-    assert st2.group_for_inputs_final == {"NA.b": 0}
-    assert st2.groups_stack_final == [[0]]
 
     st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
+    assert st2.group_for_inputs_final == {"NA.b": 0}
+    assert st2.groups_stack_final == [[0]]
     assert st1.states_ind == [
         {"NA.a": 0, "NA.b": 0},
         {"NA.a": 0, "NA.b": 1},
@@ -1078,12 +1139,12 @@ def test_state_connect_combine_2():
 
     assert st2.splitter == ["_NA", "NB.d"]
     assert st2.splitter_rpn == ["NA.b", "NB.d", "*"]
-    assert st2.group_for_inputs_final == {"NA.b": 0, "NB.d": 1}
-    assert st2.groups_stack_final == [[0, 1]]
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.c": [90, 150], "NB.d": [0, 1]}
     )
+    assert st2.group_for_inputs_final == {"NA.b": 0, "NB.d": 1}
+    assert st2.groups_stack_final == [[0, 1]]
     assert st1.states_ind == [
         {"NA.a": 0, "NA.b": 0},
         {"NA.a": 0, "NA.b": 1},
@@ -1141,12 +1202,14 @@ def test_state_connect_combine_3():
     assert st2.splitter == ["_NA", "NB.d"]
     assert st2.splitter_rpn == ["NA.b", "NB.d", "*"]
     assert st2.splitter_rpn_final == ["NA.b"]
-    assert st2.group_for_inputs_final == {"NA.b": 0}
-    assert st2.groups_stack_final == [[0]]
+    assert st2.left_combiner_all == st2.left_combiner == []
+    assert st2.right_combiner_all == st2.right_combiner == st2.combiner == ["NB.d"]
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.c": [90, 150], "NB.d": [0, 1]}
     )
+    assert st2.group_for_inputs_final == {"NA.b": 0}
+    assert st2.groups_stack_final == [[0]]
 
     assert st1.states_ind == [
         {"NA.a": 0, "NA.b": 0},
@@ -1201,8 +1264,8 @@ def test_state_connect_innerspl_combine_1():
     assert st2.splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*"]
     assert st2.splitter_final == ["NA.a", "NB.c"]
     assert st2.splitter_rpn_final == ["NA.a", "NB.c", "*"]
-    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 1}
-    assert st2.groups_stack_final == [[0], [1]]
+    assert st2.left_combiner_all == st2.left_combiner == []
+    assert st2.right_combiner_all == st2.right_combiner == st2.combiner == ["NB.b"]
     # TODO: i think at the end I should merge [0] and [1], because there are no inner splitters anymore
     # TODO: didn't include it in my code...
     # assert st2.groups_stack_final == [[0, 1]]
@@ -1211,6 +1274,9 @@ def test_state_connect_innerspl_combine_1():
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
         cont_dim={"NB.b": 2},  # will be treated as 2d container
     )
+    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 1}
+    assert st2.groups_stack_final == [[0], [1]]
+
     # NOW TODO: checking st2.states_ind_final!!!
     assert st2.states_ind == [
         {"NB.c": 0, "NA.a": 0, "NB.b": 0},
@@ -1278,13 +1344,13 @@ def test_state_connect_innerspl_combine_2():
     assert st2.splitter_rpn == ["NA.a", "NB.c", "NB.b", "*", "*"]
     assert st2.splitter_final == ["NA.a", "NB.b"]
     assert st2.splitter_rpn_final == ["NA.a", "NB.b", "*"]
-    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
-    assert st2.groups_stack_final == [[0], [1]]
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
         cont_dim={"NB.b": 2},  # will be treated as 2d container
     )
+    assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
+    assert st2.groups_stack_final == [[0], [1]]
     assert st2.states_ind == [
         {"NB.c": 0, "NA.a": 0, "NB.b": 0},
         {"NB.c": 0, "NA.a": 0, "NB.b": 1},
@@ -1349,13 +1415,13 @@ def test_state_connect_combine_left_1():
     st2 = State(name="NB", other_states={"NA": (st1, "b")}, combiner="NA.a")
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a"]
-    assert st2.combiner == ["NA.a"]
+    assert st2.combiner == st2.left_combiner == st2.left_combiner_all == ["NA.a"]
+    assert st2.right_combiner == st2.right_combiner_all == []
     assert st2.splitter_rpn_final == []
 
+    st2.prepare_states(inputs={"NA.a": [3, 5]})
     assert st2.group_for_inputs_final == {}
     assert st2.groups_stack_final == []
-
-    st2.prepare_states(inputs={"NA.a": [3, 5]})
     assert st2.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
     assert st2.states_val == [{"NA.a": 3}, {"NA.a": 5}]
     assert st2.states_ind_final == []
@@ -1375,12 +1441,13 @@ def test_state_connect_combine_left_2():
     assert st2.splitter == "_NA"
     assert st2.splitter_rpn == ["NA.a", "NA.b", "*"]
     assert st2.combiner == ["NA.a"]
+    assert st2.left_combiner_all == st2.left_combiner == ["NA.a"]
+    assert st2.right_combiner_all == st2.right_combiner == []
     assert st2.splitter_rpn_final == ["NA.b"]
 
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
     assert st2.group_for_inputs_final == {"NA.b": 0}
     assert st2.groups_stack_final == [[0]]
-
-    st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
     assert st2.states_ind == [
         {"NA.a": 0, "NA.b": 0},
         {"NA.a": 0, "NA.b": 1},
@@ -1413,10 +1480,10 @@ def test_state_connect_combine_left_3():
     assert st3.combiner == ["NA.a"]
     assert st3.splitter_rpn_final == ["NA.b"]
 
+    st3.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
     assert st3.group_for_inputs_final == {"NA.b": 0}
     assert st3.groups_stack_final == [[0]]
 
-    st3.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20]})
     assert st3.states_ind == [
         {"NA.a": 0, "NA.b": 0},
         {"NA.a": 0, "NA.b": 1},
@@ -1452,10 +1519,12 @@ def test_state_connect_combine_left_4():
     assert st3.splitter == ["_NA", "_NB"]
     assert st3.splitter_rpn == ["NA.a", "NB.a", "*"]
     assert st3.splitter_rpn_final == ["NB.a"]
-    assert st3.group_for_inputs_final == {"NB.a": 0}
-    assert st3.groups_stack_final == [[0]]
+    assert st3.left_combiner_all == st3.left_combiner == st3.combiner == ["NA.a"]
+    assert st3.right_combiner_all == st3.right_combiner == []
 
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [600, 700]})
+    assert st3.group_for_inputs_final == {"NB.a": 0}
+    assert st3.groups_stack_final == [[0]]
 
     assert st3.states_ind == [
         {"NA.a": 0, "NB.a": 0},
@@ -1496,11 +1565,15 @@ def test_state_connect_combine_left_5():
     )
     assert st3.splitter == ("_NA", "_NB")
     assert st3.splitter_rpn == ["NA.a", "NB.a", "."]
+    st3.set_input_groups()
     assert st3.splitter_rpn_final == []
-    assert st3.group_for_inputs_final == {}
-    assert st3.groups_stack_final == []
+    assert set(st3.left_combiner_all) == {"NA.a", "NB.a"}
+    assert st3.left_combiner == st3.combiner == ["NA.a"]
+    assert st3.right_combiner_all == st3.right_combiner == []
 
     st3.prepare_states(inputs={"NA.a": [3, 5], "NB.a": [600, 700]})
+    assert st3.group_for_inputs_final == {}
+    assert st3.groups_stack_final == []
 
     assert st3.states_ind == [{"NA.a": 0, "NB.a": 0}, {"NA.a": 1, "NB.a": 1}]
     assert st3.states_val == [{"NA.a": 3, "NB.a": 600}, {"NA.a": 5, "NB.a": 700}]
@@ -1523,12 +1596,14 @@ def test_state_connect_combine_left_6():
     assert st2.splitter == ["_NA", "NB.c"]
     assert st2.splitter_rpn == ["NA.a", "NA.b", "*", "NB.c", "*"]
     assert st2.combiner == ["NA.a"]
+    assert st2.left_combiner_all == st2.left_combiner == ["NA.a"]
+    assert st2.right_combiner_all == st2.right_combiner == []
     assert st2.splitter_rpn_final == ["NA.b", "NB.c", "*"]
 
+    st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.c": [0, 1]})
     assert st2.group_for_inputs_final == {"NA.b": 0, "NB.c": 1}
     assert st2.groups_stack_final == [[0, 1]]
 
-    st2.prepare_states(inputs={"NA.a": [3, 5], "NA.b": [10, 20], "NB.c": [0, 1]})
     assert st2.states_ind == [
         {"NA.a": 0, "NA.b": 0, "NB.c": 0},
         {"NA.a": 0, "NA.b": 0, "NB.c": 1},
@@ -1567,3 +1642,104 @@ def test_state_connect_combine_left_6():
         {"NB.b": 3, "NB.c": 0},
         {"NB.b": 3, "NB.c": 1},
     ]
+
+
+@pytest.mark.parametrize(
+    "splitter, other_states, expected_splitter, expected_left, expected_right",
+    [
+        (None, {"NA": (State(name="NA", splitter="a"), "b")}, "_NA", "_NA", None),
+        (
+            "b",
+            {"NA": (State(name="NA", splitter="a"), "b")},
+            ["_NA", "CN.b"],
+            "_NA",
+            "CN.b",
+        ),
+        (
+            ("b", "c"),
+            {"NA": (State(name="NA", splitter="a"), "b")},
+            ["_NA", ("CN.b", "CN.c")],
+            "_NA",
+            ("CN.b", "CN.c"),
+        ),
+        (
+            None,
+            {
+                "NA": (State(name="NA", splitter="a"), "a"),
+                "NB": (State(name="NB", splitter="a"), "b"),
+            },
+            ["_NA", "_NB"],
+            ["_NA", "_NB"],
+            None,
+        ),
+        (
+            "b",
+            {
+                "NA": (State(name="NA", splitter="a"), "a"),
+                "NB": (State(name="NB", splitter="a"), "b"),
+            },
+            [["_NA", "_NB"], "CN.b"],
+            ["_NA", "_NB"],
+            "CN.b",
+        ),
+        (
+            ["_NA", "b"],
+            {
+                "NA": (State(name="NA", splitter="a"), "a"),
+                "NB": (State(name="NB", splitter="a"), "b"),
+            },
+            [["_NB", "_NA"], "CN.b"],
+            ["_NB", "_NA"],
+            "CN.b",
+        ),
+    ],
+)
+def test_connect_splitters(
+    splitter, other_states, expected_splitter, expected_left, expected_right
+):
+    st = State(name="CN", splitter=splitter, other_states=other_states)
+    st.set_input_groups()
+    assert st.splitter == expected_splitter
+    assert st.left_splitter == expected_left
+    assert st.right_splitter == expected_right
+
+
+@pytest.mark.parametrize(
+    "splitter, other_states",
+    [
+        (("_NA", "b"), {"NA": (State(name="NA", splitter="a"), "b")}),
+        (["b", "_NA"], {"NA": (State(name="NA", splitter="a"), "b")}),
+        (
+            ["_NB", ["_NA", "b"]],
+            {
+                "NA": (State(name="NA", splitter="a"), "a"),
+                "NB": (State(name="NB", splitter="a"), "b"),
+            },
+        ),
+    ],
+)
+def test_connect_splitters_exception_1(splitter, other_states):
+    with pytest.raises(PydraStateError) as excinfo:
+        st = State(name="CN", splitter=splitter, other_states=other_states)
+    assert "Left and Right splitters are mixed" in str(excinfo.value)
+
+
+def test_connect_splitters_exception_2():
+    st = State(
+        name="CN",
+        splitter="_NB",
+        other_states={"NA": (State(name="NA", splitter="a"), "b")},
+    )
+    with pytest.raises(PydraStateError) as excinfo:
+        st.set_input_groups()
+    assert "can't ask for splitter from NB" in str(excinfo.value)
+
+
+def test_connect_splitters_exception_3():
+    with pytest.raises(PydraStateError) as excinfo:
+        st = State(
+            name="CN",
+            splitter="_NB",
+            other_states=["NA", (State(name="NA", splitter="a"), "b")],
+        )
+    assert "other states has to be a dictionary" == str(excinfo.value)
