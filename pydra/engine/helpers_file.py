@@ -91,6 +91,8 @@ def fname_presuffix(fname, prefix="", suffix="", newpath=None, use_ext=True):
 
     Examples
     --------
+    >>> import pytest, sys
+    >>> if sys.platform.startswith('win'): pytest.skip()
     >>> from pydra.engine.helpers_file import fname_presuffix
     >>> fname = 'foo.nii.gz'
     >>> fname_presuffix(fname,'pre','post','/tmp')
@@ -104,7 +106,7 @@ def fname_presuffix(fname, prefix="", suffix="", newpath=None, use_ext=True):
     # No need for isdefined: bool(Undefined) evaluates to False
     if newpath:
         pth = op.abspath(newpath)
-    return op.join(pth, prefix + fname + suffix + ext)
+    return str(Path(pth) / (prefix + fname + suffix + ext))
 
 
 def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
@@ -402,7 +404,7 @@ def get_related_files(filename, include_this_file=True):
         if this_type in type_set:
             for related_type in type_set:
                 if include_this_file or related_type != this_type:
-                    related_files.append(op.join(path, name + related_type))
+                    related_files.append(Path(path) / (name + related_type))
     if not len(related_files):
         related_files = [filename]
     return related_files
