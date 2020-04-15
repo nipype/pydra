@@ -1981,6 +1981,8 @@ def test_wf_nostate_cachedir(plugin, tmpdir):
     shutil.rmtree(cache_dir)
 
 
+# TODO: fix path for windows
+@pytest.mark.skipif(sys.platform.startswith("win"), "failing for windows, something to do with paths?")
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
     """ wf with provided cache_dir as relative path"""

@@ -38,6 +38,7 @@ def test_split_filename(filename, split):
     assert res == split
 
 
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows drive not known in advance",)
 def test_fname_presuffix():
     fname = "foo.nii"
     pth = fname_presuffix(fname, "pre_", "_post", "/tmp")
