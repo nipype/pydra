@@ -158,7 +158,7 @@ def test_shell_cmd_4(plugin):
     assert res[1].output.stdout == "pydra\n"
 
     assert res[0].output.return_code == res[1].output.return_code == 0
-    assert res[0].output.stderr == res[1].output.stderr == ""  
+    assert res[0].output.stderr == res[1].output.stderr == ""
 
 
 @pytest.mark.parametrize("plugin", Plugins)

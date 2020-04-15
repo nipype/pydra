@@ -13,17 +13,18 @@
 import sys
 from pathlib import Path
 from packaging.version import Version
+
 sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
-sys.path.insert(1, str(Path(__file__).parent / 'sphinxext'))
+sys.path.insert(1, str(Path(__file__).parent / "sphinxext"))
 from pydra import __version__
 from github_link import make_linkcode_resolve
 
 
 # -- Project information -----------------------------------------------------
 
-project = 'Pydra: A simple dataflow engine with scalable semantics'
-copyright = '2019 - 2020, The Nipype Developers team'
-author = 'The Nipype Developers team'
+project = "Pydra: A simple dataflow engine with scalable semantics"
+copyright = "2019 - 2020, The Nipype Developers team"
+author = "The Nipype Developers team"
 
 # The full version, including alpha/beta/rc tags
 release = __version__
@@ -36,25 +37,25 @@ version = Version(release).public
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.doctest',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.coverage',
-    'sphinx.ext.mathjax',
-    'sphinx.ext.ifconfig',
-    'sphinx.ext.linkcode',
-    'sphinx.ext.githubpages',
-    'sphinxcontrib.apidoc',
-    'sphinxcontrib.napoleon'
+    "sphinx.ext.autodoc",
+    "sphinx.ext.doctest",
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.coverage",
+    "sphinx.ext.mathjax",
+    "sphinx.ext.ifconfig",
+    "sphinx.ext.linkcode",
+    "sphinx.ext.githubpages",
+    "sphinxcontrib.apidoc",
+    "sphinxcontrib.napoleon",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'api/pydra.rst']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "api/pydra.rst"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -62,27 +63,22 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'api/pydra.rst']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ["_static"]
 
 # -- Options for extensions ---------------------------------------------------
 
 # Autodoc
-autodoc_mock_imports = [
-    'cloudpickle',
-    'matplotlib',
-    'numpy',
-    'psutil',
-]
-apidoc_module_dir = '../pydra'
-apidoc_output_dir = 'api'
-apidoc_excluded_paths = ['conftest.py', '*/tests/*', 'tests/*', 'data/*']
+autodoc_mock_imports = ["cloudpickle", "matplotlib", "numpy", "psutil"]
+apidoc_module_dir = "../pydra"
+apidoc_output_dir = "api"
+apidoc_excluded_paths = ["conftest.py", "*/tests/*", "tests/*", "data/*"]
 apidoc_separate_modules = True
-apidoc_extra_args = ['--module-first', '-d 1', '-T']
+apidoc_extra_args = ["--module-first", "-d 1", "-T"]
 
 # Napoleon
 # Accept custom section names to be parsed for numpy-style docstrings
@@ -90,21 +86,17 @@ apidoc_extra_args = ['--module-first', '-d 1', '-T']
 # Requires pinning sphinxcontrib-napoleon to a specific commit while
 # https://github.com/sphinx-contrib/napoleon/pull/10 is merged.
 napoleon_use_param = False
-napoleon_custom_sections = [
-    ('Inputs', 'Parameters'),
-    ('Outputs', 'Parameters'),
-]
+napoleon_custom_sections = [("Inputs", "Parameters"), ("Outputs", "Parameters")]
 
 # Intersphinx
-intersphinx_mapping = {
-    'https://docs.python.org/': None,
-}
+intersphinx_mapping = {"https://docs.python.org/": None}
 
 # Linkcode
 # The following is used by sphinx.ext.linkcode to provide links to github
 linkcode_resolve = make_linkcode_resolve(
-    'pydra', 'https://github.com/nipype/pydra/blob/{revision}/'
-    '{package}/{path}#L{lineno}')
+    "pydra",
+    "https://github.com/nipype/pydra/blob/{revision}/" "{package}/{path}#L{lineno}",
+)
 
 # Sphinx-versioning
 scv_show_banner = True
