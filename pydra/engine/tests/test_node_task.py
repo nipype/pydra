@@ -538,13 +538,13 @@ def test_task_nostate_cachedir(plugin, tmpdir):
     assert results.output.out == 5
 
 
-# TODO: fix path for windows
-@pytest.mark.skipif(sys.platform.startswith("win"), 'windows cache paths are saved differently')
 @pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_cachedir_relativepath(tmpdir, plugin):
     """ task with provided cache_dir as relative path"""
     cwd = tmpdir.chdir()
     cache_dir = "test_task_nostate"
+    tmpdir.mkdir(cache_dir)
+
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None

@@ -2,7 +2,7 @@
 
 import attr
 import typing as ty
-import os, shutil
+import os, sys, shutil
 import pytest
 from pathlib import Path
 
@@ -13,7 +13,7 @@ from ..core import Workflow
 from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
 
 
-if not sys.platform.startswith("win"):
+if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
 
 if bool(shutil.which("sbatch")):
