@@ -12,6 +12,10 @@ from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
 
+
+if not sys.platform.startswith("win"):
+    pytest.skip("SLURM not available in windows", allow_module_level=True)
+
 if bool(shutil.which("sbatch")):
     Plugins = ["cf", "slurm"]
 else:
@@ -154,7 +158,7 @@ def test_shell_cmd_4(plugin):
     assert res[1].output.stdout == "pydra\n"
 
     assert res[0].output.return_code == res[1].output.return_code == 0
-    assert res[0].output.stderr == res[1].output.stderr == ""
+    assert res[0].output.stderr == res[1].output.stderr == ""  
 
 
 @pytest.mark.parametrize("plugin", Plugins)
