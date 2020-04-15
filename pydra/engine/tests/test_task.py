@@ -350,7 +350,6 @@ def test_audit_all(tmpdir):
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
 
 
-@pytest.mark.skipif(sys.platform.startswith("win"), "skip shell tasks for windows")
 def test_shell_cmd(tmpdir):
     cmd = ["echo", "hail", "pydra"]
 
