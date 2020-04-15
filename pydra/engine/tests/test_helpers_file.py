@@ -1,4 +1,4 @@
-import os, sys
+import os
 import time
 import warnings
 import pytest
@@ -6,7 +6,6 @@ from pathlib import Path
 
 from ..helpers_file import (
     split_filename,
-    fname_presuffix,
     copyfile,
     copyfiles,
     on_cifs,
@@ -36,18 +35,6 @@ def _ignore_atime(stat):
 def test_split_filename(filename, split):
     res = split_filename(filename)
     assert res == split
-
-
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows drive not known in advance",)
-def test_fname_presuffix():
-    fname = "foo.nii"
-    pth = fname_presuffix(fname, "pre_", "_post", "/tmp")
-    assert pth == str(Path("/tmp/pre_foo_post.nii"))
-    fname += ".gz"
-    pth = fname_presuffix(fname, "pre_", "_post", "/tmp")
-    assert pth == str(Path("/tmp/pre_foo_post.nii.gz"))
-    pth = fname_presuffix(fname, "pre_", "_post", "/tmp", use_ext=False)
-    assert pth == str(Path("/tmp/pre_foo_post"))
 
 
 @pytest.fixture()

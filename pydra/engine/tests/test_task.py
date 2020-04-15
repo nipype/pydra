@@ -350,6 +350,7 @@ def test_audit_all(tmpdir):
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
 
 
+@no_win
 def test_shell_cmd(tmpdir):
     cmd = ["echo", "hail", "pydra"]
 
