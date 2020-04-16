@@ -17,4 +17,5 @@ def test_boutiques():
     btask = BoshTask(name="NA", zenodo="zenodo.1482743")
     btask.inputs.infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
     btask.inputs.maskfile = "test_brain.nii.gz"
-    btask()
+    res = btask()
+    # breakpoint()

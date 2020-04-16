@@ -311,9 +311,8 @@ class ShellOutSpec(BaseSpec):
                 if fld.type is File:
                     # assuming that field should have either default or metadata, but not both
                     if (
-                        not (fld.default is None or fld.default == attr.NOTHING)
-                        and fld.metadata
-                    ):
+                        fld.default is None or fld.default == attr.NOTHING
+                    ) and not fld.metadata:  # TODO: is it right?
                         raise Exception("File has to have default value or metadata")
                     elif not fld.default == attr.NOTHING:
                         additional_out[fld.name] = self._field_defaultvalue(

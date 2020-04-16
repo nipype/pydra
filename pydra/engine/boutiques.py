@@ -78,6 +78,7 @@ class BoshTask(ShellCommandTask):
         if output_spec is None:
             output_spec = self._prepare_output_spec()
         self.output_spec = output_spec
+        self.bindings = []
 
         super(BoshTask, self).__init__(
             name=name,
@@ -146,7 +147,10 @@ class BoshTask(ShellCommandTask):
                 "help_string": output["description"],
                 "mandatory": not output["optional"],
             }
-            fields.append((name, File, mdata))
+            # TODO NOW: temp. default value
+            fields.append(
+                (name, attr.ib(type=File, default="test_brain.nii.gz", metadata=mdata))
+            )
 
         spec = SpecInfo(name="Outputs", fields=fields, bases=(ShellOutSpec,))
         return spec
@@ -154,7 +158,9 @@ class BoshTask(ShellCommandTask):
     def _command_args_single(self, state_ind, ind=None):
         """Get command line arguments for a single state"""
         input_filepath = self._input_file(state_ind=state_ind, ind=ind)
-        cmd_list = self.inputs.executable + [input_filepath] + self.inputs.args
+        cmd_list = (
+            self.inputs.executable + [input_filepath] + self.inputs.args + self.bindings
+        )
         return cmd_list
 
     def _input_file(self, state_ind, ind=None):
@@ -166,10 +172,12 @@ class BoshTask(ShellCommandTask):
                 value = getattr(self.inputs, f.name)[state_ind[f"{self.name}.{f.name}"]]
             else:
                 value = getattr(self.inputs, f.name)
-            if is_local_file(f):
-                value = str(value)
             # adding to the json file if specified by the user
             if value is not attr.NOTHING and value != "NOTHING":
+                if is_local_file(f):
+                    self.bindings.extend(["-v", f"{value.parent}:{value.parent}:ro"])
+                    value = str(value)
+
                 input_json[f.name] = value
 
         filename = self.cache_dir / f"{self.name}-{ind}.json"
