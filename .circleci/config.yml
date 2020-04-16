@@ -49,7 +49,7 @@ jobs:
           command: pip install --no-cache-dir -r docs/requirements.txt
       - run:
           name: Build only this commit
-          command: make -C docs SPHINXOPTS="-W" BUILDDIR="_build/no_version_html" html
+          command: make -C docs SPHINXOPTS="-W" BUILDDIR="_build/no_version_html" SPHINX_APIDOC_OPTIONS="members,undoc-members,show-inheritance,noindex" html
       - store_artifacts:
           path: ./docs/_build/no_version_html
       - run:
