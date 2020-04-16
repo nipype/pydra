@@ -5,7 +5,6 @@ Library API (application programmer interface)
    :members:
    :undoc-members:
    :show-inheritance:
-   :noindex:
 
 Subpackages
 -----------
