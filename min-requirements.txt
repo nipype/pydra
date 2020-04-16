@@ -2,4 +2,4 @@
 attrs
 cloudpickle == 0.8.0
 filelock == 3.0.0
-etelemetry
+etelemetry == 0.2.0
