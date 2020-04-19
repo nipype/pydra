@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import platform
 
 import pytest
 import cloudpickle as cp
@@ -170,10 +171,14 @@ def test_get_available_cpus():
         import psutil
 
         has_psutil = True
-        assert get_available_cpus() == len(psutil.Process().cpu_affinity())
     except ImportError:
         has_psutil = False
+
     if hasattr(os, "sched_getaffinity"):
         assert get_available_cpus() == len(os.sched_getaffinity(0))
-    elif not has_psutil:
+
+    if has_psutil and platform.system().lower() != "darwin":
+        assert get_available_cpus() == len(psutil.Process().cpu_affinity())
+
+    if platform.system().lower() == "darwin":
         assert get_available_cpus() == os.cpu_count()
