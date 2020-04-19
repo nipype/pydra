@@ -135,7 +135,9 @@ def test_hash_value_dir(tmpdir):
     with open(file_2, "w") as f:
         f.write("hi")
 
-    assert hash_value(tmpdir, tp=Directory) == hash_value([file_1, file_2], tp=File)
+    assert sorted(hash_value(tmpdir, tp=Directory)) == sorted(
+        hash_value([file_1, file_2], tp=File)
+    )
     assert hash_value(tmpdir, tp=Directory) == helpers_file.hash_dir(tmpdir)
 
 
