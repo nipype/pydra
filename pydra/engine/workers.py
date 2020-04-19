@@ -7,7 +7,7 @@ from pathlib import Path
 
 import concurrent.futures as cf
 
-from .helpers import create_pyscript, read_and_display_async, save
+from .helpers import create_pyscript, get_available_cpus, read_and_display_async, save
 
 import logging
 
@@ -164,7 +164,7 @@ class ConcurrentFuturesWorker(Worker):
     def __init__(self, n_procs=None):
         """Initialize Worker."""
         super(ConcurrentFuturesWorker, self).__init__()
-        self.n_procs = n_procs
+        self.n_procs = get_available_cpus() if n_procs is None else n_procs
         # added cpu_count to verify, remove once confident and let PPE handle
         self.pool = cf.ProcessPoolExecutor(self.n_procs)
         # self.loop = asyncio.get_event_loop()
