@@ -1,10 +1,17 @@
+import os
 from pathlib import Path
 
 import pytest
 import cloudpickle as cp
 
 from .utils import multiply
-from ..helpers import hash_value, hash_function, save, create_pyscript
+from ..helpers import (
+    hash_value,
+    hash_function,
+    get_available_cpus,
+    save,
+    create_pyscript,
+)
 from .. import helpers_file
 from ..specs import File, Directory
 
@@ -155,3 +162,18 @@ def test_hash_value_nested(tmpdir):
         [file_1, [file_2, file_3]], tp=File
     )
     assert hash_value(tmpdir, tp=Directory) == helpers_file.hash_dir(tmpdir)
+
+
+def test_get_available_cpus():
+    assert get_available_cpus() > 0
+    try:
+        import psutil
+
+        has_psutil = True
+        assert get_available_cpus() == len(psutil.Process().cpu_affinity())
+    except ImportError:
+        has_psutil = False
+    if hasattr(os, "sched_getaffinity"):
+        assert get_available_cpus() == len(os.sched_getaffinity(0))
+    elif not has_psutil:
+        assert get_available_cpus() == os.cpu_count()
