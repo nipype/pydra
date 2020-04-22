@@ -7,7 +7,7 @@ from ..core import Workflow
 from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..boutiques import BoshTask
-from .utils import result_no_submitter, result_submitter
+from .utils import result_no_submitter, result_submitter, no_win
 
 need_bosh_docker = pytest.mark.skipif(
     shutil.which("docker") is None
@@ -23,6 +23,7 @@ else:
 Infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
 
 
+@no_win
 @need_bosh_docker
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
@@ -46,6 +47,7 @@ def test_boutiques_1(maskfile, plugin, results_function):
     assert not res.output.out_outskin_off.exists()
 
 
+@no_win
 @need_bosh_docker
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
@@ -76,6 +78,7 @@ def test_boutiques_wf_1(maskfile, plugin):
     assert res.output.outfile.exists()
 
 
+@no_win
 @need_bosh_docker
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]

@@ -1,12 +1,25 @@
 # Tasks for testing
 import time
+import sys, shutil
 import typing as tp
 from pathlib import Path
+import subprocess as sp
+import pytest
 
 from ..core import Workflow
 from ..submitter import Submitter
 from ... import mark
 from ..specs import File
+
+
+need_docker = pytest.mark.skipif(
+    shutil.which("docker") is None or sp.call(["docker", "info"]),
+    reason="no docker within the container",
+)
+no_win = pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="docker command not adjusted for windows docker",
+)
 
 
 def result_no_submitter(shell_task, plugin=None):

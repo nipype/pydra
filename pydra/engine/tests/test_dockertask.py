@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import os, sys, shutil
-import subprocess as sp
+import os, shutil
 import pytest
 import attr
 
@@ -9,20 +8,12 @@ from ..task import DockerTask, ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec
+from .utils import no_win, need_docker
 
 if bool(shutil.which("sbatch")):
     Plugins = ["cf", "slurm"]
 else:
     Plugins = ["cf"]
-
-need_docker = pytest.mark.skipif(
-    shutil.which("docker") is None or sp.call(["docker", "info"]),
-    reason="no docker within the container",
-)
-no_win = pytest.mark.skipif(
-    sys.platform.startswith("win"),
-    reason="docker command not adjusted for windows docker",
-)
 
 
 @no_win
