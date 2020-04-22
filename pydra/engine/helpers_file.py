@@ -66,47 +66,6 @@ def split_filename(fname):
     return pth, fname, ext
 
 
-def fname_presuffix(fname, prefix="", suffix="", newpath=None, use_ext=True):
-    """
-    Manipulate path and name of input filename.
-
-    Parameters
-    ----------
-    fname : :obj:`str`
-        A filename (may or may not include path)
-    prefix : :obj:`str`
-        Characters to prepend to the filename
-    suffix : :obj:`str`
-        Characters to append to the filename
-    newpath : :obj:`str`
-        Path to replace the path of the input fname
-    use_ext : :obj:`bool`
-        If True (default), appends the extension of the original file
-        to the output name.
-
-    Return
-    ------
-    path : :obj:`str`
-        Absolute path of the modified filename
-
-    Examples
-    --------
-    >>> from pydra.engine.helpers_file import fname_presuffix
-    >>> fname = 'foo.nii.gz'
-    >>> fname_presuffix(fname,'pre','post','/tmp')
-    '/tmp/prefoopost.nii.gz'
-
-    """
-    pth, fname, ext = split_filename(fname)
-    if not use_ext:
-        ext = ""
-
-    # No need for isdefined: bool(Undefined) evaluates to False
-    if newpath:
-        pth = op.abspath(newpath)
-    return op.join(pth, prefix + fname + suffix + ext)
-
-
 def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
     """Compute hash of a file using 'crypto' module."""
     from .specs import LazyField
@@ -402,7 +361,7 @@ def get_related_files(filename, include_this_file=True):
         if this_type in type_set:
             for related_type in type_set:
                 if include_this_file or related_type != this_type:
-                    related_files.append(op.join(path, name + related_type))
+                    related_files.append(Path(path) / (name + related_type))
     if not len(related_files):
         related_files = [filename]
     return related_files

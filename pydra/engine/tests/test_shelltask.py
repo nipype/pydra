@@ -2,7 +2,7 @@
 
 import attr
 import typing as ty
-import os, shutil
+import os, sys, shutil
 import pytest
 from pathlib import Path
 
@@ -12,6 +12,10 @@ from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
 from .utils import result_no_submitter, result_submitter
+
+
+if sys.platform.startswith("win"):
+    pytest.skip("SLURM not available in windows", allow_module_level=True)
 
 if bool(shutil.which("sbatch")):
     Plugins = ["cf", "slurm"]
@@ -28,7 +32,7 @@ def test_shell_cmd_1(plugin, results_function):
     assert shelly.cmdline == " ".join(cmd)
 
     res = results_function(shelly, plugin=plugin)
-    assert res.output.stdout == str(shelly.output_dir) + "\n"
+    assert Path(res.output.stdout.rstrip()) == shelly.output_dir
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 
@@ -44,7 +48,7 @@ def test_shell_cmd_1_strip(plugin, results_function):
     assert shelly.cmdline == " ".join(cmd)
 
     res = results_function(shelly, plugin)
-    assert res.output.stdout == str(shelly.output_dir)
+    assert Path(res.output.stdout) == Path(shelly.output_dir)
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 
@@ -111,7 +115,8 @@ def test_shell_cmd_3(plugin):
     shelly = ShellCommandTask(name="shelly", executable=cmd).split("executable")
     assert shelly.cmdline == ["pwd", "whoami"]
     res = shelly(plugin=plugin)
-    assert res[0].output.stdout == f"{str(shelly.output_dir[0])}\n"
+    assert Path(res[0].output.stdout.rstrip()) == shelly.output_dir[0]
+
     if "USER" in os.environ:
         assert res[1].output.stdout == f"{os.environ['USER']}\n"
     else:

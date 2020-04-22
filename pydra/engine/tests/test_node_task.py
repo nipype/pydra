@@ -543,6 +543,8 @@ def test_task_nostate_cachedir_relativepath(tmpdir, plugin):
     """ task with provided cache_dir as relative path"""
     cwd = tmpdir.chdir()
     cache_dir = "test_task_nostate"
+    tmpdir.mkdir(cache_dir)
+
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None

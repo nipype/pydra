@@ -1,5 +1,5 @@
-
 # Pydra <img src="pydra_logo.png" width="50">
+<!--(https://raw.githubusercontent.com/nipype/pydra/master/pydra_logo.jpg)-->
 
 A simple dataflow engine with scalable semantics.
 

@@ -1986,6 +1986,7 @@ def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
     """ wf with provided cache_dir as relative path"""
     tmpdir.chdir()
     cache_dir = "test_wf_cache_2"
+    tmpdir.mkdir(cache_dir)
 
     wf = Workflow(name="wf_2", input_spec=["x", "y"], cache_dir=cache_dir)
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))

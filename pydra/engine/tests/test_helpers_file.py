@@ -6,7 +6,6 @@ from pathlib import Path
 
 from ..helpers_file import (
     split_filename,
-    fname_presuffix,
     copyfile,
     copyfiles,
     on_cifs,
@@ -38,17 +37,6 @@ def test_split_filename(filename, split):
     assert res == split
 
 
-def test_fname_presuffix():
-    fname = "foo.nii"
-    pth = fname_presuffix(fname, "pre_", "_post", "/tmp")
-    assert pth == "/tmp/pre_foo_post.nii"
-    fname += ".gz"
-    pth = fname_presuffix(fname, "pre_", "_post", "/tmp")
-    assert pth == "/tmp/pre_foo_post.nii.gz"
-    pth = fname_presuffix(fname, "pre_", "_post", "/tmp", use_ext=False)
-    assert pth == "/tmp/pre_foo_post"
-
-
 @pytest.fixture()
 def _temp_analyze_files(tmpdir):
     """Generate temporary analyze file pair."""
@@ -56,7 +44,7 @@ def _temp_analyze_files(tmpdir):
     orig_hdr = tmpdir.join("orig.hdr")
     orig_img.open("w+").close()
     orig_hdr.open("w+").close()
-    return str(orig_img), str(orig_hdr)
+    return Path(orig_img), Path(orig_hdr)
 
 
 @pytest.fixture()
@@ -66,7 +54,7 @@ def _temp_analyze_files_prime(tmpdir):
     orig_hdr = tmpdir.join("orig_prime.hdr")
     orig_img.open("w+").close()
     orig_hdr.open("w+").close()
-    return orig_img.strpath, orig_hdr.strpath
+    return Path(orig_img.strpath), Path(orig_hdr.strpath)
 
 
 def test_copyfile(_temp_analyze_files):
@@ -213,11 +201,19 @@ def test_ensure_list(filename, expected):
 @pytest.mark.parametrize(
     "file, length, expected_files",
     [
-        ("/path/test.img", 3, ["/path/test.hdr", "/path/test.img", "/path/test.mat"]),
-        ("/path/test.hdr", 3, ["/path/test.hdr", "/path/test.img", "/path/test.mat"]),
-        ("/path/test.BRIK", 2, ["/path/test.BRIK", "/path/test.HEAD"]),
-        ("/path/test.HEAD", 2, ["/path/test.BRIK", "/path/test.HEAD"]),
-        ("/path/foo.nii", 2, ["/path/foo.nii", "/path/foo.mat"]),
+        (
+            "/path/test.img",
+            3,
+            [Path("/path/test.hdr"), Path("/path/test.img"), Path("/path/test.mat")],
+        ),
+        (
+            "/path/test.hdr",
+            3,
+            [Path("/path/test.hdr"), Path("/path/test.img"), Path("/path/test.mat")],
+        ),
+        ("/path/test.BRIK", 2, [Path("/path/test.BRIK"), Path("/path/test.HEAD")]),
+        ("/path/test.HEAD", 2, [Path("/path/test.BRIK"), Path("/path/test.HEAD")]),
+        ("/path/foo.nii", 2, [Path("/path/foo.nii"), Path("/path/foo.mat")]),
     ],
 )
 def test_related_files(file, length, expected_files):
