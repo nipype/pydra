@@ -359,9 +359,23 @@ class ShellOutSpec(BaseSpec):
         if "value" in fld.metadata:
             return output_dir / fld.metadata["value"]
         elif "output_file_template" in fld.metadata:
-            return output_dir / fld.metadata["output_file_template"].format(
-                **inputs.__dict__
+            sfx_tmpl = (output_dir / fld.metadata["output_file_template"]).suffixes
+            if sfx_tmpl:
+                # removing suffix from input field if template has it's own suffix
+                inputs_templ = {
+                    k: v.split(".")[0]
+                    for k, v in inputs.__dict__.items()
+                    if isinstance(v, str)
+                }
+            else:
+                inputs_templ = {
+                    k: v for k, v in inputs.__dict__.items() if isinstance(v, str)
+                }
+            out_path = output_dir / fld.metadata["output_file_template"].format(
+                **inputs_templ
             )
+            return out_path
+
         elif "callable" in fld.metadata:
             return fld.metadata["callable"](fld.name, output_dir)
         else:

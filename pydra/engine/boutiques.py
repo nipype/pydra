@@ -4,6 +4,7 @@ import attr
 import subprocess as sp
 import os
 from pathlib import Path
+from functools import reduce
 
 from ..utils.messenger import AuditFlag
 from ..engine import ShellCommandTask
@@ -110,6 +111,7 @@ class BoshTask(ShellCommandTask):
     def _prepare_input_spec(self):
         """ creating input spec from the zenodo file"""
         binputs = self.bosh_spec["inputs"]
+        self._input_spec_keys = {}
         fields = []
         for input in binputs:
             name = input["id"]
@@ -133,6 +135,7 @@ class BoshTask(ShellCommandTask):
                 "argstr": input.get("command-line-flag", None),
             }
             fields.append((name, tp, mdata))
+            self._input_spec_keys[input["value-key"]] = "{" + f"{name}" + "}"
 
         spec = SpecInfo(name="Inputs", fields=fields, bases=(ShellSpec,))
         return spec
@@ -143,14 +146,17 @@ class BoshTask(ShellCommandTask):
         fields = []
         for output in boutputs:
             name = output["id"]
+            path_template = reduce(
+                lambda s, r: s.replace(*r),
+                self._input_spec_keys.items(),
+                output["path-template"],
+            )
             mdata = {
                 "help_string": output["description"],
                 "mandatory": not output["optional"],
+                "output_file_template": path_template,
             }
-            # TODO NOW: temp. default value
-            fields.append(
-                (name, attr.ib(type=File, default="test_brain.nii.gz", metadata=mdata))
-            )
+            fields.append((name, attr.ib(type=File, metadata=mdata)))
 
         spec = SpecInfo(name="Outputs", fields=fields, bases=(ShellOutSpec,))
         return spec
