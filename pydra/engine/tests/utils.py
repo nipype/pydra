@@ -4,8 +4,23 @@ import typing as tp
 from pathlib import Path
 
 from ..core import Workflow
+from ..submitter import Submitter
 from ... import mark
 from ..specs import File
+
+
+def result_no_submitter(shell_task, plugin=None):
+    """ helper function to return result when running without submitter """
+    return shell_task()
+
+
+def result_submitter(shell_task, plugin):
+    """ helper function to return result when running with submitter
+        with specific plugin
+    """
+    with Submitter(plugin=plugin) as sub:
+        shell_task(submitter=sub)
+    return shell_task.result()
 
 
 @mark.task

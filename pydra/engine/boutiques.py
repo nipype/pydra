@@ -130,7 +130,7 @@ class BoshTask(ShellCommandTask):
                 tp = ty.List[tp]
 
             mdata = {
-                "help_string": input["description"],
+                "help_string": input.get("description", None) or input["name"],
                 "mandatory": not input["optional"],
                 "argstr": input.get("command-line-flag", None),
             }
@@ -152,7 +152,7 @@ class BoshTask(ShellCommandTask):
                 output["path-template"],
             )
             mdata = {
-                "help_string": output["description"],
+                "help_string": output.get("description", None) or output["name"],
                 "mandatory": not output["optional"],
                 "output_file_template": path_template,
             }
@@ -181,6 +181,7 @@ class BoshTask(ShellCommandTask):
             # adding to the json file if specified by the user
             if value is not attr.NOTHING and value != "NOTHING":
                 if is_local_file(f):
+                    value = Path(value)
                     self.bindings.extend(["-v", f"{value.parent}:{value.parent}:ro"])
                     value = str(value)
 
