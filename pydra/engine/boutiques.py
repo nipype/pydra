@@ -104,8 +104,11 @@ class BoshTask(ShellCommandTask):
             / ".cache/boutiques/production"
             / (zenodo.replace(".", "-") + ".json")
         )
+        for i in range(3):
+            if not spec_file.exists():
+                sp.run(["bosh", "pull", zenodo])
         if not spec_file.exists():
-            sp.run(["bosh", "pull", zenodo])
+            raise Exception(f"can't pull zenodo file {zenodo}")
         return spec_file
 
     def _prepare_input_spec(self):
