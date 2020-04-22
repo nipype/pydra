@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from ..core import Workflow
+from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..boutiques import BoshTask
 from .utils import result_no_submitter, result_submitter
@@ -81,7 +82,7 @@ def test_boutiques_wf_1(maskfile, plugin):
 )
 @pytest.mark.parametrize("plugin", Plugins)
 def test_boutiques_wf_2(maskfile, plugin):
-    """ wf with two tasks that run fsl.bet and fsl.stats using BoshTask"""
+    """ wf with two BoshTasks (fsl.bet and fsl.stats) and one ShellTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
     wf.inputs.maskfile = maskfile
     wf.inputs.infile = Infile
@@ -102,9 +103,14 @@ def test_boutiques_wf_2(maskfile, plugin):
             v=True,
         )
     )
+    wf.add(ShellCommandTask(name="cat", executable="cat", args=wf.stat.lzout.output))
 
     wf.set_output(
-        [("outfile_bet", wf.bet.lzout.outfile), ("out_stat", wf.stat.lzout.output)]
+        [
+            ("outfile_bet", wf.bet.lzout.outfile),
+            ("out_stat", wf.stat.lzout.output),
+            ("out", wf.cat.lzout.stdout),
+        ]
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -116,3 +122,6 @@ def test_boutiques_wf_2(maskfile, plugin):
 
     assert res.output.out_stat.name == "output.txt"
     assert res.output.out_stat.exists()
+
+    assert int(res.output.out.rstrip().split()[0]) == 11534336
+    assert float(res.output.out.rstrip().split()[1]) == 11534336.0
