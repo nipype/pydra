@@ -70,13 +70,17 @@ class BoshTask(ShellCommandTask):
         elif zenodo:
             bosh_file = self._download_spec(zenodo)
 
-        try:
-            with bosh_file.open() as f:
-                self.bosh_spec = json.load(f)
-        except json.decoder.JSONDecodeError:
-            with bosh_file.open() as f:
-                print(f.read())
-                raise
+        # retry logic - an error on travis is raised randomly, not able to reproduce
+        tries = 0
+        while tries < 3:
+            try:
+                with bosh_file.open() as f:
+                    self.bosh_spec = json.load(f)
+                break
+            except json.decoder.JSONDecodeError:
+                tries += 1
+                if tries == 3:
+                    raise
 
         if input_spec is None:
             input_spec = self._prepare_input_spec()
