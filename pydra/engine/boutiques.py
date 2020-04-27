@@ -71,15 +71,15 @@ class BoshTask(ShellCommandTask):
             bosh_file = self._download_spec(zenodo)
 
         # retry logic - an error on travis is raised randomly, not able to reproduce
-        tries = 0
-        while tries < 3:
+        tries, tries_max = 7
+        while tries < tries_max:
             try:
                 with bosh_file.open() as f:
                     self.bosh_spec = json.load(f)
                 break
             except json.decoder.JSONDecodeError:
                 tries += 1
-                if tries == 3:
+                if tries == tries_max:
                     raise
 
         if input_spec is None:
