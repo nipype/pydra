@@ -71,7 +71,7 @@ class BoshTask(ShellCommandTask):
             bosh_file = self._download_spec(zenodo)
 
         # retry logic - an error on travis is raised randomly, not able to reproduce
-        tries, tries_max = 7
+        tries, tries_max = 0, 7
         while tries < tries_max:
             try:
                 with bosh_file.open() as f:
