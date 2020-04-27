@@ -71,7 +71,11 @@ class BoshTask(ShellCommandTask):
             bosh_file = self._download_spec(zenodo)
 
         with bosh_file.open() as f:
-            self.bosh_spec = json.load(f)
+            try:
+                self.bosh_spec = json.load(f)
+            except json.decoder.JSONDecodeError:
+                print(f.read())
+                raise
 
         if input_spec is None:
             input_spec = self._prepare_input_spec()
