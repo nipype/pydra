@@ -217,18 +217,3 @@ class BoshTask(ShellCommandTask):
             json.dump(input_json, jsonfile)
 
         return str(filename)
-
-    def _run_task(self):
-        self.output_ = None
-        args = self.command_args
-        if args:
-            # removing empty strings
-            args = [str(el) for el in args if el not in ["", " "]]
-            keys = ["return_code", "stdout", "stderr"]
-            values = execute(args, strip=self.strip)
-            self.output_ = dict(zip(keys, values))
-            if self.output_["return_code"]:
-                if self.output_["stderr"]:
-                    raise RuntimeError(self.output_["stderr"])
-                else:
-                    raise RuntimeError(self.output_["stdout"])
