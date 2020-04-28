@@ -32,7 +32,7 @@ Infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
 @pytest.mark.parametrize("plugin", Plugins)
 def test_boutiques_1(maskfile, plugin, results_function):
     """ simple task to run fsl.bet using BoshTask"""
-    btask = BoshTask(name="NA", zenodo="zenodo.1482743")
+    btask = BoshTask(name="NA", zenodo_id="1482743")
     btask.inputs.infile = Infile
     btask.inputs.maskfile = maskfile
     res = results_function(btask, plugin)
@@ -62,7 +62,7 @@ def test_boutiques_wf_1(maskfile, plugin):
     wf.add(
         BoshTask(
             name="bet",
-            zenodo="zenodo.1482743",
+            zenodo_id="1482743",
             infile=wf.lzin.infile,
             maskfile=wf.lzin.maskfile,
         )
@@ -93,17 +93,14 @@ def test_boutiques_wf_2(maskfile, plugin):
     wf.add(
         BoshTask(
             name="bet",
-            zenodo="zenodo.1482743",
+            zenodo_id="1482743",
             infile=wf.lzin.infile,
             maskfile=wf.lzin.maskfile,
         )
     )
     wf.add(
         BoshTask(
-            name="stat",
-            zenodo="zenodo.3240521",
-            input_file=wf.bet.lzout.outfile,
-            v=True,
+            name="stat", zenodo_id="3240521", input_file=wf.bet.lzout.outfile, v=True
         )
     )
     wf.add(ShellCommandTask(name="cat", executable="cat", args=wf.stat.lzout.output))

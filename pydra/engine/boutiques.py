@@ -1,6 +1,7 @@
 import typing as ty
 import json
 import attr
+from urllib.request import urlretrieve
 import subprocess as sp
 import os
 from pathlib import Path
@@ -25,7 +26,7 @@ class BoshTask(ShellCommandTask):
 
     def __init__(
         self,
-        zenodo=None,
+        zenodo_id=None,
         bosh_file=None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
@@ -43,7 +44,7 @@ class BoshTask(ShellCommandTask):
 
         Parameters
         ----------
-        zenodo: :obj: str
+        zenodo_id: :obj: str
             Zenodo ID
         bosh_file : : str
             json file with the boutiques descriptors
@@ -65,16 +66,19 @@ class BoshTask(ShellCommandTask):
             TODO
 
         """
-        if (bosh_file and zenodo) or not (bosh_file or zenodo):
-            raise Exception("either bosh or zenodo has to be specified")
-        elif zenodo:
-            bosh_file = self._download_spec(zenodo)
+        self.cache_dir = cache_dir
+        if (bosh_file and zenodo_id) or not (bosh_file or zenodo_id):
+            raise Exception("either bosh or zenodo_id has to be specified")
+        elif zenodo_id:
+            self.bosh_file = self._download_spec(zenodo_id)
+        else:
+            self.bosh_file = bosh_file
 
         # retry logic - an error on travis is raised randomly, not able to reproduce
         tries, tries_max = 0, 7
         while tries < tries_max:
             try:
-                with bosh_file.open() as f:
+                with self.bosh_file.open() as f:
                     self.bosh_spec = json.load(f)
                 break
             except json.decoder.JSONDecodeError:
@@ -88,37 +92,42 @@ class BoshTask(ShellCommandTask):
         if output_spec is None:
             output_spec = self._prepare_output_spec()
         self.output_spec = output_spec
-        self.bindings = []
+        self.bindings = ["-v", f"{self.bosh_file.parent}:{self.bosh_file.parent}:ro"]
 
         super(BoshTask, self).__init__(
             name=name,
             input_spec=input_spec,
             output_spec=output_spec,
-            executable=["bosh", "exec", "launch", str(bosh_file)],
+            executable=["bosh", "exec", "launch"],
             args=["-s"],
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
-            cache_dir=cache_dir,
+            cache_dir=self.cache_dir,
             strip=strip,
             rerun=rerun,
             **kwargs,
         )
         self.strip = strip
 
-    def _download_spec(self, zenodo):
-        """ usind bosh pull to download the zenodo file"""
-        spec_file = (
-            Path(os.environ["HOME"])
-            / ".cache/boutiques/production"
-            / (zenodo.replace(".", "-") + ".json")
-        )
-        for i in range(3):
-            if not spec_file.exists():
-                sp.run(["bosh", "pull", zenodo])
-        if not spec_file.exists():
-            raise Exception(f"can't pull zenodo file {zenodo}")
-        return spec_file
+    def _download_spec(self, zenodo_id):
+        """
+        usind boutiques Searcher to find url of zenodo file for a specific id,
+        and download the file to self.cache_dir
+        """
+        from boutiques.searcher import Searcher
+
+        searcher = Searcher(zenodo_id, exact_match=True)
+        hits = searcher.zenodo_search().json()["hits"]["hits"]
+        if len(hits) == 0:
+            raise Exception(f"can't find zenodo spec for {zenodo_id}")
+        elif len(hits) > 1:
+            raise Exception(f"too many hits for {zenodo_id}")
+        else:
+            zenodo_url = hits[0]["files"][0]["links"]["self"]
+            zenodo_file = self.cache_dir / f"zenodo.{zenodo_id}.json"
+            urlretrieve(zenodo_url, zenodo_file)
+            return zenodo_file
 
     def _prepare_input_spec(self):
         """ creating input spec from the zenodo file"""
@@ -175,13 +184,17 @@ class BoshTask(ShellCommandTask):
 
     def _command_args_single(self, state_ind, ind=None):
         """Get command line arguments for a single state"""
-        input_filepath = self._input_file(state_ind=state_ind, ind=ind)
+        input_filepath = self._bosh_invocation_file(state_ind=state_ind, ind=ind)
         cmd_list = (
-            self.inputs.executable + [input_filepath] + self.inputs.args + self.bindings
+            self.inputs.executable
+            + [str(self.bosh_file), input_filepath]
+            + self.inputs.args
+            + self.bindings
         )
         return cmd_list
 
-    def _input_file(self, state_ind, ind=None):
+    def _bosh_invocation_file(self, state_ind, ind=None):
+        """creating bosh invocation file - json file with inputs values"""
         input_json = {}
         for f in attr_fields(self.inputs):
             if f.name in ["executable", "args"]:
