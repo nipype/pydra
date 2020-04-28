@@ -49,6 +49,52 @@ def test_boutiques_1(maskfile, plugin, results_function):
 
 @no_win
 @need_bosh_docker
+def test_boutiques_spec_1():
+    """ testing spec: providing input/output fields names"""
+    btask = BoshTask(
+        name="NA",
+        zenodo_id="1482743",
+        infile=Infile,
+        maskfile="test_brain.nii.gz",
+        input_spec_names=["infile", "maskfile"],
+        output_spec_names=["outfile", "out_outskin_off"],
+    )
+
+    assert len(btask.input_spec.fields) == 2
+    assert btask.input_spec.fields[0][0] == "infile"
+    assert btask.input_spec.fields[1][0] == "maskfile"
+    assert hasattr(btask.inputs, "infile")
+    assert hasattr(btask.inputs, "maskfile")
+
+    assert len(btask.output_spec.fields) == 2
+    assert btask.output_spec.fields[0][0] == "outfile"
+    assert btask.output_spec.fields[1][0] == "out_outskin_off"
+
+
+@no_win
+@need_bosh_docker
+def test_boutiques_spec_2():
+    """ testing spec: providing partial input/output fields names"""
+    btask = BoshTask(
+        name="NA",
+        zenodo_id="1482743",
+        infile=Infile,
+        maskfile="test_brain.nii.gz",
+        input_spec_names=["infile"],
+        output_spec_names=[],
+    )
+
+    assert len(btask.input_spec.fields) == 1
+    assert btask.input_spec.fields[0][0] == "infile"
+    assert hasattr(btask.inputs, "infile")
+    # input doesn't see maskfile
+    assert not hasattr(btask.inputs, "maskfile")
+
+    assert len(btask.output_spec.fields) == 0
+
+
+@no_win
+@need_bosh_docker
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )

@@ -2,23 +2,13 @@ import typing as ty
 import json
 import attr
 from urllib.request import urlretrieve
-import subprocess as sp
-import os
 from pathlib import Path
 from functools import reduce
 
 from ..utils.messenger import AuditFlag
 from ..engine import ShellCommandTask
-from ..engine.specs import (
-    SpecInfo,
-    ShellSpec,
-    ShellOutSpec,
-    File,
-    Directory,
-    attr_fields,
-)
-from .helpers import ensure_list, execute
-from .helpers_file import template_update, is_local_file
+from ..engine.specs import SpecInfo, ShellSpec, ShellOutSpec, File, attr_fields
+from .helpers_file import is_local_file
 
 
 class BoshTask(ShellCommandTask):
@@ -30,11 +20,11 @@ class BoshTask(ShellCommandTask):
         bosh_file=None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
-        input_spec: ty.Optional[SpecInfo] = None,
+        input_spec_names: ty.Optional[ty.List] = None,
         messenger_args=None,
         messengers=None,
         name=None,
-        output_spec: ty.Optional[SpecInfo] = None,
+        output_spec_names: ty.Optional[ty.List] = None,
         rerun=False,
         strip=False,
         **kwargs,
@@ -52,16 +42,16 @@ class BoshTask(ShellCommandTask):
             Auditing configuration
         cache_dir : :obj:`os.pathlike`
             Cache directory
-        input_spec : :obj:`pydra.engine.specs.SpecInfo`
-            Specification of inputs.
+        input_spec_names : :obj: list
+            Input names for input_spec.
         messenger_args :
             TODO
         messengers :
             TODO
         name : :obj:`str`
             Name of this task.
-        output_spec : :obj:`pydra.engine.specs.BaseSpec`
-            Specification of inputs.
+        output_spec_names : :obj: list
+            Output names for output_spec.
         strip : :obj:`bool`
             TODO
 
@@ -86,18 +76,14 @@ class BoshTask(ShellCommandTask):
                 if tries == tries_max:
                     raise
 
-        if input_spec is None:
-            input_spec = self._prepare_input_spec()
-        self.input_spec = input_spec
-        if output_spec is None:
-            output_spec = self._prepare_output_spec()
-        self.output_spec = output_spec
+        self.input_spec = self._prepare_input_spec(names_subset=input_spec_names)
+        self.output_spec = self._prepare_output_spec(names_subset=output_spec_names)
         self.bindings = ["-v", f"{self.bosh_file.parent}:{self.bosh_file.parent}:ro"]
 
         super(BoshTask, self).__init__(
             name=name,
-            input_spec=input_spec,
-            output_spec=output_spec,
+            input_spec=self.input_spec,
+            output_spec=self.output_spec,
             executable=["bosh", "exec", "launch"],
             args=["-s"],
             audit_flags=audit_flags,
@@ -129,13 +115,21 @@ class BoshTask(ShellCommandTask):
             urlretrieve(zenodo_url, zenodo_file)
             return zenodo_file
 
-    def _prepare_input_spec(self):
-        """ creating input spec from the zenodo file"""
+    def _prepare_input_spec(self, names_subset=None):
+        """ creating input spec from the zenodo file
+            if name_subset provided, only names from the subset will be used in the spec
+        """
         binputs = self.bosh_spec["inputs"]
         self._input_spec_keys = {}
         fields = []
         for input in binputs:
             name = input["id"]
+            if names_subset is None:
+                pass
+            elif name not in names_subset:
+                continue
+            else:
+                names_subset.remove(name)
             if input["type"] == "File":
                 tp = File
             elif input["type"] == "String":
@@ -157,16 +151,25 @@ class BoshTask(ShellCommandTask):
             }
             fields.append((name, tp, mdata))
             self._input_spec_keys[input["value-key"]] = "{" + f"{name}" + "}"
-
+        if names_subset:
+            raise RuntimeError(f"{names_subset} are not in the zenodo input spec")
         spec = SpecInfo(name="Inputs", fields=fields, bases=(ShellSpec,))
         return spec
 
-    def _prepare_output_spec(self):
-        """ creating output spec from the zenodo file"""
+    def _prepare_output_spec(self, names_subset=None):
+        """ creating output spec from the zenodo file
+            if name_subset provided, only names from the subset will be used in the spec
+        """
         boutputs = self.bosh_spec["output-files"]
         fields = []
         for output in boutputs:
             name = output["id"]
+            if names_subset is None:
+                pass
+            elif name not in names_subset:
+                continue
+            else:
+                names_subset.remove(name)
             path_template = reduce(
                 lambda s, r: s.replace(*r),
                 self._input_spec_keys.items(),
@@ -179,6 +182,8 @@ class BoshTask(ShellCommandTask):
             }
             fields.append((name, attr.ib(type=File, metadata=mdata)))
 
+        if names_subset:
+            raise RuntimeError(f"{names_subset} are not in the zenodo output spec")
         spec = SpecInfo(name="Outputs", fields=fields, bases=(ShellOutSpec,))
         return spec
 
