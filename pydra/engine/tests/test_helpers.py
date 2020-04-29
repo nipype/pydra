@@ -171,7 +171,9 @@ def test_hash_value_nested(tmpdir):
     assert orig_hash == test_sha.hexdigest()
     assert orig_hash == hash_value(tmpdir, tp=Directory)
 
-    nohidden_hash = helpers_file.hash_dir(tmpdir, ignore_hidden_dirs=True, ignore_hidden_files=True)
+    nohidden_hash = helpers_file.hash_dir(
+        tmpdir, ignore_hidden_dirs=True, ignore_hidden_files=True
+    )
     nohiddendirs_hash = helpers_file.hash_dir(tmpdir, ignore_hidden_dirs=True)
     nohiddenfiles_hash = helpers_file.hash_dir(tmpdir, ignore_hidden_files=True)
 
