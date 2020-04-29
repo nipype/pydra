@@ -87,27 +87,60 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
     return crypto_obj.hexdigest()
 
 
-def hash_dir(dirpath, raise_notfound=True):
+def hash_dir(
+    dirpath, ignore_hidden_files=False, ignore_hidden_dirs=False, raise_notfound=True
+):
+    """Compute hash of directory contents.
+
+    This function computes the hash of every file in directory `dirpath` and then
+    computes the hash of that list of hashes to return a single hash value. The
+    directory is traversed recursively.
+
+    Parameters
+    ----------
+    dirpath : :obj:`str`
+        Path to directory.
+    ignore_hidden_files : :obj:`bool`
+        If `True`, ignore filenames that begin with `.`.
+    ignore_hidden_dirs : :obj:`bool`
+        If `True`, ignore files in directories that begin with `.`.
+    raise_notfound : :obj:`bool`
+        If `True` and `dirpath` does not exist, raise `FileNotFound` exception. If
+        `False` and `dirpath` does not exist, return `None`.
+
+    Returns
+    -------
+    hash : :obj:`str`
+        Hash of the directory contents.
+    """
     from .specs import LazyField
 
     if dirpath is None or isinstance(dirpath, LazyField) or isinstance(dirpath, list):
         return None
     if not Path(dirpath).is_dir():
         if raise_notfound:
-            raise RuntimeError(f"Directory {dirpath} not found.")
+            raise FileNotFoundError(f"Directory {dirpath} not found.")
         return None
 
-    def search_dir(path):
-        path = Path(path)
-        file_list = []
-        for el in path.iterdir():
-            if el.is_file():
-                file_list.append(hash_file(el))
-            else:
-                file_list.append(search_dir(path / el))
-        return file_list
+    file_hashes = []
+    for dpath, dirnames, filenames in os.walk(dirpath):
+        # Sort in-place to guarantee order.
+        dirnames.sort()
+        filenames.sort()
+        dpath = Path(dpath)
+        if ignore_hidden_dirs and dpath.name.startswith(".") and str(dpath) != dirpath:
+            continue
+        for filename in filenames:
+            if ignore_hidden_files and filename.startswith("."):
+                continue
+            this_hash = hash_file(dpath / filename)
+            file_hashes.append(this_hash)
 
-    return search_dir(dirpath)
+    sha = sha256()
+    for h in file_hashes:
+        sha.update(h.encode())
+
+    return sha.hexdigest()
 
 
 def _parse_mount_table(exit_code, output):
