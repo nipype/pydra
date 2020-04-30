@@ -61,22 +61,11 @@ class BoshTask(ShellCommandTask):
             raise Exception("either bosh or zenodo_id has to be specified")
         elif zenodo_id:
             self.bosh_file = self._download_spec(zenodo_id)
-        else:
+        else:  # bosh_file
             self.bosh_file = bosh_file
 
         with self.bosh_file.open() as f:
             self.bosh_spec = json.load(f)
-        # # retry logic - an error on travis is raised randomly, not able to reproduce
-        # tries, tries_max = 0, 7
-        # while tries < tries_max:
-        #     try:
-        #         with self.bosh_file.open() as f:
-        #             self.bosh_spec = json.load(f)
-        #         break
-        #     except json.decoder.JSONDecodeError:
-        #         tries += 1
-        #         if tries == tries_max:
-        #             raise
 
         self.input_spec = self._prepare_input_spec(names_subset=input_spec_names)
         self.output_spec = self._prepare_output_spec(names_subset=output_spec_names)
