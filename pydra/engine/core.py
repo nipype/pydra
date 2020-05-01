@@ -532,29 +532,37 @@ class TaskBase:
                 return True
         return False
 
-    def _combined_output(self):
+    def _combined_output(self, verbose=False):
         combined_results = []
         for (gr, ind_l) in self.state.final_combined_ind_mapping.items():
-            combined_results.append([])
+            combined_results_gr = []
             for ind in ind_l:
                 result = load_result(self.checksum_states(ind), self.cache_locations)
                 if result is None:
                     return None
-                combined_results[gr].append(result)
+                if verbose is True or verbose == "val":
+                    result = (self.state.states_val[ind], result)
+                elif verbose == "ind":
+                    result = (self.state.states_ind[ind], result)
+                combined_results_gr.append(result)
+            combined_results.append(combined_results_gr)
         if len(combined_results) == 1 and self.state.splitter_rpn_final == []:
             # in case it's full combiner, removing the nested structure
             return combined_results[0]
         else:
             return combined_results
 
-    def result(self, state_index=None):
+    def result(self, state_index=None, verbose=False):
         """
         Retrieve the outcomes of this particular task.
 
         Parameters
         ----------
-        state_index :
-            TODO
+        state_index : :obj: `int`
+            index of the element for task with splitter and multiple states
+        verbose : :obj: `bool`, :obj:`str`
+            if True or "val" result is returned together with values of the input fields,
+            if "ind" result is returned together with indices of the input fields
 
         Returns
         -------
@@ -567,7 +575,7 @@ class TaskBase:
             if state_index is None:
                 # if state_index=None, collecting all results
                 if self.state.combiner:
-                    return self._combined_output()
+                    return self._combined_output(verbose=verbose)
                 else:
                     results = []
                     for checksum in self.checksum_states():
@@ -575,20 +583,40 @@ class TaskBase:
                         if result is None:
                             return None
                         results.append(result)
-                    return results
+                    if verbose is True or verbose == "val":
+                        return list(zip(self.state.states_val, results))
+                    elif verbose == "ind":
+                        return list(zip(self.state.states_ind, results))
+                    else:
+                        return results
             else:  # state_index is not None
                 if self.state.combiner:
-                    return self._combined_output()[state_index]
+                    return self._combined_output(verbose=verbose)[state_index]
                 result = load_result(
                     self.checksum_states(state_index), self.cache_locations
                 )
-                return result
+                if verbose is True or verbose == "val":
+                    return (self.state.states_val[state_index], result)
+                elif verbose == "ind":
+                    return (self.state.states_ind[state_index], result)
+                else:
+                    return result
         else:
             if state_index is not None:
                 raise ValueError("Task does not have a state")
             checksum = self.checksum
             result = load_result(checksum, self.cache_locations)
-            return result
+            if verbose is True or verbose == "val":
+                inputs_val = {
+                    f"{self.name}.{inp}": getattr(self.inputs, inp)
+                    for inp in self.input_names
+                }
+                return (inputs_val, result)
+            elif verbose == "ind":
+                inputs_ind = {f"{self.name}.{inp}": None for inp in self.input_names}
+                return (inputs_ind, result)
+            else:
+                return result
 
     def _reset(self):
         """Reset the connections between inputs and LazyFields."""

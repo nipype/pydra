@@ -567,7 +567,7 @@ def test_wf_ndst_2(plugin):
 @pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_3(plugin):
     """ workflow with 2 tasks, splitter on wf level"""
-    wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
+    wf = Workflow(name="wfst_3", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
     wf.inputs.x = [1, 2]
@@ -579,10 +579,33 @@ def test_wf_st_3(plugin):
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    expected = [
+        ({"wfst_3.x": 1, "wfst_3.y": 11}, 13),
+        ({"wfst_3.x": 2, "wfst_3.y": 12}, 26),
+    ]
+    expected_ind = [
+        ({"wfst_3.x": 0, "wfst_3.y": 0}, 13),
+        ({"wfst_3.x": 1, "wfst_3.y": 1}, 26),
+    ]
+
     results = wf.result()
-    # expected: [({"test7.x": 1, "test7.y": 11}, 13), ({"test7.x": 2, "test.y": 12}, 26)]
-    assert results[0].output.out == 13
-    assert results[1].output.out == 26
+    for i, res in enumerate(expected):
+        assert results[i].output.out == res[1]
+
+    # checking the verbose option, either verbose=True, or verbose="val",
+    # it should give values of inputs that corresponds to the specific element
+    results_verb = wf.result(verbose=True)
+    results_verb_val = wf.result(verbose="val")
+    for i, res in enumerate(expected):
+        assert (results_verb[i][0], results_verb[i][1].output.out) == res
+        assert (results_verb_val[i][0], results_verb_val[i][1].output.out) == res
+
+    # checking the verbose option verbose="ind"
+    # it should give indices of inputs (instead of values) for each element
+    results_verb_ind = wf.result(verbose="ind")
+    for i, res in enumerate(expected_ind):
+        assert (results_verb_ind[i][0], results_verb_ind[i][1].output.out) == res
+
     # checking all directories
     assert wf.output_dir
     for odir in wf.output_dir:
