@@ -592,17 +592,17 @@ def test_wf_st_3(plugin):
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
 
-    # checking the verbose option, either verbose=True, or verbose="val",
+    # checking the return_inputs option, either return_inputs is True or "val",
     # it should give values of inputs that corresponds to the specific element
-    results_verb = wf.result(verbose=True)
-    results_verb_val = wf.result(verbose="val")
+    results_verb = wf.result(return_inputs=True)
+    results_verb_val = wf.result(return_inputs="val")
     for i, res in enumerate(expected):
         assert (results_verb[i][0], results_verb[i][1].output.out) == res
         assert (results_verb_val[i][0], results_verb_val[i][1].output.out) == res
 
-    # checking the verbose option verbose="ind"
+    # checking the return_inputs option return_inputs="ind"
     # it should give indices of inputs (instead of values) for each element
-    results_verb_ind = wf.result(verbose="ind")
+    results_verb_ind = wf.result(return_inputs="ind")
     for i, res in enumerate(expected_ind):
         assert (results_verb_ind[i][0], results_verb_ind[i][1].output.out) == res
 

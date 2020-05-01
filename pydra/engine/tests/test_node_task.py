@@ -368,15 +368,15 @@ def test_task_nostate_1(plugin):
     # checking the results
     results = nn.result()
     assert results.output.out == 5
-    # checking the verbose option, either verbose=True, or verbose="val",
+    # checking the return_inputs option, either is return_inputs is True, or "val",
     # it should give values of inputs that corresponds to the specific element
-    results_verb = nn.result(verbose=True)
-    results_verb_val = nn.result(verbose="val")
+    results_verb = nn.result(return_inputs=True)
+    results_verb_val = nn.result(return_inputs="val")
     assert results_verb[0] == results_verb_val[0] == {"NA.a": 3}
     assert results_verb[1].output.out == results_verb_val[1].output.out == 5
-    # checking the verbose option verbose="ind"
+    # checking the return_inputs option return_inputs="ind"
     # it should give indices of inputs (instead of values) for each element
-    results_verb_ind = nn.result(verbose="ind")
+    results_verb_ind = nn.result(return_inputs="ind")
     assert results_verb_ind[0] == {"NA.a": None}
     assert results_verb_ind[1].output.out == 5
 
@@ -722,17 +722,17 @@ def test_task_state_1(plugin):
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
 
-    # checking the verbose option, either verbose=True, or verbose="val",
+    # checking the return_inputs option, either return_inputs is True or "val",
     # it should give values of inputs that corresponds to the specific element
-    results_verb = nn.result(verbose=True)
-    results_verb_val = nn.result(verbose="val")
+    results_verb = nn.result(return_inputs=True)
+    results_verb_val = nn.result(return_inputs="val")
     for i, res in enumerate(expected):
         assert (results_verb[i][0], results_verb[i][1].output.out) == res
         assert (results_verb_val[i][0], results_verb_val[i][1].output.out) == res
 
-    # checking the verbose option verbose="ind"
+    # checking the return_inputs option return_inputs="ind"
     # it should give indices of inputs (instead of values) for each element
-    results_verb_ind = nn.result(verbose="ind")
+    results_verb_ind = nn.result(return_inputs="ind")
     expected_ind = [({"NA.a": 0}, 5), ({"NA.a": 1}, 7)]
     for i, res in enumerate(expected_ind):
         assert (results_verb_ind[i][0], results_verb_ind[i][1].output.out) == res
@@ -815,17 +815,17 @@ def test_task_state_2(
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
 
-    # checking the verbose option, either verbose=True, or verbose="val",
+    # checking the return_inputs option, either return_inputs is True or "val",
     # it should give values of inputs that corresponds to the specific element
-    results_verb = nn.result(verbose=True)
-    results_verb_val = nn.result(verbose="val")
+    results_verb = nn.result(return_inputs=True)
+    results_verb_val = nn.result(return_inputs="val")
     for i, res in enumerate(expected):
         assert (results_verb[i][0], results_verb[i][1].output.out) == res
         assert (results_verb_val[i][0], results_verb_val[i][1].output.out) == res
 
-    # checking the verbose option verbose="ind"
+    # checking the return_inputs option return_inputs="ind"
     # it should give indices of inputs (instead of values) for each element
-    results_verb_ind = nn.result(verbose="ind")
+    results_verb_ind = nn.result(return_inputs="ind")
     for i, res in enumerate(expected_ind):
         assert (results_verb_ind[i][0], results_verb_ind[i][1].output.out) == res
 
@@ -1040,16 +1040,16 @@ def test_task_state_comb_1(plugin):
 
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     expected_ind = [({"NA.a": 0}, 5), ({"NA.a": 1}, 7)]
-    # checking the verbose option, either verbose=True, or verbose="val",
+    # checking the return_inputs option, either return_inputs is True or "val",
     # it should give values of inputs that corresponds to the specific element
-    results_verb = nn.result(verbose=True)
-    results_verb_val = nn.result(verbose="val")
+    results_verb = nn.result(return_inputs=True)
+    results_verb_val = nn.result(return_inputs="val")
     for i, res in enumerate(expected):
         assert (results_verb[i][0], results_verb[i][1].output.out) == res
         assert (results_verb_val[i][0], results_verb_val[i][1].output.out) == res
-    # checking the verbose option verbose="ind"
+    # checking the return_inputs option return_inputs="ind"
     # it should give indices of inputs (instead of values) for each element
-    results_verb_ind = nn.result(verbose="ind")
+    results_verb_ind = nn.result(return_inputs="ind")
     for i, res in enumerate(expected_ind):
         assert (results_verb_ind[i][0], results_verb_ind[i][1].output.out) == res
 
@@ -1172,9 +1172,9 @@ def test_task_state_comb_2(
 
     # checking the results
     results = nn.result()
-    # checking the verbose option, either verbose=True, or verbose="val",
+    # checking the return_inputs option, either return_inputs is True or "val",
     # it should give values of inputs that corresponds to the specific element
-    results_verb = nn.result(verbose=True)
+    results_verb = nn.result(return_inputs=True)
 
     if nn.state.splitter_rpn_final:
         for i, res in enumerate(expected):
