@@ -14,6 +14,11 @@ from ... import mark
 # list of (plugin, available)
 plugins = {"slurm": bool(shutil.which("sbatch"))}
 
+if bool(shutil.which("sbatch")):
+    Plugins = ["cf", "dask", "slurm"]
+else:
+    Plugins = ["cf", "dask"]
+
 
 @mark.task
 def sleep_add_one(x):
@@ -21,7 +26,8 @@ def sleep_add_one(x):
     return x + 1
 
 
-def test_callable_wf():
+@pytest.mark.parametrize("plugin", Plugins)
+def test_callable_wf(plugin):
     wf = gen_basic_wf()
     with pytest.raises(NotImplementedError):
         wf()
@@ -31,12 +37,13 @@ def test_callable_wf():
     del wf, res
 
     wf = gen_basic_wf()
-    sub = Submitter("cf")
+    sub = Submitter(plugin)
     res = wf(submitter=sub)
     assert res.output.out == 9
 
 
-def test_concurrent_wf():
+@pytest.mark.parametrize("plugin", Plugins)
+def test_concurrent_wf(plugin):
     # concurrent workflow
     # A --> C
     # B --> D
@@ -48,9 +55,7 @@ def test_concurrent_wf():
     wf.add(sleep_add_one(name="taskc", x=wf.taska.lzout.out))
     wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
     wf.set_output([("out1", wf.taskc.lzout.out), ("out2", wf.taskd.lzout.out)])
-    # wf.plugin = 'cf'
-    # res = wf.run()
-    with Submitter("cf") as sub:
+    with Submitter(plugin) as sub:
         sub(wf)
 
     res = wf.result()
@@ -81,7 +86,8 @@ def test_concurrent_wf_nprocs():
     assert res.output.out2 == 12
 
 
-def test_wf_in_wf():
+@pytest.mark.parametrize("plugin", Plugins)
+def test_wf_in_wf(plugin):
     """WF(A --> SUBWF(A --> B) --> B)"""
     wf = Workflow(name="wf_in_wf", input_spec=["x"])
     wf.inputs.x = 3
@@ -99,7 +105,7 @@ def test_wf_in_wf():
     wf.add(sleep_add_one(name="wf_b", x=wf.sub_wf.lzout.out))
     wf.set_output([("out", wf.wf_b.lzout.out)])
 
-    with Submitter("cf") as sub:
+    with Submitter(plugin) as sub:
         sub(wf)
 
     res = wf.result()
@@ -135,7 +141,7 @@ def test_wf_with_state():
     wf.split("x")
     wf.set_output([("out", wf.taskb.lzout.out)])
 
-    with Submitter("cf") as sub:
+    with Submitter("dask") as sub:
         sub(wf)
 
     res = wf.result()

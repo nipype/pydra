@@ -24,9 +24,9 @@ from ..submitter import Submitter
 from ..core import Workflow
 
 if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "slurm"]
+    Plugins = ["cf", "dask", "slurm"]
 else:
-    Plugins = ["cf"]
+    Plugins = ["cf", "dask"]
 
 
 @pytest.mark.parametrize("plugin", Plugins)

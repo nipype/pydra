@@ -17,9 +17,9 @@ if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
 
 if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "slurm"]
+    Plugins = ["cf", "dask", "slurm"]
 else:
-    Plugins = ["cf"]
+    Plugins = ["cf", "dask"]
 
 
 def result_no_submitter(shell_task, plugin=None):

@@ -339,6 +339,8 @@ def execute(cmd, strip=False):
         TODO
 
     """
+    rc, stdout, stderr = read_and_display(*cmd, strip=strip)
+    """
     loop = get_open_loop()
     if loop.is_running():
         rc, stdout, stderr = read_and_display(*cmd, strip=strip)
@@ -346,6 +348,7 @@ def execute(cmd, strip=False):
         rc, stdout, stderr = loop.run_until_complete(
             read_and_display_async(*cmd, strip=strip)
         )
+    """
     return rc, stdout, stderr
 
 

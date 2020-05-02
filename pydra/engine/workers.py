@@ -287,3 +287,37 @@ class SlurmWorker(DistributedWorker):
                 error_message = "Job failed (unknown reason - TODO)"
             raise Exception(error_message)
         return True
+
+
+class DaskWorker(Worker):
+    """A worker to execute in parallel using Python's concurrent futures."""
+
+    def __init__(self, **kwargs):
+        """Initialize Worker."""
+        super(DaskWorker, self).__init__()
+        try:
+            from dask.distributed import Client
+        except ImportError:
+            logger.critical("Please instiall Dask distributed.")
+            raise
+        self.client = None
+        self.client_args = kwargs
+        logger.debug("Initialize Dask")
+
+    def run_el(self, runnable, rerun=False, **kwargs):
+        """Run a task."""
+        return self.exec_dask(runnable, rerun=rerun)
+
+    async def exec_dask(self, runnable, rerun=False):
+        """Run a task (coroutine wrapper)."""
+        if self.client is None:
+            from dask.distributed import Client
+
+            self.client = await Client(**self.client_args, asynchronous=True)
+        future = self.client.submit(runnable._run, rerun)
+        result = await future
+        return result
+
+    def close(self):
+        """Finalize the internal pool of tasks."""
+        pass

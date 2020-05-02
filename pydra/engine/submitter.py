@@ -1,6 +1,6 @@
 """Handle execution backends."""
 import asyncio
-from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker
+from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker, DaskWorker
 from .core import is_workflow
 from .helpers import get_open_loop
 
@@ -33,6 +33,8 @@ class Submitter:
             self.worker = ConcurrentFuturesWorker(**kwargs)
         elif self.plugin == "slurm":
             self.worker = SlurmWorker(**kwargs)
+        elif self.plugin == "dask":
+            self.worker = DaskWorker(**kwargs)
         else:
             raise Exception("plugin {} not available".format(self.plugin))
         self.worker.loop = self.loop
@@ -176,9 +178,9 @@ class Submitter:
         Do not close previously running loop.
 
         """
+        self.worker.close()
         if self._own_loop:
             self.loop.close()
-        self.worker.close()
 
 
 def get_runnable_tasks(graph):
