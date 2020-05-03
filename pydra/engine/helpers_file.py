@@ -88,7 +88,11 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
 
 
 def hash_dir(
-    dirpath, ignore_hidden_files=False, ignore_hidden_dirs=False, raise_notfound=True
+    dirpath,
+    crypto=sha256,
+    ignore_hidden_files=False,
+    ignore_hidden_dirs=False,
+    raise_notfound=True,
 ):
     """Compute hash of directory contents.
 
@@ -100,6 +104,8 @@ def hash_dir(
     ----------
     dirpath : :obj:`str`
         Path to directory.
+    crypto : :obj: `function`
+        cryptographic hash functions
     ignore_hidden_files : :obj:`bool`
         If `True`, ignore filenames that begin with `.`.
     ignore_hidden_dirs : :obj:`bool`
@@ -136,11 +142,11 @@ def hash_dir(
             this_hash = hash_file(dpath / filename)
             file_hashes.append(this_hash)
 
-    sha = sha256()
+    crypto_obj = crypto()
     for h in file_hashes:
-        sha.update(h.encode())
+        crypto_obj.update(h.encode())
 
-    return sha.hexdigest()
+    return crypto_obj.hexdigest()
 
 
 def _parse_mount_table(exit_code, output):
