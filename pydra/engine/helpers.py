@@ -513,3 +513,31 @@ def output_from_inputfields(output_spec, inputs):
                 (field_name, attr.ib(type=File, metadata={"value": value}))
             )
     return output_spec
+
+
+def get_available_cpus():
+    """
+    Return the number of CPUs available to the current process or, if that is not
+    available, the total number of CPUs on the system.
+
+    Returns
+    -------
+    n_proc : :obj:`int`
+        The number of available CPUs.
+    """
+    # Will not work on some systems or if psutil is not installed.
+    # See https://psutil.readthedocs.io/en/latest/#psutil.Process.cpu_affinity
+    try:
+        import psutil
+
+        return len(psutil.Process().cpu_affinity())
+    except (AttributeError, ImportError, NotImplementedError):
+        pass
+
+    # Not available on all systems, including macOS.
+    # See https://docs.python.org/3/library/os.html#os.sched_getaffinity
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+
+    # Last resort
+    return os.cpu_count()

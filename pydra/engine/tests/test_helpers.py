@@ -1,10 +1,20 @@
+import os
+import hashlib
 from pathlib import Path
+import random
+import platform
 
 import pytest
 import cloudpickle as cp
 
 from .utils import multiply
-from ..helpers import hash_value, hash_function, save, create_pyscript
+from ..helpers import (
+    hash_value,
+    hash_function,
+    get_available_cpus,
+    save,
+    create_pyscript,
+)
 from .. import helpers_file
 from ..specs import File, Directory
 
@@ -135,23 +145,70 @@ def test_hash_value_dir(tmpdir):
     with open(file_2, "w") as f:
         f.write("hi")
 
-    assert hash_value(tmpdir, tp=Directory) == hash_value([file_1, file_2], tp=File)
-    assert hash_value(tmpdir, tp=Directory) == helpers_file.hash_dir(tmpdir)
+    test_sha = hashlib.sha256()
+    for fx in [file_1, file_2]:
+        test_sha.update(helpers_file.hash_file(fx).encode())
+
+    bad_sha = hashlib.sha256()
+    for fx in [file_2, file_1]:
+        bad_sha.update(helpers_file.hash_file(fx).encode())
+
+    orig_hash = helpers_file.hash_dir(tmpdir)
+
+    assert orig_hash == test_sha.hexdigest()
+    assert orig_hash != bad_sha.hexdigest()
+    assert orig_hash == hash_value(tmpdir, tp=Directory)
 
 
 def test_hash_value_nested(tmpdir):
+    hidden = tmpdir.mkdir(".hidden")
     nested = tmpdir.mkdir("nested")
     file_1 = tmpdir.join("file_1.txt")
-    file_2 = nested.join("file_2.txt")
-    file_3 = nested.join("file_3.txt")
-    with open(file_1, "w") as f:
-        f.write("hello")
-    with open(file_2, "w") as f:
-        f.write("hi")
-    with open(file_3, "w") as f:
-        f.write("hola")
+    file_2 = hidden.join("file_2.txt")
+    file_3 = nested.join(".file_3.txt")
+    file_4 = nested.join("file_4.txt")
 
-    assert hash_value(tmpdir, tp=Directory) == hash_value(
-        [file_1, [file_2, file_3]], tp=File
+    test_sha = hashlib.sha256()
+    for fx in [file_1, file_2, file_3, file_4]:
+        with open(fx, "w") as f:
+            f.write(str(random.randint(0, 1000)))
+        test_sha.update(helpers_file.hash_file(fx).encode())
+
+    orig_hash = helpers_file.hash_dir(tmpdir)
+
+    assert orig_hash == test_sha.hexdigest()
+    assert orig_hash == hash_value(tmpdir, tp=Directory)
+
+    nohidden_hash = helpers_file.hash_dir(
+        tmpdir, ignore_hidden_dirs=True, ignore_hidden_files=True
     )
-    assert hash_value(tmpdir, tp=Directory) == helpers_file.hash_dir(tmpdir)
+    nohiddendirs_hash = helpers_file.hash_dir(tmpdir, ignore_hidden_dirs=True)
+    nohiddenfiles_hash = helpers_file.hash_dir(tmpdir, ignore_hidden_files=True)
+
+    assert orig_hash != nohidden_hash
+    assert orig_hash != nohiddendirs_hash
+    assert orig_hash != nohiddenfiles_hash
+
+    file_3.remove()
+    assert helpers_file.hash_dir(tmpdir) == nohiddenfiles_hash
+    hidden.remove()
+    assert helpers_file.hash_dir(tmpdir) == nohidden_hash
+
+
+def test_get_available_cpus():
+    assert get_available_cpus() > 0
+    try:
+        import psutil
+
+        has_psutil = True
+    except ImportError:
+        has_psutil = False
+
+    if hasattr(os, "sched_getaffinity"):
+        assert get_available_cpus() == len(os.sched_getaffinity(0))
+
+    if has_psutil and platform.system().lower() != "darwin":
+        assert get_available_cpus() == len(psutil.Process().cpu_affinity())
+
+    if platform.system().lower() == "darwin":
+        assert get_available_cpus() == os.cpu_count()
