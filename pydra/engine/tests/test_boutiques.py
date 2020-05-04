@@ -11,26 +11,20 @@ from .utils import result_no_submitter, result_submitter, no_win
 
 need_bosh_docker = pytest.mark.skipif(
     shutil.which("docker") is None
-    or sp.call(["docker", "info"] or sp.call(["bosh", "version"])),
+    or sp.call(["docker", "info"])
+    or sp.call(["which", "bosh"]),
     reason="requires docker and bosh",
 )
-
-if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "slurm"]
-else:
-    Plugins = ["cf"]
 
 Infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
 
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_boutiques_1(maskfile, plugin, results_function):
     """ simple task to run fsl.bet using BoshTask"""
     btask = BoshTask(name="NA", zenodo_id="1482743")
@@ -99,7 +93,6 @@ def test_boutiques_spec_2():
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-@pytest.mark.parametrize("plugin", Plugins)
 def test_boutiques_wf_1(maskfile, plugin):
     """ wf with one task that runs fsl.bet using BoshTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
@@ -130,7 +123,6 @@ def test_boutiques_wf_1(maskfile, plugin):
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-@pytest.mark.parametrize("plugin", Plugins)
 def test_boutiques_wf_2(maskfile, plugin):
     """ wf with two BoshTasks (fsl.bet and fsl.stats) and one ShellTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])

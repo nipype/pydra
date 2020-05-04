@@ -103,6 +103,7 @@ def test_wf_in_wf(plugin):
     assert res.output.out == 7
 
 
+@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf2(plugin_dask_opt):
     """ workflow as a node
         workflow-node with one task and no splitter
@@ -123,6 +124,7 @@ def test_wf2(plugin_dask_opt):
     assert res.output.out == 3
 
 
+@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_with_state(plugin_dask_opt):
     wf = Workflow(name="wf_with_state", input_spec=["x"])
     wf.add(sleep_add_one(name="taska", x=wf.lzin.x))

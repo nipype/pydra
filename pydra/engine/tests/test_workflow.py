@@ -24,16 +24,15 @@ from ..submitter import Submitter
 from ..core import Workflow
 
 
-def test_wf_1(plugin_dask_opt):
+def test_wf_1(plugin):
     """ workflow with one task and no splitter"""
     wf = Workflow(name="wf_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
-    wf.plugin = plugin_dask_opt
 
     checksum_before = wf.checksum
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     assert wf.checksum == checksum_before
@@ -218,6 +217,7 @@ def test_wf_2d_outpasdict(plugin):
     assert wf.output_dir.exists()
 
 
+@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_3(plugin_dask_opt):
     """ testing None value for an input"""
     wf = Workflow(name="wf_3", input_spec=["x", "y"])
@@ -226,7 +226,6 @@ def test_wf_3(plugin_dask_opt):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.inputs.y = None
-    wf.plugin = plugin_dask_opt
 
     with Submitter(plugin=plugin_dask_opt) as sub:
         sub(wf)
@@ -837,6 +836,7 @@ def test_wf_3sernd_ndst_1(plugin):
 # workflows with structures A -> C, B -> C
 
 
+@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_3nd_st_1(plugin_dask_opt):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter on the workflow level
@@ -863,6 +863,7 @@ def test_wf_3nd_st_1(plugin_dask_opt):
         assert odir.exists()
 
 
+@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_3nd_ndst_1(plugin_dask_opt):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter on the tasks levels
@@ -972,7 +973,7 @@ def test_wf_3nd_st_3(plugin):
         assert odir.exists()
 
 
-def test_wf_3nd_ndst_3(plugin_dask_opt):
+def test_wf_3nd_ndst_3(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter and partial combiner (from the second task) on the tasks levels
     """
@@ -988,7 +989,7 @@ def test_wf_3nd_ndst_3(plugin_dask_opt):
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     results = wf.result()

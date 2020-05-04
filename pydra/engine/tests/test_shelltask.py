@@ -18,6 +18,7 @@ if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
 
 
+@pytest.mark.flaky(reruns=2)  # when dask
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_1(plugin_dask_opt, results_function):
     """ simple command, no arguments """
@@ -94,6 +95,7 @@ def test_shell_cmd_2b(plugin, results_function):
 # tests with State
 
 
+@pytest.mark.flaky(reruns=2)
 def test_shell_cmd_3(plugin_dask_opt):
     """ commands without arguments
         splitter = executable
@@ -1339,6 +1341,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
 # customised input_spec in Workflow
 
 
+@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_shell_cmd_2(plugin_dask_opt):
     """ a workflow with input with defined output_file_template (str)
         that requires wf.lzin
@@ -1605,7 +1608,7 @@ def test_wf_shell_cmd_3a(plugin):
     assert res.output.cp_file.exists()
 
 
-def test_wf_shell_cmd_state_1(plugin_dask_opt):
+def test_wf_shell_cmd_state_1(plugin):
     """ a workflow with 2 tasks and splitter on the wf level,
         first one has input with output_file_template (str, uses wf.lzin),
         that is passed to the second task
@@ -1683,7 +1686,7 @@ def test_wf_shell_cmd_state_1(plugin_dask_opt):
         ]
     )
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
 
     res_l = wf.result()
@@ -1694,7 +1697,7 @@ def test_wf_shell_cmd_state_1(plugin_dask_opt):
         assert res.output.cp_file.exists()
 
 
-def test_wf_shell_cmd_ndst_1(plugin_dask_opt):
+def test_wf_shell_cmd_ndst_1(plugin):
     """ a workflow with 2 tasks and a splitter on the node level,
         first one has input with output_file_template (str, uses wf.lzin),
         that is passed to the second task
@@ -1772,7 +1775,7 @@ def test_wf_shell_cmd_ndst_1(plugin_dask_opt):
         ]
     )
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()
