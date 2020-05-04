@@ -10,11 +10,6 @@ from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, SpecInfo, File, SingularitySpec
 
-if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "slurm"]
-else:
-    Plugins = ["cf"]
-
 
 need_docker = pytest.mark.skipif(
     shutil.which("docker") is None or sp.call(["docker", "info"]),
@@ -64,7 +59,6 @@ def test_singularity_2_nosubm(tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_2(plugin, tmpdir):
     """ a command with arguments, cmd and args given as executable
         using submitter
@@ -85,7 +79,6 @@ def test_singularity_2(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_2_singuflag(plugin, tmpdir):
     """ a command with arguments, cmd and args given as executable
         using ShellComandTask with container_info=("singularity", image)
@@ -111,7 +104,6 @@ def test_singularity_2_singuflag(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_2a(plugin, tmpdir):
     """ a command with arguments, using executable and args
         using submitter
@@ -136,7 +128,6 @@ def test_singularity_2a(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_3(plugin, tmpdir):
     """ a simple command in container with bindings,
         creating directory in tmp dir and checking if it is in the container
@@ -158,7 +149,6 @@ def test_singularity_3(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_3_singuflag(plugin, tmpdir):
     """ a simple command in container with bindings,
         creating directory in tmp dir and checking if it is in the container
@@ -186,7 +176,6 @@ def test_singularity_3_singuflag(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_3_singuflagbind(plugin, tmpdir):
     """ a simple command in container with bindings,
         creating directory in tmp dir and checking if it is in the container
@@ -215,7 +204,6 @@ def test_singularity_3_singuflagbind(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_st_1(plugin, tmpdir):
     """ commands without arguments in container
         splitter = executable
@@ -234,7 +222,6 @@ def test_singularity_st_1(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_st_2(plugin, tmpdir):
     """ command with arguments in docker, checking the distribution
         splitter = image
@@ -253,7 +240,6 @@ def test_singularity_st_2(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_st_3(plugin, tmpdir):
     """ outer splitter image and executable
     """
@@ -272,7 +258,6 @@ def test_singularity_st_3(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_singularity_1(plugin, tmpdir):
     """ a workflow with two connected task
         the first one read the file that is bounded to the container,
@@ -314,7 +299,6 @@ def test_wf_singularity_1(plugin, tmpdir):
 
 @need_docker
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_singularity_1a(plugin, tmpdir):
     """ a workflow with two connected task - using both containers: Docker and Singul.
         the first one read the file that is bounded to the container,
@@ -359,7 +343,6 @@ def test_wf_singularity_1a(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_outputspec_1(plugin, tmpdir):
     """
         customised output_spec, adding files to the output, providing specific pathname
@@ -393,7 +376,6 @@ def test_singularity_outputspec_1(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_inputspec_1(plugin, tmpdir):
     """ a simple customized input spec for singularity task """
     filename = str(tmpdir.join("file_pydra.txt"))
@@ -436,7 +418,6 @@ def test_singularity_inputspec_1(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_inputspec_1a(plugin, tmpdir):
     """ a simple customized input spec for singularity task
         a default value is used
@@ -477,7 +458,6 @@ def test_singularity_inputspec_1a(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_inputspec_2(plugin, tmpdir):
     """ a customized input spec with two fields for singularity task """
     filename_1 = tmpdir.join("file_pydra.txt")
@@ -527,7 +507,6 @@ def test_singularity_inputspec_2(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_inputspec_2a_except(plugin, tmpdir):
     """ a customized input spec with two fields
         first one uses a default, and second doesn't - raises a dataclass exception
@@ -578,7 +557,6 @@ def test_singularity_inputspec_2a_except(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_inputspec_2a(plugin, tmpdir):
     """ a customized input spec with two fields
         first one uses a default value,
@@ -631,7 +609,6 @@ def test_singularity_inputspec_2a(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
     """ shelltask changes a file in place,
         adding copyfile=True to the file-input from input_spec
@@ -695,7 +672,6 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_inputspec_state_1(plugin, tmpdir):
     """ a customised input spec for a singularity file with a splitter,
         splitter is on files
@@ -745,7 +721,6 @@ def test_singularity_inputspec_state_1(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_inputspec_state_1b(plugin, tmpdir):
     """ a customised input spec for a singularity file with a splitter,
         files from the input spec have the same path in the local os and the container,
@@ -796,7 +771,6 @@ def test_singularity_inputspec_state_1b(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_wf_inputspec_1(plugin, tmpdir):
     """ a customized input spec for workflow with singularity tasks """
     filename = tmpdir.join("file_pydra.txt")
@@ -848,7 +822,6 @@ def test_singularity_wf_inputspec_1(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_wf_state_inputspec_1(plugin, tmpdir):
     """ a customized input spec for workflow with singularity tasks that has a state"""
     file_1 = tmpdir.join("file_pydra.txt")
@@ -906,7 +879,6 @@ def test_singularity_wf_state_inputspec_1(plugin, tmpdir):
 
 
 @need_singularity
-@pytest.mark.parametrize("plugin", Plugins)
 def test_singularity_wf_ndst_inputspec_1(plugin, tmpdir):
     """ a customized input spec for workflow with singularity tasks with states"""
     file_1 = tmpdir.join("file_pydra.txt")

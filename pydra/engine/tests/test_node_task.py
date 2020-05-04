@@ -19,11 +19,6 @@ from .utils import (
 from ..core import TaskBase
 from ..submitter import Submitter
 
-if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "slurm"]
-else:
-    Plugins = ["cf"]
-
 
 @pytest.fixture(scope="module")
 def change_dir(request):
@@ -294,8 +289,7 @@ def test_task_init_6():
     assert nn.state.states_val == []
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_init_7(plugin, tmpdir):
+def test_task_init_7(tmpdir):
     """ task with a dictionary of files as an input, checking checksum"""
     file1 = tmpdir.join("file1.txt")
     with open(file1, "w") as f:
@@ -355,14 +349,13 @@ def test_odir_init():
 # Tests for tasks without state (i.e. no splitter)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_nostate_1(plugin):
+def test_task_nostate_1(plugin_dask_opt):
     """ task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -372,14 +365,13 @@ def test_task_nostate_1(plugin):
     assert nn.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_nostate_1_call_subm(plugin):
+def test_task_nostate_1_call_subm(plugin_dask_opt):
     """ task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         nn(submitter=sub)
 
     # checking the results
@@ -389,14 +381,13 @@ def test_task_nostate_1_call_subm(plugin):
     assert nn.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_nostate_1_call_plug(plugin):
+def test_task_nostate_1_call_plug(plugin_dask_opt):
     """ task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    nn(plugin=plugin)
+    nn(plugin=plugin_dask_opt)
 
     # checking the results
     results = nn.result()
@@ -418,7 +409,6 @@ def test_task_nostate_1_call_updateinp():
     assert nn.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_2(plugin):
     """ task with a list as an input, but no splitter"""
     nn = moment(name="NA", n=3, lst=[2, 3, 4])
@@ -436,7 +426,6 @@ def test_task_nostate_2(plugin):
     assert nn.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_3(plugin):
     """ task with a dictionary as an input"""
     nn = fun_dict(name="NA", d={"a": "ala", "b": "bala"})
@@ -452,7 +441,6 @@ def test_task_nostate_3(plugin):
     assert nn.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_4(plugin, tmpdir):
     """ task with a dictionary as an input"""
     file1 = tmpdir.join("file.txt")
@@ -461,7 +449,7 @@ def test_task_nostate_4(plugin, tmpdir):
 
     nn = fun_file(name="NA", filename=file1)
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -471,7 +459,6 @@ def test_task_nostate_4(plugin, tmpdir):
     assert nn.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_5(plugin, tmpdir):
     """ task with a dictionary of files as an input"""
     file1 = tmpdir.join("file1.txt")
@@ -522,15 +509,14 @@ def test_task_nostate_7():
 # Testing caching for tasks without states
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_nostate_cachedir(plugin, tmpdir):
+def test_task_nostate_cachedir(plugin_dask_opt, tmpdir):
     """ task with provided cache_dir using pytest tmpdir"""
     cache_dir = tmpdir.mkdir("test_task_nostate")
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -538,8 +524,7 @@ def test_task_nostate_cachedir(plugin, tmpdir):
     assert results.output.out == 5
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_nostate_cachedir_relativepath(tmpdir, plugin):
+def test_task_nostate_cachedir_relativepath(tmpdir, plugin_dask_opt):
     """ task with provided cache_dir as relative path"""
     cwd = tmpdir.chdir()
     cache_dir = "test_task_nostate"
@@ -549,7 +534,7 @@ def test_task_nostate_cachedir_relativepath(tmpdir, plugin):
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -559,8 +544,7 @@ def test_task_nostate_cachedir_relativepath(tmpdir, plugin):
     shutil.rmtree(cache_dir)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_nostate_cachelocations(plugin, tmpdir):
+def test_task_nostate_cachelocations(plugin_dask_opt, tmpdir):
     """
     Two identical tasks with provided cache_dir;
     the second task has cache_locations and should not recompute the results
@@ -569,11 +553,11 @@ def test_task_nostate_cachelocations(plugin, tmpdir):
     cache_dir2 = tmpdir.mkdir("test_task_nostate2")
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn2)
 
     # checking the results
@@ -585,7 +569,6 @@ def test_task_nostate_cachelocations(plugin, tmpdir):
     assert not nn2.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_cachelocations_forcererun(plugin, tmpdir):
     """
     Two identical tasks with provided cache_dir;
@@ -659,7 +642,6 @@ def test_task_nostate_cachelocations_nosubmitter_forcererun(tmpdir):
     assert nn2.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_nostate_cachelocations_updated(plugin, tmpdir):
     """
     Two identical tasks with provided cache_dir;
@@ -692,8 +674,7 @@ def test_task_nostate_cachelocations_updated(plugin, tmpdir):
 # Tests for tasks with states (i.e. with splitter)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_state_1(plugin):
+def test_task_state_1(plugin_dask_opt):
     """ task with the simplest splitter"""
     nn = fun_addtwo(name="NA").split(splitter="a", a=[3, 5])
 
@@ -701,7 +682,7 @@ def test_task_state_1(plugin):
     assert nn.state.splitter_rpn == ["NA.a"]
     assert (nn.inputs.a == np.array([3, 5])).all()
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -715,8 +696,7 @@ def test_task_state_1(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_state_1a(plugin):
+def test_task_state_1a(plugin_dask_opt):
     """ task with the simplest splitter (inputs set separately)"""
     nn = fun_addtwo(name="NA")
     nn.split(splitter="a")
@@ -726,7 +706,7 @@ def test_task_state_1a(plugin):
     assert nn.state.splitter_rpn == ["NA.a"]
     assert (nn.inputs.a == np.array([3, 5])).all()
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -758,8 +738,7 @@ def test_task_state_1a(plugin):
         ),
     ],
 )
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_state_2(plugin, splitter, state_splitter, state_rpn, expected):
+def test_task_state_2(plugin_dask_opt, splitter, state_splitter, state_rpn, expected):
     """ Tasks with two inputs and a splitter (no combiner)"""
     nn = fun_addvar(name="NA").split(splitter=splitter, a=[3, 5], b=[10, 20])
 
@@ -770,7 +749,7 @@ def test_task_state_2(plugin, splitter, state_splitter, state_rpn, expected):
     assert nn.state.splitter_final == state_splitter
     assert nn.state.splitter_rpn_final == state_rpn
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -783,8 +762,7 @@ def test_task_state_2(plugin, splitter, state_splitter, state_rpn, expected):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_state_singl_1(plugin):
+def test_task_state_singl_1(plugin_dask_opt):
     """ Tasks with two inputs and a splitter (no combiner)
         one input is a single value, the other is in the splitter and combiner
     """
@@ -797,7 +775,7 @@ def test_task_state_singl_1(plugin):
     assert nn.state.splitter_final == "NA.a"
     assert nn.state.splitter_rpn_final == ["NA.a"]
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -811,7 +789,6 @@ def test_task_state_singl_1(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_2(plugin):
     """ task with the simplest splitter, the input is an empty list"""
     nn = fun_addtwo(name="NA").split(splitter="a", a=[])
@@ -832,7 +809,6 @@ def test_task_state_2(plugin):
     assert nn.output_dir == []
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_3(plugin):
     """ task with a list as an input, and a simple splitter """
     nn = moment(name="NA", n=3, lst=[[2, 3, 4], [1, 2, 3]]).split(splitter="lst")
@@ -853,7 +829,6 @@ def test_task_state_3(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_3a(plugin):
     """ task with a tuple as an input, and a simple splitter """
     nn = moment(name="NA", n=3, lst=[(2, 3, 4), (1, 2, 3)]).split(splitter="lst")
@@ -874,7 +849,6 @@ def test_task_state_3a(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_4(plugin):
     """ task with a list as an input, and the variable is part of the scalar splitter"""
     nn = moment(name="NA", n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]).split(
@@ -897,7 +871,6 @@ def test_task_state_4(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_4_exception(plugin):
     """ task with a list as an input, and the variable is part of the scalar splitter
         the shapes are not matching, so exception should be raised
@@ -915,8 +888,7 @@ def test_task_state_4_exception(plugin):
     assert "shape" in str(excinfo.value)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_state_5(plugin):
+def test_task_state_5(plugin_dask_opt):
     """ ask with a list as an input, and the variable is part of the outer splitter """
     nn = moment(name="NA", n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]).split(
         splitter=["n", "lst"]
@@ -925,7 +897,7 @@ def test_task_state_5(plugin):
     assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
     assert nn.state.splitter == ["NA.n", "NA.lst"]
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -938,7 +910,6 @@ def test_task_state_5(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_5a(plugin):
     """ ask with a tuple as an input, and the variable is part of the outer splitter """
     nn = moment(name="NA", n=[1, 3], lst=[(2, 3, 4), (1, 2, 3)]).split(
@@ -961,8 +932,7 @@ def test_task_state_5a(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_state_comb_1(plugin):
+def test_task_state_comb_1(plugin_dask_opt):
     """ task with the simplest splitter and combiner"""
     nn = fun_addtwo(name="NA").split(a=[3, 5], splitter="a").combine(combiner="a")
 
@@ -974,7 +944,7 @@ def test_task_state_comb_1(plugin):
     assert nn.state.splitter_final is None
     assert nn.state.splitter_rpn_final == []
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
@@ -1054,7 +1024,6 @@ def test_task_state_comb_1(plugin):
         ),
     ],
 )
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_comb_2(
     plugin,
     splitter,
@@ -1099,8 +1068,7 @@ def test_task_state_comb_2(
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_state_comb_singl_1(plugin):
+def test_task_state_comb_singl_1(plugin_dask_opt):
     """ Tasks with two inputs;
      one input is a single value, the other is in the splitter and combiner
      """
@@ -1114,7 +1082,7 @@ def test_task_state_comb_singl_1(plugin):
     assert nn.state.splitter_final == None
     assert nn.state.splitter_rpn_final == []
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -1129,7 +1097,6 @@ def test_task_state_comb_singl_1(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_comb_2(plugin):
     """ task with the simplest splitter, the input is an empty list"""
     nn = fun_addtwo(name="NA").split(splitter="a", a=[]).combine(combiner=["a"])
@@ -1150,8 +1117,7 @@ def test_task_state_comb_2(plugin):
     assert nn.output_dir == []
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_state_comb_order(plugin):
+def test_task_state_comb_order():
     """ tasks with an outer splitter and various combiner;
         showing the order of results
     """
@@ -1210,8 +1176,7 @@ def test_task_state_comb_order(plugin):
 # Testing caching for tasks with states
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_state_cachedir(plugin, tmpdir):
+def test_task_state_cachedir(plugin_dask_opt, tmpdir):
     """ task with a state and provided cache_dir using pytest tmpdir"""
     cache_dir = tmpdir.mkdir("test_task_nostate")
     nn = fun_addtwo(name="NA", cache_dir=cache_dir).split(splitter="a", a=[3, 5])
@@ -1219,7 +1184,7 @@ def test_task_state_cachedir(plugin, tmpdir):
     assert nn.state.splitter == "NA.a"
     assert (nn.inputs.a == np.array([3, 5])).all()
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -1229,8 +1194,7 @@ def test_task_state_cachedir(plugin, tmpdir):
         assert results[i].output.out == res[1]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_task_state_cachelocations(plugin, tmpdir):
+def test_task_state_cachelocations(plugin_dask_opt, tmpdir):
     """
     Two identical tasks with a state and cache_dir;
     the second task has cache_locations and should not recompute the results
@@ -1239,13 +1203,13 @@ def test_task_state_cachelocations(plugin, tmpdir):
     cache_dir2 = tmpdir.mkdir("test_task_nostate2")
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir).split(splitter="a", a=[3, 5])
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
     nn2 = fun_addtwo(
         name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir
     ).split(splitter="a", a=[3, 5])
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn2)
 
     # checking the results
@@ -1258,7 +1222,6 @@ def test_task_state_cachelocations(plugin, tmpdir):
     assert not any([dir.exists() for dir in nn2.output_dir])
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_cachelocations_forcererun(plugin, tmpdir):
     """
     Two identical tasks with a state and cache_dir;
@@ -1289,7 +1252,6 @@ def test_task_state_cachelocations_forcererun(plugin, tmpdir):
     assert all([dir.exists() for dir in nn2.output_dir])
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_task_state_cachelocations_updated(plugin, tmpdir):
     """
     Two identical tasks with states and cache_dir;

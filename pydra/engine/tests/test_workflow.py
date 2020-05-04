@@ -23,23 +23,17 @@ from .utils import (
 from ..submitter import Submitter
 from ..core import Workflow
 
-if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "dask", "slurm"]
-else:
-    Plugins = ["cf", "dask"]
 
-
-@pytest.mark.parametrize("plugin", Plugins)
-def test_wf_1(plugin):
+def test_wf_1(plugin_dask_opt):
     """ workflow with one task and no splitter"""
     wf = Workflow(name="wf_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
-    wf.plugin = plugin
+    wf.plugin = plugin_dask_opt
 
     checksum_before = wf.checksum
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(wf)
 
     assert wf.checksum == checksum_before
@@ -48,7 +42,6 @@ def test_wf_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_1a_outpastuple(plugin):
     """ workflow with one task and no splitter
         set_output takes a tuple
@@ -67,14 +60,12 @@ def test_wf_1a_outpastuple(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_1_call_subm(plugin):
     """using wf.__call_ with submitter"""
     wf = Workflow(name="wf_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
-    wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
@@ -84,7 +75,6 @@ def test_wf_1_call_subm(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_1_call_plug(plugin):
     """using wf.__call_ with plugin"""
     wf = Workflow(name="wf_1", input_spec=["x"])
@@ -100,7 +90,6 @@ def test_wf_1_call_plug(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_1_call_exception(plugin):
     """using wf.__call_ with plugin and submitter - should raise an exception"""
     wf = Workflow(name="wf_1", input_spec=["x"])
@@ -115,7 +104,6 @@ def test_wf_1_call_exception(plugin):
         assert "Specify submitter OR plugin" in str(e.value)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_2(plugin):
     """ workflow with 2 tasks, no splitter"""
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
@@ -134,7 +122,6 @@ def test_wf_2(plugin):
     assert 8 == results.output.out
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_2a(plugin):
     """ workflow with 2 tasks, no splitter
         creating add2_task first (before calling add method),
@@ -157,7 +144,6 @@ def test_wf_2a(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_2b(plugin):
     """ workflow with 2 tasks, no splitter
         creating add2_task first (before calling add method),
@@ -182,7 +168,6 @@ def test_wf_2b(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_2c_multoutp(plugin):
     """ workflow with 2 tasks, no splitter
         setting multiple outputs for the workflow
@@ -208,7 +193,6 @@ def test_wf_2c_multoutp(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_2d_outpasdict(plugin):
     """ workflow with 2 tasks, no splitter
         setting multiple outputs using a dictionary
@@ -234,8 +218,7 @@ def test_wf_2d_outpasdict(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_wf_3(plugin):
+def test_wf_3(plugin_dask_opt):
     """ testing None value for an input"""
     wf = Workflow(name="wf_3", input_spec=["x", "y"])
     wf.add(fun_addvar_none(name="addvar", a=wf.lzin.x, b=wf.lzin.y))
@@ -243,9 +226,9 @@ def test_wf_3(plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.inputs.y = None
-    wf.plugin = plugin
+    wf.plugin = plugin_dask_opt
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(wf)
 
     assert wf.output_dir.exists()
@@ -254,7 +237,6 @@ def test_wf_3(plugin):
 
 
 @pytest.mark.xfail(reason="the task error doesn't propagate")
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_3a_exception(plugin):
     """ testinh wf without set input, attr.NOTHING should be set
         and the function should raise an exception
@@ -273,7 +255,6 @@ def test_wf_3a_exception(plugin):
     assert "unsupported" in str(excinfo.value)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_4(plugin):
     """wf with a task that doesn't set one input and use the function default value"""
     wf = Workflow(name="wf_4", input_spec=["x", "y"])
@@ -291,7 +272,6 @@ def test_wf_4(plugin):
     assert 5 == results.output.out
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_4a(plugin):
     """ wf with a task that doesn't set one input,
         the unset input is send to the task input,
@@ -312,7 +292,6 @@ def test_wf_4a(plugin):
     assert 5 == results.output.out
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_1(plugin):
     """ Workflow with one task, a splitter for the workflow"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
@@ -338,7 +317,6 @@ def test_wf_st_1(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_1_call_subm(plugin):
     """ Workflow with one task, a splitter for the workflow"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
@@ -362,7 +340,6 @@ def test_wf_st_1_call_subm(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_1_call_plug(plugin):
     """ Workflow with one task, a splitter for the workflow"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
@@ -385,7 +362,6 @@ def test_wf_st_1_call_plug(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_noinput_1(plugin):
     """ Workflow with one task, a splitter for the workflow"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
@@ -407,7 +383,6 @@ def test_wf_st_noinput_1(plugin):
     assert wf.output_dir == []
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_1(plugin):
     """ workflow with one task, a splitter on the task level"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
@@ -427,7 +402,6 @@ def test_wf_ndst_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_updatespl_1(plugin):
     """ workflow with one task,
         a splitter on the task level is added *after* calling add
@@ -450,7 +424,6 @@ def test_wf_ndst_updatespl_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_updatespl_1a(plugin):
     """ workflow with one task (initialize before calling add),
         a splitter on the task level is added *after* calling add
@@ -474,7 +447,6 @@ def test_wf_ndst_updatespl_1a(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_updateinp_1(plugin):
     """ workflow with one task,
         a splitter on the task level,
@@ -499,7 +471,6 @@ def test_wf_ndst_updateinp_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_noinput_1(plugin):
     """ workflow with one task, a splitter on the task level"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
@@ -519,7 +490,6 @@ def test_wf_ndst_noinput_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_2(plugin):
     """ workflow with one task, splitters and combiner for workflow"""
     wf = Workflow(name="wf_st_2", input_spec=["x"])
@@ -543,7 +513,6 @@ def test_wf_st_2(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_2(plugin):
     """ workflow with one task, splitters and combiner on the task level"""
     wf = Workflow(name="wf_ndst_2", input_spec=["x"])
@@ -564,7 +533,6 @@ def test_wf_ndst_2(plugin):
 # workflows with structures A -> B
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_3(plugin):
     """ workflow with 2 tasks, splitter on wf level"""
     wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
@@ -589,7 +557,6 @@ def test_wf_st_3(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_3(plugin):
     """Test workflow with 2 tasks, splitter on a task level"""
     wf = Workflow(name="wf_ndst_3", input_spec=["x", "y"])
@@ -610,7 +577,6 @@ def test_wf_ndst_3(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_4(plugin):
     """ workflow with two tasks, scalar splitter and combiner for the workflow"""
     wf = Workflow(name="wf_st_4", input_spec=["x", "y"])
@@ -637,7 +603,6 @@ def test_wf_st_4(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_4(plugin):
     """ workflow with two tasks, scalar splitter and combiner on tasks level"""
     wf = Workflow(name="wf_ndst_4", input_spec=["a", "b"])
@@ -661,7 +626,6 @@ def test_wf_ndst_4(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_5(plugin):
     """ workflow with two tasks, outer splitter and no combiner"""
     wf = Workflow(name="wf_st_5", input_spec=["x", "y"])
@@ -670,7 +634,6 @@ def test_wf_st_5(plugin):
 
     wf.split(["x", "y"], x=[1, 2], y=[11, 12])
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -686,7 +649,6 @@ def test_wf_st_5(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_5(plugin):
     """ workflow with two tasks, outer splitter on tasks level and no combiner"""
     wf = Workflow(name="wf_ndst_5", input_spec=["x", "y"])
@@ -695,7 +657,6 @@ def test_wf_ndst_5(plugin):
     wf.inputs.x = [1, 2]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -709,7 +670,6 @@ def test_wf_ndst_5(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_6(plugin):
     """ workflow with two tasks, outer splitter and combiner for the workflow"""
     wf = Workflow(name="wf_st_6", input_spec=["x", "y"])
@@ -737,7 +697,6 @@ def test_wf_st_6(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_6(plugin):
     """ workflow with two tasks, outer splitter and combiner on tasks level"""
     wf = Workflow(name="wf_ndst_6", input_spec=["x", "y"])
@@ -759,7 +718,6 @@ def test_wf_ndst_6(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_7(plugin):
     """ workflow with two tasks, outer splitter and (full) combiner for first node only"""
     wf = Workflow(name="wf_ndst_6", input_spec=["x", "y"])
@@ -780,7 +738,6 @@ def test_wf_ndst_7(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_8(plugin):
     """ workflow with two tasks, outer splitter and (partial) combiner for first task only"""
     wf = Workflow(name="wf_ndst_6", input_spec=["x", "y"])
@@ -804,7 +761,6 @@ def test_wf_ndst_8(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_9(plugin):
     """ workflow with two tasks, outer splitter and (full) combiner for first task only"""
     wf = Workflow(name="wf_ndst_6", input_spec=["x", "y"])
@@ -832,7 +788,6 @@ def test_wf_ndst_9(plugin):
 # workflows with structures A ->  B -> C
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_3sernd_ndst_1(plugin):
     """ workflow with three "serial" tasks, checking if the splitter is propagating"""
     wf = Workflow(name="wf_3sernd_ndst_1", input_spec=["x", "y"])
@@ -859,8 +814,7 @@ def test_wf_3sernd_ndst_1(plugin):
 # workflows with structures A -> C, B -> C
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_wf_3nd_st_1(plugin):
+def test_wf_3nd_st_1(plugin_dask_opt):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter on the workflow level
     """
@@ -871,9 +825,8 @@ def test_wf_3nd_st_1(plugin):
     wf.split(["x", "y"], x=[1, 2, 3], y=[11, 12])
 
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(wf)
 
     results = wf.result()
@@ -887,8 +840,7 @@ def test_wf_3nd_st_1(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_wf_3nd_ndst_1(plugin):
+def test_wf_3nd_ndst_1(plugin_dask_opt):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter on the tasks levels
     """
@@ -899,9 +851,8 @@ def test_wf_3nd_ndst_1(plugin):
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(wf)
 
     results = wf.result()
@@ -911,7 +862,6 @@ def test_wf_3nd_ndst_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_3nd_st_2(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter and partial combiner on the workflow level
@@ -942,7 +892,6 @@ def test_wf_3nd_st_2(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_3nd_ndst_2(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter and partial combiner on the tasks levels
@@ -971,7 +920,6 @@ def test_wf_3nd_ndst_2(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_3nd_st_3(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter and partial combiner (from the second task) on the workflow level
@@ -983,7 +931,6 @@ def test_wf_3nd_st_3(plugin):
     wf.split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine("y")
 
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -1002,8 +949,7 @@ def test_wf_3nd_st_3(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_wf_3nd_ndst_3(plugin):
+def test_wf_3nd_ndst_3(plugin_dask_opt):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter and partial combiner (from the second task) on the tasks levels
     """
@@ -1018,9 +964,8 @@ def test_wf_3nd_ndst_3(plugin):
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(wf)
 
     results = wf.result()
@@ -1032,7 +977,6 @@ def test_wf_3nd_ndst_3(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_3nd_st_4(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter and full combiner on the workflow level
@@ -1062,7 +1006,6 @@ def test_wf_3nd_st_4(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_3nd_ndst_4(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter and full combiner on the tasks levels
@@ -1091,7 +1034,6 @@ def test_wf_3nd_ndst_4(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_3nd_st_5(plugin):
     """ workflow with three tasks (A->C, B->C) and three fields in the splitter,
         splitter and partial combiner (from the second task) on the workflow level
@@ -1129,7 +1071,6 @@ def test_wf_3nd_st_5(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_3nd_ndst_5(plugin):
     """ workflow with three tasks (A->C, B->C) and three fields in the splitter,
         all tasks have splitters and the last one has a partial combiner (from the 2nd)
@@ -1165,7 +1106,6 @@ def test_wf_3nd_ndst_5(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_3nd_ndst_6(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
         the third one uses scalar splitter from the previous ones and a combiner
@@ -1195,7 +1135,6 @@ def test_wf_3nd_ndst_6(plugin):
 # workflows with Left and Right part in splitters A -> B (L&R parts of the splitter)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstLR_1(plugin):
     """ Test workflow with 2 tasks, splitters on tasks levels
         The second task has its own simple splitter
@@ -1224,7 +1163,6 @@ def test_wf_ndstLR_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstLR_1a(plugin):
     """ Test workflow with 2 tasks, splitters on tasks levels
         The second task has splitter that has Left part (from previous state)
@@ -1255,7 +1193,6 @@ def test_wf_ndstLR_1a(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstLR_2(plugin):
     """ Test workflow with 2 tasks, splitters on tasks levels
         The second task has its own outer splitter
@@ -1305,7 +1242,6 @@ def test_wf_ndstLR_2(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstLR_2a(plugin):
     """ Test workflow with 2 tasks, splitters on tasks levels
         The second task has splitter that has Left part (from previous state)
@@ -1358,7 +1294,6 @@ def test_wf_ndstLR_2a(plugin):
 # workflows with inner splitters A -> B (inner spl)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstinner_1(plugin):
     """ workflow with 2 tasks,
         the second task has inner splitter
@@ -1383,7 +1318,6 @@ def test_wf_ndstinner_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstinner_2(plugin):
     """ workflow with 2 tasks,
         the second task has two inputs and inner splitter from one of the input
@@ -1409,7 +1343,6 @@ def test_wf_ndstinner_2(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstinner_3(plugin):
     """ workflow with 2 tasks,
         the second task has two inputs and outer splitter that includes an inner field
@@ -1435,7 +1368,6 @@ def test_wf_ndstinner_3(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstinner_4(plugin):
     """ workflow with 3 tasks,
         the second task has two inputs and inner splitter from one of the input,
@@ -1468,7 +1400,6 @@ def test_wf_ndstinner_4(plugin):
 # workflow that have some single values as the input
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_singl_1(plugin):
     """ workflow with two tasks, only one input is in the splitter and combiner"""
     wf = Workflow(name="wf_st_5", input_spec=["x", "y"])
@@ -1492,7 +1423,6 @@ def test_wf_st_singl_1(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_singl_1(plugin):
     """ workflow with two tasks, outer splitter and combiner on tasks level;
         only one input is part of the splitter, the other is a single value
@@ -1514,7 +1444,6 @@ def test_wf_ndst_singl_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_st_singl_2(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter on the workflow level
@@ -1543,7 +1472,6 @@ def test_wf_st_singl_2(plugin):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndst_singl_2(plugin):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter on the tasks levels
@@ -1571,7 +1499,6 @@ def test_wf_ndst_singl_2(plugin):
 # workflows with structures wf(A)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_1(plugin):
     """ workflow as a node
         workflow-node with one task and no splitter
@@ -1595,7 +1522,6 @@ def test_wfasnd_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_wfinp_1(plugin):
     """ workflow as a node
         workflow-node with one task and no splitter
@@ -1622,7 +1548,6 @@ def test_wfasnd_wfinp_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_wfndupdate(plugin):
     """ workflow as a node
         workflow-node with one task and no splitter
@@ -1647,7 +1572,6 @@ def test_wfasnd_wfndupdate(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_wfndupdate_rerun(plugin):
     """ workflow as a node
         workflow-node with one task and no splitter
@@ -1692,7 +1616,6 @@ def test_wfasnd_wfndupdate_rerun(plugin):
     assert wf_o.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_st_1(plugin):
     """ workflow as a node
         workflow-node with one task,
@@ -1720,7 +1643,6 @@ def test_wfasnd_st_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_st_updatespl_1(plugin):
     """ workflow as a node
         workflow-node with one task,
@@ -1746,7 +1668,6 @@ def test_wfasnd_st_updatespl_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_ndst_1(plugin):
     """ workflow as a node
         workflow-node with one task,
@@ -1773,7 +1694,6 @@ def test_wfasnd_ndst_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_ndst_updatespl_1(plugin):
     """ workflow as a node
         workflow-node with one task,
@@ -1801,7 +1721,6 @@ def test_wfasnd_ndst_updatespl_1(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_wfst_1(plugin):
     """ workflow as a node
         workflow-node with one task,
@@ -1833,7 +1752,6 @@ def test_wfasnd_wfst_1(plugin):
 # workflows with structures wf(A) -> B
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_st_2(plugin):
     """ workflow as a node,
         the main workflow has two tasks,
@@ -1861,7 +1779,6 @@ def test_wfasnd_st_2(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_wfst_2(plugin):
     """ workflow as a node,
         the main workflow has two tasks,
@@ -1895,7 +1812,6 @@ def test_wfasnd_wfst_2(plugin):
 # workflows with structures A -> wf(B)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_ndst_3(plugin):
     """ workflow as the second node,
         the main workflow has two tasks,
@@ -1923,7 +1839,6 @@ def test_wfasnd_ndst_3(plugin):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wfasnd_wfst_3(plugin):
     """ workflow as the second node,
         the main workflow has two tasks,
@@ -1958,7 +1873,6 @@ def test_wfasnd_wfst_3(plugin):
 # Testing caching
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachedir(plugin, tmpdir):
     """ wf with provided cache_dir using pytest tmpdir"""
     cache_dir = tmpdir.mkdir("test_wf_cache_1")
@@ -1981,7 +1895,6 @@ def test_wf_nostate_cachedir(plugin, tmpdir):
     shutil.rmtree(cache_dir)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
     """ wf with provided cache_dir as relative path"""
     tmpdir.chdir()
@@ -2006,7 +1919,6 @@ def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
     shutil.rmtree(cache_dir)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachelocations(plugin, tmpdir):
     """
     Two identical wfs with provided cache_dir;
@@ -2061,7 +1973,6 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     assert not wf2.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachelocations_forcererun(plugin, tmpdir):
     """
     Two identical wfs with provided cache_dir;
@@ -2117,7 +2028,6 @@ def test_wf_nostate_cachelocations_forcererun(plugin, tmpdir):
     assert wf2.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(plugin, tmpdir):
     """
     Two identical wfs with provided cache_dir and cache_locations for the second one;
@@ -2176,7 +2086,6 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(plugin, tmpdir):
     assert t2 > 3
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(plugin, tmpdir):
     """
     Two identical wfs with provided cache_dir and cache_locations for the second one;
@@ -2235,7 +2144,6 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(plugin, tmpdir):
     assert len(list(Path(cache_dir2).glob("F*"))) == 0
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(plugin, tmpdir):
     """
     Two identical wfs with provided cache_dir, and cache_locations for teh second wf;
@@ -2295,7 +2203,6 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(plugin, tmpd
     assert t2 > 3
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_nodecachelocations(plugin, tmpdir):
     """
     Two wfs with different input, but the second node has the same input;
@@ -2348,7 +2255,6 @@ def test_wf_nostate_nodecachelocations(plugin, tmpdir):
     assert len(list(Path(cache_dir2).glob("F*"))) == 1
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_nodecachelocations_upd(plugin, tmpdir):
     """
     Two wfs with different input, but the second node has the same input;
@@ -2398,7 +2304,6 @@ def test_wf_nostate_nodecachelocations_upd(plugin, tmpdir):
     assert len(list(Path(cache_dir2).glob("F*"))) == 1
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_state_cachelocations(plugin, tmpdir):
     """
     Two identical wfs (with states) with provided cache_dir;
@@ -2463,7 +2368,6 @@ def test_wf_state_cachelocations(plugin, tmpdir):
         assert not odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_state_cachelocations_forcererun(plugin, tmpdir):
     """
     Two identical wfs (with states) with provided cache_dir;
@@ -2529,7 +2433,6 @@ def test_wf_state_cachelocations_forcererun(plugin, tmpdir):
         assert odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
     """
     Two identical wfs (with states) with provided cache_dir;
@@ -2597,7 +2500,6 @@ def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
         assert not odir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_state_n_nostate_cachelocations(plugin, tmpdir):
     """
     Two wfs with provided cache_dir, the first one has no state, the second has;
@@ -2648,7 +2550,6 @@ def test_wf_state_n_nostate_cachelocations(plugin, tmpdir):
     assert wf2.output_dir[1].exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachelocations_updated(plugin, tmpdir):
     """
     Two identical wfs with provided cache_dir;
@@ -2707,7 +2608,6 @@ def test_wf_nostate_cachelocations_updated(plugin, tmpdir):
     assert wf2.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     """
     Two wfs with the same inputs but slightly different graph;
@@ -2764,7 +2664,6 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     assert len(list(Path(cache_dir2).glob("F*"))) == 1
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstate_cachelocations(plugin, tmpdir):
     """
     Two wfs with identical inputs and node states;
@@ -2826,7 +2725,6 @@ def test_wf_ndstate_cachelocations(plugin, tmpdir):
     assert not wf2.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstate_cachelocations_forcererun(plugin, tmpdir):
     """
     Two wfs with identical inputs and node states;
@@ -2888,7 +2786,6 @@ def test_wf_ndstate_cachelocations_forcererun(plugin, tmpdir):
     assert wf2.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstate_cachelocations_updatespl(plugin, tmpdir):
     """
     Two wfs with identical inputs and node state (that is set after adding the node!);
@@ -2950,7 +2847,6 @@ def test_wf_ndstate_cachelocations_updatespl(plugin, tmpdir):
     assert not wf2.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_ndstate_cachelocations_recompute(plugin, tmpdir):
     """
     Two wfs (with nodes with states) with provided cache_dir;
@@ -3012,7 +2908,6 @@ def test_wf_ndstate_cachelocations_recompute(plugin, tmpdir):
     assert wf2.output_dir.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
     """
     running worflow (without state) twice,
@@ -3049,7 +2944,6 @@ def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
     assert cache_dir_content == os.listdir(wf1.cache_dir)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_state_runtwice_usecache(plugin, tmpdir):
     """
     running worflow with a state twice,
@@ -3168,7 +3062,6 @@ def test_workflow_combine2(tmpdir):
 # testing lzout.all to collect all of the results and let FunctionTask deal with it
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_lzoutall_1(plugin):
     """ workflow with 2 tasks, no splitter
         passing entire result object to add2_sub2_res function
@@ -3190,7 +3083,6 @@ def test_wf_lzoutall_1(plugin):
     assert 8 == results.output.out
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_lzoutall_1a(plugin):
     """ workflow with 2 tasks, no splitter
         passing entire result object to add2_res function
@@ -3212,7 +3104,6 @@ def test_wf_lzoutall_1a(plugin):
     assert results.output.out_all == {"out_add": 8, "out_sub": 4}
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_lzoutall_st_1(plugin):
     """ workflow with 2 tasks, no splitter
         passing entire result object to add2_res function
@@ -3234,7 +3125,6 @@ def test_wf_lzoutall_st_1(plugin):
     assert results.output.out_add == [8, 62, 62, 602]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_lzoutall_st_1a(plugin):
     """ workflow with 2 tasks, no splitter
         passing entire result object to add2_res function
@@ -3261,7 +3151,6 @@ def test_wf_lzoutall_st_1a(plugin):
     ]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_lzoutall_st_2(plugin):
     """ workflow with 2 tasks, no splitter
         passing entire result object to add2_res function
@@ -3286,7 +3175,6 @@ def test_wf_lzoutall_st_2(plugin):
     assert results.output.out_add[1] == [62, 602]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_lzoutall_st_2a(plugin):
     """ workflow with 2 tasks, no splitter
         passing entire result object to add2_res function
@@ -3316,7 +3204,6 @@ def test_wf_lzoutall_st_2a(plugin):
 # worfklows that have files in the result, the files should be copied to the wf dir
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_resultfile_1(plugin):
     """ workflow with a file in the result, file should be copied to the wf dir"""
     wf = Workflow(name="wf_file_1", input_spec=["x"])
@@ -3334,7 +3221,6 @@ def test_wf_resultfile_1(plugin):
     assert results.output.wf_out == wf.output_dir / "file_1.txt"
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_resultfile_2(plugin):
     """ workflow with a list of files in the wf result,
         all files should be copied to the wf dir
@@ -3356,7 +3242,6 @@ def test_wf_resultfile_2(plugin):
         assert file == wf.output_dir / file_list[ii]
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_resultfile_3(plugin):
     """ workflow with a dictionaries of files in the wf result,
         all files should be copied to the wf dir

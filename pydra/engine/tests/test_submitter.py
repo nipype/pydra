@@ -11,13 +11,7 @@ from ..core import Workflow
 from ..submitter import Submitter
 from ... import mark
 
-# list of (plugin, available)
-plugins = {"slurm": bool(shutil.which("sbatch"))}
-
-if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "dask", "slurm"]
-else:
-    Plugins = ["cf", "dask"]
+slurm_available = bool(shutil.which("sbatch"))
 
 
 @mark.task
@@ -26,7 +20,6 @@ def sleep_add_one(x):
     return x + 1
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_callable_wf(plugin):
     wf = gen_basic_wf()
     with pytest.raises(NotImplementedError):
@@ -42,7 +35,6 @@ def test_callable_wf(plugin):
     assert res.output.out == 9
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_concurrent_wf(plugin):
     # concurrent workflow
     # A --> C
@@ -86,7 +78,6 @@ def test_concurrent_wf_nprocs():
     assert res.output.out2 == 12
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_in_wf(plugin):
     """WF(A --> SUBWF(A --> B) --> B)"""
     wf = Workflow(name="wf_in_wf", input_spec=["x"])
@@ -112,7 +103,7 @@ def test_wf_in_wf(plugin):
     assert res.output.out == 7
 
 
-def test_wf2():
+def test_wf2(plugin_dask_opt):
     """ workflow as a node
         workflow-node with one task and no splitter
     """
@@ -125,14 +116,14 @@ def test_wf2():
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
 
-    with Submitter("cf") as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(wf)
 
     res = wf.result()
     assert res.output.out == 3
 
 
-def test_wf_with_state():
+def test_wf_with_state(plugin_dask_opt):
     wf = Workflow(name="wf_with_state", input_spec=["x"])
     wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
     wf.add(sleep_add_one(name="taskb", x=wf.taska.lzout.out))
@@ -141,7 +132,7 @@ def test_wf_with_state():
     wf.split("x")
     wf.set_output([("out", wf.taskb.lzout.out)])
 
-    with Submitter("dask") as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         sub(wf)
 
     res = wf.result()
@@ -151,7 +142,7 @@ def test_wf_with_state():
     assert res[2].output.out == 5
 
 
-@pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
+@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_wf(tmpdir):
     wf = gen_basic_wf()
     wf.cache_dir = tmpdir
@@ -167,7 +158,7 @@ def test_slurm_wf(tmpdir):
     assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 2
 
 
-@pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
+@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_wf_cf(tmpdir):
     # submit entire workflow as single job executing with cf worker
     wf = gen_basic_wf()
@@ -185,7 +176,7 @@ def test_slurm_wf_cf(tmpdir):
     assert sdirs[0].basename == wf.checksum
 
 
-@pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
+@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_wf_state(tmpdir):
     wf = gen_basic_wf()
     wf.split("x")
@@ -202,7 +193,7 @@ def test_slurm_wf_state(tmpdir):
     assert len(sdirs) == 2 * len(wf.inputs.x)
 
 
-@pytest.mark.skipif(not plugins["slurm"], reason="slurm not installed")
+@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_max_jobs(tmpdir):
     wf = Workflow("new_wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wf.inputs.x = 5
