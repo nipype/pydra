@@ -33,6 +33,10 @@ env:
 # Useful for testing un-released upstream fixes
 matrix:
   include:
+  - python: 3.7
+    env:
+      - INSTALL_TYPE="develop"
+      - CHECK_TYPE="test_dask"
   - os: osx
     osx_image: xcode11.2
     language: generic

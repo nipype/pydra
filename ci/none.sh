@@ -40,6 +40,10 @@ function travis_before_script {
             # extras don't seem possible with setup.py install, so switch to pip
             pip install ".[test]"
         fi
+    elif [ "$CHECK_TYPE" = "test_dask" ]; then
+        if [ "$INSTALL_TYPE" = "develop" ]; then
+            pip install -e ".[dask]"
+        fi
     elif [ "$CHECK_TYPE" = "style" ]; then
         pip install black==19.3b0
     fi
@@ -48,6 +52,8 @@ function travis_before_script {
 function travis_script {
     if [ "$CHECK_TYPE" = "test" ]; then
         pytest -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+    elif [ "$CHECK_TYPE" = "test_dask" ]; then
+        pytest -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules --dask pydra/engine
     elif [ "$CHECK_TYPE" = "style" ]; then
         black --check pydra tools setup.py
     fi
