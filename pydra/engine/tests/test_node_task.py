@@ -361,6 +361,18 @@ def test_task_nostate_1(plugin_dask_opt):
     # checking the results
     results = nn.result()
     assert results.output.out == 5
+    # checking the return_inputs option, either is return_inputs is True, or "val",
+    # it should give values of inputs that corresponds to the specific element
+    results_verb = nn.result(return_inputs=True)
+    results_verb_val = nn.result(return_inputs="val")
+    assert results_verb[0] == results_verb_val[0] == {"NA.a": 3}
+    assert results_verb[1].output.out == results_verb_val[1].output.out == 5
+    # checking the return_inputs option return_inputs="ind"
+    # it should give indices of inputs (instead of values) for each element
+    results_verb_ind = nn.result(return_inputs="ind")
+    assert results_verb_ind[0] == {"NA.a": None}
+    assert results_verb_ind[1].output.out == 5
+
     # checking the output_dir
     assert nn.output_dir.exists()
 
@@ -690,6 +702,22 @@ def test_task_state_1(plugin_dask_opt):
     expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
+
+    # checking the return_inputs option, either return_inputs is True or "val",
+    # it should give values of inputs that corresponds to the specific element
+    results_verb = nn.result(return_inputs=True)
+    results_verb_val = nn.result(return_inputs="val")
+    for i, res in enumerate(expected):
+        assert (results_verb[i][0], results_verb[i][1].output.out) == res
+        assert (results_verb_val[i][0], results_verb_val[i][1].output.out) == res
+
+    # checking the return_inputs option return_inputs="ind"
+    # it should give indices of inputs (instead of values) for each element
+    results_verb_ind = nn.result(return_inputs="ind")
+    expected_ind = [({"NA.a": 0}, 5), ({"NA.a": 1}, 7)]
+    for i, res in enumerate(expected_ind):
+        assert (results_verb_ind[i][0], results_verb_ind[i][1].output.out) == res
+
     # checking the output_dir
     assert nn.output_dir
     for odir in nn.output_dir:
@@ -717,13 +745,14 @@ def test_task_state_1a(plugin_dask_opt):
 
 
 @pytest.mark.parametrize(
-    "splitter, state_splitter, state_rpn, expected",
+    "splitter, state_splitter, state_rpn, expected, expected_ind",
     [
         (
             ("a", "b"),
             ("NA.a", "NA.b"),
             ["NA.a", "NA.b", "."],
             [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 20}, 25)],
+            [({"NA.a": 0, "NA.b": 0}, 13), ({"NA.a": 1, "NA.b": 1}, 25)],
         ),
         (
             ["a", "b"],
@@ -735,10 +764,18 @@ def test_task_state_1a(plugin_dask_opt):
                 ({"NA.a": 5, "NA.b": 10}, 15),
                 ({"NA.a": 5, "NA.b": 20}, 25),
             ],
+            [
+                ({"NA.a": 0, "NA.b": 0}, 13),
+                ({"NA.a": 0, "NA.b": 1}, 23),
+                ({"NA.a": 1, "NA.b": 0}, 15),
+                ({"NA.a": 1, "NA.b": 1}, 25),
+            ],
         ),
     ],
 )
-def test_task_state_2(plugin_dask_opt, splitter, state_splitter, state_rpn, expected):
+def test_task_state_2(
+    plugin_dask_opt, splitter, state_splitter, state_rpn, expected, expected_ind
+):
     """ Tasks with two inputs and a splitter (no combiner)"""
     nn = fun_addvar(name="NA").split(splitter=splitter, a=[3, 5], b=[10, 20])
 
@@ -756,6 +793,21 @@ def test_task_state_2(plugin_dask_opt, splitter, state_splitter, state_rpn, expe
     results = nn.result()
     for i, res in enumerate(expected):
         assert results[i].output.out == res[1]
+
+    # checking the return_inputs option, either return_inputs is True or "val",
+    # it should give values of inputs that corresponds to the specific element
+    results_verb = nn.result(return_inputs=True)
+    results_verb_val = nn.result(return_inputs="val")
+    for i, res in enumerate(expected):
+        assert (results_verb[i][0], results_verb[i][1].output.out) == res
+        assert (results_verb_val[i][0], results_verb_val[i][1].output.out) == res
+
+    # checking the return_inputs option return_inputs="ind"
+    # it should give indices of inputs (instead of values) for each element
+    results_verb_ind = nn.result(return_inputs="ind")
+    for i, res in enumerate(expected_ind):
+        assert (results_verb_ind[i][0], results_verb_ind[i][1].output.out) == res
+
     # checking the output_dir
     assert nn.output_dir
     for odir in nn.output_dir:
@@ -952,11 +1004,25 @@ def test_task_state_comb_1(plugin_dask_opt):
 
     # checking the results
     results = nn.result()
-
     # fully combined (no nested list)
     combined_results = [res.output.out for res in results]
-
     assert combined_results == [5, 7]
+
+    expected = [({"NA.a": 3}, 5), ({"NA.a": 5}, 7)]
+    expected_ind = [({"NA.a": 0}, 5), ({"NA.a": 1}, 7)]
+    # checking the return_inputs option, either return_inputs is True or "val",
+    # it should give values of inputs that corresponds to the specific element
+    results_verb = nn.result(return_inputs=True)
+    results_verb_val = nn.result(return_inputs="val")
+    for i, res in enumerate(expected):
+        assert (results_verb[i][0], results_verb[i][1].output.out) == res
+        assert (results_verb_val[i][0], results_verb_val[i][1].output.out) == res
+    # checking the return_inputs option return_inputs="ind"
+    # it should give indices of inputs (instead of values) for each element
+    results_verb_ind = nn.result(return_inputs="ind")
+    for i, res in enumerate(expected_ind):
+        assert (results_verb_ind[i][0], results_verb_ind[i][1].output.out) == res
+
     # checking the output_dir
     assert nn.output_dir
     for odir in nn.output_dir:
@@ -965,7 +1031,7 @@ def test_task_state_comb_1(plugin_dask_opt):
 
 @pytest.mark.parametrize(
     "splitter, combiner, state_splitter, state_rpn, state_combiner, state_combiner_all, "
-    "state_splitter_final, state_rpn_final, expected",
+    "state_splitter_final, state_rpn_final, expected, expected_val",
     [
         (
             ("a", "b"),
@@ -976,7 +1042,8 @@ def test_task_state_comb_1(plugin_dask_opt):
             ["NA.a", "NA.b"],
             None,
             [],
-            [({}, [13, 25])],
+            [13, 25],
+            [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 20}, 25)],
         ),
         (
             ("a", "b"),
@@ -987,7 +1054,8 @@ def test_task_state_comb_1(plugin_dask_opt):
             ["NA.a", "NA.b"],
             None,
             [],
-            [({}, [13, 25])],
+            [13, 25],
+            [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 20}, 25)],
         ),
         (
             ["a", "b"],
@@ -998,7 +1066,11 @@ def test_task_state_comb_1(plugin_dask_opt):
             ["NA.a"],
             "NA.b",
             ["NA.b"],
-            [({"NA.b": 10}, [13, 15]), ({"NA.b": 20}, [23, 25])],
+            [[13, 15], [23, 25]],
+            [
+                [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 5, "NA.b": 10}, 15)],
+                [({"NA.a": 3, "NA.b": 20}, 23), ({"NA.a": 5, "NA.b": 20}, 25)],
+            ],
         ),
         (
             ["a", "b"],
@@ -1009,7 +1081,11 @@ def test_task_state_comb_1(plugin_dask_opt):
             ["NA.b"],
             "NA.a",
             ["NA.a"],
-            [({"NA.a": 3}, [13, 23]), ({"NA.a": 5}, [15, 25])],
+            [[13, 23], [15, 25]],
+            [
+                [({"NA.a": 3, "NA.b": 10}, 13), ({"NA.a": 3, "NA.b": 20}, 23)],
+                [({"NA.a": 5, "NA.b": 10}, 15), ({"NA.a": 5, "NA.b": 20}, 25)],
+            ],
         ),
         (
             ["a", "b"],
@@ -1020,7 +1096,13 @@ def test_task_state_comb_1(plugin_dask_opt):
             ["NA.a", "NA.b"],
             None,
             [],
-            [({}, [13, 23, 15, 25])],
+            [13, 23, 15, 25],
+            [
+                ({"NA.a": 3, "NA.b": 10}, 13),
+                ({"NA.a": 3, "NA.b": 20}, 23),
+                ({"NA.a": 5, "NA.b": 10}, 15),
+                ({"NA.a": 5, "NA.b": 20}, 25),
+            ],
         ),
     ],
 )
@@ -1035,6 +1117,7 @@ def test_task_state_comb_2(
     state_splitter_final,
     state_rpn_final,
     expected,
+    expected_val,
 ):
     """ Tasks with scalar and outer splitters and  partial or full combiners"""
     nn = (
@@ -1049,19 +1132,32 @@ def test_task_state_comb_2(
     assert nn.state.splitter_rpn == state_rpn
     assert nn.state.combiner == state_combiner
 
+    with Submitter(plugin=plugin) as sub:
+        sub(nn)
+
     assert nn.state.splitter_final == state_splitter_final
     assert nn.state.splitter_rpn_final == state_rpn_final
     assert set(nn.state.right_combiner_all) == set(state_combiner_all)
 
-    with Submitter(plugin=plugin) as sub:
-        sub(nn)
-
     # checking the results
     results = nn.result()
+    # checking the return_inputs option, either return_inputs is True or "val",
+    # it should give values of inputs that corresponds to the specific element
+    results_verb = nn.result(return_inputs=True)
 
-    combined_results = [[res.output.out for res in res_l] for res_l in results]
-    for i, res in enumerate(expected):
-        assert combined_results[i] == res[1]
+    if nn.state.splitter_rpn_final:
+        for i, res in enumerate(expected):
+            assert [res.output.out for res in results[i]] == res
+        # results_verb
+        for i, res_l in enumerate(expected_val):
+            for j, res in enumerate(res_l):
+                assert (results_verb[i][j][0], results_verb[i][j][1].output.out) == res
+    # if the combiner is full expected is "a flat list"
+    else:
+        assert [res.output.out for res in results] == expected
+        for i, res in enumerate(expected_val):
+            assert (results_verb[i][0], results_verb[i][1].output.out) == res
+
     # checking the output_dir
     assert nn.output_dir
     for odir in nn.output_dir:
@@ -1097,7 +1193,7 @@ def test_task_state_comb_singl_1(plugin_dask_opt):
         assert odir.exists()
 
 
-def test_task_state_comb_2(plugin):
+def test_task_state_comb_3(plugin):
     """ task with the simplest splitter, the input is an empty list"""
     nn = fun_addtwo(name="NA").split(splitter="a", a=[]).combine(combiner=["a"])
 
