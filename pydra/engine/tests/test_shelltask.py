@@ -11,24 +11,11 @@ from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
+from .utils import result_no_submitter, result_submitter
 
 
 if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
-
-
-def result_no_submitter(shell_task, plugin=None):
-    """ helper function to return result when running without submitter """
-    return shell_task()
-
-
-def result_submitter(shell_task, plugin):
-    """ helper function to return result when running with submitter
-        with specific plugin
-    """
-    with Submitter(plugin=plugin) as sub:
-        shell_task(submitter=sub)
-    return shell_task.result()
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
