@@ -14,7 +14,8 @@ Feature list:
 2. Composable dataflows with simple node semantics. A dataflow can be a node of another dataflow.
 3. `splitter` and `combiner` provides many ways of compressing complex loop semantics
 4. Cached execution with support for a global cache across dataflows and users
-5. Distributed execution (presently via ConcurrentFutures and SLURM, more on their way)
+5. Distributed execution, presently via ConcurrentFutures, SLURM,
+and Dask (this is an experimental implementation with limited testing)
 
 [[API Documentation](https://nipype.github.io/pydra/)]
 
@@ -39,6 +40,14 @@ git clone git@github.com:nipype/pydra.git
 cd pydra
 pip install -e .[dev]
 ```
+
+If you want to test execution with Dask:
+```
+git clone git@github.com:nipype/pydra.git
+cd pydra
+pip install -e .[dask]
+```
+
 
 It is also useful to install pre-commit:
 
