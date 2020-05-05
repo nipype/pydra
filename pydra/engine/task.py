@@ -399,13 +399,16 @@ class ShellCommandTask(TaskBase):
         else:
             args = self.command_args
         if args:
-            # removing emty strings
+            # removing empty strings
             args = [str(el) for el in args if el not in ["", " "]]
             keys = ["return_code", "stdout", "stderr"]
             values = execute(args, strip=self.strip)
             self.output_ = dict(zip(keys, values))
             if self.output_["return_code"]:
-                raise RuntimeError(self.output_["stderr"])
+                if self.output_["stderr"]:
+                    raise RuntimeError(self.output_["stderr"])
+                else:
+                    raise RuntimeError(self.output_["stdout"])
 
 
 class ContainerTask(ShellCommandTask):

@@ -11,47 +11,28 @@ from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
+from .utils import result_no_submitter, result_submitter
 
 
 if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
 
-if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "dask", "slurm"]
-else:
-    Plugins = ["cf", "dask"]
 
-
-def result_no_submitter(shell_task, plugin=None):
-    """ helper function to return result when running without submitter """
-    return shell_task()
-
-
-def result_submitter(shell_task, plugin):
-    """ helper function to return result when running with submitter
-        with specific plugin
-    """
-    with Submitter(plugin=plugin) as sub:
-        shell_task(submitter=sub)
-    return shell_task.result()
-
-
+@pytest.mark.flaky(reruns=2)  # when dask
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
-def test_shell_cmd_1(plugin, results_function):
+def test_shell_cmd_1(plugin_dask_opt, results_function):
     """ simple command, no arguments """
     cmd = ["pwd"]
     shelly = ShellCommandTask(name="shelly", executable=cmd)
     assert shelly.cmdline == " ".join(cmd)
 
-    res = results_function(shelly, plugin=plugin)
+    res = results_function(shelly, plugin=plugin_dask_opt)
     assert Path(res.output.stdout.rstrip()) == shelly.output_dir
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_1_strip(plugin, results_function):
     """ simple command, no arguments
         strip option to remove \n at the end os stdout
@@ -67,7 +48,6 @@ def test_shell_cmd_1_strip(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_2(plugin, results_function):
     """ a command with arguments, cmd and args given as executable """
     cmd = ["echo", "hail", "pydra"]
@@ -81,7 +61,6 @@ def test_shell_cmd_2(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_2a(plugin, results_function):
     """ a command with arguments, using executable and args """
     cmd_exec = "echo"
@@ -98,7 +77,6 @@ def test_shell_cmd_2a(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_2b(plugin, results_function):
     """ a command with arguments, using  strings executable and args """
     cmd_exec = "echo"
@@ -117,8 +95,8 @@ def test_shell_cmd_2b(plugin, results_function):
 # tests with State
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_shell_cmd_3(plugin):
+@pytest.mark.flaky(reruns=2)
+def test_shell_cmd_3(plugin_dask_opt):
     """ commands without arguments
         splitter = executable
     """
@@ -127,7 +105,7 @@ def test_shell_cmd_3(plugin):
     # all args given as executable
     shelly = ShellCommandTask(name="shelly", executable=cmd).split("executable")
     assert shelly.cmdline == ["pwd", "whoami"]
-    res = shelly(plugin=plugin)
+    res = shelly(plugin=plugin_dask_opt)
     assert Path(res[0].output.stdout.rstrip()) == shelly.output_dir[0]
 
     if "USER" in os.environ:
@@ -138,7 +116,6 @@ def test_shell_cmd_3(plugin):
     assert res[0].output.stderr == res[1].output.stderr == ""
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_4(plugin):
     """ a command with arguments, using executable and args
         splitter=args
@@ -161,7 +138,6 @@ def test_shell_cmd_4(plugin):
     assert res[0].output.stderr == res[1].output.stderr == ""
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_5(plugin):
     """ a command with arguments
         using splitter and combiner for args
@@ -183,7 +159,6 @@ def test_shell_cmd_5(plugin):
     assert res[1].output.stdout == "pydra\n"
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_6(plugin):
     """ a command with arguments,
         outer splitter for executable and args
@@ -225,7 +200,6 @@ def test_shell_cmd_6(plugin):
     )
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_7(plugin):
     """ a command with arguments,
         outer splitter for executable and args, and combiner=args
@@ -253,7 +227,6 @@ def test_shell_cmd_7(plugin):
 # tests with workflows
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_shell_cmd_1(plugin):
     """ a workflow with two connected commands"""
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
@@ -280,7 +253,6 @@ def test_wf_shell_cmd_1(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_1(plugin, results_function):
     """ a command with executable, args and one command opt,
         using a customized input_spec to add the opt to the command
@@ -320,7 +292,6 @@ def test_shell_cmd_inputspec_1(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_2(plugin, results_function):
     """ a command with executable, args and two command options,
         using a customized input_spec to add the opt to the command
@@ -365,7 +336,6 @@ def test_shell_cmd_inputspec_2(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_3(plugin, results_function):
     """  mandatory field added to fields, value provided """
     cmd_exec = "echo"
@@ -395,7 +365,6 @@ def test_shell_cmd_inputspec_3(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_3a(plugin, results_function):
     """  mandatory field added to fields, value provided
         using shorter syntax for input spec (no attr.ib)
@@ -421,7 +390,6 @@ def test_shell_cmd_inputspec_3a(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_3b(plugin, results_function):
     """  mandatory field added to fields, value provided after init"""
     cmd_exec = "echo"
@@ -451,7 +419,6 @@ def test_shell_cmd_inputspec_3b(plugin, results_function):
     assert res.output.stdout == "HELLO\n"
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_3c_exception(plugin):
     """  mandatory field added to fields, value is not provided, so exception is raised """
     cmd_exec = "echo"
@@ -478,7 +445,6 @@ def test_shell_cmd_inputspec_3c_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_3c(plugin, results_function):
     """  mandatory=False, so tasks runs fine even without the value """
     cmd_exec = "echo"
@@ -508,7 +474,6 @@ def test_shell_cmd_inputspec_3c(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_4(plugin, results_function):
     """  mandatory field added to fields, value provided """
     cmd_exec = "echo"
@@ -540,7 +505,6 @@ def test_shell_cmd_inputspec_4(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_4a(plugin, results_function):
     """  mandatory field added to fields, value provided
         using shorter syntax for input spec (no attr.ib)
@@ -565,7 +529,6 @@ def test_shell_cmd_inputspec_4a(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_4b(plugin, results_function):
     """  mandatory field added to fields, value provided """
     cmd_exec = "echo"
@@ -596,7 +559,6 @@ def test_shell_cmd_inputspec_4b(plugin, results_function):
     assert res.output.stdout == "Hi\n"
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_4c_exception(plugin):
     """  mandatory field added to fields, value provided """
     cmd_exec = "echo"
@@ -626,7 +588,6 @@ def test_shell_cmd_inputspec_4c_exception(plugin):
     )
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_4d_exception(plugin):
     """  mandatory field added to fields, value provided """
     cmd_exec = "echo"
@@ -661,7 +622,6 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_5_nosubm(plugin, results_function):
     """ checking xor in metadata: task should work fine, since only one option is True"""
     cmd_exec = "ls"
@@ -706,7 +666,6 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function):
     res = results_function(shelly, plugin)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_5a_exception(plugin):
     """ checking xor in metadata: both options are True, so the task raises exception"""
     cmd_exec = "ls"
@@ -756,7 +715,6 @@ def test_shell_cmd_inputspec_5a_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_6(plugin, results_function):
     """ checking requires in metadata:
         the required field is set in the init, so the task works fine
@@ -803,7 +761,6 @@ def test_shell_cmd_inputspec_6(plugin, results_function):
     res = results_function(shelly, plugin)
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_6a_exception(plugin):
     """ checking requires in metadata:
         the required field is None, so the task works raises exception
@@ -845,7 +802,6 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_6b(plugin, results_function):
     """ checking requires in metadata:
         the required field set after the init
@@ -894,7 +850,6 @@ def test_shell_cmd_inputspec_6b(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_7(plugin, results_function):
     """
         providing output name using input_spec,
@@ -930,7 +885,6 @@ def test_shell_cmd_inputspec_7(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_7a(plugin, results_function):
     """
         providing output name using input_spec,
@@ -968,7 +922,6 @@ def test_shell_cmd_inputspec_7a(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
     """ using input_spec, providing list of files as an input """
 
@@ -1010,7 +963,6 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
     """ shelltask changes a file in place,
         adding copyfile=True to the file-input from input_spec
@@ -1068,7 +1020,6 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
     """ shelltask changes a file in place,
         adding copyfile=False to the File-input from input_spec
@@ -1142,7 +1093,6 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
     " and the results cant be found"
 )
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
     """ shelltask changes a file in place,
         copyfile is None for the file-input, so original filed is changed
@@ -1195,7 +1145,6 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_state_1(plugin, results_function):
     """  adding state to the input from input_spec """
     cmd_exec = "echo"
@@ -1227,7 +1176,6 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_state_1a(plugin, results_function):
     """  adding state to the input from input_spec
         using shorter syntax for input_spec (without default)
@@ -1254,7 +1202,6 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_state_2(plugin, results_function):
     """
         adding splitter to input tha is used in the output_file_tamplate
@@ -1290,7 +1237,6 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_state_3(plugin, results_function, tmpdir):
     """  adding state to the File-input from input_spec """
 
@@ -1331,7 +1277,6 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmpdir):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
     """  adding state to the File-input from input_spec """
 
@@ -1396,8 +1341,8 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
 # customised input_spec in Workflow
 
 
-@pytest.mark.parametrize("plugin", Plugins)
-def test_wf_shell_cmd_2(plugin):
+@pytest.mark.flaky(reruns=2)  # when dask
+def test_wf_shell_cmd_2(plugin_dask_opt):
     """ a workflow with input with defined output_file_template (str)
         that requires wf.lzin
     """
@@ -1434,7 +1379,7 @@ def test_wf_shell_cmd_2(plugin):
 
     wf.set_output([("out_f", wf.shelly.lzout.out1), ("out", wf.shelly.lzout.stdout)])
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin=plugin_dask_opt) as sub:
         wf(submitter=sub)
 
     res = wf.result()
@@ -1442,7 +1387,6 @@ def test_wf_shell_cmd_2(plugin):
     assert res.output.out_f.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_shell_cmd_2a(plugin):
     """ a workflow with input with defined output_file_template (tuple)
         that requires wf.lzin
@@ -1488,7 +1432,6 @@ def test_wf_shell_cmd_2a(plugin):
     assert res.output.out_f.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_shell_cmd_3(plugin):
     """ a workflow with 2 tasks,
         first one has input with output_file_template (str, uses wf.lzin),
@@ -1577,7 +1520,6 @@ def test_wf_shell_cmd_3(plugin):
     assert res.output.cp_file.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_shell_cmd_3a(plugin):
     """ a workflow with 2 tasks,
         first one has input with output_file_template (str, uses wf.lzin),
@@ -1666,7 +1608,6 @@ def test_wf_shell_cmd_3a(plugin):
     assert res.output.cp_file.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_shell_cmd_state_1(plugin):
     """ a workflow with 2 tasks and splitter on the wf level,
         first one has input with output_file_template (str, uses wf.lzin),
@@ -1756,7 +1697,6 @@ def test_wf_shell_cmd_state_1(plugin):
         assert res.output.cp_file.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_shell_cmd_ndst_1(plugin):
     """ a workflow with 2 tasks and a splitter on the node level,
         first one has input with output_file_template (str, uses wf.lzin),
@@ -1849,7 +1789,6 @@ def test_wf_shell_cmd_ndst_1(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_outputspec_1(plugin, results_function):
     """
         customised output_spec, adding files to the output, providing specific pathname
@@ -1868,7 +1807,6 @@ def test_shell_cmd_outputspec_1(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_outputspec_1a(plugin, results_function):
     """
         customised output_spec, adding files to the output, providing specific pathname
@@ -1886,7 +1824,6 @@ def test_shell_cmd_outputspec_1a(plugin, results_function):
     assert res.output.newfile.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_outputspec_1b_exception(plugin):
     """
         customised output_spec, adding files to the output, providing specific pathname
@@ -1906,7 +1843,6 @@ def test_shell_cmd_outputspec_1b_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_outputspec_2(plugin, results_function):
     """
         customised output_spec, adding files to the output,
@@ -1925,7 +1861,6 @@ def test_shell_cmd_outputspec_2(plugin, results_function):
     assert res.output.newfile.exists()
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_outputspec_2a_exception(plugin):
     """
         customised output_spec, adding files to the output,
@@ -1946,7 +1881,6 @@ def test_shell_cmd_outputspec_2a_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_outputspec_3(plugin, results_function):
     """
         customised output_spec, adding files to the output,
@@ -1968,7 +1902,6 @@ def test_shell_cmd_outputspec_3(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_outputspec_4(plugin, results_function):
     """
         customised output_spec, adding files to the output,
@@ -1995,7 +1928,6 @@ def test_shell_cmd_outputspec_4(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_outputspec_5(plugin, results_function):
     """
         providing output name by providing output_file_template
@@ -2031,7 +1963,6 @@ def test_shell_cmd_outputspec_5(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_state_outputspec_1(plugin, results_function):
     """
         providing output name by providing output_file_template
@@ -2070,7 +2001,6 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function):
 # customised output_spec for tasks in workflows
 
 
-@pytest.mark.parametrize("plugin", Plugins)
 def test_shell_cmd_outputspec_wf_1(plugin):
     """
         customised output_spec for tasks within a Workflow,

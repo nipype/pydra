@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import os, sys, shutil
-import subprocess as sp
+import os
 import pytest
 import attr
 
@@ -9,20 +8,7 @@ from ..task import DockerTask, ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec
-
-if bool(shutil.which("sbatch")):
-    Plugins = ["cf", "slurm"]
-else:
-    Plugins = ["cf"]
-
-need_docker = pytest.mark.skipif(
-    shutil.which("docker") is None or sp.call(["docker", "info"]),
-    reason="no docker within the container",
-)
-no_win = pytest.mark.skipif(
-    sys.platform.startswith("win"),
-    reason="docker command not adjusted for windows docker",
-)
+from .utils import no_win, need_docker
 
 
 @no_win
@@ -49,7 +35,6 @@ def test_docker_1_nosubm():
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_1(plugin):
     """ simple command in a container, a default bindings and working directory is added
         using submitter
@@ -69,7 +54,6 @@ def test_docker_1(plugin):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_1_dockerflag(plugin):
     """ simple command in a container, a default bindings and working directory is added
         using ShellComandTask with container_info=("docker", image)
@@ -91,7 +75,6 @@ def test_docker_1_dockerflag(plugin):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_1_dockerflag_exception(plugin):
     """using ShellComandTask with container_info=("docker"), no image provided"""
     cmd = "whoami"
@@ -124,7 +107,6 @@ def test_docker_2_nosubm():
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_2(plugin):
     """ a command with arguments, cmd and args given as executable
         using submitter
@@ -147,7 +129,6 @@ def test_docker_2(plugin):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_2_dockerflag(plugin):
     """ a command with arguments, cmd and args given as executable
         using ShellComandTask with container_info=("docker", image)
@@ -197,7 +178,6 @@ def test_docker_2a_nosubm():
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_2a(plugin):
     """ a command with arguments, using executable and args
         using submitter
@@ -225,7 +205,6 @@ def test_docker_2a(plugin):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_3(plugin, tmpdir):
     """ a simple command in container with bindings,
         creating directory in tmp dir and checking if it is in the container
@@ -249,7 +228,6 @@ def test_docker_3(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_3_dockerflag(plugin, tmpdir):
     """ a simple command in container with bindings,
         creating directory in tmp dir and checking if it is in the container
@@ -276,7 +254,6 @@ def test_docker_3_dockerflag(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_3_dockerflagbind(plugin, tmpdir):
     """ a simple command in container with bindings,
         creating directory in tmp dir and checking if it is in the container
@@ -303,7 +280,6 @@ def test_docker_3_dockerflagbind(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_4(plugin, tmpdir):
     """ task reads the file that is bounded to the container
         specifying bindings,
@@ -330,7 +306,6 @@ def test_docker_4(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_4_dockerflag(plugin, tmpdir):
     """ task reads the file that is bounded to the container
         specifying bindings,
@@ -360,7 +335,6 @@ def test_docker_4_dockerflag(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_st_1(plugin):
     """ commands without arguments in container
         splitter = executable
@@ -385,7 +359,6 @@ def test_docker_st_1(plugin):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_st_2(plugin):
     """ command with arguments in docker, checking the distribution
         splitter = image
@@ -410,7 +383,6 @@ def test_docker_st_2(plugin):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_st_3(plugin):
     """ outer splitter image and executable
     """
@@ -429,7 +401,6 @@ def test_docker_st_3(plugin):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_st_4(plugin):
     """ outer splitter image and executable, combining with images
     """
@@ -472,7 +443,6 @@ def test_docker_st_4(plugin):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_docker_1(plugin, tmpdir):
     """ a workflow with two connected task
         the first one read the file that is bounded to the container,
@@ -517,7 +487,6 @@ def test_wf_docker_1(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_docker_1_dockerflag(plugin, tmpdir):
     """ a workflow with two connected task
         the first one read the file that is bounded to the container,
@@ -558,7 +527,6 @@ def test_wf_docker_1_dockerflag(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_docker_2pre(plugin, tmpdir):
     """ a workflow with two connected task that run python scripts
         the first one creates a text file and the second one reads the file
@@ -580,7 +548,6 @@ def test_wf_docker_2pre(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_docker_2(plugin, tmpdir):
     """ a workflow with two connected task that run python scripts
         the first one creates a text file and the second one reads the file
@@ -621,7 +588,6 @@ def test_wf_docker_2(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_wf_docker_3(plugin, tmpdir):
     """ a workflow with two connected task
         the first one read the file that contains the name of the image,
@@ -665,7 +631,6 @@ def test_wf_docker_3(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_outputspec_1(plugin, tmpdir):
     """
         customised output_spec, adding files to the output, providing specific pathname
@@ -694,7 +659,6 @@ def test_docker_outputspec_1(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_1(plugin, tmpdir):
     """ a simple customized input spec for docker task """
     filename = str(tmpdir.join("file_pydra.txt"))
@@ -736,7 +700,6 @@ def test_docker_inputspec_1(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_1a(plugin, tmpdir):
     """ a simple customized input spec for docker task
         a default value is used
@@ -776,7 +739,6 @@ def test_docker_inputspec_1a(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_2(plugin, tmpdir):
     """ a customized input spec with two fields for docker task """
     filename_1 = tmpdir.join("file_pydra.txt")
@@ -825,7 +787,6 @@ def test_docker_inputspec_2(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_2a_except(plugin, tmpdir):
     """ a customized input spec with two fields
         first one uses a default, and second doesn't - raises a dataclass exception
@@ -877,7 +838,6 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_2a(plugin, tmpdir):
     """ a customized input spec with two fields
         first one uses a default value
@@ -929,7 +889,6 @@ def test_docker_inputspec_2a(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_3(plugin, tmpdir):
     """ input file is in the container, so metadata["container_path"]: True,
         the input will be treated as a str """
@@ -973,7 +932,6 @@ def test_docker_inputspec_3(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_3a(plugin, tmpdir):
     """ input file does not exist in the local file system,
         but metadata["container_path"] is not used,
@@ -1017,7 +975,6 @@ def test_docker_inputspec_3a(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
     """ shelltask changes a file in place,
         adding copyfile=True to the file-input from input_spec
@@ -1080,7 +1037,6 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_state_1(plugin, tmpdir):
     """ a customised input spec for a docker file with a splitter,
         splitter is on files
@@ -1129,7 +1085,6 @@ def test_docker_inputspec_state_1(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_inputspec_state_1b(plugin, tmpdir):
     """ a customised input spec for a docker file with a splitter,
         files from the input spec have the same path in the local os and the container,
@@ -1179,7 +1134,6 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_wf_inputspec_1(plugin, tmpdir):
     """ a customized input spec for workflow with docker tasks """
     filename = tmpdir.join("file_pydra.txt")
@@ -1231,7 +1185,6 @@ def test_docker_wf_inputspec_1(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_wf_state_inputspec_1(plugin, tmpdir):
     """ a customized input spec for workflow with docker tasks that has a state"""
     file_1 = tmpdir.join("file_pydra.txt")
@@ -1289,7 +1242,6 @@ def test_docker_wf_state_inputspec_1(plugin, tmpdir):
 
 @no_win
 @need_docker
-@pytest.mark.parametrize("plugin", Plugins)
 def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
     """ a customized input spec for workflow with docker tasks with states"""
     file_1 = tmpdir.join("file_pydra.txt")
