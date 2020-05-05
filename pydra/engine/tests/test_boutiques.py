@@ -21,6 +21,7 @@ Infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
 
 @no_win
 @need_bosh_docker
+@pytest.mark.flaky(reruns=2)  # need for travis
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
