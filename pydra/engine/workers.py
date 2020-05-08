@@ -7,6 +7,7 @@ from pathlib import Path
 
 import concurrent.futures as cf
 
+from .core import TaskBase, is_workflow
 from .helpers import create_pyscript, get_available_cpus, read_and_display_async, save
 
 import logging
@@ -177,7 +178,13 @@ class ConcurrentFuturesWorker(Worker):
 
     async def exec_as_coro(self, runnable, rerun=False):
         """Run a task (coroutine wrapper)."""
-        res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
+        if isinstance(runnable, TaskBase):
+            res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
+        else:  # it could be tuple that includes pickle files with tasks and inputs
+            ind, task_pkl, input_pkl, task_orig = runnable
+            res = await self.loop.run_in_executor(
+                self.pool, task_orig._load_and_run, ind, task_pkl, input_pkl, rerun
+            )
         return res
 
     def close(self):

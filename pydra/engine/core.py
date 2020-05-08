@@ -6,7 +6,7 @@ import logging
 import os
 from pathlib import Path
 import typing as ty
-from copy import deepcopy
+from copy import deepcopy, copy
 
 import cloudpickle as cp
 from filelock import SoftFileLock
@@ -359,6 +359,16 @@ class TaskBase:
             res = self._run(rerun=rerun, **kwargs)
         return res
 
+    def _load_and_run(self, ind, task_pkl, input_pkl, rerun=False, **kwargs):
+        """ loading the task and inputs from pickle files,
+            settings proper input for specific index before running the task
+        """
+        task_orig = cp.loads(input_pkl.read_bytes())
+        task = cp.loads(task_pkl.read_bytes())
+        _, inputs_dict = task_orig.get_input_el(ind)
+        task.inputs = attr.evolve(task.inputs, **inputs_dict)
+        return task._run(rerun=rerun, **kwargs)
+
     def _run(self, rerun=False, **kwargs):
         self.inputs = attr.evolve(self.inputs, **kwargs)
         self.inputs.check_fields_input_spec()
@@ -499,15 +509,35 @@ class TaskBase:
             return None, inputs_dict
 
     def to_job(self, ind):
-        """Run interface one element generated from node_state."""
+        """ Pickling tasks and inputs, so don't have to load the input to teh memory """
         # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
-        el = deepcopy(self)
-        el.state = None
-        # dj might be needed
-        # el._checksum = None
-        _, inputs_dict = self.get_input_el(ind)
-        el.inputs = attr.evolve(el.inputs, **inputs_dict)
-        return el
+        # copy the task and setting input/state to None
+
+        pkl_files = self.cache_dir / "pkl_files"
+        pkl_files.mkdir(exist_ok=True)
+        task_path = pkl_files / f"task_{self.name}.pklz"
+        input_path = pkl_files / f"task_orig_input_{self.name}.pklz"
+
+        # the pickle files should be independent on index, so could be saved once only
+        if ind == 0:
+            task_copy = copy(self)
+            task_copy.state = None
+            task_copy.inputs = attr.evolve(
+                self.inputs, **{k: None for k in self.input_names}
+            )
+
+            # saving the task object (no input)
+            with task_path.open("wb") as fp:
+                cp.dump(task_copy, fp)
+
+            # saving the original task with the full input
+            # so can be later used to set input to all of the tasks
+            with input_path.open("wb") as fp:
+                cp.dump(self, fp)
+
+        # index, path to the pkl task, path to the pkl original task with input,
+        # and self (to be able to check properties when needed)
+        return (ind, task_path, input_path, self)
 
     @property
     def done(self):
@@ -822,6 +852,18 @@ class Workflow(TaskBase):
                     other_states=other_states,
                     combiner=combiner,
                 )
+
+    async def _load_and_run(
+        self, ind, task_pkl, input_pkl, submitter=None, rerun=False, **kwargs
+    ):
+        """ loading the workflow and inputs from pickle files,
+            settings proper input for specific index before running the workflow
+        """
+        task_orig = cp.loads(input_pkl.read_bytes())
+        task = cp.loads(task_pkl.read_bytes())
+        _, inputs_dict = task_orig.get_input_el(ind)
+        task.inputs = attr.evolve(task.inputs, **inputs_dict)
+        await task._run(submitter=submitter, rerun=rerun, **kwargs)
 
     async def _run(self, submitter=None, rerun=False, **kwargs):
         # self.inputs = dc.replace(self.inputs, **kwargs) don't need it?
