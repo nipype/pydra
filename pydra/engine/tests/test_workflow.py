@@ -1999,7 +1999,7 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
 
 def test_wf_nostate_cachelocations_a(plugin, tmpdir):
     """
-    almost the same as previous thest, but workflows names differ;
+    the same as previous test, but workflows names differ;
     the task should not be run and it should be fast,
     but the wf itself is triggered and the new output dir is created
     """
@@ -2054,8 +2054,10 @@ def test_wf_nostate_cachelocations_a(plugin, tmpdir):
 
 def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
     """
-    Two identical wfs with provided cache_dir;
-    the second wf has cache_locations and should not recompute the results
+    the same as previous test, but wf output names differ,
+    the tasks should not be run and it should be fast,
+    but the wf itself is triggered and the new output dir is created
+    (the second wf has updated name in its Output)
     """
     cache_dir1 = tmpdir.mkdir("test_wf_cache3")
     cache_dir2 = tmpdir.mkdir("test_wf_cache4")
@@ -2097,19 +2099,18 @@ def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out2
 
-    # checking execution time
+    # checking execution time (the second wf should be fast, nodes do not have to rerun)
     assert t1 > 3
     assert t2 < 0.5
 
-    # checking if the second wf didn't run again
+    # both wf output_dirs should be created
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
 
 
 def test_wf_nostate_cachelocations_setoutputchange_a(plugin, tmpdir):
     """
-    Two identical wfs with provided cache_dir;
-    the second wf has cache_locations and should not recompute the results
+    the same as previous test, but wf names and output names differ,
     """
     cache_dir1 = tmpdir.mkdir("test_wf_cache3")
     cache_dir2 = tmpdir.mkdir("test_wf_cache4")
@@ -2151,11 +2152,11 @@ def test_wf_nostate_cachelocations_setoutputchange_a(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out2
 
-    # checking execution time
+    # checking execution time (the second wf should be fast, nodes do not have to rerun)
     assert t1 > 3
     assert t2 < 0.5
 
-    # checking if the second wf didn't run again
+    # both wf output_dirs should be created
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
 

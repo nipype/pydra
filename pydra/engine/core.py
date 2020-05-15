@@ -225,13 +225,19 @@ class TaskBase:
             self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
 
         input_hash = self.inputs.hash
-        if self.state is None:
+        if self.state is None and not is_workflow(self):
             self._checksum = create_checksum(self.__class__.__name__, input_hash)
         else:
-            # including splitter in the hash
-            splitter_hash = hash_function(self.state.splitter)
+            hash_list = [input_hash]
+            if self.state:
+                # including splitter in the hash
+                splitter_hash = hash_function(self.state.splitter)
+                hash_list.append(splitter_hash)
+            if is_workflow(self):
+                con_hash = hash_function(self._connections)
+                hash_list.append(con_hash)
             self._checksum = create_checksum(
-                self.__class__.__name__, hash_function([input_hash, splitter_hash])
+                self.__class__.__name__, hash_function(hash_list)
             )
         return self._checksum
 
@@ -259,7 +265,14 @@ class TaskBase:
                     getattr(inputs_copy, key.split(".")[1])[ind],
                 )
             input_hash = inputs_copy.hash
-            checksum_ind = create_checksum(self.__class__.__name__, input_hash)
+            if is_workflow(self):
+                con_hash = hash_function(self._connections)
+                hash_list = [input_hash, con_hash]
+                checksum_ind = create_checksum(
+                    self.__class__.__name__, hash_function(hash_list)
+                )
+            else:
+                checksum_ind = create_checksum(self.__class__.__name__, input_hash)
             return checksum_ind
         else:
             checksum_list = []
