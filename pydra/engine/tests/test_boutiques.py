@@ -21,7 +21,7 @@ Infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=2)  # need for travis
+@pytest.mark.flaky(reruns=3)  # need for travis
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
@@ -45,6 +45,7 @@ def test_boutiques_1(maskfile, plugin, results_function):
 
 @no_win
 @need_bosh_docker
+@pytest.mark.flaky(reruns=3)
 def test_boutiques_spec_1():
     """ testing spec: providing input/output fields names"""
     btask = BoshTask(
@@ -69,6 +70,7 @@ def test_boutiques_spec_1():
 
 @no_win
 @need_bosh_docker
+@pytest.mark.flaky(reruns=3)
 def test_boutiques_spec_2():
     """ testing spec: providing partial input/output fields names"""
     btask = BoshTask(
@@ -91,6 +93,7 @@ def test_boutiques_spec_2():
 
 @no_win
 @need_bosh_docker
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
@@ -121,6 +124,7 @@ def test_boutiques_wf_1(maskfile, plugin):
 
 @no_win
 @need_bosh_docker
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
