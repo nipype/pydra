@@ -927,18 +927,29 @@ class Workflow(TaskBase):
             TODO
 
         """
+        if self._connections is None:
+            self._connections = []
         if isinstance(connections, tuple) and len(connections) == 2:
-            self._connections = [connections]
+            new_connections = [connections]
         elif isinstance(connections, list) and all(
             [len(el) == 2 for el in connections]
         ):
-            self._connections = connections
+            new_connections = connections
         elif isinstance(connections, dict):
-            self._connections = list(connections.items())
+            new_connections = list(connections.items())
         else:
             raise Exception(
                 "Connections can be a 2-elements tuple, a list of these tuples, or dictionary"
             )
+        # checking if a new output name is already in the connections
+        connection_names = [name for name, _ in self._connections]
+        new_names = [name for name, _ in new_connections]
+        if set(connection_names).intersection(new_names):
+            raise Exception(
+                f"output name {set(connection_names).intersection(new_names)} is already set"
+            )
+
+        self._connections += new_connections
         fields = [(name, ty.Any) for name, _ in self._connections]
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
         logger.info("Added %s to %s", self.output_spec, self)
