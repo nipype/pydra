@@ -2025,7 +2025,6 @@ def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
     shutil.rmtree(cache_dir)
 
 
-@pytest.mark.flaky(reruns=2)  # windows test sometimes gives longer time t2
 def test_wf_nostate_cachelocations(plugin, tmpdir):
     """
     Two identical wfs with provided cache_dir;
@@ -2080,7 +2079,6 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     assert not wf2.output_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # windows test sometimes gives longer time t2
 def test_wf_nostate_cachelocations_a(plugin, tmpdir):
     """
     the same as previous test, but workflows names differ;
@@ -2195,7 +2193,6 @@ def test_wf_nostate_cachelocations_b(plugin, tmpdir):
     assert wf2.output_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # windows test sometimes gives longer time t2
 def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
     """
     the same as previous test, but wf output names differ,
@@ -2253,7 +2250,6 @@ def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
     assert wf2.output_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # windows test sometimes gives longer time t2
 def test_wf_nostate_cachelocations_setoutputchange_a(plugin, tmpdir):
     """
     the same as previous test, but wf names and output names differ,
@@ -2639,7 +2635,6 @@ def test_wf_nostate_nodecachelocations_upd(plugin, tmpdir):
     assert len(list(Path(cache_dir2).glob("F*"))) == 1
 
 
-@pytest.mark.flaky(reruns=2)  # windows test sometimes gives longer time t2
 def test_wf_state_cachelocations(plugin, tmpdir):
     """
     Two identical wfs (with states) with provided cache_dir;
@@ -2769,7 +2764,6 @@ def test_wf_state_cachelocations_forcererun(plugin, tmpdir):
         assert odir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # windows test sometimes gives longer time t2
 def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
     """
     Two identical wfs (with states) with provided cache_dir;
@@ -3001,7 +2995,6 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     assert len(list(Path(cache_dir2).glob("F*"))) == 1
 
 
-@pytest.mark.flaky(reruns=2)  # windows test sometimes gives longer time t2
 def test_wf_ndstate_cachelocations(plugin, tmpdir):
     """
     Two wfs with identical inputs and node states;
@@ -3124,7 +3117,6 @@ def test_wf_ndstate_cachelocations_forcererun(plugin, tmpdir):
     assert wf2.output_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # windows test sometimes gives longer time t2
 def test_wf_ndstate_cachelocations_updatespl(plugin, tmpdir):
     """
     Two wfs with identical inputs and node state (that is set after adding the node!);
