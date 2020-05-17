@@ -309,6 +309,18 @@ def test_exception_func():
     assert pytest.raises(Exception, bad_funk)
 
 
+def test_result_none():
+    """ checking if None is properly returned as the result"""
+
+    @mark.task
+    def fun_none(x):
+        return None
+
+    task = fun_none(name="none", x=3)
+    res = task()
+    assert res.output.out is None
+
+
 def test_audit_prov(tmpdir):
     @mark.task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
