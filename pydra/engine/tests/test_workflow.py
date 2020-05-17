@@ -12,6 +12,7 @@ from .utils import (
     ten,
     identity,
     list_output,
+    fun_addsubvar,
     fun_addvar3,
     add2_sub2_res,
     fun_addvar_none,
@@ -289,6 +290,87 @@ def test_wf_4a(plugin):
     assert wf.output_dir.exists()
     results = wf.result()
     assert 5 == results.output.out
+
+
+def test_wf_5(plugin):
+    """ wf with two outputs connected to the task outputs
+        one set_output
+    """
+    wf = Workflow(name="wf_5", input_spec=["x", "y"], x=3, y=2)
+    wf.add(fun_addsubvar(name="addsub", a=wf.lzin.x, b=wf.lzin.y))
+    wf.set_output([("out_sum", wf.addsub.lzout.sum), ("out_sub", wf.addsub.lzout.sub)])
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert 5 == results.output.out_sum
+    assert 1 == results.output.out_sub
+
+
+def test_wf_5a(plugin):
+    """ wf with two outputs connected to the task outputs,
+        set_output set twice
+    """
+    wf = Workflow(name="wf_5", input_spec=["x", "y"], x=3, y=2)
+    wf.add(fun_addsubvar(name="addsub", a=wf.lzin.x, b=wf.lzin.y))
+    wf.set_output([("out_sum", wf.addsub.lzout.sum)])
+    wf.set_output([("out_sub", wf.addsub.lzout.sub)])
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert 5 == results.output.out_sum
+    assert 1 == results.output.out_sub
+
+
+def test_wf_5b_exception():
+    """  set_output used twice with the same name - exception should be raised """
+    wf = Workflow(name="wf_5", input_spec=["x", "y"], x=3, y=2)
+    wf.add(fun_addsubvar(name="addsub", a=wf.lzin.x, b=wf.lzin.y))
+    wf.set_output([("out", wf.addsub.lzout.sum)])
+
+    with pytest.raises(Exception) as excinfo:
+        wf.set_output([("out", wf.addsub.lzout.sub)])
+    assert "is already set" in str(excinfo.value)
+
+
+def test_wf_6(plugin):
+    """ wf with two tasks and two outputs connected to both tasks,
+        one set_output
+    """
+    wf = Workflow(name="wf_6", input_spec=["x", "y"], x=2, y=3)
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out))
+    wf.set_output([("out1", wf.mult.lzout.out), ("out2", wf.add2.lzout.out)])
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.output_dir.exists()
+    results = wf.result()
+    assert 6 == results.output.out1
+    assert 8 == results.output.out2
+
+
+def test_wf_6a(plugin):
+    """ wf with two tasks and two outputs connected to both tasks,
+        set_output used twice
+    """
+    wf = Workflow(name="wf_6", input_spec=["x", "y"], x=2, y=3)
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out))
+    wf.set_output([("out1", wf.mult.lzout.out)])
+    wf.set_output([("out2", wf.add2.lzout.out)])
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.output_dir.exists()
+    results = wf.result()
+    assert 6 == results.output.out1
+    assert 8 == results.output.out2
 
 
 def test_wf_st_1(plugin):
@@ -1995,6 +2077,231 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
     assert not wf2.output_dir.exists()
+
+
+def test_wf_nostate_cachelocations_a(plugin, tmpdir):
+    """
+    the same as previous test, but workflows names differ;
+    the task should not be run and it should be fast,
+    but the wf itself is triggered and the new output dir is created
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+    cache_dir2 = tmpdir.mkdir("test_wf_cache4")
+
+    wf1 = Workflow(name="wf1", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.inputs.x = 2
+    wf1.inputs.y = 3
+    wf1.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+    t1 = time.time() - t0
+
+    results1 = wf1.result()
+    assert 8 == results1.output.out
+
+    wf2 = Workflow(
+        name="wf2",
+        input_spec=["x", "y"],
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+    )
+    wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y))
+    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
+    wf2.set_output([("out", wf2.add2.lzout.out)])
+    wf2.inputs.x = 2
+    wf2.inputs.y = 3
+    wf2.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf2)
+    t2 = time.time() - t0
+
+    results2 = wf2.result()
+    assert 8 == results2.output.out
+
+    # checking execution time (second one should be quick)
+    assert t1 > 3
+    # testing relative values (windows or slurm takes much longer to create wf itself)
+    assert t2 / t1 < 0.9
+
+    # checking if both wf.output_dir are created
+    assert wf1.output_dir.exists()
+    assert wf2.output_dir.exists()
+
+
+def test_wf_nostate_cachelocations_b(plugin, tmpdir):
+    """
+    the same as previous test, but the 2nd workflows has two outputs
+    (connected to the same task output);
+    the task should not be run and it should be fast,
+    but the wf itself is triggered and the new output dir is created
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+    cache_dir2 = tmpdir.mkdir("test_wf_cache4")
+
+    wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out", wf1.add2.lzout.out)])
+    wf1.inputs.x = 2
+    wf1.inputs.y = 3
+    wf1.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+    t1 = time.time() - t0
+
+    results1 = wf1.result()
+    assert 8 == results1.output.out
+
+    wf2 = Workflow(
+        name="wf",
+        input_spec=["x", "y"],
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+    )
+    wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y))
+    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
+    wf2.set_output([("out", wf2.add2.lzout.out)])
+    # additional output
+    wf2.set_output([("out_pr", wf2.add2.lzout.out)])
+    wf2.inputs.x = 2
+    wf2.inputs.y = 3
+    wf2.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf2)
+    t2 = time.time() - t0
+
+    results2 = wf2.result()
+    assert 8 == results2.output.out == results2.output.out_pr
+
+    # checking execution time
+    assert t1 > 3
+    assert t2 / t1 < 0.9
+
+    # checking if the second wf didn't run again
+    assert wf1.output_dir.exists()
+    assert wf2.output_dir.exists()
+
+
+def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
+    """
+    the same as previous test, but wf output names differ,
+    the tasks should not be run and it should be fast,
+    but the wf itself is triggered and the new output dir is created
+    (the second wf has updated name in its Output)
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+    cache_dir2 = tmpdir.mkdir("test_wf_cache4")
+
+    wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out1", wf1.add2.lzout.out)])
+    wf1.inputs.x = 2
+    wf1.inputs.y = 3
+    wf1.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+    t1 = time.time() - t0
+
+    results1 = wf1.result()
+    assert 8 == results1.output.out1
+
+    wf2 = Workflow(
+        name="wf",
+        input_spec=["x", "y"],
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+    )
+    wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y))
+    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
+    wf2.set_output([("out2", wf2.add2.lzout.out)])
+    wf2.inputs.x = 2
+    wf2.inputs.y = 3
+    wf2.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf2)
+    t2 = time.time() - t0
+
+    results2 = wf2.result()
+    assert 8 == results2.output.out2
+
+    # checking execution time (the second wf should be fast, nodes do not have to rerun)
+    assert t1 > 3
+    # testing relative values (windows or slurm takes much longer to create wf itself)
+    assert t2 / t1 < 0.9
+
+    # both wf output_dirs should be created
+    assert wf1.output_dir.exists()
+    assert wf2.output_dir.exists()
+
+
+def test_wf_nostate_cachelocations_setoutputchange_a(plugin, tmpdir):
+    """
+    the same as previous test, but wf names and output names differ,
+    """
+    cache_dir1 = tmpdir.mkdir("test_wf_cache3")
+    cache_dir2 = tmpdir.mkdir("test_wf_cache4")
+
+    wf1 = Workflow(name="wf1", input_spec=["x", "y"], cache_dir=cache_dir1)
+    wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
+    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.set_output([("out1", wf1.add2.lzout.out)])
+    wf1.inputs.x = 2
+    wf1.inputs.y = 3
+    wf1.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf1)
+    t1 = time.time() - t0
+
+    results1 = wf1.result()
+    assert 8 == results1.output.out1
+
+    wf2 = Workflow(
+        name="wf2",
+        input_spec=["x", "y"],
+        cache_dir=cache_dir2,
+        cache_locations=cache_dir1,
+    )
+    wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y))
+    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
+    wf2.set_output([("out2", wf2.add2.lzout.out)])
+    wf2.inputs.x = 2
+    wf2.inputs.y = 3
+    wf2.plugin = plugin
+
+    t0 = time.time()
+    with Submitter(plugin=plugin) as sub:
+        sub(wf2)
+    t2 = time.time() - t0
+
+    results2 = wf2.result()
+    assert 8 == results2.output.out2
+
+    # checking execution time (the second wf should be fast, nodes do not have to rerun)
+    assert t1 > 3
+    # testing relative values (windows or slurm takes much longer to create wf itself)
+    assert t2 / t1 < 0.9
+
+    # both wf output_dirs should be created
+    assert wf1.output_dir.exists()
+    assert wf2.output_dir.exists()
 
 
 def test_wf_nostate_cachelocations_forcererun(plugin, tmpdir):
