@@ -199,19 +199,21 @@ class FunctionTask(TaskBase):
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
-        if output is not None:
-            output_names = [el[0] for el in self.output_spec.fields]
-            self.output_ = {}
-            if len(output_names) > 1:
-                if len(output_names) == len(output):
+        output_names = [el[0] for el in self.output_spec.fields]
+        if output is None:
+            self.output_ = dict((nm, None) for nm in output_names)
+        else:
+            if len(output_names) == 1:
+                # if only one element in the fields, everything should be returned together
+                self.output_ = {output_names[0]: output}
+            else:
+                if isinstance(output, tuple) and len(output_names) == len(output):
                     self.output_ = dict(zip(output_names, output))
                 else:
                     raise Exception(
                         f"expected {len(self.output_spec.fields)} elements, "
-                        f"but {len(output)} were returned"
+                        f"but {output} were returned"
                     )
-            else:  # if only one element in the fields, everything should be returned together
-                self.output_[output_names[0]] = output
 
 
 class ShellCommandTask(TaskBase):
