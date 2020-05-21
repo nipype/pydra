@@ -537,7 +537,7 @@ def is_local_file(f):
 
 def is_existing_file(value):
     """ checking if an object is an existing file"""
-    if value is "":
+    if isinstance(value, str) and value == "":
         return False
     try:
         return Path(value).exists()
