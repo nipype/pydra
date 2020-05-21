@@ -5,7 +5,7 @@ import random
 import platform
 
 import pytest
-import cloudpickle as cp
+import dill
 
 from .utils import multiply
 from ..helpers import (
@@ -29,7 +29,7 @@ def test_save(tmpdir):
     del foo
     # load saved task
     task_pkl = outdir / "_task.pklz"
-    foo = cp.loads(task_pkl.read_bytes())
+    foo = dill.loads(task_pkl.read_bytes())
     assert foo.name == "mult"
     assert foo.inputs.x == 1 and foo.inputs.y == 2
     # execute task and save result
@@ -39,7 +39,7 @@ def test_save(tmpdir):
     del res
     # load saved result
     res_pkl = outdir / "_result.pklz"
-    res = cp.loads(res_pkl.read_bytes())
+    res = dill.loads(res_pkl.read_bytes())
     assert res.output.out == 2
 
 

@@ -46,9 +46,10 @@ def test_numpy():
 @pytest.mark.xfail(reason="cp.dumps(func) depends on the system/setup, TODO!!")
 def test_checksum():
     nn = funaddtwo(a=3)
+    # checksum from my osx
     assert (
         nn.checksum
-        == "FunctionTask_abb4e7cc03b13d0e73884b87d142ed5deae6a312275187a9d8df54407317d7d3"
+        == "FunctionTask_40de8139186e90be23ced46a7f4796487484a88683789f985ac8200cb9fa7921"
     )
 
 

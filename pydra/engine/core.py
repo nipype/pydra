@@ -8,7 +8,7 @@ from pathlib import Path
 import typing as ty
 from copy import deepcopy
 
-import cloudpickle as cp
+import dill
 from filelock import SoftFileLock
 import shutil
 from tempfile import mkdtemp
@@ -185,8 +185,8 @@ class TaskBase:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state["input_spec"] = cp.dumps(state["input_spec"])
-        state["output_spec"] = cp.dumps(state["output_spec"])
+        state["input_spec"] = dill.dumps(state["input_spec"])
+        state["output_spec"] = dill.dumps(state["output_spec"])
         inputs = {}
         for k, v in attr.asdict(state["inputs"]).items():
             if k.startswith("_"):
@@ -196,8 +196,8 @@ class TaskBase:
         return state
 
     def __setstate__(self, state):
-        state["input_spec"] = cp.loads(state["input_spec"])
-        state["output_spec"] = cp.loads(state["output_spec"])
+        state["input_spec"] = dill.loads(state["input_spec"])
+        state["output_spec"] = dill.loads(state["output_spec"])
         state["inputs"] = make_klass(state["input_spec"])(**state["inputs"])
         self.__dict__.update(state)
 

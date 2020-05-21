@@ -39,7 +39,7 @@ Implement processing nodes.
 
 """
 import attr
-import cloudpickle as cp
+import dill
 import inspect
 import typing as ty
 from pathlib import Path
@@ -126,12 +126,12 @@ class FunctionTask(TaskBase):
                     )
                     for val in inspect.signature(func).parameters.values()
                 ]
-                + [("_func", attr.ib(default=cp.dumps(func), type=str))],
+                + [("_func", attr.ib(default=dill.dumps(func), type=str))],
                 bases=(BaseSpec,),
             )
         else:
             input_spec.fields.append(
-                ("_func", attr.ib(default=cp.dumps(func), type=str))
+                ("_func", attr.ib(default=dill.dumps(func), type=str))
             )
         self.input_spec = input_spec
         if name is None:
@@ -198,7 +198,7 @@ class FunctionTask(TaskBase):
         inputs = attr.asdict(self.inputs)
         del inputs["_func"]
         self.output_ = None
-        output = cp.loads(self.inputs._func)(**inputs)
+        output = dill.loads(self.inputs._func)(**inputs)
         if output is not None:
             output_names = [el[0] for el in self.output_spec.fields]
             self.output_ = {}

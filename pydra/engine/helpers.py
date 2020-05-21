@@ -2,7 +2,7 @@
 import asyncio
 import asyncio.subprocess as asp
 import attr
-import cloudpickle as cp
+import dill
 from pathlib import Path
 import os
 import sys
@@ -89,7 +89,7 @@ def load_result(checksum, cache_locations):
         if (location / checksum).exists():
             result_file = location / checksum / "_result.pklz"
             if result_file.exists() and result_file.stat().st_size > 0:
-                return cp.loads(result_file.read_bytes())
+                return dill.loads(result_file.read_bytes())
             return None
     return None
 
@@ -116,10 +116,10 @@ def save(task_path: Path, result=None, task=None):
             # copy files to the workflow directory
             result = copyfile_workflow(wf_path=task_path, result=result)
         with (task_path / "_result.pklz").open("wb") as fp:
-            cp.dump(result, fp)
+            dill.dump(result, fp)
     if task:
         with (task_path / "_task.pklz").open("wb") as fp:
-            cp.dump(task, fp)
+            dill.dump(task, fp)
 
 
 def copyfile_workflow(wf_path, result):
@@ -370,7 +370,7 @@ def create_checksum(name, inputs):
 def record_error(error_path, error):
     """Write an error file."""
     with (error_path / "_error.pklz").open("wb") as fp:
-        cp.dump(error, fp)
+        dill.dump(error, fp)
 
 
 def get_open_loop():
@@ -424,7 +424,7 @@ from pathlib import Path
 
 cache_path = Path("{str(script_path)}")
 task_pkl = (cache_path / "_task.pklz")
-task = cp.loads(task_pkl.read_bytes())
+task = dill.loads(task_pkl.read_bytes())
 
 # submit task
 task(rerun={rerun})

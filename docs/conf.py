@@ -73,7 +73,7 @@ html_static_path = ["_static"]
 # -- Options for extensions ---------------------------------------------------
 
 # Autodoc
-autodoc_mock_imports = ["cloudpickle", "matplotlib", "numpy", "psutil"]
+autodoc_mock_imports = ["dill", "matplotlib", "numpy", "psutil"]
 apidoc_module_dir = "../pydra"
 apidoc_output_dir = "api"
 apidoc_excluded_paths = ["conftest.py", "*/tests/*", "tests/*", "data/*"]
