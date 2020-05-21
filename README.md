@@ -18,6 +18,7 @@ Feature list:
 and Dask (this is an experimental implementation with limited testing)
 
 [[API Documentation](https://nipype.github.io/pydra/)]
+[[PyCon 2020 Poster](https://docs.google.com/presentation/d/10tS2I34rS0G9qz6v29qVd77OUydjP_FdBklrgAGmYSw/edit?usp=sharing)]
 
 ### Tutorial
 This tutorial will walk you through the main concepts of Pydra!
