@@ -1,5 +1,5 @@
 import pytest
-import shutil, os
+import shutil, os, sys
 import time
 import attr
 from pathlib import Path
@@ -2070,9 +2070,11 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 < 0.5
+    # checking execution time (for unix and cf)
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        assert t1 > 2
+        assert t2 < 1
 
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
@@ -2125,10 +2127,12 @@ def test_wf_nostate_cachelocations_a(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out
 
-    # checking execution time (second one should be quick)
-    assert t1 > 3
-    # testing relative values (windows or slurm takes much longer to create wf itself)
-    assert t2 / t1 < 0.9
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking execution time (second one should be quick)
+        assert t1 > 2
+        # testing relative values (windows or slurm takes much longer to create wf itself)
+        assert t2 < 1
 
     # checking if both wf.output_dir are created
     assert wf1.output_dir.exists()
@@ -2184,9 +2188,11 @@ def test_wf_nostate_cachelocations_b(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out == results2.output.out_pr
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 / t1 < 0.9
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking execution time
+        assert t1 > 2
+        assert t2 < 1
 
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
@@ -2240,10 +2246,12 @@ def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out2
 
-    # checking execution time (the second wf should be fast, nodes do not have to rerun)
-    assert t1 > 3
-    # testing relative values (windows or slurm takes much longer to create wf itself)
-    assert t2 / t1 < 0.9
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking execution time (the second wf should be fast, nodes do not have to rerun)
+        assert t1 > 2
+        # testing relative values (windows or slurm takes much longer to create wf itself)
+        assert t2 < 1
 
     # both wf output_dirs should be created
     assert wf1.output_dir.exists()
@@ -2294,10 +2302,12 @@ def test_wf_nostate_cachelocations_setoutputchange_a(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out2
 
-    # checking execution time (the second wf should be fast, nodes do not have to rerun)
-    assert t1 > 3
-    # testing relative values (windows or slurm takes much longer to create wf itself)
-    assert t2 / t1 < 0.9
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking execution time (the second wf should be fast, nodes do not have to rerun)
+        assert t1 > 2
+        # testing relative values (windows or slurm takes much longer to create wf itself)
+        assert t2 < 1
 
     # both wf output_dirs should be created
     assert wf1.output_dir.exists()
@@ -2350,9 +2360,11 @@ def test_wf_nostate_cachelocations_forcererun(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 > 3
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking execution time
+        assert t1 > 2
+        assert t2 > 2
 
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
@@ -2413,8 +2425,11 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(plugin, tmpdir):
     # everything has to be recomputed
     assert len(list(Path(cache_dir1).glob("F*"))) == 2
     assert len(list(Path(cache_dir2).glob("F*"))) == 2
-    assert t1 > 3
-    assert t2 > 3
+
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        assert t1 > 2
+        assert t2 > 2
 
 
 def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(plugin, tmpdir):
@@ -2470,6 +2485,12 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(plugin, tmpdir):
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
 
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the time
+        assert t1 > 2
+        assert t2 < 1
+
     # tasks should not be recomputed
     assert len(list(Path(cache_dir1).glob("F*"))) == 2
     assert len(list(Path(cache_dir2).glob("F*"))) == 0
@@ -2524,14 +2545,17 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(plugin, tmpd
     results2 = wf2.result()
     assert 8 == results2.output.out
 
-    # checking if the second wf doesn't runs again
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
     # the second task should be recomputed
     assert len(list(Path(cache_dir1).glob("F*"))) == 2
     assert len(list(Path(cache_dir2).glob("F*"))) == 1
-    assert t1 > 3
-    assert t2 > 3
+
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the execution time
+        assert t1 > 2
+        assert t2 > 2
 
 
 def test_wf_nostate_nodecachelocations(plugin, tmpdir):
@@ -2545,15 +2569,13 @@ def test_wf_nostate_nodecachelocations(plugin, tmpdir):
 
     wf1 = Workflow(name="wf", input_spec=["x"], cache_dir=cache_dir1)
     wf1.add(ten(name="ten", x=wf1.lzin.x))
-    wf1.add(add2_wait(name="add2", x=wf1.ten.lzout.out))
+    wf1.add(add2(name="add2", x=wf1.ten.lzout.out))
     wf1.set_output([("out", wf1.add2.lzout.out)])
     wf1.inputs.x = 3
     wf1.plugin = plugin
 
-    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf1)
-    t1 = time.time() - t0
 
     results1 = wf1.result()
     assert 12 == results1.output.out
@@ -2565,15 +2587,13 @@ def test_wf_nostate_nodecachelocations(plugin, tmpdir):
         cache_locations=cache_dir1,
     )
     wf2.add(ten(name="ten", x=wf2.lzin.x))
-    wf2.add(add2_wait(name="add2", x=wf2.ten.lzout.out))
+    wf2.add(add2(name="add2", x=wf2.ten.lzout.out))
     wf2.set_output([("out", wf2.add2.lzout.out)])
     wf2.inputs.x = 2
     wf2.plugin = plugin
 
-    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf2)
-    t2 = time.time() - t0
 
     results2 = wf2.result()
     assert 12 == results2.output.out
@@ -2597,32 +2617,28 @@ def test_wf_nostate_nodecachelocations_upd(plugin, tmpdir):
 
     wf1 = Workflow(name="wf", input_spec=["x"], cache_dir=cache_dir1)
     wf1.add(ten(name="ten", x=wf1.lzin.x))
-    wf1.add(add2_wait(name="add2", x=wf1.ten.lzout.out))
+    wf1.add(add2(name="add2", x=wf1.ten.lzout.out))
     wf1.set_output([("out", wf1.add2.lzout.out)])
     wf1.inputs.x = 3
     wf1.plugin = plugin
 
-    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf1)
-    t1 = time.time() - t0
 
     results1 = wf1.result()
     assert 12 == results1.output.out
 
     wf2 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir2)
     wf2.add(ten(name="ten", x=wf2.lzin.x))
-    wf2.add(add2_wait(name="add2", x=wf2.ten.lzout.out))
+    wf2.add(add2(name="add2", x=wf2.ten.lzout.out))
     wf2.set_output([("out", wf2.add2.lzout.out)])
     wf2.inputs.x = 2
     wf2.plugin = plugin
     # updating cache_locations after adding the tasks
     wf2.cache_locations = cache_dir1
 
-    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf2)
-    t2 = time.time() - t0
 
     results2 = wf2.result()
     assert 12 == results2.output.out
@@ -2684,9 +2700,11 @@ def test_wf_state_cachelocations(plugin, tmpdir):
     assert results2[0].output.out == 8
     assert results2[1].output.out == 82
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 < 0.5
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < 1
 
     # checking all directories
     assert wf1.output_dir
@@ -2749,9 +2767,11 @@ def test_wf_state_cachelocations_forcererun(plugin, tmpdir):
     assert results2[0].output.out == 8
     assert results2[1].output.out == 82
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 > 3
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the execution time
+        assert t1 > 2
+        assert t2 > 2
 
     # checking all directories
     assert wf1.output_dir
@@ -2816,9 +2836,11 @@ def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
     assert results2[0].output.out == 8
     assert results2[1].output.out == 82
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 < 0.5
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < 1
 
     # checking all directories
     assert wf1.output_dir
@@ -2930,9 +2952,11 @@ def test_wf_nostate_cachelocations_updated(plugin, tmpdir):
     results2 = wf2.result()
     assert 8 == results2.output.out
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 > 3
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the execution time
+        assert t1 > 2
+        assert t2 > 2
 
     # checking if both wf run
     assert wf1.output_dir.exists()
@@ -2950,16 +2974,14 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
 
     wf1 = Workflow(name="wf", input_spec=["x", "y"], cache_dir=cache_dir1)
     wf1.add(multiply(name="mult", x=wf1.lzin.x, y=wf1.lzin.y))
-    wf1.add(add2_wait(name="add2", x=wf1.mult.lzout.out))
+    wf1.add(add2(name="add2", x=wf1.mult.lzout.out))
     wf1.set_output([("out", wf1.add2.lzout.out)])
     wf1.inputs.x = 2
     wf1.inputs.y = 3
     wf1.plugin = plugin
 
-    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf1)
-    t1 = time.time() - t0
 
     results1 = wf1.result()
     assert 8 == results1.output.out
@@ -2972,16 +2994,14 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
     )
     # different argument assigment
     wf2.add(multiply(name="mult", x=wf2.lzin.y, y=wf2.lzin.x))
-    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
+    wf2.add(add2(name="add2", x=wf2.mult.lzout.out))
     wf2.set_output([("out", wf2.add2.lzout.out)])
     wf2.inputs.x = 2
     wf2.inputs.y = 3
     wf2.plugin = plugin
 
-    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf2)
-    t2 = time.time() - t0
 
     results2 = wf2.result()
     assert 8 == results2.output.out
@@ -3044,9 +3064,11 @@ def test_wf_ndstate_cachelocations(plugin, tmpdir):
     results2 = wf2.result()
     assert results2.output.out == [8, 82]
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 < 0.5
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < 1
 
     # checking all directories
     assert wf1.output_dir.exists()
@@ -3106,9 +3128,11 @@ def test_wf_ndstate_cachelocations_forcererun(plugin, tmpdir):
     results2 = wf2.result()
     assert results2.output.out == [8, 82]
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 > 3
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the execution time
+        assert t1 > 2
+        assert t2 > 2
 
     # checking all directories
     assert wf1.output_dir.exists()
@@ -3166,9 +3190,11 @@ def test_wf_ndstate_cachelocations_updatespl(plugin, tmpdir):
     results2 = wf2.result()
     assert results2.output.out == [8, 82]
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 < 0.5
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < 1
 
     # checking all directories
     assert wf1.output_dir.exists()
@@ -3227,9 +3253,11 @@ def test_wf_ndstate_cachelocations_recompute(plugin, tmpdir):
     results2 = wf2.result()
     assert results2.output.out == [8, 10, 62, 82]
 
-    # checking execution time
-    assert t1 > 3
-    assert t2 > 3
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the execution time
+        assert t1 > 2
+        assert t2 > 2
 
     # checking all directories
     assert wf1.output_dir.exists()
@@ -3254,8 +3282,10 @@ def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
     wf1.inputs.y = 3
     wf1.plugin = plugin
 
+    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf1)
+    t1 = time.time() - t0
 
     results1 = wf1.result()
     assert 8 == results1.output.out
@@ -3266,13 +3296,21 @@ def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
     cache_dir_content = os.listdir(wf1.cache_dir)
 
     # running workflow the second time
+    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf1)
+    t2 = time.time() - t0
 
     results1 = wf1.result()
     assert 8 == results1.output.out
-    # checking if no new directory is not created
+    # checking if no new directory is created
     assert cache_dir_content == os.listdir(wf1.cache_dir)
+
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < 1
 
 
 def test_wf_state_runtwice_usecache(plugin, tmpdir):
@@ -3291,8 +3329,10 @@ def test_wf_state_runtwice_usecache(plugin, tmpdir):
     wf1.inputs.y = [3, 30]
     wf1.plugin = plugin
 
+    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf1)
+    t1 = time.time() - t0
 
     results1 = wf1.result()
     assert 8 == results1[0].output.out
@@ -3305,14 +3345,21 @@ def test_wf_state_runtwice_usecache(plugin, tmpdir):
     cache_dir_content = os.listdir(wf1.cache_dir)
 
     # running workflow the second time
+    t0 = time.time()
     with Submitter(plugin=plugin) as sub:
         sub(wf1)
+    t2 = time.time() - t0
 
     results1 = wf1.result()
     assert 8 == results1[0].output.out
     assert 602 == results1[1].output.out
-    # checking if no new directory is not created
+    # checking if no new directory is created
     assert cache_dir_content == os.listdir(wf1.cache_dir)
+    # for win and dask/slurm the time for dir creation etc. might take much longer
+    if not sys.platform.startswith("win") and plugin == "cf":
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < 1
 
 
 @pytest.fixture
