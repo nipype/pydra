@@ -128,7 +128,7 @@ def ten(x):
 
 @mark.task
 def add2_wait(x):
-    time.sleep(3)
+    time.sleep(2)
     return x + 2
 
 
