@@ -7,8 +7,14 @@ from pathlib import Path
 
 import concurrent.futures as cf
 
-from .core import TaskBase, is_workflow
-from .helpers import create_pyscript, get_available_cpus, read_and_display_async, save
+from .core import TaskBase
+from .helpers import (
+    create_pyscript,
+    get_available_cpus,
+    read_and_display_async,
+    save,
+    load_and_run,
+)
 
 import logging
 
@@ -183,7 +189,7 @@ class ConcurrentFuturesWorker(Worker):
         else:  # it could be tuple that includes pickle files with tasks and inputs
             ind, task_pkl, input_pkl, task_orig = runnable
             res = await self.loop.run_in_executor(
-                self.pool, task_orig._load_and_run, ind, task_pkl, input_pkl, rerun
+                self.pool, load_and_run, ind, task_pkl, input_pkl, rerun
             )
         return res
 

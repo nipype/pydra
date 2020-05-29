@@ -359,16 +359,6 @@ class TaskBase:
             res = self._run(rerun=rerun, **kwargs)
         return res
 
-    def _load_and_run(self, ind, task_pkl, input_pkl, rerun=False, **kwargs):
-        """ loading the task and inputs from pickle files,
-            settings proper input for specific index before running the task
-        """
-        task_orig = cp.loads(input_pkl.read_bytes())
-        task = cp.loads(task_pkl.read_bytes())
-        _, inputs_dict = task_orig.get_input_el(ind)
-        task.inputs = attr.evolve(task.inputs, **inputs_dict)
-        return task._run(rerun=rerun, **kwargs)
-
     def _run(self, rerun=False, **kwargs):
         self.inputs = attr.evolve(self.inputs, **kwargs)
         self.inputs.check_fields_input_spec()
@@ -852,18 +842,6 @@ class Workflow(TaskBase):
                     other_states=other_states,
                     combiner=combiner,
                 )
-
-    async def _load_and_run(
-        self, ind, task_pkl, input_pkl, submitter=None, rerun=False, **kwargs
-    ):
-        """ loading the workflow and inputs from pickle files,
-            settings proper input for specific index before running the workflow
-        """
-        task_orig = cp.loads(input_pkl.read_bytes())
-        task = cp.loads(task_pkl.read_bytes())
-        _, inputs_dict = task_orig.get_input_el(ind)
-        task.inputs = attr.evolve(task.inputs, **inputs_dict)
-        await task._run(submitter=submitter, rerun=rerun, **kwargs)
 
     async def _run(self, submitter=None, rerun=False, **kwargs):
         # self.inputs = dc.replace(self.inputs, **kwargs) don't need it?

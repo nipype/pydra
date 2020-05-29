@@ -544,3 +544,27 @@ def get_available_cpus():
 
     # Last resort
     return os.cpu_count()
+
+
+def load_and_run(ind, task_pkl, input_pkl, rerun=False, **kwargs):
+    """ loading the task and inputs from pickle files,
+        settings proper input for specific index before running the task
+    """
+    task_orig = cp.loads(input_pkl.read_bytes())
+    task = cp.loads(task_pkl.read_bytes())
+    _, inputs_dict = task_orig.get_input_el(ind)
+    task.inputs = attr.evolve(task.inputs, **inputs_dict)
+    return task._run(rerun=rerun, **kwargs)
+
+
+async def load_and_run_async(
+    ind, task_pkl, input_pkl, submitter=None, rerun=False, **kwargs
+):
+    """ loading the workflow and inputs from pickle files,
+        settings proper input for specific index before running the workflow
+    """
+    task_orig = cp.loads(input_pkl.read_bytes())
+    task = cp.loads(task_pkl.read_bytes())
+    _, inputs_dict = task_orig.get_input_el(ind)
+    task.inputs = attr.evolve(task.inputs, **inputs_dict)
+    await task._run(submitter=submitter, rerun=rerun, **kwargs)

@@ -2,7 +2,7 @@
 import asyncio
 from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker, DaskWorker
 from .core import is_workflow
-from .helpers import get_open_loop
+from .helpers import get_open_loop, load_and_run_async
 
 import logging
 
@@ -76,7 +76,7 @@ class Submitter:
                 # dj: this is not tested!!! TODO
                 await self.worker.run_el(workflow, rerun=rerun)
             else:
-                await wf_orig._load_and_run(
+                await load_and_run_async(
                     ind=ind,
                     task_pkl=wf_pkl,
                     input_pkl=input_pkl,
