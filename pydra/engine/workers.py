@@ -227,6 +227,7 @@ class SlurmWorker(DistributedWorker):
             poll_delay = 0
         self.poll_delay = poll_delay
         self.sbatch_args = sbatch_args or ""
+        self.error = {}
 
     def run_el(self, runnable, rerun=False):
         """Worker submission API."""
@@ -237,6 +238,9 @@ class SlurmWorker(DistributedWorker):
 
     async def _submit_job(self, task, batchscript):
         """Coroutine that submits task runscript and polls job until completion or error."""
+        script_dir = (
+            task.cache_dir / f"{self.__class__.__name__}_scripts" / task.checksum
+        )
         sargs = self.sbatch_args.split()
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
         if not jobname:
@@ -244,12 +248,14 @@ class SlurmWorker(DistributedWorker):
             sargs.append(f"--job-name={jobname}")
         output = re.search(r"(?<=-o )\S+|(?<=--output=)\S+", self.sbatch_args)
         if not output:
-            self.output = str(batchscript.parent / "slurm-%j.out")
-            sargs.append(f"--output={self.output}")
+            output_file = str(script_dir / "slurm-%j.out")
+            sargs.append(f"--output={output_file}")
         error = re.search(r"(?<=-e )\S+|(?<=--error=)\S+", self.sbatch_args)
         if not error:
-            self.error = str(batchscript.parent / "slurm-%j.err")
-            sargs.append(f"--error={self.error}")
+            error_file = str(script_dir / "slurm-%j.err")
+            sargs.append(f"--error={error_file}")
+        else:
+            error_file = None
         sargs.append(str(batchscript))
         # TO CONSIDER: add random sleep to avoid overloading calls
         _, stdout, _ = await read_and_display_async("sbatch", *sargs, hide_display=True)
@@ -257,8 +263,9 @@ class SlurmWorker(DistributedWorker):
         if not jobid:
             raise RuntimeError("Could not extract job ID")
         jobid = jobid.group()
-        self.output = self.output.replace("%j", jobid)
-        self.error = self.error.replace("%j", jobid)
+        if error_file:
+            error_file = error_file.replace("%j", jobid)
+        self.error[jobid] = error_file.replace("%j", jobid)
         # intermittent polling
         while True:
             # 3 possibilities
@@ -286,12 +293,13 @@ class SlurmWorker(DistributedWorker):
         if not stdout:
             raise RuntimeError("Job information not found")
         m = self._sacct_re.search(stdout)
+        error_file = self.error[jobid]
         if int(m.group("exit_code")) != 0 or m.group("status") != "COMPLETED":
             if m.group("status") in ["RUNNING", "PENDING"]:
                 return False
             # TODO: potential for requeuing
             # parsing the error message
-            error_line = Path(self.error).read_text().split("\n")[-2]
+            error_line = Path(error_file).read_text().split("\n")[-2]
             if "Exception" in error_line:
                 error_message = error_line.replace("Exception: ", "")
             elif "Error" in error_line:

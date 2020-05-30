@@ -219,16 +219,15 @@ class TaskBase:
 
     @property
     def checksum(self):
-        """Calculate a unique checksum of this task."""
-        # if checksum is called before run the _graph_checksums is not ready
-        if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
-            self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
-
+        """ Calculates the unique checksum of the task.
+            Used to create specific directory name for task that are run;
+            and to create nodes checksums needed for graph checkums
+            (before the tasks have inputs etc.)
+        """
         input_hash = self.inputs.hash
         if self.state is None:
             self._checksum = create_checksum(self.__class__.__name__, input_hash)
         else:
-            # including splitter in the hash
             splitter_hash = hash_function(self.state.splitter)
             self._checksum = create_checksum(
                 self.__class__.__name__, hash_function([input_hash, splitter_hash])
@@ -237,10 +236,9 @@ class TaskBase:
 
     def checksum_states(self, state_index=None):
         """
-        Calculate a checksum for the specific state or all of the states.
-
+        Calculate a checksum for the specific state or all of the states of the task.
         Replaces lists in the inputs fields with a specific values for states.
-        Can be used only for tasks with a state.
+        Used to recreate names of the task directories,
 
         Parameters
         ----------
@@ -259,7 +257,14 @@ class TaskBase:
                     getattr(inputs_copy, key.split(".")[1])[ind],
                 )
             input_hash = inputs_copy.hash
-            checksum_ind = create_checksum(self.__class__.__name__, input_hash)
+            if is_workflow(self):
+                con_hash = hash_function(self._connections)
+                hash_list = [input_hash, con_hash]
+                checksum_ind = create_checksum(
+                    self.__class__.__name__, self._checksum_wf(input_hash)
+                )
+            else:
+                checksum_ind = create_checksum(self.__class__.__name__, input_hash)
             return checksum_ind
         else:
             checksum_list = []
@@ -773,6 +778,41 @@ class Workflow(TaskBase):
         """Get a sorted graph representation of the workflow."""
         return self.graph.sorted_nodes
 
+    @property
+    def checksum(self):
+        """ Calculates the unique checksum of the task.
+            Used to create specific directory name for task that are run;
+            and to create nodes checksums needed for graph checkums
+            (before the tasks have inputs etc.)
+        """
+        # if checksum is called before run the _graph_checksums is not ready
+        if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
+            self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
+
+        input_hash = self.inputs.hash
+        if not self.state:
+            self._checksum = create_checksum(
+                self.__class__.__name__, self._checksum_wf(input_hash)
+            )
+        else:
+            self._checksum = create_checksum(
+                self.__class__.__name__,
+                self._checksum_wf(input_hash, with_splitter=True),
+            )
+        return self._checksum
+
+    def _checksum_wf(self, input_hash, with_splitter=False):
+        """ creating hash value for workflows
+            includes connections and splitter if with_splitter is True
+        """
+        connection_hash = hash_function(self._connections)
+        hash_list = [input_hash, connection_hash]
+        if with_splitter and self.state:
+            # including splitter in the hash
+            splitter_hash = hash_function(self.state.splitter)
+            hash_list.append(splitter_hash)
+        return hash_function(hash_list)
+
     def add(self, task):
         """
         Add a task to the workflow.
@@ -907,18 +947,29 @@ class Workflow(TaskBase):
             TODO
 
         """
+        if self._connections is None:
+            self._connections = []
         if isinstance(connections, tuple) and len(connections) == 2:
-            self._connections = [connections]
+            new_connections = [connections]
         elif isinstance(connections, list) and all(
             [len(el) == 2 for el in connections]
         ):
-            self._connections = connections
+            new_connections = connections
         elif isinstance(connections, dict):
-            self._connections = list(connections.items())
+            new_connections = list(connections.items())
         else:
             raise Exception(
                 "Connections can be a 2-elements tuple, a list of these tuples, or dictionary"
             )
+        # checking if a new output name is already in the connections
+        connection_names = [name for name, _ in self._connections]
+        new_names = [name for name, _ in new_connections]
+        if set(connection_names).intersection(new_names):
+            raise Exception(
+                f"output name {set(connection_names).intersection(new_names)} is already set"
+            )
+
+        self._connections += new_connections
         fields = [(name, ty.Any) for name, _ in self._connections]
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
         logger.info("Added %s to %s", self.output_spec, self)

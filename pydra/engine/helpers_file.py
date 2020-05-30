@@ -535,11 +535,11 @@ def is_local_file(f):
     return f.type is File and "container_path" not in f.metadata
 
 
-def is_existing_file(f):
+def is_existing_file(value):
     """ checking if an object is an existing file"""
-    if not f:
+    if isinstance(value, str) and value == "":
         return False
     try:
-        return Path(f).exists()
+        return Path(value).exists()
     except TypeError:
         return False

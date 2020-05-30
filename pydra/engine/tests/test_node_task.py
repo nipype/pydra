@@ -1002,6 +1002,7 @@ def test_task_state_6a(plugin):
         assert odir.exists()
 
 
+@pytest.mark.flaky(reruns=2)  # when dask
 def test_task_state_comb_1(plugin_dask_opt):
     """ task with the simplest splitter and combiner"""
     nn = fun_addtwo(name="NA").split(a=[3, 5], splitter="a").combine(combiner="a")
@@ -1290,6 +1291,7 @@ def test_task_state_comb_order():
 # Testing caching for tasks with states
 
 
+@pytest.mark.flaky(reruns=2)  # when dask
 def test_task_state_cachedir(plugin_dask_opt, tmpdir):
     """ task with a state and provided cache_dir using pytest tmpdir"""
     cache_dir = tmpdir.mkdir("test_task_nostate")

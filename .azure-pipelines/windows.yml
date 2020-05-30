@@ -35,4 +35,9 @@ jobs:
     - script: |
         pytest -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
       displayName: 'Pytest tests'
-
+    - script: |
+        python -m pip install codecov
+        codecov --file cov.xml
+      displayName: 'Upload To Codecov'
+      env:
+        CODECOV_TOKEN: $(CODECOV_TOKEN)

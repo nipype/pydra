@@ -52,6 +52,12 @@ def fun_addvar(a, b):
 
 
 @mark.task
+@mark.annotate({"return": {"sum": float, "sub": float}})
+def fun_addsubvar(a, b):
+    return a + b, a - b
+
+
+@mark.task
 def fun_addvar_none(a, b):
     if b is None:
         return a
@@ -122,7 +128,7 @@ def ten(x):
 
 @mark.task
 def add2_wait(x):
-    time.sleep(3)
+    time.sleep(2)
     return x + 2
 
 
