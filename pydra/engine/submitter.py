@@ -71,17 +71,13 @@ class Submitter:
             else:
                 await workflow._run(self, rerun=rerun)
         else:  # could be a tuple with paths to pickle files wiith tasks and inputs
-            ind, wf_pkl, input_pkl, wf_orig = workflow
+            ind, wf_main_pkl, wf_orig = workflow
             if wf_orig.plugin and wf_orig.plugin != self.plugin:
                 # dj: this is not tested!!! TODO
                 await self.worker.run_el(workflow, rerun=rerun)
             else:
                 await load_and_run_async(
-                    ind=ind,
-                    task_pkl=wf_pkl,
-                    input_pkl=input_pkl,
-                    submitter=self,
-                    rerun=rerun,
+                    ind=ind, task_main_pkl=wf_main_pkl, submitter=self, rerun=rerun
                 )
 
     async def submit(self, runnable, wait=False, rerun=False):

@@ -14,6 +14,7 @@ from ..helpers import (
     get_available_cpus,
     save,
     create_pyscript,
+    load_and_run,
 )
 from .. import helpers_file
 from ..specs import File, Directory
@@ -212,3 +213,19 @@ def test_get_available_cpus():
 
     if platform.system().lower() == "darwin":
         assert get_available_cpus() == os.cpu_count()
+
+
+def test_load_and_run(tmpdir):
+    """ testing load_and_run for pickled task"""
+    task_pkl = Path(tmpdir.join("task_main.pkl"))
+
+    task = multiply(name="mult", x=[1, 2], y=10).split("x")
+    task.state.prepare_states(inputs=task.inputs)
+    task.state.prepare_inputs()
+    with task_pkl.open("wb") as fp:
+        cp.dump(task, fp)
+
+    res_0 = load_and_run(ind=0, task_main_pkl=task_pkl)
+    assert res_0.output.out == 10
+    res_1 = load_and_run(ind=1, task_main_pkl=task_pkl)
+    assert res_1.output.out == 20

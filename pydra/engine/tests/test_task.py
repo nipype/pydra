@@ -5,13 +5,7 @@ import os, sys
 import pytest
 
 from ... import mark
-from ..task import (
-    AuditFlag,
-    ShellCommandTask,
-    ContainerTask,
-    DockerTask,
-    SingularityTask,
-)
+from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from .utils import gen_basic_wf
 

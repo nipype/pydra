@@ -510,29 +510,18 @@ class TaskBase:
 
         pkl_files = self.cache_dir / "pkl_files"
         pkl_files.mkdir(exist_ok=True)
-        task_path = pkl_files / f"task_{self.name}.pklz"
-        input_path = pkl_files / f"task_orig_input_{self.name}.pklz"
+        task_main_path = pkl_files / f"task_main_{self.name}.pklz"
 
         # the pickle files should be independent on index, so could be saved once only
         if ind == 0:
-            task_copy = copy(self)
-            task_copy.state = None
-            task_copy.inputs = attr.evolve(
-                self.inputs, **{k: None for k in self.input_names}
-            )
-
-            # saving the task object (no input)
-            with task_path.open("wb") as fp:
-                cp.dump(task_copy, fp)
-
             # saving the original task with the full input
             # so can be later used to set input to all of the tasks
-            with input_path.open("wb") as fp:
+            with task_main_path.open("wb") as fp:
                 cp.dump(self, fp)
 
-        # index, path to the pkl task, path to the pkl original task with input,
+        # index, path to the pickled original task with input,
         # and self (to be able to check properties when needed)
-        return (ind, task_path, input_path, self)
+        return (ind, task_main_path, self)
 
     @property
     def done(self):

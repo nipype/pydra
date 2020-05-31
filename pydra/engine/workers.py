@@ -187,9 +187,9 @@ class ConcurrentFuturesWorker(Worker):
         if isinstance(runnable, TaskBase):
             res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
         else:  # it could be tuple that includes pickle files with tasks and inputs
-            ind, task_pkl, input_pkl, task_orig = runnable
+            ind, task_main_pkl, task_orig = runnable
             res = await self.loop.run_in_executor(
-                self.pool, load_and_run, ind, task_pkl, input_pkl, rerun
+                self.pool, load_and_run, ind, task_main_pkl, rerun
             )
         return res
 
