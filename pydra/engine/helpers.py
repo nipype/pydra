@@ -428,14 +428,16 @@ cache_path = Path("{str(script_path)}")
     if ind is None:
         content += f"""task_pkl = (cache_path / "_task.pklz")
 task = cp.loads(task_pkl.read_bytes())
+# submit task
+task(rerun={rerun})
 """
     else:
-        content += f"""from pydra.engine.helpers import load_task
+        content += f"""from pydra.engine.helpers import load_and_run
 task_pkl = (cache_path / "_task_main.pklz")
-task = load_task(ind={ind}, task_main_pkl=task_pkl)
+# loading and running the task
+task = load_and_run(ind={ind}, task_main_pkl=task_pkl, rerun={rerun})
 """
-    content += f"""# submit task
-task(rerun={rerun})
+    content += f"""# checking results
 if not task.result():
     raise Exception("Something went wrong")
 print("Completed", task.checksum, task)
@@ -559,7 +561,8 @@ def load_and_run(ind, task_main_pkl, rerun=False, **kwargs):
      and running the task
      """
     task = load_task(ind=ind, task_main_pkl=task_main_pkl)
-    return task._run(rerun=rerun, **kwargs)
+    task._run(rerun=rerun, **kwargs)
+    return task
 
 
 async def load_and_run_async(ind, task_main_pkl, submitter=None, rerun=False, **kwargs):
