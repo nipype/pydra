@@ -110,17 +110,16 @@ class Submitter:
             logger.debug(
                 f"Expanding {runnable} into {len(runnable.state.states_val)} states"
             )
+            task_pkl = runnable.pickle_task()
+
             for sidx in range(len(runnable.state.states_val)):
-                job = runnable.to_job(sidx)
-                logger.debug(
-                    f'Submitting runnable {job}{str(sidx) if sidx is not None else ""}'
-                )
+                job_tuple = (sidx, task_pkl, runnable)
                 if is_workflow(runnable):
                     # job has no state anymore
-                    futures.add(self.submit_workflow(job, rerun=rerun))
+                    futures.add(self.submit_workflow(job_tuple, rerun=rerun))
                 else:
                     # tasks are submitted to worker for execution
-                    futures.add(self.worker.run_el(job, rerun=rerun))
+                    futures.add(self.worker.run_el(job_tuple, rerun=rerun))
         else:
             if is_workflow(runnable):
                 await self._run_workflow(runnable, rerun=rerun)

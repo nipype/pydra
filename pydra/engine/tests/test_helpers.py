@@ -225,7 +225,7 @@ def test_load_and_run(tmpdir):
     with task_pkl.open("wb") as fp:
         cp.dump(task, fp)
 
-    res_0 = load_and_run(ind=0, task_main_pkl=task_pkl)
-    assert res_0.output.out == 10
-    res_1 = load_and_run(ind=1, task_main_pkl=task_pkl)
-    assert res_1.output.out == 20
+    task_0 = load_and_run(task_pkl=task_pkl, ind=0)
+    assert task_0.result().output.out == 10
+    task_1 = load_and_run(task_pkl=task_pkl, ind=1)
+    assert task_1.result().output.out == 20

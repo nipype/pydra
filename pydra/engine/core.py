@@ -503,25 +503,13 @@ class TaskBase:
             inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
             return None, inputs_dict
 
-    def to_job(self, ind):
-        """ Pickling tasks and inputs, so don't have to load the input to teh memory """
-        # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
-        # copy the task and setting input/state to None
-
-        pkl_files = self.cache_dir / "pkl_files"
-        pkl_files.mkdir(exist_ok=True)
-        task_main_path = pkl_files / f"task_main_{self.name}.pklz"
-
-        # the pickle files should be independent on index, so could be saved once only
-        if ind == 0:
-            # saving the original task with the full input
-            # so can be later used to set input to all of the tasks
-            with task_main_path.open("wb") as fp:
-                cp.dump(self, fp)
-
-        # index, path to the pickled original task with input,
-        # and self (to be able to check properties when needed)
-        return (ind, task_main_path, self)
+    def pickle_task(self):
+        """ Pickling the tasks with full inputs"""
+        pkl_files = self.cache_dir / self.checksum / "pkl_files"
+        pkl_files.mkdir(exist_ok=True, parents=True)
+        task_main_path = pkl_files / "_task.pklz"
+        save(task_path=pkl_files, task=self, use_locfile=True)
+        return task_main_path
 
     @property
     def done(self):

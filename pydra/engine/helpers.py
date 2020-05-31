@@ -4,6 +4,7 @@ import asyncio.subprocess as asp
 import attr
 import cloudpickle as cp
 from pathlib import Path
+from filelock import SoftFileLock
 import os
 import sys
 from hashlib import sha256
@@ -94,7 +95,7 @@ def load_result(checksum, cache_locations):
     return None
 
 
-def save(task_path: Path, result=None, task=None):
+def save(task_path: Path, result=None, task=None, use_locfile=False):
     """
     Save a :class:`~pydra.engine.core.TaskBase` object and/or results.
 
@@ -106,8 +107,14 @@ def save(task_path: Path, result=None, task=None):
         Result to pickle and write
     task : :class:`~pydra.engine.core.TaskBase`
         Task to pickle and write
-
+    use_locfile : :obj: `bool`
+        if True, SoftFileLock will be used
     """
+    if use_locfile:
+        lockfile = task_path.parent / (task_path.name + ".lock")
+        with SoftFileLock(lockfile):
+            save(task_path=task_path, result=result, task=task)
+
     if task is None and result is None:
         raise ValueError("Nothing to be saved")
     task_path.mkdir(parents=True, exist_ok=True)
