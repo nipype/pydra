@@ -9,13 +9,7 @@ from shutil import copyfile
 import concurrent.futures as cf
 
 from .core import TaskBase
-from .helpers import (
-    create_pyscript,
-    get_available_cpus,
-    read_and_display_async,
-    save,
-    load_and_run,
-)
+from .helpers import get_available_cpus, read_and_display_async, save, load_and_run
 
 import logging
 
@@ -93,13 +87,18 @@ class DistributedWorker(Worker):
         else:
             copyfile(task[1], script_dir / "_task.pklz")
 
-        pyscript = create_pyscript(script_dir, checksum, rerun=rerun, ind=ind)
+        task_pkl = script_dir / "_task.pklz"
+        if not task_pkl.exists() or not task_pkl.stat().st_size:
+            raise Exception("Missing or empty task!")
+
         batchscript = script_dir / f"batchscript_{checksum}.sh"
+        python_string = f"""'from pydra.engine.helpers import load_and_run; load_and_run(task_pkl="{str(task_pkl)}", ind={ind}, rerun={rerun}) '
+        """
         bcmd = "\n".join(
             (
                 f"#!{interpreter}",
                 f"#SBATCH --output={str(script_dir / 'slurm-%j.out')}",
-                f"{sys.executable} {str(pyscript)}",
+                f"{sys.executable} -c " + python_string,
             )
         )
         with batchscript.open("wt") as fp:

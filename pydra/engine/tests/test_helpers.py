@@ -8,14 +8,7 @@ import pytest
 import cloudpickle as cp
 
 from .utils import multiply
-from ..helpers import (
-    hash_value,
-    hash_function,
-    get_available_cpus,
-    save,
-    create_pyscript,
-    load_and_run,
-)
+from ..helpers import hash_value, hash_function, get_available_cpus, save, load_and_run
 from .. import helpers_file
 from ..specs import File, Directory
 
@@ -42,16 +35,6 @@ def test_save(tmpdir):
     res_pkl = outdir / "_result.pklz"
     res = cp.loads(res_pkl.read_bytes())
     assert res.output.out == 2
-
-
-def test_create_pyscript(tmpdir):
-    outdir = Path(tmpdir)
-    with pytest.raises(Exception):
-        create_pyscript(outdir, "checksum")
-    foo = multiply(name="mult", x=1, y=2)
-    save(outdir, task=foo)
-    pyscript = create_pyscript(outdir, foo.checksum)
-    assert pyscript.exists()
 
 
 def test_hash_file(tmpdir):

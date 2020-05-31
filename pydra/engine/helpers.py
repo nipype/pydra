@@ -404,46 +404,6 @@ def get_open_loop():
     return loop
 
 
-def create_pyscript(script_path, checksum, rerun=False, ind=None):
-    """
-    Create standalone script for task execution in a different environment.
-
-    Parameters
-    ----------
-    script_path : :obj:`os.pathlike`
-        Path to the script.
-    checksum : str
-        Task checksum.
-
-    Returns
-    -------
-    pyscript : :obj:`File`
-        Execution script
-
-    """
-    task_pkl = script_path / "_task.pklz"
-    if not task_pkl.exists() or not task_pkl.stat().st_size:
-        raise Exception("Missing or empty task!")
-
-    content = f"""import cloudpickle as cp
-from pathlib import Path
-cache_path = Path("{str(script_path)}")
-from pydra.engine.helpers import load_and_run
-task_pkl = (cache_path / "_task.pklz")
-# loading and running the task
-task = load_and_run(task_pkl=task_pkl, ind={ind}, rerun={rerun})
-# checking results
-if not task.result():
-    raise Exception("Something went wrong")
-print("Completed", task.checksum, task)
-task_pkl.unlink()
-"""
-    pyscript = script_path / f"pyscript_{checksum}.py"
-    with pyscript.open("wt") as fp:
-        fp.writelines(content)
-    return pyscript
-
-
 def hash_function(obj):
     """Generate hash of object."""
     return sha256(str(obj).encode()).hexdigest()
@@ -557,6 +517,9 @@ def load_and_run(task_pkl, ind=None, rerun=False, **kwargs):
      """
     task = load_task(task_pkl=task_pkl, ind=ind)
     task._run(rerun=rerun, **kwargs)
+
+    if not task.result():
+        raise Exception("Something went wrong")
     return task
 
 
@@ -571,6 +534,8 @@ async def load_and_run_async(task_pkl, ind=None, submitter=None, rerun=False, **
 
 def load_task(task_pkl, ind=None):
     """ loading a task from a pickle file, settings proper input for the specific ind"""
+    if isinstance(task_pkl, str):
+        task_pkl = Path(task_pkl)
     task = cp.loads(task_pkl.read_bytes())
     if ind is not None:
         _, inputs_dict = task.get_input_el(ind)
