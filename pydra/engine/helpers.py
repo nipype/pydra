@@ -414,30 +414,18 @@ def create_pyscript(script_path, checksum, rerun=False, ind=None):
         Execution script
 
     """
-    if ind is None:
-        task_pkl = script_path / "_task.pklz"
-    else:
-        task_pkl = script_path / "_task_main.pklz"
+    task_pkl = script_path / "_task.pklz"
     if not task_pkl.exists() or not task_pkl.stat().st_size:
         raise Exception("Missing or empty task!")
 
     content = f"""import cloudpickle as cp
 from pathlib import Path
 cache_path = Path("{str(script_path)}")
-"""
-    if ind is None:
-        content += f"""task_pkl = (cache_path / "_task.pklz")
-task = cp.loads(task_pkl.read_bytes())
-# submit task
-task(rerun={rerun})
-"""
-    else:
-        content += f"""from pydra.engine.helpers import load_and_run
-task_pkl = (cache_path / "_task_main.pklz")
+from pydra.engine.helpers import load_and_run
+task_pkl = (cache_path / "_task.pklz")
 # loading and running the task
-task = load_and_run(ind={ind}, task_main_pkl=task_pkl, rerun={rerun})
-"""
-    content += f"""# checking results
+task = load_and_run(task_pkl=task_pkl, ind={ind}, rerun={rerun})
+# checking results
 if not task.result():
     raise Exception("Something went wrong")
 print("Completed", task.checksum, task)
@@ -555,29 +543,30 @@ def get_available_cpus():
     return os.cpu_count()
 
 
-def load_and_run(ind, task_main_pkl, rerun=False, **kwargs):
+def load_and_run(task_pkl, ind=None, rerun=False, **kwargs):
     """
      loading a task from a pickle file, settings proper input
      and running the task
      """
-    task = load_task(ind=ind, task_main_pkl=task_main_pkl)
+    task = load_task(task_pkl=task_pkl, ind=ind)
     task._run(rerun=rerun, **kwargs)
     return task
 
 
-async def load_and_run_async(ind, task_main_pkl, submitter=None, rerun=False, **kwargs):
+async def load_and_run_async(task_pkl, ind=None, submitter=None, rerun=False, **kwargs):
     """
     loading a task from a pickle file, settings proper input
     and running the workflow
     """
-    task = load_task(ind=ind, task_main_pkl=task_main_pkl)
+    task = load_task(task_pkl=task_pkl, ind=ind)
     await task._run(submitter=submitter, rerun=rerun, **kwargs)
 
 
-def load_task(ind, task_main_pkl):
+def load_task(task_pkl, ind=None):
     """ loading a task from a pickle file, settings proper input for the specific ind"""
-    task = cp.loads(task_main_pkl.read_bytes())
-    _, inputs_dict = task.get_input_el(ind)
-    task.inputs = attr.evolve(task.inputs, **inputs_dict)
-    task.state = None
+    task = cp.loads(task_pkl.read_bytes())
+    if ind is not None:
+        _, inputs_dict = task.get_input_el(ind)
+        task.inputs = attr.evolve(task.inputs, **inputs_dict)
+        task.state = None
     return task

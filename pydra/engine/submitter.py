@@ -77,7 +77,7 @@ class Submitter:
                 await self.worker.run_el(workflow, rerun=rerun)
             else:
                 await load_and_run_async(
-                    ind=ind, task_main_pkl=wf_main_pkl, submitter=self, rerun=rerun
+                    task_pkl=wf_main_pkl, ind=ind, submitter=self, rerun=rerun
                 )
 
     async def submit(self, runnable, wait=False, rerun=False):

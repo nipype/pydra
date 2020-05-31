@@ -91,7 +91,7 @@ class DistributedWorker(Worker):
             if not (script_dir / "_task.pkl").exists():
                 save(script_dir, task=task)
         else:
-            copyfile(task[1], script_dir / "_task_main.pklz")
+            copyfile(task[1], script_dir / "_task.pklz")
 
         pyscript = create_pyscript(script_dir, checksum, rerun=rerun, ind=ind)
         batchscript = script_dir / f"batchscript_{checksum}.sh"
@@ -202,7 +202,7 @@ class ConcurrentFuturesWorker(Worker):
         else:  # it could be tuple that includes pickle files with tasks and inputs
             ind, task_main_pkl, task_orig = runnable
             res = await self.loop.run_in_executor(
-                self.pool, load_and_run, ind, task_main_pkl, rerun
+                self.pool, load_and_run, task_main_pkl, ind, rerun
             )
         return res
 
