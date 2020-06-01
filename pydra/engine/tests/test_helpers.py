@@ -11,6 +11,7 @@ from .utils import multiply
 from ..helpers import hash_value, hash_function, get_available_cpus, save, load_and_run
 from .. import helpers_file
 from ..specs import File, Directory
+from ..core import Workflow
 
 
 def test_save(tmpdir):
@@ -212,3 +213,29 @@ def test_load_and_run(tmpdir):
     assert task_0.result().output.out == 10
     task_1 = load_and_run(task_pkl=task_pkl, ind=1)
     assert task_1.result().output.out == 20
+
+
+def test_load_and_run_wf(tmpdir):
+    """ testing load_and_run for pickled task"""
+    wf_pkl = Path(tmpdir.join("wf_main.pkl"))
+
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.split(("x"))
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = 10
+
+    wf.set_output([("out", wf.mult.lzout.out)])
+
+    # task = multiply(name="mult", x=[1, 2], y=10).split("x")
+    wf.state.prepare_states(inputs=wf.inputs)
+    wf.state.prepare_inputs()
+    wf.plugin = "cf"
+
+    with wf_pkl.open("wb") as fp:
+        cp.dump(wf, fp)
+
+    wf_0 = load_and_run(ind=0, task_pkl=wf_pkl)
+    assert wf_0.result().output.out == 10
+    wf_1 = load_and_run(ind=1, task_pkl=wf_pkl)
+    assert wf_1.result().output.out == 20

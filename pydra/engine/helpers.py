@@ -510,13 +510,15 @@ def get_available_cpus():
     return os.cpu_count()
 
 
-def load_and_run(task_pkl, ind=None, rerun=False, **kwargs):
+def load_and_run(
+    task_pkl, ind=None, rerun=False, submitter=None, plugin=None, **kwargs
+):
     """
      loading a task from a pickle file, settings proper input
      and running the task
      """
     task = load_task(task_pkl=task_pkl, ind=ind)
-    task._run(rerun=rerun, **kwargs)
+    task(rerun=rerun, plugin=plugin, submitter=submitter, **kwargs)
 
     if not task.result():
         raise Exception("Something went wrong")
