@@ -508,7 +508,7 @@ class TaskBase:
         pkl_files = self.cache_dir / self.checksum / "pkl_files"
         pkl_files.mkdir(exist_ok=True, parents=True)
         task_main_path = pkl_files / "_task.pklz"
-        save(task_path=pkl_files, task=self, use_locfile=True)
+        save(task_path=pkl_files, task=self)
         return task_main_path
 
     @property

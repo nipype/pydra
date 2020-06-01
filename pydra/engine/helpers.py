@@ -95,7 +95,7 @@ def load_result(checksum, cache_locations):
     return None
 
 
-def save(task_path: Path, result=None, task=None, use_locfile=False):
+def save(task_path: Path, result=None, task=None):
     """
     Save a :class:`~pydra.engine.core.TaskBase` object and/or results.
 
@@ -107,26 +107,26 @@ def save(task_path: Path, result=None, task=None, use_locfile=False):
         Result to pickle and write
     task : :class:`~pydra.engine.core.TaskBase`
         Task to pickle and write
-    use_locfile : :obj: `bool`
-        if True, SoftFileLock will be used
     """
-    if use_locfile:
-        lockfile = task_path.parent / (task_path.name + ".lock")
-        with SoftFileLock(lockfile):
-            save(task_path=task_path, result=result, task=task)
 
     if task is None and result is None:
         raise ValueError("Nothing to be saved")
+
+    if not isinstance(task_path, Path):
+        task_path = Path(task_path)
     task_path.mkdir(parents=True, exist_ok=True)
-    if result:
-        if Path(task_path).name.startswith("Workflow"):
-            # copy files to the workflow directory
-            result = copyfile_workflow(wf_path=task_path, result=result)
-        with (task_path / "_result.pklz").open("wb") as fp:
-            cp.dump(result, fp)
-    if task:
-        with (task_path / "_task.pklz").open("wb") as fp:
-            cp.dump(task, fp)
+
+    lockfile = task_path.parent / (task_path.name + "_save.lock")
+    with SoftFileLock(lockfile):
+        if result:
+            if task_path.name.startswith("Workflow"):
+                # copy files to the workflow directory
+                result = copyfile_workflow(wf_path=task_path, result=result)
+            with (task_path / "_result.pklz").open("wb") as fp:
+                cp.dump(result, fp)
+        if task:
+            with (task_path / "_task.pklz").open("wb") as fp:
+                cp.dump(task, fp)
 
 
 def copyfile_workflow(wf_path, result):
