@@ -230,7 +230,7 @@ def test_load_and_run_exception(tmpdir):
         task_0 = load_and_run(task_pkl=task_pkl, ind=0)
     assert "i'm raising an exception!" in str(excinfo.value)
     # checking if the crashfile has been created
-    assert "/crash" in str(excinfo.value)
+    assert "crash-" in str(excinfo.value)
     assert Path(str(excinfo.value).split("here: ")[1][:-2]).exists()
     # the second task should be fine
     task_1 = load_and_run(task_pkl=task_pkl, ind=1)
