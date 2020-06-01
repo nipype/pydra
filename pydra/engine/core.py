@@ -505,10 +505,10 @@ class TaskBase:
 
     def pickle_task(self):
         """ Pickling the tasks with full inputs"""
-        pkl_files = self.cache_dir / self.checksum / "pkl_files"
+        pkl_files = self.cache_dir / "pkl_files"
         pkl_files.mkdir(exist_ok=True, parents=True)
-        task_main_path = pkl_files / "_task.pklz"
-        save(task_path=pkl_files, task=self)
+        task_main_path = pkl_files / f"{self.name}_{self.checksum}_task.pklz"
+        save(task_path=pkl_files, task=self, name_prefix=f"{self.name}_{self.checksum}")
         return task_main_path
 
     @property

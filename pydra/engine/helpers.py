@@ -100,7 +100,7 @@ def load_result(checksum, cache_locations):
     return None
 
 
-def save(task_path: Path, result=None, task=None):
+def save(task_path: Path, result=None, task=None, name_prefix=None):
     """
     Save a :class:`~pydra.engine.core.TaskBase` object and/or results.
 
@@ -120,6 +120,8 @@ def save(task_path: Path, result=None, task=None):
     if not isinstance(task_path, Path):
         task_path = Path(task_path)
     task_path.mkdir(parents=True, exist_ok=True)
+    if name_prefix is None:
+        name_prefix = ""
 
     lockfile = task_path.parent / (task_path.name + "_save.lock")
     with SoftFileLock(lockfile):
@@ -127,10 +129,10 @@ def save(task_path: Path, result=None, task=None):
             if task_path.name.startswith("Workflow"):
                 # copy files to the workflow directory
                 result = copyfile_workflow(wf_path=task_path, result=result)
-            with (task_path / "_result.pklz").open("wb") as fp:
+            with (task_path / f"{name_prefix}_result.pklz").open("wb") as fp:
                 cp.dump(result, fp)
         if task:
-            with (task_path / "_task.pklz").open("wb") as fp:
+            with (task_path / f"{name_prefix}_task.pklz").open("wb") as fp:
                 cp.dump(task, fp)
 
 
