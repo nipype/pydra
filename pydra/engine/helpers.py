@@ -9,6 +9,11 @@ import os
 import sys
 from hashlib import sha256
 import subprocess as sp
+import getpass
+import uuid
+from time import strftime
+from traceback import format_exception
+
 
 from .specs import Runtime, File, Directory, attr_fields
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
@@ -518,10 +523,22 @@ def load_and_run(
      and running the task
      """
     task = load_task(task_pkl=task_pkl, ind=ind)
-    task(rerun=rerun, plugin=plugin, submitter=submitter, **kwargs)
-
-    if not task.result():
-        raise Exception("Something went wrong")
+    try:
+        task(rerun=rerun, plugin=plugin, submitter=submitter, **kwargs)
+    except Exception as excinfo:
+        etype, eval, etr = sys.exc_info()
+        traceback = format_exception(etype, eval, etr)
+        crashfile = report_crash(task, traceback=traceback)
+        raise type(excinfo)(
+            str(excinfo.with_traceback(None)),
+            f" full crash report is here: {crashfile}",
+        )
+    else:
+        if not task.result():
+            crashfile = report_crash(task, traceback="results are not set properly")
+            raise Exception(
+                f"results are not set properly, full crash report is here: {crashfile}"
+            )
     return task
 
 
@@ -544,3 +561,48 @@ def load_task(task_pkl, ind=None):
         task.inputs = attr.evolve(task.inputs, **inputs_dict)
         task.state = None
     return task
+
+
+def report_crash(task, traceback, hostname=None):
+    """Writes crash related information to a file (based on nipype function)
+    """
+    name = task.name
+
+    try:
+        result = task.result()
+    except FileNotFoundError:
+        traceback += """
+When creating this crashfile, the results file corresponding
+to the task could not be found.""".splitlines(
+            keepends=True
+        )
+    except Exception as exc:
+        traceback += """
+During the creation of this crashfile triggered by the above exception,
+another exception occurred:\n\n{}.""".format(
+            exc
+        ).splitlines(
+            keepends=True
+        )
+    else:
+        if getattr(result, "runtime", None):
+            if isinstance(result.runtime, list):
+                host = result.runtime[0].hostname
+            else:
+                host = result.runtime.hostname
+
+    # Try everything to fill in the host
+    # TODO: think about using host
+    # host = host or hostname or gethostname()
+    timeofcrash = strftime("%Y%m%d-%H%M%S")
+    try:
+        login_name = getpass.getuser()
+    except KeyError:
+        login_name = "UID{:d}".format(os.getuid())
+    crashfile = f"crash-{timeofcrash}-{login_name}-{name}-{uuid.uuid4()}.pklz"
+    crashfile = task.output_dir / crashfile
+
+    with crashfile.open("wb") as fp:
+        cp.dump(traceback, fp)
+
+    return crashfile

@@ -7,7 +7,7 @@ import platform
 import pytest
 import cloudpickle as cp
 
-from .utils import multiply
+from .utils import multiply, raise_xeq1
 from ..helpers import hash_value, hash_function, get_available_cpus, save, load_and_run
 from .. import helpers_file
 from ..specs import File, Directory
@@ -213,6 +213,28 @@ def test_load_and_run(tmpdir):
     assert task_0.result().output.out == 10
     task_1 = load_and_run(task_pkl=task_pkl, ind=1)
     assert task_1.result().output.out == 20
+
+
+def test_load_and_run_exception(tmpdir):
+    """ testing raising exception and saving info in crashfile when when load_and_run"""
+    task_pkl = Path(tmpdir.join("task_main.pkl"))
+
+    task = raise_xeq1(name="raise", x=[1, 2]).split("x")
+    task.state.prepare_states(inputs=task.inputs)
+    task.state.prepare_inputs()
+
+    with task_pkl.open("wb") as fp:
+        cp.dump(task, fp)
+
+    with pytest.raises(Exception) as excinfo:
+        task_0 = load_and_run(task_pkl=task_pkl, ind=0)
+    assert "i'm raising an exception!" in str(excinfo.value)
+    # checking if the crashfile has been created
+    assert "/crash" in str(excinfo.value)
+    assert Path(str(excinfo.value).split("here: ")[1][:-2]).exists()
+    # the second task should be fine
+    task_1 = load_and_run(task_pkl=task_pkl, ind=1)
+    assert task_1.result().output.out == 2
 
 
 def test_load_and_run_wf(tmpdir):
