@@ -235,7 +235,7 @@ def make_klass(spec):
                 if isinstance(item[1], attr._make._CountingAttr):
                     newfields[item[0]] = item[1]
                 else:
-                    newfields[item[0]] = attr.ib(repr=False, type=item[1])
+                    newfields[item[0]] = attr.ib(type=item[1])
             else:
                 if (
                     any([isinstance(ii, attr._make._CountingAttr) for ii in item])
