@@ -549,12 +549,22 @@ def load_and_run(
      loading a task from a pickle file, settings proper input
      and running the task
      """
-    task = load_task(task_pkl=task_pkl, ind=ind)
+    try:
+        task = load_task(task_pkl=task_pkl, ind=ind)
+    except Exception as excinfo:
+        if task_pkl.parent.exists():
+            etype, eval, etr = sys.exc_info()
+            traceback = format_exception(etype, eval, etr)
+            errorfile = record_error(task_pkl.parent, error=traceback)
+            result = Result(output=None, runtime=None, errored=True)
+            save(task_pkl.parent, result=result)
+        raise
+
+    resultfile = task.output_dir / "_result.pklz"
     try:
         task(rerun=rerun, plugin=plugin, submitter=submitter, **kwargs)
     except Exception as excinfo:
         # creating result and error files if missing
-        resultfile = task.output_dir / "_result.pklz"
         errorfile = task.output_dir / "_error.pklz"
         if not resultfile.exists():
             etype, eval, etr = sys.exc_info()
@@ -566,7 +576,7 @@ def load_and_run(
             str(excinfo.with_traceback(None)),
             f" full crash report is here: {errorfile}",
         )
-    return task
+    return resultfile
 
 
 async def load_and_run_async(task_pkl, ind=None, submitter=None, rerun=False, **kwargs):

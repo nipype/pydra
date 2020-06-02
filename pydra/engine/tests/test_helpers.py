@@ -209,13 +209,24 @@ def test_load_and_run(tmpdir):
     with task_pkl.open("wb") as fp:
         cp.dump(task, fp)
 
-    task_0 = load_and_run(task_pkl=task_pkl, ind=0)
-    assert task_0.result().output.out == 10
-    task_1 = load_and_run(task_pkl=task_pkl, ind=1)
-    assert task_1.result().output.out == 20
+    resultfile_0 = load_and_run(task_pkl=task_pkl, ind=0)
+    resultfile_1 = load_and_run(task_pkl=task_pkl, ind=1)
+    # checking the result files
+    result_0 = cp.loads(resultfile_0.read_bytes())
+    result_1 = cp.loads(resultfile_1.read_bytes())
+    assert result_0.output.out == 10
+    assert result_1.output.out == 20
 
 
-def test_load_and_run_exception(tmpdir):
+def test_load_and_run_exception_load(tmpdir):
+    """ testing raising exception and saving info in crashfile when when load_and_run"""
+    task_pkl = Path(tmpdir.join("task_main.pkl"))
+    task = raise_xeq1(name="raise", x=[1, 2]).split("x")
+    with pytest.raises(FileNotFoundError) as excinfo:
+        task_0 = load_and_run(task_pkl=task_pkl, ind=0)
+
+
+def test_load_and_run_exception_run(tmpdir):
     """ testing raising exception and saving info in crashfile when when load_and_run"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
 
@@ -241,8 +252,9 @@ def test_load_and_run_exception(tmpdir):
     assert result_exception.errored is True
 
     # the second task should be fine
-    task_1 = load_and_run(task_pkl=task_pkl, ind=1)
-    assert task_1.result().output.out == 2
+    resultfile = load_and_run(task_pkl=task_pkl, ind=1)
+    result_1 = cp.loads(resultfile.read_bytes())
+    assert result_1.output.out == 2
 
 
 def test_load_and_run_wf(tmpdir):
@@ -265,7 +277,10 @@ def test_load_and_run_wf(tmpdir):
     with wf_pkl.open("wb") as fp:
         cp.dump(wf, fp)
 
-    wf_0 = load_and_run(ind=0, task_pkl=wf_pkl)
-    assert wf_0.result().output.out == 10
-    wf_1 = load_and_run(ind=1, task_pkl=wf_pkl)
-    assert wf_1.result().output.out == 20
+    resultfile_0 = load_and_run(ind=0, task_pkl=wf_pkl)
+    resultfile_1 = load_and_run(ind=1, task_pkl=wf_pkl)
+    # checking the result files
+    result_0 = cp.loads(resultfile_0.read_bytes())
+    result_1 = cp.loads(resultfile_1.read_bytes())
+    assert result_0.output.out == 10
+    assert result_1.output.out == 20
