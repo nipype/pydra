@@ -15,7 +15,7 @@ from time import strftime
 from traceback import format_exception
 
 
-from .specs import Runtime, File, Directory, attr_fields
+from .specs import Runtime, File, Directory, attr_fields, Result
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 
 
@@ -383,8 +383,33 @@ def create_checksum(name, inputs):
 
 def record_error(error_path, error):
     """Write an error file."""
+
+    error_message = str(error)
+
+    resultfile = error_path / "_result.pklz"
+    if not resultfile.exists():
+        error_message += """\n
+    When creating this error file, the results file corresponding
+    to the task could not be found."""
+
+    name_checksum = str(error_path.name)
+    timeofcrash = strftime("%Y%m%d-%H%M%S")
+    try:
+        login_name = getpass.getuser()
+    except KeyError:
+        login_name = "UID{:d}".format(os.getuid())
+
+    full_error = {
+        "time of crash": timeofcrash,
+        "login name": login_name,
+        "name with checksum": name_checksum,
+        "error message": error,
+    }
+
     with (error_path / "_error.pklz").open("wb") as fp:
-        cp.dump(error, fp)
+        cp.dump(full_error, fp)
+
+    return error_path / "_error.pklz"
 
 
 def get_open_loop():
@@ -528,19 +553,19 @@ def load_and_run(
     try:
         task(rerun=rerun, plugin=plugin, submitter=submitter, **kwargs)
     except Exception as excinfo:
-        etype, eval, etr = sys.exc_info()
-        traceback = format_exception(etype, eval, etr)
-        crashfile = report_crash(task, traceback=traceback)
+        # creating result and error files if missing
+        resultfile = task.output_dir / "_result.pklz"
+        errorfile = task.output_dir / "_error.pklz"
+        if not resultfile.exists():
+            etype, eval, etr = sys.exc_info()
+            traceback = format_exception(etype, eval, etr)
+            errorfile = record_error(task.output_dir, error=traceback)
+            result = Result(output=None, runtime=None, errored=True)
+            save(task.output_dir, result=result)
         raise type(excinfo)(
             str(excinfo.with_traceback(None)),
-            f" full crash report is here: {crashfile}",
+            f" full crash report is here: {errorfile}",
         )
-    else:
-        if not task.result():
-            crashfile = report_crash(task, traceback="results are not set properly")
-            raise Exception(
-                f"results are not set properly, full crash report is here: {crashfile}"
-            )
     return task
 
 
@@ -563,48 +588,3 @@ def load_task(task_pkl, ind=None):
         task.inputs = attr.evolve(task.inputs, **inputs_dict)
         task.state = None
     return task
-
-
-def report_crash(task, traceback, hostname=None):
-    """Writes crash related information to a file (based on nipype function)
-    """
-    name = task.name
-
-    try:
-        result = task.result()
-    except FileNotFoundError:
-        traceback += """
-When creating this crashfile, the results file corresponding
-to the task could not be found.""".splitlines(
-            keepends=True
-        )
-    except Exception as exc:
-        traceback += """
-During the creation of this crashfile triggered by the above exception,
-another exception occurred:\n\n{}.""".format(
-            exc
-        ).splitlines(
-            keepends=True
-        )
-    else:
-        if getattr(result, "runtime", None):
-            if isinstance(result.runtime, list):
-                host = result.runtime[0].hostname
-            else:
-                host = result.runtime.hostname
-
-    # Try everything to fill in the host
-    # TODO: think about using host
-    # host = host or hostname or gethostname()
-    timeofcrash = strftime("%Y%m%d-%H%M%S")
-    try:
-        login_name = getpass.getuser()
-    except KeyError:
-        login_name = "UID{:d}".format(os.getuid())
-    crashfile = f"crash-{timeofcrash}-{login_name}-{name}-{uuid.uuid4()}.pklz"
-    crashfile = task.output_dir / crashfile
-
-    with crashfile.open("wb") as fp:
-        cp.dump(traceback, fp)
-
-    return crashfile
