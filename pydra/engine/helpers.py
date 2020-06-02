@@ -4,12 +4,18 @@ import asyncio.subprocess as asp
 import attr
 import cloudpickle as cp
 from pathlib import Path
+from filelock import SoftFileLock
 import os
 import sys
 from hashlib import sha256
 import subprocess as sp
+import getpass
+import uuid
+from time import strftime
+from traceback import format_exception
 
-from .specs import Runtime, File, Directory, attr_fields
+
+from .specs import Runtime, File, Directory, attr_fields, Result
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 
 
@@ -94,7 +100,7 @@ def load_result(checksum, cache_locations):
     return None
 
 
-def save(task_path: Path, result=None, task=None):
+def save(task_path: Path, result=None, task=None, name_prefix=None):
     """
     Save a :class:`~pydra.engine.core.TaskBase` object and/or results.
 
@@ -106,20 +112,28 @@ def save(task_path: Path, result=None, task=None):
         Result to pickle and write
     task : :class:`~pydra.engine.core.TaskBase`
         Task to pickle and write
-
     """
+
     if task is None and result is None:
         raise ValueError("Nothing to be saved")
+
+    if not isinstance(task_path, Path):
+        task_path = Path(task_path)
     task_path.mkdir(parents=True, exist_ok=True)
-    if result:
-        if Path(task_path).name.startswith("Workflow"):
-            # copy files to the workflow directory
-            result = copyfile_workflow(wf_path=task_path, result=result)
-        with (task_path / "_result.pklz").open("wb") as fp:
-            cp.dump(result, fp)
-    if task:
-        with (task_path / "_task.pklz").open("wb") as fp:
-            cp.dump(task, fp)
+    if name_prefix is None:
+        name_prefix = ""
+
+    lockfile = task_path.parent / (task_path.name + "_save.lock")
+    with SoftFileLock(lockfile):
+        if result:
+            if task_path.name.startswith("Workflow"):
+                # copy files to the workflow directory
+                result = copyfile_workflow(wf_path=task_path, result=result)
+            with (task_path / f"{name_prefix}_result.pklz").open("wb") as fp:
+                cp.dump(result, fp)
+        if task:
+            with (task_path / f"{name_prefix}_task.pklz").open("wb") as fp:
+                cp.dump(task, fp)
 
 
 def copyfile_workflow(wf_path, result):
@@ -221,7 +235,7 @@ def make_klass(spec):
                 if isinstance(item[1], attr._make._CountingAttr):
                     newfields[item[0]] = item[1]
                 else:
-                    newfields[item[0]] = attr.ib(repr=False, type=item[1])
+                    newfields[item[0]] = attr.ib(type=item[1])
             else:
                 if (
                     any([isinstance(ii, attr._make._CountingAttr) for ii in item])
@@ -369,8 +383,33 @@ def create_checksum(name, inputs):
 
 def record_error(error_path, error):
     """Write an error file."""
+
+    error_message = str(error)
+
+    resultfile = error_path / "_result.pklz"
+    if not resultfile.exists():
+        error_message += """\n
+    When creating this error file, the results file corresponding
+    to the task could not be found."""
+
+    name_checksum = str(error_path.name)
+    timeofcrash = strftime("%Y%m%d-%H%M%S")
+    try:
+        login_name = getpass.getuser()
+    except KeyError:
+        login_name = "UID{:d}".format(os.getuid())
+
+    full_error = {
+        "time of crash": timeofcrash,
+        "login name": login_name,
+        "name with checksum": name_checksum,
+        "error message": error,
+    }
+
     with (error_path / "_error.pklz").open("wb") as fp:
-        cp.dump(error, fp)
+        cp.dump(full_error, fp)
+
+    return error_path / "_error.pklz"
 
 
 def get_open_loop():
@@ -395,49 +434,6 @@ def get_open_loop():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
     return loop
-
-
-def create_pyscript(script_path, checksum, rerun=False):
-    """
-    Create standalone script for task execution in a different environment.
-
-    Parameters
-    ----------
-    script_path : :obj:`os.pathlike`
-        Path to the script.
-    checksum : str
-        Task checksum.
-
-    Returns
-    -------
-    pyscript : :obj:`File`
-        Execution script
-
-    """
-    task_pkl = script_path / "_task.pklz"
-    if not task_pkl.exists() or not task_pkl.stat().st_size:
-        raise Exception("Missing or empty task!")
-
-    content = f"""import cloudpickle as cp
-from pathlib import Path
-
-
-cache_path = Path("{str(script_path)}")
-task_pkl = (cache_path / "_task.pklz")
-task = cp.loads(task_pkl.read_bytes())
-
-# submit task
-task(rerun={rerun})
-
-if not task.result():
-    raise Exception("Something went wrong")
-print("Completed", task.checksum, task)
-task_pkl.unlink()
-"""
-    pyscript = script_path / f"pyscript_{checksum}.py"
-    with pyscript.open("wt") as fp:
-        fp.writelines(content)
-    return pyscript
 
 
 def hash_function(obj):
@@ -544,3 +540,61 @@ def get_available_cpus():
 
     # Last resort
     return os.cpu_count()
+
+
+def load_and_run(
+    task_pkl, ind=None, rerun=False, submitter=None, plugin=None, **kwargs
+):
+    """
+     loading a task from a pickle file, settings proper input
+     and running the task
+     """
+    try:
+        task = load_task(task_pkl=task_pkl, ind=ind)
+    except Exception as excinfo:
+        if task_pkl.parent.exists():
+            etype, eval, etr = sys.exc_info()
+            traceback = format_exception(etype, eval, etr)
+            errorfile = record_error(task_pkl.parent, error=traceback)
+            result = Result(output=None, runtime=None, errored=True)
+            save(task_pkl.parent, result=result)
+        raise
+
+    resultfile = task.output_dir / "_result.pklz"
+    try:
+        task(rerun=rerun, plugin=plugin, submitter=submitter, **kwargs)
+    except Exception as excinfo:
+        # creating result and error files if missing
+        errorfile = task.output_dir / "_error.pklz"
+        if not resultfile.exists():
+            etype, eval, etr = sys.exc_info()
+            traceback = format_exception(etype, eval, etr)
+            errorfile = record_error(task.output_dir, error=traceback)
+            result = Result(output=None, runtime=None, errored=True)
+            save(task.output_dir, result=result)
+        raise type(excinfo)(
+            str(excinfo.with_traceback(None)),
+            f" full crash report is here: {errorfile}",
+        )
+    return resultfile
+
+
+async def load_and_run_async(task_pkl, ind=None, submitter=None, rerun=False, **kwargs):
+    """
+    loading a task from a pickle file, settings proper input
+    and running the workflow
+    """
+    task = load_task(task_pkl=task_pkl, ind=ind)
+    await task._run(submitter=submitter, rerun=rerun, **kwargs)
+
+
+def load_task(task_pkl, ind=None):
+    """ loading a task from a pickle file, settings proper input for the specific ind"""
+    if isinstance(task_pkl, str):
+        task_pkl = Path(task_pkl)
+    task = cp.loads(task_pkl.read_bytes())
+    if ind is not None:
+        _, inputs_dict = task.get_input_el(ind)
+        task.inputs = attr.evolve(task.inputs, **inputs_dict)
+        task.state = None
+    return task

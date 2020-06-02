@@ -6,7 +6,7 @@ import logging
 import os
 from pathlib import Path
 import typing as ty
-from copy import deepcopy
+from copy import deepcopy, copy
 
 import cloudpickle as cp
 from filelock import SoftFileLock
@@ -503,16 +503,13 @@ class TaskBase:
             inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
             return None, inputs_dict
 
-    def to_job(self, ind):
-        """Run interface one element generated from node_state."""
-        # logger.debug("Run interface el, name={}, ind={}".format(self.name, ind))
-        el = deepcopy(self)
-        el.state = None
-        # dj might be needed
-        # el._checksum = None
-        _, inputs_dict = self.get_input_el(ind)
-        el.inputs = attr.evolve(el.inputs, **inputs_dict)
-        return el
+    def pickle_task(self):
+        """ Pickling the tasks with full inputs"""
+        pkl_files = self.cache_dir / "pkl_files"
+        pkl_files.mkdir(exist_ok=True, parents=True)
+        task_main_path = pkl_files / f"{self.name}_{self.checksum}_task.pklz"
+        save(task_path=pkl_files, task=self, name_prefix=f"{self.name}_{self.checksum}")
+        return task_main_path
 
     @property
     def done(self):

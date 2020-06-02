@@ -4,10 +4,12 @@ import sys
 import re
 from tempfile import gettempdir
 from pathlib import Path
+from shutil import copyfile
 
 import concurrent.futures as cf
 
-from .helpers import create_pyscript, get_available_cpus, read_and_display_async, save
+from .core import TaskBase
+from .helpers import get_available_cpus, read_and_display_async, save, load_and_run
 
 import logging
 
@@ -67,24 +69,41 @@ class DistributedWorker(Worker):
         self._jobs = 0
 
     def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
-        script_dir = (
-            task.cache_dir / f"{self.__class__.__name__}_scripts" / task.checksum
-        )
+
+        if isinstance(task, TaskBase):
+            checksum = task.checksum
+            cache_dir = task.cache_dir
+            ind = None
+        else:
+            ind = task[0]
+            checksum = task[-1].checksum_states()[ind]
+            cache_dir = task[-1].cache_dir
+
+        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / checksum
         script_dir.mkdir(parents=True, exist_ok=True)
-        if not (script_dir / "_task.pkl").exists():
-            save(script_dir, task=task)
-        pyscript = create_pyscript(script_dir, task.checksum, rerun=rerun)
-        batchscript = script_dir / f"batchscript_{task.checksum}.sh"
+        if ind is None:
+            if not (script_dir / "_task.pkl").exists():
+                save(script_dir, task=task)
+        else:
+            copyfile(task[1], script_dir / "_task.pklz")
+
+        task_pkl = script_dir / "_task.pklz"
+        if not task_pkl.exists() or not task_pkl.stat().st_size:
+            raise Exception("Missing or empty task!")
+
+        batchscript = script_dir / f"batchscript_{checksum}.sh"
+        python_string = f"""'from pydra.engine.helpers import load_and_run; load_and_run(task_pkl="{str(task_pkl)}", ind={ind}, rerun={rerun}) '
+        """
         bcmd = "\n".join(
             (
                 f"#!{interpreter}",
                 f"#SBATCH --output={str(script_dir / 'slurm-%j.out')}",
-                f"{sys.executable} {str(pyscript)}",
+                f"{sys.executable} -c " + python_string,
             )
         )
         with batchscript.open("wt") as fp:
             fp.writelines(bcmd)
-        return script_dir, pyscript, batchscript
+        return script_dir, batchscript
 
     async def fetch_finished(self, futures):
         """
@@ -177,7 +196,13 @@ class ConcurrentFuturesWorker(Worker):
 
     async def exec_as_coro(self, runnable, rerun=False):
         """Run a task (coroutine wrapper)."""
-        res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
+        if isinstance(runnable, TaskBase):
+            res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
+        else:  # it could be tuple that includes pickle files with tasks and inputs
+            ind, task_main_pkl, task_orig = runnable
+            res = await self.loop.run_in_executor(
+                self.pool, load_and_run, task_main_pkl, ind, rerun
+            )
         return res
 
     def close(self):
@@ -218,20 +243,30 @@ class SlurmWorker(DistributedWorker):
 
     def run_el(self, runnable, rerun=False):
         """Worker submission API."""
-        script_dir, _, batch_script = self._prepare_runscripts(runnable, rerun=rerun)
+        script_dir, batch_script = self._prepare_runscripts(runnable, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
-        return self._submit_job(runnable, batch_script)
 
-    async def _submit_job(self, task, batchscript):
-        """Coroutine that submits task runscript and polls job until completion or error."""
-        script_dir = (
-            task.cache_dir / f"{self.__class__.__name__}_scripts" / task.checksum
+        if isinstance(runnable, TaskBase):
+            checksum = runnable.checksum
+            cache_dir = runnable.cache_dir
+            name = runnable.name
+        else:
+            checksum = runnable[-1].checksum_states()[runnable[0]]
+            cache_dir = runnable[-1].cache_dir
+            name = runnable[-1].name
+
+        return self._submit_job(
+            batch_script, name=name, checksum=checksum, cache_dir=cache_dir
         )
+
+    async def _submit_job(self, batchscript, name, checksum, cache_dir):
+        """Coroutine that submits task runscript and polls job until completion or error."""
+        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / checksum
         sargs = self.sbatch_args.split()
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
         if not jobname:
-            jobname = ".".join((task.name, task.checksum))
+            jobname = ".".join((name, checksum))
             sargs.append(f"--job-name={jobname}")
         output = re.search(r"(?<=-o )\S+|(?<=--output=)\S+", self.sbatch_args)
         if not output:
@@ -261,7 +296,7 @@ class SlurmWorker(DistributedWorker):
             # Exception: Polling / job failure
             done = await self._poll_job(jobid)
             if done:
-                return task
+                return True
             await asyncio.sleep(self.poll_delay)
 
     async def _poll_job(self, jobid):

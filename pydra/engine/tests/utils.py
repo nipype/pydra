@@ -103,6 +103,13 @@ def add2(x):
 
 
 @mark.task
+def raise_xeq1(x):
+    if x == 1:
+        raise Exception("x is 1, so i'm raising an exception!")
+    return x
+
+
+@mark.task
 @mark.annotate({"return": {"out_add": float, "out_sub": float}})
 def add2_sub2_res(res):
     """function that takes entire output as an input"""

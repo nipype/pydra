@@ -2,7 +2,7 @@
 import asyncio
 from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker, DaskWorker
 from .core import is_workflow
-from .helpers import get_open_loop
+from .helpers import get_open_loop, load_and_run_async
 
 import logging
 
@@ -64,11 +64,21 @@ class Submitter:
 
     async def submit_workflow(self, workflow, rerun=False):
         """Distribute or initiate workflow execution."""
-        if workflow.plugin and workflow.plugin != self.plugin:
-            # dj: this is not tested!!!
-            await self.worker.run_el(workflow, rerun=rerun)
-        else:
-            await workflow._run(self, rerun=rerun)
+        if is_workflow(workflow):
+            if workflow.plugin and workflow.plugin != self.plugin:
+                # dj: this is not tested!!! TODO
+                await self.worker.run_el(workflow, rerun=rerun)
+            else:
+                await workflow._run(self, rerun=rerun)
+        else:  # could be a tuple with paths to pickle files wiith tasks and inputs
+            ind, wf_main_pkl, wf_orig = workflow
+            if wf_orig.plugin and wf_orig.plugin != self.plugin:
+                # dj: this is not tested!!! TODO
+                await self.worker.run_el(workflow, rerun=rerun)
+            else:
+                await load_and_run_async(
+                    task_pkl=wf_main_pkl, ind=ind, submitter=self, rerun=rerun
+                )
 
     async def submit(self, runnable, wait=False, rerun=False):
         """
@@ -100,17 +110,16 @@ class Submitter:
             logger.debug(
                 f"Expanding {runnable} into {len(runnable.state.states_val)} states"
             )
+            task_pkl = runnable.pickle_task()
+
             for sidx in range(len(runnable.state.states_val)):
-                job = runnable.to_job(sidx)
-                logger.debug(
-                    f'Submitting runnable {job}{str(sidx) if sidx is not None else ""}'
-                )
+                job_tuple = (sidx, task_pkl, runnable)
                 if is_workflow(runnable):
                     # job has no state anymore
-                    futures.add(self.submit_workflow(job, rerun=rerun))
+                    futures.add(self.submit_workflow(job_tuple, rerun=rerun))
                 else:
                     # tasks are submitted to worker for execution
-                    futures.add(self.worker.run_el(job, rerun=rerun))
+                    futures.add(self.worker.run_el(job_tuple, rerun=rerun))
         else:
             if is_workflow(runnable):
                 await self._run_workflow(runnable, rerun=rerun)

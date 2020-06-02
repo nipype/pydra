@@ -378,6 +378,17 @@ def test_task_nostate_1(plugin_dask_opt):
     assert nn.output_dir.exists()
 
 
+def test_task_nostate_1_call():
+    """ task without splitter"""
+    nn = fun_addtwo(name="NA", a=3)
+    nn()
+    # checking the results
+    results = nn.result()
+    assert results.output.out == 5
+    # checking the output_dir
+    assert nn.output_dir.exists()
+
+
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1_call_subm(plugin_dask_opt):
     """ task without splitter"""

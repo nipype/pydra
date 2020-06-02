@@ -7,16 +7,11 @@ import platform
 import pytest
 import cloudpickle as cp
 
-from .utils import multiply
-from ..helpers import (
-    hash_value,
-    hash_function,
-    get_available_cpus,
-    save,
-    create_pyscript,
-)
+from .utils import multiply, raise_xeq1
+from ..helpers import hash_value, hash_function, get_available_cpus, save, load_and_run
 from .. import helpers_file
 from ..specs import File, Directory
+from ..core import Workflow
 
 
 def test_save(tmpdir):
@@ -41,16 +36,6 @@ def test_save(tmpdir):
     res_pkl = outdir / "_result.pklz"
     res = cp.loads(res_pkl.read_bytes())
     assert res.output.out == 2
-
-
-def test_create_pyscript(tmpdir):
-    outdir = Path(tmpdir)
-    with pytest.raises(Exception):
-        create_pyscript(outdir, "checksum")
-    foo = multiply(name="mult", x=1, y=2)
-    save(outdir, task=foo)
-    pyscript = create_pyscript(outdir, foo.checksum)
-    assert pyscript.exists()
 
 
 def test_hash_file(tmpdir):
@@ -212,3 +197,90 @@ def test_get_available_cpus():
 
     if platform.system().lower() == "darwin":
         assert get_available_cpus() == os.cpu_count()
+
+
+def test_load_and_run(tmpdir):
+    """ testing load_and_run for pickled task"""
+    task_pkl = Path(tmpdir.join("task_main.pkl"))
+
+    task = multiply(name="mult", x=[1, 2], y=10).split("x")
+    task.state.prepare_states(inputs=task.inputs)
+    task.state.prepare_inputs()
+    with task_pkl.open("wb") as fp:
+        cp.dump(task, fp)
+
+    resultfile_0 = load_and_run(task_pkl=task_pkl, ind=0)
+    resultfile_1 = load_and_run(task_pkl=task_pkl, ind=1)
+    # checking the result files
+    result_0 = cp.loads(resultfile_0.read_bytes())
+    result_1 = cp.loads(resultfile_1.read_bytes())
+    assert result_0.output.out == 10
+    assert result_1.output.out == 20
+
+
+def test_load_and_run_exception_load(tmpdir):
+    """ testing raising exception and saving info in crashfile when when load_and_run"""
+    task_pkl = Path(tmpdir.join("task_main.pkl"))
+    task = raise_xeq1(name="raise", x=[1, 2]).split("x")
+    with pytest.raises(FileNotFoundError) as excinfo:
+        task_0 = load_and_run(task_pkl=task_pkl, ind=0)
+
+
+def test_load_and_run_exception_run(tmpdir):
+    """ testing raising exception and saving info in crashfile when when load_and_run"""
+    task_pkl = Path(tmpdir.join("task_main.pkl"))
+
+    task = raise_xeq1(name="raise", x=[1, 2]).split("x")
+    task.state.prepare_states(inputs=task.inputs)
+    task.state.prepare_inputs()
+
+    with task_pkl.open("wb") as fp:
+        cp.dump(task, fp)
+
+    with pytest.raises(Exception) as excinfo:
+        task_0 = load_and_run(task_pkl=task_pkl, ind=0)
+    assert "i'm raising an exception!" in str(excinfo.value)
+    # checking if the crashfile has been created
+    assert "crash" in str(excinfo.value)
+    errorfile = Path(str(excinfo.value).split("here: ")[1][:-2])
+    assert errorfile.exists()
+
+    resultfile = errorfile.parent / "_result.pklz"
+    assert resultfile.exists()
+    # checking the content
+    result_exception = cp.loads(resultfile.read_bytes())
+    assert result_exception.errored is True
+
+    # the second task should be fine
+    resultfile = load_and_run(task_pkl=task_pkl, ind=1)
+    result_1 = cp.loads(resultfile.read_bytes())
+    assert result_1.output.out == 2
+
+
+def test_load_and_run_wf(tmpdir):
+    """ testing load_and_run for pickled task"""
+    wf_pkl = Path(tmpdir.join("wf_main.pkl"))
+
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.split(("x"))
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = 10
+
+    wf.set_output([("out", wf.mult.lzout.out)])
+
+    # task = multiply(name="mult", x=[1, 2], y=10).split("x")
+    wf.state.prepare_states(inputs=wf.inputs)
+    wf.state.prepare_inputs()
+    wf.plugin = "cf"
+
+    with wf_pkl.open("wb") as fp:
+        cp.dump(wf, fp)
+
+    resultfile_0 = load_and_run(ind=0, task_pkl=wf_pkl)
+    resultfile_1 = load_and_run(ind=1, task_pkl=wf_pkl)
+    # checking the result files
+    result_0 = cp.loads(resultfile_0.read_bytes())
+    result_1 = cp.loads(resultfile_1.read_bytes())
+    assert result_0.output.out == 10
+    assert result_1.output.out == 20
