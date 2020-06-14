@@ -27,13 +27,13 @@ def test_output():
 
 
 def test_name_conflict():
-    """ checking if task name conflicts with a class attribute or method"""
+    """ raise error if task name conflicts with a class attribute or method"""
     with pytest.raises(ValueError) as excinfo1:
         nn = funaddtwo(name="split", a=3)
-    assert "Cannot use name of attributes/methods" in str(excinfo1.value)
+    assert "Cannot use names of attributes or methods" in str(excinfo1.value)
     with pytest.raises(ValueError) as excinfo2:
         nn = funaddtwo(name="checksum", a=3)
-    assert "Cannot use name of attributes/methods" in str(excinfo2.value)
+    assert "Cannot use names of attributes or methods" in str(excinfo2.value)
 
 
 def test_numpy():

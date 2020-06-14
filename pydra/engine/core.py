@@ -128,7 +128,7 @@ class TaskBase:
 
         # raise error if name is same as of attributes
         if name in dir(self):
-            raise ValueError("Cannot use name of attributes/methods as task name")
+            raise ValueError("Cannot use names of attributes or methods as task name")
         self.name = name
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
@@ -704,7 +704,9 @@ class Workflow(TaskBase):
         self.output_spec = output_spec
 
         if name in dir(self):
-            raise ValueError("Cannot use name of attributes/methods as workflow name")
+            raise ValueError(
+                "Cannot use names of attributes or methods as workflow name"
+            )
         self.name = name
 
         super(Workflow, self).__init__(
@@ -807,10 +809,21 @@ class Workflow(TaskBase):
             The task to be added.
 
         """
+        if task.name in dir(self):
+            raise ValueError(
+                "Cannot use names of workflow attributes or methods as task name"
+            )
+        if task.name in self.name2obj:
+            raise ValueError(
+                "Another task named {} is already added to the workflow".format(
+                    task.name
+                )
+            )
+        self.name2obj[task.name] = task
+
         if not is_task(task):
             raise ValueError("Unknown workflow element: {!r}".format(task))
         self.graph.add_nodes(task)
-        self.name2obj[task.name] = task
         self._last_added = task
         logger.debug(f"Added {task}")
         return self
