@@ -26,6 +26,16 @@ def test_output():
     assert res.output.out == 5
 
 
+def test_name_conflict():
+    """ checking if task name conflicts with a class attribute or method"""
+    with pytest.raises(ValueError) as excinfo1:
+        nn = funaddtwo(name="split", a=3)
+    assert "Cannot use name of attributes/methods" in str(excinfo1.value)
+    with pytest.raises(ValueError) as excinfo2:
+        nn = funaddtwo(name="checksum", a=3)
+    assert "Cannot use name of attributes/methods" in str(excinfo2.value)
+
+
 def test_numpy():
     """ checking if mark.task works for numpy functions"""
     np = pytest.importorskip("numpy")

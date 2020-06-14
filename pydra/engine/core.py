@@ -126,6 +126,9 @@ class TaskBase:
         if TaskBase._etelemetry_version_data is None:
             TaskBase._etelemetry_version_data = check_latest_version()
 
+        # raise error if name is same as of attributes
+        if name in dir(self):
+            raise ValueError("Cannot use name of attributes/methods as task name")
         self.name = name
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
@@ -699,6 +702,10 @@ class Workflow(TaskBase):
                 name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
             )
         self.output_spec = output_spec
+
+        if name in dir(self):
+            raise ValueError("Cannot use name of attributes/methods as workflow name")
+        self.name = name
 
         super(Workflow, self).__init__(
             name=name,

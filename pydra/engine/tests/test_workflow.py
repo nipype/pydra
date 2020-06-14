@@ -25,6 +25,16 @@ from ..submitter import Submitter
 from ..core import Workflow
 
 
+def test_wf_name_conflict():
+    """ checking if workflow name conflicts with a class attribute or method"""
+    with pytest.raises(ValueError) as excinfo1:
+        wf = Workflow(name="result", input_spec=["x"])
+    assert "Cannot use name of attributes/methods" in str(excinfo1.value)
+    with pytest.raises(ValueError) as excinfo2:
+        wf = Workflow(name="done", input_spec=["x"])
+    assert "Cannot use name of attributes/methods" in str(excinfo2.value)
+
+
 def test_wf_1(plugin):
     """ workflow with one task and no splitter"""
     wf = Workflow(name="wf_1", input_spec=["x"])
