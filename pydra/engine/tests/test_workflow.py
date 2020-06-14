@@ -25,6 +25,26 @@ from ..submitter import Submitter
 from ..core import Workflow
 
 
+def test_wf_name_conflict1():
+    """ raise error when workflow name conflicts with a class attribute or method"""
+    with pytest.raises(ValueError) as excinfo1:
+        wf = Workflow(name="result", input_spec=["x"])
+    assert "Cannot use names of attributes or methods" in str(excinfo1.value)
+    with pytest.raises(ValueError) as excinfo2:
+        wf = Workflow(name="done", input_spec=["x"])
+    assert "Cannot use names of attributes or methods" in str(excinfo2.value)
+
+
+def test_wf_name_conflict2():
+    """ raise error when a task with the same name is already added to workflow """
+    wf = Workflow(name="wf_1", input_spec=["x"])
+    wf.add(add2(name="task_name", x=wf.lzin.x))
+    with pytest.raises(ValueError) as excinfo:
+        wf.add(identity(name="task_name", x=3))
+
+    assert "Another task named task_name is already added" in str(excinfo.value)
+
+
 def test_wf_1(plugin):
     """ workflow with one task and no splitter"""
     wf = Workflow(name="wf_1", input_spec=["x"])
