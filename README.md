@@ -21,9 +21,9 @@ and Dask (this is an experimental implementation with limited testing)
 [[PyCon 2020 Poster](https://docs.google.com/presentation/d/10tS2I34rS0G9qz6v29qVd77OUydjP_FdBklrgAGmYSw/edit?usp=sharing)]
 
 ### Tutorial
-Pydra Tutorial can be find in [pydra-tutorial repository](https://github.com/nipype/pydra-tutorial).
+The Pydra Tutorial can be found in the [pydra-tutorial repository](https://github.com/nipype/pydra-tutorial).
 
-The tutorial can be run locally or using Binder service: [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/nipype/pydra-tutorial/master?filepath=notebooks)
+The tutorial can be run locally (with the necessary [requirements](https://github.com/nipype/pydra-tutorial/blob/master/requirements.txt)) or using Binder service: [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/nipype/pydra-tutorial/master?filepath=notebooks)
 
 Please note that mybinder times out after an hour.
 
