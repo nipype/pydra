@@ -2267,9 +2267,7 @@ def test_fsl():
     )
 
     # TODO: not sure why this has to be string
-    in_file = (
-        Path(os.path.dirname(os.path.abspath(__file__))) / "data_tests" / "test.nii.gz"
-    )
+    in_file = Path(__file__).parent / "data_tests" / "test.nii.gz"
 
     # separate command into exec + args
     shelly = ShellCommandTask(
