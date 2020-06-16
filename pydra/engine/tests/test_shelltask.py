@@ -2267,7 +2267,9 @@ def test_fsl():
     )
 
     # TODO: not sure why this has to be string
-    in_file = Path(os.path.dirname(os.path.abspath(__file__))) / "data" / "foo.nii"
+    in_file = (
+        Path(os.path.dirname(os.path.abspath(__file__))) / "data_tests" / "test.nii.gz"
+    )
 
     # separate command into exec + args
     shelly = ShellCommandTask(
@@ -2275,4 +2277,4 @@ def test_fsl():
     )
     assert shelly.inputs.executable == "bet"
     assert shelly.cmdline == f"bet {in_file} {in_file}_brain"
-    # res = shelly(plugin="cf")
+    res = shelly(plugin="cf")
