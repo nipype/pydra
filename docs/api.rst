@@ -13,4 +13,5 @@ Subpackages
 
    api/pydra.engine
    api/pydra.mark
+   api/pydra.tasks
    api/pydra.utils
