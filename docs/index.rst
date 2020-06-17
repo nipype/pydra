@@ -10,6 +10,7 @@ Welcome to Pydra: A simple dataflow engine with scalable semantics's documentati
    :maxdepth: 2
    :caption: Contents:
 
+   changes
    api
 
 
