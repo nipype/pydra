@@ -1,6 +1,15 @@
 Release Notes
 =============
 
+0.6.1
+-----
+
+* Add ``pydra.tasks`` namespace package to enable separate packages of ``Task``\s to be
+  installed into ``pydra.tasks``.
+* Raise error when task or workflow name conflicts with names of attributes, methods, or
+  other tasks already added to workflow
+* Mention ``requirements.txt`` in README
+
 0.6
 ---
 
