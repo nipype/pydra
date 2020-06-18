@@ -330,8 +330,6 @@ class ShellCommandTask(TaskBase):
             else:
                 continue
             cmd_add = []
-            if "argstr" in f.metadata:
-                cmd_add.append(f.metadata["argstr"])
             # if f.metadata.get("copyfile") in [True, False]:
             #    value = str(self.inputs.map_copyfiles[f.name])
             # else:
@@ -348,10 +346,37 @@ class ShellCommandTask(TaskBase):
                 cpath = cdir.joinpath(lpath.name)
                 value = str(cpath)
             if f.type is bool:
+                if "argstr" in f.metadata:
+                    cmd_add.append(f.metadata["argstr"])
                 if value is not True:
                     break
             else:
-                cmd_add += ensure_list(value, tuple2list=True)
+                if "argstr" in f.metadata:
+                    argstr = f.metadata["argstr"]
+
+                    if argstr.endswith("..."):
+                        argstr = argstr.replace("...", "")
+                        if "sep" in f.metadata and isinstance(value, list):
+                            cmd_el_str = f.metadata["sep"].join(
+                                [argstr.format(**{f.name: val}) for val in value]
+                            )
+                        else:
+                            raise Exception("should we have ... without sep??")
+
+                    else:
+                        if "sep" in f.metadata and isinstance(value, list):
+                            cmd_el_str = f.metadata["sep"].join(
+                                [str(val) for val in value]
+                            )
+                        else:
+                            cmd_el_str = argstr.format(**{f.name: value})
+                    cmd_add += cmd_el_str.split(" ")
+                else:
+                    if "sep" in f.metadata and isinstance(value, list):
+                        cmd_el_str = f.metadata["sep"].join([str(val) for val in value])
+                        cmd_add += cmd_el_str.split(" ")
+                    else:
+                        cmd_add += ensure_list(value, tuple2list=True)
             if cmd_add is not None:
                 pos_args.append((pos, cmd_add))
         # sorting all elements of the command
