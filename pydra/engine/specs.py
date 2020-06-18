@@ -199,6 +199,7 @@ class ShellSpec(BaseSpec):
             "requires",
             "separate_ext",
             "xor",
+            "sep",
         }
         # special inputs, don't have to follow rules for standard inputs
         special_input = ["_func", "_graph_checksums"]
