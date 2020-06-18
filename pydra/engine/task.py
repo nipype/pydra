@@ -327,8 +327,13 @@ class ShellCommandTask(TaskBase):
                     raise Exception(
                         f"position should be an integer > 0, but {pos} given"
                     )
-            else:
+            elif "output_file_template" in f.metadata:
                 continue
+            # for fields that are not executable, args or "output_file_template" and don't have
+            # position, it will be added at the end
+            else:
+                pos = None
+
             cmd_add = []
             # if f.metadata.get("copyfile") in [True, False]:
             #    value = str(self.inputs.map_copyfiles[f.name])
@@ -337,6 +342,9 @@ class ShellCommandTask(TaskBase):
                 value = getattr(self.inputs, f.name)[state_ind[f"{self.name}.{f.name}"]]
             else:
                 value = getattr(self.inputs, f.name)
+            if value is attr.NOTHING:
+                continue
+
             if is_local_file(f):
                 value = str(value)
             # changing path to the cpath (the directory should be mounted)
@@ -384,7 +392,23 @@ class ShellCommandTask(TaskBase):
             if cmd_add is not None:
                 pos_args.append((pos, cmd_add))
         # sorting all elements of the command
-        pos_args.sort()
+        try:
+            pos_args.sort()
+        except TypeError:  # is some positions are None
+            pos_args_none = []
+            pos_args_int = []
+            for el in pos_args:
+                if el[0] is None:
+                    pos_args_none.append(el)
+                else:
+                    pos_args_int.append(el)
+                pos_args_int.sort()
+                last_el = pos_args_int[-1][0]
+                for el_none in pos_args_none:
+                    last_el += 1
+                    pos_args_int.append((last_el, el_none[1]))
+            pos_args = pos_args_int
+
         # if args available, they should be moved at the of the list
         if pos_args[0][0] == -1:
             pos_args.append(pos_args.pop(0))
