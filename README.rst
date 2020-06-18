@@ -17,8 +17,8 @@ Feature list:
 5. Distributed execution, presently via ConcurrentFutures, SLURM,
 and Dask (this is an experimental implementation with limited testing)
 
-[[API Documentation](https://nipype.github.io/pydra/)]
-[[PyCon 2020 Poster](https://docs.google.com/presentation/d/10tS2I34rS0G9qz6v29qVd77OUydjP_FdBklrgAGmYSw/edit?usp=sharing)]
+[API Documentation](https://nipype.github.io/pydra/)
+[PyCon 2020 Poster](https://docs.google.com/presentation/d/10tS2I34rS0G9qz6v29qVd77OUydjP_FdBklrgAGmYSw/edit?usp=sharing)
 
 ### Tutorial
 The Pydra Tutorial can be found in the [pydra-tutorial repository](https://github.com/nipype/pydra-tutorial).
