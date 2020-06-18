@@ -347,16 +347,19 @@ class ShellCommandTask(TaskBase):
                 value = str(cpath)
             if f.type is bool:
                 if "argstr" in f.metadata:
-                    cmd_add.append(f.metadata["argstr"])
-                if value is not True:
-                    break
+                    if value is True:
+                        cmd_add.append(f.metadata["argstr"])
+                    else:
+                        break
+                else:
+                    raise Exception("if f.type is bool argst should be provided")
             else:
                 if "argstr" in f.metadata:
                     argstr = f.metadata["argstr"]
 
                     if argstr.endswith("..."):
                         argstr = argstr.replace("...", "")
-                        if "sep" in f.metadata and isinstance(value, list):
+                        if "sep" in f.metadata:
                             cmd_el_str = f.metadata["sep"].join(
                                 [argstr.format(**{f.name: val}) for val in value]
                             )
@@ -371,6 +374,7 @@ class ShellCommandTask(TaskBase):
                         else:
                             cmd_el_str = argstr.format(**{f.name: value})
                     cmd_add += cmd_el_str.split(" ")
+                # TODO: argstr in nipype1 is always required, should change
                 else:
                     if "sep" in f.metadata and isinstance(value, list):
                         cmd_el_str = f.metadata["sep"].join([str(val) for val in value])
