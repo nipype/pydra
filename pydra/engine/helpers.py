@@ -128,10 +128,10 @@ def save(task_path: Path, result=None, task=None, name_prefix=None):
         if result:
             if task_path.name.startswith("Workflow"):
                 # copy files to the workflow directory
-                if result.output is None:
-                    raise ValueError(
-                        "Workflow output cannot be None, define output(s) with set_output"
-                    )
+                # if result.output is None:
+                #    raise ValueError(
+                #        "Workflow output cannot be None, define output(s) with set_output"
+                #    )
                 result = copyfile_workflow(wf_path=task_path, result=result)
             with (task_path / f"{name_prefix}_result.pklz").open("wb") as fp:
                 cp.dump(result, fp)

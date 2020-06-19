@@ -44,8 +44,8 @@ def test_wf_name_conflict2():
     assert "Another task named task_name is already added" in str(excinfo.value)
 
 
-def test_wf_no_set_output(plugin):
-    """ Raise error when output isn't set"""
+def test_wf_no_output(plugin):
+    """ Raise error when output isn't set with set_output"""
     wf = Workflow(name="wf_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.inputs.x = 2

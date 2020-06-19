@@ -70,11 +70,11 @@ class FunctionTask(TaskBase):
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
-        input_spec: ty.Optional[SpecInfo] = None,
+        input_spec: ty.Union[SpecInfo, BaseSpec, None] = None,
         messenger_args=None,
         messengers=None,
         name=None,
-        output_spec: ty.Optional[BaseSpec] = None,
+        output_spec: ty.Union[SpecInfo, BaseSpec, None] = None,
         rerun=False,
         **kwargs,
     ):
