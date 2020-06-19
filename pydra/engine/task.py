@@ -74,7 +74,7 @@ class FunctionTask(TaskBase):
         messenger_args=None,
         messengers=None,
         name=None,
-        output_spec: ty.Union[SpecInfo, BaseSpec, None] = None,
+        output_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
         rerun=False,
         **kwargs,
     ):
