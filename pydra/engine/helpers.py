@@ -3,17 +3,17 @@ import asyncio
 import asyncio.subprocess as asp
 import attr
 import cloudpickle as cp
-from pathlib import Path
-from filelock import SoftFileLock
-import os
-import sys
-from hashlib import sha256
-import subprocess as sp
 import getpass
+import os
+import subprocess as sp
+import sys
 import uuid
+
+from filelock import SoftFileLock
+from hashlib import sha256
+from pathlib import Path
 from time import strftime
 from traceback import format_exception
-
 
 from .specs import Runtime, File, Directory, attr_fields, Result
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
@@ -80,14 +80,11 @@ def load_result(checksum, cache_locations):
     """
     Restore a result from the cache.
 
-    Parameters
-    ----------
-    checksum : :obj:`str`
+    :param str checksum:
         Unique identifier of the task to be loaded.
-    cache_locations : :obj:`list` of :obj:`os.pathlike`
+    :param list `os.PathLike` cache_locations:
         List of cache directories, in order of priority, where
         the checksum will be looked for.
-
     """
     if not cache_locations:
         return None
@@ -104,13 +101,11 @@ def save(task_path: Path, result=None, task=None, name_prefix=None):
     """
     Save a :class:`~pydra.engine.core.TaskBase` object and/or results.
 
-    Parameters
-    ----------
-    task_path : :obj:`Path`
+    :param obj `Path` task_path : 
         Write directory
-    result : :obj:`Result`
+    :param obj `Result` result : 
         Result to pickle and write
-    task : :class:`~pydra.engine.core.TaskBase`
+    :param class `~pydra.engine.core.TaskBase` task :
         Task to pickle and write
     """
 
@@ -137,7 +132,7 @@ def save(task_path: Path, result=None, task=None, name_prefix=None):
 
 
 def copyfile_workflow(wf_path, result):
-    """ if file in the wf results, the file will be copied to the workflow directory"""
+    """If file in the wf results, the file will be copied to the workflow directory"""
     for field in attr_fields(result.output):
         value = getattr(result.output, field.name)
         new_value = _copyfile_single_value(wf_path=wf_path, value=value)
@@ -147,7 +142,7 @@ def copyfile_workflow(wf_path, result):
 
 
 def _copyfile_single_value(wf_path, value):
-    """ checking a single value for files that need to be copied to the wf dir"""
+    """Checking a single value for files that need to be copied to the wf dir"""
     if isinstance(value, (tuple, list)):
         return [_copyfile_single_value(wf_path, val) for val in value]
     elif isinstance(value, dict):
@@ -168,11 +163,8 @@ def task_hash(task):
 
     input hash, output hash, environment hash
 
-    Parameters
-    ----------
-    task : :class:`~pydra.engine.core.TaskBase`
+    :param class `~pydra.engine.core.TaskBase` task:
         The input task.
-
     """
     return NotImplementedError
 
@@ -181,16 +173,11 @@ def gather_runtime_info(fname):
     """
     Extract runtime information from a file.
 
-    Parameters
-    ----------
-    fname : :obj:`os.pathlike`
+    :param os.PathLike fname: 
         The file containing runtime information
 
-    Returns
-    -------
-    runtime : :obj:`Runtime`
+    :return obj `Runtime` runtime:
         A runtime object containing the collected information.
-
     """
     runtime = Runtime(rss_peak_gb=None, vms_peak_gb=None, cpu_peak_percent=None)
 
@@ -219,11 +206,8 @@ def make_klass(spec):
     """
     Create a data class given a spec.
 
-    Parameters
-    ----------
-    spec :
+    :param spec :
         TODO
-
     """
     if spec is None:
         return None
@@ -288,7 +272,6 @@ async def read_and_display_async(*cmd, hide_display=False, strip=False):
     Capture standard input and output of a process, displaying them as they arrive.
 
     Works line-by-line.
-
     """
     # start process
     process = await asyncio.create_subprocess_exec(
@@ -345,13 +328,10 @@ def execute(cmd, strip=False):
     already running, in which case :func:`read_and_display`
     is used.
 
-    Parameters
-    ----------
-    cmd : :obj:`list` or :obj:`tuple`
+    :param list or tuple cmd:
         The command line to be executed.
-    strip : :obj:`bool`
+    :param bool strip:
         TODO
-
     """
     rc, stdout, stderr = read_and_display(*cmd, strip=strip)
     """
@@ -370,15 +350,12 @@ def create_checksum(name, inputs):
     """
     Generate a checksum name for a given combination of task name and inputs.
 
-    Parameters
-    ----------
-    name : :obj:`str`
+    :param str name:
         Task name.
-    inputs : :obj:`str`
+    :param str inputs:
         String of inputs.
-
     """
-    return "_".join((name, inputs))
+    return f'{name}_{inputs}'
 
 
 def record_error(error_path, error):
@@ -419,11 +396,8 @@ def get_open_loop():
     If the loop is closed, a new
     loop is created and set as the current event loop.
 
-    Returns
-    -------
-    loop : :obj:`asyncio.EventLoop`
+    :return asyncio.EventLoop loop:
         The current event loop
-
     """
     if os.name == "nt":
         loop = asyncio.ProactorEventLoop()  # for subprocess' pipes on Windows
@@ -442,7 +416,7 @@ def hash_function(obj):
 
 
 def hash_value(value, tp=None, metadata=None):
-    """calculating hash or returning values recursively"""
+    """Calculating hash or returning values recursively"""
     if metadata is None:
         metadata = {}
     if isinstance(value, (tuple, list)):
@@ -468,15 +442,12 @@ def hash_value(value, tp=None, metadata=None):
             return value
 
 
-def output_names_from_inputfields(inputs):
+def output_names_from_input_fields(inputs):
     """
     Collect outputs from input fields with output_file_template.
 
-    Parameters
-    ----------
-    inputs :
+    :param ? inputs:
         TODO
-
     """
     output_names = []
     for fld in attr_fields(inputs):
@@ -489,17 +460,14 @@ def output_names_from_inputfields(inputs):
     return output_names
 
 
-def output_from_inputfields(output_spec, inputs):
+def output_from_input_fields(output_spec, inputs):
     """
     Collect values from output from input fields.
 
-    Parameters
-    ----------
-    output_spec :
+    :param ? output_spec:
         TODO
-    inputs :
+    :param ? inputs:
         TODO
-
     """
     for fld in attr_fields(inputs):
         if "output_file_template" in fld.metadata:
@@ -519,9 +487,7 @@ def get_available_cpus():
     Return the number of CPUs available to the current process or, if that is not
     available, the total number of CPUs on the system.
 
-    Returns
-    -------
-    n_proc : :obj:`int`
+    :return int n_proc:
         The number of available CPUs.
     """
     # Will not work on some systems or if psutil is not installed.
@@ -542,13 +508,8 @@ def get_available_cpus():
     return os.cpu_count()
 
 
-def load_and_run(
-    task_pkl, ind=None, rerun=False, submitter=None, plugin=None, **kwargs
-):
-    """
-     loading a task from a pickle file, settings proper input
-     and running the task
-     """
+def load_and_run(task_pkl, ind=None, rerun=False, submitter=None, plugin=None, **kwargs):
+    """Loading a task from a pickle file, set proper input & run the task"""
     try:
         task = load_task(task_pkl=task_pkl, ind=ind)
     except Exception as excinfo:
@@ -580,16 +541,13 @@ def load_and_run(
 
 
 async def load_and_run_async(task_pkl, ind=None, submitter=None, rerun=False, **kwargs):
-    """
-    loading a task from a pickle file, settings proper input
-    and running the workflow
-    """
+    """Load a task from a pickle file, set proper input & run the workflow"""
     task = load_task(task_pkl=task_pkl, ind=ind)
     await task._run(submitter=submitter, rerun=rerun, **kwargs)
 
 
 def load_task(task_pkl, ind=None):
-    """ loading a task from a pickle file, settings proper input for the specific ind"""
+    """Load a task from a pickle file, setproper input for the specific ind"""
     if isinstance(task_pkl, str):
         task_pkl = Path(task_pkl)
     task = cp.loads(task_pkl.read_bytes())
