@@ -3,17 +3,16 @@ import asyncio
 import asyncio.subprocess as asp
 import attr
 import cloudpickle as cp
-from pathlib import Path
-from filelock import SoftFileLock
-import os
-import sys
-from hashlib import sha256
-import subprocess as sp
 import getpass
+import os
+import subprocess as sp
 import uuid
+
+from filelock import SoftFileLock
+from hashlib import sha256
+from pathlib import Path
 from time import strftime
 from traceback import format_exception
-
 
 from .specs import Runtime, File, Directory, attr_fields, Result
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
@@ -378,7 +377,7 @@ def create_checksum(name, inputs):
         String of inputs.
 
     """
-    return "_".join((name, inputs))
+    return f'{name}_{inputs}'
 
 
 def record_error(error_path, error):
@@ -546,9 +545,9 @@ def load_and_run(
     task_pkl, ind=None, rerun=False, submitter=None, plugin=None, **kwargs
 ):
     """
-     loading a task from a pickle file, settings proper input
-     and running the task
-     """
+    loading a task from a pickle file, settings proper input
+    and running the task
+    """
     try:
         task = load_task(task_pkl=task_pkl, ind=ind)
     except Exception as excinfo:
