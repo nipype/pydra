@@ -315,7 +315,15 @@ class ShellCommandTask(TaskBase):
         """Get command line arguments for a single state"""
         pos_args = []  # list for (position, command arg)
         for f in attr_fields(self.inputs):
-            if f.name == "executable":
+            # these inputs will eb used in container_args
+            if isinstance(self, ContainerTask) and f.name in [
+                "container",
+                "image",
+                "container_xargs",
+                "bindings",
+            ]:
+                continue
+            elif f.name == "executable":
                 pos = 0  # executable should be the first el. of the command
             elif f.name == "args":
                 pos = -1  # assuming that args is the last el. of the command
