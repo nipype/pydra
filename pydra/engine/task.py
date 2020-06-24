@@ -324,85 +324,26 @@ class ShellCommandTask(TaskBase):
             ]:
                 continue
             elif f.name == "executable":
-                pos = 0  # executable should be the first el. of the command
-            elif f.name == "args":
-                pos = -1  # assuming that args is the last el. of the command
-            # if inp has position than it should be treated as a part of the command
-            # metadata["position"] is the position in the command
-            elif "position" in f.metadata:
-                pos = f.metadata["position"]
-                if not isinstance(pos, int) or pos < 1:
-                    raise Exception(
-                        f"position should be an integer > 0, but {pos} given"
+                pos_args.append(
+                    self._command_shelltask_executable(
+                        field=f, state_ind=state_ind, ind=ind
                     )
-            elif "output_file_template" in f.metadata:
-                continue
-            # for fields that are not executable, args or "output_file_template" and don't have
-            # position, it will be added at the end
+                )
+            elif f.name == "args":
+                pos_val = self._command_shelltask_args(
+                    field=f, state_ind=state_ind, ind=ind
+                )
+                if pos_val:
+                    pos_args.append(pos_val)
             else:
-                pos = None
+                pos_val = self._command_pos_args(field=f, state_ind=state_ind, ind=ind)
+                if pos_val:
+                    pos_args.append(pos_val)
 
-            cmd_add = []
-            # if f.metadata.get("copyfile") in [True, False]:
-            #    value = str(self.inputs.map_copyfiles[f.name])
-            # else:
-            if self.state and f"{self.name}.{f.name}" in state_ind:
-                value = getattr(self.inputs, f.name)[state_ind[f"{self.name}.{f.name}"]]
-            else:
-                value = getattr(self.inputs, f.name)
-            if value is attr.NOTHING:
-                continue
-
-            if is_local_file(f):
-                value = str(value)
-            # changing path to the cpath (the directory should be mounted)
-            if getattr(self, "bind_paths", None) and is_local_file(f):
-                lpath = Path(value)
-                cdir = self.bind_paths(ind=ind)[lpath.parent][0]
-                cpath = cdir.joinpath(lpath.name)
-                value = str(cpath)
-            if f.type is bool:
-                if "argstr" in f.metadata:
-                    if value is True:
-                        cmd_add.append(f.metadata["argstr"])
-                    else:
-                        break
-                else:
-                    raise Exception("if f.type is bool argst should be provided")
-            else:
-                if "argstr" in f.metadata:
-                    argstr = f.metadata["argstr"]
-
-                    if argstr.endswith("..."):
-                        argstr = argstr.replace("...", "")
-                        if "sep" in f.metadata:
-                            cmd_el_str = f.metadata["sep"].join(
-                                [argstr.format(**{f.name: val}) for val in value]
-                            )
-                        else:
-                            raise Exception("should we have ... without sep??")
-
-                    else:
-                        if "sep" in f.metadata and isinstance(value, list):
-                            cmd_el_str = f.metadata["sep"].join(
-                                [str(val) for val in value]
-                            )
-                        else:
-                            cmd_el_str = argstr.format(**{f.name: value})
-                    cmd_add += cmd_el_str.split(" ")
-                # TODO: argstr in nipype1 is always required, should change
-                else:
-                    if "sep" in f.metadata and isinstance(value, list):
-                        cmd_el_str = f.metadata["sep"].join([str(val) for val in value])
-                        cmd_add += cmd_el_str.split(" ")
-                    else:
-                        cmd_add += ensure_list(value, tuple2list=True)
-            if cmd_add is not None:
-                pos_args.append((pos, cmd_add))
         # sorting all elements of the command
         try:
             pos_args.sort()
-        except TypeError:  # is some positions are None
+        except TypeError:  # if some positions are None
             pos_args_none = []
             pos_args_int = []
             for el in pos_args:
@@ -411,10 +352,10 @@ class ShellCommandTask(TaskBase):
                 else:
                     pos_args_int.append(el)
                 pos_args_int.sort()
-                last_el = pos_args_int[-1][0]
-                for el_none in pos_args_none:
-                    last_el += 1
-                    pos_args_int.append((last_el, el_none[1]))
+            last_el = pos_args_int[-1][0]
+            for el_none in pos_args_none:
+                last_el += 1
+                pos_args_int.append((last_el, el_none[1]))
             pos_args = pos_args_int
 
         # if args available, they should be moved at the of the list
@@ -425,6 +366,110 @@ class ShellCommandTask(TaskBase):
         for el in pos_args:
             cmd_args += el[1]
         return cmd_args
+
+    def _field_value(self, field, state_ind, ind, check_file=False):
+        """
+        Checking value of the specific field, if value is not set, None is returned.
+        If state_ind and ind, taking a specific element of the field.
+        If check_file is True, checking if field is a a local file
+        and settings bindings if needed.
+        """
+        name = f"{self.name}.{field.name}"
+        if self.state and name in state_ind:
+            value = getattr(self.inputs, field.name)[state_ind[name]]
+        else:
+            value = getattr(self.inputs, field.name)
+        if value is attr.NOTHING or value is None:
+            return None
+
+        if check_file:
+            if is_local_file(field):
+                value = str(value)
+                # changing path to the cpath (the directory should be mounted)
+                if getattr(self, "bind_paths", None):
+                    lpath = Path(value)
+                    cdir = self.bind_paths(ind=ind)[lpath.parent][0]
+                    cpath = cdir.joinpath(lpath.name)
+                    value = str(cpath)
+        return value
+
+    def _command_shelltask_executable(self, field, state_ind, ind):
+        """Returining position and value for executable ShellTask input"""
+        pos = 0  # executable should be the first el. of the command
+        value = self._field_value(field=field, state_ind=state_ind, ind=ind)
+        if value is None:
+            raise Exception("executable has to be set")
+        return pos, ensure_list(value, tuple2list=True)
+
+    def _command_shelltask_args(self, field, state_ind, ind):
+        """Returining position and value for args ShellTask input"""
+        pos = -1  # assuming that args is the last el. of the command
+        value = self._field_value(
+            field=field, state_ind=state_ind, ind=ind, check_file=True
+        )
+        if value is None:
+            return None
+        else:
+            return pos, ensure_list(value, tuple2list=True)
+
+    def _command_pos_args(self, field, state_ind, ind):
+        """
+        Checking all additional input fields, setting pos to None, if position not set.
+        Creating a list with additional parts of the command that comes from
+        the specific field.
+        """
+        pos = field.metadata.get("position", None)
+        if pos is None:
+            if "output_file_template" in field.metadata:
+                # assuming that input that has output_file_template and no position
+                # are not used in the command
+                # for others, pos will be calculated at the end
+                return None
+        # might have to change it for nipype
+        elif not isinstance(pos, int) or pos < 1:
+            raise Exception(f"position should be an integer > 0, but {pos} given")
+
+        value = self._field_value(
+            field=field, state_ind=state_ind, ind=ind, check_file=True
+        )
+        if value is None:
+            return None
+
+        cmd_add = []
+        if field.type is bool:
+            if "argstr" in field.metadata:
+                if value is True:
+                    cmd_add.append(field.metadata["argstr"])
+            else:
+                raise Exception("if f.type is bool argst should be provided")
+        else:
+            if "argstr" in field.metadata:
+                argstr = field.metadata["argstr"]
+                if argstr.endswith("..."):
+                    argstr = argstr.replace("...", "")
+                    if "sep" in field.metadata:
+                        cmd_el_str = field.metadata["sep"].join(
+                            [argstr.format(**{field.name: val}) for val in value]
+                        )
+                    else:
+                        raise Exception("should we have ... without sep??")
+
+                else:
+                    if "sep" in field.metadata and isinstance(value, list):
+                        cmd_el_str = field.metadata["sep"].join(
+                            [str(val) for val in value]
+                        )
+                    else:
+                        cmd_el_str = argstr.format(**{field.name: value})
+                cmd_add += cmd_el_str.split(" ")
+            # TODO: argstr in nipype1 is always required, should change
+            else:
+                if "sep" in field.metadata and isinstance(value, list):
+                    cmd_el_str = field.metadata["sep"].join([str(val) for val in value])
+                    cmd_add += cmd_el_str.split(" ")
+                else:
+                    cmd_add += ensure_list(value, tuple2list=True)
+        return pos, cmd_add
 
     @property
     def cmdline(self):
