@@ -81,7 +81,7 @@ class TaskBase:
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
-        inputs: ty.Optional[ty.Union[ty.Text, File, ty.Dict]] = None,
+        inputs: ty.Union[ty.Text, File, ty.Dict, None] = None,
         messenger_args=None,
         messengers=None,
         rerun=False,
@@ -644,10 +644,10 @@ class Workflow(TaskBase):
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
-        input_spec: ty.Optional[ty.Union[ty.List[ty.Text], SpecInfo, BaseSpec]] = None,
+        input_spec: ty.Union[ty.List[ty.Text], BaseSpec, None] = None,
         messenger_args=None,
         messengers=None,
-        output_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
+        output_spec: ty.Optional[BaseSpec] = None,
         rerun=False,
         propagate_rerun=True,
         **kwargs,
@@ -697,6 +697,10 @@ class Workflow(TaskBase):
                     ],
                     bases=(BaseSpec,),
                 )
+        if output_spec is None:
+            output_spec = SpecInfo(
+                name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
+            )
         self.output_spec = output_spec
 
         if name in dir(self):
@@ -878,11 +882,6 @@ class Workflow(TaskBase):
 
     async def _run(self, submitter=None, rerun=False, **kwargs):
         # self.inputs = dc.replace(self.inputs, **kwargs) don't need it?
-        # output_spec needs to be set using set_output or at workflow initialization
-        if self.output_spec is None:
-            raise ValueError(
-                "Workflow output cannot be None, use set_output to define output(s)"
-            )
         checksum = self.checksum
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached

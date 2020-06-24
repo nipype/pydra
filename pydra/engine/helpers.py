@@ -126,7 +126,7 @@ def save(task_path: Path, result=None, task=None, name_prefix=None):
     lockfile = task_path.parent / (task_path.name + "_save.lock")
     with SoftFileLock(lockfile):
         if result:
-            if task_path.name.startswith("Workflow") and result.output is not None:
+            if task_path.name.startswith("Workflow"):
                 # copy files to the workflow directory
                 result = copyfile_workflow(wf_path=task_path, result=result)
             with (task_path / f"{name_prefix}_result.pklz").open("wb") as fp:
