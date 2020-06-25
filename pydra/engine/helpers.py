@@ -598,3 +598,41 @@ def load_task(task_pkl, ind=None):
         task.inputs = attr.evolve(task.inputs, **inputs_dict)
         task.state = None
     return task
+
+
+def position_adjustment(pos_args):
+    """
+    sorting elements with the first element - position,
+    the negative positions should go to the end of the list
+    everything that has no position (i.e. it's None),
+    should go between elements with positive positions an with negative pos.
+    Returns a list of sorted args.
+    """
+    # sorting all elements of the command
+    try:
+        pos_args.sort()
+    except TypeError:  # if some positions are None
+        pos_args_none = []
+        pos_args_int = []
+        for el in pos_args:
+            if el[0] is None:
+                pos_args_none.append(el)
+            else:
+                pos_args_int.append(el)
+            pos_args_int.sort()
+        last_el = pos_args_int[-1][0]
+        for el_none in pos_args_none:
+            last_el += 1
+            pos_args_int.append((last_el, el_none[1]))
+        pos_args = pos_args_int
+
+    # if args available, they should be moved at the of the list
+    while pos_args[0][0] < 0:
+        pos_args.append(pos_args.pop(0))
+
+    # dropping the position index
+    cmd_args = []
+    for el in pos_args:
+        cmd_args += el[1]
+
+    return cmd_args

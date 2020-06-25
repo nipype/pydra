@@ -57,7 +57,7 @@ from .specs import (
     SingularitySpec,
     attr_fields,
 )
-from .helpers import ensure_list, execute
+from .helpers import ensure_list, execute, position_adjustment
 from .helpers_file import template_update, is_local_file
 
 
@@ -339,32 +339,8 @@ class ShellCommandTask(TaskBase):
                 pos_val = self._command_pos_args(field=f, state_ind=state_ind, ind=ind)
                 if pos_val:
                     pos_args.append(pos_val)
-
-        # sorting all elements of the command
-        try:
-            pos_args.sort()
-        except TypeError:  # if some positions are None
-            pos_args_none = []
-            pos_args_int = []
-            for el in pos_args:
-                if el[0] is None:
-                    pos_args_none.append(el)
-                else:
-                    pos_args_int.append(el)
-                pos_args_int.sort()
-            last_el = pos_args_int[-1][0]
-            for el_none in pos_args_none:
-                last_el += 1
-                pos_args_int.append((last_el, el_none[1]))
-            pos_args = pos_args_int
-
-        # if args available, they should be moved at the of the list
-        if pos_args[0][0] == -1:
-            pos_args.append(pos_args.pop(0))
-        # dropping the position index
-        cmd_args = []
-        for el in pos_args:
-            cmd_args += el[1]
+        # sorted elements of the command
+        cmd_args = position_adjustment(pos_args)
         return cmd_args
 
     def _field_value(self, field, state_ind, ind, check_file=False):
@@ -429,9 +405,12 @@ class ShellCommandTask(TaskBase):
                 # are not used in the command
                 # for others, pos will be calculated at the end
                 return None
-        # might have to change it for nipype
-        elif not isinstance(pos, int) or pos < 1:
-            raise Exception(f"position should be an integer > 0, but {pos} given")
+        elif not isinstance(pos, int):
+            raise Exception(f"position should be an integer, but {pos} given")
+        elif pos == 0:
+            raise Exception(f"position can't be 0")
+        elif pos < 0:  # position -1 is for args
+            pos = pos - 1
 
         value = self._field_value(
             field=field, state_ind=state_ind, ind=ind, check_file=True
