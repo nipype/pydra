@@ -677,6 +677,7 @@ def test_docker_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -718,7 +719,7 @@ def test_docker_inputspec_1a(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename,
-                    metadata={"position": 1, "help_string": "input file"},
+                    metadata={"position": 1, "argstr": "", "help_string": "input file"},
                 ),
             )
         ],
@@ -757,7 +758,12 @@ def test_docker_inputspec_2(plugin, tmpdir):
             (
                 "file1",
                 attr.ib(
-                    type=File, metadata={"position": 1, "help_string": "input file 1"}
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file 1",
+                    },
                 ),
             ),
             (
@@ -765,7 +771,11 @@ def test_docker_inputspec_2(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename_2,
-                    metadata={"position": 2, "help_string": "input file 2"},
+                    metadata={
+                        "position": 2,
+                        "argstr": "",
+                        "help_string": "input file 2",
+                    },
                 ),
             ),
         ],
@@ -809,13 +819,22 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename_1,
-                    metadata={"position": 1, "help_string": "input file 1"},
+                    metadata={
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file 1",
+                    },
                 ),
             ),
             (
                 "file2",
                 attr.ib(
-                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                    type=File,
+                    metadata={
+                        "position": 2,
+                        "argstr": "",
+                        "help_string": "input file 2",
+                    },
                 ),
             ),
         ],
@@ -861,13 +880,22 @@ def test_docker_inputspec_2a(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename_1,
-                    metadata={"position": 1, "help_string": "input file 1"},
+                    metadata={
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file 1",
+                    },
                 ),
             ),
             (
                 "file2",
                 attr.ib(
-                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                    type=File,
+                    metadata={
+                        "position": 2,
+                        "argstr": "",
+                        "help_string": "input file 2",
+                    },
                 ),
             ),
         ],
@@ -906,6 +934,7 @@ def test_docker_inputspec_3(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                         "container_path": True,
                     },
@@ -951,6 +980,7 @@ def test_docker_inputspec_3a(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -995,6 +1025,7 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
                     type=File,
                     metadata={
                         "position": 1,
+                        "argstr": "",
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": True,
@@ -1061,6 +1092,7 @@ def test_docker_inputspec_state_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -1110,6 +1142,7 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -1152,6 +1185,7 @@ def test_docker_wf_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -1207,6 +1241,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -1264,6 +1299,7 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),

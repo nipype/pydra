@@ -418,6 +418,10 @@ class ShellCommandTask(TaskBase):
         Creating a list with additional parts of the command that comes from
         the specific field.
         """
+        argstr = field.metadata.get("argstr", None)
+        if argstr is None and "output_file_template" not in field.metadata:
+            raise Exception(f"{field.name} doesn't have argstr field in the metadata")
+
         pos = field.metadata.get("position", None)
         if pos is None:
             if "output_file_template" in field.metadata:
@@ -437,46 +441,32 @@ class ShellCommandTask(TaskBase):
 
         cmd_add = []
         if field.type is bool:
-            if "argstr" in field.metadata:
-                if value is True:
-                    cmd_add.append(field.metadata["argstr"])
-            else:
-                raise Exception("if f.type is bool argst should be provided")
+            if value is True:
+                cmd_add.append(argstr)
         else:
-            if "argstr" in field.metadata:
-                argstr = field.metadata["argstr"]
-                if argstr.endswith("..."):
-                    argstr = argstr.replace("...", "")
-                    if "sep" in field.metadata:
-                        if "{" + field.name + "}" in argstr:
-                            cmd_el_str = field.metadata["sep"].join(
-                                [argstr.format(**{field.name: val}) for val in value]
-                            )
-                        else:
-                            cmd_el_str = field.metadata["sep"].join(
-                                [f"{argstr} {val}" for val in value]
-                            )
-                    else:
-                        raise Exception("should we have ... without sep??")
-
-                else:
-                    if "sep" in field.metadata and isinstance(value, list):
+            if argstr.endswith("..."):
+                argstr = argstr.replace("...", "")
+                if "sep" in field.metadata:
+                    if "{" + field.name + "}" in argstr:
                         cmd_el_str = field.metadata["sep"].join(
-                            [str(val) for val in value]
+                            [argstr.format(**{field.name: val}) for val in value]
                         )
                     else:
-                        if "{" + field.name + "}" in argstr:
-                            cmd_el_str = argstr.format(**{field.name: value})
-                        else:
-                            cmd_el_str = f"{argstr} {value}"
-                cmd_add += cmd_el_str.split(" ")
-            # TODO: argstr in nipype1 is always required, should change
+                        cmd_el_str = field.metadata["sep"].join(
+                            [f"{argstr} {val}" for val in value]
+                        )
+                else:
+                    raise Exception("should we have ... without sep??")
             else:
                 if "sep" in field.metadata and isinstance(value, list):
                     cmd_el_str = field.metadata["sep"].join([str(val) for val in value])
-                    cmd_add += cmd_el_str.split(" ")
                 else:
-                    cmd_add += ensure_list(value, tuple2list=True)
+                    if "{" + field.name + "}" in argstr:
+                        cmd_el_str = argstr.format(**{field.name: value})
+                    else:
+                        cmd_el_str = f"{argstr} {value}"
+            cmd_el_str = cmd_el_str.strip().replace("  ", " ")
+            cmd_add += cmd_el_str.split(" ")
         return pos, cmd_add
 
     @property
