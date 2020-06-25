@@ -3674,3 +3674,54 @@ def test_wf_resultfile_3(plugin):
             assert val.exists()
             ii = int(key.split("_")[1])
             assert val == wf.output_dir / file_list[ii]
+
+
+def test_wf_upstream_error1(plugin):
+    """ workflow with two tasks, task2 dependent on an task1 which raised an error"""
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.inputs.x = "hi"  # TypeError for adding str and int
+    wf.plugin = plugin
+    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.set_output([("out", wf.addvar2.lzout.out)])
+
+    with pytest.raises(Exception) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf)
+    assert "Error in upstream task" in str(excinfo.value)
+
+
+def test_wf_upstream_error2(plugin):
+    """ task2 dependent on task1, task1 errors, workflow-level split on task 1
+        goal - workflow finish running, one output errors but the other doesn't
+    """
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.inputs.x = [1, "hi"]  # TypeError for adding str and int
+    wf.split("x")  # workflow-level split
+    wf.plugin = plugin
+    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.set_output([("out", wf.addvar2.lzout.out)])
+
+    with pytest.raises(Exception) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf)
+    assert "Error in upstream task" in str(excinfo.value)
+
+
+def test_wf_upstream_error3(plugin):
+    """ task2 dependent on task1, task1 errors, task-level split on task 1
+        goal - workflow finish running, one output errors but the other doesn't
+    """
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.inputs.x = [1, "hi"]  # TypeError for adding str and int
+    wf.addvar1.split("a")  # task-level split
+    wf.plugin = plugin
+    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.set_output([("out", wf.addvar2.lzout.out)])
+
+    with pytest.raises(Exception) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf)
+    assert "Error in upstream task" in str(excinfo.value)

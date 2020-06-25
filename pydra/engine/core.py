@@ -677,7 +677,7 @@ class Workflow(TaskBase):
 
         """
         if input_spec:
-            if isinstance(input_spec, BaseSpec):
+            if isinstance(input_spec, BaseSpec):  # TODO: test this block
                 self.input_spec = input_spec
             else:
                 self.input_spec = SpecInfo(

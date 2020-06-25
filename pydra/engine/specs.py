@@ -23,9 +23,10 @@ class SpecInfo:
     name: str
     """A name for the specification."""
     fields: ty.List[ty.Tuple] = attr.ib(factory=list)
-    """List of names of fields (inputs or outputs)."""
+    """List of names of fields (can be inputs or outputs)."""
     bases: ty.Tuple[ty.Type] = attr.ib(factory=tuple)
-    """Keeps track of this specification inheritance."""
+    """Keeps track of specification inheritance.
+       Should be a tuple containing at least one BaseSpec """
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -120,6 +121,25 @@ class Result:
             )
             state["output"] = klass(**state["output"])
         self.__dict__.update(state)
+
+    def get_output_field(self, field_name, task_name):
+        """
+        Raises exception if Result errored, used in get_values in Workflow
+
+        Parameters
+        ----------
+        field_name ::`str`
+            Name of field in LazyField object
+        task_name ::`str`
+            Name of node that produced the Result object
+        """
+        if self.errored:
+            raise Exception(f"Error in upstream task {task_name}")
+
+        if field_name == "all_":
+            return attr.asdict(self.output)
+        else:
+            return getattr(self.output, field_name)
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -492,24 +512,17 @@ class LazyField:
                 if len(result) and isinstance(result[0], list):
                     results_new = []
                     for res_l in result:
-                        if self.field == "all_":
-                            res_l_new = [attr.asdict(res.output) for res in res_l]
-                        else:
-                            res_l_new = [
-                                getattr(res.output, self.field) for res in res_l
-                            ]
+                        res_l_new = [
+                            res.get_output_field(self.field, self.name) for res in res_l
+                        ]
                         results_new.append(res_l_new)
                     return results_new
                 else:
-                    if self.field == "all_":
-                        return [attr.asdict(res.output) for res in result]
-                    else:
-                        return [getattr(res.output, self.field) for res in result]
+                    return [
+                        res.get_output_field(self.field, self.name) for res in result
+                    ]
             else:
-                if self.field == "all_":
-                    return attr.asdict(result.output)
-                else:
-                    return getattr(result.output, self.field)
+                return result.get_output_field(self.field, self.name)
 
 
 def donothing(*args, **kwargs):
