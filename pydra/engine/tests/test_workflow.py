@@ -3677,12 +3677,7 @@ def test_wf_resultfile_3(plugin):
 
 
 def test_wf_upstream_error1(plugin):
-    """ workflow with two tasks, task2 dependent on an task1 which raised an error
-        now - AttributeError: 'NoneType' object has no attribute 'out' @ specs.py::get_value()
-              >>>  return getattr(result.output, self.field)
-              workflow doesn't finish running
-        goal - custom upstream task error
-    """
+    """ workflow with two tasks, task2 dependent on an task1 which raised an error"""
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
@@ -3697,8 +3692,7 @@ def test_wf_upstream_error1(plugin):
 
 
 def test_wf_upstream_error2(plugin):
-    """ one of two outputs of task1 errors, workflow-level split on task 1
-            task2 is dependent on task1 output, task2 is dependent on task1 output
+    """ task2 dependent on task1, task1 errors, workflow-level split on task 1
         goal - workflow finish running, one output errors but the other doesn't
     """
     wf = Workflow(name="wf", input_spec=["x"])
@@ -3716,8 +3710,7 @@ def test_wf_upstream_error2(plugin):
 
 
 def test_wf_upstream_error3(plugin):
-    """ one of two outputs of task1 errors, task-level split on task 1
-            task2 is dependent on task1 output
+    """ task2 dependent on task1, task1 errors, task-level split on task 1
         goal - workflow finish running, one output errors but the other doesn't
     """
     wf = Workflow(name="wf", input_spec=["x"])
