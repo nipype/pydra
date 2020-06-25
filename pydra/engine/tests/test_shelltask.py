@@ -922,7 +922,154 @@ def test_shell_cmd_inputspec_7a(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_7b(plugin, results_function):
+    """
+        providing new file and output name using input_spec,
+        using name_tamplate in metadata
+    """
+    cmd = "touch"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "newfile",
+                attr.ib(type=str, metadata={"position": 1, "help_string": "new file"}),
+            ),
+            (
+                "out1",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{newfile}",
+                        "help_string": "output file",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        newfile="newfile_tmp.txt",
+        input_spec=my_input_spec,
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.out1.exists()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
+    """
+        providing new file and output name using input_spec,
+        adding additional string input field with argstr
+    """
+    cmd = "touch"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "newfile",
+                attr.ib(type=str, metadata={"position": 2, "help_string": "new file"}),
+            ),
+            (
+                "time",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "argstr": "-t",
+                        "help_string": "time of modif.",
+                    },
+                ),
+            ),
+            (
+                "out1",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{newfile}",
+                        "help_string": "output file",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        newfile="newfile_tmp.txt",
+        time="02121010",
+        input_spec=my_input_spec,
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.out1.exists()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_8a(plugin, results_function, tmpdir):
+    """
+        providing new file and output name using input_spec,
+        adding additional string input field with argstr (argstr uses string formatting)
+    """
+    cmd = "touch"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "newfile",
+                attr.ib(type=str, metadata={"position": 2, "help_string": "new file"}),
+            ),
+            (
+                "time",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "argstr": "-t {time}",
+                        "help_string": "time of modif.",
+                    },
+                ),
+            ),
+            (
+                "out1",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{newfile}",
+                        "help_string": "output file",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        newfile="newfile_tmp.txt",
+        time="02121010",
+        input_spec=my_input_spec,
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.out1.exists()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_9(plugin, results_function, tmpdir):
     """ using input_spec, providing list of files as an input """
 
     file_1 = tmpdir.join("file_1.txt")

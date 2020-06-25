@@ -448,9 +448,14 @@ class ShellCommandTask(TaskBase):
                 if argstr.endswith("..."):
                     argstr = argstr.replace("...", "")
                     if "sep" in field.metadata:
-                        cmd_el_str = field.metadata["sep"].join(
-                            [argstr.format(**{field.name: val}) for val in value]
-                        )
+                        if "{" + field.name + "}" in argstr:
+                            cmd_el_str = field.metadata["sep"].join(
+                                [argstr.format(**{field.name: val}) for val in value]
+                            )
+                        else:
+                            cmd_el_str = field.metadata["sep"].join(
+                                [f"{argstr} {val}" for val in value]
+                            )
                     else:
                         raise Exception("should we have ... without sep??")
 
@@ -460,7 +465,10 @@ class ShellCommandTask(TaskBase):
                             [str(val) for val in value]
                         )
                     else:
-                        cmd_el_str = argstr.format(**{field.name: value})
+                        if "{" + field.name + "}" in argstr:
+                            cmd_el_str = argstr.format(**{field.name: value})
+                        else:
+                            cmd_el_str = f"{argstr} {value}"
                 cmd_add += cmd_el_str.split(" ")
             # TODO: argstr in nipype1 is always required, should change
             else:
