@@ -102,6 +102,9 @@ class NodeTesting:
             def __init__(self):
                 self.output = Output()
 
+            def get_output_field(self, field, task):
+                return getattr(self.output, field)
+
         return Result()
 
 
