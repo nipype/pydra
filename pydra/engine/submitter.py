@@ -155,8 +155,8 @@ class Submitter:
         graph_copy = wf.graph.copy()
         # keep track of pending futures
         task_futures = set()
-        while not wf.done_all_tasks or len(task_futures):
-            tasks = get_runnable_tasks(graph_copy)
+        tasks = get_runnable_tasks(graph_copy)
+        while tasks or len(task_futures):
             if not tasks and not task_futures:
                 raise Exception("Nothing queued or todo - something went wrong")
             for task in tasks:
@@ -172,6 +172,7 @@ class Submitter:
                     for fut in await self.submit(task, rerun=rerun):
                         task_futures.add(fut)
             task_futures = await self.worker.fetch_finished(task_futures)
+            tasks = get_runnable_tasks(graph_copy)
         return wf
 
     def __enter__(self):
@@ -213,13 +214,24 @@ def get_runnable_tasks(graph):
 def is_runnable(graph, obj):
     """Check if a task within a graph is runnable."""
     connections_to_remove = []
+    errored = False
+    not_done = False
     for pred in graph.predecessors[obj.name]:
         is_done = pred.done
-        if not is_done:
-            return False
+        if is_done is False:
+            not_done = True
+        elif is_done == "error":
+            # removing all successors of the errored task
+            graph.remove_successors_nodes(pred)
+            errored = True
+            # pred.errored = True
+            obj.errored = True
         else:
             connections_to_remove.append(pred)
     # removing nodes that are done from connections
     for nd in connections_to_remove:
         graph.remove_nodes_connections(nd)
-    return True
+    if errored or not_done:
+        return False
+    else:
+        return True

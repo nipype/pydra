@@ -186,7 +186,7 @@ class DiGraph:
                 remaining_nodes.append(nd)
         return sorted_part, remaining_nodes
 
-    def remove_nodes(self, nodes):
+    def remove_nodes(self, nodes, check_ready=True):
         """
         Mark nodes for removal from the graph, re-sorting if needed.
 
@@ -207,7 +207,7 @@ class DiGraph:
         for nd in nodes:
             if nd not in self.nodes:
                 raise Exception(f"{nd} is not present in the graph")
-            if self.predecessors[nd.name]:
+            if self.predecessors[nd.name] and check_ready:
                 raise Exception("this node shoudn't be run, has to wait")
             self.nodes.remove(nd)
             # adding the node to self._node_wip as for
@@ -243,6 +243,46 @@ class DiGraph:
             self.successors.pop(nd.name)
             self.predecessors.pop(nd.name)
             self._node_wip.remove(nd)
+
+    def remove_previous_connections(self, nodes):
+        """
+        Remove connections that the node has with predecessors.
+
+        Also prunes the nodes from ``_node_wip``.
+
+        Parameters
+        ----------
+        nodes : :obj:`list`
+            List of nodes which connections are to be removed.
+
+        """
+        nodes = ensure_list(nodes)
+        for nd in nodes:
+            for nd_out in self.predecessors[nd.name]:
+                if nd_out.name in self.successors:
+                    self.successors[nd_out.name].remove(nd)
+                self.edges.remove((nd_out, nd))
+            self.successors.pop(nd.name)
+            self.predecessors.pop(nd.name)
+            self._node_wip.remove(nd)
+
+    def _checking_successors_nodes(self, node, remove=True):
+        if self.successors[node.name]:
+            for nd_in in self.successors[node.name]:
+                self._successors_all.append(nd_in)
+                self._checking_successors_nodes(node=nd_in)
+        else:
+            return True
+
+    def remove_successors_nodes(self, node):
+        """ Removing all the nodes that follow the node"""
+        self._successors_all = []
+        self._checking_successors_nodes(node=node, remove=False)
+        self.remove_nodes_connections(nodes=node)
+        for nd in self._successors_all:
+            if nd in self.nodes:
+                self.remove_nodes(nodes=nd, check_ready=False)
+                self.remove_previous_connections(nodes=nd)
 
     def _checking_path(self, node_name, first_name, path=0):
         """Calculate all paths using connections list (re-entering function)."""

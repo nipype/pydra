@@ -3688,7 +3688,7 @@ def test_wf_upstream_error1(plugin):
     with pytest.raises(Exception) as excinfo:
         with Submitter(plugin=plugin) as sub:
             sub(wf)
-    assert "Error in upstream task" in str(excinfo.value)
+    assert "Workflow didn't finish" in str(excinfo.value)
 
 
 def test_wf_upstream_error2(plugin):
@@ -3706,7 +3706,7 @@ def test_wf_upstream_error2(plugin):
     with pytest.raises(Exception) as excinfo:
         with Submitter(plugin=plugin) as sub:
             sub(wf)
-    assert "Error in upstream task" in str(excinfo.value)
+    assert "Workflow didn't finish" in str(excinfo.value)
 
 
 def test_wf_upstream_error3(plugin):
@@ -3724,4 +3724,58 @@ def test_wf_upstream_error3(plugin):
     with pytest.raises(Exception) as excinfo:
         with Submitter(plugin=plugin) as sub:
             sub(wf)
-    assert "Error in upstream task" in str(excinfo.value)
+    assert "Workflow didn't finish" in str(excinfo.value)
+
+
+def test_wf_upstream_error4(plugin):
+    """ workflow with one task, which raises an error"""
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.inputs.x = "hi"  # TypeError for adding str and int
+    wf.plugin = plugin
+    wf.set_output([("out", wf.addvar1.lzout.out)])
+
+    with pytest.raises(Exception) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf)
+
+    assert "Workflow didn't finish" in str(excinfo.value)
+
+
+def test_wf_upstream_error5(plugin):
+    """ nested workflow with one task, which raises an error"""
+    wf_main = Workflow(name="wf_main", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], x=wf_main.lzin.x)
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.plugin = plugin
+    wf.set_output([("wf_out", wf.addvar1.lzout.out)])
+
+    wf_main.add(wf)
+    wf_main.inputs.x = "hi"  # TypeError for adding str and int
+    wf_main.set_output([("out", wf_main.wf.lzout.wf_out)])
+
+    with pytest.raises(Exception) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf_main)
+
+    assert "Workflow didn't finish" in str(excinfo.value)
+
+
+def test_wf_upstream_error6(plugin):
+    """ nested workflow with two tasks, the first one raises an error"""
+    wf_main = Workflow(name="wf_main", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], x=wf_main.lzin.x)
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.plugin = plugin
+    wf.set_output([("wf_out", wf.addvar2.lzout.out)])
+
+    wf_main.add(wf)
+    wf_main.inputs.x = "hi"  # TypeError for adding str and int
+    wf_main.set_output([("out", wf_main.wf.lzout.wf_out)])
+
+    with pytest.raises(Exception) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf_main)
+
+    assert "Workflow didn't finish" in str(excinfo.value)

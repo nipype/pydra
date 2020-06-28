@@ -182,6 +182,7 @@ class TaskBase:
 
         self.plugin = None
         self.hooks = TaskHook()
+        self.errored = False
 
     def __str__(self):
         return self.name
@@ -534,7 +535,11 @@ class TaskBase:
                 return True
         else:
             if self.result():
-                return True
+                if self.result().errored:
+                    self.errored = True
+                    return "error"
+                else:
+                    return True
         return False
 
     def _combined_output(self, return_inputs=False):
@@ -576,6 +581,8 @@ class TaskBase:
         """
         # TODO: check if result is available in load_result and
         # return a future if not
+        if self.errored:
+            return Result(output=None, runtime=None, errored=True)
         if self.state:
             if state_index is None:
                 # if state_index=None, collecting all results
@@ -613,6 +620,8 @@ class TaskBase:
                 raise ValueError("Task does not have a state")
             checksum = self.checksum
             result = load_result(checksum, self.cache_locations)
+            if result and result.errored:
+                self.errored = True
             if return_inputs is True or return_inputs == "val":
                 inputs_val = {
                     f"{self.name}.{inp}": getattr(self.inputs, inp)
@@ -733,22 +742,23 @@ class Workflow(TaskBase):
             return self.name2obj[name]
         return self.__getattribute__(name)
 
-    @property
-    def done_all_tasks(self):
-        """
-        Check if all tasks from the graph are done.
-
-        .. important ::
-            The fact that all tasks are reported as done
-            doesn't mean that results of the workflow
-            are available.
-            That can be checked with :py:meth:`~Workflow.done`.
-
-        """
-        for task in self.graph.nodes:
-            if not task.done:
-                return False
-        return True
+    # TODO: not sure if we will need this, if not, should be removed
+    # @property
+    # def done_all_tasks(self):
+    #     """
+    #     Check if all tasks from the graph are done.
+    #
+    #     .. important ::
+    #         The fact that all tasks are reported as done
+    #         doesn't mean that results of the workflow
+    #         are available.
+    #         That can be checked with :py:meth:`~Workflow.done`.
+    #
+    #     """
+    #     for task in self.graph.nodes:
+    #         if not task.done:
+    #             return False
+    #     return True
 
     @property
     def nodes(self):
@@ -916,7 +926,10 @@ class Workflow(TaskBase):
             try:
                 self.audit.monitor()
                 await self._run_task(submitter, rerun=rerun)
-                result.output = self._collect_outputs()
+                result.output, err = self._collect_outputs()
+                if err:
+                    result.errored = True
+                    self.errored = True
             except Exception as e:
                 record_error(self.output_dir, e)
                 result.errored = True
@@ -926,6 +939,8 @@ class Workflow(TaskBase):
                 self.audit.finalize_audit(result=result)
                 save(odir, result=result, task=self)
                 os.chdir(cwd)
+        if self.errored:
+            raise Exception("Workflow didn't finish: problems with tasks")
         self.hooks.post_run(self, result)
         return result
 
@@ -973,6 +988,7 @@ class Workflow(TaskBase):
         logger.info("Added %s to %s", self.output_spec, self)
 
     def _collect_outputs(self):
+        error = False
         output_klass = make_klass(self.output_spec)
         output = output_klass(**{f.name: None for f in attr.fields(output_klass)})
         # collecting outputs from tasks
@@ -980,8 +996,13 @@ class Workflow(TaskBase):
         for name, val in self._connections:
             if not isinstance(val, LazyField):
                 raise ValueError("all connections must be lazy")
-            output_wf[name] = val.get_value(self)
-        return attr.evolve(output, **output_wf)
+            val_out = val.get_value(self)
+            if val_out == "error":
+                error = True
+                output_wf[name] = None
+            else:
+                output_wf[name] = val_out
+        return attr.evolve(output, **output_wf), error
 
 
 def is_task(obj):

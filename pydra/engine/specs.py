@@ -122,20 +122,15 @@ class Result:
             state["output"] = klass(**state["output"])
         self.__dict__.update(state)
 
-    def get_output_field(self, field_name, task_name):
+    def get_output_field(self, field_name):
         """
-        Raises exception if Result errored, used in get_values in Workflow
+        used in get_values in Workflow
 
         Parameters
         ----------
         field_name ::`str`
             Name of field in LazyField object
-        task_name ::`str`
-            Name of node that produced the Result object
         """
-        if self.errored:
-            raise Exception(f"Error in upstream task {task_name}")
-
         if field_name == "all_":
             return attr.asdict(self.output)
         else:
@@ -512,17 +507,26 @@ class LazyField:
                 if len(result) and isinstance(result[0], list):
                     results_new = []
                     for res_l in result:
-                        res_l_new = [
-                            res.get_output_field(self.field, self.name) for res in res_l
-                        ]
+                        res_l_new = []
+                        for res in res_l:
+                            if res.errored:
+                                return "error"
+                            else:
+                                res_l_new.append(res.get_output_field(self.field))
                         results_new.append(res_l_new)
                     return results_new
                 else:
-                    return [
-                        res.get_output_field(self.field, self.name) for res in result
-                    ]
+                    results_new = []
+                    for res in result:
+                        if res.errored:
+                            return "error"
+                        else:
+                            results_new.append(res.get_output_field(self.field))
+                    return results_new
             else:
-                return result.get_output_field(self.field, self.name)
+                if result.errored:
+                    return "error"
+                return result.get_output_field(self.field)
 
 
 def donothing(*args, **kwargs):

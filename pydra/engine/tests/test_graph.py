@@ -335,6 +335,68 @@ def test_remove_add_2():
     assert graph.sorted_nodes_names == ["d", "a", "b", "c"]
 
 
+def test_remove_all_successors_1():
+    """a -> b (removing successors of A)"""
+    graph = DiGraph(nodes=[A, B], edges=[(A, B)])
+    assert set(graph.nodes_names_map.keys()) == {"a", "b"}
+    assert graph.edges_names == [("a", "b")]
+
+    graph.sorting()
+    assert graph.sorted_nodes_names == ["a", "b"]
+
+    graph.remove_nodes(A)
+
+    graph.remove_successors_nodes(A)
+    assert graph.sorted_nodes_names == []
+    assert graph.edges_names == []
+
+
+def test_remove_all_successors_2():
+    """a-> b -> c; a -> c; d (removing successors of A)"""
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
+    assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
+
+    graph.sorting()
+    assert graph.sorted_nodes_names == ["a", "d", "b", "c"]
+
+    graph.remove_nodes(A)
+    graph.remove_successors_nodes(A)
+
+    assert graph.edges_names == []
+    assert graph.sorted_nodes_names == ["d"]
+
+
+def test_remove_all_successors_3():
+    """a -> c; b -> c; c -> d (removing successors of A)"""
+    graph = DiGraph(nodes=[A, B, C, D], edges=[(A, C), (B, C), (C, D)])
+    assert set(graph.nodes_names_map.keys()) == {"a", "c", "b", "d"}
+    assert graph.edges_names == [("a", "c"), ("b", "c"), ("c", "d")]
+
+    graph.sorting()
+    assert graph.sorted_nodes_names == ["a", "b", "c", "d"]
+
+    graph.remove_nodes(A)
+    graph.remove_successors_nodes(A)
+    assert graph.edges_names == []
+    assert graph.sorted_nodes_names == ["b"]
+
+
+def test_remove_all_successors_4():
+    """ a-> b -> c; a -> d -> e (removing A and later D)"""
+    graph = DiGraph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d", "e"}
+    assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "d"), ("d", "e")]
+
+    graph.sorting()
+    assert graph.sorted_nodes_names == ["a", "b", "d", "c", "e"]
+
+    graph.remove_nodes(A)
+    graph.remove_successors_nodes(A)
+    assert graph.edges_names == []
+    assert graph.sorted_nodes_names == []
+
+
 def test_maxpath_1():
     """a -> b"""
     graph = DiGraph(nodes=[B, A], edges=[(A, B)])
