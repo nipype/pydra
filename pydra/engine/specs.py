@@ -510,7 +510,7 @@ class LazyField:
                         res_l_new = []
                         for res in res_l:
                             if res.errored:
-                                return "error"
+                                raise ValueError("Error from get_value")
                             else:
                                 res_l_new.append(res.get_output_field(self.field))
                         results_new.append(res_l_new)
@@ -519,13 +519,13 @@ class LazyField:
                     results_new = []
                     for res in result:
                         if res.errored:
-                            return "error"
+                            raise ValueError("Error from get_value")
                         else:
                             results_new.append(res.get_output_field(self.field))
                     return results_new
             else:
                 if result.errored:
-                    return "error"
+                    raise ValueError("Error from get_value")
                 return result.get_output_field(self.field)
 
 

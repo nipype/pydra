@@ -182,7 +182,7 @@ class TaskBase:
 
         self.plugin = None
         self.hooks = TaskHook()
-        self.errored = False
+        self._errored = False
 
     def __str__(self):
         return self.name
@@ -220,6 +220,11 @@ class TaskBase:
     def version(self):
         """Get version of this task structure."""
         return self._version
+
+    @property
+    def errored(self):
+        """Check if the task has raised an error"""
+        return self._errored
 
     @property
     def checksum(self):
@@ -524,7 +529,15 @@ class TaskBase:
         if self.state:
             # TODO: only check for needed state result
             if self.result() and all(self.result()):
-                return True
+                if self.state.combiner and isinstance(self.result()[0], list):
+                    for res_l in self.result():
+                        if any([res.errored for res in res_l]):
+                            raise ValueError(f"Task {self.name} raised an error")
+                    return True
+                else:
+                    if any([res.errored for res in self.result()]):
+                        raise ValueError(f"Task {self.name} raised an error")
+                    return True
             # checking if self.result() is not an empty list only because
             # the states_ind is an empty list (input field might be an empty list)
             elif (
@@ -536,8 +549,8 @@ class TaskBase:
         else:
             if self.result():
                 if self.result().errored:
-                    self.errored = True
-                    return "error"
+                    self._errored = True
+                    raise ValueError(f"Task {self.name} raised an error")
                 else:
                     return True
         return False
@@ -621,7 +634,7 @@ class TaskBase:
             checksum = self.checksum
             result = load_result(checksum, self.cache_locations)
             if result and result.errored:
-                self.errored = True
+                self._errored = True
             if return_inputs is True or return_inputs == "val":
                 inputs_val = {
                     f"{self.name}.{inp}": getattr(self.inputs, inp)
@@ -926,21 +939,17 @@ class Workflow(TaskBase):
             try:
                 self.audit.monitor()
                 await self._run_task(submitter, rerun=rerun)
-                result.output, err = self._collect_outputs()
-                if err:
-                    result.errored = True
-                    self.errored = True
+                result.output = self._collect_outputs()
             except Exception as e:
                 record_error(self.output_dir, e)
                 result.errored = True
+                self._errored = True
                 raise
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
                 save(odir, result=result, task=self)
                 os.chdir(cwd)
-        if self.errored:
-            raise Exception("Workflow didn't finish: problems with tasks")
         self.hooks.post_run(self, result)
         return result
 
@@ -996,13 +1005,13 @@ class Workflow(TaskBase):
         for name, val in self._connections:
             if not isinstance(val, LazyField):
                 raise ValueError("all connections must be lazy")
-            val_out = val.get_value(self)
-            if val_out == "error":
-                error = True
-                output_wf[name] = None
-            else:
+            try:
+                val_out = val.get_value(self)
                 output_wf[name] = val_out
-        return attr.evolve(output, **output_wf), error
+            except ValueError:
+                output_wf[name] = None
+                raise ValueError(f"Task {val.name} raised an error")
+        return attr.evolve(output, **output_wf)
 
 
 def is_task(obj):

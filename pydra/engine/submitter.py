@@ -217,16 +217,17 @@ def is_runnable(graph, obj):
     errored = False
     not_done = False
     for pred in graph.predecessors[obj.name]:
-        is_done = pred.done
-        if is_done is False:
-            not_done = True
-        elif is_done == "error":
+        try:
+            is_done = pred.done
+        except ValueError:
             # removing all successors of the errored task
             graph.remove_successors_nodes(pred)
             errored = True
-            # pred.errored = True
-            obj.errored = True
-        else:
+            obj._errored = True
+            is_done = None
+        if is_done is False:
+            not_done = True
+        elif is_done is True:
             connections_to_remove.append(pred)
     # removing nodes that are done from connections
     for nd in connections_to_remove:

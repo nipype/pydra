@@ -3685,10 +3685,11 @@ def test_wf_upstream_error1(plugin):
     wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
     wf.set_output([("out", wf.addvar2.lzout.out)])
 
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(ValueError) as excinfo:
         with Submitter(plugin=plugin) as sub:
             sub(wf)
-    assert "Workflow didn't finish" in str(excinfo.value)
+    # assert "Task addvar1 raised an error" in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
 
 
 def test_wf_upstream_error2(plugin):
@@ -3706,7 +3707,8 @@ def test_wf_upstream_error2(plugin):
     with pytest.raises(Exception) as excinfo:
         with Submitter(plugin=plugin) as sub:
             sub(wf)
-    assert "Workflow didn't finish" in str(excinfo.value)
+    # assert "Task addvar1 raised an error" in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
 
 
 def test_wf_upstream_error3(plugin):
@@ -3724,7 +3726,9 @@ def test_wf_upstream_error3(plugin):
     with pytest.raises(Exception) as excinfo:
         with Submitter(plugin=plugin) as sub:
             sub(wf)
-    assert "Workflow didn't finish" in str(excinfo.value)
+    # TODO: is it important to provide first name of the task that had an error?
+    # assert "Task addvar1 raised an error" in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
 
 
 def test_wf_upstream_error4(plugin):
@@ -3739,7 +3743,8 @@ def test_wf_upstream_error4(plugin):
         with Submitter(plugin=plugin) as sub:
             sub(wf)
 
-    assert "Workflow didn't finish" in str(excinfo.value)
+    # assert 'Task addvar1 raised an error' in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
 
 
 def test_wf_upstream_error5(plugin):
@@ -3758,7 +3763,8 @@ def test_wf_upstream_error5(plugin):
         with Submitter(plugin=plugin) as sub:
             sub(wf_main)
 
-    assert "Workflow didn't finish" in str(excinfo.value)
+    # assert 'Task addvar1 raised an error' in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
 
 
 def test_wf_upstream_error6(plugin):
@@ -3778,4 +3784,5 @@ def test_wf_upstream_error6(plugin):
         with Submitter(plugin=plugin) as sub:
             sub(wf_main)
 
-    assert "Workflow didn't finish" in str(excinfo.value)
+    # assert 'Task addvar1 raised an error' in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
