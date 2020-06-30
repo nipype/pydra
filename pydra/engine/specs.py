@@ -127,7 +127,7 @@ class Result:
 
         Parameters
         ----------
-        field_name ::`str`
+        field_name : `str`
             Name of field in LazyField object
         """
         if field_name == "all_":
