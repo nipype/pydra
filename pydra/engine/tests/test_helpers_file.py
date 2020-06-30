@@ -6,6 +6,8 @@ from pathlib import Path
 
 from ..helpers_file import (
     split_filename,
+    hash_file,
+    hash_dir,
     copyfile,
     copyfiles,
     on_cifs,
@@ -55,6 +57,24 @@ def _temp_analyze_files_prime(tmpdir):
     orig_img.open("w+").close()
     orig_hdr.open("w+").close()
     return Path(orig_img.strpath), Path(orig_hdr.strpath)
+
+
+def test_hash_broken_symlink(_temp_analyze_files):
+    """Skip broken symlinks in hash_file and hash_dir"""
+    orig_img, orig_hdr = _temp_analyze_files
+    pth, _ = os.path.split(orig_hdr)
+
+    img_link = os.path.join(pth, "img_link")
+    os.symlink(orig_img, img_link)
+    os.remove(orig_img)  # delete original file to create broken link
+    assert hash_file(img_link) == None
+
+    new_dir = os.path.join(pth, "temp")
+    os.mkdir(new_dir)
+    new_dir_link = os.path.join(pth, "new_dir_link")
+    os.symlink(new_dir, new_dir_link, target_is_directory=True)
+    os.rmdir(new_dir)  # delete directory to create broken link
+    assert hash_dir(new_dir_link) == None
 
 
 def test_copyfile(_temp_analyze_files):
