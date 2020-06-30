@@ -155,8 +155,8 @@ class Submitter:
         graph_copy = wf.graph.copy()
         # keep track of pending futures
         task_futures = set()
-        while not wf.done_all_tasks or len(task_futures):
-            tasks = get_runnable_tasks(graph_copy)
+        tasks, tasks_follow_errored = get_runnable_tasks(graph_copy)
+        while tasks or len(task_futures):
             if not tasks and not task_futures:
                 raise Exception("Nothing queued or todo - something went wrong")
             for task in tasks:
@@ -172,6 +172,14 @@ class Submitter:
                     for fut in await self.submit(task, rerun=rerun):
                         task_futures.add(fut)
             task_futures = await self.worker.fetch_finished(task_futures)
+            tasks, follow_err = get_runnable_tasks(graph_copy)
+            # updating tasks_errored
+            for key, val in follow_err.items():
+                tasks_follow_errored.setdefault(key, [])
+                tasks_follow_errored[key] += val
+
+        for key, val in tasks_follow_errored.items():
+            setattr(getattr(wf, key), "_errored", val)
         return wf
 
     def __enter__(self):
@@ -196,30 +204,59 @@ def get_runnable_tasks(graph):
     """Parse a graph and return all runnable tasks."""
     tasks = []
     to_remove = []
+    # tasks that follow task that raises an error
+    following_err = dict()
     for tsk in graph.sorted_nodes:
+        if tsk not in graph.sorted_nodes:
+            continue
         # since the list is sorted (breadth-first) we can stop
         # when we find a task that depends on any task that is already in tasks
         if set(graph.predecessors[tsk.name]).intersection(set(tasks)):
             break
-        if is_runnable(graph, tsk):
+        _is_runnable = is_runnable(graph, tsk)
+        if _is_runnable is True:
             tasks.append(tsk)
             to_remove.append(tsk)
+        elif _is_runnable is False:
+            continue
+        else:  # a previous task had an error
+            errored_task = _is_runnable
+            # removing all successors of the errored task
+            for task_err in errored_task:
+                task_to_remove = graph.remove_successors_nodes(task_err)
+                for tsk in task_to_remove:
+                    # adding tasks that were removed from the graph
+                    # due to the error in the errored_task
+                    following_err.setdefault(tsk, [])
+                    following_err[tsk].append(task_err.name)
+
     # removing tasks that are ready to run from the graph
     for nd in to_remove:
         graph.remove_nodes(nd)
-    return tasks
+    return tasks, following_err
 
 
 def is_runnable(graph, obj):
     """Check if a task within a graph is runnable."""
     connections_to_remove = []
+    pred_errored = []
+    is_done = None
     for pred in graph.predecessors[obj.name]:
-        is_done = pred.done
-        if not is_done:
-            return False
-        else:
+        try:
+            is_done = pred.done
+        except ValueError:
+            pred_errored.append(pred)
+
+        if is_done is True:
             connections_to_remove.append(pred)
+        elif is_done is False:
+            return False
+
+    if pred_errored:
+        return pred_errored
+
     # removing nodes that are done from connections
     for nd in connections_to_remove:
         graph.remove_nodes_connections(nd)
+
     return True

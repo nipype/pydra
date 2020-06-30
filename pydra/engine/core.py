@@ -182,6 +182,7 @@ class TaskBase:
 
         self.plugin = None
         self.hooks = TaskHook()
+        self._errored = False
 
     def __str__(self):
         return self.name
@@ -219,6 +220,11 @@ class TaskBase:
     def version(self):
         """Get version of this task structure."""
         return self._version
+
+    @property
+    def errored(self):
+        """Check if the task has raised an error"""
+        return self._errored
 
     @property
     def checksum(self):
@@ -520,21 +526,34 @@ class TaskBase:
         # if any of the field is lazy, there is no need to check results
         if is_lazy(self.inputs):
             return False
+        _result = self.result()
         if self.state:
             # TODO: only check for needed state result
-            if self.result() and all(self.result()):
-                return True
+            if _result and all(_result):
+                if self.state.combiner and isinstance(_result[0], list):
+                    for res_l in _result:
+                        if any([res.errored for res in res_l]):
+                            raise ValueError(f"Task {self.name} raised an error")
+                    return True
+                else:
+                    if any([res.errored for res in _result]):
+                        raise ValueError(f"Task {self.name} raised an error")
+                    return True
             # checking if self.result() is not an empty list only because
             # the states_ind is an empty list (input field might be an empty list)
             elif (
-                self.result() == []
+                _result == []
                 and hasattr(self.state, "states_ind")
                 and self.state.states_ind == []
             ):
                 return True
         else:
-            if self.result():
-                return True
+            if _result:
+                if _result.errored:
+                    self._errored = True
+                    raise ValueError(f"Task {self.name} raised an error")
+                else:
+                    return True
         return False
 
     def _combined_output(self, return_inputs=False):
@@ -576,6 +595,8 @@ class TaskBase:
         """
         # TODO: check if result is available in load_result and
         # return a future if not
+        if self.errored:
+            return Result(output=None, runtime=None, errored=True)
         if self.state:
             if state_index is None:
                 # if state_index=None, collecting all results
@@ -613,6 +634,8 @@ class TaskBase:
                 raise ValueError("Task does not have a state")
             checksum = self.checksum
             result = load_result(checksum, self.cache_locations)
+            if result and result.errored:
+                self._errored = True
             if return_inputs is True or return_inputs == "val":
                 inputs_val = {
                     f"{self.name}.{inp}": getattr(self.inputs, inp)
@@ -732,23 +755,6 @@ class Workflow(TaskBase):
         if name in self.name2obj:
             return self.name2obj[name]
         return self.__getattribute__(name)
-
-    @property
-    def done_all_tasks(self):
-        """
-        Check if all tasks from the graph are done.
-
-        .. important ::
-            The fact that all tasks are reported as done
-            doesn't mean that results of the workflow
-            are available.
-            That can be checked with :py:meth:`~Workflow.done`.
-
-        """
-        for task in self.graph.nodes:
-            if not task.done:
-                return False
-        return True
 
     @property
     def nodes(self):
@@ -920,6 +926,7 @@ class Workflow(TaskBase):
             except Exception as e:
                 record_error(self.output_dir, e)
                 result.errored = True
+                self._errored = True
                 raise
             finally:
                 self.hooks.post_run_task(self, result)
@@ -973,6 +980,7 @@ class Workflow(TaskBase):
         logger.info("Added %s to %s", self.output_spec, self)
 
     def _collect_outputs(self):
+        error = False
         output_klass = make_klass(self.output_spec)
         output = output_klass(**{f.name: None for f in attr.fields(output_klass)})
         # collecting outputs from tasks
@@ -980,7 +988,18 @@ class Workflow(TaskBase):
         for name, val in self._connections:
             if not isinstance(val, LazyField):
                 raise ValueError("all connections must be lazy")
-            output_wf[name] = val.get_value(self)
+            try:
+                val_out = val.get_value(self)
+                output_wf[name] = val_out
+            except ValueError:
+                output_wf[name] = None
+                # checking if the tasks has predecessors that raises error
+                if isinstance(getattr(self, val.name)._errored, list):
+                    raise ValueError(
+                        f"Tasks {getattr(self, val.name)._errored} raised an error"
+                    )
+                else:
+                    raise ValueError(f"Task {val.name} raised an error")
         return attr.evolve(output, **output_wf)
 
 
