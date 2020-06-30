@@ -526,29 +526,30 @@ class TaskBase:
         # if any of the field is lazy, there is no need to check results
         if is_lazy(self.inputs):
             return False
+        _result = self.result()
         if self.state:
             # TODO: only check for needed state result
-            if self.result() and all(self.result()):
-                if self.state.combiner and isinstance(self.result()[0], list):
-                    for res_l in self.result():
+            if _result and all(_result):
+                if self.state.combiner and isinstance(_result[0], list):
+                    for res_l in _result:
                         if any([res.errored for res in res_l]):
                             raise ValueError(f"Task {self.name} raised an error")
                     return True
                 else:
-                    if any([res.errored for res in self.result()]):
+                    if any([res.errored for res in _result]):
                         raise ValueError(f"Task {self.name} raised an error")
                     return True
             # checking if self.result() is not an empty list only because
             # the states_ind is an empty list (input field might be an empty list)
             elif (
-                self.result() == []
+                _result == []
                 and hasattr(self.state, "states_ind")
                 and self.state.states_ind == []
             ):
                 return True
         else:
-            if self.result():
-                if self.result().errored:
+            if _result:
+                if _result.errored:
                     self._errored = True
                     raise ValueError(f"Task {self.name} raised an error")
                 else:
