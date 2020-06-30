@@ -73,8 +73,11 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
     if afile is None or isinstance(afile, LazyField) or isinstance(afile, list):
         return None
     if not Path(afile).is_file():
+        if Path(afile).is_symlink():
+            logger.debug(f"Skip broken symlink to file: {afile}")
+            return None
         if raise_notfound:
-            raise RuntimeError('File "%s" not found.' % afile)
+            raise RuntimeError(f"File {afile} not found.")
         return None
 
     crypto_obj = crypto()
@@ -124,6 +127,9 @@ def hash_dir(
     if dirpath is None or isinstance(dirpath, LazyField) or isinstance(dirpath, list):
         return None
     if not Path(dirpath).is_dir():
+        if Path(dirpath).is_symlink():
+            logger.debug(f"Skip broken symlink to directory: {dirpath}")
+            return None
         if raise_notfound:
             raise FileNotFoundError(f"Directory {dirpath} not found.")
         return None
