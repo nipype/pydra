@@ -14,6 +14,8 @@ from .utils import (
     list_output,
     fun_addsubvar,
     fun_addvar3,
+    fun_addvar,
+    fun_addtwo,
     add2_sub2_res,
     fun_addvar_none,
     fun_addvar_default,
@@ -3688,7 +3690,7 @@ def test_wf_upstream_error1(plugin):
     with pytest.raises(ValueError) as excinfo:
         with Submitter(plugin=plugin) as sub:
             sub(wf)
-    # assert "Task addvar1 raised an error" in str(excinfo.value)
+    assert "addvar1" in str(excinfo.value)
     assert "raised an error" in str(excinfo.value)
 
 
@@ -3707,7 +3709,7 @@ def test_wf_upstream_error2(plugin):
     with pytest.raises(Exception) as excinfo:
         with Submitter(plugin=plugin) as sub:
             sub(wf)
-    # assert "Task addvar1 raised an error" in str(excinfo.value)
+    assert "addvar1" in str(excinfo.value)
     assert "raised an error" in str(excinfo.value)
 
 
@@ -3726,8 +3728,7 @@ def test_wf_upstream_error3(plugin):
     with pytest.raises(Exception) as excinfo:
         with Submitter(plugin=plugin) as sub:
             sub(wf)
-    # TODO: is it important to provide first name of the task that had an error?
-    # assert "Task addvar1 raised an error" in str(excinfo.value)
+    assert "addvar1" in str(excinfo.value)
     assert "raised an error" in str(excinfo.value)
 
 
@@ -3742,9 +3743,8 @@ def test_wf_upstream_error4(plugin):
     with pytest.raises(Exception) as excinfo:
         with Submitter(plugin=plugin) as sub:
             sub(wf)
-
-    # assert 'Task addvar1 raised an error' in str(excinfo.value)
     assert "raised an error" in str(excinfo.value)
+    assert "addvar1" in str(excinfo.value)
 
 
 def test_wf_upstream_error5(plugin):
@@ -3763,7 +3763,7 @@ def test_wf_upstream_error5(plugin):
         with Submitter(plugin=plugin) as sub:
             sub(wf_main)
 
-    # assert 'Task addvar1 raised an error' in str(excinfo.value)
+    assert "addvar1" in str(excinfo.value)
     assert "raised an error" in str(excinfo.value)
 
 
@@ -3784,5 +3784,167 @@ def test_wf_upstream_error6(plugin):
         with Submitter(plugin=plugin) as sub:
             sub(wf_main)
 
-    # assert 'Task addvar1 raised an error' in str(excinfo.value)
+    assert "addvar1" in str(excinfo.value)
     assert "raised an error" in str(excinfo.value)
+
+
+def test_wf_upstream_error7(plugin):
+    """
+    workflow with three sequential tasks, the first task raises an error
+    the last task is set as the workflow output
+    """
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.inputs.x = "hi"  # TypeError for adding str and int
+    wf.plugin = plugin
+    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default(name="addvar3", a=wf.addvar2.lzout.out))
+    wf.set_output([("out", wf.addvar3.lzout.out)])
+
+    with pytest.raises(ValueError) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf)
+    assert "addvar1" in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
+    assert wf.addvar1._errored is True
+    assert wf.addvar2._errored == wf.addvar3._errored == ["addvar1"]
+
+
+def test_wf_upstream_error7a(plugin):
+    """
+    workflow with three sequential tasks, the first task raises an error
+    the second task is set as the workflow output
+    """
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.inputs.x = "hi"  # TypeError for adding str and int
+    wf.plugin = plugin
+    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default(name="addvar3", a=wf.addvar2.lzout.out))
+    wf.set_output([("out", wf.addvar2.lzout.out)])
+
+    with pytest.raises(ValueError) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf)
+    assert "addvar1" in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
+    assert wf.addvar1._errored is True
+    assert wf.addvar2._errored == wf.addvar3._errored == ["addvar1"]
+
+
+def test_wf_upstream_error7b(plugin):
+    """
+    workflow with three sequential tasks, the first task raises an error
+    the second and the third tasks are set as the workflow output
+    """
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.inputs.x = "hi"  # TypeError for adding str and int
+    wf.plugin = plugin
+    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default(name="addvar3", a=wf.addvar2.lzout.out))
+    wf.set_output([("out1", wf.addvar2.lzout.out), ("out2", wf.addvar3.lzout.out)])
+
+    with pytest.raises(ValueError) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf)
+    assert "addvar1" in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
+    assert wf.addvar1._errored is True
+    assert wf.addvar2._errored == wf.addvar3._errored == ["addvar1"]
+
+
+def test_wf_upstream_error8(plugin):
+    """ workflow with three tasks, the first one raises an error, so 2 others are removed"""
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.inputs.x = "hi"  # TypeError for adding str and int
+    wf.plugin = plugin
+    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addtwo(name="addtwo", a=wf.addvar1.lzout.out))
+    wf.set_output([("out1", wf.addvar2.lzout.out), ("out2", wf.addtwo.lzout.out)])
+
+    with pytest.raises(ValueError) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf)
+
+    assert "addvar1" in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
+    assert wf.addvar1._errored is True
+    assert wf.addvar2._errored == wf.addtwo._errored == ["addvar1"]
+
+
+def test_wf_upstream_error9(plugin):
+    """
+    workflow with five tasks with two "branches",
+    one branch has an error, the second is fine
+    the errored branch is connected to the workflow output
+    """
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.inputs.x = 2
+    wf.add(fun_addvar(name="err", a=wf.addvar1.lzout.out, b="hi"))
+    wf.add(fun_addvar_default(name="follow_err", a=wf.err.lzout.out))
+
+    wf.add(fun_addtwo(name="addtwo", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default(name="addvar2", a=wf.addtwo.lzout.out))
+    wf.set_output([("out1", wf.follow_err.lzout.out)])
+
+    wf.plugin = plugin
+    with pytest.raises(ValueError) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf)
+    assert "err" in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
+    assert wf.err._errored is True
+    assert wf.follow_err._errored == ["err"]
+
+
+def test_wf_upstream_error9a(plugin):
+    """
+    workflow with five tasks with two "branches",
+    one branch has an error, the second is fine
+    the branch without error is connected to the workflow output
+    so the workflow finished clean
+    """
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.inputs.x = 2
+    wf.add(fun_addvar(name="err", a=wf.addvar1.lzout.out, b="hi"))
+    wf.add(fun_addvar_default(name="follow_err", a=wf.err.lzout.out))
+
+    wf.add(fun_addtwo(name="addtwo", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default(name="addvar2", a=wf.addtwo.lzout.out))
+    wf.set_output([("out1", wf.addvar2.lzout.out)])  # , ("out2", wf.addtwo.lzout.out)])
+
+    wf.plugin = plugin
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+    assert wf.err._errored is True
+    assert wf.follow_err._errored == ["err"]
+
+
+def test_wf_upstream_error9b(plugin):
+    """
+    workflow with five tasks with two "branches",
+    one branch has an error, the second is fine
+    both branches are connected to the workflow output
+    """
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.inputs.x = 2
+    wf.add(fun_addvar(name="err", a=wf.addvar1.lzout.out, b="hi"))
+    wf.add(fun_addvar_default(name="follow_err", a=wf.err.lzout.out))
+
+    wf.add(fun_addtwo(name="addtwo", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default(name="addvar2", a=wf.addtwo.lzout.out))
+    wf.set_output([("out1", wf.follow_err.lzout.out), ("out2", wf.addtwo.lzout.out)])
+
+    wf.plugin = plugin
+    with pytest.raises(ValueError) as excinfo:
+        with Submitter(plugin=plugin) as sub:
+            sub(wf)
+    assert "err" in str(excinfo.value)
+    assert "raised an error" in str(excinfo.value)
+    assert wf.err._errored is True
+    assert wf.follow_err._errored == ["err"]

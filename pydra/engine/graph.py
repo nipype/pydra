@@ -201,6 +201,8 @@ class DiGraph:
         ----------
         nodes : :obj:`list`
             List of nodes to be marked for removal.
+        check_ready : :obj: `bool`
+            checking if the node is ready to be removed
 
         """
         nodes = ensure_list(nodes)
@@ -279,10 +281,13 @@ class DiGraph:
         self._successors_all = []
         self._checking_successors_nodes(node=node, remove=False)
         self.remove_nodes_connections(nodes=node)
+        nodes_removed = []
         for nd in self._successors_all:
             if nd in self.nodes:
+                nodes_removed.append(nd.name)
                 self.remove_nodes(nodes=nd, check_ready=False)
                 self.remove_previous_connections(nodes=nd)
+        return set(nodes_removed)
 
     def _checking_path(self, node_name, first_name, path=0):
         """Calculate all paths using connections list (re-entering function)."""

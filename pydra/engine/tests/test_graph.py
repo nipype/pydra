@@ -346,7 +346,8 @@ def test_remove_all_successors_1():
 
     graph.remove_nodes(A)
 
-    graph.remove_successors_nodes(A)
+    nodes_removed = graph.remove_successors_nodes(A)
+    assert nodes_removed == {"b"}
     assert graph.sorted_nodes_names == []
     assert graph.edges_names == []
 
@@ -361,7 +362,8 @@ def test_remove_all_successors_2():
     assert graph.sorted_nodes_names == ["a", "d", "b", "c"]
 
     graph.remove_nodes(A)
-    graph.remove_successors_nodes(A)
+    nodes_removed = graph.remove_successors_nodes(A)
+    assert nodes_removed == {"b", "c"}
 
     assert graph.edges_names == []
     assert graph.sorted_nodes_names == ["d"]

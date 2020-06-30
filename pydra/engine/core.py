@@ -699,7 +699,7 @@ class Workflow(TaskBase):
 
         """
         if input_spec:
-            if isinstance(input_spec, BaseSpec):  # TODO: test this block
+            if isinstance(input_spec, BaseSpec):
                 self.input_spec = input_spec
             else:
                 self.input_spec = SpecInfo(
@@ -754,24 +754,6 @@ class Workflow(TaskBase):
         if name in self.name2obj:
             return self.name2obj[name]
         return self.__getattribute__(name)
-
-    # TODO: not sure if we will need this, if not, should be removed
-    # @property
-    # def done_all_tasks(self):
-    #     """
-    #     Check if all tasks from the graph are done.
-    #
-    #     .. important ::
-    #         The fact that all tasks are reported as done
-    #         doesn't mean that results of the workflow
-    #         are available.
-    #         That can be checked with :py:meth:`~Workflow.done`.
-    #
-    #     """
-    #     for task in self.graph.nodes:
-    #         if not task.done:
-    #             return False
-    #     return True
 
     @property
     def nodes(self):
@@ -1010,7 +992,13 @@ class Workflow(TaskBase):
                 output_wf[name] = val_out
             except ValueError:
                 output_wf[name] = None
-                raise ValueError(f"Task {val.name} raised an error")
+                # checking if the tasks has predecessors that raises error
+                if isinstance(getattr(self, val.name)._errored, list):
+                    raise ValueError(
+                        f"Tasks {getattr(self, val.name)._errored} raised an error"
+                    )
+                else:
+                    raise ValueError(f"Task {val.name} raised an error")
         return attr.evolve(output, **output_wf)
 
 
