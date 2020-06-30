@@ -43,6 +43,13 @@ cd pydra
 pip install -e .[dev]
 ```
 
+In order to run pydra's test locally:
+
+```
+pytest -vs pydra
+```
+
+
 If you want to test execution with Dask:
 ```
 git clone git@github.com:nipype/pydra.git
