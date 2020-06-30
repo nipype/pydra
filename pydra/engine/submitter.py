@@ -213,13 +213,14 @@ def get_runnable_tasks(graph):
         # when we find a task that depends on any task that is already in tasks
         if set(graph.predecessors[tsk.name]).intersection(set(tasks)):
             break
-        if is_runnable(graph, tsk) is True:
+        _is_runnable = is_runnable(graph, tsk)
+        if _is_runnable is True:
             tasks.append(tsk)
             to_remove.append(tsk)
-        elif is_runnable(graph, tsk) is False:
+        elif _is_runnable is False:
             continue
         else:  # a previous task had an error
-            errored_task = is_runnable(graph, tsk)
+            errored_task = _is_runnable
             # removing all successors of the errored task
             for task_err in errored_task:
                 task_to_remove = graph.remove_successors_nodes(task_err)
