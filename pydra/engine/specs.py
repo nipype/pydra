@@ -123,12 +123,11 @@ class Result:
         self.__dict__.update(state)
 
     def get_output_field(self, field_name):
-        """
-        used in get_values in Workflow
+        """Used in get_values in Workflow
 
         Parameters
         ----------
-        field_name ::`str`
+        field_name : `str`
             Name of field in LazyField object
         """
         if field_name == "all_":
