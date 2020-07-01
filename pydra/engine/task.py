@@ -67,6 +67,7 @@ class FunctionTask(TaskBase):
     def __init__(
         self,
         func: ty.Callable,
+        inputs: ty.Optional[ty.Union[ty.Text, File, ty.Dict]] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
@@ -138,7 +139,7 @@ class FunctionTask(TaskBase):
             name = func.__name__
         super(FunctionTask, self).__init__(
             name,
-            inputs=kwargs,
+            inputs=inputs,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
@@ -244,6 +245,9 @@ class ShellCommandTask(TaskBase):
 
     def __init__(
         self,
+        inputs: ty.Optional[ty.Union[ty.Text, File, ty.Dict]] = None,
+        executable: ty.Optional[ty.Union[ty.List, str]] = None,
+        args: ty.Optional[ty.Union[ty.List, str, File]] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         input_spec: ty.Optional[SpecInfo] = None,
@@ -283,12 +287,21 @@ class ShellCommandTask(TaskBase):
         self.input_spec = input_spec
         if output_spec is None:
             output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
+        if inputs is None:
+            inputs = {}
+        # adding executable and args to inputs
+        inputs["executable"] = executable
+        inputs["args"] = args
+        if isinstance(self, ContainerTask):
+            # adding image and bindings when ContainerTask
+            inputs["image"] = kwargs["image"]
+            inputs["bindings"] = kwargs["bindings"]
 
         self.output_spec = output_spec
 
         super(ShellCommandTask, self).__init__(
             name=name,
-            inputs=kwargs,
+            inputs=inputs,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
@@ -350,6 +363,8 @@ class ShellCommandTask(TaskBase):
             if f.type is bool:
                 if value is not True:
                     break
+            elif value in [None, attr.NOTHING]:
+                continue
             else:
                 cmd_add += ensure_list(value, tuple2list=True)
             if cmd_add is not None:
@@ -419,6 +434,8 @@ class ContainerTask(ShellCommandTask):
     def __init__(
         self,
         name,
+        image: ty.Optional[str] = None,
+        bindings: ty.Optional[ty.List] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         input_spec: ty.Optional[SpecInfo] = None,
@@ -468,6 +485,8 @@ class ContainerTask(ShellCommandTask):
             cache_dir=cache_dir,
             strip=strip,
             rerun=rerun,
+            image=image,
+            bindings=bindings,
             **kwargs,
         )
 
@@ -479,14 +498,14 @@ class ContainerTask(ShellCommandTask):
             raise AttributeError(
                 f"Container type should be {container_type}, but {self.inputs.container} given"
             )
-        if self.inputs.image is attr.NOTHING:
+        if self.inputs.image in [None, attr.NOTHING]:
             raise AttributeError("Container image is not specified")
 
     def bind_paths(self, ind=None):
         """Return bound mount points: ``dict(lpath: (cpath, mode))``."""
         bind_paths = {}
         output_dir_cpath = None
-        if self.inputs.bindings is None:
+        if self.inputs.bindings in [None, attr.NOTHING]:
             self.inputs.bindings = []
         if ind is None:
             output_dir = self.output_dir

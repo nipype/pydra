@@ -59,7 +59,7 @@ def test_task_1(tmpdir):
     # creating abs path
     file = os.path.join(os.getcwd(), "arr1.npy")
     np.save(file, arr)
-    nn = file_add2(name="add2", file=file)
+    nn = file_add2(name="add2", inputs={"file": file})
 
     with Submitter(plugin="cf") as sub:
         sub(nn)
@@ -73,8 +73,8 @@ def test_task_1(tmpdir):
 def test_wf_1(tmpdir):
     """ workflow with 2 tasks that take file as an input and give file as an aoutput"""
     wf = Workflow(name="wf_1", input_spec=["file_orig"])
-    wf.add(file_add2(name="add2", file=wf.lzin.file_orig))
-    wf.add(file_mult(name="mult", file=wf.add2.lzout.out))
+    wf.add(file_add2(name="add2", inputs={"file": wf.lzin.file_orig}))
+    wf.add(file_mult(name="mult", inputs={"file": wf.add2.lzout.out}))
     wf.set_output([("out", wf.mult.lzout.out)])
 
     os.chdir(tmpdir)
@@ -102,7 +102,7 @@ def test_file_annotation_1(tmpdir):
     # creating abs path
     file = os.path.join(os.getcwd(), "arr1.npy")
     np.save(file, arr)
-    nn = file_add2_annot(name="add2", file=file)
+    nn = file_add2_annot(name="add2", inputs={"file": file})
 
     with Submitter(plugin="cf") as sub:
         sub(nn)

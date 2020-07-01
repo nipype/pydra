@@ -21,7 +21,7 @@ def funaddtwo(a):
 
 
 def test_output():
-    nn = funaddtwo(a=3)
+    nn = funaddtwo(inputs={"a": 3})
     res = nn._run()
     assert res.output.out == 5
 
@@ -29,10 +29,10 @@ def test_output():
 def test_name_conflict():
     """ raise error if task name conflicts with a class attribute or method"""
     with pytest.raises(ValueError) as excinfo1:
-        nn = funaddtwo(name="split", a=3)
+        nn = funaddtwo(name="split")
     assert "Cannot use names of attributes or methods" in str(excinfo1.value)
     with pytest.raises(ValueError) as excinfo2:
-        nn = funaddtwo(name="checksum", a=3)
+        nn = funaddtwo(name="checksum")
     assert "Cannot use names of attributes or methods" in str(excinfo2.value)
 
 
@@ -49,7 +49,7 @@ def test_numpy():
 
 @pytest.mark.xfail(reason="cp.dumps(func) depends on the system/setup, TODO!!")
 def test_checksum():
-    nn = funaddtwo(a=3)
+    nn = funaddtwo(inputs={"a": 3})
     assert (
         nn.checksum
         == "FunctionTask_abb4e7cc03b13d0e73884b87d142ed5deae6a312275187a9d8df54407317d7d3"
@@ -63,7 +63,7 @@ def test_annotated_func():
     ) -> ty.NamedTuple("Output", [("out_out", float)]):
         return a + b
 
-    funky = testfunc(a=1)
+    funky = testfunc(inputs={"a": 1})
     assert hasattr(funky.inputs, "a")
     assert hasattr(funky.inputs, "b")
     assert hasattr(funky.inputs, "_func")
@@ -111,7 +111,7 @@ def test_annotated_func_multreturn():
 
         return math.modf(a)
 
-    funky = testfunc(a=3.5)
+    funky = testfunc(inputs={"a": 3.5})
     assert hasattr(funky.inputs, "a")
     assert hasattr(funky.inputs, "_func")
     assert getattr(funky.inputs, "a") == 3.5
@@ -154,7 +154,7 @@ def test_annotated_func_multreturn_exception():
 
         return math.modf(a)
 
-    funky = testfunc(a=3.5)
+    funky = testfunc(inputs={"a": 3.5})
     with pytest.raises(Exception) as excinfo:
         funky()
     assert "expected 3 elements" in str(excinfo.value)
@@ -165,7 +165,7 @@ def test_halfannotated_func():
     def testfunc(a, b) -> int:
         return a + b
 
-    funky = testfunc(a=10, b=20)
+    funky = testfunc(inputs={"a": 10, "b": 20})
     assert hasattr(funky.inputs, "a")
     assert hasattr(funky.inputs, "b")
     assert hasattr(funky.inputs, "_func")
@@ -206,7 +206,7 @@ def test_halfannotated_func_multreturn():
     def testfunc(a, b) -> (int, int):
         return a + 1, b + 1
 
-    funky = testfunc(a=10, b=20)
+    funky = testfunc(inputs={"a": 10, "b": 20})
     assert hasattr(funky.inputs, "a")
     assert hasattr(funky.inputs, "b")
     assert hasattr(funky.inputs, "_func")
@@ -248,7 +248,7 @@ def test_notannotated_func():
     def no_annots(c, d):
         return c + d
 
-    natask = no_annots(c=17, d=3.2)
+    natask = no_annots(inputs={"c": 17, "d": 3.2})
     assert hasattr(natask.inputs, "c")
     assert hasattr(natask.inputs, "d")
     assert hasattr(natask.inputs, "_func")
@@ -264,7 +264,7 @@ def test_notannotated_func_returnlist():
     def no_annots(c, d):
         return [c, d]
 
-    natask = no_annots(c=17, d=3.2)
+    natask = no_annots(inputs={"c": 17, "d": 3.2})
     result = natask._run()
     assert hasattr(result.output, "out")
     assert result.output.out == [17, 3.2]
@@ -275,7 +275,7 @@ def test_halfannotated_func_multrun_returnlist():
     def no_annots(c, d) -> (list, float):
         return [c, d], c + d
 
-    natask = no_annots(c=17, d=3.2)
+    natask = no_annots(inputs={"c": 17, "d": 3.2})
     result = natask._run()
 
     assert hasattr(result.output, "out1")
@@ -293,7 +293,7 @@ def test_notannotated_func_multreturn():
     def no_annots(c, d):
         return c + d, c - d
 
-    natask = no_annots(c=17, d=3.2)
+    natask = no_annots(inputs={"c": 17, "d": 3.2})
     assert hasattr(natask.inputs, "c")
     assert hasattr(natask.inputs, "d")
     assert hasattr(natask.inputs, "_func")
@@ -309,7 +309,7 @@ def test_exception_func():
     def raise_exception(c, d):
         raise Exception()
 
-    bad_funk = raise_exception(c=17, d=3.2)
+    bad_funk = raise_exception(inputs={"c": 17, "d": 3.2})
     assert pytest.raises(Exception, bad_funk)
 
 
@@ -320,7 +320,7 @@ def test_result_none_1():
     def fun_none(x):
         return None
 
-    task = fun_none(name="none", x=3)
+    task = fun_none(name="none", inputs={"x": 3})
     res = task()
     assert res.output.out is None
 
@@ -332,7 +332,7 @@ def test_result_none_2():
     def fun_none(x) -> (ty.Any, ty.Any):
         return None
 
-    task = fun_none(name="none", x=3)
+    task = fun_none(name="none", inputs={"x": 3})
     res = task()
     assert res.output.out1 is None
     assert res.output.out2 is None
@@ -344,12 +344,16 @@ def test_audit_prov(tmpdir):
         return a + b
 
     # printing the audit message
-    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky = testfunc(
+        inputs={"a": 1}, audit_flags=AuditFlag.PROV, messengers=PrintMessenger()
+    )
     funky.cache_dir = tmpdir
     funky()
 
     # saving the audit message into the file
-    funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    funky = testfunc(
+        inputs={"a": 2}, audit_flags=AuditFlag.PROV, messengers=FileMessenger()
+    )
     message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
     funky.messenger_args = dict(message_dir=message_path)
@@ -364,7 +368,9 @@ def test_audit_all(tmpdir):
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
-    funky = testfunc(a=2, audit_flags=AuditFlag.ALL, messengers=FileMessenger())
+    funky = testfunc(
+        inputs={"a": 2}, audit_flags=AuditFlag.ALL, messengers=FileMessenger()
+    )
     message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
     funky.messenger_args = dict(message_dir=message_path)
@@ -450,18 +456,18 @@ def test_singularity_cmd(tmpdir):
 
 def test_functask_callable(tmpdir):
     # no submitter or plugin
-    foo = funaddtwo(a=1)
+    foo = funaddtwo(inputs={"a": 1})
     res = foo()
     assert res.output.out == 3
     assert foo.plugin is None
 
     # plugin
-    bar = funaddtwo(a=2)
+    bar = funaddtwo(inputs={"a": 2})
     res = bar(plugin="cf")
     assert res.output.out == 4
     assert bar.plugin is None
 
-    foo2 = funaddtwo(a=3)
+    foo2 = funaddtwo(inputs={"a": 3})
     foo2.plugin = "cf"
     res = foo2()
     assert res.output.out == 5
@@ -469,7 +475,7 @@ def test_functask_callable(tmpdir):
 
 
 def test_taskhooks(tmpdir, capsys):
-    foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
+    foo = funaddtwo(name="foo", inputs={"a": 1}, cache_dir=tmpdir)
     assert foo.hooks
     # ensure all hooks are defined
     for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):
@@ -500,7 +506,7 @@ def test_taskhooks(tmpdir, capsys):
     del captured
 
     # hooks are independent across tasks by default
-    bar = funaddtwo(name="bar", a=3, cache_dir=tmpdir)
+    bar = funaddtwo(name="bar", inputs={"a": 3}, cache_dir=tmpdir)
     assert bar.hooks is not foo.hooks
     # but can be shared across tasks
     bar.hooks = foo.hooks

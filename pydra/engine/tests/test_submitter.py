@@ -42,10 +42,10 @@ def test_concurrent_wf(plugin):
     wf = Workflow("new_wf", input_spec=["x", "y"])
     wf.inputs.x = 5
     wf.inputs.y = 10
-    wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
-    wf.add(sleep_add_one(name="taskb", x=wf.lzin.y))
-    wf.add(sleep_add_one(name="taskc", x=wf.taska.lzout.out))
-    wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
+    wf.add(sleep_add_one(name="taska", inputs={"x": wf.lzin.x}))
+    wf.add(sleep_add_one(name="taskb", inputs={"x": wf.lzin.y}))
+    wf.add(sleep_add_one(name="taskc", inputs={"x": wf.taska.lzout.out}))
+    wf.add(sleep_add_one(name="taskd", inputs={"x": wf.taskb.lzout.out}))
     wf.set_output([("out1", wf.taskc.lzout.out), ("out2", wf.taskd.lzout.out)])
     with Submitter(plugin) as sub:
         sub(wf)
@@ -63,10 +63,10 @@ def test_concurrent_wf_nprocs():
     wf = Workflow("new_wf", input_spec=["x", "y"])
     wf.inputs.x = 5
     wf.inputs.y = 10
-    wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
-    wf.add(sleep_add_one(name="taskb", x=wf.lzin.y))
-    wf.add(sleep_add_one(name="taskc", x=wf.taska.lzout.out))
-    wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
+    wf.add(sleep_add_one(name="taska", inputs={"x": wf.lzin.x}))
+    wf.add(sleep_add_one(name="taskb", inputs={"x": wf.lzin.y}))
+    wf.add(sleep_add_one(name="taskc", inputs={"x": wf.taska.lzout.out}))
+    wf.add(sleep_add_one(name="taskd", inputs={"x": wf.taskb.lzout.out}))
     wf.set_output([("out1", wf.taskc.lzout.out), ("out2", wf.taskd.lzout.out)])
     # wf.plugin = 'cf'
     # res = wf.run()
@@ -82,18 +82,18 @@ def test_wf_in_wf(plugin):
     """WF(A --> SUBWF(A --> B) --> B)"""
     wf = Workflow(name="wf_in_wf", input_spec=["x"])
     wf.inputs.x = 3
-    wf.add(sleep_add_one(name="wf_a", x=wf.lzin.x))
+    wf.add(sleep_add_one(name="wf_a", inputs={"x": wf.lzin.x}))
 
     # workflow task
     subwf = Workflow(name="sub_wf", input_spec=["x"])
-    subwf.add(sleep_add_one(name="sub_a", x=subwf.lzin.x))
-    subwf.add(sleep_add_one(name="sub_b", x=subwf.sub_a.lzout.out))
+    subwf.add(sleep_add_one(name="sub_a", inputs={"x": subwf.lzin.x}))
+    subwf.add(sleep_add_one(name="sub_b", inputs={"x": subwf.sub_a.lzout.out}))
     subwf.set_output([("out", subwf.sub_b.lzout.out)])
     # connect, then add
     subwf.inputs.x = wf.wf_a.lzout.out
     wf.add(subwf)
 
-    wf.add(sleep_add_one(name="wf_b", x=wf.sub_wf.lzout.out))
+    wf.add(sleep_add_one(name="wf_b", inputs={"x": wf.sub_wf.lzout.out}))
     wf.set_output([("out", wf.wf_b.lzout.out)])
 
     with Submitter(plugin) as sub:
@@ -109,7 +109,7 @@ def test_wf2(plugin_dask_opt):
         workflow-node with one task and no splitter
     """
     wfnd = Workflow(name="wfnd", input_spec=["x"])
-    wfnd.add(sleep_add_one(name="add2", x=wfnd.lzin.x))
+    wfnd.add(sleep_add_one(name="add2", inputs={"x": wfnd.lzin.x}))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
     wfnd.inputs.x = 2
 
@@ -127,8 +127,8 @@ def test_wf2(plugin_dask_opt):
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_with_state(plugin_dask_opt):
     wf = Workflow(name="wf_with_state", input_spec=["x"])
-    wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
-    wf.add(sleep_add_one(name="taskb", x=wf.taska.lzout.out))
+    wf.add(sleep_add_one(name="taska", inputs={"x": wf.lzin.x}))
+    wf.add(sleep_add_one(name="taskb", inputs={"x": wf.taska.lzout.out}))
 
     wf.inputs.x = [1, 2, 3]
     wf.split("x")
@@ -201,10 +201,10 @@ def test_slurm_max_jobs(tmpdir):
     wf = Workflow("new_wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wf.inputs.x = 5
     wf.inputs.y = 10
-    wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
-    wf.add(sleep_add_one(name="taskb", x=wf.lzin.y))
-    wf.add(sleep_add_one(name="taskc", x=wf.taska.lzout.out))
-    wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
+    wf.add(sleep_add_one(name="taska", inputs={"x": wf.lzin.x}))
+    wf.add(sleep_add_one(name="taskb", inputs={"x": wf.lzin.y}))
+    wf.add(sleep_add_one(name="taskc", inputs={"x": wf.taska.lzout.out}))
+    wf.add(sleep_add_one(name="taskd", inputs={"x": wf.taskb.lzout.out}))
     wf.set_output([("out1", wf.taskc.lzout.out), ("out2", wf.taskd.lzout.out)])
     with Submitter("slurm", max_jobs=1) as sub:
         sub(wf)

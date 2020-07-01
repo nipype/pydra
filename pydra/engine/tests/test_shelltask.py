@@ -280,7 +280,7 @@ def test_shell_cmd_inputspec_1(plugin, results_function):
         name="shelly",
         executable=cmd_exec,
         args=cmd_args,
-        opt_n=cmd_opt,
+        inputs={"opt_n": cmd_opt},
         input_spec=my_input_spec,
     )
     assert shelly.inputs.executable == cmd_exec
@@ -324,8 +324,7 @@ def test_shell_cmd_inputspec_2(plugin, results_function):
         name="shelly",
         executable=cmd_exec,
         args=cmd_args,
-        opt_n=cmd_opt,
-        opt_hello=cmd_opt_hello,
+        inputs={"opt_n": cmd_opt, "opt_hello": cmd_opt_hello},
         input_spec=my_input_spec,
     )
     assert shelly.inputs.executable == cmd_exec
@@ -356,7 +355,10 @@ def test_shell_cmd_inputspec_3(plugin, results_function):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, text=hello, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd_exec,
+        inputs={"text": hello},
+        input_spec=my_input_spec,
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
@@ -381,8 +383,9 @@ def test_shell_cmd_inputspec_3a(plugin, results_function):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, text=hello, input_spec=my_input_spec
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec
     )
+    shelly.inputs.text = hello
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
     res = results_function(shelly, plugin)
@@ -659,7 +662,10 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, opt_t=cmd_t, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd_exec,
+        inputs={"opt_t": cmd_t},
+        input_spec=my_input_spec,
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -t"
@@ -705,8 +711,7 @@ def test_shell_cmd_inputspec_5a_exception(plugin):
     shelly = ShellCommandTask(
         name="shelly",
         executable=cmd_exec,
-        opt_t=cmd_t,
-        opt_S=cmd_S,
+        inputs={"opt_t": cmd_t, "opt_S": cmd_S},
         input_spec=my_input_spec,
     )
     with pytest.raises(Exception) as excinfo:
@@ -752,8 +757,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function):
     shelly = ShellCommandTask(
         name="shelly",
         executable=cmd_exec,
-        opt_t=cmd_t,
-        opt_l=cmd_l,
+        inputs={"opt_t": cmd_t, "opt_l": cmd_l},
         input_spec=my_input_spec,
     )
     assert shelly.inputs.executable == cmd_exec
@@ -794,8 +798,9 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, opt_t=cmd_t, input_spec=my_input_spec
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec
     )
+    shelly.inputs.opt_t = cmd_t
     with pytest.raises(Exception) as excinfo:
         shelly()
     assert "requires" in str(excinfo.value)
@@ -837,13 +842,10 @@ def test_shell_cmd_inputspec_6b(plugin, results_function):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly",
-        executable=cmd_exec,
-        opt_t=cmd_t,
-        # opt_l=cmd_l,
-        input_spec=my_input_spec,
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec
     )
     shelly.inputs.opt_l = cmd_l
+    shelly.inputs.opt_t = cmd_t
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
     res = results_function(shelly, plugin)
@@ -954,8 +956,9 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, files=files_list, input_spec=my_input_spec
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec
     )
+    shelly.inputs.files = files_list
 
     assert shelly.inputs.executable == cmd_exec
     res = results_function(shelly, plugin)
@@ -1003,10 +1006,8 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
         bases=(ShellSpec,),
     )
 
-    shelly = ShellCommandTask(
-        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
-    )
-
+    shelly = ShellCommandTask(name="shelly", executable=cmd, input_spec=my_input_spec)
+    shelly.inputs.orig_file = str(file)
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out_file.exists()
@@ -1060,10 +1061,8 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
         bases=(ShellSpec,),
     )
 
-    shelly = ShellCommandTask(
-        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
-    )
-
+    shelly = ShellCommandTask(name="shelly", executable=cmd, input_spec=my_input_spec)
+    shelly.inputs.orig_file = str(file)
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out_file.exists()
@@ -1131,10 +1130,8 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
         bases=(ShellSpec,),
     )
 
-    shelly = ShellCommandTask(
-        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
-    )
-
+    shelly = ShellCommandTask(name="shelly", executable=cmd, input_spec=my_input_spec)
+    shelly.inputs.orig_file = str(file)
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out_file.exists()
@@ -1165,7 +1162,10 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, text=hello, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd_exec,
+        inputs={"text": hello},
+        input_spec=my_input_spec,
     ).split("text")
     assert shelly.inputs.executable == cmd_exec
     # todo: this doesn't work when state
@@ -1192,7 +1192,10 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, text=hello, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd_exec,
+        inputs={"text": hello},
+        input_spec=my_input_spec,
     ).split("text")
     assert shelly.inputs.executable == cmd_exec
 
@@ -1265,9 +1268,9 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, file=files, input_spec=my_input_spec
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec
     ).split("file")
-
+    shelly.inputs.file = files
     assert shelly.inputs.executable == cmd_exec
     # todo: this doesn't work when state
     # assert shelly.cmdline == "echo HELLO"
@@ -1321,8 +1324,9 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=files
+        name="shelly", executable=cmd, input_spec=my_input_spec
     ).split("orig_file")
+    shelly.inputs.orig_file = files
 
     txt_l = ["from pydra", "world"]
     res_l = results_function(shelly, plugin)
@@ -1497,7 +1501,7 @@ def test_wf_shell_cmd_3(plugin):
             name="shelly2",
             input_spec=my_input_spec2,
             executable=wf.lzin.cmd2,
-            orig_file=wf.shelly1.lzout.file,
+            inputs={"orig_file": wf.shelly1.lzout.file},
         )
     )
 
@@ -1585,7 +1589,7 @@ def test_wf_shell_cmd_3a(plugin):
             name="shelly2",
             input_spec=my_input_spec2,
             executable=wf.lzin.cmd2,
-            orig_file=wf.shelly1.lzout.file,
+            inputs={"orig_file": wf.shelly1.lzout.file},
         )
     )
 
@@ -1673,7 +1677,7 @@ def test_wf_shell_cmd_state_1(plugin):
             name="shelly2",
             input_spec=my_input_spec2,
             executable=wf.lzin.cmd2,
-            orig_file=wf.shelly1.lzout.file,
+            inputs={"orig_file": wf.shelly1.lzout.file},
         )
     )
 
@@ -1762,7 +1766,7 @@ def test_wf_shell_cmd_ndst_1(plugin):
             name="shelly2",
             input_spec=my_input_spec2,
             executable=wf.lzin.cmd2,
-            orig_file=wf.shelly1.lzout.file,
+            inputs={"orig_file": wf.shelly1.lzout.file},
         )
     )
 
@@ -2271,8 +2275,9 @@ def test_fsl():
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="bet_task", executable="bet", in_file=in_file, input_spec=bet_input_spec
+        name="bet_task", executable="bet", input_spec=bet_input_spec
     )
+    shelly.inputs.in_file = in_file
     assert shelly.inputs.executable == "bet"
     assert shelly.cmdline == f"bet {in_file} {in_file}_brain"
     # res = shelly(plugin="cf")

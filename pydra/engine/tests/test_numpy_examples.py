@@ -19,8 +19,8 @@ def arrayout(val):
 
 def test_multiout(plugin):
     """ testing a simple function that returns a numpy array"""
-    wf = Workflow("wf", input_spec=["val"], val=[0, 1, 2])
-    wf.add(arrayout(name="mo", val=wf.lzin.val))
+    wf = Workflow("wf", input_spec=["val"], inputs={"val": [0, 1, 2]})
+    wf.add(arrayout(name="mo", inputs={"val": wf.lzin.val}))
     wf.mo.split("val").combine("val")
 
     wf.set_output([("array", wf.mo.lzout.b)])

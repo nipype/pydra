@@ -210,7 +210,7 @@ def gen_basic_wf(name="basic-wf"):
     """
     wf = Workflow(name=name, input_spec=["x"])
     wf.inputs.x = 5
-    wf.add(fun_addtwo(name="task1", a=wf.lzin.x, b=0))
-    wf.add(fun_addvar(name="task2", a=wf.task1.lzout.out, b=2))
+    wf.add(fun_addtwo(name="task1", inputs={"a": wf.lzin.x, "b": 0}))
+    wf.add(fun_addvar(name="task2", inputs={"a": wf.task1.lzout.out, "b": 2}))
     wf.set_output([("out", wf.task2.lzout.out)])
     return wf

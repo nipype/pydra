@@ -125,7 +125,6 @@ class TaskBase:
 
         if TaskBase._etelemetry_version_data is None:
             TaskBase._etelemetry_version_data = check_latest_version()
-
         # raise error if name is same as of attributes
         if name in dir(self):
             raise ValueError("Cannot use names of attributes or methods as task name")
@@ -166,7 +165,6 @@ class TaskBase:
             self.inputs = attr.evolve(self.inputs, **inputs)
             self.inputs.check_metadata()
             self.state_inputs = inputs
-
         self.audit = Audit(
             audit_flags=audit_flags,
             messengers=messengers,
@@ -664,6 +662,7 @@ class Workflow(TaskBase):
     def __init__(
         self,
         name,
+        inputs: ty.Optional[ty.Union[ty.Text, File, ty.Dict]] = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
@@ -730,7 +729,7 @@ class Workflow(TaskBase):
 
         super(Workflow, self).__init__(
             name=name,
-            inputs=kwargs,
+            inputs=inputs,
             cache_dir=cache_dir,
             cache_locations=cache_locations,
             audit_flags=audit_flags,

@@ -51,8 +51,7 @@ def test_boutiques_spec_1():
     btask = BoshTask(
         name="NA",
         zenodo_id="1482743",
-        infile=Infile,
-        maskfile="test_brain.nii.gz",
+        inputs={"infile": Infile, "maskfile": "test_brain.nii.gz"},
         input_spec_names=["infile", "maskfile"],
         output_spec_names=["outfile", "out_outskin_off"],
     )
@@ -76,8 +75,7 @@ def test_boutiques_spec_2():
     btask = BoshTask(
         name="NA",
         zenodo_id="1482743",
-        infile=Infile,
-        maskfile="test_brain.nii.gz",
+        inputs={"infile": Infile, "maskfile": "test_brain.nii.gz"},
         input_spec_names=["infile"],
         output_spec_names=[],
     )
@@ -107,8 +105,7 @@ def test_boutiques_wf_1(maskfile, plugin):
         BoshTask(
             name="bet",
             zenodo_id="1482743",
-            infile=wf.lzin.infile,
-            maskfile=wf.lzin.maskfile,
+            inputs={"infile": wf.lzin.infile, "maskfile": wf.lzin.maskfile},
         )
     )
 
@@ -138,13 +135,14 @@ def test_boutiques_wf_2(maskfile, plugin):
         BoshTask(
             name="bet",
             zenodo_id="1482743",
-            infile=wf.lzin.infile,
-            maskfile=wf.lzin.maskfile,
+            inputs={"infile": wf.lzin.infile, "maskfile": wf.lzin.maskfile},
         )
     )
     wf.add(
         BoshTask(
-            name="stat", zenodo_id="3240521", input_file=wf.bet.lzout.outfile, v=True
+            name="stat",
+            zenodo_id="3240521",
+            inputs={"input_file": wf.bet.lzout.outfile, "v": True},
         )
     )
     wf.add(ShellCommandTask(name="cat", executable="cat", args=wf.stat.lzout.output))

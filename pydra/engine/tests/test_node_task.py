@@ -49,7 +49,7 @@ def test_task_init_1a():
 
 def test_task_init_2():
     """ task with a name and inputs"""
-    nn = fun_addtwo(name="NA", a=3)
+    nn = fun_addtwo(name="NA", inputs={"a": 3})
     # adding NA to the name of the variable
     assert getattr(nn.inputs, "a") == 3
     assert nn.state is None
@@ -61,7 +61,7 @@ def test_task_init_2():
 )
 def test_task_init_3(splitter, state_splitter, state_rpn, states_ind, states_val):
     """ task with inputs and splitter"""
-    nn = fun_addtwo(name="NA", a=[3, 5]).split(splitter=splitter)
+    nn = fun_addtwo(name="NA", inputs={"a": [3, 5]}).split(splitter=splitter)
 
     assert np.allclose(nn.inputs.a, [3, 5])
     assert nn.state.splitter == state_splitter
@@ -103,7 +103,9 @@ def test_task_init_3(splitter, state_splitter, state_rpn, states_ind, states_val
 )
 def test_task_init_3a(splitter, state_splitter, state_rpn, states_ind, states_val):
     """ task with inputs and splitter"""
-    nn = fun_addvar(name="NA", a=[3, 5], b=[10, 20]).split(splitter=splitter)
+    nn = fun_addvar(name="NA", inputs={"a": [3, 5], "b": [10, 20]}).split(
+        splitter=splitter
+    )
 
     assert np.allclose(nn.inputs.a, [3, 5])
     assert np.allclose(nn.inputs.b, [10, 20])
@@ -117,7 +119,7 @@ def test_task_init_3a(splitter, state_splitter, state_rpn, states_ind, states_va
 
 def test_task_init_4():
     """ task with interface and inputs. splitter set using split method"""
-    nn = fun_addtwo(name="NA", a=[3, 5])
+    nn = fun_addtwo(name="NA", inputs={"a": [3, 5]})
     nn.split(splitter="a")
     assert np.allclose(nn.inputs.a, [3, 5])
 
@@ -277,7 +279,7 @@ def test_task_init_5c():
 
 def test_task_init_6():
     """ task with splitter, but the input is an empty list"""
-    nn = fun_addtwo(name="NA", a=[])
+    nn = fun_addtwo(name="NA", inputs={"a": []})
     nn.split(splitter="a")
     assert nn.inputs.a == []
 
@@ -299,7 +301,7 @@ def test_task_init_7(tmpdir):
     with open(file2, "w") as f:
         f.write("from pydra\n")
 
-    nn1 = fun_file_list(name="NA", filename_list=[file1, file2])
+    nn1 = fun_file_list(name="NA", inputs={"filename_list": [file1, file2]})
     output_dir1 = nn1.output_dir
 
     # changing the content of the file
@@ -307,7 +309,7 @@ def test_task_init_7(tmpdir):
     with open(file2, "w") as f:
         f.write("from pydra")
 
-    nn2 = fun_file_list(name="NA", filename_list=[file1, file2])
+    nn2 = fun_file_list(name="NA", inputs={"filename_list": [file1, file2]})
     output_dir2 = nn2.output_dir
 
     # the checksum should be different - content of file2 is different
@@ -322,17 +324,17 @@ def test_task_init_8():
 
 def test_task_init_9():
     """ task without setting the input, but using the default avlue from function"""
-    nn1 = fun_addvar_default(name="NA", a=2)
+    nn1 = fun_addvar_default(name="NA", inputs={"a": 2})
     assert nn1.inputs.b == 1
 
-    nn2 = fun_addvar_default(name="NA", a=2, b=1)
+    nn2 = fun_addvar_default(name="NA", inputs={"a": 2, "b": 1})
     assert nn2.inputs.b == 1
     # both tasks should have the same checksum
     assert nn1.checksum == nn2.checksum
 
 
 def test_task_error():
-    func = fun_div(name="div", a=1, b=0)
+    func = fun_div(name="div", inputs={"a": 1, "b": 0})
     with pytest.raises(ZeroDivisionError):
         func()
     assert (func.output_dir / "_error.pklz").exists()
@@ -342,7 +344,7 @@ def test_odir_init():
     """ checking if output_dir is available for a task without init
         before running the task
     """
-    nn = fun_addtwo(name="NA", a=3)
+    nn = fun_addtwo(name="NA", inputs={"a": 3})
     assert nn.output_dir
 
 
@@ -352,7 +354,7 @@ def test_odir_init():
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1(plugin_dask_opt):
     """ task without splitter"""
-    nn = fun_addtwo(name="NA", a=3)
+    nn = fun_addtwo(name="NA", inputs={"a": 3})
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
@@ -380,7 +382,7 @@ def test_task_nostate_1(plugin_dask_opt):
 
 def test_task_nostate_1_call():
     """ task without splitter"""
-    nn = fun_addtwo(name="NA", a=3)
+    nn = fun_addtwo(name="NA", inputs={"a": 3})
     nn()
     # checking the results
     results = nn.result()
@@ -392,7 +394,7 @@ def test_task_nostate_1_call():
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1_call_subm(plugin_dask_opt):
     """ task without splitter"""
-    nn = fun_addtwo(name="NA", a=3)
+    nn = fun_addtwo(name="NA", inputs={"a": 3})
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
@@ -409,7 +411,7 @@ def test_task_nostate_1_call_subm(plugin_dask_opt):
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_1_call_plug(plugin_dask_opt):
     """ task without splitter"""
-    nn = fun_addtwo(name="NA", a=3)
+    nn = fun_addtwo(name="NA", inputs={"a": 3})
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
@@ -424,7 +426,7 @@ def test_task_nostate_1_call_plug(plugin_dask_opt):
 
 def test_task_nostate_1_call_updateinp():
     """ task without splitter"""
-    nn = fun_addtwo(name="NA", a=30)
+    nn = fun_addtwo(name="NA", inputs={"a": 30})
     # updating input when calling the node
     nn(a=3)
 
@@ -437,7 +439,7 @@ def test_task_nostate_1_call_updateinp():
 
 def test_task_nostate_2(plugin):
     """ task with a list as an input, but no splitter"""
-    nn = moment(name="NA", n=3, lst=[2, 3, 4])
+    nn = moment(name="NA", inputs={"n": 3, "lst": [2, 3, 4]})
     assert np.allclose(nn.inputs.n, [3])
     assert np.allclose(nn.inputs.lst, [2, 3, 4])
     assert nn.state is None
@@ -454,7 +456,7 @@ def test_task_nostate_2(plugin):
 
 def test_task_nostate_3(plugin):
     """ task with a dictionary as an input"""
-    nn = fun_dict(name="NA", d={"a": "ala", "b": "bala"})
+    nn = fun_dict(name="NA", inputs={"d": {"a": "ala", "b": "bala"}})
     assert nn.inputs.d == {"a": "ala", "b": "bala"}
 
     with Submitter(plugin=plugin) as sub:
@@ -473,7 +475,7 @@ def test_task_nostate_4(plugin, tmpdir):
     with open(file1, "w") as f:
         f.write("hello from pydra\n")
 
-    nn = fun_file(name="NA", filename=file1)
+    nn = fun_file(name="NA", inputs={"filename": file1})
 
     with Submitter(plugin) as sub:
         sub(nn)
@@ -495,7 +497,8 @@ def test_task_nostate_5(plugin, tmpdir):
     with open(file2, "w") as f:
         f.write("from pydra\n")
 
-    nn = fun_file_list(name="NA", filename_list=[file1, file2])
+    nn = fun_file_list(name="NA")
+    nn.inputs.filename_list = [file1, file2]
 
     with Submitter(plugin=plugin) as sub:
         sub(nn)
@@ -509,7 +512,7 @@ def test_task_nostate_5(plugin, tmpdir):
 
 def test_task_nostate_6():
     """ checking if the function gets the None value"""
-    nn = fun_addvar_none(name="NA", a=2, b=None)
+    nn = fun_addvar_none(name="NA", inputs={"a": 2, "b": None})
     assert nn.inputs.b is None
     nn()
     assert nn.result().output.out == 2
@@ -517,7 +520,7 @@ def test_task_nostate_6():
 
 def test_task_nostate_6a_exception():
     """ checking if the function gets the attr.Nothing value"""
-    nn = fun_addvar_none(name="NA", a=2)
+    nn = fun_addvar_none(name="NA", inputs={"a": 2})
     assert nn.inputs.b is attr.NOTHING
     with pytest.raises(TypeError) as excinfo:
         nn()
@@ -526,7 +529,7 @@ def test_task_nostate_6a_exception():
 
 def test_task_nostate_7():
     """ using the default value from the function for b input"""
-    nn = fun_addvar_default(name="NA", a=2)
+    nn = fun_addvar_default(name="NA", inputs={"a": 2})
     assert nn.inputs.b == 1
     nn()
     assert nn.result().output.out == 3
@@ -539,7 +542,8 @@ def test_task_nostate_7():
 def test_task_nostate_cachedir(plugin_dask_opt, tmpdir):
     """ task with provided cache_dir using pytest tmpdir"""
     cache_dir = tmpdir.mkdir("test_task_nostate")
-    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = fun_addtwo(name="NA", cache_dir=cache_dir)
+    nn.inputs.a = 3
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
@@ -558,7 +562,8 @@ def test_task_nostate_cachedir_relativepath(tmpdir, plugin_dask_opt):
     cache_dir = "test_task_nostate"
     tmpdir.mkdir(cache_dir)
 
-    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = fun_addtwo(name="NA", cache_dir=cache_dir)
+    nn.inputs.a = 3
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
@@ -581,11 +586,13 @@ def test_task_nostate_cachelocations(plugin_dask_opt, tmpdir):
     cache_dir = tmpdir.mkdir("test_task_nostate")
     cache_dir2 = tmpdir.mkdir("test_task_nostate2")
 
-    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = fun_addtwo(name="NA", cache_dir=cache_dir)
+    nn.inputs.a = 3
     with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn)
 
-    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2 = fun_addtwo(name="NA", cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2.inputs.a = 3
     with Submitter(plugin=plugin_dask_opt) as sub:
         sub(nn2)
 
@@ -607,11 +614,13 @@ def test_task_nostate_cachelocations_forcererun(plugin, tmpdir):
     cache_dir = tmpdir.mkdir("test_task_nostate")
     cache_dir2 = tmpdir.mkdir("test_task_nostate2")
 
-    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = fun_addtwo(name="NA", cache_dir=cache_dir)
+    nn.inputs.a = 3
     with Submitter(plugin=plugin) as sub:
         sub(nn)
 
-    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2 = fun_addtwo(name="NA", cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2.inputs.a = 3
     with Submitter(plugin=plugin) as sub:
         sub(nn2, rerun=True)
 
@@ -632,10 +641,12 @@ def test_task_nostate_cachelocations_nosubmitter(tmpdir):
     cache_dir = tmpdir.mkdir("test_task_nostate")
     cache_dir2 = tmpdir.mkdir("test_task_nostate2")
 
-    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = fun_addtwo(name="NA", cache_dir=cache_dir)
+    nn.inputs.a = 3
     nn()
 
-    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2 = fun_addtwo(name="NA", cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2.inputs.a = 3
     nn2()
 
     # checking the results
@@ -656,10 +667,12 @@ def test_task_nostate_cachelocations_nosubmitter_forcererun(tmpdir):
     cache_dir = tmpdir.mkdir("test_task_nostate")
     cache_dir2 = tmpdir.mkdir("test_task_nostate2")
 
-    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = fun_addtwo(name="NA", cache_dir=cache_dir)
+    nn.inputs.a = 3
     nn()
 
-    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2 = fun_addtwo(name="NA", cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2.inputs.a = 3
     nn2(rerun=True)
 
     # checking the results
@@ -682,11 +695,13 @@ def test_task_nostate_cachelocations_updated(plugin, tmpdir):
     cache_dir1 = tmpdir.mkdir("test_task_nostate1")
     cache_dir2 = tmpdir.mkdir("test_task_nostate2")
 
-    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
+    nn = fun_addtwo(name="NA", cache_dir=cache_dir)
+    nn.inputs.a = 3
     with Submitter(plugin=plugin) as sub:
         sub(nn)
 
-    nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2 = fun_addtwo(name="NA", cache_dir=cache_dir2, cache_locations=cache_dir)
+    nn2.inputs.a = 3
     # updating cache location to non-existing dir
     with Submitter(plugin=plugin) as sub:
         sub(nn2, cache_locations=cache_dir1)
@@ -881,7 +896,9 @@ def test_task_state_3(plugin):
 
 def test_task_state_4(plugin):
     """ task with a list as an input, and a simple splitter """
-    nn = moment(name="NA", n=3, lst=[[2, 3, 4], [1, 2, 3]]).split(splitter="lst")
+    nn = moment(name="NA", inputs={"n": 3, "lst": [[2, 3, 4], [1, 2, 3]]}).split(
+        splitter="lst"
+    )
     assert np.allclose(nn.inputs.n, 3)
     assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
     assert nn.state.splitter == "NA.lst"
@@ -901,7 +918,9 @@ def test_task_state_4(plugin):
 
 def test_task_state_4a(plugin):
     """ task with a tuple as an input, and a simple splitter """
-    nn = moment(name="NA", n=3, lst=[(2, 3, 4), (1, 2, 3)]).split(splitter="lst")
+    nn = moment(name="NA", inputs={"n": 3, "lst": [(2, 3, 4), (1, 2, 3)]}).split(
+        splitter="lst"
+    )
     assert np.allclose(nn.inputs.n, 3)
     assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
     assert nn.state.splitter == "NA.lst"
@@ -921,7 +940,7 @@ def test_task_state_4a(plugin):
 
 def test_task_state_5(plugin):
     """ task with a list as an input, and the variable is part of the scalar splitter"""
-    nn = moment(name="NA", n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]).split(
+    nn = moment(name="NA", inputs={"n": [1, 3], "lst": [[2, 3, 4], [1, 2, 3]]}).split(
         splitter=("n", "lst")
     )
     assert np.allclose(nn.inputs.n, [1, 3])
@@ -945,9 +964,9 @@ def test_task_state_5_exception(plugin):
     """ task with a list as an input, and the variable is part of the scalar splitter
         the shapes are not matching, so exception should be raised
     """
-    nn = moment(name="NA", n=[1, 3, 3], lst=[[2, 3, 4], [1, 2, 3]]).split(
-        splitter=("n", "lst")
-    )
+    nn = moment(
+        name="NA", inputs={"n": [1, 3, 3], "lst": [[2, 3, 4], [1, 2, 3]]}
+    ).split(splitter=("n", "lst"))
     assert np.allclose(nn.inputs.n, [1, 3, 3])
     assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
     assert nn.state.splitter == ("NA.n", "NA.lst")
@@ -960,7 +979,7 @@ def test_task_state_5_exception(plugin):
 
 def test_task_state_6(plugin):
     """ ask with a list as an input, and the variable is part of the outer splitter """
-    nn = moment(name="NA", n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]).split(
+    nn = moment(name="NA", inputs={"n": [1, 3], "lst": [[2, 3, 4], [1, 2, 3]]}).split(
         splitter=["n", "lst"]
     )
     assert np.allclose(nn.inputs.n, [1, 3])
@@ -982,7 +1001,7 @@ def test_task_state_6(plugin):
 
 def test_task_state_6a(plugin):
     """ ask with a tuple as an input, and the variable is part of the outer splitter """
-    nn = moment(name="NA", n=[1, 3], lst=[(2, 3, 4), (1, 2, 3)]).split(
+    nn = moment(name="NA", inputs={"n": [1, 3], "lst": [(2, 3, 4), (1, 2, 3)]}).split(
         splitter=["n", "lst"]
     )
     assert np.allclose(nn.inputs.n, [1, 3])
@@ -1347,7 +1366,9 @@ def test_task_state_cachelocations_forcererun(plugin, tmpdir):
     cache_dir = tmpdir.mkdir("test_task_nostate")
     cache_dir2 = tmpdir.mkdir("test_task_nostate2")
 
-    nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir).split(splitter="a", a=[3, 5])
+    nn = fun_addtwo(name="NA", inputs={"a": 3}, cache_dir=cache_dir).split(
+        splitter="a", a=[3, 5]
+    )
     with Submitter(plugin=plugin) as sub:
         sub(nn)
 

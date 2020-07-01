@@ -18,7 +18,7 @@ def test_save(tmpdir):
     outdir = Path(tmpdir)
     with pytest.raises(ValueError):
         save(tmpdir)
-    foo = multiply(name="mult", x=1, y=2)
+    foo = multiply(name="mult", inputs={"x": 1, "y": 2})
     # save task
     save(outdir, task=foo)
     del foo
@@ -203,7 +203,7 @@ def test_load_and_run(tmpdir):
     """ testing load_and_run for pickled task"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
 
-    task = multiply(name="mult", x=[1, 2], y=10).split("x")
+    task = multiply(name="mult", inputs={"x": [1, 2], "y": 10}).split("x")
     task.state.prepare_states(inputs=task.inputs)
     task.state.prepare_inputs()
     with task_pkl.open("wb") as fp:
@@ -221,7 +221,7 @@ def test_load_and_run(tmpdir):
 def test_load_and_run_exception_load(tmpdir):
     """ testing raising exception and saving info in crashfile when when load_and_run"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
-    task = raise_xeq1(name="raise", x=[1, 2]).split("x")
+    task = raise_xeq1(name="raise", inputs={"x": [1, 2]}).split("x")
     with pytest.raises(FileNotFoundError) as excinfo:
         task_0 = load_and_run(task_pkl=task_pkl, ind=0)
 
@@ -230,7 +230,7 @@ def test_load_and_run_exception_run(tmpdir):
     """ testing raising exception and saving info in crashfile when when load_and_run"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
 
-    task = raise_xeq1(name="raise", x=[1, 2]).split("x")
+    task = raise_xeq1(name="raise", inputs={"x": [1, 2]}).split("x")
     task.state.prepare_states(inputs=task.inputs)
     task.state.prepare_inputs()
 
@@ -262,7 +262,7 @@ def test_load_and_run_wf(tmpdir):
     wf_pkl = Path(tmpdir.join("wf_main.pkl"))
 
     wf = Workflow(name="wf", input_spec=["x", "y"])
-    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(multiply(name="mult", inputs={"x": wf.lzin.x, "y": wf.lzin.y}))
     wf.split(("x"))
     wf.inputs.x = [1, 2]
     wf.inputs.y = 10

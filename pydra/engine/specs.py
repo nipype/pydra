@@ -432,7 +432,7 @@ class ContainerSpec(ShellSpec):
             pass
         # if this is a local path, checking if the path exists
         elif file.exists():
-            if self.bindings is None:
+            if self.bindings in [None, attr.NOTHING]:
                 self.bindings = []
             self.bindings.append((file.parent, f"/pydra_inp_{field.name}", "ro"))
         else:

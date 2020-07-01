@@ -11,15 +11,15 @@ def test_task_equivalence():
     def add_two(a):
         return a + 2
 
-    canonical = FunctionTask(add_two, a=3)
+    canonical = FunctionTask(add_two, inputs={"a": 3})
 
-    decorated1 = task(add_two)(a=3)
+    decorated1 = task(add_two)(inputs={"a": 3})
 
     @task
     def addtwo(a):
         return a + 2
 
-    decorated2 = addtwo(a=3)
+    decorated2 = addtwo(inputs={"a": 3})
 
     assert canonical.checksum == decorated1.checksum
 
@@ -73,7 +73,7 @@ def test_annotated_task():
     def square(in_val: float):
         return in_val ** 2
 
-    res = square(in_val=2.0)()
+    res = square(inputs={"in_val": 2.0})()
     assert res.output.out == 4.0
 
 
@@ -83,7 +83,7 @@ def test_return_annotated_task():
     def square(in_val):
         return in_val ** 2
 
-    res = square(in_val=2.0)()
+    res = square(inputs={"in_val": 2.0})()
     assert res.output.squared == 4.0
 
 
@@ -93,7 +93,7 @@ def test_return_halfannotated_annotated_task():
     def square(in_val):
         return in_val ** 2
 
-    res = square(in_val=2.0)()
+    res = square(inputs={"in_val": 2.0})()
     assert res.output.out == 4.0
 
 
@@ -103,7 +103,7 @@ def test_return_annotated_task_multiple_output():
     def square(in_val):
         return in_val ** 2, in_val ** 3
 
-    res = square(in_val=2.0)()
+    res = square(inputs={"in_val": 2.0})()
     assert res.output.squared == 4.0
     assert res.output.cubed == 8.0
 
@@ -114,6 +114,6 @@ def test_return_halfannotated_task_multiple_output():
     def square(in_val):
         return in_val ** 2, in_val ** 3
 
-    res = square(in_val=2.0)()
+    res = square(inputs={"in_val": 2.0})()
     assert res.output.out1 == 4.0
     assert res.output.out2 == 8.0

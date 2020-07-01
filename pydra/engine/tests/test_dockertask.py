@@ -689,7 +689,7 @@ def test_docker_inputspec_1(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=cmd,
-        file=filename,
+        inputs={"file": filename},
         input_spec=my_input_spec,
         strip=True,
     )
@@ -776,7 +776,7 @@ def test_docker_inputspec_2(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=cmd,
-        file1=filename_1,
+        inputs={"file1": filename_1},
         input_spec=my_input_spec,
         strip=True,
     )
@@ -826,7 +826,7 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=cmd,
-        file2=filename_2,
+        inputs={"file2": filename_2},
         input_spec=my_input_spec,
         strip=True,
     )
@@ -878,7 +878,7 @@ def test_docker_inputspec_2a(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=cmd,
-        file2=filename_2,
+        inputs={"file2": filename_2},
         input_spec=my_input_spec,
         strip=True,
     )
@@ -919,7 +919,7 @@ def test_docker_inputspec_3(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=cmd,
-        file=filename,
+        inputs={"file": filename},
         input_spec=my_input_spec,
         strip=True,
     )
@@ -963,7 +963,7 @@ def test_docker_inputspec_3a(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=cmd,
-        file=filename,
+        inputs={"file": filename},
         input_spec=my_input_spec,
         strip=True,
     )
@@ -1020,7 +1020,7 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
         image="busybox",
         executable=cmd,
         input_spec=my_input_spec,
-        orig_file=str(file),
+        inputs={"orig_file": str(file)},
     )
 
     res = docky()
@@ -1073,7 +1073,7 @@ def test_docker_inputspec_state_1(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=cmd,
-        file=filename,
+        inputs={"file": filename},
         input_spec=my_input_spec,
         strip=True,
     ).split("file")
@@ -1122,7 +1122,7 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=cmd,
-        file=filename,
+        inputs={"file": filename},
         input_spec=my_input_spec,
         strip=True,
     ).split("file")
@@ -1168,7 +1168,7 @@ def test_docker_wf_inputspec_1(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=wf.lzin.cmd,
-        file=wf.lzin.file,
+        inputs={"file": wf.lzin.file},
         input_spec=my_input_spec,
         strip=True,
     )
@@ -1223,7 +1223,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=wf.lzin.cmd,
-        file=wf.lzin.file,
+        inputs={"file": wf.lzin.file},
         input_spec=my_input_spec,
         strip=True,
     )
@@ -1280,7 +1280,7 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
         name="docky",
         image="busybox",
         executable=wf.lzin.cmd,
-        file=wf.lzin.file,
+        inputs={"file": wf.lzin.file},
         input_spec=my_input_spec,
         strip=True,
     ).split("file")
