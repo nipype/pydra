@@ -3805,6 +3805,7 @@ def test_wf_upstream_error2(plugin):
     assert "raised an error" in str(excinfo.value)
 
 
+@pytest.mark.flaky(reruns=3)  # travis with slurm complains (no clue...)
 def test_wf_upstream_error3(plugin):
     """ task2 dependent on task1, task1 errors, task-level split on task 1
         goal - workflow finish running, one output errors but the other doesn't
