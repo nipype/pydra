@@ -70,24 +70,19 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
     """Compute hash of a file using 'crypto' module."""
     from .specs import LazyField
 
-    if afile is None or isinstance(afile, LazyField) or isinstance(afile, list):
+    try:
+        crypto_obj = crypto()
+        with open(afile, "rb") as fp:
+            while True:
+                data = fp.read(chunk_len)
+                if not data:
+                    break
+                crypto_obj.update(data)
+        return crypto_obj.hexdigest()
+    except:
+        if not Path(afile).is_symlink() and raise_notfound:
+            raise FileNotFoundError(f"File {afile} not found.")
         return None
-    if not Path(afile).is_file():
-        if Path(afile).is_symlink():
-            logger.debug(f"Skip broken symlink to file: {afile}")
-            return None
-        if raise_notfound:
-            raise RuntimeError(f"File {afile} not found.")
-        return None
-
-    crypto_obj = crypto()
-    with open(afile, "rb") as fp:
-        while True:
-            data = fp.read(chunk_len)
-            if not data:
-                break
-            crypto_obj.update(data)
-    return crypto_obj.hexdigest()
 
 
 def hash_dir(
@@ -124,13 +119,8 @@ def hash_dir(
     """
     from .specs import LazyField
 
-    if dirpath is None or isinstance(dirpath, LazyField) or isinstance(dirpath, list):
-        return None
     if not Path(dirpath).is_dir():
-        if Path(dirpath).is_symlink():
-            logger.debug(f"Skip broken symlink to directory: {dirpath}")
-            return None
-        if raise_notfound:
+        if not Path(dirpath).is_symlink() and raise_notfound:  # ignore broken symlinks
             raise FileNotFoundError(f"Directory {dirpath} not found.")
         return None
 
@@ -150,8 +140,8 @@ def hash_dir(
 
     crypto_obj = crypto()
     for h in file_hashes:
-        crypto_obj.update(h.encode())
-
+        if h:  # ignore broken links and broken files
+            crypto_obj.update(h.encode())
     return crypto_obj.hexdigest()
 
 
