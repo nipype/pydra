@@ -67,14 +67,25 @@ def test_hash_broken_symlink(_temp_analyze_files):
     img_link = os.path.join(pth, "img_link")
     os.symlink(orig_img, img_link)
     os.remove(orig_img)  # delete original file to create broken link
-    assert hash_file(img_link) == None
+    assert not hash_file(img_link)
 
     new_dir = os.path.join(pth, "temp")
     os.mkdir(new_dir)
+    new_hdr = os.path.join(new_dir, "new_hdr")
+    os.rename(orig_hdr, new_hdr)  # move hdr to new_dir
+
     new_dir_link = os.path.join(pth, "new_dir_link")
+    new_hdr_link = os.path.join(new_dir, "new_hdr_link")
     os.symlink(new_dir, new_dir_link, target_is_directory=True)
-    os.rmdir(new_dir)  # delete directory to create broken link
-    assert hash_dir(new_dir_link) == None
+    os.symlink(new_hdr, new_hdr_link)  # link to a file in same directory
+
+    os.remove(new_hdr)  # break new_hdr_link
+    assert hash_dir(new_dir)  # dir containing broken links should still hash
+    assert not hash_file(new_hdr_link)
+
+    os.remove(new_hdr_link)
+    os.rmdir(new_dir)  # delete directory to break new_dir_link
+    assert not hash_dir(new_dir_link)
 
 
 def test_copyfile(_temp_analyze_files):
