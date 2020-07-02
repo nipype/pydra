@@ -2,7 +2,7 @@
 
 import attr
 import typing as ty
-import os, sys, shutil
+import os, sys
 import pytest
 from pathlib import Path
 

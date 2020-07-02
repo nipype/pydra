@@ -314,6 +314,7 @@ class ShellCommandTask(TaskBase):
     def _command_args_single(self, state_ind, ind=None):
         """Get command line arguments for a single state"""
         pos_args = []  # list for (position, command arg)
+        positions_provided = []
         for f in attr_fields(self.inputs):
             # these inputs will eb used in container_args
             if isinstance(self, ContainerTask) and f.name in [
@@ -339,6 +340,14 @@ class ShellCommandTask(TaskBase):
                 pos_val = self._command_pos_args(field=f, state_ind=state_ind, ind=ind)
                 if pos_val:
                     pos_args.append(pos_val)
+                    # checking if the position is not already used
+                    if pos_val[0] is not None:
+                        if pos_val[0] in positions_provided:
+                            raise Exception(
+                                f"{f.name} can't have provided position, {pos_val[0]} is already used"
+                            )
+                        else:
+                            positions_provided.append(pos_val[0])
         # sorted elements of the command
         cmd_args = position_adjustment(pos_args)
         return cmd_args
@@ -357,7 +366,6 @@ class ShellCommandTask(TaskBase):
             value = getattr(self.inputs, field.name)
         if value is attr.NOTHING or value is None:
             return None
-
         if check_file:
             if is_local_file(field):
                 value = str(value)
@@ -411,7 +419,6 @@ class ShellCommandTask(TaskBase):
             raise Exception(f"position can't be 0")
         elif pos < 0:  # position -1 is for args
             pos = pos - 1
-
         value = self._field_value(
             field=field, state_ind=state_ind, ind=ind, check_file=True
         )
@@ -423,23 +430,22 @@ class ShellCommandTask(TaskBase):
             if value is True:
                 cmd_add.append(argstr)
         else:
-            if argstr.endswith("..."):
+            sep = field.metadata.get("sep", " ")
+            if argstr.endswith("...") and isinstance(value, list):
                 argstr = argstr.replace("...", "")
-                if "sep" in field.metadata:
-                    if "{" + field.name + "}" in argstr:
-                        cmd_el_str = field.metadata["sep"].join(
-                            [argstr.format(**{field.name: val}) for val in value]
-                        )
-                    else:
-                        cmd_el_str = field.metadata["sep"].join(
-                            [f"{argstr} {val}" for val in value]
-                        )
+                if "{" + field.name + "}" in argstr:
+                    cmd_el_str = sep.join(
+                        [argstr.format(**{field.name: val}) for val in value]
+                    )
                 else:
-                    raise Exception("should we have ... without sep??")
+                    cmd_el_str = sep.join([f" {argstr} {val}" for val in value])
             else:
-                if "sep" in field.metadata and isinstance(value, list):
-                    cmd_el_str = field.metadata["sep"].join([str(val) for val in value])
-                else:
+                # in case there are ... when input is not a list
+                argstr = argstr.replace("...", "")
+                if isinstance(value, list):
+                    cmd_el_str = sep.join([str(val) for val in value])
+                    value = cmd_el_str
+                if True:
                     if "{" + field.name + "}" in argstr:
                         cmd_el_str = argstr.format(**{field.name: value})
                     else:
