@@ -402,7 +402,7 @@ def test_container_cmds(tmpdir):
     containy = DockerTask(name="containy", executable="pwd")
     with pytest.raises(AttributeError) as excinfo:
         containy.cmdline
-    assert "not specified" in str(excinfo.value)
+    assert "mandatory" in str(excinfo.value)
     containy.inputs.image = "busybox"
     assert containy.cmdline
 

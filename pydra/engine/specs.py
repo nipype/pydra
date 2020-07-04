@@ -223,22 +223,22 @@ class ShellSpec(BaseSpec):
             mdata = fld.metadata
             # checking keys from metadata
             if set(mdata.keys()) - supported_keys:
-                raise Exception(
+                raise AttributeError(
                     f"only these keys are supported {supported_keys}, but "
                     f"{set(mdata.keys()) - supported_keys} provided"
                 )
             # checking if the help string is provided (required field)
             if "help_string" not in mdata:
-                raise Exception(f"{fld.name} doesn't have help_string field")
+                raise AttributeError(f"{fld.name} doesn't have help_string field")
 
             # assuming that fields with output_file_template shouldn't have default
             if not fld.default == attr.NOTHING and mdata.get("output_file_template"):
-                raise Exception(
+                raise AttributeError(
                     "default value should not be set together with output_file_template"
                 )
             # not allowing for default if the field is mandatory
             if not fld.default == attr.NOTHING and mdata.get("mandatory"):
-                raise Exception(
+                raise AttributeError(
                     "default value should not be set when the field is mandatory"
                 )
             # setting default if value not provided and default is available
@@ -261,7 +261,9 @@ class ShellSpec(BaseSpec):
             # checking if the mandatory field is provided
             if getattr(self, fld.name) is attr.NOTHING:
                 if mdata.get("mandatory"):
-                    raise Exception(f"{fld.name} is mandatory, but no value provided")
+                    raise AttributeError(
+                        f"{fld.name} is mandatory, but no value provided"
+                    )
                 else:
                     continue
             names.append(fld.name)
@@ -269,7 +271,7 @@ class ShellSpec(BaseSpec):
             # checking if fields meet the xor and requires are
             if "xor" in mdata:
                 if [el for el in mdata["xor"] if el in names]:
-                    raise Exception(
+                    raise AttributeError(
                         f"{fld.name} is mutually exclusive with {mdata['xor']}"
                     )
 
@@ -284,7 +286,7 @@ class ShellSpec(BaseSpec):
         for nm, required in require_to_check.items():
             required_notfound = [el for el in required if el not in names]
             if required_notfound:
-                raise Exception(f"{nm} requires {required_notfound}")
+                raise AttributeError(f"{nm} requires {required_notfound}")
 
             # TODO: types might be checked here
         self._type_checking()
@@ -292,7 +294,7 @@ class ShellSpec(BaseSpec):
     def _file_check(self, field):
         file = Path(getattr(self, field.name))
         if not file.exists():
-            raise Exception(f"the file from the {field.name} input does not exist")
+            raise AttributeError(f"the file from the {field.name} input does not exist")
 
     def _type_checking(self):
         """Use fld.type to check the types TODO.
@@ -328,7 +330,9 @@ class ShellOutSpec(BaseSpec):
                     if (
                         fld.default is None or fld.default == attr.NOTHING
                     ) and not fld.metadata:  # TODO: is it right?
-                        raise Exception("File has to have default value or metadata")
+                        raise AttributeError(
+                            "File has to have default value or metadata"
+                        )
                     elif not fld.default == attr.NOTHING:
                         additional_out[fld.name] = self._field_defaultvalue(
                             fld, output_dir
@@ -344,7 +348,7 @@ class ShellOutSpec(BaseSpec):
     def _field_defaultvalue(self, fld, output_dir):
         """Collect output file if the default value specified."""
         if not isinstance(fld.default, (str, Path)):
-            raise Exception(
+            raise AttributeError(
                 f"{fld.name} is a File, so default value "
                 f"should be a string or a Path, "
                 f"{fld.default} provided"
@@ -359,7 +363,7 @@ class ShellOutSpec(BaseSpec):
             if default.exists():
                 return default
             else:
-                raise Exception(f"file {default} does not exist")
+                raise AttributeError(f"file {default} does not exist")
         else:
             all_files = list(Path(default.parent).expanduser().glob(default.name))
             if len(all_files) > 1:
@@ -367,7 +371,7 @@ class ShellOutSpec(BaseSpec):
             elif len(all_files) == 1:
                 return all_files[0]
             else:
-                raise Exception(f"no file matches {default.name}")
+                raise AttributeError(f"no file matches {default.name}")
 
     def _field_metadata(self, fld, inputs, output_dir):
         """Collect output file if metadata specified."""

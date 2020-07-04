@@ -510,7 +510,34 @@ def test_shell_cmd_inputs_format_2():
     assert shelly.cmdline == "executable -v el_1 -v el_2"
 
 
-def test_shell_cmd_inputs_di():
+def test_shell_cmd_inputs_mandatory_1():
+    """ additional inputs with argstr that has string formatting and ..."""
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(executable="executable", input_spec=my_input_spec)
+    with pytest.raises(Exception) as e:
+        shelly.cmdline
+    assert "mandatory" in str(e.value)
+
+
+def test_shell_cmd_inputs_di(tmpdir):
     """ example from #279 """
     my_input_spec = SpecInfo(
         name="Input",
@@ -538,6 +565,7 @@ def test_shell_cmd_inputs_di():
                     metadata={
                         "help_string": "A scalar image is expected as input for noise correction.",
                         "argstr": "-i",
+                        "mandatory": True,
                     },
                 ),
             ),
@@ -675,23 +703,28 @@ def test_shell_cmd_inputs_di():
         bases=(ShellSpec,),
     )
 
+    my_input_file = tmpdir.join("a_file.txt")
+    my_input_file.write("content")
+
     # no input provided
     shelly = ShellCommandTask(executable="DenoiseImage", input_spec=my_input_spec)
-    assert shelly.cmdline == "DenoiseImage -s 1 -p 1 -r 2"
+    with pytest.raises(Exception) as e:
+        shelly.cmdline
+    assert "mandatory" in str(e.value)
 
     # input file name
     shelly = ShellCommandTask(
         executable="DenoiseImage",
-        inputImageFilename="my_input_file",
+        inputImageFilename=my_input_file,
         input_spec=my_input_spec,
     )
-    assert shelly.cmdline == "DenoiseImage -i my_input_file -s 1 -p 1 -r 2"
+    assert shelly.cmdline == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2"
 
     # input file name and help_short
     shelly = ShellCommandTask(
         executable="DenoiseImage",
-        inputImageFilename="my_input_file",
+        inputImageFilename=my_input_file,
         help_short=True,
         input_spec=my_input_spec,
     )
-    assert shelly.cmdline == "DenoiseImage -i my_input_file -s 1 -p 1 -r 2 -h"
+    assert shelly.cmdline == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -h"

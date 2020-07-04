@@ -461,6 +461,8 @@ class ShellCommandTask(TaskBase):
         """
         if is_lazy(self.inputs):
             raise Exception("can't return cmdline, self.inputs has LazyFields")
+        # checking the inputs fields before returning the command line
+        self.inputs.check_fields_input_spec()
         orig_inputs = attr.asdict(self.inputs)
         modified_inputs = template_update(self.inputs)
         if modified_inputs is not None:

@@ -2275,7 +2275,7 @@ def no_fsl():
         return True
 
 
-# @pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
+@pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
 def test_fsl():
     """  mandatory field added to fields, value provided """
 
