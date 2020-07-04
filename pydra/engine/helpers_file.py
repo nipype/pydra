@@ -519,8 +519,14 @@ def template_update(inputs, map_copyfiles=None):
             continue
         if fld.metadata.get("output_file_template"):
             if fld.type is str:
-                value = fld.metadata["output_file_template"].format(**dict_)
-                dict_[fld.name] = str(value)
+                templates_list = ensure_list(fld.metadata["output_file_template"])
+                values_list = []
+                for template in templates_list:
+                    value = template.format(**dict_)
+                    if "NOTHING" in value:
+                        continue
+                    values_list.append(value)
+                dict_[fld.name] = " ".join(values_list)
             else:
                 raise Exception(
                     f"output_file_template metadata for "

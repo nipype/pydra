@@ -445,13 +445,17 @@ class ShellCommandTask(TaskBase):
                 if isinstance(value, list):
                     cmd_el_str = sep.join([str(val) for val in value])
                     value = cmd_el_str
-                if True:
-                    if "{" + field.name + "}" in argstr:
-                        cmd_el_str = argstr.format(**{field.name: value})
-                    else:
+
+                if "{" + field.name + "}" in argstr:
+                    cmd_el_str = argstr.format(**{field.name: value})
+                else:
+                    if value:
                         cmd_el_str = f"{argstr} {value}"
+                    else:
+                        cmd_el_str = ""
             cmd_el_str = cmd_el_str.strip().replace("  ", " ")
-            cmd_add += cmd_el_str.split(" ")
+            if cmd_el_str:
+                cmd_add += cmd_el_str.split(" ")
         return pos, cmd_add
 
     @property
