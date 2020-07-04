@@ -8,7 +8,7 @@
         "@container": "@type"
       }
     },
-    "https://openprovenance.org/prov.jsonld",
+    "https://raw.githubusercontent.com/openprov/prov-jsonld/69964ed16818f78dc5f71bdf97add026288291d4/context.json",
     {
       "pydra": "https://s.pydra.org/",
       "uid": "pydra:id/",
