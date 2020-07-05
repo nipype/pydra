@@ -403,16 +403,19 @@ class ShellCommandTask(TaskBase):
         the specific field.
         """
         argstr = field.metadata.get("argstr", None)
-        if argstr is None and "output_file_template" not in field.metadata:
-            raise Exception(f"{field.name} doesn't have argstr field in the metadata")
-
+        if argstr is None:
+            if "output_file_template" in field.metadata:
+                # assuming that input that has output_file_template and no arstr
+                # are not used in the command
+                return None
+            else:
+                raise Exception(
+                    f"{field.name} doesn't have argstr field in the metadata"
+                )
         pos = field.metadata.get("position", None)
         if pos is None:
-            if "output_file_template" in field.metadata:
-                # assuming that input that has output_file_template and no position
-                # are not used in the command
-                # for others, pos will be calculated at the end
-                return None
+            # position will be set at the end
+            pass
         elif not isinstance(pos, int):
             raise Exception(f"position should be an integer, but {pos} given")
         elif pos == 0:

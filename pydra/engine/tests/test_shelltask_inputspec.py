@@ -573,12 +573,12 @@ def test_shell_cmd_inputs_template_1():
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
-    # outA has position, so is a part of the command line
+    # outA has argstr in the metadata fields, so it's a part of the command line
     assert shelly.cmdline == "executable inpA -o inpA_out"
 
 
 def test_shell_cmd_inputs_template_1a():
-    """ additional inputs, one uses output_file_template (without position)"""
+    """ additional inputs, one uses output_file_template (without argstr)"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -600,7 +600,6 @@ def test_shell_cmd_inputs_template_1a():
                     type=str,
                     metadata={
                         "help_string": "outA",
-                        "argstr": "-o",
                         "output_file_template": "{inpA}_out",
                     },
                 ),
@@ -612,7 +611,7 @@ def test_shell_cmd_inputs_template_1a():
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
-    # outA has no position, so is not a part of the command line
+    # outA has no argstr in metadata, so it's not a part of the command line
     assert shelly.cmdline == "executable inpA"
 
 
@@ -645,7 +644,7 @@ def test_shell_cmd_inputs_template_2():
     )
 
     shelly = ShellCommandTask(executable="executable", input_spec=my_input_spec)
-    # outA has position, so is a part of the command line
+    # outA has argstr in the metadata fields, so it's a part of the command line
     assert shelly.cmdline == "executable"
 
 
