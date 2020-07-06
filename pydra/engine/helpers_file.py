@@ -2,6 +2,7 @@
 import attr
 import subprocess as sp
 from hashlib import sha256
+import re
 import os
 import os.path as op
 import re
@@ -519,20 +520,27 @@ def template_update(inputs, map_copyfiles=None):
             continue
         if fld.metadata.get("output_file_template"):
             if fld.type is str:
-                templates_list = ensure_list(fld.metadata["output_file_template"])
-                values_list = []
-                for template in templates_list:
-                    value = template.format(**dict_)
-                    if "NOTHING" in value:
-                        continue
-                    values_list.append(value)
-                dict_[fld.name] = " ".join(values_list)
+                template = fld.metadata["output_file_template"]
+                value = template.format(**dict_)
+                if "NOTHING" in value:
+                    value = _removing_nothing(value)
+                dict_[fld.name] = value
             else:
                 raise Exception(
                     f"output_file_template metadata for "
                     "{fld.name} should be a string"
                 )
     return {k: v for k, v in dict_.items() if getattr(inputs, k) is not v}
+
+
+def _removing_nothing(template_str):
+    """ removing all fields that had NOTHING"""
+    regex = re.compile("[^a-zA-Z_\-]")
+    fields_str = regex.sub(" ", template_str)
+    for fld in fields_str.split():
+        if "NOTHING" in fld:
+            template_str = template_str.replace(fld, "")
+    return template_str.replace("[ ", "[").replace(" ]", "]").strip()
 
 
 def is_local_file(f):

@@ -685,7 +685,7 @@ def test_shell_cmd_inputs_template_3():
                         "position": 3,
                         "help_string": "outAB",
                         "argstr": "-o",
-                        "output_file_template": ["{inpA}_out", "{inpB}_out"],
+                        "output_file_template": "{inpA}_out {inpB}_out",
                     },
                 ),
             ),
@@ -732,7 +732,7 @@ def test_shell_cmd_inputs_template_4():
                         "position": 3,
                         "help_string": "outAB",
                         "argstr": "-o",
-                        "output_file_template": ["{inpA}_out", "{inpB}_out"],
+                        "output_file_template": "{inpA}_out {inpB}-out",
                     },
                 ),
             ),
@@ -796,7 +796,7 @@ def test_shell_cmd_inputs_di(tmpdir):
             (
                 "maskImageFilename",
                 attr.ib(
-                    type=File,
+                    type=str,
                     metadata={
                         "help_string": "If a mask image is specified, denoising is only performed in the mask region.",
                         "argstr": "-x",
@@ -865,10 +865,7 @@ def test_shell_cmd_inputs_di(tmpdir):
                         The output consists of the noise corrected version of the input image.
                         Optionally, one can also output the estimated noise image.
                         """,
-                        "output_file_template": [
-                            "{inputImageFilename}",
-                            "{maskImageFilename}",
-                        ],
+                        "output_file_template": "[{inputImageFilename} {maskImageFilename}]",
                         "argstr": "-o",
                         "position": -1,
                     },
@@ -921,7 +918,6 @@ def test_shell_cmd_inputs_di(tmpdir):
     my_input_file = tmpdir.join("a_file.txt")
     my_input_file.write("content")
     my_mask_file = tmpdir.join("a_mask_file.txt")
-    my_mask_file.write("content")
 
     # no input provided
     shelly = ShellCommandTask(executable="DenoiseImage", input_spec=my_input_spec)
@@ -937,7 +933,7 @@ def test_shell_cmd_inputs_di(tmpdir):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -o {my_input_file}"
+        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -o [{my_input_file}]"
     )
 
     # input file name and mask file
@@ -949,7 +945,7 @@ def test_shell_cmd_inputs_di(tmpdir):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {my_input_file} -x {my_mask_file} -s 1 -p 1 -r 2 -o {my_input_file} {my_mask_file}"
+        == f"DenoiseImage -i {my_input_file} -x {my_mask_file} -s 1 -p 1 -r 2 -o [{my_input_file} {my_mask_file}]"
     )
 
     # input file name and help_short
@@ -961,5 +957,5 @@ def test_shell_cmd_inputs_di(tmpdir):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -h -o {my_input_file}"
+        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -h -o [{my_input_file}]"
     )
