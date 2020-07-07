@@ -1046,7 +1046,7 @@ def test_shell_cmd_inputs_di(tmpdir):
                     type=str,
                     metadata={
                         "help_string": "Combined output",
-                        "argstr": "-o [{correctedImage} {noiseImage}]",
+                        "argstr": "-o [{correctedImage}, {noiseImage}]",
                         "position": -1,
                         "readonly": True,
                     },
