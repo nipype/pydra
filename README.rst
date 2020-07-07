@@ -28,17 +28,16 @@ Feature list:
 2. Composable dataflows with simple node semantics. A dataflow can be a node of another dataflow.
 3. `splitter` and `combiner` provides many ways of compressing complex loop semantics
 4. Cached execution with support for a global cache across dataflows and users
-5. Distributed execution, presently via ConcurrentFutures, SLURM,
-and Dask (this is an experimental implementation with limited testing)
+5. Distributed execution, presently via ConcurrentFutures, SLURM, and Dask (this is an experimental implementation with limited testing)
 
 `API Documentation <https://nipype.github.io/pydra/>`_
-`PyCon 2020 Poster <https://docs.google.com/presentation/d/10tS2I34rS0G9qz6v29qVd77OUydjP_FdBklrgAGmYSw/edit?usp=sharing>`_
 
-Tutorial
-========
-The Pydra Tutorial can be found in the `pydra-tutorial repository <https://github.com/nipype/pydra-tutorial>`_.
+Learn more about Pydra
+======================
 
-The tutorial can be run locally with the necessary `requirements <https://github.com/nipype/pydra-tutorial/blob/master/requirements.txt>`_ or using Binder service:
+* `SciPy 2020 Proceedings <http://conference.scipy.org/proceedings/scipy2020/pydra.html>`_
+* `PyCon 2020 Poster <https://docs.google.com/presentation/d/10tS2I34rS0G9qz6v29qVd77OUydjP_FdBklrgAGmYSw/edit?usp=sharing>`_
+* `Explore Pydra interactively <https://github.com/nipype/pydra-tutorial>`_ (the tutoorial can be also run using Binder service)
 
 |Binder|
 
