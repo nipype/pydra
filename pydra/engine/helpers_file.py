@@ -522,8 +522,7 @@ def template_update(inputs, map_copyfiles=None):
             if fld.type is str:
                 template = fld.metadata["output_file_template"]
                 value = template.format(**dict_)
-                if "NOTHING" in value:
-                    value = _removing_nothing(value)
+                value = removing_nothing(value)
                 dict_[fld.name] = value
             else:
                 raise Exception(
@@ -533,8 +532,10 @@ def template_update(inputs, map_copyfiles=None):
     return {k: v for k, v in dict_.items() if getattr(inputs, k) is not v}
 
 
-def _removing_nothing(template_str):
+def removing_nothing(template_str):
     """ removing all fields that had NOTHING"""
+    if "NOTHING" not in template_str:
+        return template_str
     regex = re.compile("[^a-zA-Z_\-]")
     fields_str = regex.sub(" ", template_str)
     for fld in fields_str.split():

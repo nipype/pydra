@@ -207,6 +207,7 @@ class ShellSpec(BaseSpec):
             "copyfile",
             "help_string",
             "mandatory",
+            "readonly",
             "output_field_name",
             "output_file_template",
             "position",

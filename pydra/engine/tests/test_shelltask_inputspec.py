@@ -538,7 +538,7 @@ def test_shell_cmd_inputs_mandatory_1():
 
 
 def test_shell_cmd_inputs_template_1():
-    """ additional inputs, one uses output_file_template (and position)"""
+    """ additional inputs, one uses output_file_template (and argstr)"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -575,6 +575,8 @@ def test_shell_cmd_inputs_template_1():
     )
     # outA has argstr in the metadata fields, so it's a part of the command line
     assert shelly.cmdline == "executable inpA -o inpA_out"
+    # checking if outA in the output fields
+    assert shelly.output_names == ["return_code", "stdout", "stderr", "outA"]
 
 
 def test_shell_cmd_inputs_template_1a():
@@ -616,7 +618,7 @@ def test_shell_cmd_inputs_template_1a():
 
 
 def test_shell_cmd_inputs_template_2():
-    """ additional inputs, one uses output_file_template (and position)"""
+    """ additional inputs, one uses output_file_template (and argstr, but input not provided)"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -644,12 +646,93 @@ def test_shell_cmd_inputs_template_2():
     )
 
     shelly = ShellCommandTask(executable="executable", input_spec=my_input_spec)
-    # outA has argstr in the metadata fields, so it's a part of the command line
+    # inpB not in the inputs, so no outB in the command line
     assert shelly.cmdline == "executable"
+    # checking if outB in the output fields
+    assert shelly.output_names == ["return_code", "stdout", "stderr", "outB"]
 
 
 def test_shell_cmd_inputs_template_3():
-    """ additional inputs, one uses output_file_template with a list"""
+    """ additional inputs with output_file_template and an additional
+    read-only fields that combine two outputs together in the command line
+    """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "inpB",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 2,
+                        "help_string": "inpB",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": "outA",
+                        "output_file_template": "{inpA}_out",
+                    },
+                ),
+            ),
+            (
+                "outB",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": "outB",
+                        "output_file_template": "{inpB}_out",
+                    },
+                ),
+            ),
+            (
+                "outAB",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": -1,
+                        "help_string": "outAB",
+                        "argstr": "-o {outA} {outB}",
+                        "readonly": True,
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, inpA="inpA", inpB="inpB"
+    )
+    # using syntax from the outAB field
+    assert shelly.cmdline == "executable inpA inpB -o inpA_out inpB_out"
+    # checking if outA and outB in the output fields (outAB should not be)
+    assert shelly.output_names == ["return_code", "stdout", "stderr", "outA", "outB"]
+
+
+def test_shell_cmd_inputs_template_3a():
+    """ additional inputs with output_file_template and an additional
+    read-only fields that combine two outputs together in the command line
+    testing a different order within the input spec
+    """
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -682,10 +765,30 @@ def test_shell_cmd_inputs_template_3():
                 attr.ib(
                     type=str,
                     metadata={
-                        "position": 3,
+                        "position": -1,
                         "help_string": "outAB",
-                        "argstr": "-o",
-                        "output_file_template": "{inpA}_out {inpB}_out",
+                        "argstr": "-o {outA} {outB}",
+                        "readonly": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": "outA",
+                        "output_file_template": "{inpA}_out",
+                    },
+                ),
+            ),
+            (
+                "outB",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": "outB",
+                        "output_file_template": "{inpB}_out",
                     },
                 ),
             ),
@@ -696,12 +799,17 @@ def test_shell_cmd_inputs_template_3():
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA="inpA", inpB="inpB"
     )
-    # both inpA and inpB are provided so inpA_out and inpB_out are in the command
+    # using syntax from the outAB field
     assert shelly.cmdline == "executable inpA inpB -o inpA_out inpB_out"
+    # checking if outA and outB in the output fields (outAB should not be)
+    assert shelly.output_names == ["return_code", "stdout", "stderr", "outA", "outB"]
 
 
 def test_shell_cmd_inputs_template_4():
-    """ additional inputs, one uses output_file_template with a list"""
+    """ additional inputs with output_file_template and an additional
+    read-only fields that combine two outputs together in the command line
+    one output_file_template can't be resolved - no inpB is provided
+    """
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -729,10 +837,30 @@ def test_shell_cmd_inputs_template_4():
                 attr.ib(
                     type=str,
                     metadata={
-                        "position": 3,
+                        "position": -1,
                         "help_string": "outAB",
-                        "argstr": "-o",
-                        "output_file_template": "{inpA}_out {inpB}-out",
+                        "argstr": "-o {outA} {outB}",
+                        "readonly": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": "outA",
+                        "output_file_template": "{inpA}_out",
+                    },
+                ),
+            ),
+            (
+                "outB",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": "outB",
+                        "output_file_template": "{inpB}_out",
                     },
                 ),
             ),
@@ -743,8 +871,38 @@ def test_shell_cmd_inputs_template_4():
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
-    # inpB is not provided so inpB_out not in the output
+    # inpB is not provided so outB not in the command line
     assert shelly.cmdline == "executable inpA -o inpA_out"
+    assert shelly.output_names == ["return_code", "stdout", "stderr", "outA", "outB"]
+
+
+def test_shell_cmd_inputs_template_5_ex():
+    """ checking if the exception is raised for read-only fields when input is set"""
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "outAB",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": -1,
+                        "help_string": "outAB",
+                        "argstr": "-o",
+                        "readonly": True,
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, outAB="outAB"
+    )
+    with pytest.raises(Exception) as e:
+        shelly.cmdline
+    assert "read only" in str(e.value)
 
 
 def test_shell_cmd_inputs_di(tmpdir):
@@ -862,12 +1020,35 @@ def test_shell_cmd_inputs_di(tmpdir):
                     type=str,
                     metadata={
                         "help_string": """
-                        The output consists of the noise corrected version of the input image.
-                        Optionally, one can also output the estimated noise image.
-                        """,
-                        "output_file_template": "[{inputImageFilename} {maskImageFilename}]",
-                        "argstr": "-o",
+                    The output consists of the noise corrected version of the input image.
+                    Optionally, one can also output the estimated noise image.
+                    """,
+                        "output_file_template": "{inputImageFilename}_out",
+                    },
+                ),
+            ),
+            (
+                "noiseImage",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": """
+                    The output consists of the noise corrected version of the input image.
+                    Optionally, one can also output the estimated noise image.
+                    """,
+                        "output_file_template": "{inputImageFilename}_noise",
+                    },
+                ),
+            ),
+            (
+                "output",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": "Combined output",
+                        "argstr": "-o [{correctedImage} {noiseImage}]",
                         "position": -1,
+                        "readonly": True,
                     },
                 ),
             ),
@@ -915,9 +1096,8 @@ def test_shell_cmd_inputs_di(tmpdir):
         bases=(ShellSpec,),
     )
 
-    my_input_file = tmpdir.join("a_file.txt")
+    my_input_file = tmpdir.join("a_file")
     my_input_file.write("content")
-    my_mask_file = tmpdir.join("a_mask_file.txt")
 
     # no input provided
     shelly = ShellCommandTask(executable="DenoiseImage", input_spec=my_input_spec)
@@ -933,19 +1113,7 @@ def test_shell_cmd_inputs_di(tmpdir):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -o [{my_input_file}]"
-    )
-
-    # input file name and mask file
-    shelly = ShellCommandTask(
-        executable="DenoiseImage",
-        inputImageFilename=my_input_file,
-        maskImageFilename=my_mask_file,
-        input_spec=my_input_spec,
-    )
-    assert (
-        shelly.cmdline
-        == f"DenoiseImage -i {my_input_file} -x {my_mask_file} -s 1 -p 1 -r 2 -o [{my_input_file} {my_mask_file}]"
+        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -o [{my_input_file}_out {my_input_file}_noise]"
     )
 
     # input file name and help_short
@@ -957,5 +1125,13 @@ def test_shell_cmd_inputs_di(tmpdir):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -h -o [{my_input_file}]"
+        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -h -o [{my_input_file}_out {my_input_file}_noise]"
     )
+
+    assert shelly.output_names == [
+        "return_code",
+        "stdout",
+        "stderr",
+        "correctedImage",
+        "noiseImage",
+    ]

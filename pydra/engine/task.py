@@ -58,7 +58,7 @@ from .specs import (
     attr_fields,
 )
 from .helpers import ensure_list, execute, position_adjustment
-from .helpers_file import template_update, is_local_file
+from .helpers_file import template_update, is_local_file, removing_nothing
 
 
 class FunctionTask(TaskBase):
@@ -314,7 +314,7 @@ class ShellCommandTask(TaskBase):
     def _command_args_single(self, state_ind, ind=None):
         """Get command line arguments for a single state"""
         pos_args = []  # list for (position, command arg)
-        positions_provided = []
+        self._positions_provided = []
         for f in attr_fields(self.inputs):
             # these inputs will eb used in container_args
             if isinstance(self, ContainerTask) and f.name in [
@@ -340,14 +340,7 @@ class ShellCommandTask(TaskBase):
                 pos_val = self._command_pos_args(field=f, state_ind=state_ind, ind=ind)
                 if pos_val:
                     pos_args.append(pos_val)
-                    # checking if the position is not already used
-                    if pos_val[0] is not None:
-                        if pos_val[0] in positions_provided:
-                            raise Exception(
-                                f"{f.name} can't have provided position, {pos_val[0]} is already used"
-                            )
-                        else:
-                            positions_provided.append(pos_val[0])
+
         # sorted elements of the command
         cmd_args = position_adjustment(pos_args)
         return cmd_args
@@ -422,10 +415,18 @@ class ShellCommandTask(TaskBase):
             raise Exception(f"position can't be 0")
         elif pos < 0:  # position -1 is for args
             pos = pos - 1
+        # checking if the position is not already used
+        elif pos in self._positions_provided:
+            raise Exception(
+                f"{field.name} can't have provided position, {pos} is already used"
+            )
+        self._positions_provided.append(pos)
         value = self._field_value(
             field=field, state_ind=state_ind, ind=ind, check_file=True
         )
-        if value is None:
+        if field.metadata.get("readonly", False) and value is not None:
+            raise Exception(f"{field.name} is read only, the value can't be provided")
+        elif value is None and not field.metadata.get("readonly", False):
             return None
 
         cmd_add = []
@@ -436,10 +437,15 @@ class ShellCommandTask(TaskBase):
             sep = field.metadata.get("sep", " ")
             if argstr.endswith("...") and isinstance(value, list):
                 argstr = argstr.replace("...", "")
-                if "{" + field.name + "}" in argstr:
-                    cmd_el_str = sep.join(
-                        [argstr.format(**{field.name: val}) for val in value]
-                    )
+                if "{" in argstr and "}" in argstr:
+                    argstr_formatted_l = []
+                    for val in value:
+                        argstr_f = argstr.format(**{field.name: val}).format(
+                            **attr.asdict(self.inputs)
+                        )
+                        argstr_formatted_l.append(removing_nothing(argstr_f))
+
+                    cmd_el_str = sep.join(argstr_formatted_l)
                 else:
                     cmd_el_str = sep.join([f" {argstr} {val}" for val in value])
             else:
@@ -449,8 +455,9 @@ class ShellCommandTask(TaskBase):
                     cmd_el_str = sep.join([str(val) for val in value])
                     value = cmd_el_str
 
-                if "{" + field.name + "}" in argstr:
-                    cmd_el_str = argstr.format(**{field.name: value})
+                if "{" in argstr and "}" in argstr:
+                    argstr_f = argstr.format(**attr.asdict(self.inputs))
+                    cmd_el_str = removing_nothing(argstr_f)
                 else:
                     if value:
                         cmd_el_str = f"{argstr} {value}"
