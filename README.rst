@@ -38,7 +38,7 @@ Tutorial
 ========
 The Pydra Tutorial can be found in the `pydra-tutorial repository <https://github.com/nipype/pydra-tutorial>`_.
 
-The tutorial can be run locally with the necessary `requirements <https://github.com/nipype/pydra-tutorial/blob/master/requirements.txt>`_ or using Binder service: 
+The tutorial can be run locally with the necessary `requirements <https://github.com/nipype/pydra-tutorial/blob/master/requirements.txt>`_ or using Binder service:
 
 |Binder|
 
@@ -68,6 +68,13 @@ Pydra requires Python 3.7+. To install in developer mode:
     pip install -e .[dev]
 
 
+In order to run pydra's test locally:
+
+::
+
+    pytest -vs pydra
+
+
 If you want to test execution with Dask:
 
 ::
@@ -84,4 +91,3 @@ It is also useful to install pre-commit:
 
     pip install pre-commit
     pre-commit
-
