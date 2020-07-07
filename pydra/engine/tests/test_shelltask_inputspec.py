@@ -1113,7 +1113,7 @@ def test_shell_cmd_inputs_di(tmpdir):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -o [{my_input_file}_out {my_input_file}_noise]"
+        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -o [{my_input_file}_out, {my_input_file}_noise]"
     )
 
     # input file name and help_short
