@@ -4,7 +4,7 @@ Release Notes
 0.6.2
 -----
 
-* Use pkgutil to declare ``ppydra.tasks`` as a namespace package, ensuring better support for
+* Use pkgutil to declare ``pydra.tasks`` as a namespace package, ensuring better support for
   editable mode.
 
 0.6.1
