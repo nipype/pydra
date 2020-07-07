@@ -2,7 +2,7 @@
 
 import attr
 import typing as ty
-import os, sys, shutil
+import os, sys
 import pytest
 from pathlib import Path
 
@@ -306,7 +306,10 @@ def test_shell_cmd_inputspec_2(plugin, results_function):
         fields=[
             (
                 "opt_hello",
-                attr.ib(type=str, metadata={"position": 3, "help_string": "todo"}),
+                attr.ib(
+                    type=str,
+                    metadata={"position": 3, "help_string": "todo", "argstr": ""},
+                ),
             ),
             (
                 "opt_n",
@@ -347,7 +350,12 @@ def test_shell_cmd_inputspec_3(plugin, results_function):
                 "text",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "text", "mandatory": True},
+                    metadata={
+                        "position": 1,
+                        "help_string": "text",
+                        "mandatory": True,
+                        "argstr": "",
+                    },
                 ),
             )
         ],
@@ -374,7 +382,11 @@ def test_shell_cmd_inputspec_3a(plugin, results_function):
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
-            ("text", str, {"position": 1, "help_string": "text", "mandatory": True})
+            (
+                "text",
+                str,
+                {"position": 1, "help_string": "text", "mandatory": True, "argstr": ""},
+            )
         ],
         bases=(ShellSpec,),
     )
@@ -401,7 +413,12 @@ def test_shell_cmd_inputspec_3b(plugin, results_function):
                 "text",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "text", "mandatory": True},
+                    metadata={
+                        "position": 1,
+                        "help_string": "text",
+                        "mandatory": True,
+                        "argstr": "",
+                    },
                 ),
             )
         ],
@@ -429,7 +446,12 @@ def test_shell_cmd_inputspec_3c_exception(plugin):
                 "text",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "text", "mandatory": True},
+                    metadata={
+                        "position": 1,
+                        "help_string": "text",
+                        "mandatory": True,
+                        "argstr": "",
+                    },
                 ),
             )
         ],
@@ -456,7 +478,12 @@ def test_shell_cmd_inputspec_3c(plugin, results_function):
                 attr.ib(
                     type=str,
                     default=None,
-                    metadata={"position": 1, "help_string": "text", "mandatory": False},
+                    metadata={
+                        "position": 1,
+                        "help_string": "text",
+                        "mandatory": False,
+                        "argstr": "",
+                    },
                 ),
             )
         ],
@@ -485,7 +512,7 @@ def test_shell_cmd_inputspec_4(plugin, results_function):
                 attr.ib(
                     type=str,
                     default="Hello",
-                    metadata={"position": 1, "help_string": "text"},
+                    metadata={"position": 1, "help_string": "text", "argstr": ""},
                 ),
             )
         ],
@@ -512,7 +539,9 @@ def test_shell_cmd_inputspec_4a(plugin, results_function):
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[("text", str, "Hello", {"position": 1, "help_string": "text"})],
+        fields=[
+            ("text", str, "Hello", {"position": 1, "help_string": "text", "argstr": ""})
+        ],
         bases=(ShellSpec,),
     )
 
@@ -540,7 +569,7 @@ def test_shell_cmd_inputspec_4b(plugin, results_function):
                 attr.ib(
                     type=str,
                     default="Hi",
-                    metadata={"position": 1, "help_string": "text"},
+                    metadata={"position": 1, "help_string": "text", "argstr": ""},
                 ),
             )
         ],
@@ -570,7 +599,12 @@ def test_shell_cmd_inputspec_4c_exception(plugin):
                 attr.ib(
                     type=str,
                     default="Hello",
-                    metadata={"position": 1, "help_string": "text", "mandatory": True},
+                    metadata={
+                        "position": 1,
+                        "help_string": "text",
+                        "mandatory": True,
+                        "argstr": "",
+                    },
                 ),
             )
         ],
@@ -603,6 +637,7 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
                         "position": 1,
                         "help_string": "text",
                         "output_file_template": "exception",
+                        "argstr": "",
                     },
                 ),
             )
@@ -922,7 +957,163 @@ def test_shell_cmd_inputspec_7a(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_7b(plugin, results_function):
+    """
+        providing new file and output name using input_spec,
+        using name_tamplate in metadata
+    """
+    cmd = "touch"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "newfile",
+                attr.ib(
+                    type=str,
+                    metadata={"position": 1, "help_string": "new file", "argstr": ""},
+                ),
+            ),
+            (
+                "out1",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{newfile}",
+                        "help_string": "output file",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        newfile="newfile_tmp.txt",
+        input_spec=my_input_spec,
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.out1.exists()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
+    """
+        providing new file and output name using input_spec,
+        adding additional string input field with argstr
+    """
+    cmd = "touch"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "newfile",
+                attr.ib(
+                    type=str,
+                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                ),
+            ),
+            (
+                "time",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "argstr": "-t",
+                        "help_string": "time of modif.",
+                    },
+                ),
+            ),
+            (
+                "out1",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{newfile}",
+                        "help_string": "output file",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        newfile="newfile_tmp.txt",
+        time="02121010",
+        input_spec=my_input_spec,
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.out1.exists()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_8a(plugin, results_function, tmpdir):
+    """
+        providing new file and output name using input_spec,
+        adding additional string input field with argstr (argstr uses string formatting)
+    """
+    cmd = "touch"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "newfile",
+                attr.ib(
+                    type=str,
+                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                ),
+            ),
+            (
+                "time",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "argstr": "-t {time}",
+                        "help_string": "time of modif.",
+                    },
+                ),
+            ),
+            (
+                "out1",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{newfile}",
+                        "help_string": "output file",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        newfile="newfile_tmp.txt",
+        time="02121010",
+        input_spec=my_input_spec,
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.out1.exists()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_9(plugin, results_function, tmpdir):
     """ using input_spec, providing list of files as an input """
 
     file_1 = tmpdir.join("file_1.txt")
@@ -944,6 +1135,8 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
                     type=ty.List[File],
                     metadata={
                         "position": 1,
+                        "argstr": "...",
+                        "sep": " ",
                         "help_string": "list of files",
                         "mandatory": True,
                     },
@@ -983,6 +1176,7 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
                     type=File,
                     metadata={
                         "position": 1,
+                        "argstr": "",
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": True,
@@ -1040,6 +1234,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
                     type=File,
                     metadata={
                         "position": 1,
+                        "argstr": "",
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": False,
@@ -1112,6 +1307,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
                     type=File,
                     metadata={
                         "position": 1,
+                        "argstr": "",
                         "help_string": "orig file",
                         "mandatory": True,
                     },
@@ -1156,7 +1352,12 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function):
                 "text",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "text", "mandatory": True},
+                    metadata={
+                        "position": 1,
+                        "help_string": "text",
+                        "mandatory": True,
+                        "argstr": "",
+                    },
                 ),
             )
         ],
@@ -1185,7 +1386,11 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function):
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
-            ("text", str, {"position": 1, "help_string": "text", "mandatory": True})
+            (
+                "text",
+                str,
+                {"position": 1, "help_string": "text", "mandatory": True, "argstr": ""},
+            )
         ],
         bases=(ShellSpec,),
     )
@@ -1257,7 +1462,12 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmpdir):
                 "file",
                 attr.ib(
                     type=File,
-                    metadata={"position": 1, "help_string": "files", "mandatory": True},
+                    metadata={
+                        "position": 1,
+                        "help_string": "files",
+                        "mandatory": True,
+                        "argstr": "",
+                    },
                 ),
             )
         ],
@@ -1300,6 +1510,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
                     type=File,
                     metadata={
                         "position": 1,
+                        "argstr": "",
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": True,
@@ -1466,7 +1677,12 @@ def test_wf_shell_cmd_3(plugin):
             (
                 "orig_file",
                 attr.ib(
-                    type=File, metadata={"position": 1, "help_string": "output file"}
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "help_string": "output file",
+                        "argstr": "",
+                    },
                 ),
             ),
             (
@@ -1475,6 +1691,7 @@ def test_wf_shell_cmd_3(plugin):
                     type=str,
                     metadata={
                         "position": 2,
+                        "argstr": "",
                         "output_file_template": "{orig_file}_copy",
                         "help_string": "output file",
                     },
@@ -1554,7 +1771,12 @@ def test_wf_shell_cmd_3a(plugin):
             (
                 "orig_file",
                 attr.ib(
-                    type=str, metadata={"position": 1, "help_string": "output file"}
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "output file",
+                        "argstr": "",
+                    },
                 ),
             ),
             (
@@ -1563,6 +1785,7 @@ def test_wf_shell_cmd_3a(plugin):
                     type=str,
                     metadata={
                         "position": 2,
+                        "argstr": "",
                         "output_file_template": "{orig_file}_cp",
                         "help_string": "output file",
                     },
@@ -1642,7 +1865,12 @@ def test_wf_shell_cmd_state_1(plugin):
             (
                 "orig_file",
                 attr.ib(
-                    type=str, metadata={"position": 1, "help_string": "output file"}
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "output file",
+                        "argstr": "",
+                    },
                 ),
             ),
             (
@@ -1651,6 +1879,7 @@ def test_wf_shell_cmd_state_1(plugin):
                     type=str,
                     metadata={
                         "position": 2,
+                        "argstr": "",
                         "output_file_template": "{orig_file}_copy",
                         "help_string": "output file",
                     },
@@ -1731,7 +1960,12 @@ def test_wf_shell_cmd_ndst_1(plugin):
             (
                 "orig_file",
                 attr.ib(
-                    type=str, metadata={"position": 1, "help_string": "output file"}
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "output file",
+                        "argstr": "",
+                    },
                 ),
             ),
             (
@@ -1740,6 +1974,7 @@ def test_wf_shell_cmd_ndst_1(plugin):
                     type=str,
                     metadata={
                         "position": 2,
+                        "argstr": "",
                         "output_file_template": "{orig_file}_copy",
                         "help_string": "output file",
                     },
@@ -2070,6 +2305,7 @@ def test_fsl():
                         "help_string": "input file to skull strip",
                         "position": 1,
                         "mandatory": True,
+                        "argstr": "",
                     },
                 ),
             ),
@@ -2080,6 +2316,7 @@ def test_fsl():
                     metadata={
                         "help_string": "name of output skull stripped image",
                         "position": 2,
+                        "argstr": "",
                         "output_file_template": "{in_file}_brain",
                     },
                 ),

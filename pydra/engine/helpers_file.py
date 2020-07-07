@@ -10,6 +10,7 @@ import posixpath
 from builtins import str, bytes, open
 import logging
 from pathlib import Path
+import typing as ty
 
 related_filetype_sets = [(".hdr", ".img", ".mat"), (".nii", ".mat"), (".BRIK", ".HEAD")]
 """List of neuroimaging file types that are to be interpreted together."""
@@ -512,21 +513,52 @@ def template_update(inputs, map_copyfiles=None):
 
     from .specs import attr_fields
 
-    fields = attr_fields(inputs)
-    # TODO: Create a dependency graph first and then traverse it
-    for fld in fields:
-        if getattr(inputs, fld.name) is not attr.NOTHING:
-            continue
-        if fld.metadata.get("output_file_template"):
-            if fld.type is str:
-                value = fld.metadata["output_file_template"].format(**dict_)
-                dict_[fld.name] = str(value)
-            else:
-                raise Exception(
-                    f"output_file_template metadata for "
-                    "{fld.name} should be a string"
-                )
+    fields_templ = [
+        fld for fld in attr_fields(inputs) if fld.metadata.get("output_file_template")
+    ]
+    for fld in fields_templ:
+        if fld.type not in [str, ty.Union[str, bool]]:
+            raise Exception(
+                f"fields with output_file_template"
+                "has to be a string or Union[str, bool]"
+            )
+        inp_val_set = getattr(inputs, fld.name)
+        if inp_val_set is not attr.NOTHING and not isinstance(inp_val_set, (str, bool)):
+            raise Exception(f"{fld.name} has to be str or bool, but {inp_val_set} set")
+        if isinstance(inp_val_set, bool) and fld.type is str:
+            raise Exception(
+                f"type of {fld.name} is str, consider using Union[str, bool]"
+            )
+
+        if isinstance(inp_val_set, str):
+            dict_[fld.name] = inp_val_set
+        elif inp_val_set is False:
+            # if False, the field should not be used, so setting attr.NOTHING
+            dict_[fld.name] = attr.NOTHING
+        else:  # True or attr.NOTHING
+            template = fld.metadata["output_file_template"]
+            value = template.format(**dict_)
+            value = removing_nothing(value)
+            dict_[fld.name] = value
     return {k: v for k, v in dict_.items() if getattr(inputs, k) is not v}
+
+
+def removing_nothing(template_str):
+    """ removing all fields that had NOTHING"""
+    if "NOTHING" not in template_str:
+        return template_str
+    regex = re.compile("[^a-zA-Z_\-]")
+    fields_str = regex.sub(" ", template_str)
+    for fld in fields_str.split():
+        if "NOTHING" in fld:
+            template_str = template_str.replace(fld, "")
+    return (
+        template_str.replace("[ ", "[")
+        .replace(" ]", "]")
+        .replace(",]", "]")
+        .replace("[,", "[")
+        .strip()
+    )
 
 
 def is_local_file(f):

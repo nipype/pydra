@@ -57,8 +57,8 @@ from .specs import (
     SingularitySpec,
     attr_fields,
 )
-from .helpers import ensure_list, execute
-from .helpers_file import template_update, is_local_file
+from .helpers import ensure_list, execute, position_adjustment
+from .helpers_file import template_update, is_local_file, removing_nothing
 
 
 class FunctionTask(TaskBase):
@@ -314,56 +314,159 @@ class ShellCommandTask(TaskBase):
     def _command_args_single(self, state_ind, ind=None):
         """Get command line arguments for a single state"""
         pos_args = []  # list for (position, command arg)
+        self._positions_provided = []
         for f in attr_fields(self.inputs):
-            if f.name == "executable":
-                pos = 0  # executable should be the first el. of the command
-            elif f.name == "args":
-                pos = -1  # assuming that args is the last el. of the command
-            # if inp has position than it should be treated as a part of the command
-            # metadata["position"] is the position in the command
-            elif "position" in f.metadata:
-                pos = f.metadata["position"]
-                if not isinstance(pos, int) or pos < 1:
-                    raise Exception(
-                        f"position should be an integer > 0, but {pos} given"
-                    )
-            else:
+            # these inputs will eb used in container_args
+            if isinstance(self, ContainerTask) and f.name in [
+                "container",
+                "image",
+                "container_xargs",
+                "bindings",
+            ]:
                 continue
-            cmd_add = []
-            if "argstr" in f.metadata:
-                cmd_add.append(f.metadata["argstr"])
-            # if f.metadata.get("copyfile") in [True, False]:
-            #    value = str(self.inputs.map_copyfiles[f.name])
-            # else:
-            if self.state and f"{self.name}.{f.name}" in state_ind:
-                value = getattr(self.inputs, f.name)[state_ind[f"{self.name}.{f.name}"]]
+            elif f.name == "executable":
+                pos_args.append(
+                    self._command_shelltask_executable(
+                        field=f, state_ind=state_ind, ind=ind
+                    )
+                )
+            elif f.name == "args":
+                pos_val = self._command_shelltask_args(
+                    field=f, state_ind=state_ind, ind=ind
+                )
+                if pos_val:
+                    pos_args.append(pos_val)
             else:
-                value = getattr(self.inputs, f.name)
-            if is_local_file(f):
-                value = str(value)
-            # changing path to the cpath (the directory should be mounted)
-            if getattr(self, "bind_paths", None) and is_local_file(f):
-                lpath = Path(value)
-                cdir = self.bind_paths(ind=ind)[lpath.parent][0]
-                cpath = cdir.joinpath(lpath.name)
-                value = str(cpath)
-            if f.type is bool:
-                if value is not True:
-                    break
-            else:
-                cmd_add += ensure_list(value, tuple2list=True)
-            if cmd_add is not None:
-                pos_args.append((pos, cmd_add))
-        # sorting all elements of the command
-        pos_args.sort()
-        # if args available, they should be moved at the of the list
-        if pos_args[0][0] == -1:
-            pos_args.append(pos_args.pop(0))
-        # dropping the position index
-        cmd_args = []
-        for el in pos_args:
-            cmd_args += el[1]
+                pos_val = self._command_pos_args(field=f, state_ind=state_ind, ind=ind)
+                if pos_val:
+                    pos_args.append(pos_val)
+
+        # sorted elements of the command
+        cmd_args = position_adjustment(pos_args)
         return cmd_args
+
+    def _field_value(self, field, state_ind, ind, check_file=False):
+        """
+        Checking value of the specific field, if value is not set, None is returned.
+        If state_ind and ind, taking a specific element of the field.
+        If check_file is True, checking if field is a a local file
+        and settings bindings if needed.
+        """
+        name = f"{self.name}.{field.name}"
+        if self.state and name in state_ind:
+            value = getattr(self.inputs, field.name)[state_ind[name]]
+        else:
+            value = getattr(self.inputs, field.name)
+        if value is attr.NOTHING or value is None:
+            return None
+        if check_file:
+            if is_local_file(field):
+                value = str(value)
+                # changing path to the cpath (the directory should be mounted)
+                if getattr(self, "bind_paths", None):
+                    lpath = Path(value)
+                    cdir = self.bind_paths(ind=ind)[lpath.parent][0]
+                    cpath = cdir.joinpath(lpath.name)
+                    value = str(cpath)
+        return value
+
+    def _command_shelltask_executable(self, field, state_ind, ind):
+        """Returining position and value for executable ShellTask input"""
+        pos = 0  # executable should be the first el. of the command
+        value = self._field_value(field=field, state_ind=state_ind, ind=ind)
+        if value is None:
+            raise Exception("executable has to be set")
+        return pos, ensure_list(value, tuple2list=True)
+
+    def _command_shelltask_args(self, field, state_ind, ind):
+        """Returining position and value for args ShellTask input"""
+        pos = -1  # assuming that args is the last el. of the command
+        value = self._field_value(
+            field=field, state_ind=state_ind, ind=ind, check_file=True
+        )
+        if value is None:
+            return None
+        else:
+            return pos, ensure_list(value, tuple2list=True)
+
+    def _command_pos_args(self, field, state_ind, ind):
+        """
+        Checking all additional input fields, setting pos to None, if position not set.
+        Creating a list with additional parts of the command that comes from
+        the specific field.
+        """
+        argstr = field.metadata.get("argstr", None)
+        if argstr is None:
+            if "output_file_template" in field.metadata:
+                # assuming that input that has output_file_template and no arstr
+                # are not used in the command
+                return None
+            else:
+                raise Exception(
+                    f"{field.name} doesn't have argstr field in the metadata"
+                )
+        pos = field.metadata.get("position", None)
+        if pos is None:
+            # position will be set at the end
+            pass
+        elif not isinstance(pos, int):
+            raise Exception(f"position should be an integer, but {pos} given")
+        elif pos == 0:
+            raise Exception(f"position can't be 0")
+        elif pos < 0:  # position -1 is for args
+            pos = pos - 1
+        # checking if the position is not already used
+        elif pos in self._positions_provided:
+            raise Exception(
+                f"{field.name} can't have provided position, {pos} is already used"
+            )
+        self._positions_provided.append(pos)
+        value = self._field_value(
+            field=field, state_ind=state_ind, ind=ind, check_file=True
+        )
+        if field.metadata.get("readonly", False) and value is not None:
+            raise Exception(f"{field.name} is read only, the value can't be provided")
+        elif value is None and not field.metadata.get("readonly", False):
+            return None
+
+        cmd_add = []
+        if field.type is bool:
+            if value is True:
+                cmd_add.append(argstr)
+        else:
+            sep = field.metadata.get("sep", " ")
+            if argstr.endswith("...") and isinstance(value, list):
+                argstr = argstr.replace("...", "")
+                if "{" in argstr and "}" in argstr:
+                    argstr_formatted_l = []
+                    for val in value:
+                        argstr_f = argstr.format(**{field.name: val}).format(
+                            **attr.asdict(self.inputs)
+                        )
+                        argstr_formatted_l.append(removing_nothing(argstr_f))
+
+                    cmd_el_str = sep.join(argstr_formatted_l)
+                else:
+                    cmd_el_str = sep.join([f" {argstr} {val}" for val in value])
+            else:
+                # in case there are ... when input is not a list
+                argstr = argstr.replace("...", "")
+                if isinstance(value, list):
+                    cmd_el_str = sep.join([str(val) for val in value])
+                    value = cmd_el_str
+
+                if "{" in argstr and "}" in argstr:
+                    argstr_f = argstr.format(**attr.asdict(self.inputs))
+                    cmd_el_str = removing_nothing(argstr_f)
+                else:
+                    if value:
+                        cmd_el_str = f"{argstr} {value}"
+                    else:
+                        cmd_el_str = ""
+            cmd_el_str = cmd_el_str.strip().replace("  ", " ")
+            if cmd_el_str:
+                cmd_add += cmd_el_str.split(" ")
+        return pos, cmd_add
 
     @property
     def cmdline(self):
@@ -372,6 +475,8 @@ class ShellCommandTask(TaskBase):
         """
         if is_lazy(self.inputs):
             raise Exception("can't return cmdline, self.inputs has LazyFields")
+        # checking the inputs fields before returning the command line
+        self.inputs.check_fields_input_spec()
         orig_inputs = attr.asdict(self.inputs)
         modified_inputs = template_update(self.inputs)
         if modified_inputs is not None:
