@@ -231,9 +231,10 @@ class ShellSpec(BaseSpec):
             # checking if the help string is provided (required field)
             if "help_string" not in mdata:
                 raise AttributeError(f"{fld.name} doesn't have help_string field")
-
             # assuming that fields with output_file_template shouldn't have default
-            if not fld.default == attr.NOTHING and mdata.get("output_file_template"):
+            if fld.default not in [attr.NOTHING, True, False] and mdata.get(
+                "output_file_template"
+            ):
                 raise AttributeError(
                     "default value should not be set together with output_file_template"
                 )
