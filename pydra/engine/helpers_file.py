@@ -71,18 +71,20 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
     from .specs import LazyField
 
     try:
-        crypto_obj = crypto()
-        with open(afile, "rb") as fp:
-            while True:
-                data = fp.read(chunk_len)
-                if not data:
-                    break
-                crypto_obj.update(data)
-        return crypto_obj.hexdigest()
-    except:
+        fp = open(afile, "rb")
+    except FileNotFoundError:
         if not Path(afile).is_symlink() and raise_notfound:
-            raise FileNotFoundError(f"File {afile} not found.")
-        return None
+            raise
+        return None    
+    crypto_obj = crypto()
+    with fp as fp:
+        while True:
+            data = fp.read(chunk_len)
+            if not data:
+                break
+            crypto_obj.update(data)
+    return crypto_obj.hexdigest()
+    
 
 
 def hash_dir(
