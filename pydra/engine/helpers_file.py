@@ -522,43 +522,85 @@ def template_update(inputs, map_copyfiles=None):
                 f"fields with output_file_template"
                 "has to be a string or Union[str, bool]"
             )
-        inp_val_set = getattr(inputs, fld.name)
-        if inp_val_set is not attr.NOTHING and not isinstance(inp_val_set, (str, bool)):
-            raise Exception(f"{fld.name} has to be str or bool, but {inp_val_set} set")
-        if isinstance(inp_val_set, bool) and fld.type is str:
+        dict_[fld.name] = template_update_single(field=fld, inputs_dict=dict_)
+    # using is and  == so it covers list and numpy arrays
+    return {
+        k: v
+        for k, v in dict_.items()
+        if not (getattr(inputs, k) is v or getattr(inputs, k) == v)
+    }
+
+
+def template_update_single(field, inputs_dict, spec_type="input"):
+    """Update a single template from the input_spec or output_spec
+    based on the value from inputs_dict
+    (checking the types of the fields, that have "output_file_template)"
+    """
+    from .specs import File
+
+    if spec_type == "input":
+        if field.type not in [str, ty.Union[str, bool]]:
             raise Exception(
-                f"type of {fld.name} is str, consider using Union[str, bool]"
+                f"fields with output_file_template"
+                "has to be a string or Union[str, bool]"
             )
+        inp_val_set = inputs_dict[field.name]
+        if inp_val_set is not attr.NOTHING and not isinstance(inp_val_set, (str, bool)):
+            raise Exception(
+                f"{field.name} has to be str or bool, but {inp_val_set} set"
+            )
+        if isinstance(inp_val_set, bool) and field.type is str:
+            raise Exception(
+                f"type of {field.name} is str, consider using Union[str, bool]"
+            )
+    elif spec_type == "output":
+        if field.type is not File:
+            raise Exception(
+                f"output {field.name} should be a File, but {field.type} set as the type"
+            )
+    else:
+        raise Exception(f"spec_type can be input or output, but {spec_type} provided")
 
-        if isinstance(inp_val_set, str):
-            dict_[fld.name] = inp_val_set
-        elif inp_val_set is False:
-            # if False, the field should not be used, so setting attr.NOTHING
-            dict_[fld.name] = attr.NOTHING
-        else:  # True or attr.NOTHING
-            template = fld.metadata["output_file_template"]
-            value = template.format(**dict_)
-            value = removing_nothing(value)
-            dict_[fld.name] = value
-    return {k: v for k, v in dict_.items() if getattr(inputs, k) is not v}
+    if spec_type == "input" and isinstance(inputs_dict[field.name], str):
+        return inputs_dict[field.name]
+    elif spec_type == "input" and inputs_dict[field.name] is False:
+        # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
+        return attr.NOTHING
+    else:  # inputs_dict[field.name] is True or spec_type is output
+        template = field.metadata["output_file_template"]
+        value = _template_formatting(template, inputs_dict)
+        return value
 
 
-def removing_nothing(template_str):
-    """ removing all fields that had NOTHING"""
-    if "NOTHING" not in template_str:
-        return template_str
-    regex = re.compile("[^a-zA-Z_\-]")
-    fields_str = regex.sub(" ", template_str)
-    for fld in fields_str.split():
-        if "NOTHING" in fld:
-            template_str = template_str.replace(fld, "")
-    return (
-        template_str.replace("[ ", "[")
-        .replace(" ]", "]")
-        .replace(",]", "]")
-        .replace("[,", "[")
-        .strip()
-    )
+def _template_formatting(template, inputs_dict):
+    """Formatting a single template based on values from inputs_dict.
+    Taking into account that field values and template could have file extensions
+    (assuming that if template has extension, the field value extension is removed,
+    if field has extension, and no template extension, than it is moved to the end),
+    """
+    inp_fields = re.findall("{\w+}", template)
+    if len(inp_fields) == 0:
+        return template
+    elif len(inp_fields) == 1:
+        fld_name = inp_fields[0][1:-1]
+        fld_value = inputs_dict[fld_name]
+        if fld_value is attr.NOTHING:
+            return attr.NOTHING
+        fld_value = str(fld_value)  # in case it's a path
+        if template.endswith(inp_fields[0]):
+            # if no suffix added in template, the simplest formatting should work
+            formatted_value = template.format(**{fld_name: fld_value})
+        elif "." not in template:  # the template doesn't have its own extension
+            # if the fld_value has extension, it will be moved to the end
+            filename, *ext = fld_value.split(".", maxsplit=1)
+            formatted_value = ".".join([template.format(**{fld_name: filename})] + ext)
+        else:  # template has its own extension
+            # removing fld_value extension if any
+            filename, *ext = fld_value.split(".", maxsplit=1)
+            formatted_value = template.format(**{fld_name: filename})
+        return formatted_value
+    else:
+        raise NotImplementedError("should we allow for more args in the template?")
 
 
 def is_local_file(f):

@@ -1113,7 +1113,52 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmpdir):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_9(plugin, results_function, tmpdir):
+def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
+    """
+        providing output name using input_spec (name_tamplate in metadata),
+        the template has a suffix, the extension of the file will be moved to the end
+    """
+    cmd = "cp"
+    file = tmpdir.join("file.txt")
+    file.write("content")
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file_orig",
+                attr.ib(
+                    type=File,
+                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                ),
+            ),
+            (
+                "file_copy",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{file_orig}_copy",
+                        "help_string": "output file",
+                        "argstr": "",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, input_spec=my_input_spec, file_orig=file
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.file_copy.exists()
+    assert res.output.file_copy.name == "file_copy.txt"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_10(plugin, results_function, tmpdir):
     """ using input_spec, providing list of files as an input """
 
     file_1 = tmpdir.join("file_1.txt")
