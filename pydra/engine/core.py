@@ -79,12 +79,12 @@ class TaskBase:
         self,
         name: str,
         audit_flags: AuditFlag = AuditFlag.NONE,
+        inputs: ty.Optional[ty.Union[ty.Text, File, ty.Dict]] = None,
         cache_dir=None,
         cache_locations=None,
-        inputs: ty.Optional[ty.Union[ty.Text, File, ty.Dict]] = None,
-        messenger_args=None,
-        messengers=None,
         rerun=False,
+        messengers=None,
+        messenger_args=None,
     ):
         """
         Initialize a task.
@@ -105,20 +105,27 @@ class TaskBase:
         Parameters
         ----------
         name : :obj:`str`
-            Unique name of this node
+            Unique name of this node.
         audit_flags : :class:`AuditFlag`, optional
             Configure provenance tracking. Default is no provenance tracking.
             See available flags at :class:`~pydra.utils.messenger.AuditFlag`.
-        cache_dir : :obj:`os.pathlike`
-            Set a custom directory of previously computed nodes.
-        cache_locations :
-            TODO
         inputs : :obj:`typing.Text`, or :class:`File`, or :obj:`dict`, or `None`.
-            Set particular inputs to this node.
-        messenger_args :
+            Name(s) of input(s) to this node.
+        cache_dir : :obj:`os.pathlike` or None
+            Path to directory to store cache.  Save new cache here if prior cache couldn't be
+            found here or in `cache_locations`.
+        cache_locations : obj:`os.pathlike` or :obj:`list` of :obj:`os.pathlike` or None
+            Path or list of paths to search for cached results.  Reuse cache if found.
+        rerun : :obj:`bool`
             TODO
-        messengers :
-            TODO
+
+        Other Parameters
+        ----------
+        messenger : :class:`Messenger` or :obj:`list` of :class:`Messenger` or None
+            Messenger(s) used by Audit.
+            See available flags at :class:`~pydra.utils.messenger.Messenger`.
+        messengers_args : TODO what type?
+            Argument(s) used by `messenger`
 
         """
         from .. import check_latest_version
@@ -228,10 +235,21 @@ class TaskBase:
 
     @property
     def checksum(self):
-        """ Calculates the unique checksum of the task.
-            Used to create specific directory name for task that are run;
-            and to create nodes checksums needed for graph checkums
-            (before the tasks have inputs etc.)
+        """
+        Calculates the unique checksum of the task.
+
+          * Used to create name of cache directory and to create graph checksums.
+          * If task has a splitter, the hash of the splitter is used in checksum calculation
+          * Hash from self.inputs is used to calculate the tasj checksum, but the value
+            of inputs are not required for the calculation itself (inputs can be a `LazyField`
+            object which will be calculated later, or empty if the task doesn't
+            require any inputs).
+
+        Returns
+        ----------
+        checksum
+            checksum name TODO
+
         """
         input_hash = self.inputs.hash
         if self.state is None:
@@ -245,7 +263,7 @@ class TaskBase:
 
     def checksum_states(self, state_index=None):
         """
-        Calculate a checksum for the specific state or all of the states of the task.
+        Calculates a checksum for the specific state or all of the states of the task.
         Replaces lists in the inputs fields with a specific values for states.
         Used to recreate names of the task directories,
 
@@ -283,7 +301,9 @@ class TaskBase:
 
     def set_state(self, splitter, combiner=None):
         """
-        Set a particular state on this task.
+        Sets a particular State on this task.
+        Updates splitter and combiner information when the `split` or `combine` method
+        is called.
 
         Parameters
         ----------
@@ -319,7 +339,7 @@ class TaskBase:
 
     @property
     def cache_dir(self):
-        """Get the location of the cache directory."""
+        """Get directory path to write cache if a prior cache is not found in `cache_locations`."""
         return self._cache_dir
 
     @cache_dir.setter
@@ -333,7 +353,7 @@ class TaskBase:
 
     @property
     def cache_locations(self):
-        """Get the list of cache sources."""
+        """Get the list of directories used to search for cached results."""
         return self._cache_locations + ensure_list(self._cache_dir)
 
     @cache_locations.setter
@@ -494,7 +514,7 @@ class TaskBase:
     def get_input_el(self, ind):
         """Collect all inputs required to run the node (for specific state element)."""
         if ind is not None:
-            # TODO: doesnt work properly for more cmplicated wf (check if still an issue)
+            # TODO: doesnt work properly for more complicated wf (check if still an issue)
             state_dict = self.state.states_val[ind]
             input_ind = self.state.inputs_ind[ind]
             inputs_dict = {}
@@ -681,7 +701,7 @@ class Workflow(TaskBase):
         Parameters
         ----------
         name : :obj:`str`
-            Unique name of this node
+            Unique name of this workflow
         audit_flags : :class:`AuditFlag`, optional
             Configure provenance tracking. Default is no provenance tracking.
             See available flags at :class:`~pydra.utils.messenger.AuditFlag`.
