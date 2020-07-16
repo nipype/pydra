@@ -215,6 +215,7 @@ class ShellSpec(BaseSpec):
             "position",
             "requires",
             "separate_ext",
+            "keep_extension",
             "xor",
             "sep",
         }
@@ -379,7 +380,7 @@ class ShellOutSpec(BaseSpec):
 
     def _field_metadata(self, fld, inputs, output_dir):
         """Collect output file if metadata specified."""
-        if "value" in fld.metadata:  # jak output_file_template in input_spec
+        if "value" in fld.metadata:
             return output_dir / fld.metadata["value"]
         # this block is only run if "output_file_template" is provided in output_spec
         # if the field is set in input_spec with output_file_template,

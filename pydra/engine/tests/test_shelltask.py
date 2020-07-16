@@ -917,6 +917,7 @@ def test_shell_cmd_inputspec_7(plugin, results_function):
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
+    assert res.output.out1.name == "newfile_tmp.txt"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -960,7 +961,7 @@ def test_shell_cmd_inputspec_7a(plugin, results_function):
 def test_shell_cmd_inputspec_7b(plugin, results_function):
     """
         providing new file and output name using input_spec,
-        using name_tamplate in metadata
+        using name_template in metadata
     """
     cmd = "touch"
 
@@ -1115,7 +1116,7 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
     """
-        providing output name using input_spec (name_tamplate in metadata),
+        providing output name using input_spec (output_file_template in metadata),
         the template has a suffix, the extension of the file will be moved to the end
     """
     cmd = "cp"
@@ -1155,6 +1156,99 @@ def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
     assert res.output.stdout == ""
     assert res.output.file_copy.exists()
     assert res.output.file_copy.name == "file_copy.txt"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_9a(tmpdir, plugin, results_function):
+    """
+        providing output name using input_spec (output_file_template in metadata)
+        and the keep_extension is set to False, so the extension is removed completely.
+    """
+    cmd = "cp"
+    file = tmpdir.join("file.txt")
+    file.write("content")
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file_orig",
+                attr.ib(
+                    type=File,
+                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                ),
+            ),
+            (
+                "file_copy",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{file_orig}_copy",
+                        "keep_extension": False,
+                        "help_string": "output file",
+                        "argstr": "",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, input_spec=my_input_spec, file_orig=file
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.file_copy.exists()
+    assert res.output.file_copy.name == "file_copy"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_9b(tmpdir, plugin, results_function):
+    """
+        providing output name using input_spec (output_file_template in metadata)
+        and the keep_extension is set to False, so the extension is removed completely,
+        no suffix in the template.
+    """
+    cmd = "cp"
+    file = tmpdir.join("file.txt")
+    file.write("content")
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file_orig",
+                attr.ib(
+                    type=File,
+                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                ),
+            ),
+            (
+                "file_copy",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{file_orig}",
+                        "keep_extension": False,
+                        "help_string": "output file",
+                        "argstr": "",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, input_spec=my_input_spec, file_orig=file
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.file_copy.exists()
+    assert res.output.file_copy.name == "file"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])

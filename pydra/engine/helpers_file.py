@@ -560,7 +560,6 @@ def template_update_single(field, inputs_dict, spec_type="input"):
             )
     else:
         raise Exception(f"spec_type can be input or output, but {spec_type} provided")
-
     if spec_type == "input" and isinstance(inputs_dict[field.name], str):
         return inputs_dict[field.name]
     elif spec_type == "input" and inputs_dict[field.name] is False:
@@ -568,11 +567,15 @@ def template_update_single(field, inputs_dict, spec_type="input"):
         return attr.NOTHING
     else:  # inputs_dict[field.name] is True or spec_type is output
         template = field.metadata["output_file_template"]
-        value = _template_formatting(template, inputs_dict)
+        # as default, we assume that keep_extension is True
+        keep_extension = field.metadata.get("keep_extension", True)
+        value = _template_formatting(
+            template, inputs_dict, keep_extension=keep_extension
+        )
         return value
 
 
-def _template_formatting(template, inputs_dict):
+def _template_formatting(template, inputs_dict, keep_extension=True):
     """Formatting a single template based on values from inputs_dict.
     Taking into account that field values and template could have file extensions
     (assuming that if template has extension, the field value extension is removed,
@@ -587,16 +590,20 @@ def _template_formatting(template, inputs_dict):
         if fld_value is attr.NOTHING:
             return attr.NOTHING
         fld_value = str(fld_value)  # in case it's a path
+        filename, *ext = fld_value.split(".", maxsplit=1)
+        # if keep_extension is False, the extensions are removed
+        if keep_extension is False:
+            ext = []
         if template.endswith(inp_fields[0]):
             # if no suffix added in template, the simplest formatting should work
-            formatted_value = template.format(**{fld_name: fld_value})
+            # recreating fld_value with the updated extension
+            fld_value_upd = ".".join([filename] + ext)
+            formatted_value = template.format(**{fld_name: fld_value_upd})
         elif "." not in template:  # the template doesn't have its own extension
             # if the fld_value has extension, it will be moved to the end
-            filename, *ext = fld_value.split(".", maxsplit=1)
             formatted_value = ".".join([template.format(**{fld_name: filename})] + ext)
         else:  # template has its own extension
             # removing fld_value extension if any
-            filename, *ext = fld_value.split(".", maxsplit=1)
             formatted_value = template.format(**{fld_name: filename})
         return formatted_value
     else:
