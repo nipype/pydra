@@ -625,7 +625,7 @@ class ContainerTask(ShellCommandTask):
         """
         bargs = []
         for (key, val) in self.bind_paths(ind).items():
-            bargs.extend([opt, "{}:{}:{}".format(key, val[0], val[1])])
+            bargs.extend([opt, f"{key}:{val[0]}:{val[1]}"])
         return bargs
 
 
