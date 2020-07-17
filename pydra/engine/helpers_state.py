@@ -17,7 +17,7 @@ class PydraStateError(Exception):
         self.value = value
 
     def __str__(self):
-        return f"{self.value}"
+        return str(self.value)
 
 
 def splitter2rpn(splitter, other_states=None, state_fields=True):
