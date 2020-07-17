@@ -425,7 +425,7 @@ def splits(splitter_rpn, inputs, inner_inputs=None, cont_dim=None):
     # analysing states from connected tasks if inner_inputs
     if inner_inputs:
         previous_states_ind = {
-            f"_{v.name}": (v.ind_l_final, v.keys_final) for _, v in inner_inputs.items()
+            f"_{v.name}": (v.ind_l_final, v.keys_final) for v in inner_inputs.values()
         }
         inner_inputs = {k: v for k, v in inner_inputs.items() if k in splitter_rpn}
     else:
