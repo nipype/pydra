@@ -50,19 +50,19 @@ def ensure_list(obj, tuple2list=False):
 
 def print_help(obj):
     """Visit a task object and print its input/output interface."""
-    lines = ["Help for {}".format(obj.__class__.__name__)]
+    lines = [f"Help for {obj.__class__.__name__}"]
     input_klass = make_klass(obj.input_spec)
     if attr.fields(input_klass):
         lines += ["Input Parameters:"]
     for f in attr.fields(input_klass):
         default = ""
         if f.default != attr.NOTHING and not f.name.startswith("_"):
-            default = " (default: {})".format(f.default)
+            default = f" (default: {f.default})"
         try:
             name = f.type.__name__
         except AttributeError:
             name = str(f.type)
-        lines += ["- {}: {}{}".format(f.name, name, default)]
+        lines += [f"- {f.name}: {name}{default}"]
     output_klass = make_klass(obj.output_spec)
     if attr.fields(output_klass):
         lines += ["Output Parameters:"]
@@ -71,7 +71,7 @@ def print_help(obj):
             name = f.type.__name__
         except AttributeError:
             name = str(f.type)
-        lines += ["- {}: {}".format(f.name, name)]
+        lines += [f"- {f.name}: {name}"]
     print("\n".join(lines))
     return lines
 
@@ -397,7 +397,7 @@ def record_error(error_path, error):
     try:
         login_name = getpass.getuser()
     except KeyError:
-        login_name = "UID{:d}".format(os.getuid())
+        login_name = f"UID{os.getuid():d}"
 
     full_error = {
         "time of crash": timeofcrash,

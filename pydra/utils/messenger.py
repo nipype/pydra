@@ -68,7 +68,7 @@ class PrintMessenger(Messenger):
 
         mid = gen_uuid()
         print(
-            "id: {0}\n{1}".format(
+            "id: {}\n{}".format(
                 mid, json.dumps(message, ensure_ascii=False, indent=2, sort_keys=False)
             )
         )
@@ -153,12 +153,12 @@ def collect_messages(collected_path, message_path, ld_op="compact"):
     fl = glob(str(message_path / "*.jsonld"))
     data = []
     for f in fl:
-        with open(f, "rt") as fp:
+        with open(f) as fp:
             data.append(json.load(fp))
     if data:
         records = getattr(pld.jsonld, ld_op)(
             pld.jsonld.from_rdf(pld.jsonld.to_rdf(data, {})), data[0]
         )
-        records["@id"] = "uid:{}".format(gen_uuid())
+        records["@id"] = f"uid:{gen_uuid()}"
         with open(collected_path / "messages.jsonld", "wt") as fp:
             json.dump(records, fp, ensure_ascii=False, indent=2, sort_keys=False)

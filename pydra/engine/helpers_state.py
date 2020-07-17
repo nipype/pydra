@@ -17,7 +17,7 @@ class PydraStateError(Exception):
         self.value = value
 
     def __str__(self):
-        return "{}".format(self.value)
+        return f"{self.value}"
 
 
 def splitter2rpn(splitter, other_states=None, state_fields=True):
@@ -311,7 +311,7 @@ def add_name_combiner(combiner, name):
     combiner_changed = []
     for comb in combiner:
         if "." not in comb:
-            combiner_changed.append("{}.{}".format(name, comb))
+            combiner_changed.append(f"{name}.{comb}")
         else:
             combiner_changed.append(comb)
     return combiner_changed
@@ -425,8 +425,7 @@ def splits(splitter_rpn, inputs, inner_inputs=None, cont_dim=None):
     # analysing states from connected tasks if inner_inputs
     if inner_inputs:
         previous_states_ind = {
-            "_{}".format(v.name): (v.ind_l_final, v.keys_final)
-            for _, v in inner_inputs.items()
+            f"_{v.name}": (v.ind_l_final, v.keys_final) for _, v in inner_inputs.items()
         }
         inner_inputs = {k: v for k, v in inner_inputs.items() if k in splitter_rpn}
     else:
@@ -576,7 +575,7 @@ def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
         combiner = []
     if inner_inputs:
         previous_states_ind = {
-            "_{}".format(v.name): v.keys_final for _, v in inner_inputs.items()
+            f"_{v.name}": v.keys_final for _, v in inner_inputs.items()
         }
         inner_inputs = {k: v for k, v in inner_inputs.items() if k in splitter_rpn}
     else:
@@ -776,5 +775,5 @@ def inputs_types_to_dict(name, inputs):
     input_names = [field for field in attr.asdict(inputs) if field != "_func"]
     inputs_dict = {}
     for field in input_names:
-        inputs_dict["{}.{}".format(name, field)] = getattr(inputs, field)
+        inputs_dict[f"{name}.{field}"] = getattr(inputs, field)
     return inputs_dict

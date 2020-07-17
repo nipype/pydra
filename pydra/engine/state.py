@@ -327,10 +327,10 @@ class State:
                 left, other_states=self.other_states, state_fields=False
             )
             for name, (st, inp) in list(self.other_states.items())[::-1]:
-                if "_{}".format(name) not in rpn_left and st.splitter_final:
-                    left = ["_{}".format(name), left]
+                if f"_{name}" not in rpn_left and st.splitter_final:
+                    left = [f"_{name}", left]
         else:
-            left = ["_{}".format(name) for name in self.other_states]
+            left = [f"_{name}" for name in self.other_states]
             if len(left) == 1:
                 left = left[0]
         return left
@@ -557,12 +557,12 @@ class State:
         elements_to_remove_comb = []
         for name, (st, inp) in self.other_states.items():
             if (
-                "{}.{}".format(self.name, inp) in self.splitter_rpn
-                and "_{}".format(name) in self.splitter_rpn_compact
+                f"{self.name}.{inp}" in self.splitter_rpn
+                and f"_{name}" in self.splitter_rpn_compact
             ):
-                elements_to_remove.append("_{}".format(name))
-                if "{}.{}".format(self.name, inp) not in self.combiner:
-                    elements_to_remove_comb.append("_{}".format(name))
+                elements_to_remove.append(f"_{name}")
+                if f"{self.name}.{inp}" not in self.combiner:
+                    elements_to_remove_comb.append(f"_{name}")
 
         partial_rpn = hlpst.remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn_compact), elements_to_remove
@@ -679,9 +679,7 @@ class State:
                 if el in ["*", "."]:
                     continue
                 st, inp = self.other_states[el[1:]]
-                if (
-                    "{}.{}".format(self.name, inp) in self.splitter_rpn
-                ):  # inner splitter
+                if f"{self.name}.{inp}" in self.splitter_rpn:  # inner splitter
                     connected_to_inner += [
                         el for el in st.splitter_rpn_final if el not in [".", "*"]
                     ]
@@ -695,7 +693,7 @@ class State:
                             inputs_ind_prev = hlpst.op["*"](inputs_ind_prev, st_ind)
                     else:
                         inputs_ind_prev = hlpst.op["*"](st_ind)
-                    keys_inp_prev += ["{}.{}".format(self.name, inp)]
+                    keys_inp_prev += [f"{self.name}.{inp}"]
             keys_inp = keys_inp_prev + keys_inp
 
             if inputs_ind and inputs_ind_prev:

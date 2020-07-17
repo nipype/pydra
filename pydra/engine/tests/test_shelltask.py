@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import attr
 import typing as ty
 import os, sys
@@ -1206,10 +1204,10 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
     assert res.output.out_file.exists()
     # the file is  copied, and than it is changed in place
     assert res.output.out_file.parent == shelly.output_dir
-    with open(res.output.out_file, "r") as f:
+    with open(res.output.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
-    with open(file, "r") as f:
+    with open(file) as f:
         assert "hello from pydra\n" == f.read()
 
 
@@ -1266,7 +1264,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
     assert res.output.out_file.parent == shelly.output_dir
 
     assert res.output.out_file.parent.joinpath(res.output.out_file.name + "s").exists()
-    with open(res.output.out_file, "r") as f:
+    with open(res.output.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the file is uses a soft link, but it creates and an extra copy
     # it might depend on the OS
@@ -1274,11 +1272,11 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
         res.output.out_file.name + "s"
     )
     if linked_file_copy.exists():
-        with open(linked_file_copy, "r") as f:
+        with open(linked_file_copy) as f:
             assert "hello from pydra\n" == f.read()
 
     # the original file is unchanged
-    with open(file, "r") as f:
+    with open(file) as f:
         assert "hello from pydra\n" == f.read()
 
 
@@ -1336,7 +1334,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
     assert res.output.out_file.exists()
     # the file is  not copied, it is changed in place
     assert res.output.out_file == file
-    with open(res.output.out_file, "r") as f:
+    with open(res.output.out_file) as f:
         assert "hi from pydra\n" == f.read()
 
 
@@ -1542,10 +1540,10 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
         assert res.output.out_file.exists()
         # the file is  copied, and than it is changed in place
         assert res.output.out_file.parent == shelly.output_dir[i]
-        with open(res.output.out_file, "r") as f:
+        with open(res.output.out_file) as f:
             assert f"hi {txt_l[i]}\n" == f.read()
         # the original file is unchanged
-        with open(files[i], "r") as f:
+        with open(files[i]) as f:
             assert f"hello {txt_l[i]}\n" == f.read()
 
 

@@ -7,7 +7,6 @@ import os.path as op
 import re
 import shutil
 import posixpath
-from builtins import str, bytes, open
 import logging
 from pathlib import Path
 import typing as ty
@@ -547,7 +546,7 @@ def removing_nothing(template_str):
     """ removing all fields that had NOTHING"""
     if "NOTHING" not in template_str:
         return template_str
-    regex = re.compile("[^a-zA-Z_\-]")
+    regex = re.compile(r"[^a-zA-Z_\-]")
     fields_str = regex.sub(" ", template_str)
     for fld in fields_str.split():
         if "NOTHING" in fld:
