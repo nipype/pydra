@@ -87,7 +87,7 @@ class ResourceMonitor(threading.Thread):
                 pass
 
         print(
-            "{:f},{:f},{:f},{:f}".format(time(), cpu, rss / _MB, vms / _MB),
+            f"{time():f},{cpu:f},{rss / _MB:f},{vms / _MB:f}",
             file=self._logfile,
         )
         self._logfile.flush()
