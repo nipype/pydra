@@ -575,7 +575,7 @@ def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
         combiner = []
     if inner_inputs:
         previous_states_ind = {
-            f"_{v.name}": v.keys_final for _, v in inner_inputs.items()
+            f"_{v.name}": v.keys_final for v in inner_inputs.values()
         }
         inner_inputs = {k: v for k, v in inner_inputs.items() if k in splitter_rpn}
     else:
