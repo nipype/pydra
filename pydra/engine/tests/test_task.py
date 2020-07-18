@@ -39,7 +39,7 @@ def test_name_conflict():
 def test_numpy():
     """ checking if mark.task works for numpy functions"""
     np = pytest.importorskip("numpy")
-    fft = mark.annotate({"a": np.ndarray, "return": float})(np.fft.fft)
+    fft = mark.annotate({"a": np.ndarray, "return": np.ndarray})(np.fft.fft)
     fft = mark.task(fft)()
     arr = np.array([[1, 10], [2, 20]])
     fft.inputs.a = arr
@@ -109,7 +109,7 @@ def test_annotated_func_multreturn():
     ) -> ty.NamedTuple("Output", [("fractional", float), ("integer", int)]):
         import math
 
-        return math.modf(a)
+        return math.modf(a)[0], int(math.modf(a)[1])
 
     funky = testfunc(a=3.5)
     assert hasattr(funky.inputs, "a")

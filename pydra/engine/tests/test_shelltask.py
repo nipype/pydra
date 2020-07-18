@@ -1376,6 +1376,50 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function):
     assert res[1].output.stdout == "hi\n"
 
 
+def test_shell_cmd_inputspec_typeval_1():
+    """ customized input_spec with a type that doesn't match the value
+     - raise an exception
+    """
+    cmd_exec = "echo"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "text",
+                attr.ib(
+                    type=int,
+                    metadata={"position": 1, "argstr": "", "help_string": "text"},
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    with pytest.raises(TypeError):
+        shelly = ShellCommandTask(
+            executable=cmd_exec, text="hello", input_spec=my_input_spec
+        )
+
+
+def test_shell_cmd_inputspec_typeval_2():
+    """ customized input_spec (shorter syntax) with a type that doesn't match the value
+     - raise an exception
+    """
+    cmd_exec = "echo"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("text", int, {"position": 1, "argstr": "", "help_string": "text"})],
+        bases=(ShellSpec,),
+    )
+
+    with pytest.raises(TypeError):
+        shelly = ShellCommandTask(
+            executable=cmd_exec, text="hello", input_spec=my_input_spec
+        )
+
+
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_state_1a(plugin, results_function):
     """  adding state to the input from input_spec

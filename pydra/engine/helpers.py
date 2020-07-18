@@ -13,9 +13,12 @@ import getpass
 import uuid
 from time import strftime
 from traceback import format_exception
+import typing as ty
+import typing_inspect as tyi
+import inspect
 
 
-from .specs import Runtime, File, Directory, attr_fields, Result
+from .specs import Runtime, File, Directory, attr_fields, Result, LazyField
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 
 
@@ -234,8 +237,11 @@ def make_klass(spec):
             if len(item) == 2:
                 if isinstance(item[1], attr._make._CountingAttr):
                     newfields[item[0]] = item[1]
+                    newfields[item[0]].validator(custom_validator)
                 else:
-                    newfields[item[0]] = attr.ib(type=item[1])
+                    newfields[item[0]] = attr.ib(
+                        type=item[1], validator=custom_validator
+                    )
             else:
                 if (
                     any([isinstance(ii, attr._make._CountingAttr) for ii in item])
@@ -251,15 +257,119 @@ def make_klass(spec):
                         name, tp = item[:2]
                         if isinstance(item[-1], dict) and "help_string" in item[-1]:
                             mdata = item[-1]
-                            newfields[name] = attr.ib(type=tp, metadata=mdata)
+                            newfields[name] = attr.ib(
+                                type=tp, metadata=mdata, validator=custom_validator
+                            )
                         else:
                             dflt = item[-1]
-                            newfields[name] = attr.ib(type=tp, default=dflt)
+                            newfields[name] = attr.ib(
+                                type=tp, default=dflt, validator=custom_validator
+                            )
                     elif len(item) == 4:
                         name, tp, dflt, mdata = item
-                        newfields[name] = attr.ib(type=tp, default=dflt, metadata=mdata)
+                        newfields[name] = attr.ib(
+                            type=tp,
+                            default=dflt,
+                            metadata=mdata,
+                            validator=custom_validator,
+                        )
         fields = newfields
     return attr.make_class(spec.name, fields, bases=spec.bases, kw_only=True)
+
+
+def custom_validator(instance, attribute, value):
+    """simple custom validation
+    take into account ty.Union, ty.List, ty.Dict (but only one level depth)
+    """
+    tp_attr = attribute.type
+    check = True
+    if (
+        value is attr.NOTHING
+        or value is None
+        or isinstance(value, LazyField)
+        or tp_attr in [ty.Any, inspect._empty]
+    ):
+        check = False
+    elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:  # what about File
+        tp = _single_type_update(tp_attr)
+        cont = None  # no container
+    elif tyi.is_union_type(tp_attr):
+        tp_attr_list = tyi.get_args(tp_attr)
+        cont = None
+        tp, check = _types_updates(tp_attr_list)
+    elif tp_attr._name == "List":
+        cont = "List"
+        tp_attr_list = tyi.get_args(tp_attr)
+        tp, check = _types_updates(tp_attr_list)
+    elif tp_attr._name == "Dict":
+        cont = "Dict"
+        breakpoint()
+    else:
+        breakpoint()
+
+    if check:
+        if cont is None:
+            # if tp is not (list,), we are assuming that the value is a list
+            # due to the splitter, so checking the member types
+            if isinstance(value, list) and tp != (list,):
+                return attr.validators.deep_iterable(
+                    member_validator=attr.validators.instance_of(
+                        tp + (attr._make._Nothing,)
+                    )
+                )(instance, attribute, value)
+            else:
+                return attr.validators.instance_of(tp + (attr._make._Nothing,))(
+                    instance, attribute, value
+                )
+        elif cont == "List":
+            return attr.validators.deep_iterable(
+                member_validator=attr.validators.instance_of(
+                    tp + (attr._make._Nothing,)
+                )
+            )(instance, attribute, value)
+        elif cont == "Dict":
+            breakpoint()  # TODO
+        else:
+            raise Exception(f"cont should be None, List or Dict, and not {cont}")
+    else:
+        pass
+
+
+def _types_updates(tp_list):
+    tp_upd_list = []
+    check = True
+    for tp_el in tp_list:
+        tp_upd = _single_type_update(tp_el, simplify=True)
+        if tp_upd is None:
+            check = False
+            break
+        else:
+            tp_upd_list += list(tp_upd)
+    tp_upd = tuple(set(tp_upd_list))
+    return tp_upd, check
+
+
+def _single_type_update(tp, simplify=False):
+    if isinstance(tp, type) or tp in [File, Directory]:
+        if tp is str:
+            return (str, bytes)
+        elif tp in [File, Directory, os.PathLike]:
+            return (os.PathLike, str)
+        elif tp is float:
+            return (float, int)
+        else:
+            return (tp,)
+    elif simplify:
+        if tp._name is "List":
+            return (list,)
+        elif tp._name is "Dict":
+            return (dict,)
+        elif tyi.is_union_type(tp):
+            return None
+        else:
+            raise NotImplementedError(f"not implemented for type {tp}")
+    else:
+        return None
 
 
 async def read_stream_and_display(stream, display):

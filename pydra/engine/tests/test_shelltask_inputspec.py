@@ -1192,7 +1192,7 @@ def test_shell_cmd_inputs_di(tmpdir):
             (
                 "verbose",
                 attr.ib(
-                    type=bool,
+                    type=int,
                     default=0,
                     metadata={"help_string": "(0)/1. Verbose output. ", "argstr": "-v"},
                 ),
