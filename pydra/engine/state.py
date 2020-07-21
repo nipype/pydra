@@ -205,7 +205,7 @@ class State:
 
     @property
     def left_splitter_rpn_compact(self):
-        """the Left Part of the splitter using RPN in a compact form,
+        """ the Left Part of the splitter using RPN in a compact form,
         (without unwrapping the states from previous nodes), e.g. [_NA, _NB, *]
         """
         if self.left_splitter:
