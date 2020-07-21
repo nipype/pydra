@@ -131,7 +131,7 @@ class State:
     def splitter_rpn_compact(self):
         """splitter in :abbr:`RPN (Reverse Polish Notation)`
         with a compact representation of the Left Part (i.e. without unwrapping
-        the part that comes from the previous states), e.g., e.g. [_NA, _NB, *]
+        the part that comes from the previous states), e.g., [_NA, _NB, \*]
         """
         if self.other_states:
             _splitter_rpn_compact = hlpst.splitter2rpn(
@@ -205,8 +205,8 @@ class State:
 
     @property
     def left_splitter_rpn_compact(self):
-        r""" the Left Part of the splitter using RPN in a compact form,
-        (without unwrapping the states from previous nodes), e.g. [\_NA, \_NB, \*]
+        """ the Left Part of the splitter using RPN in a compact form,
+        (without unwrapping the states from previous nodes), e.g. [_NA, _NB, \*]
         """
         if self.left_splitter:
             left_splitter_rpn_compact = hlpst.splitter2rpn(
@@ -274,12 +274,8 @@ class State:
 
     @property
     def other_states(self):
-        """
-        specifies the connections with previous states, uses dictionary:
-        {
-            name of a previous state:
-            (previous state, input from current state needed the connection)
-        }
+        """ specifies the connections with previous states, uses dictionary:
+        {name of a previous state: (previous state, input field from current state)}
         """
         return self._other_states
 
