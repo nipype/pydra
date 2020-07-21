@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import os, shutil
 import subprocess as sp
 import pytest
@@ -693,10 +691,10 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
     assert res.output.out_file.exists()
     # the file is  copied, and than it is changed in place
     assert res.output.out_file.parent == singu.output_dir
-    with open(res.output.out_file, "r") as f:
+    with open(res.output.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
-    with open(file, "r") as f:
+    with open(file) as f:
         assert "hello from pydra\n" == f.read()
 
 

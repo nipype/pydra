@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import attr
 import typing as ty
 import os, sys

@@ -36,7 +36,7 @@ class Submitter:
         elif self.plugin == "dask":
             self.worker = DaskWorker(**kwargs)
         else:
-            raise Exception("plugin {} not available".format(self.plugin))
+            raise Exception(f"plugin {self.plugin} not available")
         self.worker.loop = self.loop
 
     def __call__(self, runnable, cache_locations=None, rerun=False):

@@ -46,7 +46,7 @@ class Audit:
         """
         self.odir = odir
         if self.audit_check(AuditFlag.PROV):
-            self.aid = "uid:{}".format(gen_uuid())
+            self.aid = f"uid:{gen_uuid()}"
             start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now()}
         os.chdir(self.odir)
         if self.audit_check(AuditFlag.PROV):
@@ -61,7 +61,7 @@ class Audit:
         if self.audit_check(AuditFlag.RESOURCE):
             self.resource_monitor.start()
             if self.audit_check(AuditFlag.PROV):
-                self.mid = "uid:{}".format(gen_uuid())
+                self.mid = f"uid:{gen_uuid()}"
                 self.audit_message(
                     {
                         "@id": self.mid,
@@ -83,7 +83,7 @@ class Audit:
                     AuditFlag.PROV,
                 )
                 # audit resources/runtime information
-                self.eid = "uid:{}".format(gen_uuid())
+                self.eid = f"uid:{gen_uuid()}"
                 entity = attr.asdict(result.runtime)
                 entity.update(
                     **{
@@ -123,7 +123,7 @@ class Audit:
         """
         if self.develop:
             with open(
-                Path(os.path.dirname(__file__)) / ".." / "schema/context.jsonld", "rt"
+                Path(os.path.dirname(__file__)) / ".." / "schema/context.jsonld"
             ) as fp:
                 context = json.load(fp)
         else:

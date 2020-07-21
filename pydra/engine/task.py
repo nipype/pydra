@@ -136,7 +136,7 @@ class FunctionTask(TaskBase):
         self.input_spec = input_spec
         if name is None:
             name = func.__name__
-        super(FunctionTask, self).__init__(
+        super().__init__(
             name,
             inputs=kwargs,
             audit_flags=audit_flags,
@@ -201,7 +201,7 @@ class FunctionTask(TaskBase):
         output = cp.loads(self.inputs._func)(**inputs)
         output_names = [el[0] for el in self.output_spec.fields]
         if output is None:
-            self.output_ = dict((nm, None) for nm in output_names)
+            self.output_ = {nm: None for nm in output_names}
         else:
             if len(output_names) == 1:
                 # if only one element in the fields, everything should be returned together
@@ -221,7 +221,7 @@ class ShellCommandTask(TaskBase):
 
     def __new__(cls, container_info=None, *args, **kwargs):
         if not container_info:
-            return super(ShellCommandTask, cls).__new__(cls)
+            return super().__new__(cls)
 
         if len(container_info) == 3:
             type_cont, image, bind = container_info
@@ -286,7 +286,7 @@ class ShellCommandTask(TaskBase):
 
         self.output_spec = output_spec
 
-        super(ShellCommandTask, self).__init__(
+        super().__init__(
             name=name,
             inputs=kwargs,
             audit_flags=audit_flags,
@@ -563,7 +563,7 @@ class ContainerTask(ShellCommandTask):
         if input_spec is None:
             input_spec = SpecInfo(name="Inputs", fields=[], bases=(ContainerSpec,))
         self.output_cpath = Path(output_cpath)
-        super(ContainerTask, self).__init__(
+        super().__init__(
             name=name,
             input_spec=input_spec,
             output_spec=output_spec,
@@ -625,7 +625,7 @@ class ContainerTask(ShellCommandTask):
         """
         bargs = []
         for (key, val) in self.bind_paths(ind).items():
-            bargs.extend([opt, "{0}:{1}:{2}".format(key, val[0], val[1])])
+            bargs.extend([opt, f"{key}:{val[0]}:{val[1]}"])
         return bargs
 
 
@@ -677,7 +677,7 @@ class DockerTask(ContainerTask):
             if input_spec is None:
                 input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
 
-            super(DockerTask, self).__init__(
+            super().__init__(
                 name=name,
                 input_spec=input_spec,
                 output_spec=output_spec,
@@ -774,7 +774,7 @@ class SingularityTask(ContainerTask):
                 input_spec = SpecInfo(
                     name="Inputs", fields=[], bases=(SingularitySpec,)
                 )
-            super(SingularityTask, self).__init__(
+            super().__init__(
                 input_spec=input_spec,
                 output_spec=output_spec,
                 audit_flags=audit_flags,
