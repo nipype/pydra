@@ -14,12 +14,12 @@ class State:
         and input values for specific task states
         (specified by the splitter and the input).
       * It also contains information about the final groups and the final splitter
-        if combiner is available..
+        if combiner is available.
 
     Attributes
     ----------
     name : :obj:`str`
-        name of the state that is the same as name of the task
+        name of the state that is the same as a name of the task
     splitter : :obj:`str`, :obj:`tuple`, :obj:`list`
         can be a str (name of a single input),
         tuple for scalar splitter, or list for outer splitter
@@ -72,12 +72,12 @@ class State:
 
     def __init__(self, name, splitter=None, combiner=None, other_states=None):
         """
-        Initialize state.
+        Initialize a state.
 
         Parameters
         ----------
         name : :obj:`str`
-            name (should be the same as task name)
+            name (should be the same as the task's name)
         splitter : :obj:`str`, or :obj:`tuple`, or :obj:`list`
             splitter of a task
         combiner : :obj:`str`, or :obj:`list`)
@@ -120,6 +120,33 @@ class State:
             self._splitter = None
 
     @property
+    def splitter_rpn(self):
+        """splitter in :abbr:`RPN (Reverse Polish Notation)`"""
+        _splitter_rpn = hlpst.splitter2rpn(
+            self.splitter, other_states=self.other_states
+        )
+        return _splitter_rpn
+
+    @property
+    def splitter_rpn_compact(self):
+        """splitter in :abbr:`RPN (Reverse Polish Notation)`
+        with a compact representation of the Left Part (i.e. without unwrapping
+        the part that comes from the previous states), e.g., e.g. [_NA, _NB, *]
+        """
+        if self.other_states:
+            _splitter_rpn_compact = hlpst.splitter2rpn(
+                self.splitter, other_states=self.other_states, state_fields=False
+            )
+            return _splitter_rpn_compact
+        else:
+            return self.splitter_rpn
+
+    @property
+    def splitter_final(self):
+        """the final splitter, after removing the combined fields"""
+        return hlpst.rpn2splitter(self.splitter_rpn_final)
+
+    @property
     def splitter_rpn_final(self):
         if self.combiner:
             _splitter_rpn_final = hlpst.remove_inp_from_splitter_rpn(
@@ -131,30 +158,11 @@ class State:
             return self.splitter_rpn
 
     @property
-    def splitter_final(self):
-        """ final splitter, after removing the combined fields"""
-        return hlpst.rpn2splitter(self.splitter_rpn_final)
-
-    @property
-    def splitter_rpn(self):
-        _splitter_rpn = hlpst.splitter2rpn(
-            self.splitter, other_states=self.other_states
-        )
-        return _splitter_rpn
-
-    @property
-    def splitter_rpn_compact(self):
-        if self.other_states:
-            _splitter_rpn_compact = hlpst.splitter2rpn(
-                self.splitter, other_states=self.other_states, state_fields=False
-            )
-            return _splitter_rpn_compact
-        else:
-            return self.splitter_rpn
-
-    @property
     def right_splitter(self):
-        """ current state splitter (i.e. the Right part)"""
+        """the Right Part of the splitter,
+        i.e. the part that is related to the current task's state only
+        (doesn't include fields propagated from the previous tasks)
+        """
         lr_flag = self._left_right_check(self.splitter)
         if lr_flag == "Left":
             return None
@@ -165,6 +173,7 @@ class State:
 
     @property
     def right_splitter_rpn(self):
+        """the Right Part in the splitter using RPN"""
         if self.right_splitter:
             right_splitter_rpn = hlpst.splitter2rpn(
                 self.right_splitter, other_states=self.other_states
@@ -175,7 +184,9 @@ class State:
 
     @property
     def left_splitter(self):
-        """ splitters from the previous stated (i.e. the Light part)"""
+        """ the left part of the splitter,
+        i.e. the part that comes from the previous tasks' states
+        """
         if hasattr(self, "_left_splitter"):
             return self._left_splitter
         else:
@@ -183,6 +194,7 @@ class State:
 
     @property
     def left_splitter_rpn(self):
+        """the Left Part of the splitter using RPN"""
         if self.left_splitter:
             left_splitter_rpn = hlpst.splitter2rpn(
                 self.left_splitter, other_states=self.other_states
@@ -193,7 +205,9 @@ class State:
 
     @property
     def left_splitter_rpn_compact(self):
-        # left rpn part, but keeping the names of the nodes, e.g. [_NA, _NB, *]
+        """the Left Part of the splitter using RPN in a compact form,
+        (without unwrapping the states from previous nodes), e.g. [_NA, _NB, *]
+        """
         if self.left_splitter:
             left_splitter_rpn_compact = hlpst.splitter2rpn(
                 self.left_splitter, other_states=self.other_states, state_fields=False
@@ -204,7 +218,7 @@ class State:
 
     @property
     def combiner(self):
-        """Get the combiner associated to the state."""
+        """the combiner associated to the state."""
         return self._combiner
 
     @combiner.setter
@@ -218,35 +232,55 @@ class State:
 
     @property
     def right_combiner(self):
+        """the Right Part of the combiner,
+        i.e. the part that is related to the current task's state only
+        (doesn't include fields propagated from the previous tasks)
+        """
         return [comb for comb in self.combiner if self.name in comb]
 
     @property
-    def left_combiner(self):
-        if hasattr(self, "_left_combiner"):
-            return self._left_combiner
-        else:
-            return list(set(self.combiner) - set(self.right_combiner))
-
-    @property
     def right_combiner_all(self):
+        """the Right Part of the combiner including all the fields
+        that should be combined (i.e. not only the fields that are explicitly
+        set, but also the fields that re in the same group/axis and had to be combined
+        together, e.g., if splitter is (a, b) a and b has to be combined together)
+        """
         if hasattr(self, "_right_combiner_all"):
             return self._right_combiner_all
         else:
             return self.right_combiner
 
     @property
+    def left_combiner(self):
+        """ the Left Part of the combiner,
+        i.e. the part that comes from the previous tasks' states
+        """
+        if hasattr(self, "_left_combiner"):
+            return self._left_combiner
+        else:
+            return list(set(self.combiner) - set(self.right_combiner))
+
+    @property
     def left_combiner_all(self):
+        """the Left Part of the combiner including all the fields
+        that should be combined (i.e. not only the fields that are explicitly
+        set, but also the fields that re in the same group/axis and had to be combined
+        together, e.g., if splitter is (a, b) a and b has to be combined together)
+        """
         if hasattr(self, "_left_combiner_all"):
-            return self._left_combiner_all
+            return list(set(self._left_combiner_all))
         else:
             return self.left_combiner
 
-    @left_combiner_all.setter
-    def left_combiner_all(self, left_combiner_all):
-        self._left_combiner_all = list(set(left_combiner_all))
-
     @property
     def other_states(self):
+        """
+        specifies the connections with previous states, uses dictionary:
+        {
+            name of a previous state:
+            (previous state, input from current state needed the connection)
+        }
+        """
         return self._other_states
 
     @other_states.setter
@@ -266,7 +300,10 @@ class State:
 
     @property
     def inner_inputs(self):
-        """input fields from previous nodes"""
+        """specifies connections between fields from the current state
+        with the specific state from the previous states, uses dictionary
+        ``{input name for current state: the previous state}``
+        """
         if self.other_states:
             _inner_inputs = {}
             for name, (st, inp) in self.other_states.items():
@@ -277,7 +314,15 @@ class State:
             return {}
 
     def update_connections(self, new_other_states=None, new_combiner=None):
-        """ updating states connections and input groups"""
+        """ updating connections, can use a new other_states and combiner
+
+        Parameters
+        ----------
+        new_other_states : :obj:`dict`, optional
+            dictionary with new other_states, will be set before updating connections
+        new_combiner : :obj:`str`, or :obj:`list`, optional
+            new combiner
+        """
         if new_other_states:
             self.other_states = new_other_states
         self._connect_splitters()
@@ -286,10 +331,10 @@ class State:
 
     def _connect_splitters(self):
         """
-        Connect splitters from previous nodes.
-        Evaluates Left (the part from previous states) and Right (current state) parts.
-        If left splitter is not provided the splitter has to be completed.
-
+        Connect splitters from the previous nodes.
+        Evaluates the Left Part of the splitter (i.e. the part from the previous states)
+        and the Right Part of the splitter(i.e., the current state).
+        If the left splitter is not provided the splitter has to be completed.
         """
         # TODO: should this be in the left_Splitter property?
         if self.splitter:
@@ -321,7 +366,13 @@ class State:
             self.splitter = deepcopy(self._left_splitter)
 
     def _complete_left(self, left=None):
-        """Add all splitters from previous nodes (completing the Left part)."""
+        """Add all splitters from the previous nodes (completing the Left part).
+
+        Parameters
+        ----------
+        left :  :obj:`str`, or :obj:`list`, or :obj:`tuple`, optional
+            the left part of the splitter, that has to be completed
+        """
         if left:
             rpn_left = hlpst.splitter2rpn(
                 left, other_states=self.other_states, state_fields=False
@@ -340,7 +391,17 @@ class State:
         Check if splitter_part is purely Left, Right
         or [Left, Right] if the splitter_part is a list (outer splitter)
 
-        String is returned.
+        Parameters
+        ----------
+        splitter_part : :obj:`str`, or :obj:`list`, or :obj:`tuple`
+            Part of the splitter that is being check
+        check_nested : :obj:`bool`, optional
+            If True, the nested parts are checked.
+
+        Returns
+        -------
+        str
+           describes the type - "Left" or "Right"
 
         If the splitter_part is mixed exception is raised.
 
@@ -369,13 +430,19 @@ class State:
             )
 
     def set_input_groups(self, state_fields=True):
-        """Evaluate groups, especially the final groups that address the combiner."""
+        """Evaluates groups, especially the final groups that address the combiner.
+
+        Parameters
+        ----------
+        state_fields : :obj:`bool`
+            if False the splitter from the previous states are unwrapped
+        """
         right_splitter_rpn = hlpst.splitter2rpn(
             self.right_splitter,
             other_states=self.other_states,
             state_fields=state_fields,
         )
-        # merging groups from previous nodes if any input come from previous the nodes
+        # merging groups from previous nodes if any input come from previous states
         if self.inner_inputs:
             self._merge_previous_groups()
         keys_f, group_for_inputs_f, groups_stack_f, combiner_all = hlpst.splits_groups(
@@ -403,7 +470,7 @@ class State:
         self.group_for_inputs_final = {}
         self.keys_final = []
         if self.left_combiner:
-            _, _, _, self.left_combiner_all = hlpst.splits_groups(
+            _, _, _, self._left_combiner_all = hlpst.splits_groups(
                 self.left_splitter_rpn, combiner=self.left_combiner
             )
         for i, left_nm in enumerate(self.left_splitter_rpn_compact):
@@ -443,7 +510,7 @@ class State:
                     raise hlpst.PydraStateError("previous state has to run first")
                 group_for_inputs = group_for_inputs_f_st
                 groups_stack = groups_stack_f_st
-                self.left_combiner_all += combiner_all_st
+                self._left_combiner_all += combiner_all_st
             else:
                 # if no element from st.splitter is in the current combiner,
                 # using st attributes without changes
@@ -519,6 +586,12 @@ class State:
         State Values
             specific elements from inputs that can be used running interfaces
 
+        Parameters
+        ----------
+        inputs : :obj:`dict`
+            inputs of the task
+        cont_dim : :obj:`dict` or `None`
+            container's dimensions for a specific input's fields
         """
         # checking if splitter and combiner have valid forms
         self.splitter_validation()
@@ -591,7 +664,13 @@ class State:
         return self.states_ind
 
     def prepare_states_combined_ind(self, elements_to_remove_comb):
-        """Prepare the final list of dictionaries with indices after combiner."""
+        """Prepare the final list of dictionaries with indices after combiner.
+
+        Parameters
+        ----------
+        elements_to_remove_comb : :obj:`list`
+            elements of the splitter that should be removed due to the combining
+        """
         partial_rpn_compact = hlpst.remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn_compact), elements_to_remove_comb
         )
