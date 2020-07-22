@@ -667,7 +667,7 @@ def hash_value(value, tp=None, metadata=None):
             and is_existing_file(value)
             and "container_path" not in metadata
         ):
-            return hash_file(value)
+            return hash_file(value, raise_notfound=True)
         elif (
             (tp is File or "pydra.engine.specs.Directory" in str(tp))
             and is_existing_file(value)

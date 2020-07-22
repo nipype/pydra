@@ -66,16 +66,20 @@ def split_filename(fname):
     return pth, fname, ext
 
 
-def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
+def hash_file(afile, raise_notfound=True, chunk_len=8192, crypto=sha256):
     """Compute hash of a file using 'crypto' module."""
     from .specs import LazyField
 
     try:
         fp = open(afile, "rb")
     except FileNotFoundError:
-        if not Path(afile).is_symlink() and raise_notfound:
-            raise
-        return None    
+        if raise_notfound:
+            if Path(afile).is_symlink():
+                raise FileNotFoundError(f"Broken symlink to file: {afile}")
+            else:
+                raise FileNotFoundError(f"File doesn't exist: {afile} ")
+        return None
+
     crypto_obj = crypto()
     with fp as fp:
         while True:
@@ -84,7 +88,6 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
                 break
             crypto_obj.update(data)
     return crypto_obj.hexdigest()
-    
 
 
 def hash_dir(
@@ -100,6 +103,10 @@ def hash_dir(
     computes the hash of that list of hashes to return a single hash value. The
     directory is traversed recursively.
 
+    Note
+    -------
+    Directories that contain some broken links should still be hashed.
+
     Parameters
     ----------
     dirpath : :obj:`str`
@@ -111,8 +118,8 @@ def hash_dir(
     ignore_hidden_dirs : :obj:`bool`
         If `True`, ignore files in directories that begin with `.`.
     raise_notfound : :obj:`bool`
-        If `True` and `dirpath` does not exist, raise `FileNotFound` exception. If
-        `False` and `dirpath` does not exist, return `None`.
+        If `True` and `dirpath` does not exist, raise `FileNotFound` exception.
+        If `False` and `dirpath` does not exist, return `None`.
 
     Returns
     -------
@@ -122,8 +129,11 @@ def hash_dir(
     from .specs import LazyField
 
     if not Path(dirpath).is_dir():
-        if not Path(dirpath).is_symlink() and raise_notfound:  # ignore broken symlinks
-            raise FileNotFoundError(f"Directory {dirpath} not found.")
+        if raise_notfound:
+            if Path(dirpath).is_symlink():
+                raise FileNotFoundError(f"Broken symlink to directory: {dirpath}")
+            else:
+                raise FileNotFoundError(f"Directory doesn't exist: {dirpath}")
         return None
 
     file_hashes = []
@@ -137,7 +147,7 @@ def hash_dir(
         for filename in filenames:
             if ignore_hidden_files and filename.startswith("."):
                 continue
-            this_hash = hash_file(dpath / filename)
+            this_hash = hash_file(dpath / filename, raise_notfound=False)
             file_hashes.append(this_hash)
 
     crypto_obj = crypto()
