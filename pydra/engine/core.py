@@ -1002,6 +1002,20 @@ class Workflow(TaskBase):
                     raise ValueError(f"Task {val.name} raised an error")
         return attr.evolve(output, **output_wf)
 
+    def create_dotfile(self, type="simple"):
+        for task in self.graph.nodes:
+            # todo: create_connections is also run in _run, can I remove duplication?
+            self.create_connections(task)
+        if type == "simple":
+            dotfile = self.graph.create_dotfile_simple(outdir=self.output_dir)
+        elif type == "detailed":
+            pass
+        else:
+            raise Exception(
+                f"type of the graph can be simple or detailed, " f"but {type} provided"
+            )
+        return dotfile
+
 
 def is_task(obj):
     """Check whether an object looks like a task."""

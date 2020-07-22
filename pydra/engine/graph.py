@@ -1,5 +1,6 @@
 """Data structure to support :class:`~pydra.engine.core.Workflow` tasks."""
 from copy import copy
+from pathlib import Path
 from .helpers import ensure_list
 
 
@@ -318,3 +319,49 @@ class DiGraph:
         for nm in first_nodes:
             self.max_paths[nm] = {}
             self._checking_path(node_name=nm, first_name=nm)
+
+    def create_dotfile_simple(self, outdir, name="graph"):
+        from .core import is_workflow
+
+        dotstr = "digraph G {\n"
+        for nd in self.nodes:
+            if is_workflow(nd):
+                dotstr += f"{nd.name} [shape=box]\n"
+            else:
+                dotstr += f"{nd.name}\n"
+
+        for ed in self.edges_names:
+            dotstr += f"{ed[0]} -> {ed[1]}\n"
+
+        dotstr += "}"
+        Path(outdir).mkdir(parents=True, exist_ok=True)
+        dotfile = Path(outdir) / f"{name}.dot"
+        dotfile.write_text(dotstr)
+        return dotfile
+
+    def create_dotfile_detailed(self, outdir, name="graph"):
+        dotstr = "digraph G {\n"
+        dotstr += self._create_dotfile_single_graph(nodes=self.nodes)
+        dotstr += "}"
+        Path(outdir).mkdir(parents=True, exist_ok=True)
+        dotfile = Path(outdir) / f"{name}.dot"
+        dotfile.write_text(dotstr)
+        return dotfile
+
+    def _create_dotfile_single_graph(self, nodes):
+        from .core import is_workflow
+
+        for nd in nodes:
+            if is_workflow(nd):
+                dotstr = (
+                    f"subgraph cluster_{nd.name} {{\n "
+                    f"compound=true; \n"
+                    f"label = {nd.name};"
+                )
+                dotstr += self._create_dotfile_single_graph(nodes=nd.graph.nodes)
+                dotstr += "}"
+            else:
+                dotstr = f"{nd.name}\n"
+
+        # for ed in self.edges_names:
+        #     dotstr += f"{ed[0]} -> {ed[1]}\n"

@@ -452,3 +452,22 @@ def test_copy_1():
     assert id(graph.nodes[0]) == id(graph_copy.nodes[0])
     assert graph.edges == graph_copy.edges
     assert id(graph.edges) != (graph_copy.edges)
+
+
+def test_dotfile_1(tmpdir):
+    graph = DiGraph(nodes=[A, B], edges=[(A, B)])
+    dotfile = graph.create_dotfile_simple(outdir=tmpdir)
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "a" in dotstr_lines
+    assert "b" in dotstr_lines
+    assert "a -> b" in dotstr_lines
+
+
+def test_dotfile_2(tmpdir):
+    graph = DiGraph(nodes=[A, B, C, D], edges=[(A, C), (B, C), (C, D)])
+    dotfile = graph.create_dotfile_simple(outdir=tmpdir)
+    dotstr_lines = dotfile.read_text().split("\n")
+    for nm in ["a", "b", "c", "d"]:
+        assert nm in dotstr_lines
+    for ed in ["a -> c", "b -> c", "c -> d"]:
+        assert ed in dotstr_lines

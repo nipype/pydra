@@ -3948,3 +3948,36 @@ def test_wf_upstream_error9b(plugin):
     assert "raised an error" in str(excinfo.value)
     assert wf.err._errored is True
     assert wf.follow_err._errored == ["err"]
+
+
+def test_graph_1(tmpdir):
+    """ workflow with 2 tasks, no splitter"""
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(multiply(name="mult_1", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(multiply(name="mult_2", x=wf.lzin.x, y=wf.lzin.x))
+    wf.add(add2(name="add2", x=wf.mult_1.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.inputs.y = 3
+
+    dotfile = wf.create_dotfile()
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "mult_1" in dotstr_lines
+    assert "mult_2" in dotstr_lines
+    assert "add2" in dotstr_lines
+    assert "mult_1 -> add2" in dotstr_lines
+
+
+def test_graph_2(tmpdir):
+    wfnd = Workflow(name="wfnd", input_spec=["x"])
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wfnd.inputs.x = 2
+
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
+    dotfile = wf.create_dotfile()
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "wfnd [shape=box]" in dotstr_lines
