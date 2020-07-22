@@ -186,6 +186,79 @@ def test_get_related_files_noninclusive(_temp_analyze_files):
     assert orig_hdr not in related_files
 
 
+def test_hash_file_broken(_temp_analyze_files):
+    """
+    Test how broken file paths are handled during hashing
+
+    When `raise_notfound` is True, raise error for broken file paths or
+    broken symlinks. Otherwise return None
+    """
+    # broken file path
+    assert hash_file("broken_file.txt", raise_notfound=False) is None
+    with pytest.raises(FileNotFoundError) as e1:
+        hash_file("broken_file.txt", raise_notfound=True)
+    assert "File doesn't exist" in str(e1)
+
+    # broken symlink to file
+    orig_img, _ = _temp_analyze_files
+    pth, _ = os.path.split(orig_img)
+    img_link = os.path.join(pth, "img_link")
+    os.symlink(orig_img, img_link)
+    os.remove(orig_img)
+    assert hash_file(img_link, raise_notfound=False) is None
+    with pytest.raises(FileNotFoundError) as e2:
+        hash_file(img_link, raise_notfound=True)
+    assert "Broken symlink to file" in str(e2)
+
+
+def test_hash_dir_broken(tmpdir):
+    """
+    Test how broken dir paths or broken files in dirs are handled during hashing
+
+    When `raise_notfound` is True raise error for broken dir paths or
+    broken symlinks to directories, otherwise return None.
+
+    Directories that contain some broken links should still be hashed.
+    """
+
+    assert hash_dir("/broken_dir_path/", raise_notfound=False) is None
+    with pytest.raises(FileNotFoundError) as e1:
+        hash_dir("/broken_dir_path/", raise_notfound=True)
+    assert "Directory doesn't exist" in str(e1)
+
+    # broken symlink to dir path
+    dir1 = tmpdir.join("dir1")
+    os.mkdir(dir1)
+    dir1_link = tmpdir.join("dir1_link")
+    os.symlink(dir1, dir1_link)
+    os.rmdir(dir1)
+    assert hash_dir(dir1_link, raise_notfound=False) is None
+    with pytest.raises(FileNotFoundError) as e1:
+        hash_dir(dir1_link, raise_notfound=True)
+    assert "Broken symlink to directory" in str(e1)
+
+    # dirs with broken symlink(s) are hashed
+    dir2 = tmpdir.join("dir2")
+    os.mkdir(dir2)
+    file1 = dir2.join("file1")
+    file2 = dir2.join("file2")
+    file1.open("w+").close()
+    file2.open("w+").close()
+
+    file1_link = dir2.join("file1_link")
+    os.symlink(file1, file1_link)
+    os.remove(file1)  # file1_link is broken
+    assert isinstance(hash_dir(dir2, raise_notfound=False), str)
+    assert isinstance(hash_dir(dir2, raise_notfound=True), str)
+
+    # dir is still hashed when all files in dir are broken
+    file2_link = dir2.join("file2_link")
+    os.symlink(file2, file2_link)
+    os.remove(file2)  # file2_link is broken
+    assert isinstance(hash_dir(dir2, raise_notfound=False), str)
+    assert isinstance(hash_dir(dir2, raise_notfound=True), str)
+
+
 @pytest.mark.parametrize(
     "filename, expected",
     [
