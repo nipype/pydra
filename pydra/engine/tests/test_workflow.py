@@ -22,6 +22,7 @@ from .utils import (
     fun_write_file,
     fun_write_file_list,
     fun_write_file_list2dict,
+    DOT_FLAG,
 )
 from ..submitter import Submitter
 from ..core import Workflow
@@ -3951,14 +3952,12 @@ def test_wf_upstream_error9b(plugin):
 
 
 def test_graph_1(tmpdir):
-    """ workflow with 2 tasks, no splitter"""
+    """creating a graph, wf with two nodes"""
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult_1", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(multiply(name="mult_2", x=wf.lzin.x, y=wf.lzin.x))
     wf.add(add2(name="add2", x=wf.mult_1.lzout.out))
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.inputs.x = 2
-    wf.inputs.y = 3
 
     dotfile = wf.create_dotfile()
     dotstr_lines = dotfile.read_text().split("\n")
@@ -3967,8 +3966,71 @@ def test_graph_1(tmpdir):
     assert "add2" in dotstr_lines
     assert "mult_1 -> add2" in dotstr_lines
 
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        dotfile_pr, formatted_dot = wf.create_dotfile(export=True, name=name)
+        assert dotfile_pr.read_text().split("\n") == dotstr_lines
+        assert len(formatted_dot) == 1
+        assert formatted_dot[0] == dotfile_pr.with_suffix(".png")
+        assert formatted_dot[0].exists()
+        print("\n graph in: ", formatted_dot[0])
+
+
+def test_graph_1det(tmpdir):
+    """creating a detailed graph, wf with two nodes"""
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(multiply(name="mult_1", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(multiply(name="mult_2", x=wf.lzin.x, y=wf.lzin.x))
+    wf.add(add2(name="add2", x=wf.mult_1.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.inputs.y = 3
+
+    dotfile = wf.create_dotfile(type="detailed")
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "mult_1" in dotstr_lines
+    assert "mult_2" in dotstr_lines
+    assert "add2" in dotstr_lines
+    assert "mult_1 -> add2" in dotstr_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        dotfile_pr, formatted_dot = wf.create_dotfile(
+            type="detailed", export=["png", "pdf"], name=name
+        )
+        assert dotfile_pr.read_text().split("\n") == dotstr_lines
+        assert len(formatted_dot) == 2
+        for i, ext in enumerate(["png", "pdf"]):
+            assert formatted_dot[i] == dotfile_pr.with_suffix(f".{ext}")
+            assert formatted_dot[i].exists()
+        print("\n graph in: ", formatted_dot[0])
+
 
 def test_graph_2(tmpdir):
+    """creating a graph, wf with one worfklow as a node"""
+    wfnd = Workflow(name="wfnd", input_spec=["x"])
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
+    dotfile = wf.create_dotfile()
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "wfnd [shape=box]" in dotstr_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        dotfile_pr, formatted_dot = wf.create_dotfile(export=True, name=name)
+        assert dotfile_pr.read_text().split("\n") == dotstr_lines
+        assert len(formatted_dot) == 1
+        assert formatted_dot[0].exists()
+        print("\n graph in: ", formatted_dot[0])
+
+
+def test_graph_2det(tmpdir):
+    """creating a detailed graph, wf with one worfklow as a node"""
     wfnd = Workflow(name="wfnd", input_spec=["x"])
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
@@ -3978,6 +4040,135 @@ def test_graph_2(tmpdir):
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
 
+    dotfile = wf.create_dotfile(type="detailed")
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "subgraph cluster_wfnd {" in dotstr_lines
+    assert "add2" in dotstr_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        dotfile_pr, formatted_dot = wf.create_dotfile(
+            type="detailed", export=True, name=name
+        )
+        assert dotfile_pr.read_text().split("\n") == dotstr_lines
+        assert len(formatted_dot) == 1
+        assert formatted_dot[0].exists()
+        print("\n graph in: ", formatted_dot[0])
+
+
+def test_graph_3(tmpdir):
+    """creating a graph, wf with two nodes (one node is a workflow)"""
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
     dotfile = wf.create_dotfile()
     dotstr_lines = dotfile.read_text().split("\n")
+    assert "mult" in dotstr_lines
     assert "wfnd [shape=box]" in dotstr_lines
+    assert "mult -> wfnd" in dotstr_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        dotfile_pr, formatted_dot = wf.create_dotfile(export=True, name=name)
+        assert dotfile_pr.read_text().split("\n") == dotstr_lines
+        assert len(formatted_dot) == 1
+        assert formatted_dot[0].exists()
+        print("\n graph in: ", formatted_dot[0])
+
+
+def test_graph_3det(tmpdir):
+    """creating a detailed graph, wf with two nodes (one node is a workflow)"""
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
+    dotfile = wf.create_dotfile(type="detailed")
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "mult" in dotstr_lines
+    assert "subgraph cluster_wfnd {" in dotstr_lines
+    assert "add2" in dotstr_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        dotfile_pr, formatted_dot = wf.create_dotfile(
+            type="detailed", export=True, name=name
+        )
+        assert dotfile_pr.read_text().split("\n") == dotstr_lines
+        assert len(formatted_dot) == 1
+        assert formatted_dot[0].exists()
+        print("\n graph in: ", formatted_dot[0])
+
+
+def test_graph_4det(tmpdir):
+    """creating a detailed graph, wf with two nodes (one node is a workflow with two nodes
+    inside). Connection from the node to the inner workflow.
+    """
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
+    wfnd.add(add2(name="add2_a", x=wfnd.lzin.x))
+    wfnd.add(add2(name="add2_b", x=wfnd.add2_a.lzout.out))
+    wfnd.set_output([("out", wfnd.add2_b.lzout.out)])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
+    dotfile = wf.create_dotfile(type="detailed")
+    dotstr_lines = dotfile.read_text().split("\n")
+    for el in ["mult", "add2_a", "add2_b"]:
+        assert el in dotstr_lines
+    assert "subgraph cluster_wfnd {" in dotstr_lines
+    assert "add2_a -> add2_b" in dotstr_lines
+    assert "mult -> add2_a [lhead=cluster_wfnd]"
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        dotfile_pr, formatted_dot = wf.create_dotfile(
+            type="detailed", export=True, name=name
+        )
+        assert dotfile_pr.read_text().split("\n") == dotstr_lines
+        assert formatted_dot[0].exists()
+        print("\n graph in: ", formatted_dot[0])
+
+
+def test_graph_5det(tmpdir):
+    """creating a detailed graph, wf with two nodes (one node is a workflow with two nodes
+    inside). Connection from the inner workflow to the node.
+    """
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
+    wfnd.add(add2(name="add2_a", x=wfnd.lzin.x))
+    wfnd.add(add2(name="add2_b", x=wfnd.add2_a.lzout.out))
+    wfnd.set_output([("out", wfnd.add2_b.lzout.out)])
+    wf.add(wfnd)
+    wf.add(multiply(name="mult", x=wf.wfnd.lzout.out, y=wf.lzin.y))
+    wf.set_output([("out", wf.mult.lzout.out)])
+
+    dotfile = wf.create_dotfile(type="detailed")
+    dotstr_lines = dotfile.read_text().split("\n")
+    for el in ["mult", "add2_a", "add2_b"]:
+        assert el in dotstr_lines
+    assert "subgraph cluster_wfnd {" in dotstr_lines
+    assert "add2_a -> add2_b" in dotstr_lines
+    assert "add2_b -> mult [ltail=cluster_wfnd]"
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        dotfile_pr, formatted_dot = wf.create_dotfile(
+            type="detailed", export=True, name=name
+        )
+        assert dotfile_pr.read_text().split("\n") == dotstr_lines
+        assert formatted_dot[0].exists()
+        print("\n graph in: ", formatted_dot[0])

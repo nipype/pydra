@@ -1002,19 +1002,33 @@ class Workflow(TaskBase):
                     raise ValueError(f"Task {val.name} raised an error")
         return attr.evolve(output, **output_wf)
 
-    def create_dotfile(self, type="simple"):
+    def create_dotfile(self, type="simple", export=None, name=None):
+        """creating a graph - dotfile and optionally exporting to other formats"""
         for task in self.graph.nodes:
-            # todo: create_connections is also run in _run, can I remove duplication?
             self.create_connections(task)
+        if not name:
+            name = f"graph_{self.name}"
         if type == "simple":
-            dotfile = self.graph.create_dotfile_simple(outdir=self.output_dir)
+            dotfile = self.graph.create_dotfile_simple(
+                outdir=self.output_dir, name=name
+            )
         elif type == "detailed":
-            pass
+            dotfile = self.graph.create_dotfile_detailed(
+                outdir=self.output_dir, name=name
+            )
         else:
             raise Exception(
                 f"type of the graph can be simple or detailed, " f"but {type} provided"
             )
-        return dotfile
+        if not export:
+            return dotfile
+        else:
+            if export is True:
+                export = ["png"]
+            formatted_dot = []
+            for ext in export:
+                formatted_dot.append(self.graph.export_graph(dotfile=dotfile, ext=ext))
+            return dotfile, formatted_dot
 
 
 def is_task(obj):

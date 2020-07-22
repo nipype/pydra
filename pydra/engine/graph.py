@@ -1,6 +1,8 @@
 """Data structure to support :class:`~pydra.engine.core.Workflow` tasks."""
 from copy import copy
 from pathlib import Path
+import subprocess as sp
+
 from .helpers import ensure_list
 
 
@@ -340,28 +342,118 @@ class DiGraph:
         return dotfile
 
     def create_dotfile_detailed(self, outdir, name="graph"):
-        dotstr = "digraph G {\n"
-        dotstr += self._create_dotfile_single_graph(nodes=self.nodes)
+        dotstr = "digraph G {\ncompound=true \n"
+        dotstr += self._create_dotfile_single_graph(nodes=self.nodes, edges=self.edges)
         dotstr += "}"
         Path(outdir).mkdir(parents=True, exist_ok=True)
         dotfile = Path(outdir) / f"{name}.dot"
         dotfile.write_text(dotstr)
         return dotfile
 
-    def _create_dotfile_single_graph(self, nodes):
+    def _create_dotfile_single_graph(self, nodes, edges):
         from .core import is_workflow
 
+        wf_asnd = []
+        dotstr = ""
         for nd in nodes:
             if is_workflow(nd):
-                dotstr = (
-                    f"subgraph cluster_{nd.name} {{\n "
-                    f"compound=true; \n"
-                    f"label = {nd.name};"
+                wf_asnd.append(nd.name)
+                for task in nd.graph.nodes:
+                    nd.create_connections(task)
+                dotstr += f"subgraph cluster_{nd.name} {{\n" f"label = {nd.name} \n"
+                dotstr += self._create_dotfile_single_graph(
+                    nodes=nd.graph.nodes, edges=nd.graph.edges
                 )
-                dotstr += self._create_dotfile_single_graph(nodes=nd.graph.nodes)
-                dotstr += "}"
+                dotstr += "}\n"
             else:
-                dotstr = f"{nd.name}\n"
+                dotstr += f"{nd.name}\n"
 
-        # for ed in self.edges_names:
-        #     dotstr += f"{ed[0]} -> {ed[1]}\n"
+        dotstr_edg = ""
+        for ed in edges:
+            if ed[0].name in wf_asnd and ed[1].name in wf_asnd:
+                head_nd = list(ed[1].nodes)[0].name
+                tail_nd = list(ed[0].nodes)[-1].name
+                dotstr_edg += (
+                    f"{tail_nd} -> {head_nd} "
+                    f"[ltail=cluster_{ed[0].name}, "
+                    f"lhead=cluster_{ed[1].name}]\n"
+                )
+            elif ed[0].name in wf_asnd:
+                tail_nd = list(ed[0].nodes)[-1].name
+                dotstr_edg += (
+                    f"{tail_nd} -> {ed[1].name} [ltail=cluster_{ed[0].name}]\n"
+                )
+            elif ed[1].name in wf_asnd:
+                head_nd = list(ed[1].nodes)[0].name
+                dotstr_edg += (
+                    f"{ed[0].name} -> {head_nd} [lhead=cluster_{ed[1].name}]\n"
+                )
+            else:
+                dotstr_edg += f"{ed[0].name} -> {ed[1].name}\n"
+        dotstr = dotstr + dotstr_edg
+        return dotstr
+
+    def export_graph(self, dotfile, ext="png"):
+        """ exporting dotfile to other format, equires the dot command"""
+        available_ext = [
+            "bmp",
+            "canon",
+            "cgimage",
+            "cmap",
+            "cmapx",
+            "cmapx_np",
+            "dot",
+            "dot_json",
+            "eps",
+            "exr",
+            "fig",
+            "gif",
+            "gv",
+            "icns",
+            "ico",
+            "imap",
+            "imap_np",
+            "ismap",
+            "jp2",
+            "jpe",
+            "jpeg",
+            "jpg",
+            "json",
+            "json0",
+            "mp",
+            "pct",
+            "pdf",
+            "pic",
+            "pict",
+            "plain",
+            "plain-ext",
+            "png",
+            "pov",
+            "ps",
+            "ps2",
+            "psd",
+            "sgi",
+            "svg",
+            "svgz",
+            "tga",
+            "tif",
+            "tiff",
+            "tk",
+            "vml",
+            "vmlz",
+            "xdot",
+            "xdot1.2",
+            "xdot1.4",
+            "xdot_json",
+        ]
+        if ext not in available_ext:
+            raise Exception(f"unvalid extension - {ext}, chose from {available_ext}")
+
+        dot_check = sp.run(["which", "dot"], stdout=sp.PIPE, stderr=sp.PIPE)
+        if not dot_check.stdout:
+            raise Exception(f"dot command not available, can't create a {ext} file")
+
+        formatted_dot = dotfile.with_suffix(f".{ext}")
+        cmd = f"dot -T{ext} -o {formatted_dot} {dotfile}"
+        sp.run(cmd.split(), stdout=sp.PIPE, stderr=sp.PIPE)
+        return formatted_dot
