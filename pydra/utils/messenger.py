@@ -169,7 +169,7 @@ def make_message(obj, context=None):
 
 def collect_messages(collected_path, message_path, ld_op="compact"):
     """
-    Gather messages.
+    Compile all messages into a single provenance graph.
 
     Parameters
     ----------
