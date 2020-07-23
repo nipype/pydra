@@ -149,7 +149,7 @@ def make_message(obj, context=None):
     Parameters
     ----------
     obj : :obj:`dict`
-        All the fields of the message (TODO)
+        A dictionary containing the non-context information of a message record.
     context : :obj:`dict`, optional
         Dictionary with the link to the context file or containing a JSON-LD context.
 
