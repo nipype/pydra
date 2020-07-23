@@ -117,7 +117,7 @@ class Audit:
         Parameters
         ----------
         message : :obj:`dict`
-            All the information needed to build a message (TODO)
+            A message in Pydra is a JSON-LD message object.
         flags : :obj:`bool`, optional
             If True and self.audit_flag, the message is sent.
 
