@@ -151,7 +151,7 @@ def make_message(obj, context=None):
     obj : :obj:`dict`
         All the fields of the message (TODO)
     context : :obj:`dict`, optional
-        Dictionary with the link to the context.jsonld file.
+        Dictionary with the link to the context file or containing a JSON-LD context.
 
     Returns
     -------
