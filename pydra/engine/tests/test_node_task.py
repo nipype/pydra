@@ -1156,7 +1156,7 @@ def test_task_state_comb_2(
 
     assert nn.state.splitter_final == state_splitter_final
     assert nn.state.splitter_rpn_final == state_rpn_final
-    assert set(nn.state.right_combiner_all) == set(state_combiner_all)
+    assert set(nn.state.current_combiner_all) == set(state_combiner_all)
 
     # checking the results
     results = nn.result()
