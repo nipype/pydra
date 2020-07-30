@@ -18,12 +18,13 @@ class Audit:
         ----------
         audit_flags : :class:`AuditFlag`
             Base configuration of auditing.
-        messengers :
-            TODO
-        messenger_args :
-            TODO
-        develop :
-            TODO
+        messengers : :obj:`pydra.util.messenger.Messenger` or list of :class:`pydra.util.messenger.Messenger`, optional
+            Specify types of messenger used by Audit to send a message.
+            Could be `PrintMessenger`, `FileMessenger`, or `RemoteRESTMessenger`.
+        messenger_args : :obj:`dict`, optional
+            Optional arguments for the `Messenger.send` method.
+        develop : :obj:`bool`, optional
+            If True, the local context.jsonld file is used, otherwise the one from github is used.
 
         """
         self.audit_flags = audit_flags
@@ -46,7 +47,7 @@ class Audit:
         """
         self.odir = odir
         if self.audit_check(AuditFlag.PROV):
-            self.aid = "uid:{}".format(gen_uuid())
+            self.aid = f"uid:{gen_uuid()}"
             start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now()}
         os.chdir(self.odir)
         if self.audit_check(AuditFlag.PROV):
@@ -61,7 +62,7 @@ class Audit:
         if self.audit_check(AuditFlag.RESOURCE):
             self.resource_monitor.start()
             if self.audit_check(AuditFlag.PROV):
-                self.mid = "uid:{}".format(gen_uuid())
+                self.mid = f"uid:{gen_uuid()}"
                 self.audit_message(
                     {
                         "@id": self.mid,
@@ -83,7 +84,7 @@ class Audit:
                     AuditFlag.PROV,
                 )
                 # audit resources/runtime information
-                self.eid = "uid:{}".format(gen_uuid())
+                self.eid = f"uid:{gen_uuid()}"
                 entity = attr.asdict(result.runtime)
                 entity.update(
                     **{
@@ -115,15 +116,15 @@ class Audit:
 
         Parameters
         ----------
-        message :
-            TODO
-        flags :
-            TODO
+        message : :obj:`dict`
+            A message in Pydra is a JSON-LD message object.
+        flags : :obj:`bool`, optional
+            If True and self.audit_flag, the message is sent.
 
         """
         if self.develop:
             with open(
-                Path(os.path.dirname(__file__)) / ".." / "schema/context.jsonld", "rt"
+                Path(os.path.dirname(__file__)) / ".." / "schema/context.jsonld"
             ) as fp:
                 context = json.load(fp)
         else:
@@ -149,8 +150,12 @@ class Audit:
 
         Parameters
         ----------
-        flag :
-            TODO
+        flag : :obj: `bool`
+            The flag that is checked.
 
+        Returns
+        -------
+        bool
+            Boolean AND for self.oudit_flags and flag
         """
         return self.audit_flags & flag

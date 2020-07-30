@@ -411,7 +411,7 @@ def test_wf_st_1(plugin):
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x"))
+    wf.split("x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
@@ -436,7 +436,7 @@ def test_wf_st_1_call_subm(plugin):
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x"))
+    wf.split("x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
@@ -459,7 +459,7 @@ def test_wf_st_1_call_plug(plugin):
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x"))
+    wf.split("x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
@@ -481,7 +481,7 @@ def test_wf_st_noinput_1(plugin):
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x"))
+    wf.split("x")
     wf.inputs.x = []
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
@@ -609,7 +609,7 @@ def test_wf_st_2(plugin):
     wf = Workflow(name="wf_st_2", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x")).combine(combiner="x")
+    wf.split("x").combine(combiner="x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin

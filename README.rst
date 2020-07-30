@@ -1,5 +1,5 @@
 
-.. image:: https://raw.githubusercontent.com/nipype/pydra/master/pydra_logo.jpg
+.. image:: https://raw.githubusercontent.com/nipype/pydra/master/docs/logo/pydra_logo.jpg
    :width: 50
    :alt: pydra logo
 

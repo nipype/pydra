@@ -10,7 +10,7 @@ import sys
 from hashlib import sha256
 import subprocess as sp
 import getpass
-import uuid
+import re
 from time import strftime
 from traceback import format_exception
 import typing as ty
@@ -53,19 +53,19 @@ def ensure_list(obj, tuple2list=False):
 
 def print_help(obj):
     """Visit a task object and print its input/output interface."""
-    lines = ["Help for {}".format(obj.__class__.__name__)]
+    lines = [f"Help for {obj.__class__.__name__}"]
     input_klass = make_klass(obj.input_spec)
     if attr.fields(input_klass):
         lines += ["Input Parameters:"]
     for f in attr.fields(input_klass):
         default = ""
         if f.default != attr.NOTHING and not f.name.startswith("_"):
-            default = " (default: {})".format(f.default)
+            default = f" (default: {f.default})"
         try:
             name = f.type.__name__
         except AttributeError:
             name = str(f.type)
-        lines += ["- {}: {}{}".format(f.name, name, default)]
+        lines += [f"- {f.name}: {name}{default}"]
     output_klass = make_klass(obj.output_spec)
     if attr.fields(output_klass):
         lines += ["Output Parameters:"]
@@ -74,7 +74,7 @@ def print_help(obj):
             name = f.type.__name__
         except AttributeError:
             name = str(f.type)
-        lines += ["- {}: {}".format(f.name, name)]
+        lines += [f"- {f.name}: {name}"]
     print("\n".join(lines))
     return lines
 
@@ -507,7 +507,7 @@ def record_error(error_path, error):
     try:
         login_name = getpass.getuser()
     except KeyError:
-        login_name = "UID{:d}".format(os.getuid())
+        login_name = f"UID{os.getuid():d}"
 
     full_error = {
         "time of crash": timeofcrash,
@@ -746,3 +746,36 @@ def position_adjustment(pos_args):
         cmd_args += el[1]
 
     return cmd_args
+
+
+def argstr_formatting(argstr, inputs, value_updates=None):
+    """ formatting argstr that have form {field_name},
+    using values from inputs and updating with value_update if provided
+    """
+    inputs_dict = attr.asdict(inputs)
+    # if there is a value that has to be updated (e.g. single value from a list)
+    if value_updates:
+        inputs_dict.update(value_updates)
+    # getting all fields that should be formatted, i.e. {field_name}, ...
+    inp_fields = re.findall("{\w+}", argstr)
+    val_dict = {}
+    for fld in inp_fields:
+        fld_name = fld[1:-1]  # extracting the name form {field_name}
+        fld_value = inputs_dict[fld_name]
+        if fld_value is attr.NOTHING:
+            # if value is NOTHING, nothing should be added to the command
+            val_dict[fld_name] = ""
+        else:
+            val_dict[fld_name] = fld_value
+
+    # formatting string based on the val_dict
+    argstr_formatted = argstr.format(**val_dict)
+    # removing extra commas and spaces after removing the field that have NOTHING
+    argstr_formatted = (
+        argstr_formatted.replace("[ ", "[")
+        .replace(" ]", "]")
+        .replace("[,", "[")
+        .replace(",]", "]")
+        .strip()
+    )
+    return argstr_formatted

@@ -2,7 +2,7 @@ import os
 
 
 def loading(filename):
-    with open(filename, "r") as f:
+    with open(filename) as f:
         txt = f.read()
     print(txt)
 

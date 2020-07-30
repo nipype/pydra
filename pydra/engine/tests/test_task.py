@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import typing as ty
 import os, sys
 import pytest
@@ -70,7 +68,7 @@ def test_annotated_func():
     assert getattr(funky.inputs, "a") == 1
     assert getattr(funky.inputs, "b") == 0.1
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["out_out"])
+    assert set(funky.output_names) == {"out_out"}
     # assert funky.inputs.hash == '17772c3aec9540a8dd3e187eecd2301a09c9a25c6e371ddd86e31e3a1ecfeefa'
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
@@ -116,7 +114,7 @@ def test_annotated_func_multreturn():
     assert hasattr(funky.inputs, "_func")
     assert getattr(funky.inputs, "a") == 3.5
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["fractional", "integer"])
+    assert set(funky.output_names) == {"fractional", "integer"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     result = funky()
@@ -172,7 +170,7 @@ def test_halfannotated_func():
     assert getattr(funky.inputs, "a") == 10
     assert getattr(funky.inputs, "b") == 20
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["out"])
+    assert set(funky.output_names) == {"out"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     result = funky()
@@ -213,7 +211,7 @@ def test_halfannotated_func_multreturn():
     assert getattr(funky.inputs, "a") == 10
     assert getattr(funky.inputs, "b") == 20
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["out1", "out2"])
+    assert set(funky.output_names) == {"out1", "out2"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     result = funky()
