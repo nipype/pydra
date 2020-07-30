@@ -161,7 +161,7 @@ class TaskBase:
                 inputs = json.loads(Path(inputs).read_text())
             elif isinstance(inputs, str):
                 if self._input_sets is None or inputs not in self._input_sets:
-                    raise ValueError("Unknown input set {!r}".format(inputs))
+                    raise ValueError(f"Unknown input set {inputs!r}")
                 inputs = self._input_sets[inputs]
             self.inputs = attr.evolve(self.inputs, **inputs)
             self.inputs.check_metadata()
@@ -726,7 +726,7 @@ class Workflow(TaskBase):
             )
         self.name = name
 
-        super(Workflow, self).__init__(
+        super().__init__(
             name=name,
             inputs=kwargs,
             cache_dir=cache_dir,
@@ -822,7 +822,7 @@ class Workflow(TaskBase):
         self.name2obj[task.name] = task
 
         if not is_task(task):
-            raise ValueError("Unknown workflow element: {!r}".format(task))
+            raise ValueError(f"Unknown workflow element: {task!r}")
         self.graph.add_nodes(task)
         self._last_added = task
         logger.debug(f"Added {task}")

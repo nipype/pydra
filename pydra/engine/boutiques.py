@@ -71,7 +71,7 @@ class BoshTask(ShellCommandTask):
         self.output_spec = self._prepare_output_spec(names_subset=output_spec_names)
         self.bindings = ["-v", f"{self.bosh_file.parent}:{self.bosh_file.parent}:ro"]
 
-        super(BoshTask, self).__init__(
+        super().__init__(
             name=name,
             input_spec=self.input_spec,
             output_spec=self.output_spec,

@@ -56,7 +56,7 @@ class PrintMessenger(Messenger):
 
     def send(self, message, **kwargs):
         """
-        Send to standard output.
+        Send the message to standard output.
 
         Parameters
         ----------
@@ -68,7 +68,7 @@ class PrintMessenger(Messenger):
 
         mid = gen_uuid()
         print(
-            "id: {0}\n{1}".format(
+            "id: {}\n{}".format(
                 mid, json.dumps(message, ensure_ascii=False, indent=2, sort_keys=False)
             )
         )
@@ -88,6 +88,10 @@ class FileMessenger(Messenger):
         append : :obj:`bool`
             Do not truncate file when opening (i.e. append to it).
 
+        Returns
+        -------
+        str
+            Returns the unique identifier used in the file's name.
         """
         import json
 
@@ -114,6 +118,11 @@ class RemoteRESTMessenger(Messenger):
         message : :obj:`dict`
             The message to be printed.
 
+        Returns
+        -------
+        int
+            The status code from the `request.post`
+
         """
         import requests
 
@@ -134,7 +143,21 @@ def send_message(message, messengers=None, **kwargs):
 
 
 def make_message(obj, context=None):
-    """Build a message."""
+    """
+    Build a message using the specific context
+
+    Parameters
+    ----------
+    obj : :obj:`dict`
+        A dictionary containing the non-context information of a message record.
+    context : :obj:`dict`, optional
+        Dictionary with the link to the context file or containing a JSON-LD context.
+
+    Returns
+    -------
+    dict
+        The message with the context.
+    """
     if context is None:
         context = {
             "@context": "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld"
@@ -145,7 +168,19 @@ def make_message(obj, context=None):
 
 
 def collect_messages(collected_path, message_path, ld_op="compact"):
-    """Gather messages."""
+    """
+    Compile all messages into a single provenance graph.
+
+    Parameters
+    ----------
+    collected_path : :obj:`os.pathlike`
+        A place to write all of the collected messages. (?TODO)
+    message_path : :obj:`os.pathlike`
+        A path with the message file (?TODO)
+    ld_op : :obj:`str`, optional
+        Option used by pld.jsonld
+    """
+
     import pyld as pld
     import json
     from glob import glob
@@ -153,12 +188,12 @@ def collect_messages(collected_path, message_path, ld_op="compact"):
     fl = glob(str(message_path / "*.jsonld"))
     data = []
     for f in fl:
-        with open(f, "rt") as fp:
+        with open(f) as fp:
             data.append(json.load(fp))
     if data:
         records = getattr(pld.jsonld, ld_op)(
             pld.jsonld.from_rdf(pld.jsonld.to_rdf(data, {})), data[0]
         )
-        records["@id"] = "uid:{}".format(gen_uuid())
+        records["@id"] = f"uid:{gen_uuid()}"
         with open(collected_path / "messages.jsonld", "wt") as fp:
             json.dump(records, fp, ensure_ascii=False, indent=2, sort_keys=False)

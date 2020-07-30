@@ -270,7 +270,7 @@ def test_load_and_run_wf(tmpdir):
 
     wf = Workflow(name="wf", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
-    wf.split(("x"))
+    wf.split("x")
     wf.inputs.x = [1, 2]
     wf.inputs.y = 10
 

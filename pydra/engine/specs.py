@@ -467,7 +467,7 @@ class LazyField:
         elif attr_type == "output":
             self.fields = node.output_names
         else:
-            raise ValueError("LazyField: Unknown attr_type: {}".format(attr_type))
+            raise ValueError(f"LazyField: Unknown attr_type: {attr_type}")
         self.attr_type = attr_type
         self.field = None
 
@@ -478,7 +478,7 @@ class LazyField:
         if name in dir(self):
             return self.__getattribute__(name)
         raise AttributeError(
-            "Task {0} has no {1} attribute {2}".format(self.name, self.attr_type, name)
+            f"Task {self.name} has no {self.attr_type} attribute {name}"
         )
 
     def __getstate__(self):
@@ -492,7 +492,7 @@ class LazyField:
         self.__dict__.update(state)
 
     def __repr__(self):
-        return "LF('{0}', '{1}')".format(self.name, self.field)
+        return f"LF('{self.name}', '{self.field}')"
 
     def get_value(self, wf, state_index=None):
         """Return the value of a lazy field."""

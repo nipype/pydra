@@ -7,7 +7,6 @@ import os.path as op
 import re
 import shutil
 import posixpath
-from builtins import str, bytes, open
 import logging
 from pathlib import Path
 import typing as ty
@@ -524,11 +523,12 @@ def template_update(inputs, map_copyfiles=None):
             )
         dict_[fld.name] = template_update_single(field=fld, inputs_dict=dict_)
     # using is and  == so it covers list and numpy arrays
-    return {
+    updated_templ_dict = {
         k: v
         for k, v in dict_.items()
         if not (getattr(inputs, k) is v or getattr(inputs, k) == v)
     }
+    return updated_templ_dict
 
 
 def template_update_single(field, inputs_dict, spec_type="input"):
