@@ -3,6 +3,8 @@ import attr
 from pathlib import Path
 import typing as ty
 
+from .helpers_file import template_update_single
+
 
 def attr_fields(x):
     return x.__attrs_attrs__
@@ -33,7 +35,7 @@ class SpecInfo:
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
 
-    def collect_additional_outputs(self, input_spec, inputs, output_dir):
+    def collect_additional_outputs(self, inputs, output_dir):
         """Get additional outputs."""
         return {}
 
@@ -213,6 +215,7 @@ class ShellSpec(BaseSpec):
             "position",
             "requires",
             "separate_ext",
+            "keep_extension",
             "xor",
             "sep",
         }
@@ -322,7 +325,7 @@ class ShellOutSpec(BaseSpec):
     stderr: ty.Union[File, str]
     """The process' standard input."""
 
-    def collect_additional_outputs(self, input_spec, inputs, output_dir):
+    def collect_additional_outputs(self, inputs, output_dir):
         """Collect additional outputs from shelltask output_spec."""
         additional_out = {}
         for fld in attr_fields(self):
@@ -379,24 +382,13 @@ class ShellOutSpec(BaseSpec):
         """Collect output file if metadata specified."""
         if "value" in fld.metadata:
             return output_dir / fld.metadata["value"]
+        # this block is only run if "output_file_template" is provided in output_spec
+        # if the field is set in input_spec with output_file_template,
+        # than the field already should have value
         elif "output_file_template" in fld.metadata:
-            sfx_tmpl = (output_dir / fld.metadata["output_file_template"]).suffixes
-            if sfx_tmpl:
-                # removing suffix from input field if template has it's own suffix
-                inputs_templ = {
-                    k: v.split(".")[0]
-                    for k, v in inputs.__dict__.items()
-                    if isinstance(v, str)
-                }
-            else:
-                inputs_templ = {
-                    k: v for k, v in inputs.__dict__.items() if isinstance(v, str)
-                }
-            out_path = output_dir / fld.metadata["output_file_template"].format(
-                **inputs_templ
-            )
-            return out_path
-
+            inputs_templ = attr.asdict(inputs)
+            value = template_update_single(fld, inputs_templ, spec_type="output")
+            return output_dir / value
         elif "callable" in fld.metadata:
             return fld.metadata["callable"](fld.name, output_dir)
         else:

@@ -477,9 +477,9 @@ def test_shell_cmd_inputs_format_1():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA="inpA", input_spec=my_input_spec
+        executable="executable", inpA="aaa", input_spec=my_input_spec
     )
-    assert shelly.cmdline == "executable -v inpA"
+    assert shelly.cmdline == "executable -v aaa"
 
 
 def test_shell_cmd_inputs_format_2():
@@ -1028,6 +1028,198 @@ def test_shell_cmd_inputs_template_6a():
     assert shelly.cmdline == "executable inpA"
 
 
+def test_shell_cmd_inputs_template_7(tmpdir):
+    """ additional inputs uses output_file_template with a suffix (no extension)
+    no keep_extension is used
+    """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 2,
+                        "help_string": "outA",
+                        "argstr": "",
+                        "output_file_template": "{inpA}_out",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    inpA_file = tmpdir.join("a_file.txt")
+    inpA_file.write("content")
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, inpA=inpA_file
+    )
+
+    # outA should be formatted in a way that that .txt goes to the end
+    assert (
+        shelly.cmdline
+        == f"executable {tmpdir.join('a_file.txt')} {tmpdir.join('a_file_out.txt')}"
+    )
+
+
+def test_shell_cmd_inputs_template_7a(tmpdir):
+    """ additional inputs uses output_file_template with a suffix (no extension)
+        keep_extension is True (as default)
+    """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 2,
+                        "help_string": "outA",
+                        "argstr": "",
+                        "keep_extension": True,
+                        "output_file_template": "{inpA}_out",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    inpA_file = tmpdir.join("a_file.txt")
+    inpA_file.write("content")
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, inpA=inpA_file
+    )
+
+    # outA should be formatted in a way that that .txt goes to the end
+    assert (
+        shelly.cmdline
+        == f"executable {tmpdir.join('a_file.txt')} {tmpdir.join('a_file_out.txt')}"
+    )
+
+
+def test_shell_cmd_inputs_template_7b(tmpdir):
+    """ additional inputs uses output_file_template with a suffix (no extension)
+    keep extension is False (so the extension is removed when creating the output)
+    """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 2,
+                        "help_string": "outA",
+                        "argstr": "",
+                        "keep_extension": False,
+                        "output_file_template": "{inpA}_out",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    inpA_file = tmpdir.join("a_file.txt")
+    inpA_file.write("content")
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, inpA=inpA_file
+    )
+
+    # outA should be formatted in a way that that .txt goes to the end
+    assert (
+        shelly.cmdline
+        == f"executable {tmpdir.join('a_file.txt')} {tmpdir.join('a_file_out')}"
+    )
+
+
+def test_shell_cmd_inputs_template_8(tmpdir):
+    """additional inputs uses output_file_template with a suffix and an extension"""
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 2,
+                        "help_string": "outA",
+                        "argstr": "",
+                        "output_file_template": "{inpA}_out.txt",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    inpA_file = tmpdir.join("a_file.t")
+    inpA_file.write("content")
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, inpA=inpA_file
+    )
+
+    # outA should be formatted in a way that inpA extension is removed and the template extension is used
+    assert (
+        shelly.cmdline
+        == f"executable {tmpdir.join('a_file.t')} {tmpdir.join('a_file_out.txt')}"
+    )
+
+
 def test_shell_cmd_inputs_di(tmpdir):
     """ example from #279 """
     my_input_spec = SpecInfo(
@@ -1220,7 +1412,7 @@ def test_shell_cmd_inputs_di(tmpdir):
         bases=(ShellSpec,),
     )
 
-    my_input_file = tmpdir.join("a_file")
+    my_input_file = tmpdir.join("a_file.ext")
     my_input_file.write("content")
 
     # no input provided
@@ -1237,7 +1429,7 @@ def test_shell_cmd_inputs_di(tmpdir):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -o [{my_input_file}_out]"
+        == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{tmpdir.join('a_file_out.ext')}]"
     )
 
     # input file name, noiseImage is set to True, so template is used in the utput
@@ -1249,7 +1441,7 @@ def test_shell_cmd_inputs_di(tmpdir):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -o [{my_input_file}_out, {my_input_file}_noise]"
+        == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{tmpdir.join('a_file_out.ext')}, {tmpdir.join('a_file_noise.ext')}]"
     )
 
     # input file name and help_short
@@ -1261,7 +1453,7 @@ def test_shell_cmd_inputs_di(tmpdir):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {my_input_file} -s 1 -p 1 -r 2 -h -o [{my_input_file}_out]"
+        == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -h -o [{tmpdir.join('a_file_out.ext')}]"
     )
 
     assert shelly.output_names == [

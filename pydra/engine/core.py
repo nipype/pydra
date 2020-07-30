@@ -423,9 +423,7 @@ class TaskBase:
         self.output_spec = output_from_inputfields(self.output_spec, self.inputs)
         output_klass = make_klass(self.output_spec)
         output = output_klass(**{f.name: None for f in attr.fields(output_klass)})
-        other_output = output.collect_additional_outputs(
-            self.input_spec, self.inputs, self.output_dir
-        )
+        other_output = output.collect_additional_outputs(self.inputs, self.output_dir)
         return attr.evolve(output, **run_output, **other_output)
 
     def split(self, splitter, overwrite=False, **kwargs):
