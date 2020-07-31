@@ -5,7 +5,7 @@ import pytest
 from ... import mark
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
-from .utils import gen_basic_wf
+from .utils import gen_basic_wf, use_validator
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -34,7 +34,7 @@ def test_name_conflict():
     assert "Cannot use names of attributes or methods" in str(excinfo2.value)
 
 
-def test_numpy():
+def test_numpy(use_validator):
     """ checking if mark.task works for numpy functions"""
     np = pytest.importorskip("numpy")
     fft = mark.annotate({"a": np.ndarray, "return": np.ndarray})(np.fft.fft)
@@ -54,7 +54,7 @@ def test_checksum():
     )
 
 
-def test_annotated_func():
+def test_annotated_func(use_validator):
     @mark.task
     def testfunc(
         a: int, b: float = 0.1
@@ -98,7 +98,7 @@ def test_annotated_func():
     ]
 
 
-def test_annotated_func_multreturn():
+def test_annotated_func_multreturn(use_validator):
     """ the function has two elements in the return statement"""
 
     @mark.task
@@ -137,7 +137,7 @@ def test_annotated_func_multreturn():
     ]
 
 
-def test_annotated_input_func_1():
+def test_annotated_input_func_1(use_validator):
     """ the function with annotated input (float)"""
 
     @mark.task
@@ -148,7 +148,7 @@ def test_annotated_input_func_1():
     assert getattr(funky.inputs, "a") == 3.5
 
 
-def test_annotated_input_func_2():
+def test_annotated_input_func_2(use_validator):
     """ the function with annotated input (int, but float provided)"""
 
     @mark.task
@@ -159,7 +159,7 @@ def test_annotated_input_func_2():
         funky = testfunc(a=3.5)
 
 
-def test_annotated_input_func_2a():
+def test_annotated_input_func_2a(use_validator):
     """ the function with annotated input (int, but float provided)"""
 
     @mark.task
@@ -173,7 +173,7 @@ def test_annotated_input_func_2a():
         funky()
 
 
-def test_annotated_input_func_3():
+def test_annotated_input_func_3(use_validator):
     """ the function with annotated input (list)"""
 
     @mark.task
@@ -195,7 +195,7 @@ def test_annotated_input_func_3a():
     assert getattr(funky.inputs, "a") == [1.0, 3.5]
 
 
-def test_annotated_input_func_3b():
+def test_annotated_input_func_3b(use_validator):
     """ the function with annotated input
     (list of floats - int and float provided, should be fine)
     """
@@ -208,7 +208,7 @@ def test_annotated_input_func_3b():
     assert getattr(funky.inputs, "a") == [1, 3.5]
 
 
-def test_annotated_input_func_3c_excep():
+def test_annotated_input_func_3c_excep(use_validator):
     """ the function with annotated input
     (list of ints - int and float provided, should raise an error)
     """
@@ -221,7 +221,7 @@ def test_annotated_input_func_3c_excep():
         funky = testfunc(a=[1, 3.5])
 
 
-def test_annotated_input_func_4():
+def test_annotated_input_func_4(use_validator):
     """ the function with annotated input (dictionary)"""
 
     @mark.task
@@ -232,7 +232,7 @@ def test_annotated_input_func_4():
     assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
 
 
-def test_annotated_input_func_4a():
+def test_annotated_input_func_4a(use_validator):
     """ the function with annotated input (dictionary of floats)"""
 
     @mark.task
@@ -243,7 +243,7 @@ def test_annotated_input_func_4a():
     assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
 
 
-def test_annotated_input_func_4b_excep():
+def test_annotated_input_func_4b_excep(use_validator):
     """ the function with annotated input (dictionary of ints, but float provided)"""
 
     @mark.task
@@ -254,7 +254,7 @@ def test_annotated_input_func_4b_excep():
         funky = testfunc(a={"el1": 1, "el2": 3.5})
 
 
-def test_annotated_func_multreturn_exception():
+def test_annotated_func_multreturn_exception(use_validator):
     """function has two elements in the return statement,
         but three element provided in the spec - should raise an error
     """
@@ -453,7 +453,7 @@ def test_result_none_2():
     assert res.output.out2 is None
 
 
-def test_audit_prov(tmpdir):
+def test_audit_prov(tmpdir, use_validator):
     @mark.task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
@@ -474,7 +474,7 @@ def test_audit_prov(tmpdir):
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
 
 
-def test_audit_all(tmpdir):
+def test_audit_all(tmpdir, use_validator):
     @mark.task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b

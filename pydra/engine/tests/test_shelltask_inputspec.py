@@ -1,12 +1,10 @@
 import attr
 import typing as ty
-import os, sys
 import pytest
-from pathlib import Path
-
 
 from ..task import ShellCommandTask
 from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
+from .utils import use_validator
 
 
 def test_shell_cmd_execargs_1():
@@ -1220,7 +1218,7 @@ def test_shell_cmd_inputs_template_8(tmpdir):
     )
 
 
-def test_shell_cmd_inputs_di(tmpdir):
+def test_shell_cmd_inputs_di(tmpdir, use_validator):
     """ example from #279 """
     my_input_spec = SpecInfo(
         name="Input",

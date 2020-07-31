@@ -10,6 +10,7 @@ from ..core import Workflow
 from ..submitter import Submitter
 from ... import mark
 from ..specs import File
+from ... import set_input_validator
 
 
 need_docker = pytest.mark.skipif(
@@ -214,3 +215,13 @@ def gen_basic_wf(name="basic-wf"):
     wf.add(fun_addvar(name="task2", a=wf.task1.lzout.out, b=2))
     wf.set_output([("out", wf.task2.lzout.out)])
     return wf
+
+
+@pytest.fixture(scope="function")
+def use_validator(request):
+    set_input_validator(flag=True)
+
+    def fin():
+        set_input_validator(flag=False)
+
+    request.addfinalizer(fin)
