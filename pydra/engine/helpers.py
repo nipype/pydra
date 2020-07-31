@@ -16,6 +16,7 @@ from traceback import format_exception
 import typing as ty
 import typing_inspect as tyi
 import inspect
+import warnings
 
 
 from .specs import Runtime, File, Directory, attr_fields, Result, LazyField
@@ -286,10 +287,11 @@ def custom_validator(instance, attribute, value):
     if (
         value is attr.NOTHING
         or value is None
+        or attribute.name.startswith("_")  # e.g. _func
         or isinstance(value, LazyField)
         or tp_attr in [ty.Any, inspect._empty]
     ):
-        check = False
+        check = False  # no checking of the type
     elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:  # what about File
         tp = _single_type_update(tp_attr)
         cont = None  # no container
@@ -303,9 +305,20 @@ def custom_validator(instance, attribute, value):
         tp, check = _types_updates(tp_attr_list)
     elif tp_attr._name == "Dict":
         cont = "Dict"
-        breakpoint()
+        tp_attr_key_val = tyi.get_args(tp_attr)
+        # assuming that it should have length of 2 for keys and values
+        if len(tp_attr_key_val) != 2:
+            check = False
+        # updating types separately for keys and values
+        tp_k, check_k = _types_updates([tp_attr_key_val[0]])
+        tp_v, check_v = _types_updates([tp_attr_key_val[1]])
+        if not (check_k and check_v):
+            check = False
+        else:
+            tp = {"key": tp_k, "val": tp_v}
     else:
-        breakpoint()
+        warnings.warn(f"no checking implemented for value {value} and type {tp_attr}")
+        check = False
 
     if check:
         if cont is None:
@@ -328,7 +341,12 @@ def custom_validator(instance, attribute, value):
                 )
             )(instance, attribute, value)
         elif cont == "Dict":
-            breakpoint()  # TODO
+            return attr.validators.deep_mapping(
+                key_validator=attr.validators.instance_of(tp["key"]),
+                value_validator=attr.validators.instance_of(
+                    tp["val"] + (attr._make._Nothing,)
+                ),
+            )(instance, attribute, value)
         else:
             raise Exception(f"cont should be None, List or Dict, and not {cont}")
     else:
@@ -336,6 +354,7 @@ def custom_validator(instance, attribute, value):
 
 
 def _types_updates(tp_list):
+    """updating the tuple with possible types"""
     tp_upd_list = []
     check = True
     for tp_el in tp_list:
@@ -350,6 +369,9 @@ def _types_updates(tp_list):
 
 
 def _single_type_update(tp, simplify=False):
+    """ updating a single type - e.g. adding bytes if str is required
+        if simplify is True, than changing typing.List to list etc.
+    """
     if isinstance(tp, type) or tp in [File, Directory]:
         if tp is str:
             return (str, bytes)
@@ -359,16 +381,20 @@ def _single_type_update(tp, simplify=False):
             return (float, int)
         else:
             return (tp,)
-    elif simplify:
-        if tp._name is "List":
+    elif simplify is True:
+        if getattr(tp, "_name", None) is "List":
             return (list,)
-        elif tp._name is "Dict":
+        elif getattr(tp, "_name", None) is "Dict":
             return (dict,)
         elif tyi.is_union_type(tp):
-            return None
+            return tyi.get_args(tp)
         else:
-            raise NotImplementedError(f"not implemented for type {tp}")
+            warnings.warn(f"type check not implemented for type {tp}")
+            return None
     else:
+        warnings.warn(
+            f"type check not implemented for type {tp}, consider using simplify=True"
+        )
         return None
 
 

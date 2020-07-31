@@ -137,6 +137,123 @@ def test_annotated_func_multreturn():
     ]
 
 
+def test_annotated_input_func_1():
+    """ the function with annotated input (float)"""
+
+    @mark.task
+    def testfunc(a: float):
+        return a
+
+    funky = testfunc(a=3.5)
+    assert getattr(funky.inputs, "a") == 3.5
+
+
+def test_annotated_input_func_2():
+    """ the function with annotated input (int, but float provided)"""
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a=3.5)
+
+
+def test_annotated_input_func_2a():
+    """ the function with annotated input (int, but float provided)"""
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    funky = testfunc()
+    # the error is raised when run (should be improved?)
+    funky.inputs.a = 3.5
+    with pytest.raises(TypeError):
+        funky()
+
+
+def test_annotated_input_func_3():
+    """ the function with annotated input (list)"""
+
+    @mark.task
+    def testfunc(a: list):
+        return sum(a)
+
+    funky = testfunc(a=[1, 3.5])
+    assert getattr(funky.inputs, "a") == [1, 3.5]
+
+
+def test_annotated_input_func_3a():
+    """ the function with annotated input (list of floats)"""
+
+    @mark.task
+    def testfunc(a: ty.List[float]):
+        return sum(a)
+
+    funky = testfunc(a=[1.0, 3.5])
+    assert getattr(funky.inputs, "a") == [1.0, 3.5]
+
+
+def test_annotated_input_func_3b():
+    """ the function with annotated input
+    (list of floats - int and float provided, should be fine)
+    """
+
+    @mark.task
+    def testfunc(a: ty.List[float]):
+        return sum(a)
+
+    funky = testfunc(a=[1, 3.5])
+    assert getattr(funky.inputs, "a") == [1, 3.5]
+
+
+def test_annotated_input_func_3c_excep():
+    """ the function with annotated input
+    (list of ints - int and float provided, should raise an error)
+    """
+
+    @mark.task
+    def testfunc(a: ty.List[int]):
+        return sum(a)
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a=[1, 3.5])
+
+
+def test_annotated_input_func_4():
+    """ the function with annotated input (dictionary)"""
+
+    @mark.task
+    def testfunc(a: dict):
+        return sum(a.values())
+
+    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+
+
+def test_annotated_input_func_4a():
+    """ the function with annotated input (dictionary of floats)"""
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, float]):
+        return sum(a.values())
+
+    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+
+
+def test_annotated_input_func_4b_excep():
+    """ the function with annotated input (dictionary of ints, but float provided)"""
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, int]):
+        return sum(a.values())
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a={"el1": 1, "el2": 3.5})
+
+
 def test_annotated_func_multreturn_exception():
     """function has two elements in the return statement,
         but three element provided in the spec - should raise an error
