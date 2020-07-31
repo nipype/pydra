@@ -1277,20 +1277,6 @@ def test_shell_cmd_inputs_di(tmpdir):
                 ),
             ),
             (
-                "noise_model",
-                attr.ib(
-                    type=int,
-                    metadata={
-                        "help_string": """
-            Rician/(Gaussian)
-            Employ a Rician or Gaussian noise model.
-            """,
-                        "allowed_values": ["Rician", "Gaussian"],
-                        "argstr": "-n",
-                    },
-                ),
-            ),
-            (
                 "shrink_factor",
                 attr.ib(
                     type=int,
@@ -1463,3 +1449,24 @@ def test_shell_cmd_inputs_di(tmpdir):
         "correctedImage",
         "noiseImage",
     ]
+
+    # adding image_dimensionality that has allowed_values [2, 3, 4]
+    shelly = ShellCommandTask(
+        executable="DenoiseImage",
+        inputImageFilename=my_input_file,
+        input_spec=my_input_spec,
+        image_dimensionality=2,
+    )
+    assert (
+        shelly.cmdline
+        == f"DenoiseImage -d 2 -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{tmpdir.join('a_file_out.ext')}]"
+    )
+
+    # adding image_dimensionality that has allowed_values [2, 3, 4] and providing 5 - exception should be raised
+    with pytest.raises(ValueError):
+        shelly = ShellCommandTask(
+            executable="DenoiseImage",
+            inputImageFilename=my_input_file,
+            input_spec=my_input_spec,
+            image_dimensionality=5,
+        )

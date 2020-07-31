@@ -293,25 +293,10 @@ class ShellSpec(BaseSpec):
             if required_notfound:
                 raise AttributeError(f"{nm} requires {required_notfound}")
 
-            # TODO: types might be checked here
-        self._type_checking()
-
     def _file_check(self, field):
         file = Path(getattr(self, field.name))
         if not file.exists():
             raise AttributeError(f"the file from the {field.name} input does not exist")
-
-    def _type_checking(self):
-        """Use fld.type to check the types TODO.
-
-        This may be done through attr validators.
-
-        """
-        fields = attr_fields(self)
-        allowed_keys = ["min_val", "max_val", "range", "enum"]  # noqa
-        for fld in fields:
-            # TODO
-            pass
 
 
 @attr.s(auto_attribs=True, kw_only=True)
