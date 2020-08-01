@@ -255,6 +255,59 @@ def test_annotated_input_func_4b_excep(use_validator):
 
 
 def test_annotated_input_func_5(use_validator):
+    """ the function with annotated more complex input type (ty.List in ty.Dict)
+        the validator should simply check if values of dict are lists
+        so no error for 3.5
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.List[int]]):
+        return sum(a["el1"])
+
+    funky = testfunc(a={"el1": [1, 3.5]})
+    assert getattr(funky.inputs, "a") == {"el1": [1, 3.5]}
+
+
+def test_annotated_input_func_5a_except(use_validator):
+    """ the function with annotated more complex input type (ty.Dict in ty.Dict)
+        list is provided as a dict value (instead a dict), so error is raised
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.Dict[str, float]]):
+        return sum(a["el1"])
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a={"el1": [1, 3.5]})
+
+
+def test_annotated_input_func_6(use_validator):
+    """ the function with annotated more complex input type (ty.Union in ty.Dict)
+        the validator should unpack values from the Union
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.Union[float, int]]):
+        return sum(a["el1"])
+
+    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+
+
+def test_annotated_input_func_6a_excep(use_validator):
+    """ the function with annotated more complex input type (ty.Union in ty.Dict)
+        the validator should unpack values from the Union and raise an error for 3.5
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.Union[str, int]]):
+        return sum(a["el1"])
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a={"el1": 1, "el2": 3.5})
+
+
+def test_annotated_input_func_7(use_validator):
     """ the function with annotated input (float)
         the task has a splitter, so list of float is provided
         it should work, the validator tries to guess if this is a field with a splitter
@@ -268,7 +321,7 @@ def test_annotated_input_func_5(use_validator):
     assert getattr(funky.inputs, "a") == [3.5, 2.1]
 
 
-def test_annotated_input_func_6(use_validator):
+def test_annotated_input_func_7a_excep(use_validator):
     """ the function with annotated input (int) and splitter
         list of float provided - should raise an error (list of int would be fine)
     """

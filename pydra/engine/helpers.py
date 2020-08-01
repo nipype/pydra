@@ -400,6 +400,7 @@ def _single_type_update(tp, name, simplify=False):
         else:
             return (tp,)
     elif simplify is True:
+        warnings.warn(f"simplify validator for {name} field, checking only one depth")
         cont_tp, types_list = _check_special_type(tp, name=name)
         if cont_tp is list:
             return (list,)
