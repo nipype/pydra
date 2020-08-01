@@ -280,6 +280,7 @@ def make_klass(spec):
 def custom_validator(instance, attribute, value):
     """simple custom validation
     take into account ty.Union, ty.List, ty.Dict (but only one level depth)
+    adding an additional validator, if allowe_values provided
     """
     validators = []
     tp_attr = attribute.type
@@ -333,6 +334,12 @@ def custom_validator(instance, attribute, value):
 
 
 def _type_validator(instance, attribute, value, tp, cont_type):
+    """ creating a customized type validator,
+    uses validator.deep_iterable/mapping if the field is a container
+    (i.e. ty.List or ty.Dict),
+    it also tries to guess when the value is a list due to the splitter
+    and validates the elements
+    """
     if cont_type is None or cont_type is ty.Union:
         # if tp is not (list,), we are assuming that the value is a list
         # due to the splitter, so checking the member types
@@ -364,7 +371,7 @@ def _type_validator(instance, attribute, value, tp, cont_type):
 
 
 def _types_updates(tp_list, name):
-    """updating the tuple with possible types"""
+    """updating the type's tuple with possible additional types"""
     tp_upd_list = []
     check = True
     for tp_el in tp_list:
@@ -379,8 +386,9 @@ def _types_updates(tp_list, name):
 
 
 def _single_type_update(tp, name, simplify=False):
-    """ updating a single type - e.g. adding bytes if str is required
+    """ updating a single type with other related types - e.g. adding bytes for str
         if simplify is True, than changing typing.List to list etc.
+        (assuming that I validate only one depth, so have to simplify at some point)
     """
     if isinstance(tp, type) or tp in [File, Directory]:
         if tp is str:
