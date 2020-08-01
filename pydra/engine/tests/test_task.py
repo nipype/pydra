@@ -254,6 +254,33 @@ def test_annotated_input_func_4b_excep(use_validator):
         funky = testfunc(a={"el1": 1, "el2": 3.5})
 
 
+def test_annotated_input_func_5(use_validator):
+    """ the function with annotated input (float)
+        the task has a splitter, so list of float is provided
+        it should work, the validator tries to guess if this is a field with a splitter
+    """
+
+    @mark.task
+    def testfunc(a: float):
+        return a
+
+    funky = testfunc(a=[3.5, 2.1]).split("a")
+    assert getattr(funky.inputs, "a") == [3.5, 2.1]
+
+
+def test_annotated_input_func_6(use_validator):
+    """ the function with annotated input (int) and splitter
+        list of float provided - should raise an error (list of int would be fine)
+    """
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a=[3.5, 2.1]).split("a")
+
+
 def test_annotated_func_multreturn_exception(use_validator):
     """function has two elements in the return statement,
         but three element provided in the spec - should raise an error
