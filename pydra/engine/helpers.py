@@ -14,7 +14,6 @@ import re
 from time import strftime
 from traceback import format_exception
 import typing as ty
-import typing_inspect as tyi
 import inspect
 import warnings
 
@@ -282,7 +281,9 @@ def custom_validator(instance, attribute, value):
     """simple custom validation
     take into account ty.Union, ty.List, ty.Dict (but only one level depth)
     """
+    validators = []
     tp_attr = attribute.type
+    # a flag that could be changed to False, if the type is not recognized
     check_type = True
     if (
         value is attr.NOTHING
@@ -292,79 +293,72 @@ def custom_validator(instance, attribute, value):
         or tp_attr in [ty.Any, inspect._empty]
     ):
         check_type = False  # no checking of the type
-    elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:  # what about File
+    elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:
         tp = _single_type_update(tp_attr)
-        cont = None  # no container
-    elif tyi.is_union_type(tp_attr):
-        tp_attr_list = tyi.get_args(tp_attr)
-        cont = None
-        tp, check_type = _types_updates(tp_attr_list)
-    elif tp_attr._name == "List":
-        cont = "List"
-        tp_attr_list = tyi.get_args(tp_attr)
-        tp, check_type = _types_updates(tp_attr_list)
-    elif tp_attr._name == "Dict":
-        cont = "Dict"
-        tp_attr_key_val = tyi.get_args(tp_attr)
-        # assuming that it should have length of 2 for keys and values
-        if len(tp_attr_key_val) != 2:
-            check_type = False
-        # updating types separately for keys and values
-        tp_k, check_k = _types_updates([tp_attr_key_val[0]])
-        tp_v, check_v = _types_updates([tp_attr_key_val[1]])
-        if not (check_k and check_v):
-            check_type = False
+        cont_type = None
+    else:  # more complex types
+        cont_type, tp_attr_list = _check_special_type(tp_attr)
+        if cont_type is ty.Union:
+            tp, check_type = _types_updates(tp_attr_list)
+        elif cont_type is list:
+            tp, check_type = _types_updates(tp_attr_list)
+        elif cont_type is dict:
+            # assuming that it should have length of 2 for keys and values
+            if len(tp_attr_list) != 2:
+                check_type = False
+            else:
+                tp_attr_key, tp_attr_val = tp_attr_list
+            # updating types separately for keys and values
+            tp_k, check_k = _types_updates([tp_attr_key])
+            tp_v, check_v = _types_updates([tp_attr_val])
+            # assuming that I have to be able to check keys and values
+            if not (check_k and check_v):
+                check_type = False
+            else:
+                tp = {"key": tp_k, "val": tp_v}
         else:
-            tp = {"key": tp_k, "val": tp_v}
-    else:
-        warnings.warn(f"no checking implemented for value {value} and type {tp_attr}")
-        check_type = False
+            warnings.warn(
+                f"no checking implemented for value {value} and type {tp_attr}"
+            )
+            check_type = False
 
     if check_type:
-        if cont is None:
-            # if tp is not (list,), we are assuming that the value is a list
-            # due to the splitter, so checking the member types
-            if isinstance(value, list) and tp != (list,):
-                validators = [
-                    attr.validators.deep_iterable(
-                        member_validator=attr.validators.instance_of(
-                            tp + (attr._make._Nothing,)
-                        )
-                    )(instance, attribute, value)
-                ]
-            else:
-                validators = [
-                    attr.validators.instance_of(tp + (attr._make._Nothing,))(
-                        instance, attribute, value
-                    )
-                ]
-        elif cont == "List":
-            validators = [
-                attr.validators.deep_iterable(
-                    member_validator=attr.validators.instance_of(
-                        tp + (attr._make._Nothing,)
-                    )
-                )(instance, attribute, value)
-            ]
-        elif cont == "Dict":
-            validators = [
-                attr.validators.deep_mapping(
-                    key_validator=attr.validators.instance_of(tp["key"]),
-                    value_validator=attr.validators.instance_of(
-                        tp["val"] + (attr._make._Nothing,)
-                    ),
-                )(instance, attribute, value)
-            ]
-        else:
-            raise Exception(f"cont should be None, List or Dict, and not {cont}")
-    else:
-        validators = []
+        validators.append(_type_validator(instance, attribute, value, tp, cont_type))
 
     # checking additional requirements for values (e.g. allowed_values)
     meta_attr = attribute.metadata
     if "allowed_values" in meta_attr:
-        validators.append(_check_allowed_values(isinstance, attribute, value))
+        validators.append(_allowed_values_validator(isinstance, attribute, value))
     return validators
+
+
+def _type_validator(instance, attribute, value, tp, cont_type):
+    if cont_type is None or cont_type is ty.Union:
+        # if tp is not (list,), we are assuming that the value is a list
+        # due to the splitter, so checking the member types
+        if isinstance(value, list) and tp != (list,):
+            return attr.validators.deep_iterable(
+                member_validator=attr.validators.instance_of(
+                    tp + (attr._make._Nothing,)
+                )
+            )(instance, attribute, value)
+        else:
+            return attr.validators.instance_of(tp + (attr._make._Nothing,))(
+                instance, attribute, value
+            )
+    elif cont_type is list:
+        return attr.validators.deep_iterable(
+            member_validator=attr.validators.instance_of(tp + (attr._make._Nothing,))
+        )(instance, attribute, value)
+    elif cont_type is dict:
+        return attr.validators.deep_mapping(
+            key_validator=attr.validators.instance_of(tp["key"]),
+            value_validator=attr.validators.instance_of(
+                tp["val"] + (attr._make._Nothing,)
+            ),
+        )(instance, attribute, value)
+    else:
+        raise Exception(f"cont should be None, List or Dict, and not {cont_type}")
 
 
 def _types_updates(tp_list):
@@ -396,12 +390,13 @@ def _single_type_update(tp, simplify=False):
         else:
             return (tp,)
     elif simplify is True:
-        if getattr(tp, "_name", None) is "List":
+        cont_tp, types_list = _check_special_type(tp)
+        if cont_tp is list:
             return (list,)
-        elif getattr(tp, "_name", None) is "Dict":
+        elif cont_tp is dict:
             return (dict,)
-        elif tyi.is_union_type(tp):
-            return tyi.get_args(tp)
+        elif cont_tp is ty.Union:
+            return types_list
         else:
             warnings.warn(f"type check not implemented for type {tp}")
             return None
@@ -412,7 +407,26 @@ def _single_type_update(tp, simplify=False):
         return None
 
 
-def _check_allowed_values(instance, attribute, value):
+def _check_special_type(tp):
+    """checking if the type is a container: ty.List, ty.Dict or ty.Union """
+    if sys.version_info.minor >= 8:
+        return ty.get_origin(tp), ty.get_args(tp)
+    else:
+        if isinstance(tp, type):  # simple type
+            return None, ()
+        else:
+            if tp._name == "List":
+                return list, tp.__args__
+            elif tp._name == "Dict":
+                return dict, tp.__args__
+            elif tp.__origin__ is ty.Union:
+                return ty.Union, tp.__args__
+            else:
+                warnings.warn(f"type check not implemented for type {tp}")
+                return None, ()
+
+
+def _allowed_values_validator(instance, attribute, value):
     """ checking if the values is in allowed_values"""
     allowed = attribute.metadata["allowed_values"]
     if value is attr.NOTHING:
