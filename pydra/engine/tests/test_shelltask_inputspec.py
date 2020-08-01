@@ -1461,10 +1461,11 @@ def test_shell_cmd_inputs_di(tmpdir, use_validator):
     )
 
     # adding image_dimensionality that has allowed_values [2, 3, 4] and providing 5 - exception should be raised
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as excinfo:
         shelly = ShellCommandTask(
             executable="DenoiseImage",
             inputImageFilename=my_input_file,
             input_spec=my_input_spec,
             image_dimensionality=5,
         )
+    assert "value of image_dimensionality" in str(excinfo.value)

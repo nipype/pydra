@@ -294,14 +294,14 @@ def custom_validator(instance, attribute, value):
     ):
         check_type = False  # no checking of the type
     elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:
-        tp = _single_type_update(tp_attr)
+        tp = _single_type_update(tp_attr, name=attribute.name)
         cont_type = None
     else:  # more complex types
-        cont_type, tp_attr_list = _check_special_type(tp_attr)
+        cont_type, tp_attr_list = _check_special_type(tp_attr, name=attribute.name)
         if cont_type is ty.Union:
-            tp, check_type = _types_updates(tp_attr_list)
+            tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
         elif cont_type is list:
-            tp, check_type = _types_updates(tp_attr_list)
+            tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
         elif cont_type is dict:
             # assuming that it should have length of 2 for keys and values
             if len(tp_attr_list) != 2:
@@ -309,8 +309,8 @@ def custom_validator(instance, attribute, value):
             else:
                 tp_attr_key, tp_attr_val = tp_attr_list
             # updating types separately for keys and values
-            tp_k, check_k = _types_updates([tp_attr_key])
-            tp_v, check_v = _types_updates([tp_attr_val])
+            tp_k, check_k = _types_updates([tp_attr_key], name=attribute.name)
+            tp_v, check_v = _types_updates([tp_attr_val], name=attribute.name)
             # assuming that I have to be able to check keys and values
             if not (check_k and check_v):
                 check_type = False
@@ -318,7 +318,7 @@ def custom_validator(instance, attribute, value):
                 tp = {"key": tp_k, "val": tp_v}
         else:
             warnings.warn(
-                f"no checking implemented for value {value} and type {tp_attr}"
+                f"no type check for {attribute.name} field, no type check implemented for value {value} and type {tp_attr}"
             )
             check_type = False
 
@@ -358,15 +358,17 @@ def _type_validator(instance, attribute, value, tp, cont_type):
             ),
         )(instance, attribute, value)
     else:
-        raise Exception(f"cont should be None, List or Dict, and not {cont_type}")
+        raise Exception(
+            f"container type of {attribute.name} should be None, list, dict or ty.Union, and not {cont_type}"
+        )
 
 
-def _types_updates(tp_list):
+def _types_updates(tp_list, name):
     """updating the tuple with possible types"""
     tp_upd_list = []
     check = True
     for tp_el in tp_list:
-        tp_upd = _single_type_update(tp_el, simplify=True)
+        tp_upd = _single_type_update(tp_el, name, simplify=True)
         if tp_upd is None:
             check = False
             break
@@ -376,7 +378,7 @@ def _types_updates(tp_list):
     return tp_upd, check
 
 
-def _single_type_update(tp, simplify=False):
+def _single_type_update(tp, name, simplify=False):
     """ updating a single type - e.g. adding bytes if str is required
         if simplify is True, than changing typing.List to list etc.
     """
@@ -390,7 +392,7 @@ def _single_type_update(tp, simplify=False):
         else:
             return (tp,)
     elif simplify is True:
-        cont_tp, types_list = _check_special_type(tp)
+        cont_tp, types_list = _check_special_type(tp, name=name)
         if cont_tp is list:
             return (list,)
         elif cont_tp is dict:
@@ -398,16 +400,18 @@ def _single_type_update(tp, simplify=False):
         elif cont_tp is ty.Union:
             return types_list
         else:
-            warnings.warn(f"type check not implemented for type {tp}")
+            warnings.warn(
+                f"no type check for {name} field, type check not implemented for type of {tp}"
+            )
             return None
     else:
         warnings.warn(
-            f"type check not implemented for type {tp}, consider using simplify=True"
+            f"no type check for {name} field, type check not implemented for type - {tp}, consider using simplify=True"
         )
         return None
 
 
-def _check_special_type(tp):
+def _check_special_type(tp, name):
     """checking if the type is a container: ty.List, ty.Dict or ty.Union """
     if sys.version_info.minor >= 8:
         return ty.get_origin(tp), ty.get_args(tp)
@@ -422,7 +426,9 @@ def _check_special_type(tp):
             elif tp.__origin__ is ty.Union:
                 return ty.Union, tp.__args__
             else:
-                warnings.warn(f"type check not implemented for type {tp}")
+                warnings.warn(
+                    f"not type check for {name} field, type check not implemented for type {tp}"
+                )
                 return None, ()
 
 
@@ -432,7 +438,9 @@ def _allowed_values_validator(instance, attribute, value):
     if value is attr.NOTHING:
         pass
     elif value not in allowed:
-        raise ValueError(f"value has to be from {allowed}, but {value} provided")
+        raise ValueError(
+            f"value of {attribute.name} has to be from {allowed}, but {value} provided"
+        )
 
 
 async def read_stream_and_display(stream, display):
