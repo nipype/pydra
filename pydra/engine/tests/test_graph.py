@@ -484,12 +484,12 @@ def test_dotfile_2(tmpdir):
         assert formatted_dot.exists()
 
 
-def test_dotfile_2det(tmpdir):
-    """detailed dotfile for graph: a -> b -> d, a -> c -> d
+def test_dotfile_2nest(tmpdir):
+    """nested dotfile for graph: a -> b -> d, a -> c -> d
     (should be the same as default type, i.e. type=simple)
     """
     graph = DiGraph(nodes=[A, B, C, D], edges=[(A, B), (A, C), (B, D), (C, D)])
-    dotfile = graph.create_dotfile_detailed(outdir=tmpdir)
+    dotfile = graph.create_dotfile_nested(outdir=tmpdir)
     dotstr_lines = dotfile.read_text().split("\n")
     for el in ["a", "b", "c", "d"]:
         assert el in dotstr_lines
@@ -502,7 +502,7 @@ def test_dotfile_2det(tmpdir):
 
 
 def test_dotfile_3(tmpdir):
-    """detailed dotfile for graph: a -> c, b -> c, c -> d"""
+    """nested dotfile for graph: a -> c, b -> c, c -> d"""
     graph = DiGraph(nodes=[A, B, C, D], edges=[(A, C), (B, C), (C, D)])
     dotfile = graph.create_dotfile_simple(outdir=tmpdir)
     dotstr_lines = dotfile.read_text().split("\n")

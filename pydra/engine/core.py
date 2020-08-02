@@ -1012,13 +1012,13 @@ class Workflow(TaskBase):
             dotfile = self.graph.create_dotfile_simple(
                 outdir=self.output_dir, name=name
             )
-        elif type == "detailed":
-            dotfile = self.graph.create_dotfile_detailed(
+        elif type == "nested":
+            dotfile = self.graph.create_dotfile_nested(
                 outdir=self.output_dir, name=name
             )
         else:
             raise Exception(
-                f"type of the graph can be simple or detailed, " f"but {type} provided"
+                f"type of the graph can be simple or nested, " f"but {type} provided"
             )
         if not export:
             return dotfile

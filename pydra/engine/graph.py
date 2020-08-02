@@ -323,6 +323,7 @@ class DiGraph:
             self._checking_path(node_name=nm, first_name=nm)
 
     def create_dotfile_simple(self, outdir, name="graph"):
+        """ creates a simple dotfile (no nested structure)"""
         from .core import is_workflow
 
         dotstr = "digraph G {\n"
@@ -341,7 +342,8 @@ class DiGraph:
         dotfile.write_text(dotstr)
         return dotfile
 
-    def create_dotfile_detailed(self, outdir, name="graph"):
+    def create_dotfile_nested(self, outdir, name="graph"):
+        """dotfile that includes the nested structures for workflows"""
         dotstr = "digraph G {\ncompound=true \n"
         dotstr += self._create_dotfile_single_graph(nodes=self.nodes, edges=self.edges)
         dotstr += "}"

@@ -3976,8 +3976,8 @@ def test_graph_1(tmpdir):
         print("\n graph in: ", formatted_dot[0])
 
 
-def test_graph_1det(tmpdir):
-    """creating a detailed graph, wf with two nodes"""
+def test_graph_1nest(tmpdir):
+    """creating a nested graph, wf with two nodes"""
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult_1", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(multiply(name="mult_2", x=wf.lzin.x, y=wf.lzin.x))
@@ -3986,7 +3986,7 @@ def test_graph_1det(tmpdir):
     wf.inputs.x = 2
     wf.inputs.y = 3
 
-    dotfile = wf.create_dotfile(type="detailed")
+    dotfile = wf.create_dotfile(type="nested")
     dotstr_lines = dotfile.read_text().split("\n")
     assert "mult_1" in dotstr_lines
     assert "mult_2" in dotstr_lines
@@ -3996,7 +3996,7 @@ def test_graph_1det(tmpdir):
     if DOT_FLAG:
         name = f"graph_{sys._getframe().f_code.co_name}"
         dotfile_pr, formatted_dot = wf.create_dotfile(
-            type="detailed", export=["png", "pdf"], name=name
+            type="nested", export=["png", "pdf"], name=name
         )
         assert dotfile_pr.read_text().split("\n") == dotstr_lines
         assert len(formatted_dot) == 2
@@ -4029,8 +4029,8 @@ def test_graph_2(tmpdir):
         print("\n graph in: ", formatted_dot[0])
 
 
-def test_graph_2det(tmpdir):
-    """creating a detailed graph, wf with one worfklow as a node"""
+def test_graph_2nest(tmpdir):
+    """creating a nested graph, wf with one worfklow as a node"""
     wfnd = Workflow(name="wfnd", input_spec=["x"])
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
@@ -4040,7 +4040,7 @@ def test_graph_2det(tmpdir):
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
 
-    dotfile = wf.create_dotfile(type="detailed")
+    dotfile = wf.create_dotfile(type="nested")
     dotstr_lines = dotfile.read_text().split("\n")
     assert "subgraph cluster_wfnd {" in dotstr_lines
     assert "add2" in dotstr_lines
@@ -4048,7 +4048,7 @@ def test_graph_2det(tmpdir):
     if DOT_FLAG:
         name = f"graph_{sys._getframe().f_code.co_name}"
         dotfile_pr, formatted_dot = wf.create_dotfile(
-            type="detailed", export=True, name=name
+            type="nested", export=True, name=name
         )
         assert dotfile_pr.read_text().split("\n") == dotstr_lines
         assert len(formatted_dot) == 1
@@ -4082,8 +4082,8 @@ def test_graph_3(tmpdir):
         print("\n graph in: ", formatted_dot[0])
 
 
-def test_graph_3det(tmpdir):
-    """creating a detailed graph, wf with two nodes (one node is a workflow)"""
+def test_graph_3nest(tmpdir):
+    """creating a nested graph, wf with two nodes (one node is a workflow)"""
     wf = Workflow(name="wf", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
 
@@ -4093,7 +4093,7 @@ def test_graph_3det(tmpdir):
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
 
-    dotfile = wf.create_dotfile(type="detailed")
+    dotfile = wf.create_dotfile(type="nested")
     dotstr_lines = dotfile.read_text().split("\n")
     assert "mult" in dotstr_lines
     assert "subgraph cluster_wfnd {" in dotstr_lines
@@ -4102,7 +4102,7 @@ def test_graph_3det(tmpdir):
     if DOT_FLAG:
         name = f"graph_{sys._getframe().f_code.co_name}"
         dotfile_pr, formatted_dot = wf.create_dotfile(
-            type="detailed", export=True, name=name
+            type="nested", export=True, name=name
         )
         assert dotfile_pr.read_text().split("\n") == dotstr_lines
         assert len(formatted_dot) == 1
@@ -4110,8 +4110,8 @@ def test_graph_3det(tmpdir):
         print("\n graph in: ", formatted_dot[0])
 
 
-def test_graph_4det(tmpdir):
-    """creating a detailed graph, wf with two nodes (one node is a workflow with two nodes
+def test_graph_4nest(tmpdir):
+    """creating a nested graph, wf with two nodes (one node is a workflow with two nodes
     inside). Connection from the node to the inner workflow.
     """
     wf = Workflow(name="wf", input_spec=["x", "y"])
@@ -4124,7 +4124,7 @@ def test_graph_4det(tmpdir):
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
 
-    dotfile = wf.create_dotfile(type="detailed")
+    dotfile = wf.create_dotfile(type="nested")
     dotstr_lines = dotfile.read_text().split("\n")
     for el in ["mult", "add2_a", "add2_b"]:
         assert el in dotstr_lines
@@ -4135,15 +4135,15 @@ def test_graph_4det(tmpdir):
     if DOT_FLAG:
         name = f"graph_{sys._getframe().f_code.co_name}"
         dotfile_pr, formatted_dot = wf.create_dotfile(
-            type="detailed", export=True, name=name
+            type="nested", export=True, name=name
         )
         assert dotfile_pr.read_text().split("\n") == dotstr_lines
         assert formatted_dot[0].exists()
         print("\n graph in: ", formatted_dot[0])
 
 
-def test_graph_5det(tmpdir):
-    """creating a detailed graph, wf with two nodes (one node is a workflow with two nodes
+def test_graph_5nest(tmpdir):
+    """creating a nested graph, wf with two nodes (one node is a workflow with two nodes
     inside). Connection from the inner workflow to the node.
     """
     wf = Workflow(name="wf", input_spec=["x", "y"])
@@ -4156,7 +4156,7 @@ def test_graph_5det(tmpdir):
     wf.add(multiply(name="mult", x=wf.wfnd.lzout.out, y=wf.lzin.y))
     wf.set_output([("out", wf.mult.lzout.out)])
 
-    dotfile = wf.create_dotfile(type="detailed")
+    dotfile = wf.create_dotfile(type="nested")
     dotstr_lines = dotfile.read_text().split("\n")
     for el in ["mult", "add2_a", "add2_b"]:
         assert el in dotstr_lines
@@ -4167,7 +4167,7 @@ def test_graph_5det(tmpdir):
     if DOT_FLAG:
         name = f"graph_{sys._getframe().f_code.co_name}"
         dotfile_pr, formatted_dot = wf.create_dotfile(
-            type="detailed", export=True, name=name
+            type="nested", export=True, name=name
         )
         assert dotfile_pr.read_text().split("\n") == dotstr_lines
         assert formatted_dot[0].exists()
