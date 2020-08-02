@@ -9,8 +9,7 @@ from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
-from .utils import result_no_submitter, result_submitter
-
+from .utils import result_no_submitter, result_submitter, use_validator
 
 if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
@@ -251,7 +250,7 @@ def test_wf_shell_cmd_1(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_1(plugin, results_function):
+def test_shell_cmd_inputspec_1(plugin, results_function, use_validator):
     """ a command with executable, args and one command opt,
         using a customized input_spec to add the opt to the command
         in the right place that is specified in metadata["cmd_pos"]
@@ -290,7 +289,7 @@ def test_shell_cmd_inputspec_1(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_2(plugin, results_function):
+def test_shell_cmd_inputspec_2(plugin, results_function, use_validator):
     """ a command with executable, args and two command options,
         using a customized input_spec to add the opt to the command
         in the right place that is specified in metadata["cmd_pos"]
@@ -1511,6 +1510,50 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function):
     res = results_function(shelly, plugin)
     assert res[0].output.stdout == "HELLO\n"
     assert res[1].output.stdout == "hi\n"
+
+
+def test_shell_cmd_inputspec_typeval_1(use_validator):
+    """ customized input_spec with a type that doesn't match the value
+     - raise an exception
+    """
+    cmd_exec = "echo"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "text",
+                attr.ib(
+                    type=int,
+                    metadata={"position": 1, "argstr": "", "help_string": "text"},
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    with pytest.raises(TypeError):
+        shelly = ShellCommandTask(
+            executable=cmd_exec, text="hello", input_spec=my_input_spec
+        )
+
+
+def test_shell_cmd_inputspec_typeval_2(use_validator):
+    """ customized input_spec (shorter syntax) with a type that doesn't match the value
+     - raise an exception
+    """
+    cmd_exec = "echo"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("text", int, {"position": 1, "argstr": "", "help_string": "text"})],
+        bases=(ShellSpec,),
+    )
+
+    with pytest.raises(TypeError):
+        shelly = ShellCommandTask(
+            executable=cmd_exec, text="hello", input_spec=my_input_spec
+        )
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])

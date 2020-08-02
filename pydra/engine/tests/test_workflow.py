@@ -2107,7 +2107,7 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
         assert t1 > 2
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
@@ -2165,7 +2165,7 @@ def test_wf_nostate_cachelocations_a(plugin, tmpdir):
         # checking execution time (second one should be quick)
         assert t1 > 2
         # testing relative values (windows or slurm takes much longer to create wf itself)
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
     # checking if both wf.output_dir are created
     assert wf1.output_dir.exists()
@@ -2225,7 +2225,7 @@ def test_wf_nostate_cachelocations_b(plugin, tmpdir):
     if not sys.platform.startswith("win") and plugin == "cf":
         # checking execution time
         assert t1 > 2
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
@@ -2284,7 +2284,7 @@ def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
         # checking execution time (the second wf should be fast, nodes do not have to rerun)
         assert t1 > 2
         # testing relative values (windows or slurm takes much longer to create wf itself)
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
     # both wf output_dirs should be created
     assert wf1.output_dir.exists()
@@ -2340,7 +2340,7 @@ def test_wf_nostate_cachelocations_setoutputchange_a(plugin, tmpdir):
         # checking execution time (the second wf should be fast, nodes do not have to rerun)
         assert t1 > 2
         # testing relative values (windows or slurm takes much longer to create wf itself)
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
     # both wf output_dirs should be created
     assert wf1.output_dir.exists()
@@ -2522,7 +2522,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(plugin, tmpdir):
     if not sys.platform.startswith("win") and plugin == "cf":
         # checking the time
         assert t1 > 2
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
     # tasks should not be recomputed
     assert len(list(Path(cache_dir1).glob("F*"))) == 2
@@ -2737,7 +2737,7 @@ def test_wf_state_cachelocations(plugin, tmpdir):
     if not sys.platform.startswith("win") and plugin == "cf":
         # checking the execution time
         assert t1 > 2
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
     # checking all directories
     assert wf1.output_dir
@@ -2873,7 +2873,7 @@ def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
     if not sys.platform.startswith("win") and plugin == "cf":
         # checking the execution time
         assert t1 > 2
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
     # checking all directories
     assert wf1.output_dir
@@ -3101,7 +3101,7 @@ def test_wf_ndstate_cachelocations(plugin, tmpdir):
     if not sys.platform.startswith("win") and plugin == "cf":
         # checking the execution time
         assert t1 > 2
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
     # checking all directories
     assert wf1.output_dir.exists()
@@ -3227,7 +3227,7 @@ def test_wf_ndstate_cachelocations_updatespl(plugin, tmpdir):
     if not sys.platform.startswith("win") and plugin == "cf":
         # checking the execution time
         assert t1 > 2
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
     # checking all directories
     assert wf1.output_dir.exists()
@@ -3343,7 +3343,7 @@ def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
     if not sys.platform.startswith("win") and plugin == "cf":
         # checking the execution time
         assert t1 > 2
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
 
 def test_wf_state_runtwice_usecache(plugin, tmpdir):
@@ -3392,7 +3392,7 @@ def test_wf_state_runtwice_usecache(plugin, tmpdir):
     if not sys.platform.startswith("win") and plugin == "cf":
         # checking the execution time
         assert t1 > 2
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
 
 @pytest.fixture

@@ -1,12 +1,10 @@
 import attr
 import typing as ty
-import os, sys
 import pytest
-from pathlib import Path
-
 
 from ..task import ShellCommandTask
 from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
+from .utils import use_validator
 
 
 def test_shell_cmd_execargs_1():
@@ -1220,7 +1218,7 @@ def test_shell_cmd_inputs_template_8(tmpdir):
     )
 
 
-def test_shell_cmd_inputs_di(tmpdir):
+def test_shell_cmd_inputs_di(tmpdir, use_validator):
     """ example from #279 """
     my_input_spec = SpecInfo(
         name="Input",
@@ -1273,20 +1271,6 @@ def test_shell_cmd_inputs_di(tmpdir):
                     metadata={
                         "help_string": "If a mask image is specified, denoising is only performed in the mask region.",
                         "argstr": "-x",
-                    },
-                ),
-            ),
-            (
-                "noise_model",
-                attr.ib(
-                    type=int,
-                    metadata={
-                        "help_string": """
-            Rician/(Gaussian)
-            Employ a Rician or Gaussian noise model.
-            """,
-                        "allowed_values": ["Rician", "Gaussian"],
-                        "argstr": "-n",
                     },
                 ),
             ),
@@ -1382,7 +1366,7 @@ def test_shell_cmd_inputs_di(tmpdir):
             (
                 "verbose",
                 attr.ib(
-                    type=bool,
+                    type=int,
                     default=0,
                     metadata={"help_string": "(0)/1. Verbose output. ", "argstr": "-v"},
                 ),
@@ -1463,3 +1447,25 @@ def test_shell_cmd_inputs_di(tmpdir):
         "correctedImage",
         "noiseImage",
     ]
+
+    # adding image_dimensionality that has allowed_values [2, 3, 4]
+    shelly = ShellCommandTask(
+        executable="DenoiseImage",
+        inputImageFilename=my_input_file,
+        input_spec=my_input_spec,
+        image_dimensionality=2,
+    )
+    assert (
+        shelly.cmdline
+        == f"DenoiseImage -d 2 -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{tmpdir.join('a_file_out.ext')}]"
+    )
+
+    # adding image_dimensionality that has allowed_values [2, 3, 4] and providing 5 - exception should be raised
+    with pytest.raises(ValueError) as excinfo:
+        shelly = ShellCommandTask(
+            executable="DenoiseImage",
+            inputImageFilename=my_input_file,
+            input_spec=my_input_spec,
+            image_dimensionality=5,
+        )
+    assert "value of image_dimensionality" in str(excinfo.value)
