@@ -3983,14 +3983,42 @@ def test_graph_1nest(tmpdir):
     wf.add(multiply(name="mult_2", x=wf.lzin.x, y=wf.lzin.x))
     wf.add(add2(name="add2", x=wf.mult_1.lzout.out))
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.inputs.x = 2
-    wf.inputs.y = 3
 
     dotfile = wf.create_dotfile(type="nested")
     dotstr_lines = dotfile.read_text().split("\n")
     assert "mult_1" in dotstr_lines
     assert "mult_2" in dotstr_lines
     assert "add2" in dotstr_lines
+    assert "mult_1 -> add2" in dotstr_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        dotfile_pr, formatted_dot = wf.create_dotfile(
+            type="nested", export=["png", "pdf"], name=name
+        )
+        assert dotfile_pr.read_text().split("\n") == dotstr_lines
+        assert len(formatted_dot) == 2
+        for i, ext in enumerate(["png", "pdf"]):
+            assert formatted_dot[i] == dotfile_pr.with_suffix(f".{ext}")
+            assert formatted_dot[i].exists()
+        print("\n graph in: ", formatted_dot[0])
+
+
+def test_graph_1nest_st(tmpdir):
+    """creating a nested graph, wf with two nodes
+    some nodes have splitters, should be marked with blue color
+    """
+    wf = Workflow(name="wf_2", input_spec=["x", "y"])
+    wf.add(multiply(name="mult_1", x=wf.lzin.x, y=wf.lzin.y).split("x"))
+    wf.add(multiply(name="mult_2", x=wf.lzin.x, y=wf.lzin.x))
+    wf.add(add2(name="add2", x=wf.mult_1.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+
+    dotfile = wf.create_dotfile(type="nested")
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "mult_1 [color=blue]" in dotstr_lines
+    assert "mult_2" in dotstr_lines
+    assert "add2 [color=blue]" in dotstr_lines
     assert "mult_1 -> add2" in dotstr_lines
 
     if DOT_FLAG:
@@ -4043,6 +4071,36 @@ def test_graph_2nest(tmpdir):
     dotfile = wf.create_dotfile(type="nested")
     dotstr_lines = dotfile.read_text().split("\n")
     assert "subgraph cluster_wfnd {" in dotstr_lines
+    assert "add2" in dotstr_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        dotfile_pr, formatted_dot = wf.create_dotfile(
+            type="nested", export=True, name=name
+        )
+        assert dotfile_pr.read_text().split("\n") == dotstr_lines
+        assert len(formatted_dot) == 1
+        assert formatted_dot[0].exists()
+        print("\n graph in: ", formatted_dot[0])
+
+
+def test_graph_2nest_st(tmpdir):
+    """creating a nested graph, wf with one worfklow as a node
+    the inner workflow has a state, so should be blue
+    """
+    wfnd = Workflow(name="wfnd", input_spec=["x"]).split("x")
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wfnd.inputs.x = 2
+
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
+    dotfile = wf.create_dotfile(type="nested")
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "subgraph cluster_wfnd {" in dotstr_lines
+    assert "color=blue" in dotstr_lines
     assert "add2" in dotstr_lines
 
     if DOT_FLAG:

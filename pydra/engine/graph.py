@@ -328,11 +328,19 @@ class DiGraph:
 
         dotstr = "digraph G {\n"
         for nd in self.nodes:
+            # breakpoint()
             if is_workflow(nd):
-                dotstr += f"{nd.name} [shape=box]\n"
+                if nd.state:
+                    # adding color for wf with a state
+                    dotstr += f"{nd.name} [shape=box, color=blue]\n"
+                else:
+                    dotstr += f"{nd.name} [shape=box]\n"
             else:
-                dotstr += f"{nd.name}\n"
-
+                if nd.state:
+                    # adding color for nd with a state
+                    dotstr += f"{nd.name} [color=blue]\n"
+                else:
+                    dotstr += f"{nd.name}\n"
         for ed in self.edges_names:
             dotstr += f"{ed[0]} -> {ed[1]}\n"
 
@@ -366,9 +374,14 @@ class DiGraph:
                 dotstr += self._create_dotfile_single_graph(
                     nodes=nd.graph.nodes, edges=nd.graph.edges
                 )
+                if nd.state:
+                    dotstr += "color=blue\n"
                 dotstr += "}\n"
             else:
-                dotstr += f"{nd.name}\n"
+                if nd.state:
+                    dotstr += f"{nd.name} [color=blue]\n"
+                else:
+                    dotstr += f"{nd.name}\n"
 
         dotstr_edg = ""
         for ed in edges:

@@ -6,6 +6,7 @@ import pytest
 class ObjTest:
     def __init__(self, name):
         self.name = name
+        self.state = None
 
 
 A = ObjTest("a")
