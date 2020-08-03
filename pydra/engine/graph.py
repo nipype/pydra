@@ -9,7 +9,7 @@ from .helpers import ensure_list
 class DiGraph:
     """A simple Directed Graph object."""
 
-    def __init__(self, nodes=None, edges=None):
+    def __init__(self, name=None, nodes=None, edges=None):
         """
         Initialize a directed graph.
 
@@ -22,6 +22,7 @@ class DiGraph:
             the graph.
 
         """
+        self.name = name
         self._nodes = []
         self.nodes = nodes
         self._edges = []
@@ -29,6 +30,7 @@ class DiGraph:
         self._create_connections()
         self._sorted_nodes = None
         self._node_wip = []
+        self._nodes_details = {}
 
     def copy(self):
         """
@@ -96,6 +98,20 @@ class DiGraph:
         return [(edg[0].name, edg[1].name) for edg in self._edges]
 
     @property
+    def nodes_details(self):
+        """ dictionary with details of the nodes
+            for each task, there are inputs/outputs and connections
+            (with input/output fields names)
+        """
+        # removing repeated fields from inputs and outputs
+        for el in self._nodes_details.values():
+            el["inputs"] = list(set(el["inputs"]))
+            el["inputs"].sort()
+            el["outputs"] = list(set(el["outputs"]))
+            el["outputs"].sort()
+        return self._nodes_details
+
+    @property
     def sorted_nodes(self):
         """Return sorted nodes (runs sorting if needed)."""
         if self._sorted_nodes is None:
@@ -138,6 +154,19 @@ class DiGraph:
         if self._sorted_nodes is not None:
             # starting from the previous sorted list, so it's faster
             self.sorting(presorted=self.sorted_nodes + [])
+
+    def add_edges_description(self, new_edge_details):
+        """ adding detailed description of the connections, filling _nodes_details"""
+        in_nd, in_fld, out_nd, out_fld = new_edge_details
+        for key in [in_nd, out_nd]:
+            self._nodes_details.setdefault(
+                key, {"inputs": [], "outputs": [], "connections": []}
+            )
+
+        if (in_fld, out_nd, out_fld) not in self._nodes_details[in_nd]["connections"]:
+            self._nodes_details[in_nd]["connections"].append((in_fld, out_nd, out_fld))
+            self._nodes_details[in_nd]["inputs"].append(in_fld)
+            self._nodes_details[out_nd]["outputs"].append(out_fld)
 
     def sorting(self, presorted=None):
         """
@@ -344,6 +373,52 @@ class DiGraph:
         for ed in self.edges_names:
             dotstr += f"{ed[0]} -> {ed[1]}\n"
 
+        dotstr += "}"
+        Path(outdir).mkdir(parents=True, exist_ok=True)
+        dotfile = Path(outdir) / f"{name}.dot"
+        dotfile.write_text(dotstr)
+        return dotfile
+
+    def create_dotfile_detailed(self, outdir, name="graph_det"):
+        """ creates a detailed dotfile (detailed connections - input/output fields,
+        but no nested structure)
+        """
+        dotstr = "digraph structs {\n"
+        dotstr += "node [shape=record];\n"
+        if not self._nodes_details:
+            raise Exception("node_details is empty, detailed dotfile can't be created")
+        for nd_nm, nd_det in self.nodes_details.items():
+            if nd_nm == self.name:  # the main workflow itself
+                # wf inputs
+                wf_inputs_str = f'{{<{nd_det["outputs"][0]}> {nd_det["outputs"][0]}'
+                for el in nd_det["outputs"][1:]:
+                    wf_inputs_str += f" | <{el}> {el}"
+                wf_inputs_str += "}"
+                dotstr += f'struct_{nd_nm} [color=red, label="{{WORKFLOW INPUT: | {wf_inputs_str}}}"];\n'
+                # wf outputs
+                wf_outputs_str = f'{{<{nd_det["inputs"][0]}> {nd_det["inputs"][0]}'
+                for el in nd_det["inputs"][1:]:
+                    wf_outputs_str += f" | <{el}> {el}"
+                wf_outputs_str += "}"
+                dotstr += f'struct_{nd_nm}_out [color=red, label="{{WORKFLOW OUTPUT: | {wf_outputs_str}}}"];\n'
+                # connections to the wf outputs
+                for con in nd_det["connections"]:
+                    dotstr += (
+                        f"struct_{con[1]}:{con[2]} -> struct_{nd_nm}_out:{con[0]};\n"
+                    )
+            else:  # elements of the main workflow
+                inputs_str = "{INPUT:"
+                for inp in nd_det["inputs"]:
+                    inputs_str += f" | <{inp}> {inp}"
+                inputs_str += "}"
+                outputs_str = "{OUTPUT:"
+                for out in nd_det["outputs"]:
+                    outputs_str += f" | <{out}> {out}"
+                outputs_str += "}"
+                dotstr += f'struct_{nd_nm} [shape=record, label="{inputs_str} | {nd_nm} | {outputs_str}"];\n'
+                # connections between elements
+                for con in nd_det["connections"]:
+                    dotstr += f"struct_{con[1]}:{con[2]} -> struct_{nd_nm}:{con[0]};\n"
         dotstr += "}"
         Path(outdir).mkdir(parents=True, exist_ok=True)
         dotfile = Path(outdir) / f"{name}.dot"
