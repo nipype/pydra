@@ -1,6 +1,26 @@
 Release Notes
 =============
 
+0.8.0
+-----
+
+* refactoring template formatting for ``input_spec``
+* fixing issues with input fields with extension (and using them in templates)
+* adding simple validators to input spec (using ``attr.validator``)
+* adding ``create_dotfile`` for workflows, that creates graphs as dotfiles (can convert to other formats if dot available)
+* adding a simple user guide with ``input_spec`` description
+* expanding docstrings for ``State``, ``audit`` and ``messanger``
+* updating syntax to newer python
+
+0.7.0
+-----
+
+* refactoring the error handling by padra: improving raised errors, removing nodes from the workflow graph that can't be run
+* refactoring of the ``input_spec``: adapting better to the nipype interfaces
+* switching from ``pkg_resources.declare_namespace`` to the stdlib ``pkgutil.extend_path``
+* moving ``readme`` to rst format
+
+
 0.6.2
 -----
 
