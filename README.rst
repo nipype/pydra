@@ -37,7 +37,7 @@ Learn more about Pydra
 
 * `SciPy 2020 Proceedings <http://conference.scipy.org/proceedings/scipy2020/pydra.html>`_
 * `PyCon 2020 Poster <https://docs.google.com/presentation/d/10tS2I34rS0G9qz6v29qVd77OUydjP_FdBklrgAGmYSw/edit?usp=sharing>`_
-* `Explore Pydra interactively <https://github.com/nipype/pydra-tutorial>`_ (the tutoorial can be also run using Binder service)
+* `Explore Pydra interactively <https://github.com/nipype/pydra-tutorial>`_ (the tutorial can be also run using Binder service)
 
 |Binder|
 
