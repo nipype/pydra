@@ -37,6 +37,13 @@ def result_submitter(shell_task, plugin):
     return shell_task.result()
 
 
+dot_check = sp.run(["which", "dot"], stdout=sp.PIPE, stderr=sp.PIPE)
+if dot_check.stdout:
+    DOT_FLAG = True
+else:
+    DOT_FLAG = False
+
+
 @mark.task
 def fun_addtwo(a):
     import time
