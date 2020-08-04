@@ -214,7 +214,6 @@ class ShellSpec(BaseSpec):
             "output_file_template",
             "position",
             "requires",
-            "separate_ext",
             "keep_extension",
             "xor",
             "sep",
