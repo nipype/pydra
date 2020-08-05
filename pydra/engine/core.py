@@ -58,9 +58,8 @@ class TaskBase:
 
     Attributes
     ----------
-    name : :obj:`str`
+    name : str
         Unique name of this node.
-
     inputs : : TODO
         XXXX
     input_names : :obj:`List` of :obj:`str`
@@ -193,12 +192,12 @@ class TaskBase:
                 inputs = {k: v for k, v in inputs.items() if k in self.input_names}
             elif Path(inputs).is_file():
                 inputs = json.loads(Path(inputs).read_text())
-            self.inputs = attr.evolve(self.inputs, **inputs)
-            self.inputs.check_metadata()
             elif isinstance(inputs, str):
                 if self._input_sets is None or inputs not in self._input_sets:
                     raise ValueError(f"Unknown input set {inputs!r}")
                 inputs = self._input_sets[inputs]
+            self.inputs = attr.evolve(self.inputs, **inputs)
+            self.inputs.check_metadata()
 
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
