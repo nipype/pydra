@@ -2229,6 +2229,7 @@ def test_wf_nostate_cachelocations_b(plugin, tmpdir):
     assert wf2.output_dir.exists()
 
 
+@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
     """
     the same as previous test, but wf output names differ,
@@ -2278,14 +2279,15 @@ def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time for second run should be much shorter
-        assert t1 / 2 > t2
+        # execution time should be a bit shorter
+        assert t1 - 1 > t2
 
     # both wf output_dirs should be created
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
 
 
+@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_setoutputchange_a(plugin, tmpdir):
     """
     the same as previous test, but wf names and output names differ,
@@ -2332,14 +2334,15 @@ def test_wf_nostate_cachelocations_setoutputchange_a(plugin, tmpdir):
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time for second run should be much shorter
-        assert t1 / 2 > t2
+        # execution time should be a bit shorter
+        assert t1 - 1 > t2
 
     # both wf output_dirs should be created
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
 
 
+@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_forcererun(plugin, tmpdir):
     """
     Two identical wfs with provided cache_dir;
@@ -2397,6 +2400,7 @@ def test_wf_nostate_cachelocations_forcererun(plugin, tmpdir):
     assert wf2.output_dir.exists()
 
 
+@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(plugin, tmpdir):
     """
     Two identical wfs with provided cache_dir and cache_locations for the second one;
@@ -2458,6 +2462,7 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateTrue(plugin, tmpdir):
         assert abs(t1 - t2) < t1 / 2
 
 
+@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(plugin, tmpdir):
     """
     Two identical wfs with provided cache_dir and cache_locations for the second one;
@@ -2676,6 +2681,7 @@ def test_wf_nostate_nodecachelocations_upd(plugin, tmpdir):
     assert len(list(Path(cache_dir2).glob("F*"))) == 1
 
 
+@pytest.mark.flaky(reruns=3)
 def test_wf_state_cachelocations(plugin, tmpdir):
     """
     Two identical wfs (with states) with provided cache_dir;
@@ -2808,6 +2814,7 @@ def test_wf_state_cachelocations_forcererun(plugin, tmpdir):
         assert odir.exists()
 
 
+@pytest.mark.flaky(reruns=3)
 def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
     """
     Two identical wfs (with states) with provided cache_dir;
