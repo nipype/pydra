@@ -23,7 +23,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Update build tools
       run: |
-        python -m pip install --upgrade pip==18.1 setuptools==30.2.1 wheel
+        python -m pip install --upgrade pip==20.2.1 setuptools==30.2.1 wheel
     - name: Install dependencies
       run: |
         python -m pip install -r min-requirements.txt
