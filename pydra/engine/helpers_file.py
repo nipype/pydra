@@ -640,3 +640,13 @@ def is_existing_file(value):
         return Path(value).exists()
     except TypeError:
         return False
+
+
+def is_broken(value, filetype):
+    """ checking if an object is an existing file"""
+    if is_existing_file(value, str):
+        pass
+    try:
+        return Path(value).exists()
+    except TypeError:
+        return False
