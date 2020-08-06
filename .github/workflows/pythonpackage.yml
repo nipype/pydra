@@ -1,6 +1,7 @@
 # This workflow will install Python dependencies, run tests and lint with a variety of Python versions
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 
+
 name: Python package
 
 on: [push, pull_request]
@@ -31,5 +32,7 @@ jobs:
       run: |
         python -m pip install .[test]
     - name: Pytest tests
+      env:
+        IGNORE_TESTS: 'pydra/engine/tests/test_dockertask.py'  # not running containers in this action
       run: |
-        pytest -vs -n auto --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+        pytest --ignore=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
