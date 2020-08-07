@@ -10,12 +10,15 @@ import sys
 from hashlib import sha256
 import subprocess as sp
 import getpass
-import uuid
+import re
 from time import strftime
 from traceback import format_exception
+import typing as ty
+import inspect
+import warnings
 
 
-from .specs import Runtime, File, Directory, attr_fields, Result
+from .specs import Runtime, File, Directory, attr_fields, Result, LazyField
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 
 
@@ -50,19 +53,19 @@ def ensure_list(obj, tuple2list=False):
 
 def print_help(obj):
     """Visit a task object and print its input/output interface."""
-    lines = ["Help for {}".format(obj.__class__.__name__)]
+    lines = [f"Help for {obj.__class__.__name__}"]
     input_klass = make_klass(obj.input_spec)
     if attr.fields(input_klass):
         lines += ["Input Parameters:"]
     for f in attr.fields(input_klass):
         default = ""
         if f.default != attr.NOTHING and not f.name.startswith("_"):
-            default = " (default: {})".format(f.default)
+            default = f" (default: {f.default})"
         try:
             name = f.type.__name__
         except AttributeError:
             name = str(f.type)
-        lines += ["- {}: {}{}".format(f.name, name, default)]
+        lines += [f"- {f.name}: {name}{default}"]
     output_klass = make_klass(obj.output_spec)
     if attr.fields(output_klass):
         lines += ["Output Parameters:"]
@@ -71,7 +74,7 @@ def print_help(obj):
             name = f.type.__name__
         except AttributeError:
             name = str(f.type)
-        lines += ["- {}: {}".format(f.name, name)]
+        lines += [f"- {f.name}: {name}"]
     print("\n".join(lines))
     return lines
 
@@ -234,8 +237,11 @@ def make_klass(spec):
             if len(item) == 2:
                 if isinstance(item[1], attr._make._CountingAttr):
                     newfields[item[0]] = item[1]
+                    newfields[item[0]].validator(custom_validator)
                 else:
-                    newfields[item[0]] = attr.ib(type=item[1])
+                    newfields[item[0]] = attr.ib(
+                        type=item[1], validator=custom_validator
+                    )
             else:
                 if (
                     any([isinstance(ii, attr._make._CountingAttr) for ii in item])
@@ -251,15 +257,199 @@ def make_klass(spec):
                         name, tp = item[:2]
                         if isinstance(item[-1], dict) and "help_string" in item[-1]:
                             mdata = item[-1]
-                            newfields[name] = attr.ib(type=tp, metadata=mdata)
+                            newfields[name] = attr.ib(
+                                type=tp, metadata=mdata, validator=custom_validator
+                            )
                         else:
                             dflt = item[-1]
-                            newfields[name] = attr.ib(type=tp, default=dflt)
+                            newfields[name] = attr.ib(
+                                type=tp, default=dflt, validator=custom_validator
+                            )
                     elif len(item) == 4:
                         name, tp, dflt, mdata = item
-                        newfields[name] = attr.ib(type=tp, default=dflt, metadata=mdata)
+                        newfields[name] = attr.ib(
+                            type=tp,
+                            default=dflt,
+                            metadata=mdata,
+                            validator=custom_validator,
+                        )
         fields = newfields
     return attr.make_class(spec.name, fields, bases=spec.bases, kw_only=True)
+
+
+def custom_validator(instance, attribute, value):
+    """simple custom validation
+    take into account ty.Union, ty.List, ty.Dict (but only one level depth)
+    adding an additional validator, if allowe_values provided
+    """
+    validators = []
+    tp_attr = attribute.type
+    # a flag that could be changed to False, if the type is not recognized
+    check_type = True
+    if (
+        value is attr.NOTHING
+        or value is None
+        or attribute.name.startswith("_")  # e.g. _func
+        or isinstance(value, LazyField)
+        or tp_attr in [ty.Any, inspect._empty]
+    ):
+        check_type = False  # no checking of the type
+    elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:
+        tp = _single_type_update(tp_attr, name=attribute.name)
+        cont_type = None
+    else:  # more complex types
+        cont_type, tp_attr_list = _check_special_type(tp_attr, name=attribute.name)
+        if cont_type is ty.Union:
+            tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
+        elif cont_type is list:
+            tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
+        elif cont_type is dict:
+            # assuming that it should have length of 2 for keys and values
+            if len(tp_attr_list) != 2:
+                check_type = False
+            else:
+                tp_attr_key, tp_attr_val = tp_attr_list
+            # updating types separately for keys and values
+            tp_k, check_k = _types_updates([tp_attr_key], name=attribute.name)
+            tp_v, check_v = _types_updates([tp_attr_val], name=attribute.name)
+            # assuming that I have to be able to check keys and values
+            if not (check_k and check_v):
+                check_type = False
+            else:
+                tp = {"key": tp_k, "val": tp_v}
+        else:
+            warnings.warn(
+                f"no type check for {attribute.name} field, no type check implemented for value {value} and type {tp_attr}"
+            )
+            check_type = False
+
+    if check_type:
+        validators.append(_type_validator(instance, attribute, value, tp, cont_type))
+
+    # checking additional requirements for values (e.g. allowed_values)
+    meta_attr = attribute.metadata
+    if "allowed_values" in meta_attr:
+        validators.append(_allowed_values_validator(isinstance, attribute, value))
+    return validators
+
+
+def _type_validator(instance, attribute, value, tp, cont_type):
+    """ creating a customized type validator,
+    uses validator.deep_iterable/mapping if the field is a container
+    (i.e. ty.List or ty.Dict),
+    it also tries to guess when the value is a list due to the splitter
+    and validates the elements
+    """
+    if cont_type is None or cont_type is ty.Union:
+        # if tp is not (list,), we are assuming that the value is a list
+        # due to the splitter, so checking the member types
+        if isinstance(value, list) and tp != (list,):
+            return attr.validators.deep_iterable(
+                member_validator=attr.validators.instance_of(
+                    tp + (attr._make._Nothing,)
+                )
+            )(instance, attribute, value)
+        else:
+            return attr.validators.instance_of(tp + (attr._make._Nothing,))(
+                instance, attribute, value
+            )
+    elif cont_type is list:
+        return attr.validators.deep_iterable(
+            member_validator=attr.validators.instance_of(tp + (attr._make._Nothing,))
+        )(instance, attribute, value)
+    elif cont_type is dict:
+        return attr.validators.deep_mapping(
+            key_validator=attr.validators.instance_of(tp["key"]),
+            value_validator=attr.validators.instance_of(
+                tp["val"] + (attr._make._Nothing,)
+            ),
+        )(instance, attribute, value)
+    else:
+        raise Exception(
+            f"container type of {attribute.name} should be None, list, dict or ty.Union, and not {cont_type}"
+        )
+
+
+def _types_updates(tp_list, name):
+    """updating the type's tuple with possible additional types"""
+    tp_upd_list = []
+    check = True
+    for tp_el in tp_list:
+        tp_upd = _single_type_update(tp_el, name, simplify=True)
+        if tp_upd is None:
+            check = False
+            break
+        else:
+            tp_upd_list += list(tp_upd)
+    tp_upd = tuple(set(tp_upd_list))
+    return tp_upd, check
+
+
+def _single_type_update(tp, name, simplify=False):
+    """ updating a single type with other related types - e.g. adding bytes for str
+        if simplify is True, than changing typing.List to list etc.
+        (assuming that I validate only one depth, so have to simplify at some point)
+    """
+    if isinstance(tp, type) or tp in [File, Directory]:
+        if tp is str:
+            return (str, bytes)
+        elif tp in [File, Directory, os.PathLike]:
+            return (os.PathLike, str)
+        elif tp is float:
+            return (float, int)
+        else:
+            return (tp,)
+    elif simplify is True:
+        warnings.warn(f"simplify validator for {name} field, checking only one depth")
+        cont_tp, types_list = _check_special_type(tp, name=name)
+        if cont_tp is list:
+            return (list,)
+        elif cont_tp is dict:
+            return (dict,)
+        elif cont_tp is ty.Union:
+            return types_list
+        else:
+            warnings.warn(
+                f"no type check for {name} field, type check not implemented for type of {tp}"
+            )
+            return None
+    else:
+        warnings.warn(
+            f"no type check for {name} field, type check not implemented for type - {tp}, consider using simplify=True"
+        )
+        return None
+
+
+def _check_special_type(tp, name):
+    """checking if the type is a container: ty.List, ty.Dict or ty.Union """
+    if sys.version_info.minor >= 8:
+        return ty.get_origin(tp), ty.get_args(tp)
+    else:
+        if isinstance(tp, type):  # simple type
+            return None, ()
+        else:
+            if tp._name == "List":
+                return list, tp.__args__
+            elif tp._name == "Dict":
+                return dict, tp.__args__
+            elif tp.__origin__ is ty.Union:
+                return ty.Union, tp.__args__
+            else:
+                warnings.warn(
+                    f"not type check for {name} field, type check not implemented for type {tp}"
+                )
+                return None, ()
+
+
+def _allowed_values_validator(instance, attribute, value):
+    """ checking if the values is in allowed_values"""
+    allowed = attribute.metadata["allowed_values"]
+    if value is attr.NOTHING:
+        pass
+    elif value not in allowed:
+        raise ValueError(
+            f"value of {attribute.name} has to be from {allowed}, but {value} provided"
+        )
 
 
 async def read_stream_and_display(stream, display):
@@ -397,7 +587,7 @@ def record_error(error_path, error):
     try:
         login_name = getpass.getuser()
     except KeyError:
-        login_name = "UID{:d}".format(os.getuid())
+        login_name = f"UID{os.getuid():d}"
 
     full_error = {
         "time of crash": timeofcrash,
@@ -636,3 +826,36 @@ def position_adjustment(pos_args):
         cmd_args += el[1]
 
     return cmd_args
+
+
+def argstr_formatting(argstr, inputs, value_updates=None):
+    """ formatting argstr that have form {field_name},
+    using values from inputs and updating with value_update if provided
+    """
+    inputs_dict = attr.asdict(inputs)
+    # if there is a value that has to be updated (e.g. single value from a list)
+    if value_updates:
+        inputs_dict.update(value_updates)
+    # getting all fields that should be formatted, i.e. {field_name}, ...
+    inp_fields = re.findall("{\w+}", argstr)
+    val_dict = {}
+    for fld in inp_fields:
+        fld_name = fld[1:-1]  # extracting the name form {field_name}
+        fld_value = inputs_dict[fld_name]
+        if fld_value is attr.NOTHING:
+            # if value is NOTHING, nothing should be added to the command
+            val_dict[fld_name] = ""
+        else:
+            val_dict[fld_name] = fld_value
+
+    # formatting string based on the val_dict
+    argstr_formatted = argstr.format(**val_dict)
+    # removing extra commas and spaces after removing the field that have NOTHING
+    argstr_formatted = (
+        argstr_formatted.replace("[ ", "[")
+        .replace(" ]", "]")
+        .replace("[,", "[")
+        .replace(",]", "]")
+        .strip()
+    )
+    return argstr_formatted

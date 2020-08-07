@@ -57,8 +57,8 @@ from .specs import (
     SingularitySpec,
     attr_fields,
 )
-from .helpers import ensure_list, execute, position_adjustment
-from .helpers_file import template_update, is_local_file, removing_nothing
+from .helpers import ensure_list, execute, position_adjustment, argstr_formatting
+from .helpers_file import template_update, is_local_file
 
 
 class FunctionTask(TaskBase):
@@ -136,7 +136,7 @@ class FunctionTask(TaskBase):
         self.input_spec = input_spec
         if name is None:
             name = func.__name__
-        super(FunctionTask, self).__init__(
+        super().__init__(
             name,
             inputs=kwargs,
             audit_flags=audit_flags,
@@ -201,7 +201,7 @@ class FunctionTask(TaskBase):
         output = cp.loads(self.inputs._func)(**inputs)
         output_names = [el[0] for el in self.output_spec.fields]
         if output is None:
-            self.output_ = dict((nm, None) for nm in output_names)
+            self.output_ = {nm: None for nm in output_names}
         else:
             if len(output_names) == 1:
                 # if only one element in the fields, everything should be returned together
@@ -221,7 +221,7 @@ class ShellCommandTask(TaskBase):
 
     def __new__(cls, container_info=None, *args, **kwargs):
         if not container_info:
-            return super(ShellCommandTask, cls).__new__(cls)
+            return super().__new__(cls)
 
         if len(container_info) == 3:
             type_cont, image, bind = container_info
@@ -286,7 +286,7 @@ class ShellCommandTask(TaskBase):
 
         self.output_spec = output_spec
 
-        super(ShellCommandTask, self).__init__(
+        super().__init__(
             name=name,
             inputs=kwargs,
             audit_flags=audit_flags,
@@ -431,22 +431,24 @@ class ShellCommandTask(TaskBase):
 
         cmd_add = []
         if field.type is bool:
+            # if value is simply True the original argstr is used,
+            # if False, nothing is added to the command
             if value is True:
                 cmd_add.append(argstr)
         else:
             sep = field.metadata.get("sep", " ")
             if argstr.endswith("...") and isinstance(value, list):
                 argstr = argstr.replace("...", "")
+                # if argstr has a more complex form, with "{input_field}"
                 if "{" in argstr and "}" in argstr:
                     argstr_formatted_l = []
                     for val in value:
-                        argstr_f = argstr.format(**{field.name: val}).format(
-                            **attr.asdict(self.inputs)
+                        argstr_f = argstr_formatting(
+                            argstr, self.inputs, value_updates={field.name: val}
                         )
-                        argstr_formatted_l.append(removing_nothing(argstr_f))
-
+                        argstr_formatted_l.append(argstr_f)
                     cmd_el_str = sep.join(argstr_formatted_l)
-                else:
+                else:  # argstr has a simple form, e.g. "-f", or "--f"
                     cmd_el_str = sep.join([f" {argstr} {val}" for val in value])
             else:
                 # in case there are ... when input is not a list
@@ -454,15 +456,15 @@ class ShellCommandTask(TaskBase):
                 if isinstance(value, list):
                     cmd_el_str = sep.join([str(val) for val in value])
                     value = cmd_el_str
-
+                # if argstr has a more complex form, with "{input_field}"
                 if "{" in argstr and "}" in argstr:
-                    argstr_f = argstr.format(**attr.asdict(self.inputs))
-                    cmd_el_str = removing_nothing(argstr_f)
-                else:
+                    cmd_el_str = argstr_formatting(argstr, self.inputs)
+                else:  # argstr has a simple form, e.g. "-f", or "--f"
                     if value:
                         cmd_el_str = f"{argstr} {value}"
                     else:
                         cmd_el_str = ""
+            # removing double spacing
             cmd_el_str = cmd_el_str.strip().replace("  ", " ")
             if cmd_el_str:
                 cmd_add += cmd_el_str.split(" ")
@@ -563,7 +565,7 @@ class ContainerTask(ShellCommandTask):
         if input_spec is None:
             input_spec = SpecInfo(name="Inputs", fields=[], bases=(ContainerSpec,))
         self.output_cpath = Path(output_cpath)
-        super(ContainerTask, self).__init__(
+        super().__init__(
             name=name,
             input_spec=input_spec,
             output_spec=output_spec,
@@ -625,7 +627,7 @@ class ContainerTask(ShellCommandTask):
         """
         bargs = []
         for (key, val) in self.bind_paths(ind).items():
-            bargs.extend([opt, "{0}:{1}:{2}".format(key, val[0], val[1])])
+            bargs.extend([opt, f"{key}:{val[0]}:{val[1]}"])
         return bargs
 
 
@@ -677,7 +679,7 @@ class DockerTask(ContainerTask):
             if input_spec is None:
                 input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
 
-            super(DockerTask, self).__init__(
+            super().__init__(
                 name=name,
                 input_spec=input_spec,
                 output_spec=output_spec,
@@ -774,7 +776,7 @@ class SingularityTask(ContainerTask):
                 input_spec = SpecInfo(
                     name="Inputs", fields=[], bases=(SingularitySpec,)
                 )
-            super(SingularityTask, self).__init__(
+            super().__init__(
                 input_spec=input_spec,
                 output_spec=output_spec,
                 audit_flags=audit_flags,

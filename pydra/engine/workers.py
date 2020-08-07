@@ -182,7 +182,7 @@ class ConcurrentFuturesWorker(Worker):
 
     def __init__(self, n_procs=None):
         """Initialize Worker."""
-        super(ConcurrentFuturesWorker, self).__init__()
+        super().__init__()
         self.n_procs = get_available_cpus() if n_procs is None else n_procs
         # added cpu_count to verify, remove once confident and let PPE handle
         self.pool = cf.ProcessPoolExecutor(self.n_procs)
@@ -339,7 +339,7 @@ class DaskWorker(Worker):
 
     def __init__(self, **kwargs):
         """Initialize Worker."""
-        super(DaskWorker, self).__init__()
+        super().__init__()
         try:
             from dask.distributed import Client
         except ImportError:

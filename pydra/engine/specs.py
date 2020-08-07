@@ -3,6 +3,8 @@ import attr
 from pathlib import Path
 import typing as ty
 
+from .helpers_file import template_update_single
+
 
 def attr_fields(x):
     return x.__attrs_attrs__
@@ -33,7 +35,7 @@ class SpecInfo:
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
 
-    def collect_additional_outputs(self, input_spec, inputs, output_dir):
+    def collect_additional_outputs(self, inputs, output_dir):
         """Get additional outputs."""
         return {}
 
@@ -212,7 +214,7 @@ class ShellSpec(BaseSpec):
             "output_file_template",
             "position",
             "requires",
-            "separate_ext",
+            "keep_extension",
             "xor",
             "sep",
         }
@@ -290,25 +292,10 @@ class ShellSpec(BaseSpec):
             if required_notfound:
                 raise AttributeError(f"{nm} requires {required_notfound}")
 
-            # TODO: types might be checked here
-        self._type_checking()
-
     def _file_check(self, field):
         file = Path(getattr(self, field.name))
         if not file.exists():
             raise AttributeError(f"the file from the {field.name} input does not exist")
-
-    def _type_checking(self):
-        """Use fld.type to check the types TODO.
-
-        This may be done through attr validators.
-
-        """
-        fields = attr_fields(self)
-        allowed_keys = ["min_val", "max_val", "range", "enum"]  # noqa
-        for fld in fields:
-            # TODO
-            pass
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -322,7 +309,7 @@ class ShellOutSpec(BaseSpec):
     stderr: ty.Union[File, str]
     """The process' standard input."""
 
-    def collect_additional_outputs(self, input_spec, inputs, output_dir):
+    def collect_additional_outputs(self, inputs, output_dir):
         """Collect additional outputs from shelltask output_spec."""
         additional_out = {}
         for fld in attr_fields(self):
@@ -379,24 +366,13 @@ class ShellOutSpec(BaseSpec):
         """Collect output file if metadata specified."""
         if "value" in fld.metadata:
             return output_dir / fld.metadata["value"]
+        # this block is only run if "output_file_template" is provided in output_spec
+        # if the field is set in input_spec with output_file_template,
+        # than the field already should have value
         elif "output_file_template" in fld.metadata:
-            sfx_tmpl = (output_dir / fld.metadata["output_file_template"]).suffixes
-            if sfx_tmpl:
-                # removing suffix from input field if template has it's own suffix
-                inputs_templ = {
-                    k: v.split(".")[0]
-                    for k, v in inputs.__dict__.items()
-                    if isinstance(v, str)
-                }
-            else:
-                inputs_templ = {
-                    k: v for k, v in inputs.__dict__.items() if isinstance(v, str)
-                }
-            out_path = output_dir / fld.metadata["output_file_template"].format(
-                **inputs_templ
-            )
-            return out_path
-
+            inputs_templ = attr.asdict(inputs)
+            value = template_update_single(fld, inputs_templ, spec_type="output")
+            return output_dir / value
         elif "callable" in fld.metadata:
             return fld.metadata["callable"](fld.name, output_dir)
         else:
@@ -475,7 +451,7 @@ class LazyField:
         elif attr_type == "output":
             self.fields = node.output_names
         else:
-            raise ValueError("LazyField: Unknown attr_type: {}".format(attr_type))
+            raise ValueError(f"LazyField: Unknown attr_type: {attr_type}")
         self.attr_type = attr_type
         self.field = None
 
@@ -486,7 +462,7 @@ class LazyField:
         if name in dir(self):
             return self.__getattribute__(name)
         raise AttributeError(
-            "Task {0} has no {1} attribute {2}".format(self.name, self.attr_type, name)
+            f"Task {self.name} has no {self.attr_type} attribute {name}"
         )
 
     def __getstate__(self):
@@ -500,7 +476,7 @@ class LazyField:
         self.__dict__.update(state)
 
     def __repr__(self):
-        return "LF('{0}', '{1}')".format(self.name, self.field)
+        return f"LF('{self.name}', '{self.field}')"
 
     def get_value(self, wf, state_index=None):
         """Return the value of a lazy field."""

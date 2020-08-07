@@ -35,3 +35,13 @@ if not hasattr(__main__, "__file__"):
 
     if TaskBase._etelemetry_version_data is None:
         TaskBase._etelemetry_version_data = check_latest_version()
+
+
+# attr run_validators is set to False, but could be changed using use_validator
+import attr
+
+attr.set_run_validators(False)
+
+
+def set_input_validator(flag=False):
+    attr.set_run_validators(flag)

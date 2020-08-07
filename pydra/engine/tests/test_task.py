@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import typing as ty
 import os, sys
 import pytest
@@ -7,7 +5,7 @@ import pytest
 from ... import mark
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
-from .utils import gen_basic_wf
+from .utils import gen_basic_wf, use_validator
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -36,10 +34,10 @@ def test_name_conflict():
     assert "Cannot use names of attributes or methods" in str(excinfo2.value)
 
 
-def test_numpy():
+def test_numpy(use_validator):
     """ checking if mark.task works for numpy functions"""
     np = pytest.importorskip("numpy")
-    fft = mark.annotate({"a": np.ndarray, "return": float})(np.fft.fft)
+    fft = mark.annotate({"a": np.ndarray, "return": np.ndarray})(np.fft.fft)
     fft = mark.task(fft)()
     arr = np.array([[1, 10], [2, 20]])
     fft.inputs.a = arr
@@ -56,7 +54,7 @@ def test_checksum():
     )
 
 
-def test_annotated_func():
+def test_annotated_func(use_validator):
     @mark.task
     def testfunc(
         a: int, b: float = 0.1
@@ -70,7 +68,7 @@ def test_annotated_func():
     assert getattr(funky.inputs, "a") == 1
     assert getattr(funky.inputs, "b") == 0.1
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["out_out"])
+    assert set(funky.output_names) == {"out_out"}
     # assert funky.inputs.hash == '17772c3aec9540a8dd3e187eecd2301a09c9a25c6e371ddd86e31e3a1ecfeefa'
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
@@ -100,7 +98,7 @@ def test_annotated_func():
     ]
 
 
-def test_annotated_func_multreturn():
+def test_annotated_func_multreturn(use_validator):
     """ the function has two elements in the return statement"""
 
     @mark.task
@@ -109,14 +107,14 @@ def test_annotated_func_multreturn():
     ) -> ty.NamedTuple("Output", [("fractional", float), ("integer", int)]):
         import math
 
-        return math.modf(a)
+        return math.modf(a)[0], int(math.modf(a)[1])
 
     funky = testfunc(a=3.5)
     assert hasattr(funky.inputs, "a")
     assert hasattr(funky.inputs, "_func")
     assert getattr(funky.inputs, "a") == 3.5
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["fractional", "integer"])
+    assert set(funky.output_names) == {"fractional", "integer"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     result = funky()
@@ -139,7 +137,204 @@ def test_annotated_func_multreturn():
     ]
 
 
-def test_annotated_func_multreturn_exception():
+def test_annotated_input_func_1(use_validator):
+    """ the function with annotated input (float)"""
+
+    @mark.task
+    def testfunc(a: float):
+        return a
+
+    funky = testfunc(a=3.5)
+    assert getattr(funky.inputs, "a") == 3.5
+
+
+def test_annotated_input_func_2(use_validator):
+    """ the function with annotated input (int, but float provided)"""
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a=3.5)
+
+
+def test_annotated_input_func_2a(use_validator):
+    """ the function with annotated input (int, but float provided)"""
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    funky = testfunc()
+    # the error is raised when run (should be improved?)
+    funky.inputs.a = 3.5
+    with pytest.raises(TypeError):
+        funky()
+
+
+def test_annotated_input_func_3(use_validator):
+    """ the function with annotated input (list)"""
+
+    @mark.task
+    def testfunc(a: list):
+        return sum(a)
+
+    funky = testfunc(a=[1, 3.5])
+    assert getattr(funky.inputs, "a") == [1, 3.5]
+
+
+def test_annotated_input_func_3a():
+    """ the function with annotated input (list of floats)"""
+
+    @mark.task
+    def testfunc(a: ty.List[float]):
+        return sum(a)
+
+    funky = testfunc(a=[1.0, 3.5])
+    assert getattr(funky.inputs, "a") == [1.0, 3.5]
+
+
+def test_annotated_input_func_3b(use_validator):
+    """ the function with annotated input
+    (list of floats - int and float provided, should be fine)
+    """
+
+    @mark.task
+    def testfunc(a: ty.List[float]):
+        return sum(a)
+
+    funky = testfunc(a=[1, 3.5])
+    assert getattr(funky.inputs, "a") == [1, 3.5]
+
+
+def test_annotated_input_func_3c_excep(use_validator):
+    """ the function with annotated input
+    (list of ints - int and float provided, should raise an error)
+    """
+
+    @mark.task
+    def testfunc(a: ty.List[int]):
+        return sum(a)
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a=[1, 3.5])
+
+
+def test_annotated_input_func_4(use_validator):
+    """ the function with annotated input (dictionary)"""
+
+    @mark.task
+    def testfunc(a: dict):
+        return sum(a.values())
+
+    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+
+
+def test_annotated_input_func_4a(use_validator):
+    """ the function with annotated input (dictionary of floats)"""
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, float]):
+        return sum(a.values())
+
+    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+
+
+def test_annotated_input_func_4b_excep(use_validator):
+    """ the function with annotated input (dictionary of ints, but float provided)"""
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, int]):
+        return sum(a.values())
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a={"el1": 1, "el2": 3.5})
+
+
+def test_annotated_input_func_5(use_validator):
+    """ the function with annotated more complex input type (ty.List in ty.Dict)
+        the validator should simply check if values of dict are lists
+        so no error for 3.5
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.List[int]]):
+        return sum(a["el1"])
+
+    funky = testfunc(a={"el1": [1, 3.5]})
+    assert getattr(funky.inputs, "a") == {"el1": [1, 3.5]}
+
+
+def test_annotated_input_func_5a_except(use_validator):
+    """ the function with annotated more complex input type (ty.Dict in ty.Dict)
+        list is provided as a dict value (instead a dict), so error is raised
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.Dict[str, float]]):
+        return sum(a["el1"])
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a={"el1": [1, 3.5]})
+
+
+def test_annotated_input_func_6(use_validator):
+    """ the function with annotated more complex input type (ty.Union in ty.Dict)
+        the validator should unpack values from the Union
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.Union[float, int]]):
+        return sum(a["el1"])
+
+    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+
+
+def test_annotated_input_func_6a_excep(use_validator):
+    """ the function with annotated more complex input type (ty.Union in ty.Dict)
+        the validator should unpack values from the Union and raise an error for 3.5
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.Union[str, int]]):
+        return sum(a["el1"])
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a={"el1": 1, "el2": 3.5})
+
+
+def test_annotated_input_func_7(use_validator):
+    """ the function with annotated input (float)
+        the task has a splitter, so list of float is provided
+        it should work, the validator tries to guess if this is a field with a splitter
+    """
+
+    @mark.task
+    def testfunc(a: float):
+        return a
+
+    funky = testfunc(a=[3.5, 2.1]).split("a")
+    assert getattr(funky.inputs, "a") == [3.5, 2.1]
+
+
+def test_annotated_input_func_7a_excep(use_validator):
+    """ the function with annotated input (int) and splitter
+        list of float provided - should raise an error (list of int would be fine)
+    """
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a=[3.5, 2.1]).split("a")
+
+
+def test_annotated_func_multreturn_exception(use_validator):
     """function has two elements in the return statement,
         but three element provided in the spec - should raise an error
     """
@@ -172,7 +367,7 @@ def test_halfannotated_func():
     assert getattr(funky.inputs, "a") == 10
     assert getattr(funky.inputs, "b") == 20
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["out"])
+    assert set(funky.output_names) == {"out"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     result = funky()
@@ -213,7 +408,7 @@ def test_halfannotated_func_multreturn():
     assert getattr(funky.inputs, "a") == 10
     assert getattr(funky.inputs, "b") == 20
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["out1", "out2"])
+    assert set(funky.output_names) == {"out1", "out2"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     result = funky()
@@ -338,7 +533,7 @@ def test_result_none_2():
     assert res.output.out2 is None
 
 
-def test_audit_prov(tmpdir):
+def test_audit_prov(tmpdir, use_validator):
     @mark.task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
@@ -359,7 +554,7 @@ def test_audit_prov(tmpdir):
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
 
 
-def test_audit_all(tmpdir):
+def test_audit_all(tmpdir, use_validator):
     @mark.task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b

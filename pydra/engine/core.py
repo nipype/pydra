@@ -161,7 +161,7 @@ class TaskBase:
                 inputs = json.loads(Path(inputs).read_text())
             elif isinstance(inputs, str):
                 if self._input_sets is None or inputs not in self._input_sets:
-                    raise ValueError("Unknown input set {!r}".format(inputs))
+                    raise ValueError(f"Unknown input set {inputs!r}")
                 inputs = self._input_sets[inputs]
             self.inputs = attr.evolve(self.inputs, **inputs)
             self.inputs.check_metadata()
@@ -423,9 +423,7 @@ class TaskBase:
         self.output_spec = output_from_inputfields(self.output_spec, self.inputs)
         output_klass = make_klass(self.output_spec)
         output = output_klass(**{f.name: None for f in attr.fields(output_klass)})
-        other_output = output.collect_additional_outputs(
-            self.input_spec, self.inputs, self.output_dir
-        )
+        other_output = output.collect_additional_outputs(self.inputs, self.output_dir)
         return attr.evolve(output, **run_output, **other_output)
 
     def split(self, splitter, overwrite=False, **kwargs):
@@ -728,7 +726,7 @@ class Workflow(TaskBase):
             )
         self.name = name
 
-        super(Workflow, self).__init__(
+        super().__init__(
             name=name,
             inputs=kwargs,
             cache_dir=cache_dir,
@@ -739,7 +737,7 @@ class Workflow(TaskBase):
             rerun=rerun,
         )
 
-        self.graph = DiGraph()
+        self.graph = DiGraph(name=name)
         self.name2obj = {}
 
         # store output connections
@@ -824,13 +822,13 @@ class Workflow(TaskBase):
         self.name2obj[task.name] = task
 
         if not is_task(task):
-            raise ValueError("Unknown workflow element: {!r}".format(task))
+            raise ValueError(f"Unknown workflow element: {task!r}")
         self.graph.add_nodes(task)
         self._last_added = task
         logger.debug(f"Added {task}")
         return self
 
-    def create_connections(self, task):
+    def create_connections(self, task, detailed=False):
         """
         Add and connect a particular task to existing nodes in the workflow.
 
@@ -838,7 +836,9 @@ class Workflow(TaskBase):
         ----------
         task : :class:`TaskBase`
             The task to be added.
-
+        detailed : :obj:`bool`
+            If True, `add_edges_description` is run for self.graph to add
+            a detailed descriptions of the connections (input/output fields names)
         """
         other_states = {}
         for field in attr_fields(task.inputs):
@@ -849,9 +849,12 @@ class Workflow(TaskBase):
                 # adding an edge to the graph if task id expecting output from a different task
                 if val.name != self.name:
                     # checking if the connection is already in the graph
-                    if (getattr(self, val.name), task) in self.graph.edges:
-                        continue
-                    self.graph.add_edges((getattr(self, val.name), task))
+                    if (getattr(self, val.name), task) not in self.graph.edges:
+                        self.graph.add_edges((getattr(self, val.name), task))
+                    if detailed:
+                        self.graph.add_edges_description(
+                            (task.name, field.name, val.name, val.field)
+                        )
                     logger.debug("Connecting %s to %s", val.name, task.name)
 
                     if (
@@ -863,6 +866,13 @@ class Workflow(TaskBase):
                             getattr(self, val.name).state,
                             field.name,
                         )
+                else:  # LazyField with the wf input
+                    # connections with wf input should be added to the detailed graph description
+                    if detailed:
+                        self.graph.add_edges_description(
+                            (task.name, field.name, val.name, val.field)
+                        )
+
         # if task has connections state has to be recalculated
         if other_states:
             if hasattr(task, "fut_combiner"):
@@ -1001,6 +1011,49 @@ class Workflow(TaskBase):
                 else:
                     raise ValueError(f"Task {val.name} raised an error")
         return attr.evolve(output, **output_wf)
+
+    def create_dotfile(self, type="simple", export=None, name=None):
+        """creating a graph - dotfile and optionally exporting to other formats"""
+        if not name:
+            name = f"graph_{self.name}"
+        if type == "simple":
+            for task in self.graph.nodes:
+                self.create_connections(task)
+            dotfile = self.graph.create_dotfile_simple(
+                outdir=self.output_dir, name=name
+            )
+        elif type == "nested":
+            for task in self.graph.nodes:
+                self.create_connections(task)
+            dotfile = self.graph.create_dotfile_nested(
+                outdir=self.output_dir, name=name
+            )
+        elif type == "detailed":
+            # create connections with detailed=True
+            for task in self.graph.nodes:
+                self.create_connections(task, detailed=True)
+            # adding wf outputs
+            for (wf_out, lf) in self._connections:
+                self.graph.add_edges_description((self.name, wf_out, lf.name, lf.field))
+            dotfile = self.graph.create_dotfile_detailed(
+                outdir=self.output_dir, name=name
+            )
+        else:
+            raise Exception(
+                f"type of the graph can be simple, detailed or nested, "
+                f"but {type} provided"
+            )
+        if not export:
+            return dotfile
+        else:
+            if export is True:
+                export = ["png"]
+            elif isinstance(export, str):
+                export = [export]
+            formatted_dot = []
+            for ext in export:
+                formatted_dot.append(self.graph.export_graph(dotfile=dotfile, ext=ext))
+            return dotfile, formatted_dot
 
 
 def is_task(obj):

@@ -22,6 +22,7 @@ from .utils import (
     fun_write_file,
     fun_write_file_list,
     fun_write_file_list2dict,
+    DOT_FLAG,
 )
 from ..submitter import Submitter
 from ..core import Workflow
@@ -411,7 +412,7 @@ def test_wf_st_1(plugin):
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x"))
+    wf.split("x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
@@ -436,7 +437,7 @@ def test_wf_st_1_call_subm(plugin):
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x"))
+    wf.split("x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
@@ -459,7 +460,7 @@ def test_wf_st_1_call_plug(plugin):
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x"))
+    wf.split("x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
@@ -481,7 +482,7 @@ def test_wf_st_noinput_1(plugin):
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x"))
+    wf.split("x")
     wf.inputs.x = []
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
@@ -609,7 +610,7 @@ def test_wf_st_2(plugin):
     wf = Workflow(name="wf_st_2", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
-    wf.split(("x")).combine(combiner="x")
+    wf.split("x").combine(combiner="x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
@@ -2107,7 +2108,7 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
         assert t1 > 2
-        assert t2 < 1
+        assert t2 < max(1, t1 - 1)
 
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
@@ -2162,8 +2163,10 @@ def test_wf_nostate_cachelocations_a(plugin, tmpdir):
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time should be a bit shorter
-        assert t1 - 1 > t2
+        # checking execution time (second one should be quick)
+        assert t1 > 2
+        # testing relative values (windows or slurm takes much longer to create wf itself)
+        assert t2 < max(1, t1 - 1)
 
     # checking if both wf.output_dir are created
     assert wf1.output_dir.exists()
@@ -2222,7 +2225,9 @@ def test_wf_nostate_cachelocations_b(plugin, tmpdir):
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
         # execution time for second run should be much shorter
-        assert t1 - 1 > t2
+        assert t1 > 2
+        assert t2 < max(1, t1 - 1)
+
 
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
@@ -2279,8 +2284,10 @@ def test_wf_nostate_cachelocations_setoutputchange(plugin, tmpdir):
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time should be a bit shorter
-        assert t1 - 1 > t2
+        # checking execution time (the second wf should be fast, nodes do not have to rerun)
+        assert t1 > 2
+        # testing relative values (windows or slurm takes much longer to create wf itself)
+        assert t2 < max(1, t1 - 1)
 
     # both wf output_dirs should be created
     assert wf1.output_dir.exists()
@@ -2334,8 +2341,9 @@ def test_wf_nostate_cachelocations_setoutputchange_a(plugin, tmpdir):
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time should be a bit shorter
-        assert t1 - 1 > t2
+        assert t1 > 2
+        # testing relative values (windows or slurm takes much longer to create wf itself)
+        assert t2 < max(1, t1 - 1)
 
     # both wf output_dirs should be created
     assert wf1.output_dir.exists()
@@ -2518,8 +2526,9 @@ def test_wf_nostate_cachelocations_wftaskrerun_propagateFalse(plugin, tmpdir):
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time should be a bit shorter
-        assert t1 - 1 > t2
+        # checking the time
+        assert t1 > 2
+        assert t2 < max(1, t1 - 1)
 
     # tasks should not be recomputed
     assert len(list(Path(cache_dir1).glob("F*"))) == 2
@@ -2733,8 +2742,9 @@ def test_wf_state_cachelocations(plugin, tmpdir):
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time for second run should be much shorter
-        assert t1 / 2 > t2
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < max(1, t1 - 1)
 
     # checking all directories
     assert wf1.output_dir
@@ -2869,8 +2879,9 @@ def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time for second run should be much shorter
-        assert t1 / 2 > t2
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < max(1, t1 - 1)
 
     # checking all directories
     assert wf1.output_dir
@@ -3096,9 +3107,10 @@ def test_wf_ndstate_cachelocations(plugin, tmpdir):
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time for second run should be much shorter
-        assert t1 / 2 > t2
-
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < max(1, t1 - 1)
+        
     # checking all directories
     assert wf1.output_dir.exists()
 
@@ -3221,8 +3233,9 @@ def test_wf_ndstate_cachelocations_updatespl(plugin, tmpdir):
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time for wf2 should be much shorter
-        assert t1 / 2 > t2
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < max(1, t1 - 1)
 
     # checking all directories
     assert wf1.output_dir.exists()
@@ -3336,8 +3349,9 @@ def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
 
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time for wf2 should be much shorter
-        assert t1 / 2 > t2
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < max(1, t1 - 1)
 
 
 def test_wf_state_runtwice_usecache(plugin, tmpdir):
@@ -3384,9 +3398,9 @@ def test_wf_state_runtwice_usecache(plugin, tmpdir):
     assert cache_dir_content == os.listdir(wf1.cache_dir)
     # for win and dask/slurm the time for dir creation etc. might take much longer
     if not sys.platform.startswith("win") and plugin == "cf":
-        # execution time for wf2 should be much shorter
-        assert t1 / 2 > t2
-
+        # checking the execution time
+        assert t1 > 2
+        assert t2 < max(1, t1 - 1)
 
 @pytest.fixture
 def create_tasks():
@@ -3941,3 +3955,301 @@ def test_wf_upstream_error9b(plugin):
     assert "raised an error" in str(excinfo.value)
     assert wf.err._errored is True
     assert wf.follow_err._errored == ["err"]
+
+
+def exporting_graphs(wf, name):
+    """ helper function to run dot to create png/pdf files from dotfiles"""
+    # exporting the simple graph
+    dotfile_pr, formatted_dot = wf.create_dotfile(export=True, name=name)
+    assert len(formatted_dot) == 1
+    assert formatted_dot[0] == dotfile_pr.with_suffix(".png")
+    assert formatted_dot[0].exists()
+    print("\n png of a simple graph in: ", formatted_dot[0])
+    # exporting nested graph
+    dotfile_pr, formatted_dot = wf.create_dotfile(
+        type="nested", export=["pdf", "png"], name=f"{name}_nest"
+    )
+    assert len(formatted_dot) == 2
+    assert formatted_dot[0] == dotfile_pr.with_suffix(".pdf")
+    assert formatted_dot[0].exists()
+    print("\n pdf of the nested graph in: ", formatted_dot[0])
+    # detailed graph
+    dotfile_pr, formatted_dot = wf.create_dotfile(
+        type="detailed", export="pdf", name=f"{name}_det"
+    )
+    assert len(formatted_dot) == 1
+    assert formatted_dot[0] == dotfile_pr.with_suffix(".pdf")
+    assert formatted_dot[0].exists()
+    print("\n pdf of the detailed graph in: ", formatted_dot[0])
+
+
+def test_graph_1(tmpdir):
+    """creating a set of graphs, wf with two nodes"""
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf.add(multiply(name="mult_1", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(multiply(name="mult_2", x=wf.lzin.x, y=wf.lzin.x))
+    wf.add(add2(name="add2", x=wf.mult_1.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+
+    # simple graph
+    dotfile_s = wf.create_dotfile()
+    dotstr_s_lines = dotfile_s.read_text().split("\n")
+    assert "mult_1" in dotstr_s_lines
+    assert "mult_2" in dotstr_s_lines
+    assert "add2" in dotstr_s_lines
+    assert "mult_1 -> add2" in dotstr_s_lines
+
+    # nested graph (should have the same elements)
+    dotfile_n = wf.create_dotfile(type="nested")
+    dotstr_n_lines = dotfile_n.read_text().split("\n")
+    assert "mult_1" in dotstr_n_lines
+    assert "mult_2" in dotstr_n_lines
+    assert "add2" in dotstr_n_lines
+    assert "mult_1 -> add2" in dotstr_n_lines
+
+    # detailed graph
+    dotfile_d = wf.create_dotfile(type="detailed")
+    dotstr_d_lines = dotfile_d.read_text().split("\n")
+    assert (
+        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        in dotstr_d_lines
+    )
+    assert "struct_mult_1:out -> struct_add2:x;" in dotstr_d_lines
+
+    # exporting graphs if dot available
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        exporting_graphs(wf=wf, name=name)
+
+
+def test_graph_1st(tmpdir):
+    """creating a set of graphs, wf with two nodes
+    some nodes have splitters, should be marked with blue color
+    """
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf.add(multiply(name="mult_1", x=wf.lzin.x, y=wf.lzin.y).split("x"))
+    wf.add(multiply(name="mult_2", x=wf.lzin.x, y=wf.lzin.x))
+    wf.add(add2(name="add2", x=wf.mult_1.lzout.out))
+    wf.set_output([("out", wf.add2.lzout.out)])
+
+    # simple graph
+    dotfile_s = wf.create_dotfile()
+    dotstr_s_lines = dotfile_s.read_text().split("\n")
+    assert "mult_1 [color=blue]" in dotstr_s_lines
+    assert "mult_2" in dotstr_s_lines
+    assert "add2 [color=blue]" in dotstr_s_lines
+    assert "mult_1 -> add2" in dotstr_s_lines
+
+    # nested graph
+    dotfile_n = wf.create_dotfile(type="nested")
+    dotstr_n_lines = dotfile_n.read_text().split("\n")
+    assert "mult_1 [color=blue]" in dotstr_n_lines
+    assert "mult_2" in dotstr_n_lines
+    assert "add2 [color=blue]" in dotstr_n_lines
+    assert "mult_1 -> add2" in dotstr_n_lines
+
+    # detailed graph
+    dotfile_d = wf.create_dotfile(type="detailed")
+    dotstr_d_lines = dotfile_d.read_text().split("\n")
+    assert (
+        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        in dotstr_d_lines
+    )
+    assert "struct_mult_1:out -> struct_add2:x;" in dotstr_d_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        exporting_graphs(wf=wf, name=name)
+
+
+def test_graph_2(tmpdir):
+    """creating a graph, wf with one worfklow as a node"""
+    wf = Workflow(name="wf", input_spec=["x"])
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
+    # simple graph
+    dotfile_s = wf.create_dotfile()
+    dotstr_s_lines = dotfile_s.read_text().split("\n")
+    assert "wfnd [shape=box]" in dotstr_s_lines
+
+    # nested graph
+    dotfile = wf.create_dotfile(type="nested")
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "subgraph cluster_wfnd {" in dotstr_lines
+    assert "add2" in dotstr_lines
+
+    # detailed graph
+    dotfile_d = wf.create_dotfile(type="detailed")
+    dotstr_d_lines = dotfile_d.read_text().split("\n")
+    assert (
+        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x}}"];' in dotstr_d_lines
+    )
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        exporting_graphs(wf=wf, name=name)
+
+
+def test_graph_2st(tmpdir):
+    """creating a set of graphs, wf with one worfklow as a node
+    the inner workflow has a state, so should be blue
+    """
+    wf = Workflow(name="wf", input_spec=["x"])
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x).split("x")
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
+    # simple graph
+    dotfile_s = wf.create_dotfile()
+    dotstr_s_lines = dotfile_s.read_text().split("\n")
+    assert "wfnd [shape=box, color=blue]" in dotstr_s_lines
+
+    # nested graph
+    dotfile_s = wf.create_dotfile(type="nested")
+    dotstr_s_lines = dotfile_s.read_text().split("\n")
+    assert "subgraph cluster_wfnd {" in dotstr_s_lines
+    assert "color=blue" in dotstr_s_lines
+    assert "add2" in dotstr_s_lines
+
+    # detailed graph
+    dotfile_d = wf.create_dotfile(type="detailed")
+    dotstr_d_lines = dotfile_d.read_text().split("\n")
+    assert (
+        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x}}"];' in dotstr_d_lines
+    )
+    assert "struct_wfnd:out -> struct_wf_out:out;" in dotstr_d_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        exporting_graphs(wf=wf, name=name)
+
+
+def test_graph_3(tmpdir):
+    """creating a set of graphs, wf with two nodes (one node is a workflow)"""
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
+    # simple graph
+    dotfile_s = wf.create_dotfile()
+    dotstr_s_lines = dotfile_s.read_text().split("\n")
+    assert "mult" in dotstr_s_lines
+    assert "wfnd [shape=box]" in dotstr_s_lines
+    assert "mult -> wfnd" in dotstr_s_lines
+
+    # nested graph
+    dotfile_n = wf.create_dotfile(type="nested")
+    dotstr_n_lines = dotfile_n.read_text().split("\n")
+    assert "mult" in dotstr_n_lines
+    assert "subgraph cluster_wfnd {" in dotstr_n_lines
+    assert "add2" in dotstr_n_lines
+
+    # detailed graph
+    dotfile_d = wf.create_dotfile(type="detailed")
+    dotstr_d_lines = dotfile_d.read_text().split("\n")
+    assert (
+        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        in dotstr_d_lines
+    )
+    assert "struct_mult:out -> struct_wfnd:x;" in dotstr_d_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        exporting_graphs(wf=wf, name=name)
+
+
+def test_graph_4(tmpdir):
+    """creating a set of graphs, wf with two nodes (one node is a workflow with two nodes
+    inside). Connection from the node to the inner workflow.
+    """
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
+    wfnd.add(add2(name="add2_a", x=wfnd.lzin.x))
+    wfnd.add(add2(name="add2_b", x=wfnd.add2_a.lzout.out))
+    wfnd.set_output([("out", wfnd.add2_b.lzout.out)])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
+    # simple graph
+    dotfile_s = wf.create_dotfile()
+    dotstr_s_lines = dotfile_s.read_text().split("\n")
+    assert "mult" in dotstr_s_lines
+    assert "wfnd [shape=box]" in dotstr_s_lines
+    assert "mult -> wfnd" in dotstr_s_lines
+
+    # nested graph
+    dotfile_n = wf.create_dotfile(type="nested")
+    dotstr_n_lines = dotfile_n.read_text().split("\n")
+    for el in ["mult", "add2_a", "add2_b"]:
+        assert el in dotstr_n_lines
+    assert "subgraph cluster_wfnd {" in dotstr_n_lines
+    assert "add2_a -> add2_b" in dotstr_n_lines
+    assert "mult -> add2_a [lhead=cluster_wfnd]"
+
+    # detailed graph
+    dotfile_d = wf.create_dotfile(type="detailed")
+    dotstr_d_lines = dotfile_d.read_text().split("\n")
+    assert (
+        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        in dotstr_d_lines
+    )
+    assert "struct_wf:y -> struct_mult:y;" in dotstr_d_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        exporting_graphs(wf=wf, name=name)
+
+
+def test_graph_5(tmpdir):
+    """creating a set of graphs, wf with two nodes (one node is a workflow with two nodes
+    inside). Connection from the inner workflow to the node.
+    """
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
+    wfnd.add(add2(name="add2_a", x=wfnd.lzin.x))
+    wfnd.add(add2(name="add2_b", x=wfnd.add2_a.lzout.out))
+    wfnd.set_output([("out", wfnd.add2_b.lzout.out)])
+    wf.add(wfnd)
+    wf.add(multiply(name="mult", x=wf.wfnd.lzout.out, y=wf.lzin.y))
+    wf.set_output([("out", wf.mult.lzout.out)])
+
+    # simple graph
+    dotfile_s = wf.create_dotfile()
+    dotstr_s_lines = dotfile_s.read_text().split("\n")
+    assert "mult" in dotstr_s_lines
+    assert "wfnd [shape=box]" in dotstr_s_lines
+    assert "wfnd -> mult" in dotstr_s_lines
+
+    # nested graph
+    dotfile_n = wf.create_dotfile(type="nested")
+    dotstr_n_lines = dotfile_n.read_text().split("\n")
+    for el in ["mult", "add2_a", "add2_b"]:
+        assert el in dotstr_n_lines
+    assert "subgraph cluster_wfnd {" in dotstr_n_lines
+    assert "add2_a -> add2_b" in dotstr_n_lines
+    assert "add2_b -> mult [ltail=cluster_wfnd]"
+
+    # detailed graph
+    dotfile_d = wf.create_dotfile(type="detailed")
+    dotstr_d_lines = dotfile_d.read_text().split("\n")
+    assert (
+        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        in dotstr_d_lines
+    )
+    assert "struct_wf:x -> struct_wfnd:x;" in dotstr_d_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        exporting_graphs(wf=wf, name=name)
