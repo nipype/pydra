@@ -108,7 +108,7 @@ def test_task_init_3(
         ),
     ],
 )
-@pytest.mark.parametrize("input_type", ["list", "array"])
+@pytest.mark.parametrize("input_type", ["list", "array", "mixed"])
 def test_task_init_3a(
     splitter, state_splitter, state_rpn, states_ind, states_val, input_type
 ):
@@ -116,6 +116,8 @@ def test_task_init_3a(
     a_in, b_in = [3, 5], [10, 20]
     if input_type == "array":
         a_in, b_in = np.array(a_in), np.array(b_in)
+    elif input_type == "mixed":
+        a_in = np.array(a_in)
     nn = fun_addvar(name="NA", a=a_in, b=b_in).split(splitter=splitter)
 
     assert np.allclose(nn.inputs.a, [3, 5])
@@ -836,7 +838,7 @@ def test_task_state_singl_1(plugin):
         ),
     ],
 )
-@pytest.mark.parametrize("input_type", ["list", "array"])
+@pytest.mark.parametrize("input_type", ["list", "array", "mixed"])
 def test_task_state_2(
     plugin, splitter, state_splitter, state_rpn, expected, expected_ind, input_type
 ):
@@ -844,6 +846,8 @@ def test_task_state_2(
     a_in, b_in = [3, 5], [10, 20]
     if input_type == "array":
         a_in, b_in = np.array(a_in), np.array(b_in)
+    elif input_type == "mixed":
+        a_in = np.array(a_in)
     nn = fun_addvar(name="NA").split(splitter=splitter, a=a_in, b=b_in)
     assert (nn.inputs.a == np.array([3, 5])).all()
     assert (nn.inputs.b == np.array([10, 20])).all()
