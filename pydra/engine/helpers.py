@@ -44,10 +44,13 @@ def ensure_list(obj, tuple2list=False):
     """
     if obj is None:
         return []
-    if isinstance(obj, list):
+    # list or numpy.array (this might need some extra flag in case an array has to be converted)
+    elif isinstance(obj, list) or hasattr(obj, "__array__"):
         return obj
     elif tuple2list and isinstance(obj, tuple):
         return list(obj)
+    elif isinstance(obj, list):
+        return obj
     return [obj]
 
 
