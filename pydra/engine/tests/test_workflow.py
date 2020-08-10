@@ -22,6 +22,7 @@ from .utils import (
     fun_write_file,
     fun_write_file_list,
     fun_write_file_list2dict,
+    list_sum,
     DOT_FLAG,
 )
 from ..submitter import Submitter
@@ -4032,7 +4033,7 @@ def test_graph_1st(tmpdir):
     assert "mult_1 [color=blue]" in dotstr_s_lines
     assert "mult_2" in dotstr_s_lines
     assert "add2 [color=blue]" in dotstr_s_lines
-    assert "mult_1 -> add2" in dotstr_s_lines
+    assert "mult_1 -> add2 [color=blue]" in dotstr_s_lines
 
     # nested graph
     dotfile_n = wf.create_dotfile(type="nested")
@@ -4040,7 +4041,7 @@ def test_graph_1st(tmpdir):
     assert "mult_1 [color=blue]" in dotstr_n_lines
     assert "mult_2" in dotstr_n_lines
     assert "add2 [color=blue]" in dotstr_n_lines
-    assert "mult_1 -> add2" in dotstr_n_lines
+    assert "mult_1 -> add2 [color=blue]" in dotstr_n_lines
 
     # detailed graph
     dotfile_d = wf.create_dotfile(type="detailed")
@@ -4050,6 +4051,48 @@ def test_graph_1st(tmpdir):
         in dotstr_d_lines
     )
     assert "struct_mult_1:out -> struct_add2:x;" in dotstr_d_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        exporting_graphs(wf=wf, name=name)
+
+
+def test_graph_1st_cmb(tmpdir):
+    """creating a set of graphs, wf with three nodes
+    the first one has a splitter, the second has a combiner, so the third one is stateless
+    first two nodes should be blue and the arrow between them should be blue
+    """
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split("x"))
+    wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("mult.x"))
+    wf.add(list_sum(name="sum", x=wf.add2.lzout.out))
+    wf.set_output([("out", wf.sum.lzout.out)])
+    # simple graph
+    dotfile_s = wf.create_dotfile()
+    dotstr_s_lines = dotfile_s.read_text().split("\n")
+    assert "mult [color=blue]" in dotstr_s_lines
+    assert "add2 [color=blue]" in dotstr_s_lines
+    assert "sum" in dotstr_s_lines
+    assert "mult -> add2 [color=blue]" in dotstr_s_lines
+    assert "add2 -> sum" in dotstr_s_lines
+
+    # nested graph
+    dotfile_n = wf.create_dotfile(type="nested")
+    dotstr_n_lines = dotfile_n.read_text().split("\n")
+    assert "mult [color=blue]" in dotstr_n_lines
+    assert "add2 [color=blue]" in dotstr_n_lines
+    assert "sum" in dotstr_n_lines
+    assert "mult -> add2 [color=blue]" in dotstr_n_lines
+    assert "add2 -> sum" in dotstr_n_lines
+
+    # detailed graph
+    dotfile_d = wf.create_dotfile(type="detailed")
+    dotstr_d_lines = dotfile_d.read_text().split("\n")
+    assert (
+        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        in dotstr_d_lines
+    )
+    assert "struct_mult:out -> struct_add2:x;" in dotstr_d_lines
 
     if DOT_FLAG:
         name = f"graph_{sys._getframe().f_code.co_name}"
@@ -4146,6 +4189,48 @@ def test_graph_3(tmpdir):
     dotfile_n = wf.create_dotfile(type="nested")
     dotstr_n_lines = dotfile_n.read_text().split("\n")
     assert "mult" in dotstr_n_lines
+    assert "subgraph cluster_wfnd {" in dotstr_n_lines
+    assert "add2" in dotstr_n_lines
+
+    # detailed graph
+    dotfile_d = wf.create_dotfile(type="detailed")
+    dotstr_d_lines = dotfile_d.read_text().split("\n")
+    assert (
+        'struct_wf [color=red, label="{WORKFLOW INPUT: | {<x> x | <y> y}}"];'
+        in dotstr_d_lines
+    )
+    assert "struct_mult:out -> struct_wfnd:x;" in dotstr_d_lines
+
+    if DOT_FLAG:
+        name = f"graph_{sys._getframe().f_code.co_name}"
+        exporting_graphs(wf=wf, name=name)
+
+
+def test_graph_3st(tmpdir):
+    """creating a set of graphs, wf with two nodes (one node is a workflow)
+       the first node has a state and it should be passed to the second node
+       (blue node and a wfasnd, and blue arrow from the node to the wfasnd)
+    """
+    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split("x"))
+
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
+    wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+
+    # simple graph
+    dotfile_s = wf.create_dotfile()
+    dotstr_s_lines = dotfile_s.read_text().split("\n")
+    assert "mult [color=blue]" in dotstr_s_lines
+    assert "wfnd [shape=box, color=blue]" in dotstr_s_lines
+    assert "mult -> wfnd [color=blue]" in dotstr_s_lines
+
+    # nested graph
+    dotfile_n = wf.create_dotfile(type="nested")
+    dotstr_n_lines = dotfile_n.read_text().split("\n")
+    assert "mult [color=blue]" in dotstr_n_lines
     assert "subgraph cluster_wfnd {" in dotstr_n_lines
     assert "add2" in dotstr_n_lines
 

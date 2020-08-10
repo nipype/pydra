@@ -357,7 +357,6 @@ class DiGraph:
 
         dotstr = "digraph G {\n"
         for nd in self.nodes:
-            # breakpoint()
             if is_workflow(nd):
                 if nd.state:
                     # adding color for wf with a state
@@ -370,8 +369,13 @@ class DiGraph:
                     dotstr += f"{nd.name} [color=blue]\n"
                 else:
                     dotstr += f"{nd.name}\n"
-        for ed in self.edges_names:
-            dotstr += f"{ed[0]} -> {ed[1]}\n"
+        for ed in self.edges:
+            # if the tails nd has a final state, than the state is passed
+            # to the next node and the arrow is blue
+            if ed[0].state and ed[0].state.splitter_rpn_final:
+                dotstr += f"{ed[0].name} -> {ed[1].name} [color=blue]\n"
+            else:
+                dotstr += f"{ed[0].name} -> {ed[1].name}\n"
 
         dotstr += "}"
         Path(outdir).mkdir(parents=True, exist_ok=True)
@@ -480,6 +484,10 @@ class DiGraph:
                 )
             else:
                 dotstr_edg += f"{ed[0].name} -> {ed[1].name}\n"
+            # if tail has a state and a final splitter (not combined) than the state
+            # is passed to the next state and the arrow is blue
+            if ed[0].state and ed[0].state.splitter_rpn_final:
+                dotstr_edg = dotstr_edg[:-1] + " [color=blue]\n"
         dotstr = dotstr + dotstr_edg
         return dotstr
 
