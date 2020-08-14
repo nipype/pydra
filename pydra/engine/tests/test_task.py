@@ -6,6 +6,7 @@ from ... import mark
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from .utils import gen_basic_wf, use_validator
+from ..specs import MultiInputObj, File
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -167,10 +168,8 @@ def test_annotated_input_func_2a(use_validator):
         return a
 
     funky = testfunc()
-    # the error is raised when run (should be improved?)
-    funky.inputs.a = 3.5
     with pytest.raises(TypeError):
-        funky()
+        funky.inputs.a = 3.5
 
 
 def test_annotated_input_func_3(use_validator):
@@ -332,6 +331,54 @@ def test_annotated_input_func_7a_excep(use_validator):
 
     with pytest.raises(TypeError):
         funky = testfunc(a=[3.5, 2.1]).split("a")
+
+
+def test_annotated_input_func_8():
+    """ the function with annotated input as MultiInputObj
+        a single value is provided and should be converted to a list
+    """
+
+    @mark.task
+    def testfunc(a: MultiInputObj):
+        return len(a)
+
+    funky = testfunc(a=3.5)
+    assert getattr(funky.inputs, "a") == [3.5]
+    res = funky()
+    assert res.output.out == 1
+
+
+def test_annotated_input_func_8a():
+    """ the function with annotated input as MultiInputObj
+        a 1-el list is provided so shouldn't be changed
+    """
+
+    @mark.task
+    def testfunc(a: MultiInputObj):
+        return len(a)
+
+    funky = testfunc(a=[3.5])
+    assert getattr(funky.inputs, "a") == [3.5]
+    res = funky()
+    assert res.output.out == 1
+
+
+def test_annotated_input_func_8b():
+    """ the function with annotated input as MultiInputObj
+        a single value is provided after initial. the task
+        (input should still be converted to a list)
+    """
+
+    @mark.task
+    def testfunc(a: MultiInputObj):
+        return len(a)
+
+    funky = testfunc()
+    # setting a after init
+    funky.inputs.a = 3.5
+    assert getattr(funky.inputs, "a") == [3.5]
+    res = funky()
+    assert res.output.out == 1
 
 
 def test_annotated_func_multreturn_exception(use_validator):

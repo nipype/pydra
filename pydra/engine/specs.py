@@ -2,6 +2,7 @@
 import attr
 from pathlib import Path
 import typing as ty
+import inspect
 
 from .helpers_file import template_update_single
 
@@ -16,6 +17,16 @@ class File:
 
 class Directory:
     """An :obj:`os.pathlike` object, designating a folder."""
+
+
+class MultiInputObj:
+    """An :obj: ty.List[`os.pathlike`] object"""
+
+    @classmethod
+    def converter(cls, value):
+        from .helpers import ensure_list
+
+        return ensure_list(value)
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -34,6 +45,21 @@ class SpecInfo:
 @attr.s(auto_attribs=True, kw_only=True)
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
+
+    def __setattr__(self, name, value):
+        """changing settatr, so the converter and validator is run
+        if input is set after __init__
+        """
+        if inspect.stack()[1][3] == "__init__":  # or name.startswith("_"):
+            super().__setattr__(name, value)
+        else:
+            tp = attr.fields_dict(self.__class__)[name].type
+            # if the type has a converter, e.g., MultiInputObj
+            if hasattr(tp, "converter"):
+                value = tp.converter(value)
+            super().__setattr__(name, value)
+            # validate all fields that have set a validator
+            attr.validate(self)
 
     def collect_additional_outputs(self, inputs, output_dir):
         """Get additional outputs."""

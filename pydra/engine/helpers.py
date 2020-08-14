@@ -235,13 +235,12 @@ def make_klass(spec):
         newfields = dict()
         for item in fields:
             if len(item) == 2:
+                name = item[0]
                 if isinstance(item[1], attr._make._CountingAttr):
-                    newfields[item[0]] = item[1]
-                    newfields[item[0]].validator(custom_validator)
+                    newfields[name] = item[1]
+                    newfields[name].validator(custom_validator)
                 else:
-                    newfields[item[0]] = attr.ib(
-                        type=item[1], validator=custom_validator
-                    )
+                    newfields[name] = attr.ib(type=item[1], validator=custom_validator)
             else:
                 if (
                     any([isinstance(ii, attr._make._CountingAttr) for ii in item])
@@ -273,6 +272,9 @@ def make_klass(spec):
                             metadata=mdata,
                             validator=custom_validator,
                         )
+            # if type has converter, e.g. MultiInputObj
+            if hasattr(newfields[name].type, "converter"):
+                newfields[name].converter = newfields[name].type.converter
         fields = newfields
     return attr.make_class(spec.name, fields, bases=spec.bases, kw_only=True)
 
