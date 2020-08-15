@@ -485,7 +485,7 @@ def test_task_nostate_4(plugin, tmpdir):
     assert nn.output_dir.exists()
 
 
-def test_task_nostate_5(plugin, tmpdir):
+def test_task_nostate_5(tmpdir):
     """ task with a dictionary of files as an input"""
     file1 = tmpdir.join("file1.txt")
     with open(file1, "w") as f:
@@ -497,8 +497,7 @@ def test_task_nostate_5(plugin, tmpdir):
 
     nn = fun_file_list(name="NA", filename_list=[file1, file2])
 
-    with Submitter(plugin=plugin) as sub:
-        sub(nn)
+    nn()
 
     # checking the results
     results = nn.result()

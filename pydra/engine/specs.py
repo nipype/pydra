@@ -99,11 +99,56 @@ class BaseSpec:
         for field, value in temp_values.items():
             setattr(self, field, value)
 
+    def check_fields_input_spec(self):
+        """
+        Check fields from input spec based on the medatada.
+
+        e.g., if xor, requires are fulfilled, if value provided when mandatory.
+
+        """
+        fields = attr_fields(self)
+        names = []
+        require_to_check = {}
+        for fld in fields:
+            mdata = fld.metadata
+            # checking if the mandatory field is provided
+            if getattr(self, fld.name) is attr.NOTHING:
+                if mdata.get("mandatory"):
+                    raise AttributeError(
+                        f"{fld.name} is mandatory, but no value provided"
+                    )
+                else:
+                    continue
+            names.append(fld.name)
+
+            # checking if fields meet the xor and requires are
+            if "xor" in mdata:
+                if [el for el in mdata["xor"] if el in names]:
+                    raise AttributeError(
+                        f"{fld.name} is mutually exclusive with {mdata['xor']}"
+                    )
+
+            if "requires" in mdata:
+                if [el for el in mdata["requires"] if el not in names]:
+                    # will check after adding all fields to names
+                    require_to_check[fld.name] = mdata["requires"]
+
+            if fld.type is File:
+                self._file_check_n_bindings(fld)
+
+        for nm, required in require_to_check.items():
+            required_notfound = [el for el in required if el not in names]
+            if required_notfound:
+                raise AttributeError(f"{nm} requires {required_notfound}")
+
+    def _file_check_n_bindings(self, field):
+        """for tasks without container, this is simple check if the file exists"""
+        file = Path(getattr(self, field.name))
+        if not file.exists():
+            raise AttributeError(f"the file from the {field.name} input does not exist")
+
     def check_metadata(self):
         """Check contained metadata."""
-
-    def check_fields_input_spec(self):
-        """Check input fields."""
 
     def template_update(self):
         """Update template."""
@@ -187,6 +232,56 @@ class RuntimeSpec:
     outdir: ty.Optional[str] = None
     container: ty.Optional[str] = "shell"
     network: bool = False
+
+
+@attr.s(auto_attribs=True, kw_only=True)
+class FunctionSpec(BaseSpec):
+    """Specification for a process invoked from a shell."""
+
+    def check_metadata(self):
+        """
+        Check the metadata for fields in input_spec and fields.
+
+        Also sets the default values when available and needed.
+
+        """
+        supported_keys = {
+            "allowed_values",
+            "copyfile",
+            "help_string",
+            "mandatory",
+            # "readonly", #likely not needed
+            # "output_field_name", #likely not needed
+            # "output_file_template", #likely not needed
+            "requires",
+            "keep_extension",
+            "xor",
+            "sep",
+        }
+        # special inputs, don't have to follow rules for standard inputs
+        special_input = ["_func", "_graph_checksums"]
+
+        fields = [fld for fld in attr_fields(self) if fld.name not in special_input]
+        for fld in fields:
+            mdata = fld.metadata
+            # checking keys from metadata
+            if set(mdata.keys()) - supported_keys:
+                raise AttributeError(
+                    f"only these keys are supported {supported_keys}, but "
+                    f"{set(mdata.keys()) - supported_keys} provided"
+                )
+            # checking if the help string is provided (required field)
+            if "help_string" not in mdata:
+                raise AttributeError(f"{fld.name} doesn't have help_string field")
+            # not allowing for default if the field is mandatory
+            if not fld.default == attr.NOTHING and mdata.get("mandatory"):
+                raise AttributeError(
+                    "default value should not be set when the field is mandatory"
+                )
+            # setting default if value not provided and default is available
+            if getattr(self, fld.name) is None:
+                if not fld.default == attr.NOTHING:
+                    setattr(self, fld.name, fld.default)
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -276,56 +371,9 @@ class ShellSpec(BaseSpec):
                 if not fld.default == attr.NOTHING:
                     setattr(self, fld.name, fld.default)
 
-    def check_fields_input_spec(self):
-        """
-        Check fields from input spec based on the medatada.
-
-        e.g., if xor, requires are fulfilled, if value provided when mandatory.
-
-        """
-        fields = attr_fields(self)
-        names = []
-        require_to_check = {}
-        for fld in fields:
-            mdata = fld.metadata
-            # checking if the mandatory field is provided
-            if getattr(self, fld.name) is attr.NOTHING:
-                if mdata.get("mandatory"):
-                    raise AttributeError(
-                        f"{fld.name} is mandatory, but no value provided"
-                    )
-                else:
-                    continue
-            names.append(fld.name)
-
-            # checking if fields meet the xor and requires are
-            if "xor" in mdata:
-                if [el for el in mdata["xor"] if el in names]:
-                    raise AttributeError(
-                        f"{fld.name} is mutually exclusive with {mdata['xor']}"
-                    )
-
-            if "requires" in mdata:
-                if [el for el in mdata["requires"] if el not in names]:
-                    # will check after adding all fields to names
-                    require_to_check[fld.name] = mdata["requires"]
-
-            if fld.type is File:
-                self._file_check(fld)
-
-        for nm, required in require_to_check.items():
-            required_notfound = [el for el in required if el not in names]
-            if required_notfound:
-                raise AttributeError(f"{nm} requires {required_notfound}")
-
-    def _file_check(self, field):
-        file = Path(getattr(self, field.name))
-        if not file.exists():
-            raise AttributeError(f"the file from the {field.name} input does not exist")
-
 
 @attr.s(auto_attribs=True, kw_only=True)
-class ShellOutSpec(BaseSpec):
+class ShellOutSpec:
     """Output specification of a generic shell process."""
 
     return_code: int
@@ -432,7 +480,7 @@ class ContainerSpec(ShellSpec):
     ] = attr.ib(default=None, metadata={"help_string": "bindings"})
     """Mount points to be bound into the container."""
 
-    def _file_check(self, field):
+    def _file_check_n_bindings(self, field):
         file = Path(getattr(self, field.name))
         if field.metadata.get("container_path"):
             # if the path is in a container the input should be treated as a str (hash as a str)

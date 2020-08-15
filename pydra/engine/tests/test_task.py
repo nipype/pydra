@@ -1,12 +1,13 @@
 import typing as ty
 import os, sys
+import attr
 import pytest
 
 from ... import mark
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from .utils import gen_basic_wf, use_validator
-from ..specs import MultiInputObj, File
+from ..specs import MultiInputObj, SpecInfo, FunctionSpec
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -544,6 +545,236 @@ def test_notannotated_func_multreturn():
     assert hasattr(result, "output")
     assert hasattr(result.output, "out")
     assert result.output.out == (20.2, 13.8)
+
+
+def test_input_spec_func_1(use_validator):
+    """ the function w/o annotated, but input_spec is used """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("a", attr.ib(type=float, metadata={"help_string": "input a"}))],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    assert getattr(funky.inputs, "a") == 3.5
+
+
+def test_input_spec_func_1a_except(use_validator):
+    """ the function w/o annotated, but input_spec is used
+    a TypeError is raised (float is provided instead of int)
+    """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("a", attr.ib(type=int, metadata={"help_string": "input a"}))],
+        bases=(FunctionSpec,),
+    )
+    with pytest.raises(TypeError):
+        funky = testfunc(a=3.5, input_spec=my_input_spec)
+
+
+def test_input_spec_func_1b_except(use_validator):
+    """ the function w/o annotated, but input_spec is used
+     metadata checks raise an error
+     """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "a",
+                attr.ib(type=float, metadata={"position": 1, "help_string": "input a"}),
+            )
+        ],
+        bases=(FunctionSpec,),
+    )
+    with pytest.raises(AttributeError, match="only these keys are supported"):
+        funky = testfunc(a=3.5, input_spec=my_input_spec)
+
+
+def test_input_spec_func_1d_except(use_validator):
+    """ the function w/o annotated, but input_spec is used
+    input_spec doesn't contain 'a' input, an error is raised
+    """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(name="Input", fields=[], bases=(FunctionSpec,))
+    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        funky()
+
+
+def test_input_spec_func_2(use_validator):
+    """ the function with annotation, and the task has input_spec,
+    input_spec changes the type of the input (so error is not raised)
+    """
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("a", attr.ib(type=float, metadata={"help_string": "input a"}))],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    assert getattr(funky.inputs, "a") == 3.5
+
+
+def test_input_spec_func_3(use_validator):
+    """ the function w/o annotated, but input_spec is used
+    additional keys (allowed_values) are used in metadata
+    """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "a",
+                attr.ib(
+                    type=int,
+                    metadata={"help_string": "input a", "allowed_values": [0, 1, 2]},
+                ),
+            )
+        ],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=2, input_spec=my_input_spec)
+    assert getattr(funky.inputs, "a") == 2
+
+
+def test_input_spec_func_3a_except(use_validator):
+    """ the function w/o annotated, but input_spec is used
+    allowed_values is used in metadata and the ValueError is raised
+    """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "a",
+                attr.ib(
+                    type=int,
+                    metadata={"help_string": "input a", "allowed_values": [0, 1, 2]},
+                ),
+            )
+        ],
+        bases=(FunctionSpec,),
+    )
+
+    with pytest.raises(ValueError, match="value of a has to be"):
+        funky = testfunc(a=3, input_spec=my_input_spec)
+
+
+def test_input_spec_func_4(use_validator):
+    """ the function with a default value for b
+    but b is set as mandatory in the input_spec, so error is raised if not provided
+    """
+
+    @mark.task
+    def testfunc(a, b=1):
+        return a + b
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "a",
+                attr.ib(
+                    type=int, metadata={"help_string": "input a", "mandatory": True}
+                ),
+            ),
+            (
+                "b",
+                attr.ib(
+                    type=int, metadata={"help_string": "input b", "mandatory": True}
+                ),
+            ),
+        ],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=2, input_spec=my_input_spec)
+    with pytest.raises(Exception, match="b is mandatory"):
+        funky()
+
+
+def test_input_spec_func_4a(use_validator):
+    """ the function with a default value for b and metadata in the input_spec
+    has a different default value, so value from the function is overwritten
+    """
+
+    @mark.task
+    def testfunc(a, b=1):
+        return a + b
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "a",
+                attr.ib(
+                    type=int, metadata={"help_string": "input a", "mandatory": True}
+                ),
+            ),
+            ("b", attr.ib(type=int, default=10, metadata={"help_string": "input b"})),
+        ],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=2, input_spec=my_input_spec)
+    res = funky()
+    assert res.output.out == 12
+
+
+def test_input_spec_func_5():
+    """ the FunctionTask with input_spec, a input has MultiInputObj type
+        a single value is provided and should be converted to a list
+    """
+
+    @mark.task
+    def testfunc(a):
+        return len(a)
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            ("a", attr.ib(type=MultiInputObj, metadata={"help_string": "input a"}))
+        ],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    assert getattr(funky.inputs, "a") == [3.5]
+    res = funky()
+    assert res.output.out == 1
 
 
 def test_exception_func():

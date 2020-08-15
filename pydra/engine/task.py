@@ -104,31 +104,26 @@ class FunctionTask(TaskBase):
 
         """
         if input_spec is None:
-            input_spec = SpecInfo(
-                name="Inputs",
-                fields=[
+            fields = []
+            for val in inspect.signature(func).parameters.values():
+                if val.default is not inspect.Signature.empty:
+                    val_dflt = val.default
+                else:
+                    val_dflt = attr.NOTHING
+                fields.append(
                     (
                         val.name,
                         attr.ib(
-                            default=val.default,
+                            default=val_dflt,
                             type=val.annotation,
                             metadata={
                                 "help_string": f"{val.name} parameter from {func.__name__}"
                             },
                         ),
                     )
-                    if val.default is not inspect.Signature.empty
-                    else (
-                        val.name,
-                        attr.ib(
-                            type=val.annotation, metadata={"help_string": val.name}
-                        ),
-                    )
-                    for val in inspect.signature(func).parameters.values()
-                ]
-                + [("_func", attr.ib(default=cp.dumps(func), type=str))],
-                bases=(BaseSpec,),
-            )
+                )
+            fields.append(("_func", attr.ib(default=cp.dumps(func), type=str)))
+            input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
         else:
             input_spec.fields.append(
                 ("_func", attr.ib(default=cp.dumps(func), type=str))
