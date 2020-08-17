@@ -1,0 +1,50 @@
+#https://github.com/eWaterCycle/singularity-versions/blob/master/.github/workflows/dist.yml
+
+name: Test singularity
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Install OS deps
+        run: |
+          sudo apt-get update;
+          sudo apt-get install flawfinder squashfs-tools uuid-dev libuuid1 libffi-dev libssl-dev libssl1.0.0 \
+          libarchive-dev libgpgme11-dev libseccomp-dev wget gcc make pkg-config -y;
+      - name: Set env
+        run: echo ::set-env name=RELEASE_VERSION::${GITHUB_REF#refs/*/v}
+      - uses: actions/checkout@v2
+        with:
+          repository: hpcng/singularity
+          ref: v${{ env.RELEASE_VERSION }}
+      - name: Setup GO
+        uses: actions/setup-go@v2
+        with:
+          go-version: '^1.13'
+      - name: Build
+        run: |
+          ./mconfig;
+          make -C ./builddir;
+          sudo make -C ./builddir install;
+          cd -;
+      - name: Echo version
+        run: |
+          echo ${{ github.ref }}
+          ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64/bin/singularity --version
+      - name: Install miniconda
+        run: |
+           python setup.py develop
+           python -c 'import pydra; print(pydra.__version__)'  # Verify import with bare install
+
+
+
+#- name: Build
+# ./mconfig --without-suid -p ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64
+# cd builddir
+# make -j 2
+# ake install
