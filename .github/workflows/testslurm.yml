@@ -1,0 +1,49 @@
+# use containers in github actions
+# https://stackoverflow.com/questions/58930529/github-action-how-do-i-run-commands-inside-a-docker-container
+# https://stackoverflow.com/questions/58476228/how-to-use-a-variable-docker-image-in-github-actions
+# https://github.community/t/confused-with-runs-on-and-container-options/16258/2
+
+# using go and docker in github actions
+# https://steele.blue/tiny-github-actions/
+
+name: Run SLURM tests
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      DOCKER_IMAGE: mgxd/slurm:19.05.1
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Pull docker image
+      run: |
+        docker pull $DOCKER_IMAGE
+        # Have image running in background
+        docker run `bash <(curl -s https://codecov.io/env)` -itd -h ernie --name slurm -v `pwd`:/pydra $DOCKER_IMAGE
+    - name: Display previous jobs with sacct
+      run: |
+        echo "Allowing ports/daemons time to start" && sleep 10
+        docker exec slurm bash -c "sacctmgr -i add cluster name=linux \
+          && supervisorctl restart slurmdbd \
+          && supervisorctl restart slurmctld \
+          && sacctmgr -i add account none,test Cluster=linux Description='none' Organization='none'"
+        docker exec slurm bash -c "sacct && sinfo && squeue" 2&> /dev/null
+        if [ $? -ne 0 ]; then
+            echo "Slurm docker image error"
+            exit 1
+        fi
+    - name: Setup Python
+      run: |
+        docker exec slurm bash -c "ls -la && echo list top level dir"
+        docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
+        docker exec slurm bash -c "pip install -e /pydra[test] && python -c 'import pydra; print(pydra.__version__)'"
+    - name: Run pytest
+      run: docker exec slurm bash -c "pytest --color=yes -vs -n auto --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra"
+    - name: Upload to codecov
+      run: |
+        docker exec slurm bash -c "codecov --root /pydra -f /pydra/cov.xml -F unittests"
+        docker rm -f slurm

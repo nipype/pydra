@@ -31,6 +31,8 @@ jobs:
     - name: Pytest
       env:
         IGNORE_TESTS: '*dockertask.py'  # docker tests run in a seperate action for now
-      run: pytest --ignore-glob=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+      run: |
+        pytest --ignore-glob=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
     - name: Upload to codecov
-      run: codecov --root /pydra -f /pydra/cov.xml -F unittests
+      run: |
+        codecov --root /pydra -f /pydra/cov.xml -F unittests
