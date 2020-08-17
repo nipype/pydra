@@ -43,15 +43,19 @@ jobs:
           wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
           bash Miniconda3-latest-Linux-x86_64.sh -b -p $HOME/miniconda
           eval "$($HOME/miniconda/bin/conda shell.bash hook)"
-      - name: Install Python
+      - uses: actions/checkout@v2
+      - name: Set up dev env
         run: |
            python setup.py develop
            python -c 'import pydra; print(pydra.__version__)'  # Verify import with bare install
-
-
-
-#- name: Build
-# ./mconfig --without-suid -p ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64
-# cd builddir
-# make -j 2
-# ake install
+      - name: Install pydra
+        run: |
+           pip install -e ".[test]"
+      - name: Pytest
+        env:
+          IGNORE_TESTS: '*dockertask.py'  # docker tests run in a seperate action for now
+        run: |
+          pytest --ignore-glob=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml
+      - name: Upload to codecov
+        run: |
+          codecov --root /pydra -f /pydra/cov.xml -F unittests
