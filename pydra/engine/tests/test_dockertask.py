@@ -885,6 +885,7 @@ def test_docker_inputspec_2a(plugin, tmpdir):
 
 
 @need_docker
+@pytest.mark.xfail(reason="'docker' not in /proc/1/cgroup on ubuntu; TODO")
 def test_docker_inputspec_3(plugin, tmpdir):
     """ input file is in the container, so metadata["container_path"]: True,
         the input will be treated as a str """
