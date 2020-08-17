@@ -8,7 +8,6 @@ jobs:
   build:
 
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
@@ -31,7 +30,7 @@ jobs:
         python -m pip install .[test]
     - name: Pytest
       env:
-        IGNORE_TESTS: 'pydra/engine/tests/test_dockertask.py'  # docker tests run in a seperate action for now
-      run: pytest --ignore=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+        IGNORE_TESTS: '*dockertask.py'  # docker tests run in a seperate action for now
+      run: pytest --ignore-glob=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
     - name: Upload to codecov
       run: codecov --root /pydra -f /pydra/cov.xml -F unittests
