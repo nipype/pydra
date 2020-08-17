@@ -38,11 +38,17 @@ jobs:
         run: |
           echo ${{ github.ref }}
           ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64/bin/singularity --version
-      - name: Install miniconda
+      - uses: goanpeca/setup-miniconda@v1
+      - name: Conda info
+        shell: bash -l {0}
         run: |
-          wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-          bash Miniconda3-latest-Linux-x86_64.sh -b -p $HOME/miniconda
-          eval "$($HOME/miniconda/bin/conda shell.bash hook)"
+          conda info
+          conda list
+      #- name: Install miniconda
+        #run: |
+        #  wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+        # bash Miniconda3-latest-Linux-x86_64.sh -b -p $HOME/miniconda
+        #  eval "$($HOME/miniconda/bin/conda shell.bash hook)"
       - uses: actions/checkout@v2
       - name: Set up dev env
         run: |
@@ -50,7 +56,7 @@ jobs:
            python -c 'import pydra; print(pydra.__version__)'  # Verify import with bare install
       - name: Install pydra
         run: |
-           pip install -e ".[test]"
+           python -m pip install -e .[test]
       - name: Pytest
         env:
           IGNORE_TESTS: '*dockertask.py'  # docker tests run in a seperate action for now
