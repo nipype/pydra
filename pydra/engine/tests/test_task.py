@@ -7,7 +7,7 @@ from ... import mark
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from .utils import gen_basic_wf, use_validator
-from ..specs import MultiInputObj, SpecInfo, FunctionSpec
+from ..specs import MultiInputObj, SpecInfo, FunctionSpec, BaseSpec
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -639,6 +639,26 @@ def test_input_spec_func_2(use_validator):
     assert getattr(funky.inputs, "a") == 3.5
 
 
+def test_input_spec_func_2a(use_validator):
+    """ the function with annotation, and the task has input_spec,
+    input_spec changes the type of the input (so error is not raised)
+    using the shorter syntax
+    """
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("a", float, {"help_string": "input a"})],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    assert getattr(funky.inputs, "a") == 3.5
+
+
 def test_input_spec_func_3(use_validator):
     """ the function w/o annotated, but input_spec is used
     additional keys (allowed_values) are used in metadata
@@ -775,6 +795,85 @@ def test_input_spec_func_5():
     assert getattr(funky.inputs, "a") == [3.5]
     res = funky()
     assert res.output.out == 1
+
+
+def test_output_spec_func_1(use_validator):
+    """ the function w/o annotated, but output_spec is used """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("out1", attr.ib(type=float, metadata={"help_string": "output"}))],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, output_spec=my_output_spec)
+    res = funky()
+    assert res.output.out1 == 3.5
+
+
+def test_output_spec_func_1a_except(use_validator):
+    """ the function w/o annotated, but output_spec is used
+        float returned instead of int - TypeError
+    """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("out1", attr.ib(type=int, metadata={"help_string": "output"}))],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, output_spec=my_output_spec)
+    with pytest.raises(TypeError):
+        res = funky()
+
+
+def test_output_spec_func_2(use_validator):
+    """ the function w/o annotated, but output_spec is used
+    output_spec changes the type of the output (so error is not raised)
+    """
+
+    @mark.task
+    def testfunc(a) -> int:
+        return a
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("out1", attr.ib(type=float, metadata={"help_string": "output"}))],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, output_spec=my_output_spec)
+    res = funky()
+    assert res.output.out1 == 3.5
+
+
+def test_output_spec_func_2a(use_validator):
+    """ the function w/o annotated, but output_spec is used
+    output_spec changes the type of the output (so error is not raised)
+    using a shorter syntax
+    """
+
+    @mark.task
+    def testfunc(a) -> int:
+        return a
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("out1", float, {"help_string": "output"})],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, output_spec=my_output_spec)
+    res = funky()
+    assert res.output.out1 == 3.5
 
 
 def test_exception_func():

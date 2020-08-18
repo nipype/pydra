@@ -183,8 +183,6 @@ class FunctionTask(TaskBase):
                     output_spec = SpecInfo(
                         name="Output", fields=[("out", return_info)], bases=(BaseSpec,)
                     )
-        elif "return" in func.__annotations__:
-            raise NotImplementedError("Branch not implemented")
         self.output_spec = output_spec
 
     def _run_task(self):
