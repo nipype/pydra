@@ -904,15 +904,27 @@ def test_task_state_3(plugin):
     assert nn.output_dir == []
 
 
-def test_task_state_4(plugin):
+@pytest.mark.parametrize("input_type", ["list", "array"])
+def test_task_state_4(plugin, input_type):
     """ task with a list as an input, and a simple splitter """
-    nn = moment(name="NA", n=3, lst=[[2, 3, 4], [1, 2, 3]]).split(splitter="lst")
+    lst_in = [[2, 3, 4], [1, 2, 3]]
+    if input_type == "array":
+        lst_in = np.array(lst_in)
+    nn = moment(name="NA", n=3, lst=lst_in).split(splitter="lst")
     assert np.allclose(nn.inputs.n, 3)
     assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
     assert nn.state.splitter == "NA.lst"
 
     with Submitter(plugin=plugin) as sub:
         sub(nn)
+
+    # checking that split is done across dim 0
+    el_0 = nn.state.states_val[0]["NA.lst"]
+    if input_type == "list":
+        assert el_0 == [2, 3, 4]
+    elif input_type == "array":
+        assert isinstance(el_0, np.ndarray)
+        assert (el_0 == [2, 3, 4]).all()
 
     # checking the results
     results = nn.result()
