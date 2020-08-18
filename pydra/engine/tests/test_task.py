@@ -7,7 +7,7 @@ from ... import mark
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from .utils import gen_basic_wf, use_validator
-from ..specs import MultiInputObj, SpecInfo, FunctionSpec, BaseSpec
+from ..specs import MultiInputObj, MultiOutputObj, SpecInfo, FunctionSpec, BaseSpec
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -874,6 +874,56 @@ def test_output_spec_func_2a(use_validator):
     funky = testfunc(a=3.5, output_spec=my_output_spec)
     res = funky()
     assert res.output.out1 == 3.5
+
+
+def test_output_spec_func_3(use_validator):
+    """ the function w/o annotated, but output_spec is used
+    MultiOutputObj is used, output is a 2-el list, so converter doesn't do anything
+    """
+
+    @mark.task
+    def testfunc(a, b):
+        return [a, b]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out_list",
+                attr.ib(type=MultiOutputObj, metadata={"help_string": "output"}),
+            )
+        ],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, b=1, output_spec=my_output_spec)
+    res = funky()
+    assert res.output.out_list == [3.5, 1]
+
+
+def test_output_spec_func_4(use_validator):
+    """ the function w/o annotated, but output_spec is used
+    MultiOutputObj is used, output is a 1el list, so converter return the element
+    """
+
+    @mark.task
+    def testfunc(a):
+        return [a]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out_1el",
+                attr.ib(type=MultiOutputObj, metadata={"help_string": "output"}),
+            )
+        ],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, output_spec=my_output_spec)
+    res = funky()
+    assert res.output.out_1el == 3.5
 
 
 def test_exception_func():

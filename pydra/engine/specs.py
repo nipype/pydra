@@ -20,13 +20,24 @@ class Directory:
 
 
 class MultiInputObj:
-    """An :obj: ty.List[`os.pathlike`] object"""
+    """A ty.List[ty.Any] object, converter changes a single values to a list"""
 
     @classmethod
     def converter(cls, value):
         from .helpers import ensure_list
 
         return ensure_list(value)
+
+
+class MultiOutputObj:
+    """A ty.List[ty.Any] object, converter changes an 1-el list to the single value"""
+
+    @classmethod
+    def converter(cls, value):
+        if isinstance(value, list) and len(value) == 1:
+            return value[0]
+        else:
+            return value
 
 
 @attr.s(auto_attribs=True, kw_only=True)
