@@ -148,6 +148,8 @@ class FunctionTask(TaskBase):
                 )
             else:
                 return_info = func.__annotations__["return"]
+                # e.g. python annotation: fun() -> ty.NamedTuple("Output", [("out", float)])
+                # or pydra decorator: @pydra.mark.annotate({"return": ty.NamedTuple(...)})
                 if hasattr(return_info, "__name__") and hasattr(
                     return_info, "__annotations__"
                 ):
@@ -156,35 +158,31 @@ class FunctionTask(TaskBase):
                         fields=list(return_info.__annotations__.items()),
                         bases=(BaseSpec,),
                     )
-                # Objects like int, float, list, tuple, and dict do not have __name__ attribute.
-                elif hasattr(return_info, "__annotations__"):
-                    output_spec = SpecInfo(
-                        name="Output",
-                        fields=list(return_info.__annotations__.items()),
-                        bases=(BaseSpec,),
-                    )
+                # e.g. python annotation: fun() -> {"out": int}
+                # or pydra decorator: @pydra.mark.annotate({"return": {"out": int}})
                 elif isinstance(return_info, dict):
                     output_spec = SpecInfo(
                         name="Output",
                         fields=list(return_info.items()),
                         bases=(BaseSpec,),
                     )
+                # e.g. python annotation: fun() -> (int, int)
+                # or pydra decorator: @pydra.mark.annotate({"return": (int, int)})
+                elif isinstance(return_info, tuple):
+                    output_spec = SpecInfo(
+                        name="Output",
+                        fields=[
+                            ("out{}".format(n + 1), t)
+                            for n, t in enumerate(return_info)
+                        ],
+                        bases=(BaseSpec,),
+                    )
+                # e.g. python annotation: fun() -> int
+                # or pydra decorator: @pydra.mark.annotate({"return": int})
                 else:
-                    if not isinstance(return_info, tuple):
-                        output_spec = SpecInfo(
-                            name="Output",
-                            fields=[("out", return_info)],
-                            bases=(BaseSpec,),
-                        )
-                    else:
-                        output_spec = SpecInfo(
-                            name="Output",
-                            fields=[
-                                ("out{}".format(n + 1), t)
-                                for n, t in enumerate(return_info)
-                            ],
-                            bases=(BaseSpec,),
-                        )
+                    output_spec = SpecInfo(
+                        name="Output", fields=[("out", return_info)], bases=(BaseSpec,)
+                    )
         elif "return" in func.__annotations__:
             raise NotImplementedError("Branch not implemented")
         self.output_spec = output_spec
