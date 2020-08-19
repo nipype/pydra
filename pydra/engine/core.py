@@ -130,8 +130,6 @@ class TaskBase:
         if name in dir(self):
             raise ValueError("Cannot use names of attributes or methods as task name")
         self.name = name
-        if not inputs:
-            inputs = {}
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
         klass = make_klass(self.input_spec)
@@ -150,9 +148,18 @@ class TaskBase:
             if field.name not in ["_func", "_graph_checksums"]
         ]
 
-        # selecting items that are in input_names (ignoring fields that are not in input_spec)
-        if isinstance(inputs, dict):
-            inputs = {k: v for k, v in inputs.items() if k in self.input_names}
+        if inputs:
+            if isinstance(inputs, dict):
+                # selecting items that are in input_names (ignoring fields that are not in input_spec)
+                inputs = {k: v for k, v in inputs.items() if k in self.input_names}
+            # TODO: this needs to finished and tested after #305
+            elif Path(inputs).is_file():
+                inputs = json.loads(Path(inputs).read_text())
+            # TODO: this needs to finished and tested after #305
+            elif isinstance(inputs, str):
+                if self._input_sets is None or inputs not in self._input_sets:
+                    raise ValueError(f"Unknown input set {inputs!r}")
+                inputs = self._input_sets[inputs]
 
         self.inputs = attr.evolve(self.inputs, **inputs)
 
