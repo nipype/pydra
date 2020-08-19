@@ -135,26 +135,30 @@ class TaskBase:
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
         klass = make_klass(self.input_spec)
-        inp_dict = {}
-        for f in attr.fields(klass):
-            if f.name.startswith("_"):
+
+        self.inputs = klass(
+            **{
                 # in attrs names that starts with "_" could be set when name provided w/o "_"
-                name = f.name[1:]
-            else:
-                name = f.name
-            if name in inputs:
-                inp_dict[name] = inputs[name]
-            else:
-                # if the field not in inputs, the default value should be used
-                inp_dict[name] = f.default
-        self.inputs = klass(**inp_dict)
-        # checking if metadata is set properly
-        self.inputs.check_metadata()
+                (f.name[1:] if f.name.startswith("_") else f.name): f.default
+                for f in attr.fields(klass)
+            }
+        )
+
         self.input_names = [
             field.name
             for field in attr.fields(klass)
             if field.name not in ["_func", "_graph_checksums"]
         ]
+
+        # selecting items that are in input_names (ignoring fields that are not in input_spec)
+        if isinstance(inputs, dict):
+            inputs = {k: v for k, v in inputs.items() if k in self.input_names}
+
+        self.inputs = attr.evolve(self.inputs, **inputs)
+
+        # checking if metadata is set properly
+        self.inputs.check_metadata()
+        self.state_inputs = inputs
         # dictionary to save the connections with lazy fields
         self.inp_lf = {}
         self.state = None
@@ -164,7 +168,6 @@ class TaskBase:
         self._done = False
         if self._input_sets is None:
             self._input_sets = {}
-        self.state_inputs = {k: v for k, v in inputs.items() if k in self.input_names}
 
         self.audit = Audit(
             audit_flags=audit_flags,
