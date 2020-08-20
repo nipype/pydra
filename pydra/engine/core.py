@@ -133,18 +133,39 @@ class TaskBase:
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
         klass = make_klass(self.input_spec)
-        # todo should be used to input_check in spec??
+
         self.inputs = klass(
             **{
+                # in attrs names that starts with "_" could be set when name provided w/o "_"
                 (f.name[1:] if f.name.startswith("_") else f.name): f.default
                 for f in attr.fields(klass)
             }
         )
+
         self.input_names = [
             field.name
             for field in attr.fields(klass)
             if field.name not in ["_func", "_graph_checksums"]
         ]
+
+        if inputs:
+            if isinstance(inputs, dict):
+                # selecting items that are in input_names (ignoring fields that are not in input_spec)
+                inputs = {k: v for k, v in inputs.items() if k in self.input_names}
+            # TODO: this needs to finished and tested after #305
+            elif Path(inputs).is_file():
+                inputs = json.loads(Path(inputs).read_text())
+            # TODO: this needs to finished and tested after #305
+            elif isinstance(inputs, str):
+                if self._input_sets is None or inputs not in self._input_sets:
+                    raise ValueError(f"Unknown input set {inputs!r}")
+                inputs = self._input_sets[inputs]
+
+        self.inputs = attr.evolve(self.inputs, **inputs)
+
+        # checking if metadata is set properly
+        self.inputs.check_metadata()
+        self.state_inputs = inputs
         # dictionary to save the connections with lazy fields
         self.inp_lf = {}
         self.state = None
@@ -154,18 +175,6 @@ class TaskBase:
         self._done = False
         if self._input_sets is None:
             self._input_sets = {}
-        if inputs:
-            if isinstance(inputs, dict):
-                inputs = {k: v for k, v in inputs.items() if k in self.input_names}
-            elif Path(inputs).is_file():
-                inputs = json.loads(Path(inputs).read_text())
-            elif isinstance(inputs, str):
-                if self._input_sets is None or inputs not in self._input_sets:
-                    raise ValueError(f"Unknown input set {inputs!r}")
-                inputs = self._input_sets[inputs]
-            self.inputs = attr.evolve(self.inputs, **inputs)
-            self.inputs.check_metadata()
-            self.state_inputs = inputs
 
         self.audit = Audit(
             audit_flags=audit_flags,
@@ -412,8 +421,11 @@ class TaskBase:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
                 save(odir, result=result, task=self)
-                for k, v in orig_inputs.items():
-                    setattr(self.inputs, k, v)
+                # # function etc. shouldn't change anyway, so removing
+                orig_inputs = dict(
+                    (k, v) for (k, v) in orig_inputs.items() if not k.startswith("_")
+                )
+                self.inputs = attr.evolve(self.inputs, **orig_inputs)
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         return result

@@ -1,7 +1,7 @@
 # Tasks for testing
 import time
 import sys, shutil
-import typing as tp
+import typing as ty
 from pathlib import Path
 import subprocess as sp
 import pytest
@@ -164,14 +164,14 @@ def fun_dict(d):
 
 
 @mark.task
-def fun_write_file(filename: tp.Union[str, File, Path], text="hello"):
+def fun_write_file(filename: ty.Union[str, File, Path], text="hello"):
     with open(filename, "w") as f:
         f.write(text)
     return Path(filename).absolute()
 
 
 @mark.task
-def fun_write_file_list(filename_list: tp.List[tp.Union[str, File, Path]], text="hi"):
+def fun_write_file_list(filename_list: ty.List[ty.Union[str, File, Path]], text="hi"):
     for ii, filename in enumerate(filename_list):
         with open(filename, "w") as f:
             f.write(f"from file {ii}: {text}")
@@ -181,7 +181,7 @@ def fun_write_file_list(filename_list: tp.List[tp.Union[str, File, Path]], text=
 
 @mark.task
 def fun_write_file_list2dict(
-    filename_list: tp.List[tp.Union[str, File, Path]], text="hi"
+    filename_list: ty.List[ty.Union[str, File, Path]], text="hi"
 ):
     filename_dict = {}
     for ii, filename in enumerate(filename_list):
@@ -201,7 +201,7 @@ def fun_file(filename: File):
 
 
 @mark.task
-def fun_file_list(filename_list: File):
+def fun_file_list(filename_list: ty.List[File]):
     txt_list = []
     for filename in filename_list:
         with open(filename) as f:

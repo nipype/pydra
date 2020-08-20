@@ -1,5 +1,6 @@
 import pytest
 import random
+import typing as ty
 
 from ..functions import task, annotate
 from ...engine.task import FunctionTask
@@ -29,7 +30,9 @@ def test_task_equivalence():
     assert c_res.output.hash == d2_res.output.hash
 
 
-def test_annotation_equivalence():
+def test_annotation_equivalence_1():
+    """ testing various ways of annotation: one output, only types provided"""
+
     def direct(a: int) -> int:
         return a + 2
 
@@ -41,6 +44,7 @@ def test_annotation_equivalence():
     def indirect(a):
         return a + 2
 
+    # checking if the annotations are equivalent
     assert direct.__annotations__ == partial.__annotations__
     assert direct.__annotations__ == indirect.__annotations__
 
@@ -48,6 +52,104 @@ def test_annotation_equivalence():
     a = random.randint(0, (1 << 32) - 3)
     assert direct(a) == partial(a)
     assert direct(a) == indirect(a)
+
+    # checking if the annotation is properly converted to output_spec if used in task
+    task_direct = task(direct)()
+    assert task_direct.output_spec.fields[0] == ("out", int)
+
+
+def test_annotation_equivalence_2():
+    """ testing various ways of annotation: multiple outputs, using a tuple for output annot."""
+
+    def direct(a: int) -> (int, float):
+        return a + 2, a + 2.0
+
+    @annotate({"return": (int, float)})
+    def partial(a: int):
+        return a + 2, a + 2.0
+
+    @annotate({"a": int, "return": (int, float)})
+    def indirect(a):
+        return a + 2, a + 2.0
+
+    # checking if the annotations are equivalent
+    assert direct.__annotations__ == partial.__annotations__
+    assert direct.__annotations__ == indirect.__annotations__
+
+    # Run functions to ensure behavior is unaffected
+    a = random.randint(0, (1 << 32) - 3)
+    assert direct(a) == partial(a)
+    assert direct(a) == indirect(a)
+
+    # checking if the annotation is properly converted to output_spec if used in task
+    task_direct = task(direct)()
+    assert task_direct.output_spec.fields == [("out1", int), ("out2", float)]
+
+
+def test_annotation_equivalence_3():
+    """ testing various ways of annotation: using dictionary for output annot."""
+
+    def direct(a: int) -> {"out1": int}:
+        return a + 2
+
+    @annotate({"return": {"out1": int}})
+    def partial(a: int):
+        return a + 2
+
+    @annotate({"a": int, "return": {"out1": int}})
+    def indirect(a):
+        return a + 2
+
+    # checking if the annotations are equivalent
+    assert direct.__annotations__ == partial.__annotations__
+    assert direct.__annotations__ == indirect.__annotations__
+
+    # Run functions to ensure behavior is unaffected
+    a = random.randint(0, (1 << 32) - 3)
+    assert direct(a) == partial(a)
+    assert direct(a) == indirect(a)
+
+    # checking if the annotation is properly converted to output_spec if used in task
+    task_direct = task(direct)()
+    assert task_direct.output_spec.fields[0] == ("out1", int)
+
+
+def test_annotation_equivalence_4():
+    """ testing various ways of annotation: using ty.NamedTuple for the output"""
+
+    def direct(a: int) -> ty.NamedTuple("Output", [("sum", int), ("sub", int)]):
+        return a + 2, a - 2
+
+    @annotate({"return": ty.NamedTuple("Output", [("sum", int), ("sub", int)])})
+    def partial(a: int):
+        return a + 2, a - 2
+
+    @annotate(
+        {"a": int, "return": ty.NamedTuple("Output", [("sum", int), ("sub", int)])}
+    )
+    def indirect(a):
+        return a + 2, a - 2
+
+    # checking if the annotations are equivalent
+    assert (
+        direct.__annotations__["return"].__annotations__
+        == partial.__annotations__["return"].__annotations__
+        == indirect.__annotations__["return"].__annotations__
+    )
+    assert (
+        direct.__annotations__["return"].__name__
+        == partial.__annotations__["return"].__name__
+        == indirect.__annotations__["return"].__name__
+    )
+
+    # Run functions to ensure behavior is unaffected
+    a = random.randint(0, (1 << 32) - 3)
+    assert direct(a) == partial(a)
+    assert direct(a) == indirect(a)
+
+    # checking if the annotation is properly converted to output_spec if used in task
+    task_direct = task(direct)()
+    assert task_direct.output_spec.fields == [("sum", int), ("sub", int)]
 
 
 def test_annotation_override():

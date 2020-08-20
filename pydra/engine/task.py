@@ -104,31 +104,26 @@ class FunctionTask(TaskBase):
 
         """
         if input_spec is None:
-            input_spec = SpecInfo(
-                name="Inputs",
-                fields=[
+            fields = []
+            for val in inspect.signature(func).parameters.values():
+                if val.default is not inspect.Signature.empty:
+                    val_dflt = val.default
+                else:
+                    val_dflt = attr.NOTHING
+                fields.append(
                     (
                         val.name,
                         attr.ib(
-                            default=val.default,
+                            default=val_dflt,
                             type=val.annotation,
                             metadata={
                                 "help_string": f"{val.name} parameter from {func.__name__}"
                             },
                         ),
                     )
-                    if val.default is not inspect.Signature.empty
-                    else (
-                        val.name,
-                        attr.ib(
-                            type=val.annotation, metadata={"help_string": val.name}
-                        ),
-                    )
-                    for val in inspect.signature(func).parameters.values()
-                ]
-                + [("_func", attr.ib(default=cp.dumps(func), type=str))],
-                bases=(BaseSpec,),
-            )
+                )
+            fields.append(("_func", attr.ib(default=cp.dumps(func), type=str)))
+            input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
         else:
             input_spec.fields.append(
                 ("_func", attr.ib(default=cp.dumps(func), type=str))
@@ -153,6 +148,8 @@ class FunctionTask(TaskBase):
                 )
             else:
                 return_info = func.__annotations__["return"]
+                # e.g. python annotation: fun() -> ty.NamedTuple("Output", [("out", float)])
+                # or pydra decorator: @pydra.mark.annotate({"return": ty.NamedTuple(...)})
                 if hasattr(return_info, "__name__") and hasattr(
                     return_info, "__annotations__"
                 ):
@@ -161,37 +158,31 @@ class FunctionTask(TaskBase):
                         fields=list(return_info.__annotations__.items()),
                         bases=(BaseSpec,),
                     )
-                # Objects like int, float, list, tuple, and dict do not have __name__ attribute.
-                elif hasattr(return_info, "__annotations__"):
-                    output_spec = SpecInfo(
-                        name="Output",
-                        fields=list(return_info.__annotations__.items()),
-                        bases=(BaseSpec,),
-                    )
+                # e.g. python annotation: fun() -> {"out": int}
+                # or pydra decorator: @pydra.mark.annotate({"return": {"out": int}})
                 elif isinstance(return_info, dict):
                     output_spec = SpecInfo(
                         name="Output",
                         fields=list(return_info.items()),
                         bases=(BaseSpec,),
                     )
+                # e.g. python annotation: fun() -> (int, int)
+                # or pydra decorator: @pydra.mark.annotate({"return": (int, int)})
+                elif isinstance(return_info, tuple):
+                    output_spec = SpecInfo(
+                        name="Output",
+                        fields=[
+                            ("out{}".format(n + 1), t)
+                            for n, t in enumerate(return_info)
+                        ],
+                        bases=(BaseSpec,),
+                    )
+                # e.g. python annotation: fun() -> int
+                # or pydra decorator: @pydra.mark.annotate({"return": int})
                 else:
-                    if not isinstance(return_info, tuple):
-                        output_spec = SpecInfo(
-                            name="Output",
-                            fields=[("out", return_info)],
-                            bases=(BaseSpec,),
-                        )
-                    else:
-                        output_spec = SpecInfo(
-                            name="Output",
-                            fields=[
-                                ("out{}".format(n + 1), t)
-                                for n, t in enumerate(return_info)
-                            ],
-                            bases=(BaseSpec,),
-                        )
-        elif "return" in func.__annotations__:
-            raise NotImplementedError("Branch not implemented")
+                    output_spec = SpecInfo(
+                        name="Output", fields=[("out", return_info)], bases=(BaseSpec,)
+                    )
         self.output_spec = output_spec
 
     def _run_task(self):
