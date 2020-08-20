@@ -1,4 +1,5 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# Reference
+# https://hynek.me/articles/python-github-actions/
 
 name: Test Pydra
 
@@ -79,11 +80,8 @@ jobs:
 
     - name: Pytest
       if: matrix.install != 'style'
-      env:
-        IGNORE_TESTS: '*dockertask.py'  # docker tests run in a seperate action for now
-      run: |
-        pytest --ignore-glob=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+      run: pytest -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+
 
     - name: Upload to codecov
-      run: |
-        codecov --root /pydra -f /pydra/cov.xml -F unittests
+      run: codecov --root /pydra -f /pydra/cov.xml -F unittests
