@@ -7,27 +7,80 @@ on: [push, pull_request]
 jobs:
   build:
 
-    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
         python-version: [3.7, 3.8]
+        install: [pip, install, develop, sdist, wheel]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
 
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Update build tools
+
+    #- name: Update build tools
+    #  run: |
+    #    python -m pip install --upgrade pip==20.2.1 setuptools==30.2.1 wheel
+    #- name: Install dependencies
+    #  run: |
+    #    python -m pip install -r min-requirements.txt
+    #- name: Install pydra
+    #  run: |
+    #    python -m pip install .[test]
+
+# https://www.edwardthomson.com/blog/github_actions_14_conditionals_with_a_matrix.html
+    - name: Install dependencies (pip)
+      if: matrix.install == 'pip'
+      run: pip install $PIP_ARGS .
+
+    - name: Install dependencies (setup.py install)
+      if: matrix.install == 'install'
+      run: python setup.py install
+
+    - name: Install dependencies (setup.py develop)
+      if: matrix.install == 'develop'
+      run: python setup.py develop
+
+    - name: Install dependencies (sdist)
+      if: matrix.install == 'sdist'
       run: |
-        python -m pip install --upgrade pip==20.2.1 setuptools==30.2.1 wheel
-    - name: Install dependencies
+        python setup.py sdist
+        pip install dist/*.whl
+
+    - name: Install dependencies (wheel)
+      if: matrix.install == 'wheel'
       run: |
-        python -m pip install -r min-requirements.txt
-    - name: Install pydra
-      run: |
-        python -m pip install .[test]
+        python setup.py bdist_wheel
+        pip install dist/*.whl
+
+
+    - name: Verify Python import
+      run: python -c 'import pydra; print(pydra.__version__)'
+
+
+    - name: Install Pydra (pip or setup.py install)
+      if: matrix.install == 'pip' || matrix.install == 'install'
+      run: pip install ".[test]"
+
+    - name: Install Pydra (setup.py develop)
+      if: matrix.install == 'develop'
+      run: pip install -e ".[test]"
+
+    - name: Install Pydra (sdist)
+      if: matrix.install == 'sdist'
+      run: pip install "$( ls dist/pydra*.tar.gz )[test]"
+
+    - name: Install Pydra (wheel)
+      if: matrix.install == 'wheel'
+      run: pip install "$( ls dist/pydra*.whl )[test]"
+
+
+
     - name: Pytest
       env:
         IGNORE_TESTS: '*dockertask.py'  # docker tests run in a seperate action for now
