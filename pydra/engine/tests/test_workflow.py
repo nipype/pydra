@@ -2228,7 +2228,6 @@ def test_wf_nostate_cachelocations_b(plugin, tmpdir):
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
 
-
     # checking if the second wf didn't run again
     assert wf1.output_dir.exists()
     assert wf2.output_dir.exists()
@@ -3110,7 +3109,7 @@ def test_wf_ndstate_cachelocations(plugin, tmpdir):
         # checking the execution time
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
-        
+
     # checking all directories
     assert wf1.output_dir.exists()
 
@@ -3401,6 +3400,7 @@ def test_wf_state_runtwice_usecache(plugin, tmpdir):
         # checking the execution time
         assert t1 > 2
         assert t2 < max(1, t1 - 1)
+
 
 @pytest.fixture
 def create_tasks():
