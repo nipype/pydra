@@ -153,6 +153,11 @@ def list_output(x):
 
 
 @mark.task
+def list_sum(x):
+    return sum(x)
+
+
+@mark.task
 def fun_dict(d):
     kv_list = [f"{k}:{v}" for (k, v) in d.items()]
     return "_".join(kv_list)
