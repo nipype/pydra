@@ -2173,6 +2173,7 @@ def test_wf_nostate_cachelocations_a(plugin, tmpdir):
     assert wf2.output_dir.exists()
 
 
+@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_b(plugin, tmpdir):
     """
     the same as previous test, but the 2nd workflows has two outputs
