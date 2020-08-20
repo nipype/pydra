@@ -74,7 +74,7 @@ jobs:
     - name: Check Style
       if: matrix.install == 'style'
       run: |
-        pip install black==19.3b0
+        pip install black==19.3b0 codecov
         black --check pydra tools setup.py
 
 
@@ -85,3 +85,4 @@ jobs:
 
     - name: Upload to codecov
       run: codecov --root /pydra -f /pydra/cov.xml -F unittests
+      shell: bash
