@@ -11,7 +11,7 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
         python-version: [3.7, 3.8]
-        install: [min-req, install, develop, sdist, wheel]
+        install: [min-req, install, develop, sdist, wheel, style]
       fail-fast: false
     runs-on: ${{ matrix.os }}
 
@@ -70,11 +70,20 @@ jobs:
       run: pip install "$( ls dist/pydra*.whl )[test]"
 
 
+    - name: Check Style
+      if: matrix.install == 'style'
+      run: |
+        pip install black==19.3b0
+        black --check pydra tools setup.py
+
+
     - name: Pytest
+      if: matrix.install != 'style'
       env:
         IGNORE_TESTS: '*dockertask.py'  # docker tests run in a seperate action for now
       run: |
         pytest --ignore-glob=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+
     - name: Upload to codecov
       run: |
         codecov --root /pydra -f /pydra/cov.xml -F unittests
