@@ -40,39 +40,19 @@ jobs:
         run: |
           echo ${{ github.ref }}
           ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64/bin/singularity --version
-      #- uses: goanpeca/setup-miniconda@v1
-      - name: Set up miniconda
-        run: |
-          wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-          bash Miniconda3-latest-Linux-x86_64.sh -b -p $HOME/miniconda
-          eval "$($HOME/miniconda/bin/conda shell.bash hook)"
-      - name: Conda info
-        shell: bash -l {0}
-        run: |
-          conda info
-          conda list
-          which python
-          echo you are here
-          pwd
-          echo PATH=$PATH
-          #eval "$(conda shell.bash hook)"
-          #conda activate test
+
       - name: Setup Pydra
         uses: actions/checkout@v2
         with:
           repository: ${{ github.repository }}
       - name: Set up dev env
-        run: |
-           python setup.py develop
-           python -c 'import pydra; print(pydra.__version__)'  # Verify import with bare install
+        run: python setup.py develop
       - name: Install pydra
-        run: |
-           python -m pip install -e .[test]
+        run: python -m pip install -e .[test]
+
       - name: Pytest
         env:
           IGNORE_TESTS: '*dockertask.py'  # docker tests run in a seperate action for now
-        run: |
-          pytest --ignore-glob=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml
+        run: pytest --ignore-glob=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml
       - name: Upload to codecov
-        run: |
-          codecov --root /pydra -f /pydra/cov.xml -F unittests
+        run: codecov --root /pydra -f /pydra/cov.xml -F unittests
