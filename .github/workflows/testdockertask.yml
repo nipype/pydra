@@ -1,0 +1,36 @@
+# Reference
+# https://hynek.me/articles/python-github-actions/
+
+name: Test Dockertask
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        python-version: [3.7, 3.8]
+        install: [min-req, install, develop, sdist, wheel, style]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Update build tools
+      run: python -m pip install --upgrade pip==20.2.1 setuptools==30.2.1 wheel
+    - name: Install dependencies
+      run: pip install -r min-requirements.txt
+    - name: Install pydra
+      run: pip install .[test]
+    - name: Pytest
+      run: pytest pydra/engine/tests/test_dockertask.py -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml
+    - name: Upload to codecov
+      run: codecov --root /pydra -f /pydra/cov.xml -F unittests
