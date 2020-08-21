@@ -11,6 +11,7 @@ jobs:
     strategy:
       matrix:
         python-version: [3.7, 3.8]
+      fail-fast: False
 
     steps:
       - name: Set env
@@ -43,22 +44,28 @@ jobs:
           echo ${{ github.ref }}
           ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64/bin/singularity --version
 
+
+      - name: Checkout Pydra repo
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ github.repository }}
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Setup Pydra
-        uses: actions/checkout@v2
-        with:
-          repository: ${{ github.repository }}
-      - name: Set up dev env
-        run: python setup.py develop
-      - name: Install pydra
-        run: python -m pip install -e .[test]
+      - name: Update build tools
+        run: python -m pip install --upgrade pip setuptools
+      - name: Install dependencies (setup.py develop)
+        run: |
+          python setup.py develop
+          python -c 'import pydra; print(pydra.__version__)' # Verify import with bare install
+      - name: Install pydra (test)
+        run: pip install -e ".[test]"
+
 
       - name: Pytest
         env:
           IGNORE_TESTS: '*dockertask.py'  # docker tests run in a seperate action for now
-        run: pytest --ignore-glob=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml
+        run: pytest --ignore-glob=$IGNORE_TESTS -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
       - name: Upload to codecov
-        run: codecov --root /pydra -f /pydra/cov.xml -F unittests
+        run: codecov -f /pydra/cov.xml -F unittests
