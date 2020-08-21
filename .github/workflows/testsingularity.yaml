@@ -45,16 +45,18 @@ jobs:
           ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64/bin/singularity --version
 
 
-      - name: Checkout Pydra repo
-        uses: actions/checkout@v2
-        with:
-          repository: ${{ github.repository }}
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
       - name: Update build tools
         run: python -m pip install --upgrade pip setuptools
+
+
+      - name: Checkout Pydra repo
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ github.repository }}
       - name: Install dependencies (setup.py develop)
         run: |
           python setup.py develop
@@ -64,8 +66,6 @@ jobs:
 
 
       - name: Pytest
-        env:
-          IGNORE_TESTS: '*dockertask.py'  # docker tests run in a seperate action for now
-        run: pytest --ignore-glob=$IGNORE_TESTS -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+        run: pytest -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
       - name: Upload to codecov
         run: codecov -f /pydra/cov.xml -F unittests
