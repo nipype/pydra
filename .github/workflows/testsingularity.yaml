@@ -8,7 +8,9 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    continue-on-error: true
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8]
 
     steps:
       - name: Set env
@@ -41,6 +43,10 @@ jobs:
           echo ${{ github.ref }}
           ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64/bin/singularity --version
 
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: Setup Pydra
         uses: actions/checkout@v2
         with:
