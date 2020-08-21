@@ -5,9 +5,12 @@ name: Test Pydra
 
 on: [push, pull_request]
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
-
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
@@ -82,8 +85,7 @@ jobs:
       if: matrix.install != 'style'
       env:
         IGNORE_TESTS: '*dockertask.py'  # docker tests run in a seperate action for now
-      run: |
-        pytest --ignore-glob=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+      run: pytest --ignore-glob=$IGNORE_TESTS -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
 
 
     - name: Upload to codecov
