@@ -57,10 +57,6 @@ jobs:
         uses: actions/checkout@v2
         with:
           repository: ${{ github.repository }}
-      - name: Install dependencies (setup.py develop)
-        run: |
-          python setup.py develop
-          python -c 'import pydra; print(pydra.__version__)' # Verify import with bare install
       - name: Install pydra (test)
         run: pip install -e ".[test]"
 
