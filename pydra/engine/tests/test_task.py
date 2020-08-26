@@ -1090,7 +1090,7 @@ def test_functask_callable(tmpdir):
     assert foo2.plugin == "cf"
 
 
-def test_taskhooks(tmpdir, capsys):
+def test_taskhooks_1(tmpdir, capsys):
     foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
     assert foo.hooks
     # ensure all hooks are defined
@@ -1142,3 +1142,78 @@ def test_taskhooks(tmpdir, capsys):
     for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):
         hook = getattr(foo.hooks, attr)
         assert hook() is None
+
+
+def test_taskhooks_2(tmpdir, capsys):
+    """checking order of the hooks; using task's attributes"""
+    foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
+
+    def myhook_prerun(task, *args):
+        print(f"i. prerun hook was called from {task.name}")
+
+    def myhook_prerun_task(task, *args):
+        print(f"ii. prerun task hook was called {task.name}")
+
+    def myhook_postrun_task(task, *args):
+        print(f"iii. postrun task hook was called {task.name}")
+
+    def myhook_postrun(task, *args):
+        print(f"iv. postrun hook was called {task.name}")
+
+    foo.hooks.pre_run = myhook_prerun
+    foo.hooks.post_run = myhook_postrun
+    foo.hooks.pre_run_task = myhook_prerun_task
+    foo.hooks.post_run_task = myhook_postrun_task
+    foo()
+
+    captured = capsys.readouterr()
+    hook_messages = captured.out.strip().split("\n")
+    # checking the order of the hooks
+    assert "i. prerun hook" in hook_messages[0]
+    assert "ii. prerun task hook" in hook_messages[1]
+    assert "iii. postrun task hook" in hook_messages[2]
+    assert "iv. postrun hook" in hook_messages[3]
+
+
+def test_taskhooks_3(tmpdir, capsys):
+    """checking results in the post run hooks"""
+    foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
+
+    def myhook_postrun_task(task, result, *args):
+        print(f"postrun task hook, the result is {result.output.out}")
+
+    def myhook_postrun(task, result, *args):
+        print(f"postrun hook, the result is {result.output.out}")
+
+    foo.hooks.post_run = myhook_postrun
+    foo.hooks.post_run_task = myhook_postrun_task
+    foo()
+
+    captured = capsys.readouterr()
+    hook_messages = captured.out.strip().split("\n")
+    # checking that the postrun hooks have access to results
+    assert "postrun task hook, the result is 3" in hook_messages[0]
+    assert "postrun hook, the result is 3" in hook_messages[1]
+
+
+def test_taskhooks_4(tmpdir, capsys):
+    """task raises an error: postrun task should be called, postrun shouldn't be called"""
+    foo = funaddtwo(name="foo", a="one", cache_dir=tmpdir)
+
+    def myhook_postrun_task(task, result, *args):
+        print(f"postrun task hook was called, result object is {result}")
+
+    def myhook_postrun(task, result, *args):
+        print(f"postrun hook should not be called")
+
+    foo.hooks.post_run = myhook_postrun
+    foo.hooks.post_run_task = myhook_postrun_task
+
+    with pytest.raises(Exception):
+        foo()
+
+    captured = capsys.readouterr()
+    hook_messages = captured.out.strip().split("\n")
+    # only post run task hook should be called
+    assert len(hook_messages) == 1
+    assert "postrun task hook was called" in hook_messages[0]
