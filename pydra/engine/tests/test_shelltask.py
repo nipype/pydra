@@ -2377,6 +2377,35 @@ def test_shell_cmd_outputspec_5(plugin, results_function):
     assert res.output.out1.exists()
 
 
+def test_shell_cmd_outputspec_5a():
+    """
+        providing output name by providing output_file_template
+        (using shorter syntax)
+    """
+    cmd = "touch"
+    args = "newfile_tmp.txt"
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out1",
+                File,
+                {"output_file_template": "{args}", "help_string": "output file"},
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
+    )
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.out1.exists()
+
+
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_state_outputspec_1(plugin, results_function):
     """

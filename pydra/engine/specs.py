@@ -416,7 +416,7 @@ class ShellOutSpec:
                             fld, inputs, output_dir
                         )
                 else:
-                    raise Exception("not implemented")
+                    raise Exception("not implemented (collect_additional_output)")
         return additional_out
 
     def _field_defaultvalue(self, fld, output_dir):
@@ -449,6 +449,10 @@ class ShellOutSpec:
 
     def _field_metadata(self, fld, inputs, output_dir):
         """Collect output file if metadata specified."""
+        if "requires" in fld.metadata:
+            for inp in fld.metadata["requires"]:
+                if getattr(inputs, inp) in [attr.NOTHING, None, False]:
+                    return attr.NOTHING
         if "value" in fld.metadata:
             return output_dir / fld.metadata["value"]
         # this block is only run if "output_file_template" is provided in output_spec
@@ -461,7 +465,7 @@ class ShellOutSpec:
         elif "callable" in fld.metadata:
             return fld.metadata["callable"](fld.name, output_dir)
         else:
-            raise Exception("not implemented")
+            raise Exception("not implemented (_field_metadata)")
 
 
 @attr.s(auto_attribs=True, kw_only=True)
