@@ -3,6 +3,7 @@ import attr
 from pathlib import Path
 import typing as ty
 import inspect
+import re
 
 from .helpers_file import template_update_single
 
@@ -450,9 +451,34 @@ class ShellOutSpec:
     def _field_metadata(self, fld, inputs, output_dir):
         """Collect output file if metadata specified."""
         if "requires" in fld.metadata:
-            for inp in fld.metadata["requires"]:
-                if getattr(inputs, inp) in [attr.NOTHING, None, False]:
+            field_required = fld.metadata["requires"]
+        # if the output field doesn't have requires field, we use fields from output_file_template
+        elif "output_file_template" in fld.metadata:
+            inp_fields = re.findall("{\w+}", fld.metadata["output_file_template"])
+            field_required = [el[1:-1] for el in inp_fields]
+        else:
+            field_required = []
+        for inp in field_required:
+            if isinstance(inp, str):  # name of the input field
+                if not hasattr(inputs, inp):
+                    raise Exception(
+                        f"{inp} is not a valid input field, can't be used in requires"
+                    )
+                elif getattr(inputs, inp) in [attr.NOTHING, None]:
                     return attr.NOTHING
+            elif isinstance(inp, tuple):  # (name, allowed values)
+                inp, allowed_val = inp
+                if not hasattr(inputs, inp):
+                    raise Exception(
+                        f"{inp} is not a valid input field, can't be used in requires"
+                    )
+                elif getattr(inputs, inp) not in allowed_val:
+                    return attr.NOTHING
+            else:
+                raise Exception(
+                    f"each element of the requires should be a string or a tuple, "
+                    f"but {inp} is found"
+                )
         if "value" in fld.metadata:
             return output_dir / fld.metadata["value"]
         # this block is only run if "output_file_template" is provided in output_spec
