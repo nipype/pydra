@@ -494,7 +494,7 @@ class ShellOutSpec:
         elif "callable" in fld.metadata:
             return fld.metadata["callable"](fld.name, output_dir)
         else:
-            raise Exception("not implemented (_field_metadata)")
+            raise Exception("(_field_metadata) is not a current valid metadata key.")
 
 
 @attr.s(auto_attribs=True, kw_only=True)
