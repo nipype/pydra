@@ -62,4 +62,4 @@ jobs:
       - name: Pytest
         run: pytest -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
       - name: Upload to codecov
-        run: codecov -f /pydra/cov.xml -F unittests -e GITHUB_WORKFLOW
+        run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW

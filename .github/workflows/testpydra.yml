@@ -61,4 +61,4 @@ jobs:
 
 
     - name: Upload to codecov
-      run: codecov --root /pydra -f /pydra/cov.xml -F unittests -e GITHUB_WORKFLOW
+      run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW

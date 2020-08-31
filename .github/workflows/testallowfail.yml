@@ -32,6 +32,6 @@ jobs:
     - name: Install Pydra (test)
       run: pip install -e ".[test]"
     - name: Pytest
-      run: pytest -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+      run: pytest -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules pydra
     - name: Upload to codecov
       run: codecov --root /pydra -f /pydra/cov.xml -F unittests -e GITHUB_WORKFLOW
