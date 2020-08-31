@@ -35,10 +35,6 @@ jobs:
       if: matrix.install == 'install'
       run: python setup.py install
 
-    - name: Install dependencies (setup.py develop)
-      if: matrix.install == 'develop'
-      run: python setup.py develop
-
     - name: Install dependencies (wheel)
       if: matrix.install == 'wheel'
       run: |
