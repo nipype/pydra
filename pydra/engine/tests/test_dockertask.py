@@ -6,9 +6,10 @@ from ..task import DockerTask, ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec
-from .utils import need_docker
+from .utils import no_win, need_docker
 
 
+@no_win
 @need_docker
 def test_docker_1_nosubm():
     """ simple command in a container, a default bindings and working directory is added
@@ -30,6 +31,7 @@ def test_docker_1_nosubm():
         assert "Unable to find image" in res.output.stderr
 
 
+@no_win
 @need_docker
 def test_docker_1(plugin):
     """ simple command in a container, a default bindings and working directory is added
@@ -48,6 +50,7 @@ def test_docker_1(plugin):
         assert "Unable to find image" in res.output.stderr
 
 
+@no_win
 @need_docker
 def test_docker_1_dockerflag(plugin):
     """ simple command in a container, a default bindings and working directory is added
@@ -68,6 +71,7 @@ def test_docker_1_dockerflag(plugin):
         assert "Unable to find image" in res.output.stderr
 
 
+@no_win
 @need_docker
 def test_docker_1_dockerflag_exception(plugin):
     """using ShellComandTask with container_info=("docker"), no image provided"""
@@ -79,6 +83,7 @@ def test_docker_1_dockerflag_exception(plugin):
     assert "container_info has to have 2 or 3 elements" in str(excinfo.value)
 
 
+@no_win
 @need_docker
 def test_docker_2_nosubm():
     """ a command with arguments, cmd and args given as executable
@@ -98,6 +103,7 @@ def test_docker_2_nosubm():
         assert "Unable to find image" in res.output.stderr
 
 
+@no_win
 @need_docker
 def test_docker_2(plugin):
     """ a command with arguments, cmd and args given as executable
@@ -119,6 +125,7 @@ def test_docker_2(plugin):
         assert "Unable to find image" in res.output.stderr
 
 
+@no_win
 @need_docker
 def test_docker_2_dockerflag(plugin):
     """ a command with arguments, cmd and args given as executable
@@ -142,6 +149,7 @@ def test_docker_2_dockerflag(plugin):
         assert "Unable to find image" in res.output.stderr
 
 
+@no_win
 @need_docker
 def test_docker_2a_nosubm():
     """ a command with arguments, using executable and args
@@ -166,6 +174,7 @@ def test_docker_2a_nosubm():
         assert "Unable to find image" in res.output.stderr
 
 
+@no_win
 @need_docker
 def test_docker_2a(plugin):
     """ a command with arguments, using executable and args
@@ -192,6 +201,7 @@ def test_docker_2a(plugin):
         assert "Unable to find image" in res.output.stderr
 
 
+@no_win
 @need_docker
 def test_docker_3(plugin, tmpdir):
     """ a simple command in container with bindings,
@@ -214,6 +224,7 @@ def test_docker_3(plugin, tmpdir):
         assert "Unable to find image" in res.output.stderr
 
 
+@no_win
 @need_docker
 def test_docker_3_dockerflag(plugin, tmpdir):
     """ a simple command in container with bindings,
@@ -239,6 +250,7 @@ def test_docker_3_dockerflag(plugin, tmpdir):
         assert "Unable to find image" in res.output.stderr
 
 
+@no_win
 @need_docker
 def test_docker_3_dockerflagbind(plugin, tmpdir):
     """ a simple command in container with bindings,
@@ -264,6 +276,7 @@ def test_docker_3_dockerflagbind(plugin, tmpdir):
         assert "Unable to find image" in res.output.stderr
 
 
+@no_win
 @need_docker
 def test_docker_4(plugin, tmpdir):
     """ task reads the file that is bounded to the container
@@ -289,6 +302,7 @@ def test_docker_4(plugin, tmpdir):
     assert res.output.return_code == 0
 
 
+@no_win
 @need_docker
 def test_docker_4_dockerflag(plugin, tmpdir):
     """ task reads the file that is bounded to the container
@@ -317,6 +331,7 @@ def test_docker_4_dockerflag(plugin, tmpdir):
 # tests with State
 
 
+@no_win
 @need_docker
 def test_docker_st_1(plugin):
     """ commands without arguments in container
@@ -340,6 +355,7 @@ def test_docker_st_1(plugin):
     assert res[0].output.return_code == res[1].output.return_code == 0
 
 
+@no_win
 @need_docker
 def test_docker_st_2(plugin):
     """ command with arguments in docker, checking the distribution
@@ -363,6 +379,7 @@ def test_docker_st_2(plugin):
     assert res[0].output.return_code == res[1].output.return_code == 0
 
 
+@no_win
 @need_docker
 def test_docker_st_3(plugin):
     """ outer splitter image and executable
@@ -380,6 +397,7 @@ def test_docker_st_3(plugin):
     assert "Ubuntu" in res[3].output.stdout
 
 
+@no_win
 @need_docker
 def test_docker_st_4(plugin):
     """ outer splitter image and executable, combining with images
@@ -421,6 +439,7 @@ def test_docker_st_4(plugin):
 # tests with workflows
 
 
+@no_win
 @need_docker
 def test_wf_docker_1(plugin, tmpdir):
     """ a workflow with two connected task
@@ -464,6 +483,7 @@ def test_wf_docker_1(plugin, tmpdir):
     assert res.output.out == "message from the previous task: hello from pydra"
 
 
+@no_win
 @need_docker
 def test_wf_docker_1_dockerflag(plugin, tmpdir):
     """ a workflow with two connected task
@@ -503,6 +523,7 @@ def test_wf_docker_1_dockerflag(plugin, tmpdir):
     assert res.output.out == "message from the previous task: hello from pydra"
 
 
+@no_win
 @need_docker
 def test_wf_docker_2pre(plugin, tmpdir):
     """ a workflow with two connected task that run python scripts
@@ -523,6 +544,7 @@ def test_wf_docker_2pre(plugin, tmpdir):
     assert res.output.stdout == "/outputs/tmp.txt"
 
 
+@no_win
 @need_docker
 def test_wf_docker_2(plugin, tmpdir):
     """ a workflow with two connected task that run python scripts
@@ -562,6 +584,7 @@ def test_wf_docker_2(plugin, tmpdir):
     assert res.output.out == "Hello!"
 
 
+@no_win
 @need_docker
 def test_wf_docker_3(plugin, tmpdir):
     """ a workflow with two connected task
@@ -604,6 +627,7 @@ def test_wf_docker_3(plugin, tmpdir):
 # tests with customized output_spec
 
 
+@no_win
 @need_docker
 def test_docker_outputspec_1(plugin, tmpdir):
     """
@@ -631,6 +655,7 @@ def test_docker_outputspec_1(plugin, tmpdir):
 # tests with customised input_spec
 
 
+@no_win
 @need_docker
 def test_docker_inputspec_1(plugin, tmpdir):
     """ a simple customized input spec for docker task """
@@ -672,6 +697,7 @@ def test_docker_inputspec_1(plugin, tmpdir):
     assert res.output.stdout == "hello from pydra"
 
 
+@no_win
 @need_docker
 def test_docker_inputspec_1a(plugin, tmpdir):
     """ a simple customized input spec for docker task
@@ -710,6 +736,7 @@ def test_docker_inputspec_1a(plugin, tmpdir):
     assert res.output.stdout == "hello from pydra"
 
 
+@no_win
 @need_docker
 def test_docker_inputspec_2(plugin, tmpdir):
     """ a customized input spec with two fields for docker task """
@@ -766,6 +793,7 @@ def test_docker_inputspec_2(plugin, tmpdir):
     assert res.output.stdout == "hello from pydra\nhave a nice one"
 
 
+@no_win
 @need_docker
 def test_docker_inputspec_2a_except(plugin, tmpdir):
     """ a customized input spec with two fields
@@ -825,6 +853,7 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
     assert res.output.stdout == "hello from pydra\nhave a nice one"
 
 
+@no_win
 @need_docker
 def test_docker_inputspec_2a(plugin, tmpdir):
     """ a customized input spec with two fields
@@ -884,6 +913,7 @@ def test_docker_inputspec_2a(plugin, tmpdir):
     assert res.output.stdout == "hello from pydra\nhave a nice one"
 
 
+@no_win
 @need_docker
 @pytest.mark.xfail(reason="'docker' not in /proc/1/cgroup on ubuntu; TODO")
 def test_docker_inputspec_3(plugin, tmpdir):
@@ -928,6 +958,7 @@ def test_docker_inputspec_3(plugin, tmpdir):
     assert cmdline == docky.cmdline
 
 
+@no_win
 @need_docker
 def test_docker_inputspec_3a(plugin, tmpdir):
     """ input file does not exist in the local file system,
@@ -971,6 +1002,7 @@ def test_docker_inputspec_3a(plugin, tmpdir):
     assert "use field.metadata['container_path']=True" in str(excinfo.value)
 
 
+@no_win
 @need_docker
 def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
     """ shelltask changes a file in place,
@@ -1033,6 +1065,7 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
         assert "hello from pydra\n" == f.read()
 
 
+@no_win
 @need_docker
 def test_docker_inputspec_state_1(plugin, tmpdir):
     """ a customised input spec for a docker file with a splitter,
@@ -1081,6 +1114,7 @@ def test_docker_inputspec_state_1(plugin, tmpdir):
     assert res[1].output.stdout == "have a nice one"
 
 
+@no_win
 @need_docker
 def test_docker_inputspec_state_1b(plugin, tmpdir):
     """ a customised input spec for a docker file with a splitter,
@@ -1130,6 +1164,7 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
     assert res[1].output.stdout == "have a nice one"
 
 
+@no_win
 @need_docker
 def test_docker_wf_inputspec_1(plugin, tmpdir):
     """ a customized input spec for workflow with docker tasks """
@@ -1181,6 +1216,7 @@ def test_docker_wf_inputspec_1(plugin, tmpdir):
     assert res.output.out == "hello from pydra"
 
 
+@no_win
 @need_docker
 def test_docker_wf_state_inputspec_1(plugin, tmpdir):
     """ a customized input spec for workflow with docker tasks that has a state"""
@@ -1238,6 +1274,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmpdir):
     assert res[1].output.out == "have a nice one"
 
 
+@no_win
 @need_docker
 def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
     """ a customized input spec for workflow with docker tasks with states"""
