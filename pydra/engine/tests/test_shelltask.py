@@ -2737,11 +2737,7 @@ def test_shell_cmd_inputspec_outputspec_3():
             (
                 "newfile1",
                 File,
-                {
-                    "output_file_template": "{file1}",
-                    "help_string": "newfile 1",
-                    "requires": ["file1"],
-                },
+                {"output_file_template": "{file1}", "help_string": "newfile 1"},
             ),
             (
                 "newfile2",
@@ -2749,7 +2745,7 @@ def test_shell_cmd_inputspec_outputspec_3():
                 {
                     "output_file_template": "{file2}",
                     "help_string": "newfile 1",
-                    "requires": ["file1", "file2", "additional_inp"],
+                    "requires": ["file1", "additional_inp"],
                 },
             ),
         ],
@@ -2802,11 +2798,7 @@ def test_shell_cmd_inputspec_outputspec_3a():
             (
                 "newfile1",
                 File,
-                {
-                    "output_file_template": "{file1}",
-                    "help_string": "newfile 1",
-                    "requires": ["file1"],
-                },
+                {"output_file_template": "{file1}", "help_string": "newfile 1"},
             ),
             (
                 "newfile2",
@@ -2814,7 +2806,7 @@ def test_shell_cmd_inputspec_outputspec_3a():
                 {
                     "output_file_template": "{file2}",
                     "help_string": "newfile 1",
-                    "requires": ["file1", "file2", "additional_inp"],
+                    "requires": ["file1", "additional_inp"],
                 },
             ),
         ],

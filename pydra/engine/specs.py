@@ -452,12 +452,15 @@ class ShellOutSpec:
         """Collect output file if metadata specified."""
         if "requires" in fld.metadata:
             field_required = fld.metadata["requires"]
-        # if the output field doesn't have requires field, we use fields from output_file_template
-        elif "output_file_template" in fld.metadata:
-            inp_fields = re.findall("{\w+}", fld.metadata["output_file_template"])
-            field_required = [el[1:-1] for el in inp_fields]
         else:
             field_required = []
+        # if the output has output_file_template field, adding all input fields from the template to requires
+        if "output_file_template" in fld.metadata:
+            inp_fields = re.findall("{\w+}", fld.metadata["output_file_template"])
+            field_required += [
+                el[1:-1] for el in inp_fields if el[1:-1] not in field_required
+            ]
+        # checking if the input fields from requires have set values
         for inp in field_required:
             if isinstance(inp, str):  # name of the input field
                 if not hasattr(inputs, inp):
