@@ -1,6 +1,4 @@
-#https://github.com/eWaterCycle/singularity-versions/blob/master/.github/workflows/dist.yml
-
-name: Test singularity
+name: Test Pydra (singularity)
 
 on: [push, pull_request]
 

@@ -1,6 +1,3 @@
-# Reference
-# https://hynek.me/articles/python-github-actions/
-
 name: Test Pydra
 
 on: [push, pull_request]
@@ -15,7 +12,7 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
         python-version: [3.7, 3.8]
-        install: [min-req, install, develop, wheel, style]
+        install: [min-req, install, develop, wheel]
       fail-fast: false
     runs-on: ${{ matrix.os }}
 
@@ -63,15 +60,7 @@ jobs:
       run: pip install "$( ls dist/pydra*.whl )[test]"
 
 
-    - name: Check Style
-      if: matrix.install == 'style'
-      run: |
-        pip install black==19.3b0 codecov
-        black --check pydra tools setup.py
-
-
     - name: Pytest
-      if: matrix.install != 'style'
       run: pytest -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
 
 

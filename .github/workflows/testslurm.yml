@@ -1,12 +1,4 @@
-# use containers in github actions
-# https://stackoverflow.com/questions/58930529/github-action-how-do-i-run-commands-inside-a-docker-container
-# https://stackoverflow.com/questions/58476228/how-to-use-a-variable-docker-image-in-github-actions
-# https://github.community/t/confused-with-runs-on-and-container-options/16258/2
-
-# using go and docker in github actions
-# https://steele.blue/tiny-github-actions/
-
-name: Run SLURM tests
+name: Test Pydra (SLURM)
 
 on: [push, pull_request]
 
