@@ -403,7 +403,9 @@ class TaskBase:
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
             orig_inputs = attr.asdict(self.inputs)
             map_copyfiles = copyfile_input(self.inputs, self.output_dir)
-            modified_inputs = template_update(self.inputs, map_copyfiles)
+            modified_inputs = template_update(
+                self.inputs, self.output_dir, map_copyfiles=map_copyfiles
+            )
             if modified_inputs:
                 self.inputs = attr.evolve(self.inputs, **modified_inputs)
             self.audit.start_audit(odir)

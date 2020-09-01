@@ -456,8 +456,10 @@ class ShellOutSpec:
         # than the field already should have value
         elif "output_file_template" in fld.metadata:
             inputs_templ = attr.asdict(inputs)
-            value = template_update_single(fld, inputs_templ, spec_type="output")
-            return output_dir / value
+            value = template_update_single(
+                fld, inputs_templ, output_dir=output_dir, spec_type="output"
+            )
+            return value
         elif "callable" in fld.metadata:
             return fld.metadata["callable"](fld.name, output_dir)
         else:

@@ -570,7 +570,8 @@ def test_shell_cmd_inputs_template_1():
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
     # outA has argstr in the metadata fields, so it's a part of the command line
-    assert shelly.cmdline == "executable inpA -o inpA_out"
+    # the full path will be use din the command line
+    assert shelly.cmdline == f"executable inpA -o {str(shelly.output_dir / 'inpA_out')}"
     # checking if outA in the output fields
     assert shelly.output_names == ["return_code", "stdout", "stderr", "outA"]
 
@@ -610,9 +611,10 @@ def test_shell_cmd_inputs_template_1a():
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
     # outA has no argstr in metadata, so it's not a part of the command line
-    assert shelly.cmdline == "executable inpA"
+    assert shelly.cmdline == f"executable inpA"
 
 
+# TODO: after deciding how we use requires/templates
 def test_shell_cmd_inputs_template_2():
     """ additional inputs, one uses output_file_template (and argstr, but input not provided)"""
     my_input_spec = SpecInfo(
@@ -719,7 +721,10 @@ def test_shell_cmd_inputs_template_3():
         executable="executable", input_spec=my_input_spec, inpA="inpA", inpB="inpB"
     )
     # using syntax from the outAB field
-    assert shelly.cmdline == "executable inpA inpB -o inpA_out inpB_out"
+    assert (
+        shelly.cmdline
+        == f"executable inpA inpB -o {str(shelly.output_dir / 'inpA_out')} {str(shelly.output_dir / 'inpB_out')}"
+    )
     # checking if outA and outB in the output fields (outAB should not be)
     assert shelly.output_names == ["return_code", "stdout", "stderr", "outA", "outB"]
 
@@ -796,11 +801,15 @@ def test_shell_cmd_inputs_template_3a():
         executable="executable", input_spec=my_input_spec, inpA="inpA", inpB="inpB"
     )
     # using syntax from the outAB field
-    assert shelly.cmdline == "executable inpA inpB -o inpA_out inpB_out"
+    assert (
+        shelly.cmdline
+        == f"executable inpA inpB -o {str(shelly.output_dir / 'inpA_out')} {str(shelly.output_dir / 'inpB_out')}"
+    )
     # checking if outA and outB in the output fields (outAB should not be)
     assert shelly.output_names == ["return_code", "stdout", "stderr", "outA", "outB"]
 
 
+# TODO: after deciding how we use requires/templates
 def test_shell_cmd_inputs_template_4():
     """ additional inputs with output_file_template and an additional
     read-only fields that combine two outputs together in the command line
@@ -868,7 +877,7 @@ def test_shell_cmd_inputs_template_4():
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
     # inpB is not provided so outB not in the command line
-    assert shelly.cmdline == "executable inpA -o inpA_out"
+    assert shelly.cmdline == f"executable inpA -o {str(shelly.output_dir / 'inpA_out')}"
     assert shelly.output_names == ["return_code", "stdout", "stderr", "outA", "outB"]
 
 
@@ -943,7 +952,7 @@ def test_shell_cmd_inputs_template_6():
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
-    assert shelly.cmdline == "executable inpA -o inpA_out"
+    assert shelly.cmdline == f"executable inpA -o {str(shelly.output_dir / 'inpA_out')}"
 
     # a string is provided for outA, so this should be used as the outA value
     shelly = ShellCommandTask(
@@ -955,7 +964,7 @@ def test_shell_cmd_inputs_template_6():
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA=True
     )
-    assert shelly.cmdline == "executable inpA -o inpA_out"
+    assert shelly.cmdline == f"executable inpA -o {str(shelly.output_dir / 'inpA_out')}"
 
     # False is provided for outA, so the outA shouldn't be used
     shelly = ShellCommandTask(
@@ -1017,7 +1026,7 @@ def test_shell_cmd_inputs_template_6a():
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA=True
     )
-    assert shelly.cmdline == "executable inpA -o inpA_out"
+    assert shelly.cmdline == f"executable inpA -o {str(shelly.output_dir / 'inpA_out')}"
 
     # False is provided for outA, so the outA shouldn't be used
     shelly = ShellCommandTask(
@@ -1070,7 +1079,7 @@ def test_shell_cmd_inputs_template_7(tmpdir):
     # outA should be formatted in a way that that .txt goes to the end
     assert (
         shelly.cmdline
-        == f"executable {tmpdir.join('a_file.txt')} {tmpdir.join('a_file_out.txt')}"
+        == f"executable {tmpdir.join('a_file.txt')} {str(shelly.output_dir / 'a_file_out.txt')}"
     )
 
 
@@ -1119,7 +1128,7 @@ def test_shell_cmd_inputs_template_7a(tmpdir):
     # outA should be formatted in a way that that .txt goes to the end
     assert (
         shelly.cmdline
-        == f"executable {tmpdir.join('a_file.txt')} {tmpdir.join('a_file_out.txt')}"
+        == f"executable {tmpdir.join('a_file.txt')} {str(shelly.output_dir / 'a_file_out.txt')}"
     )
 
 
@@ -1168,7 +1177,7 @@ def test_shell_cmd_inputs_template_7b(tmpdir):
     # outA should be formatted in a way that that .txt goes to the end
     assert (
         shelly.cmdline
-        == f"executable {tmpdir.join('a_file.txt')} {tmpdir.join('a_file_out')}"
+        == f"executable {tmpdir.join('a_file.txt')} {str(shelly.output_dir / 'a_file_out')}"
     )
 
 
@@ -1214,10 +1223,11 @@ def test_shell_cmd_inputs_template_8(tmpdir):
     # outA should be formatted in a way that inpA extension is removed and the template extension is used
     assert (
         shelly.cmdline
-        == f"executable {tmpdir.join('a_file.t')} {tmpdir.join('a_file_out.txt')}"
+        == f"executable {tmpdir.join('a_file.t')} {str(shelly.output_dir / 'a_file_out.txt')}"
     )
 
 
+# TODO: after deciding how we use requires/templates
 def test_shell_cmd_inputs_di(tmpdir, use_validator):
     """ example from #279 """
     my_input_spec = SpecInfo(
@@ -1413,7 +1423,7 @@ def test_shell_cmd_inputs_di(tmpdir, use_validator):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{tmpdir.join('a_file_out.ext')}]"
+        == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{str(shelly.output_dir / 'a_file_out.ext')}]"
     )
 
     # input file name, noiseImage is set to True, so template is used in the utput

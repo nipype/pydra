@@ -914,6 +914,8 @@ def test_shell_cmd_inputspec_7(plugin, results_function):
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
+    # checking if the file is created in a good place
+    assert shelly.output_dir == res.output.out1.parent
     assert res.output.out1.name == "newfile_tmp.txt"
 
 
@@ -1117,7 +1119,7 @@ def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
         the template has a suffix, the extension of the file will be moved to the end
     """
     cmd = "cp"
-    file = tmpdir.join("file.txt")
+    file = tmpdir.mkdir("data_inp").join("file.txt")
     file.write("content")
 
     my_input_spec = SpecInfo(
@@ -1153,6 +1155,8 @@ def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
     assert res.output.stdout == ""
     assert res.output.file_copy.exists()
     assert res.output.file_copy.name == "file_copy.txt"
+    # checking if it's created in a good place
+    assert shelly.output_dir == res.output.file_copy.parent
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])

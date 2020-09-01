@@ -499,7 +499,7 @@ def copyfile_input(inputs, output_dir):
 
 
 # not sure if this might be useful for Function Task
-def template_update(inputs, map_copyfiles=None):
+def template_update(inputs, output_dir, map_copyfiles=None):
     """
     Update all templates that are present in the input spec.
 
@@ -521,7 +521,9 @@ def template_update(inputs, map_copyfiles=None):
                 f"fields with output_file_template"
                 "has to be a string or Union[str, bool]"
             )
-        dict_[fld.name] = template_update_single(field=fld, inputs_dict=dict_)
+        dict_[fld.name] = template_update_single(
+            field=fld, inputs_dict=dict_, output_dir=output_dir
+        )
     # using is and  == so it covers list and numpy arrays
     updated_templ_dict = {
         k: v
@@ -531,7 +533,7 @@ def template_update(inputs, map_copyfiles=None):
     return updated_templ_dict
 
 
-def template_update_single(field, inputs_dict, spec_type="input"):
+def template_update_single(field, inputs_dict, output_dir=None, spec_type="input"):
     """Update a single template from the input_spec or output_spec
     based on the value from inputs_dict
     (checking the types of the fields, that have "output_file_template)"
@@ -560,6 +562,7 @@ def template_update_single(field, inputs_dict, spec_type="input"):
             )
     else:
         raise Exception(f"spec_type can be input or output, but {spec_type} provided")
+    # for inputs that the value is set (so the template is ignored)
     if spec_type == "input" and isinstance(inputs_dict[field.name], str):
         return inputs_dict[field.name]
     elif spec_type == "input" and inputs_dict[field.name] is False:
@@ -572,6 +575,9 @@ def template_update_single(field, inputs_dict, spec_type="input"):
         value = _template_formatting(
             template, inputs_dict, keep_extension=keep_extension
         )
+        # changing path so it is in the output_dir
+        if output_dir:
+            value = output_dir / Path(value).name
         return value
 
 
