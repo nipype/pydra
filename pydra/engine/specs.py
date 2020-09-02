@@ -3,6 +3,7 @@ import attr
 from pathlib import Path
 import typing as ty
 import inspect
+import re
 
 from .helpers_file import template_update_single
 
@@ -416,7 +417,7 @@ class ShellOutSpec:
                             fld, inputs, output_dir
                         )
                 else:
-                    raise Exception("not implemented")
+                    raise Exception("not implemented (collect_additional_output)")
         return additional_out
 
     def _field_defaultvalue(self, fld, output_dir):
@@ -449,6 +450,9 @@ class ShellOutSpec:
 
     def _field_metadata(self, fld, inputs, output_dir):
         """Collect output file if metadata specified."""
+        if self._check_requires(fld, inputs) is False:
+            return attr.NOTHING
+
         if "value" in fld.metadata:
             return output_dir / fld.metadata["value"]
         # this block is only run if "output_file_template" is provided in output_spec
@@ -463,7 +467,72 @@ class ShellOutSpec:
         elif "callable" in fld.metadata:
             return fld.metadata["callable"](fld.name, output_dir)
         else:
-            raise Exception("not implemented")
+            raise Exception("(_field_metadata) is not a current valid metadata key.")
+
+    def _check_requires(self, fld, inputs):
+        """ checking if all fields from the requires and template are set in the input
+            if requires is a list of list, checking if at least one list has all elements set
+        """
+        if "requires" in fld.metadata:
+            # if requires is a list of list it is treated as el[0] OR el[1] OR...
+            if all([isinstance(el, list) for el in fld.metadata["requires"]]):
+                field_required_OR = fld.metadata["requires"]
+            # if requires is a list of tuples/strings - I'm creating a 1-el nested list
+            elif all([isinstance(el, (str, tuple)) for el in fld.metadata["requires"]]):
+                field_required_OR = [fld.metadata["requires"]]
+            else:
+                raise Exception(
+                    f"requires field can be a list of list, or a list "
+                    f"of strings/tuples, but {fld.metadata['requires']} "
+                    f"provided for {fld.name}"
+                )
+        else:
+            field_required_OR = [[]]
+
+        for field_required in field_required_OR:
+            # if the output has output_file_template field, adding all input fields from the template to requires
+            if "output_file_template" in fld.metadata:
+                inp_fields = re.findall("{\w+}", fld.metadata["output_file_template"])
+                field_required += [
+                    el[1:-1] for el in inp_fields if el[1:-1] not in field_required
+                ]
+
+        # it's a flag, of the field from the list is not in input it will be changed to False
+        required_found = True
+        for field_required in field_required_OR:
+            required_found = True
+            # checking if the input fields from requires have set values
+            for inp in field_required:
+                if isinstance(inp, str):  # name of the input field
+                    if not hasattr(inputs, inp):
+                        raise Exception(
+                            f"{inp} is not a valid input field, can't be used in requires"
+                        )
+                    elif getattr(inputs, inp) in [attr.NOTHING, None]:
+                        required_found = False
+                        break
+                elif isinstance(inp, tuple):  # (name, allowed values)
+                    inp, allowed_val = inp
+                    if not hasattr(inputs, inp):
+                        raise Exception(
+                            f"{inp} is not a valid input field, can't be used in requires"
+                        )
+                    elif getattr(inputs, inp) not in allowed_val:
+                        required_found = False
+                        break
+                else:
+                    raise Exception(
+                        f"each element of the requires element should be a string or a tuple, "
+                        f"but {inp} is found in {field_required}"
+                    )
+            # if the specific list from field_required_OR has all elements set, no need to check more
+            if required_found:
+                break
+
+        if required_found:
+            return True
+        else:
+            return False
 
 
 @attr.s(auto_attribs=True, kw_only=True)
