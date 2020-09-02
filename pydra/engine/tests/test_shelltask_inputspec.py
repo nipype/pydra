@@ -1434,8 +1434,8 @@ def test_shell_cmd_inputs_di(tmpdir, use_validator):
         noiseImage=True,
     )
     assert (
-        shelly.cmdline
-        == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{tmpdir.join('a_file_out.ext')}, {tmpdir.join('a_file_noise.ext')}]"
+        shelly.cmdline == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 "
+        f"-o [{str(shelly.output_dir / 'a_file_out.ext')}, {str(shelly.output_dir / 'a_file_noise.ext')}]"
     )
 
     # input file name and help_short
@@ -1447,7 +1447,7 @@ def test_shell_cmd_inputs_di(tmpdir, use_validator):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -h -o [{tmpdir.join('a_file_out.ext')}]"
+        == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -h -o [{str(shelly.output_dir / 'a_file_out.ext')}]"
     )
 
     assert shelly.output_names == [
@@ -1467,7 +1467,7 @@ def test_shell_cmd_inputs_di(tmpdir, use_validator):
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -d 2 -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{tmpdir.join('a_file_out.ext')}]"
+        == f"DenoiseImage -d 2 -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{str(shelly.output_dir / 'a_file_out.ext')}]"
     )
 
     # adding image_dimensionality that has allowed_values [2, 3, 4] and providing 5 - exception should be raised

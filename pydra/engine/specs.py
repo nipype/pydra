@@ -463,7 +463,7 @@ class ShellOutSpec:
             value = template_update_single(
                 fld, inputs_templ, output_dir=output_dir, spec_type="output"
             )
-            return value
+            return Path(value)
         elif "callable" in fld.metadata:
             return fld.metadata["callable"](fld.name, output_dir)
         else:

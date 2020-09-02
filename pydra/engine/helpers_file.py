@@ -576,9 +576,11 @@ def template_update_single(field, inputs_dict, output_dir=None, spec_type="input
             template, inputs_dict, keep_extension=keep_extension
         )
         # changing path so it is in the output_dir
-        if output_dir:
-            value = output_dir / Path(value).name
-        return value
+        if output_dir and value is not attr.NOTHING:
+            # should be converted to str, it is also used for input fields that should be str
+            return str(output_dir / Path(value).name)
+        else:
+            return value
 
 
 def _template_formatting(template, inputs_dict, keep_extension=True):
