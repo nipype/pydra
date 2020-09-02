@@ -914,6 +914,8 @@ def test_shell_cmd_inputspec_7(plugin, results_function):
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
+    # checking if the file is created in a good place
+    assert shelly.output_dir == res.output.out1.parent
     assert res.output.out1.name == "newfile_tmp.txt"
 
 
@@ -952,6 +954,9 @@ def test_shell_cmd_inputspec_7a(plugin, results_function):
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out1_changed.exists()
+    # checking if the file is created in a good place
+    assert shelly.output_dir == res.output.out1_changed.parent
+    assert res.output.out1_changed.name == "newfile_tmp.txt"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -1117,7 +1122,7 @@ def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
         the template has a suffix, the extension of the file will be moved to the end
     """
     cmd = "cp"
-    file = tmpdir.join("file.txt")
+    file = tmpdir.mkdir("data_inp").join("file.txt")
     file.write("content")
 
     my_input_spec = SpecInfo(
@@ -1153,6 +1158,8 @@ def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
     assert res.output.stdout == ""
     assert res.output.file_copy.exists()
     assert res.output.file_copy.name == "file_copy.txt"
+    # checking if it's created in a good place
+    assert shelly.output_dir == res.output.file_copy.parent
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -1246,6 +1253,7 @@ def test_shell_cmd_inputspec_9b(tmpdir, plugin, results_function):
     assert res.output.stdout == ""
     assert res.output.file_copy.exists()
     assert res.output.file_copy.name == "file"
+    assert res.output.file_copy.parent == shelly.output_dir
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -1619,6 +1627,7 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function):
     for i in range(len(args)):
         assert res[i].output.stdout == ""
         assert res[i].output.out1.exists()
+        assert res[i].output.out1.parent == shelly.output_dir[i]
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -1776,6 +1785,7 @@ def test_wf_shell_cmd_2(plugin_dask_opt):
     res = wf.result()
     assert res.output.out == ""
     assert res.output.out_f.exists()
+    assert res.output.out_f.parent == wf.output_dir
 
 
 def test_wf_shell_cmd_2a(plugin):
@@ -1913,8 +1923,10 @@ def test_wf_shell_cmd_3(plugin):
     res = wf.result()
     assert res.output.out1 == ""
     assert res.output.touch_file.exists()
+    assert res.output.touch_file.parent == wf.output_dir
     assert res.output.out2 == ""
     assert res.output.cp_file.exists()
+    assert res.output.cp_file.parent == wf.output_dir
 
 
 def test_wf_shell_cmd_3a(plugin):
@@ -2099,11 +2111,13 @@ def test_wf_shell_cmd_state_1(plugin):
         wf(submitter=sub)
 
     res_l = wf.result()
-    for res in res_l:
+    for i, res in enumerate(res_l):
         assert res.output.out1 == ""
         assert res.output.touch_file.exists()
+        assert res.output.touch_file.parent == wf.output_dir[i]
         assert res.output.out2 == ""
         assert res.output.cp_file.exists()
+        assert res.output.cp_file.parent == wf.output_dir[i]
 
 
 def test_wf_shell_cmd_ndst_1(plugin):

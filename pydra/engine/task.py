@@ -465,7 +465,7 @@ class ShellCommandTask(TaskBase):
         # checking the inputs fields before returning the command line
         self.inputs.check_fields_input_spec()
         orig_inputs = attr.asdict(self.inputs)
-        modified_inputs = template_update(self.inputs)
+        modified_inputs = template_update(self.inputs, output_dir=self.output_dir)
         if modified_inputs is not None:
             self.inputs = attr.evolve(self.inputs, **modified_inputs)
         if isinstance(self, ContainerTask):
