@@ -2926,6 +2926,215 @@ def test_shell_cmd_inputspec_outputspec_4a():
     assert res.output.newfile1 is attr.NOTHING
 
 
+def test_shell_cmd_inputspec_outputspec_5():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires
+    requires is a list of list so it is treated as OR list (i.e. el[0] OR el[1] OR...)
+    the firs element of the requires list has all the fields set
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            ("additional_inp_A", str, {"help_string": "additional inp A"}),
+            ("additional_inp_B", str, {"help_string": "additional inp B"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    # requires is a list of list so it's treated as el[0] OR el[1] OR...
+                    "requires": [
+                        ["file1", "additional_inp_A"],
+                        ["file1", "additional_inp_B"],
+                    ],
+                },
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+    shelly.inputs.additional_inp_A = 2
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1.exists()
+
+
+def test_shell_cmd_inputspec_outputspec_5a():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires
+    requires is a list of list so it is treated as OR list (i.e. el[0] OR el[1] OR...)
+    the second element of the requires list (i.e. additional_inp_B) has all the fields set
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            ("additional_inp_A", str, {"help_string": "additional inp A"}),
+            ("additional_inp_B", str, {"help_string": "additional inp B"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    # requires is a list of list so it's treated as el[0] OR el[1] OR...
+                    "requires": [
+                        ["file1", "additional_inp_A"],
+                        ["file1", "additional_inp_B"],
+                    ],
+                },
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+    shelly.inputs.additional_inp_B = 2
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1.exists()
+
+
+def test_shell_cmd_inputspec_outputspec_5b():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires
+    requires is a list of list so it is treated as OR list (i.e. el[0] OR el[1] OR...)
+    neither of the list from requirements has all the fields set, so the output is NOTHING
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            ("additional_inp_A", str, {"help_string": "additional inp A"}),
+            ("additional_inp_B", str, {"help_string": "additional inp B"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    # requires is a list of list so it's treated as el[0] OR el[1] OR...
+                    "requires": [
+                        ["file1", "additional_inp_A"],
+                        ["file1", "additional_inp_B"],
+                    ],
+                },
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+
+    res = shelly()
+    assert res.output.stdout == ""
+    # neither additional_inp_A nor additional_inp_B is set, so newfile1 is NOTHING
+    assert res.output.newfile1 is attr.NOTHING
+
+
+def test_shell_cmd_inputspec_outputspec_6_except():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires
+    requires has invalid syntax - exception is raised
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            ("additional_inp_A", str, {"help_string": "additional inp A"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    # requires has invalid syntax
+                    "requires": [["file1", "additional_inp_A"], "file1"],
+                },
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+
+    with pytest.raises(Exception, match="requires field can be"):
+        res = shelly()
+
+
 def no_fsl():
     if "FSLDIR" not in os.environ:
         return True
