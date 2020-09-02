@@ -2377,6 +2377,35 @@ def test_shell_cmd_outputspec_5(plugin, results_function):
     assert res.output.out1.exists()
 
 
+def test_shell_cmd_outputspec_5a():
+    """
+        providing output name by providing output_file_template
+        (using shorter syntax)
+    """
+    cmd = "touch"
+    args = "newfile_tmp.txt"
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out1",
+                File,
+                {"output_file_template": "{args}", "help_string": "output file"},
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
+    )
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.out1.exists()
+
+
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_state_outputspec_1(plugin, results_function):
     """
@@ -2448,6 +2477,662 @@ def test_shell_cmd_outputspec_wf_1(plugin):
     assert res.output.newfile.exists()
     # checking if the file was copied to the wf dir
     assert res.output.newfile.parent == wf.output_dir
+
+
+def test_shell_cmd_inputspec_outputspec_1():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in templates
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            (
+                "file2",
+                str,
+                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {"output_file_template": "{file1}", "help_string": "newfile 1"},
+            ),
+            (
+                "newfile2",
+                File,
+                {"output_file_template": "{file2}", "help_string": "newfile 2"},
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+    shelly.inputs.file2 = "new_file_2.txt"
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1.exists()
+    assert res.output.newfile2.exists()
+
+
+def test_shell_cmd_inputspec_outputspec_1a():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in templates,
+    file2 is used in a template for newfile2, but it is not provided, so newfile2 is set to NOTHING
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            (
+                "file2",
+                str,
+                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {"output_file_template": "{file1}", "help_string": "newfile 1"},
+            ),
+            (
+                "newfile2",
+                File,
+                {"output_file_template": "{file2}", "help_string": "newfile 2"},
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1.exists()
+    # newfile2 is not created, since file2 is not provided
+    assert res.output.newfile2 is attr.NOTHING
+
+
+def test_shell_cmd_inputspec_outputspec_2():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            (
+                "file2",
+                str,
+                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    "requires": ["file1"],
+                },
+            ),
+            (
+                "newfile2",
+                File,
+                {
+                    "output_file_template": "{file2}",
+                    "help_string": "newfile 1",
+                    "requires": ["file1", "file2"],
+                },
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+    shelly.inputs.file2 = "new_file_2.txt"
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1.exists()
+    assert res.output.newfile2.exists()
+
+
+def test_shell_cmd_inputspec_outputspec_2a():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            (
+                "file2",
+                str,
+                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    "requires": ["file1"],
+                },
+            ),
+            (
+                "newfile2",
+                File,
+                {
+                    "output_file_template": "{file2}",
+                    "help_string": "newfile 1",
+                    "requires": ["file1", "file2"],
+                },
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1.exists()
+    assert res.output.newfile2 is attr.NOTHING
+
+
+def test_shell_cmd_inputspec_outputspec_3():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
+    adding one additional input that is not in the template, but in the requires field,
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            (
+                "file2",
+                str,
+                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+            ),
+            ("additional_inp", str, {"help_string": "additional inp"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {"output_file_template": "{file1}", "help_string": "newfile 1"},
+            ),
+            (
+                "newfile2",
+                File,
+                {
+                    "output_file_template": "{file2}",
+                    "help_string": "newfile 1",
+                    "requires": ["file1", "additional_inp"],
+                },
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+    shelly.inputs.file2 = "new_file_2.txt"
+    shelly.inputs.additional_inp = 2
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1.exists()
+    assert res.output.newfile2.exists()
+
+
+def test_shell_cmd_inputspec_outputspec_3a():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
+    adding one additional input that is not in the template, but in the requires field,
+    the additional input not provided, so the output is NOTHING
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            (
+                "file2",
+                str,
+                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+            ),
+            ("additional_inp", str, {"help_string": "additional inp"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {"output_file_template": "{file1}", "help_string": "newfile 1"},
+            ),
+            (
+                "newfile2",
+                File,
+                {
+                    "output_file_template": "{file2}",
+                    "help_string": "newfile 1",
+                    "requires": ["file1", "additional_inp"],
+                },
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+    shelly.inputs.file2 = "new_file_2.txt"
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1.exists()
+    # additional input not provided so no newfile2 set (even if the file was created)
+    assert res.output.newfile2 is attr.NOTHING
+
+
+def test_shell_cmd_inputspec_outputspec_4():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
+    adding one additional input to the requires together with a list of the allowed values,
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            ("additional_inp", str, {"help_string": "additional inp"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    "requires": ["file1", ("additional_inp", [2, 3])],
+                },
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+    shelly.inputs.additional_inp = 2
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1.exists()
+
+
+def test_shell_cmd_inputspec_outputspec_4a():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires filed
+    adding one additional input to the requires together with a list of the allowed values,
+    the input is set to a value that is not in the list, so output is NOTHING
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            ("additional_inp", str, {"help_string": "additional inp"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    "requires": ["file1", ("additional_inp", [2, 3])],
+                },
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+    # the value is not in the list from requires
+    shelly.inputs.additional_inp = 1
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1 is attr.NOTHING
+
+
+def test_shell_cmd_inputspec_outputspec_5():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires
+    requires is a list of list so it is treated as OR list (i.e. el[0] OR el[1] OR...)
+    the firs element of the requires list has all the fields set
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            ("additional_inp_A", str, {"help_string": "additional inp A"}),
+            ("additional_inp_B", str, {"help_string": "additional inp B"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    # requires is a list of list so it's treated as el[0] OR el[1] OR...
+                    "requires": [
+                        ["file1", "additional_inp_A"],
+                        ["file1", "additional_inp_B"],
+                    ],
+                },
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+    shelly.inputs.additional_inp_A = 2
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1.exists()
+
+
+def test_shell_cmd_inputspec_outputspec_5a():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires
+    requires is a list of list so it is treated as OR list (i.e. el[0] OR el[1] OR...)
+    the second element of the requires list (i.e. additional_inp_B) has all the fields set
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            ("additional_inp_A", str, {"help_string": "additional inp A"}),
+            ("additional_inp_B", str, {"help_string": "additional inp B"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    # requires is a list of list so it's treated as el[0] OR el[1] OR...
+                    "requires": [
+                        ["file1", "additional_inp_A"],
+                        ["file1", "additional_inp_B"],
+                    ],
+                },
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+    shelly.inputs.additional_inp_B = 2
+
+    res = shelly()
+    assert res.output.stdout == ""
+    assert res.output.newfile1.exists()
+
+
+def test_shell_cmd_inputspec_outputspec_5b():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires
+    requires is a list of list so it is treated as OR list (i.e. el[0] OR el[1] OR...)
+    neither of the list from requirements has all the fields set, so the output is NOTHING
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            ("additional_inp_A", str, {"help_string": "additional inp A"}),
+            ("additional_inp_B", str, {"help_string": "additional inp B"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    # requires is a list of list so it's treated as el[0] OR el[1] OR...
+                    "requires": [
+                        ["file1", "additional_inp_A"],
+                        ["file1", "additional_inp_B"],
+                    ],
+                },
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+
+    res = shelly()
+    assert res.output.stdout == ""
+    # neither additional_inp_A nor additional_inp_B is set, so newfile1 is NOTHING
+    assert res.output.newfile1 is attr.NOTHING
+
+
+def test_shell_cmd_inputspec_outputspec_6_except():
+    """
+    customised input_spec and output_spec, output_spec uses input_spec fields in the requires
+    requires has invalid syntax - exception is raised
+    """
+    cmd = ["touch", "newfile_tmp.txt"]
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file1",
+                str,
+                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+            ),
+            ("additional_inp_A", str, {"help_string": "additional inp A"}),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "newfile1",
+                File,
+                {
+                    "output_file_template": "{file1}",
+                    "help_string": "newfile 1",
+                    # requires has invalid syntax
+                    "requires": [["file1", "additional_inp_A"], "file1"],
+                },
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+    )
+    shelly.inputs.file1 = "new_file_1.txt"
+
+    with pytest.raises(Exception, match="requires field can be"):
+        res = shelly()
 
 
 def no_fsl():

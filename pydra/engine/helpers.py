@@ -672,30 +672,11 @@ def hash_value(value, tp=None, metadata=None):
             return value
 
 
-def output_names_from_inputfields(inputs):
-    """
-    Collect outputs from input fields with output_file_template.
-
-    Parameters
-    ----------
-    inputs :
-        TODO
-
-    """
-    output_names = []
-    for fld in attr_fields(inputs):
-        if "output_file_template" in fld.metadata:
-            if "output_field_name" in fld.metadata:
-                field_name = fld.metadata["output_field_name"]
-            else:
-                field_name = fld.name
-            output_names.append(field_name)
-    return output_names
-
-
-def output_from_inputfields(output_spec, inputs):
+def output_from_inputfields(output_spec, inputs, names_only=False):
     """
     Collect values from output from input fields.
+    If names_only is False, the output_spec is updated,
+    if names_only is True only the names are returned
 
     Parameters
     ----------
@@ -705,6 +686,8 @@ def output_from_inputfields(output_spec, inputs):
         TODO
 
     """
+    current_output_spec_names = [f.name for f in attr.fields(make_klass(output_spec))]
+    new_fields = []
     for fld in attr_fields(inputs):
         if "output_file_template" in fld.metadata:
             value = getattr(inputs, fld.name)
@@ -712,10 +695,17 @@ def output_from_inputfields(output_spec, inputs):
                 field_name = fld.metadata["output_field_name"]
             else:
                 field_name = fld.name
-            output_spec.fields.append(
-                (field_name, attr.ib(type=File, metadata={"value": value}))
-            )
-    return output_spec
+            # not adding if the field already in teh output_spec
+            if field_name not in current_output_spec_names:
+                new_fields.append(
+                    (field_name, attr.ib(type=File, metadata={"value": value}))
+                )
+    if names_only:
+        new_names = [el[0] for el in new_fields]
+        return current_output_spec_names + new_names
+    else:
+        output_spec.fields += new_fields
+        return output_spec
 
 
 def get_available_cpus():
