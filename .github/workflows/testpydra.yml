@@ -1,4 +1,4 @@
-name: Test Pydra
+name: Pydra
 
 on: [push, pull_request]
 
@@ -40,7 +40,6 @@ jobs:
       run: |
         python setup.py bdist_wheel
         pip install dist/*.whl
-      shell: bash
 
 
     - name: Install Pydra (min-requirements.txt or setup.py install)

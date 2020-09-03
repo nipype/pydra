@@ -1,6 +1,6 @@
 # Test on an older version of pip
 
-name: Test Pydra (allow failures)
+name: Allow failure
 
 on: [push, pull_request]
 

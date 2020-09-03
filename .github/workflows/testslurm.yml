@@ -1,11 +1,10 @@
-name: Test Pydra (SLURM)
+name: SLURM
 
 on: [push, pull_request]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    continue-on-error: true
     env:
       DOCKER_IMAGE: mgxd/slurm:19.05.1
 
