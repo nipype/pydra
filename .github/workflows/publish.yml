@@ -6,9 +6,6 @@ name: Upload to PyPI
 on:
   release:
     types: [created]
-  push:
-    tags:
-    - '*'
 
 jobs:
   deploy:
@@ -31,4 +28,4 @@ jobs:
         TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
       run: |
         python setup.py bdist_wheel
-        twine upload --repository testpypi dist/*
+        twine upload dist/*
