@@ -156,7 +156,7 @@ def copyfile_workflow(wf_path, result):
     for field in attr_fields(result.output):
         value = getattr(result.output, field.name)
         new_value = _copyfile_single_value(wf_path=wf_path, value=value)
-        if new_value != value:
+        if not (new_value is value or new_value == value):
             setattr(result.output, field.name, new_value)
     return result
 

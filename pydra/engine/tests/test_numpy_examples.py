@@ -19,6 +19,22 @@ def arrayout(val):
 
 def test_multiout(plugin):
     """ testing a simple function that returns a numpy array"""
+    wf = Workflow("wf", input_spec=["val"], val=2)
+    wf.add(arrayout(name="mo", val=wf.lzin.val))
+
+    wf.set_output([("array", wf.mo.lzout.b)])
+
+    with Submitter(plugin=plugin, n_procs=2) as sub:
+        sub(runnable=wf)
+
+    results = wf.result(return_inputs=True)
+
+    assert results[0] == {"wf.val": 2}
+    assert np.array_equal(results[1].output.array, np.array([2, 2]))
+
+
+def test_multiout_st(plugin):
+    """ testing a simple function that returns a numpy array, adding splitter"""
     wf = Workflow("wf", input_spec=["val"], val=[0, 1, 2])
     wf.add(arrayout(name="mo", val=wf.lzin.val))
     wf.mo.split("val").combine("val")
