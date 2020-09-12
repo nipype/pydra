@@ -155,8 +155,14 @@ def copyfile_workflow(wf_path, result):
     """ if file in the wf results, the file will be copied to the workflow directory"""
     for field in attr_fields(result.output):
         value = getattr(result.output, field.name)
-        new_value = _copyfile_single_value(wf_path=wf_path, value=value)
-        if new_value != value:
+        # if the field is a path or it can contain a path _copyfile_single_value is run
+        # to move all files and directories to the workflow directory
+        if field.type in [File, Directory, MultiOutputObj] or type(value) in [
+            list,
+            tuple,
+            dict,
+        ]:
+            new_value = _copyfile_single_value(wf_path=wf_path, value=value)
             setattr(result.output, field.name, new_value)
     return result
 
