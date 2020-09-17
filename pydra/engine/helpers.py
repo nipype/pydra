@@ -155,8 +155,14 @@ def copyfile_workflow(wf_path, result):
     """ if file in the wf results, the file will be copied to the workflow directory"""
     for field in attr_fields(result.output):
         value = getattr(result.output, field.name)
-        new_value = _copyfile_single_value(wf_path=wf_path, value=value)
-        if new_value != value:
+        # if the field is a path or it can contain a path _copyfile_single_value is run
+        # to move all files and directories to the workflow directory
+        if field.type in [File, Directory, MultiOutputObj] or type(value) in [
+            list,
+            tuple,
+            dict,
+        ]:
+            new_value = _copyfile_single_value(wf_path=wf_path, value=value)
             setattr(result.output, field.name, new_value)
     return result
 
@@ -672,7 +678,7 @@ def hash_value(value, tp=None, metadata=None):
             return value
 
 
-def output_from_inputfields(output_spec, inputs, names_only=False):
+def output_from_inputfields(output_spec, input_spec):
     """
     Collect values from output from input fields.
     If names_only is False, the output_spec is updated,
@@ -682,30 +688,26 @@ def output_from_inputfields(output_spec, inputs, names_only=False):
     ----------
     output_spec :
         TODO
-    inputs :
+    input_spec :
         TODO
 
     """
     current_output_spec_names = [f.name for f in attr.fields(make_klass(output_spec))]
     new_fields = []
-    for fld in attr_fields(inputs):
+    for fld in attr.fields(make_klass(input_spec)):
         if "output_file_template" in fld.metadata:
-            value = getattr(inputs, fld.name)
             if "output_field_name" in fld.metadata:
                 field_name = fld.metadata["output_field_name"]
             else:
                 field_name = fld.name
             # not adding if the field already in teh output_spec
             if field_name not in current_output_spec_names:
+                # TODO: should probably remove some of the keys
                 new_fields.append(
-                    (field_name, attr.ib(type=File, metadata={"value": value}))
+                    (field_name, attr.ib(type=File, metadata=fld.metadata))
                 )
-    if names_only:
-        new_names = [el[0] for el in new_fields]
-        return current_output_spec_names + new_names
-    else:
-        output_spec.fields += new_fields
-        return output_spec
+    output_spec.fields += new_fields
+    return output_spec
 
 
 def get_available_cpus():

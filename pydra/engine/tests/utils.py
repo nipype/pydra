@@ -164,7 +164,7 @@ def fun_dict(d):
 
 
 @mark.task
-def fun_write_file(filename: ty.Union[str, File, Path], text="hello"):
+def fun_write_file(filename: ty.Union[str, File, Path], text="hello") -> File:
     with open(filename, "w") as f:
         f.write(text)
     return Path(filename).absolute()

@@ -57,7 +57,13 @@ from .specs import (
     SingularitySpec,
     attr_fields,
 )
-from .helpers import ensure_list, execute, position_adjustment, argstr_formatting
+from .helpers import (
+    ensure_list,
+    execute,
+    position_adjustment,
+    argstr_formatting,
+    output_from_inputfields,
+)
 from .helpers_file import template_update, is_local_file
 
 
@@ -276,6 +282,7 @@ class ShellCommandTask(TaskBase):
             output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
 
         self.output_spec = output_spec
+        self.output_spec = output_from_inputfields(self.output_spec, self.input_spec)
 
         super().__init__(
             name=name,
