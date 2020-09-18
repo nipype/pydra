@@ -55,6 +55,14 @@ Installation
     pip install pydra
 
 
+Note that installation fails with older versions of pip on Windows. Upgrade pip before installing:
+
+::
+   
+   pip install –upgrade pip
+   pip install pydra
+   
+
 Developer installation
 ======================
 
