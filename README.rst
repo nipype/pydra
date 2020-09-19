@@ -10,6 +10,11 @@ A simple dataflow engine with scalable semantics.
    :alt: GitHub Actions CI
    :target: https://github.com/nipype/Pydra/actions
 
+|CircleCI|	
+
+.. |CircleCI| image:: https://circleci.com/gh/nipype/pydra.svg?style=svg	
+   :alt: CircleCI	
+
 
 |codecov|
 
