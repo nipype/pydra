@@ -5,15 +5,11 @@
 
 A simple dataflow engine with scalable semantics.
 
-|Build Status|
 
-.. |Build Status| image:: https://travis-ci.org/nipype/pydra.svg?branch=master
-   :alt: Build Status
+.. image:: https://github.com/nipype/pydra/workflows/Pydra/badge.svg
+   :alt: GitHub Actions CI
+   :target: https://github.com/nipype/Pydra/actions
 
-|CircleCI|
-
-.. |CircleCI| image:: https://circleci.com/gh/nipype/pydra.svg?style=svg
-   :alt: CircleCI
 
 |codecov|
 
