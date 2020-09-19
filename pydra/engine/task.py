@@ -43,6 +43,7 @@ import cloudpickle as cp
 import inspect
 import typing as ty
 from pathlib import Path
+import warnings
 
 from .core import TaskBase, is_lazy
 from ..utils.messenger import AuditFlag
@@ -275,14 +276,31 @@ class ShellCommandTask(TaskBase):
             TODO
 
         """
-        if input_spec is None:
-            input_spec = SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
-        self.input_spec = input_spec
-        if output_spec is None:
-            output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
-
-        self.output_spec = output_spec
+        if input_spec is not None:
+            self.input_spec = input_spec
+        elif not hasattr(self, "input_spec"):
+            self.input_spec = SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
+        else:
+            # changing class attribute to instance attribute, so it is part of __dict__
+            # (used in TaskBase.__set/get-state__)
+            self.input_spec = self.input_spec
+        if output_spec is not None:
+            self.output_spec = output_spec
+        elif not hasattr(self, "output_spec"):
+            self.output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
+        else:
+            # changing class attribute to instance attribute, so it is part of __dict__
+            self.output_spec = self.output_spec
         self.output_spec = output_from_inputfields(self.output_spec, self.input_spec)
+
+        for special_inp in ["executable", "args"]:
+            if hasattr(self, special_inp):
+                if special_inp not in kwargs:
+                    kwargs[special_inp] = getattr(self, special_inp)
+                elif kwargs[special_inp] != getattr(self, special_inp):
+                    warnings.warn(
+                        f"you are changing the executable from {getattr(self, special_inp)} to {kwargs[special_inp]}"
+                    )
 
         super().__init__(
             name=name,
