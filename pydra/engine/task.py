@@ -43,6 +43,7 @@ import cloudpickle as cp
 import inspect
 import typing as ty
 from pathlib import Path
+import warnings
 
 from .core import TaskBase, is_lazy
 from ..utils.messenger import AuditFlag
@@ -216,6 +217,9 @@ class FunctionTask(TaskBase):
 class ShellCommandTask(TaskBase):
     """Wrap a shell command as a task element."""
 
+    input_spec = None
+    output_spec = None
+
     def __new__(cls, container_info=None, *args, **kwargs):
         if not container_info:
             return super().__new__(cls)
@@ -275,14 +279,28 @@ class ShellCommandTask(TaskBase):
             TODO
 
         """
-        if input_spec is None:
-            input_spec = SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
-        self.input_spec = input_spec
-        if output_spec is None:
-            output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
 
-        self.output_spec = output_spec
+        # using provided spec, class attribute or setting the default SpecInfo
+        self.input_spec = (
+            input_spec
+            or self.input_spec
+            or SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
+        )
+        self.output_spec = (
+            output_spec
+            or self.output_spec
+            or SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
+        )
         self.output_spec = output_from_inputfields(self.output_spec, self.input_spec)
+
+        for special_inp in ["executable", "args"]:
+            if hasattr(self, special_inp):
+                if special_inp not in kwargs:
+                    kwargs[special_inp] = getattr(self, special_inp)
+                elif kwargs[special_inp] != getattr(self, special_inp):
+                    warnings.warn(
+                        f"you are changing the executable from {getattr(self, special_inp)} to {kwargs[special_inp]}"
+                    )
 
         super().__init__(
             name=name,
