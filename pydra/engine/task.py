@@ -217,6 +217,9 @@ class FunctionTask(TaskBase):
 class ShellCommandTask(TaskBase):
     """Wrap a shell command as a task element."""
 
+    input_spec = None
+    output_spec = None
+
     def __new__(cls, container_info=None, *args, **kwargs):
         if not container_info:
             return super().__new__(cls)
@@ -276,21 +279,18 @@ class ShellCommandTask(TaskBase):
             TODO
 
         """
-        if input_spec is not None:
-            self.input_spec = input_spec
-        elif not hasattr(self, "input_spec"):
-            self.input_spec = SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
-        else:
-            # changing class attribute to instance attribute, so it is part of __dict__
-            # (used in TaskBase.__set/get-state__)
-            self.input_spec = self.input_spec
-        if output_spec is not None:
-            self.output_spec = output_spec
-        elif not hasattr(self, "output_spec"):
-            self.output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
-        else:
-            # changing class attribute to instance attribute, so it is part of __dict__
-            self.output_spec = self.output_spec
+
+        # using provided spec, class attribute or setting the default SpecInfo
+        self.input_spec = (
+            input_spec
+            or self.input_spec
+            or SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
+        )
+        self.output_spec = (
+            output_spec
+            or self.output_spec
+            or SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
+        )
         self.output_spec = output_from_inputfields(self.output_spec, self.input_spec)
 
         for special_inp in ["executable", "args"]:
