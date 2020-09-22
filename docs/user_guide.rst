@@ -9,3 +9,4 @@ User Guide
    state
    combiner
    input_spec
+   output_spec
