@@ -2654,6 +2654,12 @@ def test_shell_cmd_inputspec_outputspec_2():
     )
     shelly.inputs.file1 = "new_file_1.txt"
     shelly.inputs.file2 = "new_file_2.txt"
+    # all fileds from output_spec should be in output_names and generated_output_names
+    assert (
+        shelly.output_names
+        == shelly.generated_output_names
+        == ["return_code", "stdout", "stderr", "newfile1", "newfile2"]
+    )
 
     res = shelly()
     assert res.output.stdout == ""
@@ -2714,6 +2720,20 @@ def test_shell_cmd_inputspec_outputspec_2a():
         output_spec=my_output_spec,
     )
     shelly.inputs.file1 = "new_file_1.txt"
+    # generated_output_names shoule know that newfile2 will not be generated
+    assert shelly.output_names == [
+        "return_code",
+        "stdout",
+        "stderr",
+        "newfile1",
+        "newfile2",
+    ]
+    assert shelly.generated_output_names == [
+        "return_code",
+        "stdout",
+        "stderr",
+        "newfile1",
+    ]
 
     res = shelly()
     assert res.output.stdout == ""
@@ -2834,6 +2854,20 @@ def test_shell_cmd_inputspec_outputspec_3a():
     )
     shelly.inputs.file1 = "new_file_1.txt"
     shelly.inputs.file2 = "new_file_2.txt"
+    # generated_output_names shoule know that newfile2 will not be generated
+    assert shelly.output_names == [
+        "return_code",
+        "stdout",
+        "stderr",
+        "newfile1",
+        "newfile2",
+    ]
+    assert shelly.generated_output_names == [
+        "return_code",
+        "stdout",
+        "stderr",
+        "newfile1",
+    ]
 
     res = shelly()
     assert res.output.stdout == ""
@@ -2884,6 +2918,12 @@ def test_shell_cmd_inputspec_outputspec_4():
     )
     shelly.inputs.file1 = "new_file_1.txt"
     shelly.inputs.additional_inp = 2
+    # generated_output_names should be the same as output_names
+    assert (
+        shelly.output_names
+        == shelly.generated_output_names
+        == ["return_code", "stdout", "stderr", "newfile1"]
+    )
 
     res = shelly()
     assert res.output.stdout == ""
