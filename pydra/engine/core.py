@@ -262,8 +262,6 @@ class TaskBase:
             TODO
 
         """
-        self.state.prepare_states(self.inputs)
-        self.state.prepare_inputs()
         if state_index is not None:
             inputs_copy = deepcopy(self.inputs)
             for key, ind in self.state.inputs_ind[state_index].items():
@@ -284,6 +282,9 @@ class TaskBase:
             return checksum_ind
         else:
             checksum_list = []
+            if not hasattr(self.state, "inputs_ind"):
+                self.state.prepare_states(self.inputs)
+                self.state.prepare_inputs()
             for ind in range(len(self.state.inputs_ind)):
                 checksum_list.append(self.checksum_states(state_index=ind))
             return checksum_list
@@ -611,7 +612,8 @@ class TaskBase:
                     return self._combined_output(return_inputs=return_inputs)
                 else:
                     results = []
-                    for checksum in self.checksum_states():
+                    for ind in range(len(self.state.inputs_ind)):
+                        checksum = self.checksum_states(state_index=ind)
                         result = load_result(checksum, self.cache_locations)
                         if result is None:
                             return None
