@@ -1,18 +1,10 @@
-
-.. image:: https://raw.githubusercontent.com/nipype/pydra/master/docs/logo/pydra_logo.jpg
-   :width: 50px
-   :alt: pydra logo
-
-======================
-Pydra: Dataflow Engine
-======================
-
-A simple dataflow engine with scalable semantics.
-
-Pydra is a rewrite of the Nipype engine with mapping and joining as
-first-class operations. It forms the core of the Nipype 2.0 ecosystem.
-
 |GHAction| |CircleCI| |codecov|
+
+|Pydralogo|
+
+.. |Pydralogo| image:: https://raw.githubusercontent.com/nipype/pydra/master/docs/logo/pydra_logo.jpg
+   :width: 200px
+   :alt: pydra logo
 
 .. |GHAction| image:: https://github.com/nipype/pydra/workflows/Pydra/badge.svg
    :alt: GitHub Actions CI
@@ -24,7 +16,17 @@ first-class operations. It forms the core of the Nipype 2.0 ecosystem.
 .. |codecov| image:: https://codecov.io/gh/nipype/pydra/branch/master/graph/badge.svg
    :alt: codecov
 
-The goal of pydra is to provide a lightweight Python dataflow engine for DAG construction, manipulation, and distributed execution.
+======================
+Pydra: Dataflow Engine
+======================
+
+A simple dataflow engine with scalable semantics.
+
+Pydra is a rewrite of the Nipype engine with mapping and joining as
+first-class operations. It forms the core of the Nipype 2.0 ecosystem.
+
+The goal of pydra is to provide a lightweight Python dataflow engine for DAG
+construction, manipulation, and distributed execution.
 
 Feature list:
 =============
