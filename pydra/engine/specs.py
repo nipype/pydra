@@ -425,6 +425,8 @@ class ShellOutSpec:
             Takes into account the task input and the requires list for the output fields.
             TODO: should be in all Output specs?
         """
+        # checking the input (if all mandatory fields are provided, etc.)
+        inputs.check_fields_input_spec()
         output_names = ["return_code", "stdout", "stderr"]
         for fld in attr_fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:

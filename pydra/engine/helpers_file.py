@@ -519,7 +519,7 @@ def template_update(inputs, output_dir, map_copyfiles=None):
         if fld.type not in [str, ty.Union[str, bool]]:
             raise Exception(
                 f"fields with output_file_template"
-                "has to be a string or Union[str, bool]"
+                " has to be a string or Union[str, bool]"
             )
         dict_[fld.name] = template_update_single(
             field=fld, inputs_dict=dict_, output_dir=output_dir
