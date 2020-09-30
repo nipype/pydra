@@ -22,15 +22,10 @@ from . import mark
 
 
 def check_latest_version():
-    import os
 
-    if "NO_ET" not in os.environ:
+    import etelemetry
 
-        import etelemetry
-
-        return etelemetry.check_available_version(
-            "nipype/pydra", __version__, lgr=logger
-        )
+    return etelemetry.check_available_version("nipype/pydra", __version__, lgr=logger)
 
 
 # Run telemetry on import for interactive sessions, such as IPython, Jupyter notebooks, Python REPL
