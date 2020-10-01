@@ -61,6 +61,6 @@ jobs:
 
 
       - name: Pytest
-        run: pytest -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+        run: pytest -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml pydra/engine/tests/test_singularity.py
       - name: Upload to codecov
         run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
