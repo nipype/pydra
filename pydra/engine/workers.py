@@ -1,6 +1,6 @@
 """Execution workers."""
 import asyncio
-import sys
+import sys, os
 import re
 from tempfile import gettempdir
 from pathlib import Path
@@ -300,7 +300,12 @@ class SlurmWorker(DistributedWorker):
             # Exception: Polling / job failure
             done = await self._poll_job(jobid)
             if done:
-                return True
+                if done == "CANCELLED":
+                    os.remove(cache_dir / f"{checksum}.lock")
+                    cmd_re = ("scontrol", "requeue", jobid)
+                    await read_and_display_async(*cmd_re, hide_display=True)
+                else:
+                    return True
             await asyncio.sleep(self.poll_delay)
 
     async def _poll_job(self, jobid):
@@ -321,7 +326,9 @@ class SlurmWorker(DistributedWorker):
         m = self._sacct_re.search(stdout)
         error_file = self.error[jobid]
         if int(m.group("exit_code")) != 0 or m.group("status") != "COMPLETED":
-            if m.group("status") in ["RUNNING", "PENDING"]:
+            if m.group("status") == "CANCELLED":
+                return "CANCELLED"
+            elif m.group("status") in ["RUNNING", "PENDING"]:
                 return False
             # TODO: potential for requeuing
             # parsing the error message
