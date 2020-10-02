@@ -301,7 +301,7 @@ class SlurmWorker(DistributedWorker):
             done = await self._poll_job(jobid)
             if done:
                 if done == "CANCELLED":
-                    os.remove(cache_dir / f"{checksum}.lock")
+                    (cache_dir / f"{checksum}.lock").unlink(missing_ok=True)
                     cmd_re = ("scontrol", "requeue", jobid)
                     await read_and_display_async(*cmd_re, hide_display=True)
                 else:
