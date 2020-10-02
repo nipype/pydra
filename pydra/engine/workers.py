@@ -280,9 +280,13 @@ class SlurmWorker(DistributedWorker):
             error_file = None
         sargs.append(str(batchscript))
         # TO CONSIDER: add random sleep to avoid overloading calls
-        _, stdout, _ = await read_and_display_async("sbatch", *sargs, hide_display=True)
+        rc, stdout, stderr = await read_and_display_async(
+            "sbatch", *sargs, hide_display=True
+        )
         jobid = re.search(r"\d+", stdout)
-        if not jobid:
+        if rc:
+            raise RuntimeError(f"Error returned from sbatch: {stderr}")
+        elif not jobid:
             raise RuntimeError("Could not extract job ID")
         jobid = jobid.group()
         if error_file:

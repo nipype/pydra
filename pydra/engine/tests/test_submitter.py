@@ -233,3 +233,31 @@ def test_slurm_max_jobs(tmpdir):
             prev = et
             continue
         assert (prev - et).seconds >= 2
+
+
+@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+def test_slurm_args_1(tmpdir):
+    """ testing sbatch_args provided to the submitter"""
+    task = sleep_add_one(x=1)
+    task.cache_dir = tmpdir
+    # submit workflow and every task as slurm job
+    with Submitter("slurm", sbatch_args="-N1") as sub:
+        sub(task)
+
+    res = task.result()
+    assert res.output.out == 2
+    script_dir = tmpdir / "SlurmWorker_scripts"
+    assert script_dir.exists()
+
+
+@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+def test_slurm_args_2(tmpdir):
+    """ testing sbatch_args provided to the submitter
+        exception should be raised for invalid options
+    """
+    task = sleep_add_one(x=1)
+    task.cache_dir = tmpdir
+    # submit workflow and every task as slurm job
+    with pytest.raises(RuntimeError, match="Error returned from sbatch:"):
+        with Submitter("slurm", sbatch_args="-N1 --invalid") as sub:
+            sub(task)
