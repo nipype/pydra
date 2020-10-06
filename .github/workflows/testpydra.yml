@@ -12,7 +12,7 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
         python-version: [3.7, 3.8]
-        install: [min-req, install, develop, wheel]
+        install: [install, develop, wheel]
       fail-fast: false
     runs-on: ${{ matrix.os }}
 
@@ -29,9 +29,10 @@ jobs:
       run: python -m pip install --upgrade pip setuptools
 
 
-    - name: Install dependencies (min-requirements.txt)
-      if: matrix.install == 'min-req'
-      run: pip install -r min-requirements.txt
+    - name: Install Pydra tests dependencies (develop or setup.py install)
+      if: matrix.install == 'develop' || matrix.install == 'install'
+      run: pip install ".[test]"
+
 
     - name: Install dependencies (setup.py install)
       if: matrix.install == 'install'
@@ -44,15 +45,7 @@ jobs:
         pip install dist/*.whl
 
 
-    - name: Install Pydra (min-requirements.txt or setup.py install)
-      if: matrix.install == 'min-req' || matrix.install == 'install'
-      run: pip install ".[test]"
-
-    - name: Install Pydra (setup.py develop)
-      if: matrix.install == 'develop'
-      run: pip install -e ".[test]"
-
-    - name: Install Pydra (wheel)
+    - name: Install Pydra tests dependencies (wheel)
       if: matrix.install == 'wheel'
       run: pip install "$( ls dist/pydra*.whl )[test]"
 
