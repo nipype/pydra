@@ -334,11 +334,10 @@ def test_slurm_cancel_rerun_1(tmpdir):
 
 @pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_cancel_rerun_2(tmpdir):
-    """ testing that tasks run with slurm is re-queue
-        Running wf with 2 tasks, one sleeps and the other trying to get
+    """ testing that tasks run with slurm that has --no-requeue
+        Running wf with 2 tasks, one sleeps and the other gets
         job_id of the first task and cancel it.
-        The first job should be re-queue and finish without problem.
-        (possibly has to be improved, in theory cancel job might finish before cancel)
+        The first job is not able t be rescheduled and the error is returned.
     """
     wf = Workflow(name="wf", input_spec=["x", "job_name"], cache_dir=tmpdir)
     wf.add(sleep(name="sleep", x=wf.lzin.x))
