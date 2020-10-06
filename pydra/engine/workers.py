@@ -300,7 +300,10 @@ class SlurmWorker(DistributedWorker):
             # Exception: Polling / job failure
             done = await self._poll_job(jobid)
             if done:
-                if done in ["CANCELLED", "TIMEOUT", "PREEMPTED"]:
+                if (
+                    done in ["CANCELLED", "TIMEOUT", "PREEMPTED"]
+                    and "--no-requeue" not in self.sbatch_args
+                ):
                     if (cache_dir / f"{checksum}.lock").exists():
                         # for pyt3.8 we could you missing_ok=True
                         (cache_dir / f"{checksum}.lock").unlink()
