@@ -8,6 +8,7 @@ import pytest
 
 from .utils import gen_basic_wf
 from ..core import Workflow
+from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ... import mark
 
@@ -233,3 +234,119 @@ def test_slurm_max_jobs(tmpdir):
             prev = et
             continue
         assert (prev - et).seconds >= 2
+
+
+@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+def test_slurm_args_1(tmpdir):
+    """ testing sbatch_args provided to the submitter"""
+    task = sleep_add_one(x=1)
+    task.cache_dir = tmpdir
+    # submit workflow and every task as slurm job
+    with Submitter("slurm", sbatch_args="-N1") as sub:
+        sub(task)
+
+    res = task.result()
+    assert res.output.out == 2
+    script_dir = tmpdir / "SlurmWorker_scripts"
+    assert script_dir.exists()
+
+
+@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+def test_slurm_args_2(tmpdir):
+    """ testing sbatch_args provided to the submitter
+        exception should be raised for invalid options
+    """
+    task = sleep_add_one(x=1)
+    task.cache_dir = tmpdir
+    # submit workflow and every task as slurm job
+    with pytest.raises(RuntimeError, match="Error returned from sbatch:"):
+        with Submitter("slurm", sbatch_args="-N1 --invalid") as sub:
+            sub(task)
+
+
+@mark.task
+def sleep(x, job_name_part):
+    time.sleep(x)
+    import subprocess as sp
+
+    # getting the job_id of the first job that sleeps
+    job_id = 999
+    while job_id != "":
+        time.sleep(3)
+        id_p1 = sp.Popen(["squeue"], stdout=sp.PIPE)
+        id_p2 = sp.Popen(["grep", job_name_part], stdin=id_p1.stdout, stdout=sp.PIPE)
+        id_p3 = sp.Popen(["awk", "{print $1}"], stdin=id_p2.stdout, stdout=sp.PIPE)
+        job_id = id_p3.communicate()[0].decode("utf-8").strip()
+
+    return x
+
+
+@mark.task
+def cancel(job_name_part):
+    import subprocess as sp
+
+    # getting the job_id of the first job that sleeps
+    job_id = ""
+    while job_id == "":
+        time.sleep(1)
+        id_p1 = sp.Popen(["squeue"], stdout=sp.PIPE)
+        id_p2 = sp.Popen(["grep", job_name_part], stdin=id_p1.stdout, stdout=sp.PIPE)
+        id_p3 = sp.Popen(["awk", "{print $1}"], stdin=id_p2.stdout, stdout=sp.PIPE)
+        job_id = id_p3.communicate()[0].decode("utf-8").strip()
+
+    # # canceling the job
+    proc1 = sp.run(["scancel", job_id])
+    # checking the status of jobs with the name; returning the last item
+    proc2 = sp.run(["sacct", "-j", job_id], stdout=sp.PIPE, stderr=sp.PIPE)
+    return proc2.stdout.decode("utf-8").strip()
+
+
+@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+def test_slurm_cancel_rerun_1(tmpdir):
+    """ testing that tasks run with slurm is re-queue
+        Running wf with 2 tasks, one sleeps and the other trying to get
+        job_id of the first task and cancel it.
+        The first job should be re-queue and finish without problem.
+        (possibly has to be improved, in theory cancel job might finish before cancel)
+    """
+    wf = Workflow(
+        name="wf",
+        input_spec=["x", "job_name_cancel", "job_name_resqueue"],
+        cache_dir=tmpdir,
+    )
+    wf.add(sleep(name="sleep", x=wf.lzin.x, job_name_part=wf.lzin.job_name_cancel))
+    wf.add(cancel(nane="cancel", job_name_part=wf.lzin.job_name_resqueue))
+    wf.inputs.x = 10
+    wf.inputs.job_name_resqueue = "sleep"
+    wf.inputs.job_name_cancel = "cancel"
+
+    wf.set_output([("out", wf.sleep.lzout.out), ("canc_out", wf.cancel.lzout.out)])
+    with Submitter("slurm") as sub:
+        sub(wf)
+
+    res = wf.result()
+    assert res.output.out == 10
+    # checking if indeed the sleep-task job was cancelled by cancel-task
+    assert "CANCELLED" in res.output.canc_out
+    script_dir = tmpdir / "SlurmWorker_scripts"
+    assert script_dir.exists()
+
+
+@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+def test_slurm_cancel_rerun_2(tmpdir):
+    """ testing that tasks run with slurm that has --no-requeue
+        Running wf with 2 tasks, one sleeps and the other gets
+        job_id of the first task and cancel it.
+        The first job is not able t be rescheduled and the error is returned.
+    """
+    wf = Workflow(name="wf", input_spec=["x", "job_name"], cache_dir=tmpdir)
+    wf.add(sleep(name="sleep", x=wf.lzin.x))
+    wf.add(cancel(nane="cancel", job_name_part=wf.lzin.job_name))
+
+    wf.inputs.x = 10
+    wf.inputs.job_name = "sleep"
+
+    wf.set_output([("out", wf.sleep.lzout.out), ("canc_out", wf.cancel.lzout.out)])
+    with pytest.raises(Exception):
+        with Submitter("slurm", sbatch_args="--no-requeue") as sub:
+            sub(wf)

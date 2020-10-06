@@ -1,6 +1,6 @@
 """Execution workers."""
 import asyncio
-import sys
+import sys, os
 import re
 from tempfile import gettempdir
 from pathlib import Path
@@ -280,9 +280,13 @@ class SlurmWorker(DistributedWorker):
             error_file = None
         sargs.append(str(batchscript))
         # TO CONSIDER: add random sleep to avoid overloading calls
-        _, stdout, _ = await read_and_display_async("sbatch", *sargs, hide_display=True)
+        rc, stdout, stderr = await read_and_display_async(
+            "sbatch", *sargs, hide_display=True
+        )
         jobid = re.search(r"\d+", stdout)
-        if not jobid:
+        if rc:
+            raise RuntimeError(f"Error returned from sbatch: {stderr}")
+        elif not jobid:
             raise RuntimeError("Could not extract job ID")
         jobid = jobid.group()
         if error_file:
@@ -296,7 +300,17 @@ class SlurmWorker(DistributedWorker):
             # Exception: Polling / job failure
             done = await self._poll_job(jobid)
             if done:
-                return True
+                if (
+                    done in ["CANCELLED", "TIMEOUT", "PREEMPTED"]
+                    and "--no-requeue" not in self.sbatch_args
+                ):
+                    if (cache_dir / f"{checksum}.lock").exists():
+                        # for pyt3.8 we could you missing_ok=True
+                        (cache_dir / f"{checksum}.lock").unlink()
+                    cmd_re = ("scontrol", "requeue", jobid)
+                    await read_and_display_async(*cmd_re, hide_display=True)
+                else:
+                    return True
             await asyncio.sleep(self.poll_delay)
 
     async def _poll_job(self, jobid):
@@ -317,7 +331,9 @@ class SlurmWorker(DistributedWorker):
         m = self._sacct_re.search(stdout)
         error_file = self.error[jobid]
         if int(m.group("exit_code")) != 0 or m.group("status") != "COMPLETED":
-            if m.group("status") in ["RUNNING", "PENDING"]:
+            if m.group("status") in ["CANCELLED", "TIMEOUT", "PREEMPTED"]:
+                return m.group("status")
+            elif m.group("status") in ["RUNNING", "PENDING"]:
                 return False
             # TODO: potential for requeuing
             # parsing the error message
