@@ -9,12 +9,14 @@ jobs:
       DOCKER_IMAGE: mgxd/slurm:19.05.1
 
     steps:
+    - name: Disable etelemetry
+      run: echo ::set-env name=NO_ET::TRUE
     - uses: actions/checkout@v2
     - name: Pull docker image
       run: |
         docker pull $DOCKER_IMAGE
         # Have image running in background
-        docker run `bash <(curl -s https://codecov.io/env)` -itd -h ernie --name slurm -v `pwd`:/pydra $DOCKER_IMAGE
+        docker run `bash <(curl -s https://codecov.io/env)` -itd -h ernie --name slurm -v `pwd`:/pydra -e NO_ET=$NO_ET $DOCKER_IMAGE
     - name: Display previous jobs with sacct
       run: |
         echo "Allowing ports/daemons time to start" && sleep 10
@@ -29,6 +31,7 @@ jobs:
         fi
     - name: Setup Python
       run: |
+        docker exec slurm bash -c "echo $NO_ET"
         docker exec slurm bash -c "ls -la && echo list top level dir"
         docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
         docker exec slurm bash -c "pip install -e /pydra[test] && python -c 'import pydra; print(pydra.__version__)'"

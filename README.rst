@@ -1,27 +1,32 @@
+|GHAction| |CircleCI| |codecov|
 
-.. image:: https://raw.githubusercontent.com/nipype/pydra/master/docs/logo/pydra_logo.jpg
-   :width: 50
+|Pydralogo|
+
+.. |Pydralogo| image:: https://raw.githubusercontent.com/nipype/pydra/master/docs/logo/pydra_logo.jpg
+   :width: 200px
    :alt: pydra logo
 
-A simple dataflow engine with scalable semantics.
-
-
-.. image:: https://github.com/nipype/pydra/workflows/Pydra/badge.svg
+.. |GHAction| image:: https://github.com/nipype/pydra/workflows/Pydra/badge.svg
    :alt: GitHub Actions CI
    :target: https://github.com/nipype/Pydra/actions
 
-|CircleCI|	
-
-.. |CircleCI| image:: https://circleci.com/gh/nipype/pydra.svg?style=svg	
-   :alt: CircleCI	
-
-
-|codecov|
+.. |CircleCI| image:: https://circleci.com/gh/nipype/pydra.svg?style=svg
+   :alt: CircleCI
 
 .. |codecov| image:: https://codecov.io/gh/nipype/pydra/branch/master/graph/badge.svg
    :alt: codecov
 
-The goal of pydra is to provide a lightweight Python dataflow engine for DAG construction, manipulation, and distributed execution.
+======================
+Pydra: Dataflow Engine
+======================
+
+A simple dataflow engine with scalable semantics.
+
+Pydra is a rewrite of the Nipype engine with mapping and joining as
+first-class operations. It forms the core of the Nipype 2.0 ecosystem.
+
+The goal of pydra is to provide a lightweight Python dataflow engine for DAG
+construction, manipulation, and distributed execution.
 
 Feature list:
 =============
@@ -59,10 +64,10 @@ Installation
 Note that installation fails with older versions of pip on Windows. Upgrade pip before installing:
 
 ::
-   
+
    pip install –upgrade pip
    pip install pydra
-   
+
 
 Developer installation
 ======================
