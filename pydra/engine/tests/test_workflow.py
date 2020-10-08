@@ -153,6 +153,7 @@ def test_wf_2(plugin, tmpdir):
     wf.inputs.x = 2
     wf.inputs.y = 3
     wf.plugin = plugin
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -263,7 +264,7 @@ def test_wf_2d_outpasdict(plugin, tmpdir):
 
 
 @pytest.mark.flaky(reruns=3)  # when dask
-def test_wf_3(plugin_dask_opt):
+def test_wf_3(plugin_dask_opt, tmpdir):
     """ testing None value for an input"""
     wf = Workflow(name="wf_3", input_spec=["x", "y"])
     wf.add(fun_addvar_none(name="addvar", a=wf.lzin.x, b=wf.lzin.y))
@@ -375,7 +376,7 @@ def test_wf_5a(plugin, tmpdir):
     assert 1 == results.output.out_sub
 
 
-def test_wf_5b_exception():
+def test_wf_5b_exception(tmpdir):
     """  set_output used twice with the same name - exception should be raised """
     wf = Workflow(name="wf_5", input_spec=["x", "y"], x=3, y=2)
     wf.add(fun_addsubvar(name="addsub", a=wf.lzin.x, b=wf.lzin.y))
@@ -995,7 +996,7 @@ def test_wf_3sernd_ndst_1(plugin, tmpdir):
 
 
 @pytest.mark.flaky(reruns=3)  # when dask
-def test_wf_3nd_st_1(plugin_dask_opt):
+def test_wf_3nd_st_1(plugin_dask_opt, tmpdir):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter on the workflow level
     """
@@ -1023,7 +1024,7 @@ def test_wf_3nd_st_1(plugin_dask_opt):
 
 
 @pytest.mark.flaky(reruns=3)  # when dask
-def test_wf_3nd_ndst_1(plugin_dask_opt):
+def test_wf_3nd_ndst_1(plugin_dask_opt, tmpdir):
     """ workflow with three tasks, third one connected to two previous tasks,
         splitter on the tasks levels
     """
@@ -1712,6 +1713,7 @@ def test_wfasnd_1(plugin, tmpdir):
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
     wfnd.inputs.x = 2
+    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
@@ -1737,6 +1739,7 @@ def test_wfasnd_wfinp_1(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wfnd.cache_dir = tmpdir
 
     wf.add(wfnd)
     wf.inputs.x = 2
@@ -1764,6 +1767,7 @@ def test_wfasnd_wfndupdate(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=2)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"], x=3)
     wfnd.inputs.x = wf.lzin.x
@@ -1790,6 +1794,7 @@ def test_wfasnd_wfndupdate_rerun(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=2)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wfnd.cache_dir = tmpdir
     with Submitter(plugin=plugin) as sub:
         sub(wfnd)
 
@@ -1835,6 +1840,7 @@ def test_wfasnd_st_1(plugin, tmpdir):
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
     wfnd.split("x")
     wfnd.inputs.x = [2, 4]
+    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
@@ -1862,6 +1868,7 @@ def test_wfasnd_st_updatespl_1(plugin, tmpdir):
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
     wfnd.inputs.x = [2, 4]
+    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
@@ -1890,6 +1897,7 @@ def test_wfasnd_ndst_1(plugin, tmpdir):
     # TODO: without this the test is failing
     wfnd.plugin = plugin
     wfnd.inputs.x = [2, 4]
+    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
@@ -1917,6 +1925,7 @@ def test_wfasnd_ndst_updatespl_1(plugin, tmpdir):
     # TODO: without this the test is failing
     wfnd.plugin = plugin
     wfnd.inputs.x = [2, 4]
+    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
@@ -1943,6 +1952,7 @@ def test_wfasnd_wfst_1(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wfnd.cache_dir = tmpdir
 
     wf.add(wfnd)
     wf.split("x")
@@ -1976,6 +1986,7 @@ def test_wfasnd_st_2(plugin, tmpdir):
     wfnd.split(("x", "y"))
     wfnd.inputs.x = [2, 4]
     wfnd.inputs.y = [1, 10]
+    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
     wf.add(wfnd)
@@ -2002,6 +2013,7 @@ def test_wfasnd_wfst_2(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x", "y"], x=wf.lzin.x, y=wf.lzin.y)
     wfnd.add(multiply(name="mult", x=wfnd.lzin.x, y=wfnd.lzin.y))
     wfnd.set_output([("out", wfnd.mult.lzout.out)])
+    wfnd.cache_dir = tmpdir
 
     wf.add(wfnd)
     wf.add(add2(name="add2", x=wf.wfnd.lzout.out))
@@ -2010,6 +2022,7 @@ def test_wfasnd_wfst_2(plugin, tmpdir):
     wf.inputs.y = [1, 10]
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.plugin = plugin
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -2039,6 +2052,7 @@ def test_wfasnd_ndst_3(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wfnd.cache_dir = tmpdir
     wf.add(wfnd)
 
     wf.set_output([("out", wf.wfnd.lzout.out)])
@@ -2068,6 +2082,7 @@ def test_wfasnd_wfst_3(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
+    wfnd.cache_dir = tmpdir
     wf.add(wfnd)
 
     wf.set_output([("out", wf.wfnd.lzout.out)])
