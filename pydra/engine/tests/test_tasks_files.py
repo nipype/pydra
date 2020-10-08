@@ -246,7 +246,7 @@ def test_broken_dir_link(tmpdir):
 
 
 def test_broken_dir_link2(tmpdir):
-    # existing dirs with broken symlink(s) are hashed
+    # valid dirs with broken symlink(s) are hashed
     dir2 = tmpdir.join("dir2")
     os.mkdir(dir2)
     file1 = dir2.join("file1")
@@ -264,7 +264,5 @@ def test_broken_dir_link2(tmpdir):
         sub(nn)
 
     nn2 = dir_count_file_annot(name="listdir", dirpath=str(dir2))
-    # raises error when there's type hinting
-    with pytest.raises(FileNotFoundError) as e:
-        with Submitter(plugin="cf") as sub:
-            sub(nn2)
+    with Submitter(plugin="cf") as sub:
+        sub(nn2)

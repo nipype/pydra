@@ -638,7 +638,7 @@ def is_existing_path(value, raise_notfound=True):
         return False
     try:
         return Path(value).exists()
-    except TypeError:
+    except (TypeError, FileNotFoundError):
         if raise_notfound:
             raise FileNotFoundError(f"{value}: broken symlink or path doesn't exist")
         else:
