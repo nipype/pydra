@@ -17,20 +17,20 @@ if sys.platform.startswith("win"):
 
 @pytest.mark.flaky(reruns=2)  # when dask
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_1(plugin_dask_opt, results_function):
+def test_shell_cmd_1(plugin_dask_opt, results_function, tmpdir):
     """ simple command, no arguments """
     cmd = ["pwd"]
     shelly = ShellCommandTask(name="shelly", executable=cmd)
     assert shelly.cmdline == " ".join(cmd)
 
-    res = results_function(shelly, plugin=plugin_dask_opt)
+    res = results_function(shelly, plugin=plugin_dask_opt, tmpdir=tmpdir)
     assert Path(res.output.stdout.rstrip()) == shelly.output_dir
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_1_strip(plugin, results_function):
+def test_shell_cmd_1_strip(plugin, results_function, tmpdir):
     """ simple command, no arguments
         strip option to remove \n at the end os stdout
     """
@@ -38,27 +38,27 @@ def test_shell_cmd_1_strip(plugin, results_function):
     shelly = ShellCommandTask(name="shelly", executable=cmd, strip=True)
     assert shelly.cmdline == " ".join(cmd)
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert Path(res.output.stdout) == Path(shelly.output_dir)
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_2(plugin, results_function):
+def test_shell_cmd_2(plugin, results_function, tmpdir):
     """ a command with arguments, cmd and args given as executable """
     cmd = ["echo", "hail", "pydra"]
     shelly = ShellCommandTask(name="shelly", executable=cmd)
     assert shelly.cmdline == " ".join(cmd)
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_2a(plugin, results_function):
+def test_shell_cmd_2a(plugin, results_function, tmpdir):
     """ a command with arguments, using executable and args """
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
@@ -67,14 +67,14 @@ def test_shell_cmd_2a(plugin, results_function):
     assert shelly.inputs.executable == "echo"
     assert shelly.cmdline == "echo " + " ".join(cmd_args)
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout.strip() == " ".join(cmd_args)
     assert res.output.return_code == 0
     assert res.output.stderr == ""
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_2b(plugin, results_function):
+def test_shell_cmd_2b(plugin, results_function, tmpdir):
     """ a command with arguments, using  strings executable and args """
     cmd_exec = "echo"
     cmd_args = "pydra"
@@ -83,7 +83,7 @@ def test_shell_cmd_2b(plugin, results_function):
     assert shelly.inputs.executable == "echo"
     assert shelly.cmdline == "echo pydra"
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "pydra\n"
     assert res.output.return_code == 0
     assert res.output.stderr == ""
@@ -250,7 +250,7 @@ def test_wf_shell_cmd_1(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_1(plugin, results_function, use_validator):
+def test_shell_cmd_inputspec_1(plugin, results_function, use_validator, tmpdir):
     """ a command with executable, args and one command opt,
         using a customized input_spec to add the opt to the command
         in the right place that is specified in metadata["cmd_pos"]
@@ -284,12 +284,12 @@ def test_shell_cmd_inputspec_1(plugin, results_function, use_validator):
     assert shelly.inputs.args == cmd_args
     assert shelly.cmdline == "echo -n hello from pydra"
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "hello from pydra"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_2(plugin, results_function, use_validator):
+def test_shell_cmd_inputspec_2(plugin, results_function, use_validator, tmpdir):
     """ a command with executable, args and two command options,
         using a customized input_spec to add the opt to the command
         in the right place that is specified in metadata["cmd_pos"]
@@ -331,12 +331,12 @@ def test_shell_cmd_inputspec_2(plugin, results_function, use_validator):
     assert shelly.inputs.executable == cmd_exec
     assert shelly.inputs.args == cmd_args
     assert shelly.cmdline == "echo -n HELLO from pydra"
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "HELLO from pydra"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_3(plugin, results_function):
+def test_shell_cmd_inputspec_3(plugin, results_function, tmpdir):
     """  mandatory field added to fields, value provided """
     cmd_exec = "echo"
     hello = "HELLO"
@@ -365,12 +365,12 @@ def test_shell_cmd_inputspec_3(plugin, results_function):
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "HELLO\n"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_3a(plugin, results_function):
+def test_shell_cmd_inputspec_3a(plugin, results_function, tmpdir):
     """  mandatory field added to fields, value provided
         using shorter syntax for input spec (no attr.ib)
     """
@@ -394,12 +394,12 @@ def test_shell_cmd_inputspec_3a(plugin, results_function):
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "HELLO\n"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_3b(plugin, results_function):
+def test_shell_cmd_inputspec_3b(plugin, results_function, tmpdir):
     """  mandatory field added to fields, value provided after init"""
     cmd_exec = "echo"
     hello = "HELLO"
@@ -429,7 +429,7 @@ def test_shell_cmd_inputspec_3b(plugin, results_function):
     shelly.inputs.text = hello
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "HELLO\n"
 
 
@@ -464,7 +464,7 @@ def test_shell_cmd_inputspec_3c_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_3c(plugin, results_function):
+def test_shell_cmd_inputspec_3c(plugin, results_function, tmpdir):
     """  mandatory=False, so tasks runs fine even without the value """
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
@@ -493,12 +493,12 @@ def test_shell_cmd_inputspec_3c(plugin, results_function):
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo"
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "\n"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_4(plugin, results_function):
+def test_shell_cmd_inputspec_4(plugin, results_function, tmpdir):
     """  mandatory field added to fields, value provided """
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
@@ -524,12 +524,12 @@ def test_shell_cmd_inputspec_4(plugin, results_function):
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo Hello"
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "Hello\n"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_4a(plugin, results_function):
+def test_shell_cmd_inputspec_4a(plugin, results_function, tmpdir):
     """  mandatory field added to fields, value provided
         using shorter syntax for input spec (no attr.ib)
     """
@@ -550,12 +550,12 @@ def test_shell_cmd_inputspec_4a(plugin, results_function):
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo Hello"
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "Hello\n"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_4b(plugin, results_function):
+def test_shell_cmd_inputspec_4b(plugin, results_function, tmpdir):
     """  mandatory field added to fields, value provided """
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
@@ -581,7 +581,7 @@ def test_shell_cmd_inputspec_4b(plugin, results_function):
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo Hi"
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "Hi\n"
 
 
@@ -654,7 +654,7 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_5_nosubm(plugin, results_function):
+def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmpdir):
     """ checking xor in metadata: task should work fine, since only one option is True"""
     cmd_exec = "ls"
     cmd_t = True
@@ -695,7 +695,7 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function):
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -t"
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
 
 
 def test_shell_cmd_inputspec_5a_exception(plugin):
@@ -747,7 +747,7 @@ def test_shell_cmd_inputspec_5a_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_6(plugin, results_function):
+def test_shell_cmd_inputspec_6(plugin, results_function, tmpdir):
     """ checking requires in metadata:
         the required field is set in the init, so the task works fine
     """
@@ -790,7 +790,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function):
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
 
 
 def test_shell_cmd_inputspec_6a_exception(plugin):
@@ -834,7 +834,7 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_6b(plugin, results_function):
+def test_shell_cmd_inputspec_6b(plugin, results_function, tmpdir):
     """ checking requires in metadata:
         the required field set after the init
     """
@@ -878,11 +878,11 @@ def test_shell_cmd_inputspec_6b(plugin, results_function):
     shelly.inputs.opt_l = cmd_l
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_7(plugin, results_function):
+def test_shell_cmd_inputspec_7(plugin, results_function, tmpdir):
     """
         providing output name using input_spec,
         using name_tamplate in metadata
@@ -911,7 +911,7 @@ def test_shell_cmd_inputspec_7(plugin, results_function):
         name="shelly", executable=cmd, args=args, input_spec=my_input_spec
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
     # checking if the file is created in a good place
@@ -920,7 +920,7 @@ def test_shell_cmd_inputspec_7(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_7a(plugin, results_function):
+def test_shell_cmd_inputspec_7a(plugin, results_function, tmpdir):
     """
         providing output name using input_spec,
         using name_tamplate in metadata
@@ -951,7 +951,7 @@ def test_shell_cmd_inputspec_7a(plugin, results_function):
         name="shelly", executable=cmd, args=args, input_spec=my_input_spec
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.out1_changed.exists()
     # checking if the file is created in a good place
@@ -960,7 +960,7 @@ def test_shell_cmd_inputspec_7a(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_7b(plugin, results_function):
+def test_shell_cmd_inputspec_7b(plugin, results_function, tmpdir):
     """
         providing new file and output name using input_spec,
         using name_template in metadata
@@ -998,7 +998,7 @@ def test_shell_cmd_inputspec_7b(plugin, results_function):
         input_spec=my_input_spec,
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
 
@@ -1054,7 +1054,7 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
         input_spec=my_input_spec,
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
 
@@ -1110,7 +1110,7 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmpdir):
         input_spec=my_input_spec,
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
 
@@ -1154,7 +1154,7 @@ def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
         name="shelly", executable=cmd, input_spec=my_input_spec, file_orig=file
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.file_copy.exists()
     assert res.output.file_copy.name == "file_copy.txt"
@@ -1202,7 +1202,7 @@ def test_shell_cmd_inputspec_9a(tmpdir, plugin, results_function):
         name="shelly", executable=cmd, input_spec=my_input_spec, file_orig=file
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.file_copy.exists()
     assert res.output.file_copy.name == "file_copy"
@@ -1249,7 +1249,7 @@ def test_shell_cmd_inputspec_9b(tmpdir, plugin, results_function):
         name="shelly", executable=cmd, input_spec=my_input_spec, file_orig=file
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.file_copy.exists()
     assert res.output.file_copy.name == "file"
@@ -1295,7 +1295,7 @@ def test_shell_cmd_inputspec_10(plugin, results_function, tmpdir):
     )
 
     assert shelly.inputs.executable == cmd_exec
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "hello from boston"
 
 
@@ -1345,7 +1345,7 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
         name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.out_file.exists()
     # the file is  copied, and than it is changed in place
@@ -1403,7 +1403,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
         name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.out_file.exists()
     # the file is uses a soft link, but it creates and an extra copy before modifying
@@ -1475,7 +1475,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
         name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.out_file.exists()
     # the file is  not copied, it is changed in place
@@ -1485,7 +1485,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_state_1(plugin, results_function):
+def test_shell_cmd_inputspec_state_1(plugin, results_function, tmpdir):
     """  adding state to the input from input_spec """
     cmd_exec = "echo"
     hello = ["HELLO", "hi"]
@@ -1515,7 +1515,7 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function):
     assert shelly.inputs.executable == cmd_exec
     # todo: this doesn't work when state
     # assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res[0].output.stdout == "HELLO\n"
     assert res[1].output.stdout == "hi\n"
 
@@ -1565,7 +1565,7 @@ def test_shell_cmd_inputspec_typeval_2(use_validator):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_state_1a(plugin, results_function):
+def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmpdir):
     """  adding state to the input from input_spec
         using shorter syntax for input_spec (without default)
     """
@@ -1589,13 +1589,13 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function):
     ).split("text")
     assert shelly.inputs.executable == cmd_exec
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res[0].output.stdout == "HELLO\n"
     assert res[1].output.stdout == "hi\n"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_state_2(plugin, results_function):
+def test_shell_cmd_inputspec_state_2(plugin, results_function, tmpdir):
     """
         adding splitter to input tha is used in the output_file_tamplate
     """
@@ -1623,7 +1623,7 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function):
         name="shelly", executable=cmd, args=args, input_spec=my_input_spec
     ).split("args")
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     for i in range(len(args)):
         assert res[i].output.stdout == ""
         assert res[i].output.out1.exists()
@@ -1670,7 +1670,7 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmpdir):
     assert shelly.inputs.executable == cmd_exec
     # todo: this doesn't work when state
     # assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res[0].output.stdout == "hello from pydra"
     assert res[1].output.stdout == "have a nice one"
 
@@ -1725,7 +1725,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
     ).split("orig_file")
 
     txt_l = ["from pydra", "world"]
-    res_l = results_function(shelly, plugin)
+    res_l = results_function(shelly, plugin, tmpdir)
     for i, res in enumerate(res_l):
         assert res.output.stdout == ""
         assert res.output.out_file.exists()
@@ -2218,7 +2218,7 @@ def test_wf_shell_cmd_ndst_1(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_1(plugin, results_function):
+def test_shell_cmd_outputspec_1(plugin, results_function, tmpdir):
     """
         customised output_spec, adding files to the output, providing specific pathname
     """
@@ -2230,13 +2230,13 @@ def test_shell_cmd_outputspec_1(plugin, results_function):
     )
     shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.newfile.exists()
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_1a(plugin, results_function):
+def test_shell_cmd_outputspec_1a(plugin, results_function, tmpdir):
     """
         customised output_spec, adding files to the output, providing specific pathname
     """
@@ -2248,7 +2248,7 @@ def test_shell_cmd_outputspec_1a(plugin, results_function):
     )
     shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.newfile.exists()
 
@@ -2272,7 +2272,7 @@ def test_shell_cmd_outputspec_1b_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_2(plugin, results_function):
+def test_shell_cmd_outputspec_2(plugin, results_function, tmpdir):
     """
         customised output_spec, adding files to the output,
         using a wildcard in default
@@ -2285,7 +2285,7 @@ def test_shell_cmd_outputspec_2(plugin, results_function):
     )
     shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.newfile.exists()
 
@@ -2310,7 +2310,7 @@ def test_shell_cmd_outputspec_2a_exception(plugin):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_3(plugin, results_function):
+def test_shell_cmd_outputspec_3(plugin, results_function, tmpdir):
     """
         customised output_spec, adding files to the output,
         using a wildcard in default, should collect two files
@@ -2323,7 +2323,7 @@ def test_shell_cmd_outputspec_3(plugin, results_function):
     )
     shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     # newfile is a list
     assert len(res.output.newfile) == 2
@@ -2331,7 +2331,7 @@ def test_shell_cmd_outputspec_3(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_4(plugin, results_function):
+def test_shell_cmd_outputspec_4(plugin, results_function, tmpdir):
     """
         customised output_spec, adding files to the output,
         using a function to collect output, the function is saved in the field metadata
@@ -2349,7 +2349,7 @@ def test_shell_cmd_outputspec_4(plugin, results_function):
     )
     shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     # newfile is a list
     assert len(res.output.newfile) == 2
@@ -2357,7 +2357,7 @@ def test_shell_cmd_outputspec_4(plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_5(plugin, results_function):
+def test_shell_cmd_outputspec_5(plugin, results_function, tmpdir):
     """
         providing output name by providing output_file_template
         (similar to the previous example, but not touching input_spec)
@@ -2386,7 +2386,7 @@ def test_shell_cmd_outputspec_5(plugin, results_function):
         name="shelly", executable=cmd, args=args, output_spec=my_output_spec
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
 
@@ -2421,7 +2421,7 @@ def test_shell_cmd_outputspec_5a():
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_state_outputspec_1(plugin, results_function):
+def test_shell_cmd_state_outputspec_1(plugin, results_function, tmpdir):
     """
         providing output name by providing output_file_template
         splitter for a field that is used in the template
@@ -2450,7 +2450,7 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function):
         name="shelly", executable=cmd, args=args, output_spec=my_output_spec
     ).split("args")
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, plugin, tmpdir)
     for i in range(len(args)):
         assert res[i].output.stdout == ""
         assert res[i].output.out1.exists()
