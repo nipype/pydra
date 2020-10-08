@@ -175,7 +175,7 @@ def _copyfile_single_value(wf_path, value):
         return {
             key: _copyfile_single_value(wf_path, val) for (key, val) in value.items()
         }
-    elif is_existing_file(value):
+    elif is_existing_path(value, raise_notfound=False):
         new_path = wf_path / Path(value).name
         copyfile(originalfile=value, newfile=new_path, copy=True, use_hardlink=True)
         return new_path
@@ -664,13 +664,13 @@ def hash_value(value, tp=None, metadata=None):
     else:  # not a container
         if (
             (tp is File or "pydra.engine.specs.File" in str(tp))
-            and is_existing_path(tp)
+            and is_existing_path(value)
             and "container_path" not in metadata
         ):
             return hash_file(value, raise_notfound=True)
         elif (
             (tp is Directory or "pydra.engine.specs.Directory" in str(tp))
-            and is_existing_path(tp, raise_notfound=True)
+            and is_existing_path(value, raise_notfound=True)
             and "container_path" not in metadata
         ):
             return hash_dir(value)

@@ -640,7 +640,6 @@ def is_existing_path(value, raise_notfound=True):
         return Path(value).exists()
     except TypeError:
         if raise_notfound:
-            # if Path(value).is_symlink():
             raise FileNotFoundError(f"{value}: broken symlink or path doesn't exist")
         else:
             return False
