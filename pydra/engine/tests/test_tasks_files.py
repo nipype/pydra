@@ -11,12 +11,24 @@ from ..specs import File, Directory
 
 
 @mark.task
-def dir_count_file(dirpath: Directory):
+def dir_count_file(dirpath):
     return len(os.listdir(dirpath))
 
 
 @mark.task
-def file_append_text(file: File):
+def dir_count_file_annot(dirpath: Directory):
+    return len(os.listdir(dirpath))
+
+
+@mark.task
+def file_append_text(file):
+    with open(file, "a") as f:
+        f.write("!")
+    return f
+
+
+@mark.task
+def file_append_text_annot(file: File):
     with open(file, "a") as f:
         f.write("!")
     return f
@@ -68,7 +80,7 @@ def test_text_task(tmpdir):
     file = tmpdir.join("file.txt")
     with open(file, "w") as f:
         f.write("hello")
-    nn = file_append_text(name="add_text", file=file)
+    nn = file_append_text_annot(name="add_text", file=file)
 
     with Submitter(plugin="cf") as sub:
         sub(nn)
@@ -83,7 +95,7 @@ def test_broken_task(tmpdir):
     """ task that takes file as an input"""
     os.chdir(tmpdir)
     file = os.path.join(os.getcwd(), "file.txt")
-    nn = file_append_text(name="add_text", file=file)
+    nn = file_append_text_annot(name="add_text", file=file)
 
     with pytest.raises(FileNotFoundError) as e:
         with Submitter(plugin="cf") as sub:
@@ -150,3 +162,109 @@ def test_file_annotation_np_1(tmpdir):
     results = nn.result()
     res = np.load(results.output.out)
     assert res == np.array([4])
+
+
+def test_broken_file(tmpdir):
+    """ Test how broken paths are handled during file hashing"""
+    # file path doesn't exist
+    file = os.path.join(tmpdir, "A.txt")
+
+    nn2 = file_append_text_annot(name="add_text", file=file)
+    with pytest.raises(AttributeError) as e:
+        with Submitter(plugin="cf") as sub:
+            sub(nn2)
+
+
+def test_broken_file_link(tmpdir):
+    """
+    Test how broken symlinks are handled during hashing
+    """
+    os.chdir(tmpdir)
+    file = tmpdir.join("file1")
+    file.open("w+").close()
+
+    file_link = tmpdir.join("file_link")
+    os.symlink(file, file_link)
+    os.remove(file)
+
+    nn = file_append_text(name="add_text", file=file_link)
+    # raises error inside task
+    # unless variable is defined as a File pydra will treat it as a string
+    with pytest.raises(FileNotFoundError) as e:
+        with Submitter(plugin="cf") as sub:
+            sub(nn)
+
+    # raises error before task is run
+    # TODO typecheck at add???
+    nn2 = file_append_text(name="add_text", file=file)
+    with pytest.raises(AttributeError) as e:
+        with Submitter(plugin="cf") as sub:
+            sub(nn2)
+
+
+@pytest.mark.skip(reason="pickling error with type hinting - how to improve?")
+def test_broken_dir():
+    """ Test how broken directories are handled during hashing"""
+
+    # dirpath doesn't exist
+    nn = dir_count_file(name="listdir", dirpath="/broken_dir_path/")
+    # raises error inside task
+    # unless variable is defined as a File pydra will treat it as a string
+    with pytest.raises(FileNotFoundError) as e:
+        with Submitter(plugin="cf") as sub:
+            sub(nn)
+
+    # raises error before task is run
+    nn2 = dir_count_file_annot(name="listdir", dirpath="/broken_dir_path/")
+    with pytest.raises(FileNotFoundError) as e:
+        with Submitter(plugin="cf") as sub:
+            sub(nn2)
+
+
+def test_broken_dir_link(tmpdir):
+    """
+    Test how broken symlinks are hashed in hash_dir
+    """
+    # broken symlink to dir path
+    dir1 = tmpdir.join("dir1")
+    os.mkdir(dir1)
+    dir1_link = tmpdir.join("dir1_link")
+    os.symlink(dir1, dir1_link)
+    os.rmdir(dir1)
+
+    nn = dir_count_file(name="listdir", dirpath=dir1)
+    # raises error while running task
+    with pytest.raises(FileNotFoundError) as e:
+        with Submitter(plugin="cf") as sub:
+            sub(nn)
+
+    nn2 = dir_count_file_annot(name="listdir", dirpath=dir1)
+    # raises error before task is run
+    with pytest.raises(FileNotFoundError) as e:
+        with Submitter(plugin="cf") as sub:
+            sub(nn2)
+
+
+def test_broken_dir_link2(tmpdir):
+    # existing dirs with broken symlink(s) are hashed
+    dir2 = tmpdir.join("dir2")
+    os.mkdir(dir2)
+    file1 = dir2.join("file1")
+    file2 = dir2.join("file2")
+    file1.open("w+").close()
+    file2.open("w+").close()
+
+    file1_link = dir2.join("file1_link")
+    os.symlink(file1, file1_link)
+    os.remove(file1)  # file1_link is broken
+
+    nn = dir_count_file(name="listdir", dirpath=dir2)
+    # does not raises error because pydra treats dirpath as a string
+    with Submitter(plugin="cf") as sub:
+        sub(nn)
+
+    nn2 = dir_count_file_annot(name="listdir", dirpath=str(dir2))
+    # raises error when there's type hinting
+    with pytest.raises(FileNotFoundError) as e:
+        with Submitter(plugin="cf") as sub:
+            sub(nn2)

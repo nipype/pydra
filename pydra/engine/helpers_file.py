@@ -632,21 +632,17 @@ def is_local_file(f):
     return f.type is File and "container_path" not in f.metadata
 
 
-def is_existing_file(value):
+def is_existing_path(value, raise_notfound=True):
     """ checking if an object is an existing file"""
     if isinstance(value, str) and value == "":
         return False
     try:
         return Path(value).exists()
     except TypeError:
-        return False
-
-
-def is_broken(value, filetype):
-    """ checking if an object is an existing file"""
-    if is_existing_file(value, str):
-        pass
-    try:
-        return Path(value).exists()
-    except TypeError:
+        if raise_notfound:
+            # if Path(value).is_symlink():
+            raise FileNotFoundError(f"{value}: broken symlink or path doesn't exist")
+        else:
+            return False
+    else:
         return False
