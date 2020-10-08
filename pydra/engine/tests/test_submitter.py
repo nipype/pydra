@@ -23,7 +23,6 @@ def sleep_add_one(x):
 
 def test_callable_wf(plugin, tmpdir):
     wf = gen_basic_wf()
-    wf.cache_dir = tmpdir
 
     with pytest.raises(NotImplementedError):
         wf()
@@ -33,6 +32,8 @@ def test_callable_wf(plugin, tmpdir):
     del wf, res
 
     wf = gen_basic_wf()
+    wf.cache_dir = tmpdir
+
     sub = Submitter(plugin)
     res = wf(submitter=sub)
     assert res.output.out == 9
@@ -96,8 +97,9 @@ def test_wf_in_wf(plugin, tmpdir):
     subwf.set_output([("out", subwf.sub_b.lzout.out)])
     # connect, then add
     subwf.inputs.x = wf.wf_a.lzout.out
-    wf.add(subwf)
+    subwf.cache_dir = tmpdir
 
+    wf.add(subwf)
     wf.add(sleep_add_one(name="wf_b", x=wf.sub_wf.lzout.out))
     wf.set_output([("out", wf.wf_b.lzout.out)])
     wf.cache_dir = tmpdir
@@ -118,6 +120,7 @@ def test_wf2(plugin_dask_opt, tmpdir):
     wfnd.add(sleep_add_one(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
     wfnd.inputs.x = 2
+    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
