@@ -3599,6 +3599,7 @@ def test_wf_lzoutall_1(plugin, tmpdir):
     wf.inputs.x = 2
     wf.inputs.y = 3
     wf.plugin = plugin
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -3620,6 +3621,7 @@ def test_wf_lzoutall_1a(plugin, tmpdir):
     wf.inputs.x = 2
     wf.inputs.y = 3
     wf.plugin = plugin
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -3641,6 +3643,7 @@ def test_wf_lzoutall_st_1(plugin, tmpdir):
     wf.inputs.x = [2, 20]
     wf.inputs.y = [3, 30]
     wf.plugin = plugin
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -3662,6 +3665,7 @@ def test_wf_lzoutall_st_1a(plugin, tmpdir):
     wf.inputs.x = [2, 20]
     wf.inputs.y = [3, 30]
     wf.plugin = plugin
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -3690,6 +3694,7 @@ def test_wf_lzoutall_st_2(plugin, tmpdir):
     wf.inputs.x = [2, 20]
     wf.inputs.y = [3, 30]
     wf.plugin = plugin
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -3714,6 +3719,7 @@ def test_wf_lzoutall_st_2a(plugin, tmpdir):
     wf.inputs.x = [2, 20]
     wf.inputs.y = [3, 30]
     wf.plugin = plugin
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -3731,7 +3737,7 @@ def test_wf_lzoutall_st_2a(plugin, tmpdir):
 
 def test_wf_resultfile_1(plugin, tmpdir):
     """ workflow with a file in the result, file should be copied to the wf dir"""
-    wf = Workflow(name="wf_file_1", input_spec=["x"])
+    wf = Workflow(name="wf_file_1", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_write_file(name="writefile", filename=wf.lzin.x))
     wf.inputs.x = "file_1.txt"
     wf.plugin = plugin
@@ -3750,7 +3756,7 @@ def test_wf_resultfile_2(plugin, tmpdir):
     """ workflow with a list of files in the wf result,
         all files should be copied to the wf dir
     """
-    wf = Workflow(name="wf_file_1", input_spec=["x"])
+    wf = Workflow(name="wf_file_1", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_write_file_list(name="writefile", filename_list=wf.lzin.x))
     file_list = ["file_1.txt", "file_2.txt", "file_3.txt"]
     wf.inputs.x = file_list
@@ -3771,7 +3777,7 @@ def test_wf_resultfile_3(plugin, tmpdir):
     """ workflow with a dictionaries of files in the wf result,
         all files should be copied to the wf dir
     """
-    wf = Workflow(name="wf_file_1", input_spec=["x"])
+    wf = Workflow(name="wf_file_1", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_write_file_list2dict(name="writefile", filename_list=wf.lzin.x))
     file_list = ["file_1.txt", "file_2.txt", "file_3.txt"]
     wf.inputs.x = file_list
@@ -3794,7 +3800,7 @@ def test_wf_resultfile_3(plugin, tmpdir):
 
 def test_wf_upstream_error1(plugin, tmpdir):
     """ workflow with two tasks, task2 dependent on an task1 which raised an error"""
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
@@ -3812,7 +3818,7 @@ def test_wf_upstream_error2(plugin, tmpdir):
     """ task2 dependent on task1, task1 errors, workflow-level split on task 1
         goal - workflow finish running, one output errors but the other doesn't
     """
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = [1, "hi"]  # TypeError for adding str and int
     wf.split("x")  # workflow-level split
@@ -3831,7 +3837,7 @@ def test_wf_upstream_error3(plugin, tmpdir):
     """ task2 dependent on task1, task1 errors, task-level split on task 1
         goal - workflow finish running, one output errors but the other doesn't
     """
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = [1, "hi"]  # TypeError for adding str and int
     wf.addvar1.split("a")  # task-level split
@@ -3848,7 +3854,7 @@ def test_wf_upstream_error3(plugin, tmpdir):
 
 def test_wf_upstream_error4(plugin, tmpdir):
     """ workflow with one task, which raises an error"""
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
@@ -3863,7 +3869,7 @@ def test_wf_upstream_error4(plugin, tmpdir):
 
 def test_wf_upstream_error5(plugin, tmpdir):
     """ nested workflow with one task, which raises an error"""
-    wf_main = Workflow(name="wf_main", input_spec=["x"])
+    wf_main = Workflow(name="wf_main", input_spec=["x"], cache_dir=tmpdir)
     wf = Workflow(name="wf", input_spec=["x"], x=wf_main.lzin.x)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.plugin = plugin
@@ -3883,7 +3889,7 @@ def test_wf_upstream_error5(plugin, tmpdir):
 
 def test_wf_upstream_error6(plugin, tmpdir):
     """ nested workflow with two tasks, the first one raises an error"""
-    wf_main = Workflow(name="wf_main", input_spec=["x"])
+    wf_main = Workflow(name="wf_main", input_spec=["x"], cache_dir=tmpdir)
     wf = Workflow(name="wf", input_spec=["x"], x=wf_main.lzin.x)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
@@ -3907,7 +3913,7 @@ def test_wf_upstream_error7(plugin, tmpdir):
     workflow with three sequential tasks, the first task raises an error
     the last task is set as the workflow output
     """
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
@@ -3929,7 +3935,7 @@ def test_wf_upstream_error7a(plugin, tmpdir):
     workflow with three sequential tasks, the first task raises an error
     the second task is set as the workflow output
     """
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
@@ -3951,7 +3957,7 @@ def test_wf_upstream_error7b(plugin, tmpdir):
     workflow with three sequential tasks, the first task raises an error
     the second and the third tasks are set as the workflow output
     """
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
@@ -3970,7 +3976,7 @@ def test_wf_upstream_error7b(plugin, tmpdir):
 
 def test_wf_upstream_error8(plugin, tmpdir):
     """ workflow with three tasks, the first one raises an error, so 2 others are removed"""
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
@@ -3994,7 +4000,7 @@ def test_wf_upstream_error9(plugin, tmpdir):
     one branch has an error, the second is fine
     the errored branch is connected to the workflow output
     """
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = 2
     wf.add(fun_addvar(name="err", a=wf.addvar1.lzout.out, b="hi"))
@@ -4021,7 +4027,7 @@ def test_wf_upstream_error9a(plugin, tmpdir):
     the branch without error is connected to the workflow output
     so the workflow finished clean
     """
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = 2
     wf.add(fun_addvar(name="err", a=wf.addvar1.lzout.out, b="hi"))
@@ -4044,7 +4050,7 @@ def test_wf_upstream_error9b(plugin, tmpdir):
     one branch has an error, the second is fine
     both branches are connected to the workflow output
     """
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = 2
     wf.add(fun_addvar(name="err", a=wf.addvar1.lzout.out, b="hi"))
