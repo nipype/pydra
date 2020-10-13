@@ -93,7 +93,7 @@ def test_shell_cmd_2b(plugin, results_function, tmpdir):
 
 
 @pytest.mark.flaky(reruns=2)
-def test_shell_cmd_3(plugin_dask_opt):
+def test_shell_cmd_3(plugin_dask_opt, tmpdir):
     """ commands without arguments
         splitter = executable
     """
@@ -101,6 +101,8 @@ def test_shell_cmd_3(plugin_dask_opt):
 
     # all args given as executable
     shelly = ShellCommandTask(name="shelly", executable=cmd).split("executable")
+    shelly.cache_dir = tmpdir
+
     assert shelly.cmdline == ["pwd", "whoami"]
     res = shelly(plugin=plugin_dask_opt)
     assert Path(res[0].output.stdout.rstrip()) == shelly.output_dir[0]
@@ -113,7 +115,7 @@ def test_shell_cmd_3(plugin_dask_opt):
     assert res[0].output.stderr == res[1].output.stderr == ""
 
 
-def test_shell_cmd_4(plugin):
+def test_shell_cmd_4(plugin, tmpdir):
     """ a command with arguments, using executable and args
         splitter=args
     """
@@ -123,6 +125,8 @@ def test_shell_cmd_4(plugin):
     shelly = ShellCommandTask(name="shelly", executable=cmd_exec, args=cmd_args).split(
         splitter="args"
     )
+    shelly.cache_dir = tmpdir
+
     assert shelly.inputs.executable == "echo"
     assert shelly.inputs.args == ["nipype", "pydra"]
     assert shelly.cmdline == ["echo nipype", "echo pydra"]
@@ -135,7 +139,7 @@ def test_shell_cmd_4(plugin):
     assert res[0].output.stderr == res[1].output.stderr == ""
 
 
-def test_shell_cmd_5(plugin):
+def test_shell_cmd_5(plugin, tmpdir):
     """ a command with arguments
         using splitter and combiner for args
     """
@@ -147,6 +151,8 @@ def test_shell_cmd_5(plugin):
         .split(splitter="args")
         .combine("args")
     )
+    shelly.cache_dir = tmpdir
+
     assert shelly.inputs.executable == "echo"
     assert shelly.inputs.args == ["nipype", "pydra"]
     assert shelly.cmdline == ["echo nipype", "echo pydra"]
@@ -156,7 +162,7 @@ def test_shell_cmd_5(plugin):
     assert res[1].output.stdout == "pydra\n"
 
 
-def test_shell_cmd_6(plugin):
+def test_shell_cmd_6(plugin, tmpdir):
     """ a command with arguments,
         outer splitter for executable and args
     """
@@ -166,6 +172,8 @@ def test_shell_cmd_6(plugin):
     shelly = ShellCommandTask(name="shelly", executable=cmd_exec, args=cmd_args).split(
         splitter=["executable", "args"]
     )
+    shelly.cache_dir = tmpdir
+
     assert shelly.inputs.executable == ["echo", ["echo", "-n"]]
     assert shelly.inputs.args == ["nipype", "pydra"]
     assert shelly.cmdline == [
@@ -197,7 +205,7 @@ def test_shell_cmd_6(plugin):
     )
 
 
-def test_shell_cmd_7(plugin):
+def test_shell_cmd_7(plugin, tmpdir):
     """ a command with arguments,
         outer splitter for executable and args, and combiner=args
     """
@@ -209,6 +217,8 @@ def test_shell_cmd_7(plugin):
         .split(splitter=["executable", "args"])
         .combine("args")
     )
+    shelly.cache_dir = tmpdir
+
     assert shelly.inputs.executable == ["echo", ["echo", "-n"]]
     assert shelly.inputs.args == ["nipype", "pydra"]
 
@@ -224,7 +234,7 @@ def test_shell_cmd_7(plugin):
 # tests with workflows
 
 
-def test_wf_shell_cmd_1(plugin):
+def test_wf_shell_cmd_1(plugin, tmpdir):
     """ a workflow with two connected commands"""
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
     wf.inputs.cmd1 = "pwd"
@@ -237,6 +247,7 @@ def test_wf_shell_cmd_1(plugin):
     )
 
     wf.set_output([("out", wf.shelly_ls.lzout.stdout)])
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
@@ -427,13 +438,14 @@ def test_shell_cmd_inputspec_3b(plugin, results_function, tmpdir):
         name="shelly", executable=cmd_exec, input_spec=my_input_spec
     )
     shelly.inputs.text = hello
+
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
     res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == "HELLO\n"
 
 
-def test_shell_cmd_inputspec_3c_exception(plugin):
+def test_shell_cmd_inputspec_3c_exception(plugin, tmpdir):
     """  mandatory field added to fields, value is not provided, so exception is raised """
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
@@ -458,6 +470,8 @@ def test_shell_cmd_inputspec_3c_exception(plugin):
     shelly = ShellCommandTask(
         name="shelly", executable=cmd_exec, input_spec=my_input_spec
     )
+    shelly.cache_dir = tmpdir
+
     with pytest.raises(Exception) as excinfo:
         shelly()
     assert "mandatory" in str(excinfo.value)
@@ -491,6 +505,8 @@ def test_shell_cmd_inputspec_3c(plugin, results_function, tmpdir):
     shelly = ShellCommandTask(
         name="shelly", executable=cmd_exec, input_spec=my_input_spec
     )
+    shelly.cache_dir = tmpdir
+
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo"
     res = results_function(shelly, plugin, tmpdir)
@@ -520,6 +536,7 @@ def test_shell_cmd_inputspec_4(plugin, results_function, tmpdir):
     shelly = ShellCommandTask(
         name="shelly", executable=cmd_exec, input_spec=my_input_spec
     )
+    shelly.cache_dir = tmpdir
 
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo Hello"
@@ -1742,7 +1759,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
-def test_wf_shell_cmd_2(plugin_dask_opt):
+def test_wf_shell_cmd_2(plugin_dask_opt, tmpdir):
     """ a workflow with input with defined output_file_template (str)
         that requires wf.lzin
     """
@@ -1750,6 +1767,7 @@ def test_wf_shell_cmd_2(plugin_dask_opt):
 
     wf.inputs.cmd = "touch"
     wf.inputs.args = "newfile.txt"
+    wf.cache_dir = tmpdir
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1788,7 +1806,7 @@ def test_wf_shell_cmd_2(plugin_dask_opt):
     assert res.output.out_f.parent == wf.output_dir
 
 
-def test_wf_shell_cmd_2a(plugin):
+def test_wf_shell_cmd_2a(plugin, tmpdir):
     """ a workflow with input with defined output_file_template (tuple)
         that requires wf.lzin
     """
@@ -1796,6 +1814,7 @@ def test_wf_shell_cmd_2a(plugin):
 
     wf.inputs.cmd = "touch"
     wf.inputs.args = "newfile.txt"
+    wf.cache_dir = tmpdir
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1833,7 +1852,7 @@ def test_wf_shell_cmd_2a(plugin):
     assert res.output.out_f.exists()
 
 
-def test_wf_shell_cmd_3(plugin):
+def test_wf_shell_cmd_3(plugin, tmpdir):
     """ a workflow with 2 tasks,
         first one has input with output_file_template (str, uses wf.lzin),
         that is passed to the second task
@@ -1843,6 +1862,7 @@ def test_wf_shell_cmd_3(plugin):
     wf.inputs.cmd1 = "touch"
     wf.inputs.cmd2 = "cp"
     wf.inputs.args = "newfile.txt"
+    wf.cache_dir = tmpdir
 
     my_input_spec1 = SpecInfo(
         name="Input",
@@ -1929,7 +1949,7 @@ def test_wf_shell_cmd_3(plugin):
     assert res.output.cp_file.parent == wf.output_dir
 
 
-def test_wf_shell_cmd_3a(plugin):
+def test_wf_shell_cmd_3a(plugin, tmpdir):
     """ a workflow with 2 tasks,
         first one has input with output_file_template (str, uses wf.lzin),
         that is passed to the second task
@@ -1939,6 +1959,7 @@ def test_wf_shell_cmd_3a(plugin):
     wf.inputs.cmd1 = "touch"
     wf.inputs.cmd2 = "cp"
     wf.inputs.args = "newfile.txt"
+    wf.cache_dir = tmpdir
 
     my_input_spec1 = SpecInfo(
         name="Input",
@@ -2120,7 +2141,7 @@ def test_wf_shell_cmd_state_1(plugin):
         assert res.output.cp_file.parent == wf.output_dir[i]
 
 
-def test_wf_shell_cmd_ndst_1(plugin):
+def test_wf_shell_cmd_ndst_1(plugin, tmpdir):
     """ a workflow with 2 tasks and a splitter on the node level,
         first one has input with output_file_template (str, uses wf.lzin),
         that is passed to the second task
@@ -2130,6 +2151,7 @@ def test_wf_shell_cmd_ndst_1(plugin):
     wf.inputs.cmd1 = "touch"
     wf.inputs.cmd2 = "cp"
     wf.inputs.args = ["newfile_1.txt", "newfile_2.txt"]
+    wf.cache_dir = tmpdir
 
     my_input_spec1 = SpecInfo(
         name="Input",
@@ -2228,7 +2250,9 @@ def test_shell_cmd_outputspec_1(plugin, results_function, tmpdir):
         fields=[("newfile", File, "newfile_tmp.txt")],
         bases=(ShellOutSpec,),
     )
-    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
+    )
 
     res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
@@ -2246,14 +2270,16 @@ def test_shell_cmd_outputspec_1a(plugin, results_function, tmpdir):
         fields=[("newfile", attr.ib(type=File, default="newfile_tmp.txt"))],
         bases=(ShellOutSpec,),
     )
-    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
+    )
 
     res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.newfile.exists()
 
 
-def test_shell_cmd_outputspec_1b_exception(plugin):
+def test_shell_cmd_outputspec_1b_exception(plugin, tmpdir):
     """
         customised output_spec, adding files to the output, providing specific pathname
     """
@@ -2263,7 +2289,9 @@ def test_shell_cmd_outputspec_1b_exception(plugin):
         fields=[("newfile", File, "newfile_tmp_.txt")],
         bases=(ShellOutSpec,),
     )
-    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
+    )
 
     with pytest.raises(Exception) as exinfo:
         with Submitter(plugin=plugin) as sub:
@@ -2283,14 +2311,16 @@ def test_shell_cmd_outputspec_2(plugin, results_function, tmpdir):
         fields=[("newfile", File, "newfile_*.txt")],
         bases=(ShellOutSpec,),
     )
-    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
+    )
 
     res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
     assert res.output.newfile.exists()
 
 
-def test_shell_cmd_outputspec_2a_exception(plugin):
+def test_shell_cmd_outputspec_2a_exception(plugin, tmpdir):
     """
         customised output_spec, adding files to the output,
         using a wildcard in default
@@ -2301,7 +2331,9 @@ def test_shell_cmd_outputspec_2a_exception(plugin):
         fields=[("newfile", File, "newfile_*K.txt")],
         bases=(ShellOutSpec,),
     )
-    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
+    )
 
     with pytest.raises(Exception) as excinfo:
         with Submitter(plugin=plugin) as sub:
@@ -2321,7 +2353,9 @@ def test_shell_cmd_outputspec_3(plugin, results_function, tmpdir):
         fields=[("newfile", File, "newfile_*.txt")],
         bases=(ShellOutSpec,),
     )
-    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
+    )
 
     res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
@@ -2347,7 +2381,9 @@ def test_shell_cmd_outputspec_4(plugin, results_function, tmpdir):
         fields=[("newfile", attr.ib(type=File, metadata={"callable": gather_output}))],
         bases=(ShellOutSpec,),
     )
-    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
+    )
 
     res = results_function(shelly, plugin, tmpdir)
     assert res.output.stdout == ""
@@ -2459,7 +2495,7 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function, tmpdir):
 # customised output_spec for tasks in workflows
 
 
-def test_shell_cmd_outputspec_wf_1(plugin):
+def test_shell_cmd_outputspec_wf_1(plugin, tmpdir):
     """
         customised output_spec for tasks within a Workflow,
         adding files to the output, providing specific pathname
@@ -2468,6 +2504,7 @@ def test_shell_cmd_outputspec_wf_1(plugin):
     cmd = ["touch", "newfile_tmp.txt"]
     wf = Workflow(name="wf", input_spec=["cmd"])
     wf.inputs.cmd = cmd
+    wf.cache_dir = tmpdir
 
     my_output_spec = SpecInfo(
         name="Output",
