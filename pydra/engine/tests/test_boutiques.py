@@ -26,12 +26,12 @@ Infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_boutiques_1(maskfile, plugin, results_function):
+def test_boutiques_1(maskfile, plugin, results_function, tmpdir):
     """ simple task to run fsl.bet using BoshTask"""
     btask = BoshTask(name="NA", zenodo_id="1482743")
     btask.inputs.infile = Infile
     btask.inputs.maskfile = maskfile
-    res = results_function(btask, plugin)
+    res = results_function(btask, plugin, tmpdir)
 
     assert res.output.return_code == 0
 
