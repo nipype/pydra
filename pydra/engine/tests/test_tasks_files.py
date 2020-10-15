@@ -21,20 +21,6 @@ def dir_count_file_annot(dirpath: Directory):
 
 
 @mark.task
-def file_append_text(file):
-    with open(file, "a") as f:
-        f.write("!")
-    return f
-
-
-@mark.task
-def file_append_text_annot(file: File):
-    with open(file, "a") as f:
-        f.write("!")
-    return f
-
-
-@mark.task
 def file_np_add2(file):
     array_inp = np.load(file)
     array_out = array_inp + 2
@@ -74,33 +60,6 @@ def file_np_mult_annot(file: File) -> ty.NamedTuple("Output", [("out", File)]):
     file_out = os.path.join(cwd, "arr_out.npy")
     np.save(file_out, array_out)
     return file_out
-
-
-def test_text_task(tmpdir):
-    file = tmpdir.join("file.txt")
-    with open(file, "w") as f:
-        f.write("hello")
-    nn = file_append_text_annot(name="add_text", file=file)
-
-    with Submitter(plugin="cf") as sub:
-        sub(nn)
-
-    results = nn.result()
-    with open(file, "r") as text:
-        text.read()
-    assert text == "hello!"
-
-
-def test_broken_task(tmpdir):
-    """ task that takes file as an input"""
-    os.chdir(tmpdir)
-    file = os.path.join(os.getcwd(), "file.txt")
-    nn = file_append_text_annot(name="add_text", file=file)
-
-    with pytest.raises(FileNotFoundError) as e:
-        with Submitter(plugin="cf") as sub:
-            sub(nn)
-    assert "File doesn't exist" in str(e.value)
 
 
 def test_task_np_1(tmpdir):
@@ -165,11 +124,16 @@ def test_file_annotation_np_1(tmpdir):
 
 
 def test_broken_file(tmpdir):
-    """ Test how broken paths are handled during file hashing"""
-    # file path doesn't exist
-    file = os.path.join(tmpdir, "A.txt")
+    """ task that takes file as an input"""
+    os.chdir(tmpdir)
+    file = os.path.join(os.getcwd(), "non_existent.npy")
 
-    nn2 = file_append_text_annot(name="add_text", file=file)
+    nn = file_np_add2(name="add2", file=file)
+    with pytest.raises(FileNotFoundError) as e:
+        with Submitter(plugin="cf") as sub:
+            sub(nn)
+
+    nn2 = file_np_add2_annot(name="add2_annot", file=file)
     with pytest.raises(AttributeError) as e:
         with Submitter(plugin="cf") as sub:
             sub(nn2)
@@ -180,14 +144,15 @@ def test_broken_file_link(tmpdir):
     Test how broken symlinks are handled during hashing
     """
     os.chdir(tmpdir)
-    file = tmpdir.join("file1")
-    file.open("w+").close()
+    file = os.path.join(os.getcwd(), "arr.npy")
+    arr = np.array([2])
+    np.save(file, arr)
 
-    file_link = tmpdir.join("file_link")
+    file_link = os.path.join(os.getcwd(), "link_to_arr.npy")
     os.symlink(file, file_link)
     os.remove(file)
 
-    nn = file_append_text(name="add_text", file=file_link)
+    nn = file_np_add2(name="add2", file=file_link)
     # raises error inside task
     # unless variable is defined as a File pydra will treat it as a string
     with pytest.raises(FileNotFoundError) as e:
@@ -196,13 +161,12 @@ def test_broken_file_link(tmpdir):
 
     # raises error before task is run
     # TODO typecheck at add???
-    nn2 = file_append_text(name="add_text", file=file)
+    nn2 = file_np_add2_annot(name="add2_annot", file=file_link)
     with pytest.raises(AttributeError) as e:
         with Submitter(plugin="cf") as sub:
             sub(nn2)
 
 
-@pytest.mark.skip(reason="pickling error with type hinting - how to improve?")
 def test_broken_dir():
     """ Test how broken directories are handled during hashing"""
 
