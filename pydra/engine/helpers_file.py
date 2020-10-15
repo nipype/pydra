@@ -68,7 +68,6 @@ def split_filename(fname):
 
 def hash_file(afile, raise_notfound=True, chunk_len=8192, crypto=sha256):
     """Compute hash of a file using 'crypto' module."""
-    from .specs import LazyField
 
     try:
         fp = open(afile, "rb")
@@ -126,7 +125,6 @@ def hash_dir(
     hash : :obj:`str`
         Hash of the directory contents.
     """
-    from .specs import LazyField
 
     if not Path(dirpath).is_dir():
         if raise_notfound:
@@ -634,6 +632,10 @@ def is_local_file(f):
 
 def is_existing_path(value, raise_notfound=True):
     """ checking if an object is an existing file"""
+    from .specs import LazyField
+
+    if value is None or isinstance(value, LazyField) or isinstance(value, list):
+        return None
     if isinstance(value, str) and value == "":
         return False
     try:
