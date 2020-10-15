@@ -663,13 +663,14 @@ def hash_value(value, tp=None, metadata=None):
         return [list(el) for el in sorted(dict_hash.items(), key=lambda x: x[0])]
     else:  # not a container
         if (
-            (tp is File or "pydra.engine.specs.File" in str(tp))
+            (tp is File or "pydra.engine.specs.File" == str(tp))
             and is_existing_path(value)
             and "container_path" not in metadata
         ):
+            # breakpoint()
             return hash_file(value, raise_notfound=True)
         elif (
-            (tp is Directory or "pydra.engine.specs.Directory" in str(tp))
+            (tp is Directory or "pydra.engine.specs.Directory" == str(tp))
             and is_existing_path(value, raise_notfound=True)
             and "container_path" not in metadata
         ):
