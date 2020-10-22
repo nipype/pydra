@@ -139,7 +139,9 @@ def hash_dir(
         for filename in filenames:
             if ignore_hidden_files and filename.startswith("."):
                 continue
-            if is_existing_file(filename):
+            if not is_existing_file(dpath / filename):
+                file_hashes.append(str(filename))
+            else:
                 this_hash = hash_file(dpath / filename)
                 file_hashes.append(this_hash)
 

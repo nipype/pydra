@@ -1338,15 +1338,8 @@ def test_shell_cmd_inputspec_10_err(tmpdir):
         name="shelly", executable=cmd_exec, files=file_2, input_spec=my_input_spec
     )
 
-    # checking if the broken symlink error is raised when checksum is calculated
-    with pytest.raises(FileNotFoundError) as e:
-        checksum = shelly.checksum
-    assert "Broken symlink" in str(e.value)
-
-    # checking if the broken symlink error is raised when the task is run
-    with pytest.raises(FileNotFoundError) as e:
+    with pytest.raises(AttributeError) as e:
         res = shelly()
-    assert "Broken symlink" in str(e.value)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
