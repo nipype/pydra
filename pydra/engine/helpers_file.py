@@ -139,8 +139,9 @@ def hash_dir(
         for filename in filenames:
             if ignore_hidden_files and filename.startswith("."):
                 continue
-            this_hash = hash_file(dpath / filename)
-            file_hashes.append(this_hash)
+            if is_existing_file(filename):
+                this_hash = hash_file(dpath / filename)
+                file_hashes.append(this_hash)
 
     crypto_obj = crypto()
     for h in file_hashes:
