@@ -301,6 +301,7 @@ def cancel(job_name_part):
     return proc2.stdout.decode("utf-8").strip()
 
 
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_cancel_rerun_1(tmpdir):
     """ testing that tasks run with slurm is re-queue
@@ -332,6 +333,7 @@ def test_slurm_cancel_rerun_1(tmpdir):
     assert script_dir.exists()
 
 
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_cancel_rerun_2(tmpdir):
     """ testing that tasks run with slurm that has --no-requeue
