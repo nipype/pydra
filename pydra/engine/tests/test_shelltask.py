@@ -20,10 +20,11 @@ if sys.platform.startswith("win"):
 def test_shell_cmd_1(plugin_dask_opt, results_function, tmpdir):
     """ simple command, no arguments """
     cmd = ["pwd"]
-    shelly = ShellCommandTask(name="shelly", executable=cmd)
+    shelly = ShellCommandTask(name="shelly", executable=cmd, cache_dir=tmpdir)
+    shelly.cache_dir = tmpdir
     assert shelly.cmdline == " ".join(cmd)
 
-    res = results_function(shelly, plugin=plugin_dask_opt, tmpdir=tmpdir)
+    res = results_function(shelly, plugin=plugin_dask_opt)
     assert Path(res.output.stdout.rstrip()) == shelly.output_dir
     assert res.output.return_code == 0
     assert res.output.stderr == ""
@@ -36,9 +37,10 @@ def test_shell_cmd_1_strip(plugin, results_function, tmpdir):
     """
     cmd = ["pwd"]
     shelly = ShellCommandTask(name="shelly", executable=cmd, strip=True)
+    shelly.cache_dir = tmpdir
     assert shelly.cmdline == " ".join(cmd)
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert Path(res.output.stdout) == Path(shelly.output_dir)
     assert res.output.return_code == 0
     assert res.output.stderr == ""
@@ -49,9 +51,10 @@ def test_shell_cmd_2(plugin, results_function, tmpdir):
     """ a command with arguments, cmd and args given as executable """
     cmd = ["echo", "hail", "pydra"]
     shelly = ShellCommandTask(name="shelly", executable=cmd)
+    shelly.cache_dir = tmpdir
     assert shelly.cmdline == " ".join(cmd)
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
     assert res.output.stderr == ""
@@ -64,10 +67,11 @@ def test_shell_cmd_2a(plugin, results_function, tmpdir):
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
     shelly = ShellCommandTask(name="shelly", executable=cmd_exec, args=cmd_args)
+    shelly.cache_dir = tmpdir
     assert shelly.inputs.executable == "echo"
     assert shelly.cmdline == "echo " + " ".join(cmd_args)
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout.strip() == " ".join(cmd_args)
     assert res.output.return_code == 0
     assert res.output.stderr == ""
@@ -80,10 +84,11 @@ def test_shell_cmd_2b(plugin, results_function, tmpdir):
     cmd_args = "pydra"
     # separate command into exec + args
     shelly = ShellCommandTask(name="shelly", executable=cmd_exec, args=cmd_args)
+    shelly.cache_dir = tmpdir
     assert shelly.inputs.executable == "echo"
     assert shelly.cmdline == "echo pydra"
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == "pydra\n"
     assert res.output.return_code == 0
     assert res.output.stderr == ""
@@ -290,12 +295,14 @@ def test_shell_cmd_inputspec_1(plugin, results_function, use_validator, tmpdir):
         args=cmd_args,
         opt_n=cmd_opt,
         input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
+    shelly.cache_dir = tmpdir
     assert shelly.inputs.executable == cmd_exec
     assert shelly.inputs.args == cmd_args
     assert shelly.cmdline == "echo -n hello from pydra"
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == "hello from pydra"
 
 
@@ -338,11 +345,12 @@ def test_shell_cmd_inputspec_2(plugin, results_function, use_validator, tmpdir):
         opt_n=cmd_opt,
         opt_hello=cmd_opt_hello,
         input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.inputs.args == cmd_args
     assert shelly.cmdline == "echo -n HELLO from pydra"
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == "HELLO from pydra"
 
 
@@ -372,11 +380,15 @@ def test_shell_cmd_inputspec_3(plugin, results_function, tmpdir):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, text=hello, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd_exec,
+        text=hello,
+        input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == "HELLO\n"
 
 
@@ -401,11 +413,15 @@ def test_shell_cmd_inputspec_3a(plugin, results_function, tmpdir):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, text=hello, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd_exec,
+        text=hello,
+        input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == "HELLO\n"
 
 
@@ -435,13 +451,13 @@ def test_shell_cmd_inputspec_3b(plugin, results_function, tmpdir):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, input_spec=my_input_spec
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmpdir
     )
     shelly.inputs.text = hello
 
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == "HELLO\n"
 
 
@@ -468,9 +484,8 @@ def test_shell_cmd_inputspec_3c_exception(plugin, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, input_spec=my_input_spec
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmpdir
     )
-    shelly.cache_dir = tmpdir
 
     with pytest.raises(Exception) as excinfo:
         shelly()
@@ -503,13 +518,12 @@ def test_shell_cmd_inputspec_3c(plugin, results_function, tmpdir):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, input_spec=my_input_spec
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmpdir
     )
-    shelly.cache_dir = tmpdir
 
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo"
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == "\n"
 
 
@@ -534,14 +548,13 @@ def test_shell_cmd_inputspec_4(plugin, results_function, tmpdir):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, input_spec=my_input_spec
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmpdir
     )
-    shelly.cache_dir = tmpdir
 
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo Hello"
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == "Hello\n"
 
 
@@ -561,13 +574,13 @@ def test_shell_cmd_inputspec_4a(plugin, results_function, tmpdir):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, input_spec=my_input_spec
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmpdir
     )
 
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo Hello"
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == "Hello\n"
 
 
@@ -592,13 +605,13 @@ def test_shell_cmd_inputspec_4b(plugin, results_function, tmpdir):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, input_spec=my_input_spec
+        name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmpdir
     )
 
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "echo Hi"
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == "Hi\n"
 
 
@@ -708,14 +721,18 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmpdir):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, opt_t=cmd_t, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd_exec,
+        opt_t=cmd_t,
+        input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -t"
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
 
 
-def test_shell_cmd_inputspec_5a_exception(plugin):
+def test_shell_cmd_inputspec_5a_exception(plugin, tmpdir):
     """ checking xor in metadata: both options are True, so the task raises exception"""
     cmd_exec = "ls"
     cmd_t = True
@@ -757,6 +774,7 @@ def test_shell_cmd_inputspec_5a_exception(plugin):
         opt_t=cmd_t,
         opt_S=cmd_S,
         input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
     with pytest.raises(Exception) as excinfo:
         shelly()
@@ -807,7 +825,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function, tmpdir):
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
 
 
 def test_shell_cmd_inputspec_6a_exception(plugin):
@@ -891,11 +909,12 @@ def test_shell_cmd_inputspec_6b(plugin, results_function, tmpdir):
         opt_t=cmd_t,
         # opt_l=cmd_l,
         input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
     shelly.inputs.opt_l = cmd_l
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -925,10 +944,14 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, args=args, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd,
+        args=args,
+        input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
     # checking if the file is created in a good place
@@ -965,10 +988,14 @@ def test_shell_cmd_inputspec_7a(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, args=args, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd,
+        args=args,
+        input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out1_changed.exists()
     # checking if the file is created in a good place
@@ -1013,9 +1040,10 @@ def test_shell_cmd_inputspec_7b(plugin, results_function, tmpdir):
         executable=cmd,
         newfile="newfile_tmp.txt",
         input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
 
@@ -1069,9 +1097,10 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
         newfile="newfile_tmp.txt",
         time="02121010",
         input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
 
@@ -1125,9 +1154,10 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmpdir):
         newfile="newfile_tmp.txt",
         time="02121010",
         input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
 
@@ -1168,10 +1198,14 @@ def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, input_spec=my_input_spec, file_orig=file
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        file_orig=file,
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.file_copy.exists()
     assert res.output.file_copy.name == "file_copy.txt"
@@ -1216,10 +1250,14 @@ def test_shell_cmd_inputspec_9a(tmpdir, plugin, results_function):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, input_spec=my_input_spec, file_orig=file
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        file_orig=file,
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.file_copy.exists()
     assert res.output.file_copy.name == "file_copy"
@@ -1263,10 +1301,14 @@ def test_shell_cmd_inputspec_9b(tmpdir, plugin, results_function):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, input_spec=my_input_spec, file_orig=file
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        file_orig=file,
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.file_copy.exists()
     assert res.output.file_copy.name == "file"
@@ -1308,11 +1350,15 @@ def test_shell_cmd_inputspec_10(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, files=files_list, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd_exec,
+        files=files_list,
+        input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
 
     assert shelly.inputs.executable == cmd_exec
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == "hello from boston"
 
 
@@ -1359,10 +1405,14 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        orig_file=str(file),
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out_file.exists()
     # the file is  copied, and than it is changed in place
@@ -1417,10 +1467,14 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        orig_file=str(file),
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out_file.exists()
     # the file is uses a soft link, but it creates and an extra copy before modifying
@@ -1489,10 +1543,14 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=str(file)
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        orig_file=str(file),
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out_file.exists()
     # the file is  not copied, it is changed in place
@@ -1527,12 +1585,16 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function, tmpdir):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, text=hello, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd_exec,
+        text=hello,
+        input_spec=my_input_spec,
+        cache_dir=tmpdir,
     ).split("text")
     assert shelly.inputs.executable == cmd_exec
     # todo: this doesn't work when state
     # assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res[0].output.stdout == "HELLO\n"
     assert res[1].output.stdout == "hi\n"
 
@@ -1602,11 +1664,15 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmpdir):
 
     # separate command into exec + args
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, text=hello, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd_exec,
+        text=hello,
+        input_spec=my_input_spec,
+        cache_dir=tmpdir,
     ).split("text")
     assert shelly.inputs.executable == cmd_exec
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res[0].output.stdout == "HELLO\n"
     assert res[1].output.stdout == "hi\n"
 
@@ -1637,10 +1703,14 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, args=args, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd,
+        args=args,
+        input_spec=my_input_spec,
+        cache_dir=tmpdir,
     ).split("args")
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     for i in range(len(args)):
         assert res[i].output.stdout == ""
         assert res[i].output.out1.exists()
@@ -1681,13 +1751,17 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd_exec, file=files, input_spec=my_input_spec
+        name="shelly",
+        executable=cmd_exec,
+        file=files,
+        input_spec=my_input_spec,
+        cache_dir=tmpdir,
     ).split("file")
 
     assert shelly.inputs.executable == cmd_exec
     # todo: this doesn't work when state
     # assert shelly.cmdline == "echo HELLO"
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res[0].output.stdout == "hello from pydra"
     assert res[1].output.stdout == "have a nice one"
 
@@ -1738,11 +1812,15 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, input_spec=my_input_spec, orig_file=files
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        orig_file=files,
+        cache_dir=tmpdir,
     ).split("orig_file")
 
     txt_l = ["from pydra", "world"]
-    res_l = results_function(shelly, plugin, tmpdir)
+    res_l = results_function(shelly, plugin)
     for i, res in enumerate(res_l):
         assert res.output.stdout == ""
         assert res.output.out_file.exists()
@@ -2254,7 +2332,7 @@ def test_shell_cmd_outputspec_1(plugin, results_function, tmpdir):
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.newfile.exists()
 
@@ -2274,7 +2352,7 @@ def test_shell_cmd_outputspec_1a(plugin, results_function, tmpdir):
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.newfile.exists()
 
@@ -2315,7 +2393,7 @@ def test_shell_cmd_outputspec_2(plugin, results_function, tmpdir):
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.newfile.exists()
 
@@ -2357,7 +2435,7 @@ def test_shell_cmd_outputspec_3(plugin, results_function, tmpdir):
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     # newfile is a list
     assert len(res.output.newfile) == 2
@@ -2385,7 +2463,7 @@ def test_shell_cmd_outputspec_4(plugin, results_function, tmpdir):
         name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     # newfile is a list
     assert len(res.output.newfile) == 2
@@ -2419,10 +2497,14 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
+        name="shelly",
+        executable=cmd,
+        args=args,
+        output_spec=my_output_spec,
+        cache_dir=tmpdir,
     )
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.out1.exists()
 
@@ -2483,10 +2565,14 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function, tmpdir):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
+        name="shelly",
+        executable=cmd,
+        args=args,
+        output_spec=my_output_spec,
+        cache_dir=tmpdir,
     ).split("args")
 
-    res = results_function(shelly, plugin, tmpdir)
+    res = results_function(shelly, plugin)
     for i in range(len(args)):
         assert res[i].output.stdout == ""
         assert res[i].output.out1.exists()

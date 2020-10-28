@@ -31,7 +31,8 @@ def test_boutiques_1(maskfile, plugin, results_function, tmpdir):
     btask = BoshTask(name="NA", zenodo_id="1482743")
     btask.inputs.infile = Infile
     btask.inputs.maskfile = maskfile
-    res = results_function(btask, plugin, tmpdir)
+    btask.cache_dir = tmpdir
+    res = results_function(btask, plugin)
 
     assert res.output.return_code == 0
 
@@ -102,6 +103,7 @@ def test_boutiques_wf_1(maskfile, plugin):
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
     wf.inputs.maskfile = maskfile
     wf.inputs.infile = Infile
+    wf.cache_dir = tmpdir
 
     wf.add(
         BoshTask(
@@ -128,11 +130,12 @@ def test_boutiques_wf_1(maskfile, plugin):
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-def test_boutiques_wf_2(maskfile, plugin):
+def test_boutiques_wf_2(maskfile, plugin, tmdpir):
     """ wf with two BoshTasks (fsl.bet and fsl.stats) and one ShellTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
     wf.inputs.maskfile = maskfile
     wf.inputs.infile = Infile
+    wf.cache_dir = tmpdir
 
     wf.add(
         BoshTask(
