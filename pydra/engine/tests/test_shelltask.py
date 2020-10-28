@@ -1299,6 +1299,49 @@ def test_shell_cmd_inputspec_10(plugin, results_function, tmpdir):
     assert res.output.stdout == "hello from boston"
 
 
+def test_shell_cmd_inputspec_10_err(tmpdir):
+    """ checking if the proper error is raised when broken symlink is provided
+    as a input field with File as a type
+    """
+
+    file_1 = tmpdir.join("file_1.txt")
+    with open(file_1, "w") as f:
+        f.write("hello")
+    file_2 = tmpdir.join("file_2.txt")
+
+    # creating symlink and removing the original file
+    os.symlink(file_1, file_2)
+    os.remove(file_1)
+
+    cmd_exec = "cat"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "files",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "a file",
+                        "mandatory": True,
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd_exec, files=file_2, input_spec=my_input_spec
+    )
+
+    with pytest.raises(AttributeError) as e:
+        res = shelly()
+
+
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
     """ shelltask changes a file in place,
