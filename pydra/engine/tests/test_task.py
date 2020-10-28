@@ -4,6 +4,7 @@ import attr
 import pytest
 
 from ... import mark
+from ..core import Workflow
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from .utils import gen_basic_wf, use_validator
@@ -972,13 +973,97 @@ def test_audit_prov(tmpdir, use_validator):
 
     # saving the audit message into the file
     funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
-    message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
-    funky.messenger_args = dict(message_dir=message_path)
     funky()
+    # this should be the default loctaion
+    message_path = tmpdir / funky.checksum / "messages"
+    assert (tmpdir / funky.checksum / "messages").exists()
 
     collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
+
+
+def test_audit_prov_messdir_1(tmpdir, use_validator):
+    """customized messenger dir"""
+
+    @mark.task
+    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+        return a + b
+
+    # printing the audit message
+    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky.cache_dir = tmpdir
+    funky()
+
+    # saving the audit message into the file
+    funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    # user defined path
+    message_path = tmpdir / funky.checksum / "my_messages"
+    funky.cache_dir = tmpdir
+    # providing messenger_dir for audit
+    funky.audit.messenger_args = dict(message_dir=message_path)
+    funky()
+    assert (tmpdir / funky.checksum / "my_messages").exists()
+
+    collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
+    assert (tmpdir / funky.checksum / "messages.jsonld").exists()
+
+
+def test_audit_prov_messdir_2(tmpdir, use_validator):
+    """customized messenger dir in init"""
+
+    @mark.task
+    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+        return a + b
+
+    # printing the audit message
+    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky.cache_dir = tmpdir
+    funky()
+
+    # user defined path (doesnt depend on checksum, can be defined before init)
+    message_path = tmpdir / "my_messages"
+    # saving the audit message into the file
+    funky = testfunc(
+        a=2,
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+        messenger_args=dict(message_dir=message_path),
+    )
+    funky.cache_dir = tmpdir
+    # providing messenger_dir for audit
+    funky()
+    assert (tmpdir / "my_messages").exists()
+
+    collect_messages(tmpdir, message_path, ld_op="compact")
+    assert (tmpdir / "messages.jsonld").exists()
+
+
+def test_audit_prov_wf(tmpdir, use_validator):
+    """FileMessenger for wf"""
+
+    @mark.task
+    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+        return a + b
+
+    wf = Workflow(
+        name="wf",
+        input_spec=["x"],
+        cache_dir=tmpdir,
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+    )
+    wf.add(testfunc(name="testfunc", a=wf.lzin.x))
+    wf.set_output([("out", wf.testfunc.lzout.out)])
+    wf.inputs.x = 2
+
+    wf(plugin="cf")
+    # default path
+    message_path = tmpdir / wf.checksum / "messages"
+    assert message_path.exists()
+
+    collect_messages(tmpdir / wf.checksum, message_path, ld_op="compact")
+    assert (tmpdir / wf.checksum / "messages.jsonld").exists()
 
 
 def test_audit_all(tmpdir, use_validator):
@@ -989,7 +1074,7 @@ def test_audit_all(tmpdir, use_validator):
     funky = testfunc(a=2, audit_flags=AuditFlag.ALL, messengers=FileMessenger())
     message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
-    funky.messenger_args = dict(message_dir=message_path)
+    funky.audit.messenger_args = dict(message_dir=message_path)
     funky()
     from glob import glob
 
