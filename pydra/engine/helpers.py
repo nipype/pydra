@@ -27,6 +27,8 @@ from .specs import (
     LazyField,
     MultiOutputObj,
     MultiInputObj,
+    MultiInputFile,
+    MultiOutputFile,
 )
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 
@@ -311,7 +313,15 @@ def custom_validator(instance, attribute, value):
         or value is None
         or attribute.name.startswith("_")  # e.g. _func
         or isinstance(value, LazyField)
-        or tp_attr in [ty.Any, inspect._empty, MultiOutputObj, MultiInputObj]
+        or tp_attr
+        in [
+            ty.Any,
+            inspect._empty,
+            MultiOutputObj,
+            MultiInputObj,
+            MultiOutputFile,
+            MultiInputFile,
+        ]
     ):
         check_type = False  # no checking of the type
     elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:

@@ -8,7 +8,14 @@ from pathlib import Path
 from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
+from ..specs import (
+    ShellOutSpec,
+    ShellSpec,
+    SpecInfo,
+    File,
+    MultiOutputFile,
+    MultiInputObj,
+)
 from .utils import result_no_submitter, result_submitter, use_validator
 
 if sys.platform.startswith("win"):
@@ -2461,6 +2468,157 @@ def test_shell_cmd_outputspec_5a():
     res = shelly()
     assert res.output.stdout == ""
     assert res.output.out1.exists()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_6(tmpdir, plugin, results_function):
+    """
+        providing output with output_file_name and using MultiOutputFile as a type.
+        the input field used in the template is a MultiInputObj, so it can be and is a list
+    """
+    file = tmpdir.join("script.sh")
+    file.write(f'for var in "$@"; do touch file"$var".txt; done')
+
+    cmd = "bash"
+    new_files_id = ["1", "2", "3"]
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "script",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "help_string": "script file",
+                        "mandatory": True,
+                        "position": 1,
+                        "argstr": "",
+                    },
+                ),
+            ),
+            (
+                "files_id",
+                attr.ib(
+                    type=MultiInputObj,
+                    metadata={
+                        "position": 2,
+                        "argstr": "...",
+                        "sep": " ",
+                        "help_string": "list of name indices",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "new_files",
+                attr.ib(
+                    type=MultiOutputFile,
+                    metadata={
+                        "output_file_template": "file{files_id}.txt",
+                        "help_string": "output file",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+        script=file,
+        files_id=new_files_id,
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    for file in res.output.new_files:
+        assert file.exists()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_6a(tmpdir, plugin, results_function):
+    """
+        providing output with output_file_name and using MultiOutputFile as a type.
+        the input field used in the template is a MultiInputObj, but a single element is used
+    """
+    file = tmpdir.join("script.sh")
+    file.write(f'for var in "$@"; do touch file"$var".txt; done')
+
+    cmd = "bash"
+    new_files_id = "1"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "script",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "help_string": "script file",
+                        "mandatory": True,
+                        "position": 1,
+                        "argstr": "",
+                    },
+                ),
+            ),
+            (
+                "files_id",
+                attr.ib(
+                    type=MultiInputObj,
+                    metadata={
+                        "position": 2,
+                        "argstr": "...",
+                        "sep": " ",
+                        "help_string": "list of name indices",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "new_files",
+                attr.ib(
+                    type=MultiOutputFile,
+                    metadata={
+                        "output_file_template": "file{files_id}.txt",
+                        "help_string": "output file",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+        script=file,
+        files_id=new_files_id,
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.new_files.exists()
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])

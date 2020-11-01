@@ -541,7 +541,7 @@ def template_update_single(field, inputs_dict, output_dir=None, spec_type="input
     based on the value from inputs_dict
     (checking the types of the fields, that have "output_file_template)"
     """
-    from .specs import File
+    from .specs import File, MultiOutputFile
 
     if spec_type == "input":
         if field.type not in [str, ty.Union[str, bool]]:
@@ -559,7 +559,7 @@ def template_update_single(field, inputs_dict, output_dir=None, spec_type="input
                 f"type of {field.name} is str, consider using Union[str, bool]"
             )
     elif spec_type == "output":
-        if field.type is not File:
+        if field.type not in [File, MultiOutputFile]:
             raise Exception(
                 f"output {field.name} should be a File, but {field.type} set as the type"
             )
@@ -572,26 +572,30 @@ def template_update_single(field, inputs_dict, output_dir=None, spec_type="input
         # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
         return attr.NOTHING
     else:  # inputs_dict[field.name] is True or spec_type is output
-        template = field.metadata["output_file_template"]
-        # as default, we assume that keep_extension is True
-        keep_extension = field.metadata.get("keep_extension", True)
-        value = _template_formatting(
-            template, inputs_dict, keep_extension=keep_extension
-        )
+        value = _template_formatting(field, inputs_dict)
         # changing path so it is in the output_dir
         if output_dir and value is not attr.NOTHING:
             # should be converted to str, it is also used for input fields that should be str
-            return str(output_dir / Path(value).name)
+            if type(value) is list:
+                return [str(output_dir / Path(val).name) for val in value]
+            else:
+                return str(output_dir / Path(value).name)
         else:
             return value
 
 
-def _template_formatting(template, inputs_dict, keep_extension=True):
+def _template_formatting(field, inputs_dict):
     """Formatting a single template based on values from inputs_dict.
-    Taking into account that field values and template could have file extensions
-    (assuming that if template has extension, the field value extension is removed,
-    if field has extension, and no template extension, than it is moved to the end),
+    Taking into account that the field with a template can be a MultiOutputFile
+    and the field values needed in the template can be a list -
+    returning a list of formatted templates in that case.
     """
+    from .specs import MultiOutputFile
+
+    template = field.metadata["output_file_template"]
+    # as default, we assume that keep_extension is True
+    keep_extension = field.metadata.get("keep_extension", True)
+
     inp_fields = re.findall("{\w+}", template)
     if len(inp_fields) == 0:
         return template
@@ -600,25 +604,55 @@ def _template_formatting(template, inputs_dict, keep_extension=True):
         fld_value = inputs_dict[fld_name]
         if fld_value is attr.NOTHING:
             return attr.NOTHING
-        fld_value = str(fld_value)  # in case it's a path
-        filename, *ext = fld_value.split(".", maxsplit=1)
-        # if keep_extension is False, the extensions are removed
-        if keep_extension is False:
-            ext = []
-        if template.endswith(inp_fields[0]):
-            # if no suffix added in template, the simplest formatting should work
-            # recreating fld_value with the updated extension
-            fld_value_upd = ".".join([filename] + ext)
-            formatted_value = template.format(**{fld_name: fld_value_upd})
-        elif "." not in template:  # the template doesn't have its own extension
-            # if the fld_value has extension, it will be moved to the end
-            formatted_value = ".".join([template.format(**{fld_name: filename})] + ext)
-        else:  # template has its own extension
-            # removing fld_value extension if any
-            formatted_value = template.format(**{fld_name: filename})
+        # if field is MultiOutputFile and the fld_value is a list,
+        # each element of the list should be used separately in the template
+        # and return a list with formatted values
+        if field.type is MultiOutputFile and type(fld_value) is list:
+            formatted_value = []
+            for el in fld_value:
+                formatted_value.append(
+                    _element_formatting(
+                        template,
+                        fld_name=fld_name,
+                        fld_value=el,
+                        keep_extension=keep_extension,
+                    )
+                )
+        else:
+            formatted_value = _element_formatting(
+                template,
+                fld_name=fld_name,
+                fld_value=fld_value,
+                keep_extension=keep_extension,
+            )
         return formatted_value
     else:
         raise NotImplementedError("should we allow for more args in the template?")
+
+
+def _element_formatting(template, fld_name, fld_value, keep_extension):
+    """Formatting a single template for a single element of field value (if a list).
+    Taking into account that field values and template could have file extensions
+    (assuming that if template has extension, the field value extension is removed,
+    if field has extension, and no template extension, than it is moved to the end),
+    """
+    fld_value = str(fld_value)  # in case it's a path
+    filename, *ext = fld_value.split(".", maxsplit=1)
+    # if keep_extension is False, the extensions are removed
+    if keep_extension is False:
+        ext = []
+    if template.endswith(f"{{{fld_name}}}"):
+        # if no suffix added in template, the simplest formatting should work
+        # recreating fld_value with the updated extension
+        fld_value_upd = ".".join([filename] + ext)
+        formatted_value = template.format(**{fld_name: fld_value_upd})
+    elif "." not in template:  # the template doesn't have its own extension
+        # if the fld_value has extension, it will be moved to the end
+        formatted_value = ".".join([template.format(**{fld_name: filename})] + ext)
+    else:  # template has its own extension
+        # removing fld_value extension if any
+        formatted_value = template.format(**{fld_name: filename})
+    return formatted_value
 
 
 def is_local_file(f):
