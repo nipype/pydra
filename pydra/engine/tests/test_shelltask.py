@@ -2378,11 +2378,12 @@ def test_shell_cmd_outputspec_4(plugin, results_function):
     """
         customised output_spec, adding files to the output,
         using a function to collect output, the function is saved in the field metadata
+        and uses output_dir and the glob function
     """
     cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
 
-    def gather_output(keyname, output_dir):
-        if keyname == "newfile":
+    def gather_output(field, output_dir):
+        if field.name == "newfile":
             return list(Path(output_dir).expanduser().glob("newfile*.txt"))
 
     my_output_spec = SpecInfo(
@@ -2397,6 +2398,55 @@ def test_shell_cmd_outputspec_4(plugin, results_function):
     # newfile is a list
     assert len(res.output.newfile) == 2
     assert all([file.exists for file in res.output.newfile])
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_4a(plugin, results_function):
+    """
+        customised output_spec, adding files to the output,
+        using a function to collect output, the function is saved in the field metadata
+        and uses output_dir and inputs element
+    """
+    cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
+
+    def gather_output(executable, output_dir):
+        files = executable[1:]
+        return [Path(output_dir) / file for file in files]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", attr.ib(type=File, metadata={"callable": gather_output}))],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    # newfile is a list
+    assert len(res.output.newfile) == 2
+    assert all([file.exists for file in res.output.newfile])
+
+
+def test_shell_cmd_outputspec_4b_error():
+    """
+        customised output_spec, adding files to the output,
+        using a function to collect output, the function is saved in the field metadata
+        with an argument that is not part of the inputs - error is raised
+    """
+    cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
+
+    def gather_output(executable, output_dir, ble):
+        files = executable[1:]
+        return [Path(output_dir) / file for file in files]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", attr.ib(type=File, metadata={"callable": gather_output}))],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+    with pytest.raises(AttributeError, match="ble"):
+        shelly()
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
