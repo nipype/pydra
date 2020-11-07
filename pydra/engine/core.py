@@ -163,7 +163,6 @@ class TaskBase:
 
         # checking if metadata is set properly
         self.inputs.check_metadata()
-        self.state_inputs = inputs
         # dictionary to save the connections with lazy fields
         self.inp_lf = {}
         self.state = None
@@ -481,7 +480,6 @@ class TaskBase:
             )
         if kwargs:
             self.inputs = attr.evolve(self.inputs, **kwargs)
-            self.state_inputs = kwargs
         if not self.state or splitter != self.state.splitter:
             self.set_state(splitter)
         return self
