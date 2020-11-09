@@ -21,8 +21,9 @@ def sleep_add_one(x):
     return x + 1
 
 
-def test_callable_wf(plugin):
+def test_callable_wf(plugin, tmpdir):
     wf = gen_basic_wf()
+
     with pytest.raises(NotImplementedError):
         wf()
 
@@ -31,12 +32,14 @@ def test_callable_wf(plugin):
     del wf, res
 
     wf = gen_basic_wf()
+    wf.cache_dir = tmpdir
+
     sub = Submitter(plugin)
     res = wf(submitter=sub)
     assert res.output.out == 9
 
 
-def test_concurrent_wf(plugin):
+def test_concurrent_wf(plugin, tmpdir):
     # concurrent workflow
     # A --> C
     # B --> D
@@ -48,6 +51,8 @@ def test_concurrent_wf(plugin):
     wf.add(sleep_add_one(name="taskc", x=wf.taska.lzout.out))
     wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
     wf.set_output([("out1", wf.taskc.lzout.out), ("out2", wf.taskd.lzout.out)])
+    wf.cache_dir = tmpdir
+
     with Submitter(plugin) as sub:
         sub(wf)
 
@@ -56,7 +61,7 @@ def test_concurrent_wf(plugin):
     assert res.output.out2 == 12
 
 
-def test_concurrent_wf_nprocs():
+def test_concurrent_wf_nprocs(tmpdir):
     # concurrent workflow
     # setting n_procs in Submitter that is passed to the worker
     # A --> C
@@ -69,8 +74,8 @@ def test_concurrent_wf_nprocs():
     wf.add(sleep_add_one(name="taskc", x=wf.taska.lzout.out))
     wf.add(sleep_add_one(name="taskd", x=wf.taskb.lzout.out))
     wf.set_output([("out1", wf.taskc.lzout.out), ("out2", wf.taskd.lzout.out)])
-    # wf.plugin = 'cf'
-    # res = wf.run()
+    wf.cache_dir = tmpdir
+
     with Submitter("cf", n_procs=2) as sub:
         sub(wf)
 
@@ -79,7 +84,7 @@ def test_concurrent_wf_nprocs():
     assert res.output.out2 == 12
 
 
-def test_wf_in_wf(plugin):
+def test_wf_in_wf(plugin, tmpdir):
     """WF(A --> SUBWF(A --> B) --> B)"""
     wf = Workflow(name="wf_in_wf", input_spec=["x"])
     wf.inputs.x = 3
@@ -92,10 +97,12 @@ def test_wf_in_wf(plugin):
     subwf.set_output([("out", subwf.sub_b.lzout.out)])
     # connect, then add
     subwf.inputs.x = wf.wf_a.lzout.out
-    wf.add(subwf)
+    subwf.cache_dir = tmpdir
 
+    wf.add(subwf)
     wf.add(sleep_add_one(name="wf_b", x=wf.sub_wf.lzout.out))
     wf.set_output([("out", wf.wf_b.lzout.out)])
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin) as sub:
         sub(wf)
@@ -105,7 +112,7 @@ def test_wf_in_wf(plugin):
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
-def test_wf2(plugin_dask_opt):
+def test_wf2(plugin_dask_opt, tmpdir):
     """ workflow as a node
         workflow-node with one task and no splitter
     """
@@ -113,10 +120,12 @@ def test_wf2(plugin_dask_opt):
     wfnd.add(sleep_add_one(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
     wfnd.inputs.x = 2
+    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin_dask_opt) as sub:
         sub(wf)
@@ -126,7 +135,7 @@ def test_wf2(plugin_dask_opt):
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
-def test_wf_with_state(plugin_dask_opt):
+def test_wf_with_state(plugin_dask_opt, tmpdir):
     wf = Workflow(name="wf_with_state", input_spec=["x"])
     wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
     wf.add(sleep_add_one(name="taskb", x=wf.taska.lzout.out))
@@ -134,6 +143,7 @@ def test_wf_with_state(plugin_dask_opt):
     wf.inputs.x = [1, 2, 3]
     wf.split("x")
     wf.set_output([("out", wf.taskb.lzout.out)])
+    wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin_dask_opt) as sub:
         sub(wf)
