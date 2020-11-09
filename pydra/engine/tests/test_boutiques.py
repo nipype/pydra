@@ -98,7 +98,7 @@ def test_boutiques_spec_2():
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-def test_boutiques_wf_1(maskfile, plugin):
+def test_boutiques_wf_1(maskfile, plugin, tmpdir):
     """ wf with one task that runs fsl.bet using BoshTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
     wf.inputs.maskfile = maskfile
@@ -130,7 +130,7 @@ def test_boutiques_wf_1(maskfile, plugin):
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-def test_boutiques_wf_2(maskfile, plugin, tmdpir):
+def test_boutiques_wf_2(maskfile, plugin, tmpdir):
     """ wf with two BoshTasks (fsl.bet and fsl.stats) and one ShellTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
     wf.inputs.maskfile = maskfile
