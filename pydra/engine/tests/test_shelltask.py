@@ -21,7 +21,6 @@ def test_shell_cmd_1(plugin_dask_opt, results_function, tmpdir):
     """ simple command, no arguments """
     cmd = ["pwd"]
     shelly = ShellCommandTask(name="shelly", executable=cmd, cache_dir=tmpdir)
-    shelly.cache_dir = tmpdir
     assert shelly.cmdline == " ".join(cmd)
 
     res = results_function(shelly, plugin=plugin_dask_opt)
@@ -297,7 +296,6 @@ def test_shell_cmd_inputspec_1(plugin, results_function, use_validator, tmpdir):
         input_spec=my_input_spec,
         cache_dir=tmpdir,
     )
-    shelly.cache_dir = tmpdir
     assert shelly.inputs.executable == cmd_exec
     assert shelly.inputs.args == cmd_args
     assert shelly.cmdline == "echo -n hello from pydra"
@@ -822,6 +820,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function, tmpdir):
         opt_t=cmd_t,
         opt_l=cmd_l,
         input_spec=my_input_spec,
+        cache_dir=tmpdir,
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
@@ -1400,6 +1399,7 @@ def test_shell_cmd_inputspec_10_err(tmpdir):
     shelly = ShellCommandTask(
         name="shelly", executable=cmd_exec, files=file_2, input_spec=my_input_spec
     )
+    shelly.cache_dir = tmpdir
 
     with pytest.raises(AttributeError) as e:
         res = shelly()

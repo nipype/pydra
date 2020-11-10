@@ -120,7 +120,6 @@ def test_wf2(plugin_dask_opt, tmpdir):
     wfnd.add(sleep_add_one(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
     wfnd.inputs.x = 2
-    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)

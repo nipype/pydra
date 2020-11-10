@@ -50,7 +50,7 @@ def test_wf_name_conflict2():
 
 def test_wf_no_output(plugin, tmpdir):
     """ Raise error when output isn't set with set_output"""
-    wf = Workflow(name="wf_1", input_spec=["x"])
+    wf = Workflow(name="wf_1", input_spec=["x"], cache_dir=tmpdir)
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.inputs.x = 2
 
@@ -1713,7 +1713,6 @@ def test_wfasnd_1(plugin, tmpdir):
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
     wfnd.inputs.x = 2
-    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
@@ -1739,7 +1738,6 @@ def test_wfasnd_wfinp_1(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
-    wfnd.cache_dir = tmpdir
 
     wf.add(wfnd)
     wf.inputs.x = 2
@@ -1767,7 +1765,6 @@ def test_wfasnd_wfndupdate(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=2)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
-    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"], x=3)
     wfnd.inputs.x = wf.lzin.x
@@ -1821,6 +1818,7 @@ def test_wfasnd_wfndupdate_rerun(plugin, tmpdir):
     wf_o.add(wf)
     wf_o.set_output([("out", wf_o.wf.lzout.out)])
     wf_o.plugin = plugin
+    wf_o.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
         sub(wf_o)
@@ -1840,7 +1838,6 @@ def test_wfasnd_st_1(plugin, tmpdir):
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
     wfnd.split("x")
     wfnd.inputs.x = [2, 4]
-    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
@@ -1868,7 +1865,6 @@ def test_wfasnd_st_updatespl_1(plugin, tmpdir):
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
     wfnd.inputs.x = [2, 4]
-    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
@@ -1897,7 +1893,6 @@ def test_wfasnd_ndst_1(plugin, tmpdir):
     # TODO: without this the test is failing
     wfnd.plugin = plugin
     wfnd.inputs.x = [2, 4]
-    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
@@ -1925,7 +1920,6 @@ def test_wfasnd_ndst_updatespl_1(plugin, tmpdir):
     # TODO: without this the test is failing
     wfnd.plugin = plugin
     wfnd.inputs.x = [2, 4]
-    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
@@ -1948,11 +1942,10 @@ def test_wfasnd_wfst_1(plugin, tmpdir):
         workflow-node with one task,
         splitter for the main workflow
     """
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
-    wfnd.cache_dir = tmpdir
 
     wf.add(wfnd)
     wf.split("x")
@@ -1986,7 +1979,6 @@ def test_wfasnd_st_2(plugin, tmpdir):
     wfnd.split(("x", "y"))
     wfnd.inputs.x = [2, 4]
     wfnd.inputs.y = [1, 10]
-    wfnd.cache_dir = tmpdir
 
     wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
     wf.add(wfnd)
@@ -2013,7 +2005,6 @@ def test_wfasnd_wfst_2(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x", "y"], x=wf.lzin.x, y=wf.lzin.y)
     wfnd.add(multiply(name="mult", x=wfnd.lzin.x, y=wfnd.lzin.y))
     wfnd.set_output([("out", wfnd.mult.lzout.out)])
-    wfnd.cache_dir = tmpdir
 
     wf.add(wfnd)
     wf.add(add2(name="add2", x=wf.wfnd.lzout.out))
@@ -2052,7 +2043,6 @@ def test_wfasnd_ndst_3(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
-    wfnd.cache_dir = tmpdir
     wf.add(wfnd)
 
     wf.set_output([("out", wf.wfnd.lzout.out)])
@@ -2082,7 +2072,6 @@ def test_wfasnd_wfst_3(plugin, tmpdir):
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
-    wfnd.cache_dir = tmpdir
     wf.add(wfnd)
 
     wf.set_output([("out", wf.wfnd.lzout.out)])
@@ -2095,6 +2084,91 @@ def test_wfasnd_wfst_3(plugin, tmpdir):
     results = wf.result()
     assert results[0].output.out == 4
     assert results[1].output.out == 42
+    # checking all directories
+    assert wf.output_dir
+    for odir in wf.output_dir:
+        assert odir.exists()
+
+
+# workflows with structures wfns(A->B)
+
+
+def test_wfasnd_4(plugin, tmpdir):
+    """ workflow as a node
+        workflow-node with two tasks and no splitter
+    """
+    wfnd = Workflow(name="wfnd", input_spec=["x"])
+    wfnd.add(add2(name="add2_1st", x=wfnd.lzin.x))
+    wfnd.add(add2(name="add2_2nd", x=wfnd.add2_1st.lzout.out))
+    wfnd.set_output([("out", wfnd.add2_2nd.lzout.out)])
+    wfnd.inputs.x = 2
+
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.plugin = plugin
+    wf.cache_dir = tmpdir
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out == 6
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
+def test_wfasnd_ndst_4(plugin, tmpdir):
+    """ workflow as a node
+        workflow-node with two tasks,
+        splitter for node
+    """
+    wfnd = Workflow(name="wfnd", input_spec=["x"])
+    wfnd.add(add2(name="add2_1st", x=wfnd.lzin.x).split("x"))
+    wfnd.add(add2(name="add2_2nd", x=wfnd.add2_1st.lzout.out))
+    wfnd.set_output([("out", wfnd.add2_2nd.lzout.out)])
+    # TODO: without this the test is failing
+    wfnd.plugin = plugin
+    wfnd.inputs.x = [2, 4]
+
+    wf = Workflow(name="wf", input_spec=["x"])
+    wf.add(wfnd)
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.plugin = plugin
+    wf.cache_dir = tmpdir
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out == [6, 8]
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
+def test_wfasnd_wfst_4(plugin, tmpdir):
+    """ workflow as a node
+        workflow-node with two tasks,
+        splitter for the main workflow
+    """
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
+    wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
+    wfnd.add(add2(name="add2_1st", x=wfnd.lzin.x))
+    wfnd.add(add2(name="add2_2nd", x=wfnd.add2_1st.lzout.out))
+    wfnd.set_output([("out", wfnd.add2_2nd.lzout.out)])
+
+    wf.add(wfnd)
+    wf.split("x")
+    wf.inputs.x = [2, 4]
+    wf.set_output([("out", wf.wfnd.lzout.out)])
+    wf.plugin = plugin
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+    # assert wf.output_dir.exists()
+    results = wf.result()
+    assert results[0].output.out == 6
+    assert results[1].output.out == 8
     # checking all directories
     assert wf.output_dir
     for odir in wf.output_dir:
@@ -4098,7 +4172,7 @@ def exporting_graphs(wf, name):
 
 def test_graph_1(tmpdir):
     """creating a set of graphs, wf with two nodes"""
-    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf = Workflow(name="wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wf.add(multiply(name="mult_1", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(multiply(name="mult_2", x=wf.lzin.x, y=wf.lzin.x))
     wf.add(add2(name="add2", x=wf.mult_1.lzout.out))
@@ -4139,7 +4213,7 @@ def test_graph_1st(tmpdir):
     """creating a set of graphs, wf with two nodes
     some nodes have splitters, should be marked with blue color
     """
-    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf = Workflow(name="wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wf.add(multiply(name="mult_1", x=wf.lzin.x, y=wf.lzin.y).split("x"))
     wf.add(multiply(name="mult_2", x=wf.lzin.x, y=wf.lzin.x))
     wf.add(add2(name="add2", x=wf.mult_1.lzout.out))
@@ -4180,7 +4254,7 @@ def test_graph_1st_cmb(tmpdir):
     the first one has a splitter, the second has a combiner, so the third one is stateless
     first two nodes should be blue and the arrow between them should be blue
     """
-    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf = Workflow(name="wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split("x"))
     wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("mult.x"))
     wf.add(list_sum(name="sum", x=wf.add2.lzout.out))
@@ -4219,7 +4293,7 @@ def test_graph_1st_cmb(tmpdir):
 
 def test_graph_2(tmpdir):
     """creating a graph, wf with one worfklow as a node"""
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
@@ -4253,7 +4327,7 @@ def test_graph_2st(tmpdir):
     """creating a set of graphs, wf with one worfklow as a node
     the inner workflow has a state, so should be blue
     """
-    wf = Workflow(name="wf", input_spec=["x"])
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x).split("x")
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
@@ -4287,7 +4361,7 @@ def test_graph_2st(tmpdir):
 
 def test_graph_3(tmpdir):
     """creating a set of graphs, wf with two nodes (one node is a workflow)"""
-    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf = Workflow(name="wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
 
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
@@ -4329,7 +4403,7 @@ def test_graph_3st(tmpdir):
        the first node has a state and it should be passed to the second node
        (blue node and a wfasnd, and blue arrow from the node to the wfasnd)
     """
-    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf = Workflow(name="wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split("x"))
 
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
@@ -4370,7 +4444,7 @@ def test_graph_4(tmpdir):
     """creating a set of graphs, wf with two nodes (one node is a workflow with two nodes
     inside). Connection from the node to the inner workflow.
     """
-    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf = Workflow(name="wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.mult.lzout.out)
     wfnd.add(add2(name="add2_a", x=wfnd.lzin.x))
@@ -4413,7 +4487,7 @@ def test_graph_5(tmpdir):
     """creating a set of graphs, wf with two nodes (one node is a workflow with two nodes
     inside). Connection from the inner workflow to the node.
     """
-    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf = Workflow(name="wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
     wfnd.add(add2(name="add2_a", x=wfnd.lzin.x))
     wfnd.add(add2(name="add2_b", x=wfnd.add2_a.lzout.out))
