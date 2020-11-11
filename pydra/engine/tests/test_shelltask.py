@@ -1162,8 +1162,56 @@ def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
     assert shelly.output_dir == res.output.file_copy.parent
 
 
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+@pytest.mark.parametrize("results_function", [result_no_submitter])
 def test_shell_cmd_inputspec_9a(tmpdir, plugin, results_function):
+    """
+        providing output name using input_spec (output_file_template in metadata),
+        the template has a suffix, the extension of the file will be moved to the end
+        the change: input file has directory with a dot
+    """
+    cmd = "cp"
+    file = tmpdir.mkdir("data.inp").join("file.txt")
+    file.write("content")
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file_orig",
+                attr.ib(
+                    type=File,
+                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                ),
+            ),
+            (
+                "file_copy",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{file_orig}_copy",
+                        "help_string": "output file",
+                        "argstr": "",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, input_spec=my_input_spec, file_orig=file
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.file_copy.exists()
+    assert res.output.file_copy.name == "file_copy.txt"
+    # checking if it's created in a good place
+    assert shelly.output_dir == res.output.file_copy.parent
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_9b(tmpdir, plugin, results_function):
     """
         providing output name using input_spec (output_file_template in metadata)
         and the keep_extension is set to False, so the extension is removed completely.
@@ -1209,7 +1257,7 @@ def test_shell_cmd_inputspec_9a(tmpdir, plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_9b(tmpdir, plugin, results_function):
+def test_shell_cmd_inputspec_9c(tmpdir, plugin, results_function):
     """
         providing output name using input_spec (output_file_template in metadata)
         and the keep_extension is set to False, so the extension is removed completely,
