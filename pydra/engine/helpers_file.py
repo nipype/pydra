@@ -600,8 +600,12 @@ def _template_formatting(template, inputs_dict, keep_extension=True):
         fld_value = inputs_dict[fld_name]
         if fld_value is attr.NOTHING:
             return attr.NOTHING
-        fld_value = str(fld_value)  # in case it's a path
-        filename, *ext = fld_value.split(".", maxsplit=1)
+        fld_value_parent = Path(fld_value).parent
+        fld_value_name = Path(fld_value).name
+
+        name, *ext = fld_value_name.split(".", maxsplit=1)
+        filename = str(fld_value_parent / name)
+
         # if keep_extension is False, the extensions are removed
         if keep_extension is False:
             ext = []
