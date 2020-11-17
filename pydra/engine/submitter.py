@@ -1,5 +1,6 @@
 """Handle execution backends."""
 import asyncio
+import time
 from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker, DaskWorker
 from .core import is_workflow
 from .helpers import get_open_loop, load_and_run_async
@@ -150,15 +151,31 @@ class Submitter:
             The computed workflow
 
         """
+        for nd in wf.graph.nodes:
+            if nd.allow_cache_override:
+                nd.cache_dir = wf.cache_dir
+
         # creating a copy of the graph that will be modified
         # the copy contains new lists with original runnable objects
         graph_copy = wf.graph.copy()
         # keep track of pending futures
         task_futures = set()
         tasks, tasks_follow_errored = get_runnable_tasks(graph_copy)
-        while tasks or len(task_futures):
+        while tasks or task_futures or graph_copy.nodes:
             if not tasks and not task_futures:
-                raise Exception("Nothing queued or todo - something went wrong")
+                # it's possible that task_futures is empty, but not able to get any
+                # tasks from graph_copy (using get_runnable_tasks)
+                # this might be related to some delays saving the files
+                # so try to get_runnable_tasks for another minut
+                ii = 0
+                while not tasks and graph_copy.nodes:
+                    tasks, follow_err = get_runnable_tasks(graph_copy)
+                    ii += 1
+                    time.sleep(1)
+                    if ii > 60:
+                        raise Exception(
+                            "graph is not empty, but not able to get more tasks - something is wrong (e.g. with the filesystem)"
+                        )
             for task in tasks:
                 # grab inputs if needed
                 logger.debug(f"Retrieving inputs for {task}")

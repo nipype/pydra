@@ -636,8 +636,12 @@ def _element_formatting(template, fld_name, fld_value, keep_extension):
     (assuming that if template has extension, the field value extension is removed,
     if field has extension, and no template extension, than it is moved to the end),
     """
-    fld_value = str(fld_value)  # in case it's a path
-    filename, *ext = fld_value.split(".", maxsplit=1)
+    fld_value_parent = Path(fld_value).parent
+    fld_value_name = Path(fld_value).name
+
+    name, *ext = fld_value_name.split(".", maxsplit=1)
+    filename = str(fld_value_parent / name)
+
     # if keep_extension is False, the extensions are removed
     if keep_extension is False:
         ext = []
