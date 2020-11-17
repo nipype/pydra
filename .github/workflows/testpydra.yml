@@ -20,7 +20,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Disable etelemetry
-      run:  echo ::set-env name=NO_ET::TRUE
+      run:  echo "NO_ET=TRUE" >> $GITHUB_ENV
     - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
       uses: actions/setup-python@v2
       with:
