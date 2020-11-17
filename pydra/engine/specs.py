@@ -41,6 +41,14 @@ class MultiOutputObj:
             return value
 
 
+class MultiInputFile(MultiInputObj):
+    """A ty.List[File] object, converter changes a single file path to a list"""
+
+
+class MultiOutputFile(MultiOutputObj):
+    """A ty.List[File] object, converter changes an 1-el list to the single value"""
+
+
 @attr.s(auto_attribs=True, kw_only=True)
 class SpecInfo:
     """Base data structure for metadata of specifications."""
@@ -400,7 +408,7 @@ class ShellOutSpec:
         additional_out = {}
         for fld in attr_fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:
-                if fld.type is File:
+                if fld.type in [File, MultiOutputFile]:
                     # assuming that field should have either default or metadata, but not both
                     if (
                         fld.default is None or fld.default == attr.NOTHING
@@ -493,7 +501,10 @@ class ShellOutSpec:
             value = template_update_single(
                 fld, inputs_templ, output_dir=output_dir, spec_type="output"
             )
-            return Path(value)
+            if fld.type is MultiOutputFile and type(value) is list:
+                return [Path(val) for val in value]
+            else:
+                return Path(value)
         elif "callable" in fld.metadata:
             return fld.metadata["callable"](fld.name, output_dir)
         else:
