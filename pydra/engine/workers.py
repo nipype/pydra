@@ -68,42 +68,6 @@ class DistributedWorker(Worker):
         """Maximum number of concurrently running jobs."""
         self._jobs = 0
 
-    def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
-        if isinstance(task, TaskBase):
-            cache_dir = task.cache_dir
-            ind = None
-            uid = task.uid
-        else:
-            ind = task[0]
-            cache_dir = task[-1].cache_dir
-            uid = task[-1].uid_states()[ind]
-
-        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
-        script_dir.mkdir(parents=True, exist_ok=True)
-        if ind is None:
-            if not (script_dir / "_task.pkl").exists():
-                save(script_dir, task=task)
-        else:
-            copyfile(task[1], script_dir / "_task.pklz")
-
-        task_pkl = script_dir / "_task.pklz"
-        if not task_pkl.exists() or not task_pkl.stat().st_size:
-            raise Exception("Missing or empty task!")
-
-        batchscript = script_dir / f"batchscript_{uid}.sh"
-        python_string = f"""'from pydra.engine.helpers import load_and_run; load_and_run(task_pkl="{str(task_pkl)}", ind={ind}, rerun={rerun}) '
-        """
-        bcmd = "\n".join(
-            (
-                f"#!{interpreter}",
-                f"#SBATCH --output={str(script_dir / 'slurm-%j.out')}",
-                f"{sys.executable} -c " + python_string,
-            )
-        )
-        with batchscript.open("wt") as fp:
-            fp.writelines(bcmd)
-        return script_dir, batchscript
-
     async def fetch_finished(self, futures):
         """
         Awaits asyncio's :class:`asyncio.Task` until one is finished.
@@ -256,6 +220,42 @@ class SlurmWorker(DistributedWorker):
 
         return self._submit_job(batch_script, name=name, uid=uid, cache_dir=cache_dir)
 
+    def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
+        if isinstance(task, TaskBase):
+            cache_dir = task.cache_dir
+            ind = None
+            uid = task.uid
+        else:
+            ind = task[0]
+            cache_dir = task[-1].cache_dir
+            uid = task[-1].uid_states()[ind]
+
+        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
+        script_dir.mkdir(parents=True, exist_ok=True)
+        if ind is None:
+            if not (script_dir / "_task.pkl").exists():
+                save(script_dir, task=task)
+        else:
+            copyfile(task[1], script_dir / "_task.pklz")
+
+        task_pkl = script_dir / "_task.pklz"
+        if not task_pkl.exists() or not task_pkl.stat().st_size:
+            raise Exception("Missing or empty task!")
+
+        batchscript = script_dir / f"batchscript_{uid}.sh"
+        python_string = f"""'from pydra.engine.helpers import load_and_run; load_and_run(task_pkl="{str(task_pkl)}", ind={ind}, rerun={rerun}) '
+        """
+        bcmd = "\n".join(
+            (
+                f"#!{interpreter}",
+                f"#SBATCH --output={str(script_dir / 'slurm-%j.out')}",
+                f"{sys.executable} -c " + python_string,
+            )
+        )
+        with batchscript.open("wt") as fp:
+            fp.writelines(bcmd)
+        return script_dir, batchscript
+
     async def _submit_job(self, batchscript, name, uid, cache_dir):
         """Coroutine that submits task runscript and polls job until completion or error."""
         script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
@@ -308,6 +308,42 @@ class SlurmWorker(DistributedWorker):
                 else:
                     return True
             await asyncio.sleep(self.poll_delay)
+
+    def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
+        if isinstance(task, TaskBase):
+            cache_dir = task.cache_dir
+            ind = None
+            uid = task.uid
+        else:
+            ind = task[0]
+            cache_dir = task[-1].cache_dir
+            uid = task[-1].uid_states()[ind]
+
+        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
+        script_dir.mkdir(parents=True, exist_ok=True)
+        if ind is None:
+            if not (script_dir / "_task.pkl").exists():
+                save(script_dir, task=task)
+        else:
+            copyfile(task[1], script_dir / "_task.pklz")
+
+        task_pkl = script_dir / "_task.pklz"
+        if not task_pkl.exists() or not task_pkl.stat().st_size:
+            raise Exception("Missing or empty task!")
+
+        batchscript = script_dir / f"batchscript_{uid}.sh"
+        python_string = f"""'from pydra.engine.helpers import load_and_run; load_and_run(task_pkl="{str(task_pkl)}", ind={ind}, rerun={rerun}) '
+        """
+        bcmd = "\n".join(
+            (
+                f"#!{interpreter}",
+                f"#SBATCH --output={str(script_dir / 'slurm-%j.out')}",
+                f"{sys.executable} -c " + python_string,
+            )
+        )
+        with batchscript.open("wt") as fp:
+            fp.writelines(bcmd)
+        return script_dir, batchscript
 
     async def _poll_job(self, jobid):
         cmd = ("squeue", "-h", "-j", jobid)
