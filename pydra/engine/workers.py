@@ -69,17 +69,16 @@ class DistributedWorker(Worker):
         self._jobs = 0
 
     def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
-
         if isinstance(task, TaskBase):
-            checksum = task.checksum
             cache_dir = task.cache_dir
             ind = None
+            uid = task.uid
         else:
             ind = task[0]
-            checksum = task[-1].checksum_states()[ind]
             cache_dir = task[-1].cache_dir
+            uid = task[-1].uid_states()[ind]
 
-        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / checksum
+        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
         script_dir.mkdir(parents=True, exist_ok=True)
         if ind is None:
             if not (script_dir / "_task.pkl").exists():
@@ -91,7 +90,7 @@ class DistributedWorker(Worker):
         if not task_pkl.exists() or not task_pkl.stat().st_size:
             raise Exception("Missing or empty task!")
 
-        batchscript = script_dir / f"batchscript_{checksum}.sh"
+        batchscript = script_dir / f"batchscript_{uid}.sh"
         python_string = f"""'from pydra.engine.helpers import load_and_run; load_and_run(task_pkl="{str(task_pkl)}", ind={ind}, rerun={rerun}) '
         """
         bcmd = "\n".join(
@@ -246,27 +245,24 @@ class SlurmWorker(DistributedWorker):
         script_dir, batch_script = self._prepare_runscripts(runnable, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
-
         if isinstance(runnable, TaskBase):
-            checksum = runnable.checksum
             cache_dir = runnable.cache_dir
             name = runnable.name
+            uid = runnable.uid
         else:
-            checksum = runnable[-1].checksum_states()[runnable[0]]
             cache_dir = runnable[-1].cache_dir
             name = runnable[-1].name
+            uid = runnable[-1].uid_states()[runnable[0]]
 
-        return self._submit_job(
-            batch_script, name=name, checksum=checksum, cache_dir=cache_dir
-        )
+        return self._submit_job(batch_script, name=name, uid=uid, cache_dir=cache_dir)
 
-    async def _submit_job(self, batchscript, name, checksum, cache_dir):
+    async def _submit_job(self, batchscript, name, uid, cache_dir):
         """Coroutine that submits task runscript and polls job until completion or error."""
-        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / checksum
+        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
         sargs = self.sbatch_args.split()
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
         if not jobname:
-            jobname = ".".join((name, checksum))
+            jobname = ".".join((name, uid))
             sargs.append(f"--job-name={jobname}")
         output = re.search(r"(?<=-o )\S+|(?<=--output=)\S+", self.sbatch_args)
         if not output:
@@ -304,9 +300,9 @@ class SlurmWorker(DistributedWorker):
                     done in ["CANCELLED", "TIMEOUT", "PREEMPTED"]
                     and "--no-requeue" not in self.sbatch_args
                 ):
-                    if (cache_dir / f"{checksum}.lock").exists():
+                    if (cache_dir / f"{uid}.lock").exists():
                         # for pyt3.8 we could you missing_ok=True
-                        (cache_dir / f"{checksum}.lock").unlink()
+                        (cache_dir / f"{uid}.lock").unlink()
                     cmd_re = ("scontrol", "requeue", jobid)
                     await read_and_display_async(*cmd_re, hide_display=True)
                 else:

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import typing as ty
 from copy import deepcopy, copy
+from uuid import uuid4
 
 import cloudpickle as cp
 from filelock import SoftFileLock
@@ -183,6 +184,8 @@ class TaskBase:
         self.cache_locations = cache_locations
         self.allow_cache_override = True
         self._checksum = None
+        self._uid = None
+        self._uid_states = None
         # if True the results are not checked (does not propagate to nodes)
         self.task_rerun = rerun
 
@@ -248,6 +251,29 @@ class TaskBase:
                 self.__class__.__name__, hash_function([input_hash, splitter_hash])
             )
         return self._checksum
+
+    @property
+    def uid(self):
+        """ setting the unique id number for the task
+            It will be used to create unique names for slurm scripts etc.
+            without a need to run checksum
+        """
+        if not self._uid:
+            self._uid = str(uuid4())
+        return self._uid
+
+    def uid_states(self):
+        """ setting a list of the unique id numbers for the task with a splitter
+            It will be used to create unique names for slurm scripts etc.
+            without a need to run checksum
+        """
+        if self._uid_states is None:
+            self._uid_states = []
+            if not hasattr(self.state, "inputs_ind"):
+                self.state.prepare_states(self.inputs)
+            for ind in range(len(self.state.inputs_ind)):
+                self._uid_states.append(str(uuid4()))
+        return self._uid_states
 
     def checksum_states(self, state_index=None):
         """
@@ -546,8 +572,8 @@ class TaskBase:
         """ Pickling the tasks with full inputs"""
         pkl_files = self.cache_dir / "pkl_files"
         pkl_files.mkdir(exist_ok=True, parents=True)
-        task_main_path = pkl_files / f"{self.name}_{self.checksum}_task.pklz"
-        save(task_path=pkl_files, task=self, name_prefix=f"{self.name}_{self.checksum}")
+        task_main_path = pkl_files / f"{self.name}_{self.uid}_task.pklz"
+        save(task_path=pkl_files, task=self, name_prefix=f"{self.name}_{self.uid}")
         return task_main_path
 
     @property
