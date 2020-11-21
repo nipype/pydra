@@ -51,9 +51,6 @@ class Submitter:
                 runnable.create_connections(nd)
                 if nd.allow_cache_override:
                     nd.cache_dir = runnable.cache_dir
-            runnable.inputs._graph_checksums = [
-                nd.checksum for nd in runnable.graph_sorted
-            ]
         if is_workflow(runnable) and runnable.state is None:
             self.loop.run_until_complete(self.submit_workflow(runnable, rerun=rerun))
         else:

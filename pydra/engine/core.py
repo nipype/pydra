@@ -252,29 +252,6 @@ class TaskBase:
             )
         return self._checksum
 
-    @property
-    def uid(self):
-        """ setting the unique id number for the task
-            It will be used to create unique names for slurm scripts etc.
-            without a need to run checksum
-        """
-        if not self._uid:
-            self._uid = str(uuid4())
-        return self._uid
-
-    def uid_states(self):
-        """ setting a list of the unique id numbers for the task with a splitter
-            It will be used to create unique names for slurm scripts etc.
-            without a need to run checksum
-        """
-        if self._uid_states is None:
-            self._uid_states = []
-            if not hasattr(self.state, "inputs_ind"):
-                self.state.prepare_states(self.inputs)
-            for ind in range(len(self.state.inputs_ind)):
-                self._uid_states.append(str(uuid4()))
-        return self._uid_states
-
     def checksum_states(self, state_index=None):
         """
         Calculate a checksum for the specific state or all of the states of the task.
@@ -287,6 +264,9 @@ class TaskBase:
             TODO
 
         """
+        if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
+            self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
+
         if state_index is not None:
             inputs_copy = deepcopy(self.inputs)
             for key, ind in self.state.inputs_ind[state_index].items():
@@ -313,6 +293,29 @@ class TaskBase:
             for ind in range(len(self.state.inputs_ind)):
                 checksum_list.append(self.checksum_states(state_index=ind))
             return checksum_list
+
+    @property
+    def uid(self):
+        """ setting the unique id number for the task
+            It will be used to create unique names for slurm scripts etc.
+            without a need to run checksum
+        """
+        if not self._uid:
+            self._uid = str(uuid4())
+        return self._uid
+
+    def uid_states(self):
+        """ setting a list of the unique id numbers for the task with a splitter
+            It will be used to create unique names for slurm scripts etc.
+            without a need to run checksum
+        """
+        if self._uid_states is None:
+            self._uid_states = []
+            if not hasattr(self.state, "inputs_ind"):
+                self.state.prepare_states(self.inputs)
+            for ind in range(len(self.state.inputs_ind)):
+                self._uid_states.append(str(uuid4()))
+        return self._uid_states
 
     def set_state(self, splitter, combiner=None):
         """
