@@ -89,6 +89,7 @@ class BaseSpec:
             super().__setattr__(name, value)
             # validate all fields that have set a validator
             attr.validate(self)
+            # TODO: consider using on_setattr
             super().__setattr__("changed", True)
 
     def collect_additional_outputs(self, inputs, output_dir):
@@ -102,7 +103,13 @@ class BaseSpec:
 
         # if inp_hash already calculated and nothing has changed, the old value can be used
         if self.changed is False and self.inp_hash:
-            return self.inp_hash
+            # if there are files in self.files_hash, checking if they didn't changed
+            check_files = [
+                Path(val[0]).stat().st_mtime == val[1]
+                for val in self.files_hash.values()
+            ]
+            if all(check_files):
+                return self.inp_hash
         if self.files_hash is None:
             self.files_hash = {}
         inp_dict = {}
@@ -119,20 +126,33 @@ class BaseSpec:
             if getattr(self, field.name) is attr.NOTHING:
                 continue
             value = getattr(self, field.name)
-            # checking if the value is a file that already has calculated hash value
-            if str(value) in self.files_hash:
-                inp_dict[field.name] = self.files_hash[str(value)]
-            else:
-                inp_dict[field.name] = hash_value(
-                    value=value, tp=field.type, metadata=field.metadata
-                )
-                # if file/dir, the hash value will be saved to prevent recomputation
+            # checking if the field name is in the dictionary with pre-computed hash values for files
+            if field.name in self.files_hash:
+                filename, mtime, cont_hash = self.files_hash[field.name]
+                # if the name of the file and the time of last modification is the same,
+                # we are reusing the content hash value
                 if (
-                    field.type in [File, Directory]
-                    or "pydra.engine.specs.File" in str(field.type)
-                    or "pydra.engine.specs.File" in str(field.type)
-                ) and is_existing_file(value):
-                    self.files_hash[str(value)] = inp_dict[field.name]
+                    str(Path(value)) == filename
+                    and Path(value).stat().st_mtime == mtime
+                ):
+                    inp_dict[field.name] = cont_hash
+                    continue
+
+            inp_dict[field.name] = hash_value(
+                value=value, tp=field.type, metadata=field.metadata
+            )
+            # if file/dir, the hash value will be saved to prevent recomputation
+            if (
+                field.type in [File, Directory]
+                or "pydra.engine.specs.File" in str(field.type)
+                or "pydra.engine.specs.File" in str(field.type)
+            ) and is_existing_file(value):
+                # saving tuple with full pathname, time modification and hash value
+                self.files_hash[field.name] = (
+                    str(Path(value)),
+                    Path(value).stat().st_mtime,
+                    inp_dict[field.name],
+                )
 
         inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph_checksums"):
