@@ -475,6 +475,8 @@ class TaskBase:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
                 save(odir, result=result, task=self)
+                # removing the additional file with the chcksum
+                (self.cache_dir / f"{self.uid}_info.json").unlink()
                 # # function etc. shouldn't change anyway, so removing
                 orig_inputs = dict(
                     (k, v) for (k, v) in orig_inputs.items() if not k.startswith("_")
@@ -965,11 +967,6 @@ class Workflow(TaskBase):
                 "Workflow output cannot be None, use set_output to define output(s)"
             )
         checksum = self.checksum
-        # adding info file with the checksum in case the task was cancelled
-        # and the lockfile has to be removed
-        with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
-            json.dump({"checksum": checksum}, jsonfile)
-        lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
         if not (rerun or self.task_rerun):
             result = self.result()
@@ -987,6 +984,11 @@ class Workflow(TaskBase):
             task.cache_locations = task._cache_locations + self.cache_locations
             self.create_connections(task)
         # TODO add signal handler for processes killed after lock acquisition
+        # adding info file with the checksum in case the task was cancelled
+        # and the lockfile has to be removed
+        with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
+            json.dump({"checksum": checksum}, jsonfile)
+        lockfile = self.cache_dir / (checksum + ".lock")
         self.hooks.pre_run(self)
         with SoftFileLock(lockfile):
             # # Let only one equivalent process run
@@ -1011,6 +1013,8 @@ class Workflow(TaskBase):
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
                 save(odir, result=result, task=self)
+                # removing the additional file with the chcksum
+                (self.cache_dir / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         return result

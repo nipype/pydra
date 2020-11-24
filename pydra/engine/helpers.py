@@ -803,6 +803,7 @@ def load_task(task_pkl, ind=None):
         _, inputs_dict = task.get_input_el(ind)
         task.inputs = attr.evolve(task.inputs, **inputs_dict)
         task.state = None
+        task._uid = None
     return task
 
 
