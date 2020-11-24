@@ -5,7 +5,7 @@ import typing as ty
 import inspect
 import re
 
-from .helpers_file import template_update_single
+from .helpers_file import template_update_single, is_existing_file
 
 
 def attr_fields(x):
@@ -69,12 +69,17 @@ class BaseSpec:
     inp_hash = None
     # a flag to check if anything has changed since the last hash was calculated
     changed = None
+    files_hash = None
 
     def __setattr__(self, name, value):
         """changing settatr, so the converter and validator is run
         if input is set after __init__
         """
-        if inspect.stack()[1][3] == "__init__" or name in ["inp_hash", "changed"]:
+        if inspect.stack()[1][3] == "__init__" or name in [
+            "inp_hash",
+            "changed",
+            "files_hash",
+        ]:
             super().__setattr__(name, value)
         else:
             tp = attr.fields_dict(self.__class__)[name].type
@@ -98,6 +103,8 @@ class BaseSpec:
         # if inp_hash already calculated and nothing has changed, the old value can be used
         if self.changed is False and self.inp_hash:
             return self.inp_hash
+        if self.files_hash is None:
+            self.files_hash = {}
         inp_dict = {}
         for field in attr_fields(self):
             if field.name in [
@@ -105,14 +112,28 @@ class BaseSpec:
                 "bindings",
                 "inp_hash",
                 "changed",
+                "files_hash",
             ] or field.metadata.get("output_file_template"):
                 continue
             # removing values that are notset from hash calculation
             if getattr(self, field.name) is attr.NOTHING:
                 continue
-            inp_dict[field.name] = hash_value(
-                value=getattr(self, field.name), tp=field.type, metadata=field.metadata
-            )
+            value = getattr(self, field.name)
+            # checking if the value is a file that already has calculated hash value
+            if str(value) in self.files_hash:
+                inp_dict[field.name] = self.files_hash[str(value)]
+            else:
+                inp_dict[field.name] = hash_value(
+                    value=value, tp=field.type, metadata=field.metadata
+                )
+                # if file/dir, the hash value will be saved to prevent recomputation
+                if (
+                    field.type in [File, Directory]
+                    or "pydra.engine.specs.File" in str(field.type)
+                    or "pydra.engine.specs.File" in str(field.type)
+                ) and is_existing_file(value):
+                    self.files_hash[str(value)] = inp_dict[field.name]
+
         inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph_checksums"):
             inp_hash = hash_function((inp_hash, self._graph_checksums))
