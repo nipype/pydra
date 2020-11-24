@@ -74,9 +74,7 @@ class BaseSpec:
         """changing settatr, so the converter and validator is run
         if input is set after __init__
         """
-        if name == "inp_hash":
-            breakpoint()
-        if inspect.stack()[1][3] == "__init__":  # or name.startswith("_"):
+        if inspect.stack()[1][3] == "__init__" or name in ["inp_hash", "changed"]:
             super().__setattr__(name, value)
         else:
             tp = attr.fields_dict(self.__class__)[name].type
@@ -86,7 +84,7 @@ class BaseSpec:
             super().__setattr__(name, value)
             # validate all fields that have set a validator
             attr.validate(self)
-        super().__setattr__("changed", True)
+            super().__setattr__("changed", True)
 
     def collect_additional_outputs(self, inputs, output_dir):
         """Get additional outputs."""
@@ -102,9 +100,12 @@ class BaseSpec:
             return self.inp_hash
         inp_dict = {}
         for field in attr_fields(self):
-            if field.name in ["_graph_checksums", "bindings"] or field.metadata.get(
-                "output_file_template"
-            ):
+            if field.name in [
+                "_graph_checksums",
+                "bindings",
+                "inp_hash",
+                "changed",
+            ] or field.metadata.get("output_file_template"):
                 continue
             # removing values that are notset from hash calculation
             if getattr(self, field.name) is attr.NOTHING:
@@ -116,8 +117,8 @@ class BaseSpec:
         if hasattr(self, "_graph_checksums"):
             inp_hash = hash_function((inp_hash, self._graph_checksums))
         # setting inp_hash and changing the flag to False
-        super().__setattr__("inp_hash", inp_hash)
-        super().__setattr__("changed", False)
+        self.inp_hash = inp_hash
+        self.changed = False
         return inp_hash
 
     def retrieve_values(self, wf, state_index=None):
