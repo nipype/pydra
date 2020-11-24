@@ -68,7 +68,7 @@ class BaseSpec:
 
     inp_hash = None
     # a flag to check if anything has changed since the last hash was calculated
-    changed = None
+    changed = True
     files_hash = None
 
     def __setattr__(self, name, value):
