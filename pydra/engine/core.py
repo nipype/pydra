@@ -438,7 +438,10 @@ class TaskBase:
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached - see scenarios in __init__()
         self.hooks.pre_run(self)
-        # TODO add signal handler for processes killed after lock acquisition
+        # adding info file with the checksum in case the task was cancelled
+        # and the lockfile has to be removed
+        with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
+            json.dump({"checksum": self.checksum}, jsonfile)
         with SoftFileLock(lockfile):
             if not (rerun or self.task_rerun):
                 result = self.result()
@@ -962,6 +965,10 @@ class Workflow(TaskBase):
                 "Workflow output cannot be None, use set_output to define output(s)"
             )
         checksum = self.checksum
+        # adding info file with the checksum in case the task was cancelled
+        # and the lockfile has to be removed
+        with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
+            json.dump({"checksum": checksum}, jsonfile)
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
         if not (rerun or self.task_rerun):

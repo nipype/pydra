@@ -1,6 +1,6 @@
 """Execution workers."""
 import asyncio
-import sys, os
+import sys, os, json
 import re
 from tempfile import gettempdir
 from pathlib import Path
@@ -300,9 +300,13 @@ class SlurmWorker(DistributedWorker):
                     done in ["CANCELLED", "TIMEOUT", "PREEMPTED"]
                     and "--no-requeue" not in self.sbatch_args
                 ):
-                    if (cache_dir / f"{uid}.lock").exists():
-                        # for pyt3.8 we could you missing_ok=True
-                        (cache_dir / f"{uid}.lock").unlink()
+                    # loading info about task with a specific uid
+                    info_file = cache_dir / f"{uid}_info.json"
+                    if info_file.exists():
+                        checksum = json.loads(info_file.read_text())["checksum"]
+                        if (cache_dir / f"{checksum}.lock").exists():
+                            # for pyt3.8 we could you missing_ok=True
+                            (cache_dir / f"{checksum}.lock").unlink()
                     cmd_re = ("scontrol", "requeue", jobid)
                     await read_and_display_async(*cmd_re, hide_display=True)
                 else:
