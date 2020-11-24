@@ -178,8 +178,6 @@ class Submitter:
                 logger.debug(f"Retrieving inputs for {task}")
                 # TODO: add state idx to retrieve values to reduce waiting
                 task.inputs.retrieve_values(wf)
-                # checksum has to be updated, so resetting
-                task._checksum = None
                 if is_workflow(task) and not task.state:
                     await self.submit_workflow(task, rerun=rerun)
                 else:

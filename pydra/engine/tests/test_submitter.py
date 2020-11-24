@@ -185,7 +185,8 @@ def test_slurm_wf_cf(tmpdir):
     # ensure only workflow was executed with slurm
     sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
     assert len(sdirs) == 1
-    assert sdirs[0].basename == wf.checksum
+    # slurm scripts should be in the dirs that are using uid in the name
+    assert sdirs[0].basename == wf.uid
 
 
 @pytest.mark.skipif(not slurm_available, reason="slurm not installed")
