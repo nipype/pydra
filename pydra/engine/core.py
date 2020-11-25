@@ -184,7 +184,7 @@ class TaskBase:
         self.cache_locations = cache_locations
         self.allow_cache_override = True
         self._checksum = None
-        self._uid = str(uuid4())
+        self._uid = uuid4().hex
         # if True the results are not checked (does not propagate to nodes)
         self.task_rerun = rerun
 
