@@ -158,7 +158,7 @@ class Submitter:
         graph_copy = wf.graph.copy()
         # resetting uid for nodes in the copied workflows
         for nd in graph_copy.nodes:
-            nd._uid = str(uuid4())
+            nd._uid = uuid4().hex
         # keep track of pending futures
         task_futures = set()
         tasks, tasks_follow_errored = get_runnable_tasks(graph_copy)
