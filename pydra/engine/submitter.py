@@ -1,6 +1,7 @@
 """Handle execution backends."""
 import asyncio
 import time
+from uuid import uuid4
 from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker, DaskWorker
 from .core import is_workflow
 from .helpers import get_open_loop, load_and_run_async
@@ -155,6 +156,9 @@ class Submitter:
         # creating a copy of the graph that will be modified
         # the copy contains new lists with original runnable objects
         graph_copy = wf.graph.copy()
+        # resetting uid for nodes in the copied workflows
+        for nd in graph_copy.nodes:
+            nd._uid = str(uuid4())
         # keep track of pending futures
         task_futures = set()
         tasks, tasks_follow_errored = get_runnable_tasks(graph_copy)

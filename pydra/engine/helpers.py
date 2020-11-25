@@ -8,6 +8,7 @@ from filelock import SoftFileLock
 import os
 import sys
 from hashlib import sha256
+from uuid import uuid4
 import subprocess as sp
 import getpass
 import re
@@ -805,7 +806,8 @@ def load_task(task_pkl, ind=None):
         _, inputs_dict = task.get_input_el(ind)
         task.inputs = attr.evolve(task.inputs, **inputs_dict)
         task.state = None
-        task._uid = None
+        # resetting uid for task
+        task._uid = str(uuid4())
     return task
 
 

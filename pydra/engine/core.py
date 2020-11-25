@@ -184,7 +184,7 @@ class TaskBase:
         self.cache_locations = cache_locations
         self.allow_cache_override = True
         self._checksum = None
-        self._uid = None
+        self._uid = str(uuid4())
         # if True the results are not checked (does not propagate to nodes)
         self.task_rerun = rerun
 
@@ -295,12 +295,10 @@ class TaskBase:
 
     @property
     def uid(self):
-        """ setting the unique id number for the task
+        """ the unique id number for the task
             It will be used to create unique names for slurm scripts etc.
             without a need to run checksum
         """
-        if not self._uid:
-            self._uid = str(uuid4())
         return self._uid
 
     def set_state(self, splitter, combiner=None):
