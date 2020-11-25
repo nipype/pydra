@@ -807,7 +807,7 @@ def load_task(task_pkl, ind=None):
         task.inputs = attr.evolve(task.inputs, **inputs_dict)
         task.state = None
         # resetting uid for task
-        task._uid = str(uuid4())
+        task._uid = uuid4().hex
     return task
 
 
