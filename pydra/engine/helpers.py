@@ -661,14 +661,16 @@ def hash_function(obj):
     return sha256(str(obj).encode()).hexdigest()
 
 
-def hash_value(value, tp=None, metadata=None):
+def hash_value(value, tp=None, metadata=None, precalculated=None):
     """calculating hash or returning values recursively"""
     if metadata is None:
         metadata = {}
     if isinstance(value, (tuple, list)):
-        return [hash_value(el, tp, metadata) for el in value]
+        return [hash_value(el, tp, metadata, precalculated) for el in value]
     elif isinstance(value, dict):
-        dict_hash = {k: hash_value(v, tp, metadata) for (k, v) in value.items()}
+        dict_hash = {
+            k: hash_value(v, tp, metadata, precalculated) for (k, v) in value.items()
+        }
         # returning a sorted object
         return [list(el) for el in sorted(dict_hash.items(), key=lambda x: x[0])]
     else:  # not a container
@@ -677,13 +679,13 @@ def hash_value(value, tp=None, metadata=None):
             and is_existing_file(value)
             and "container_path" not in metadata
         ):
-            return hash_file(value)
+            return hash_file(value, precalculated=precalculated)
         elif (
             (tp is File or "pydra.engine.specs.Directory" in str(tp))
             and is_existing_file(value)
             and "container_path" not in metadata
         ):
-            return hash_dir(value)
+            return hash_dir(value, precalculated=precalculated)
         else:
             return value
 

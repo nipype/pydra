@@ -6,7 +6,7 @@ import logging
 import os
 from pathlib import Path
 import typing as ty
-from copy import deepcopy, copy
+from copy import deepcopy
 from uuid import uuid4
 
 import cloudpickle as cp

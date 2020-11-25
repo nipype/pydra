@@ -1,6 +1,6 @@
 from pathlib import Path
 import typing as ty
-from copy import copy
+from copy import deepcopy
 
 from ..specs import (
     BaseSpec,
@@ -242,7 +242,7 @@ def test_input_file_hash_2a(tmpdir):
 
 
 def test_input_file_hash_3(tmpdir):
-    """ input spec with File types, checking when the checksum changes"""
+    """ input spec with File types, checking when the hash and file_hash change"""
     file = tmpdir.join("in_file_1.txt")
     with open(file, "w") as f:
         f.write("hello")
@@ -255,32 +255,43 @@ def test_input_file_hash_3(tmpdir):
     my_inp = inputs(in_file=file, in_int=3)
     # original hash and files_hash (dictionary contains info about files)
     hash1 = my_inp.hash
-    files_hash1 = copy(my_inp.files_hash)
+    files_hash1 = deepcopy(my_inp.files_hash)
+    # file name should be in files_hash1[in_file]
+    filename = str(Path(file))
+    assert filename in files_hash1["in_file"]
 
     # changing int input
     my_inp.in_int = 5
     hash2 = my_inp.hash
-    files_hash2 = copy(my_inp.files_hash)
+    files_hash2 = deepcopy(my_inp.files_hash)
     # hash should be different
     assert hash1 != hash2
-    # files_hash should be the same, and the tuple for in_file shouldn't be recomputed
+    # files_hash should be the same, and the tuple for filename shouldn't be recomputed
     assert files_hash1 == files_hash2
-    assert id(files_hash1["in_file"]) == id(files_hash2["in_file"])
+    assert id(files_hash1["in_file"][filename]) == id(files_hash2["in_file"][filename])
 
     # recreating the file
     with open(file, "w") as f:
         f.write("hello")
 
     hash3 = my_inp.hash
-    files_hash3 = copy(my_inp.files_hash)
+    files_hash3 = deepcopy(my_inp.files_hash)
     # hash should be the same,
     # but the entry for in_file in files_hash should be different (modification time)
     assert hash3 == hash2
-    assert files_hash3["in_file"] != files_hash2["in_file"]
+    assert files_hash3["in_file"][filename] != files_hash2["in_file"][filename]
     # different timestamp
-    assert files_hash3["in_file"][1] != files_hash2["in_file"][1]
+    assert files_hash3["in_file"][filename][0] != files_hash2["in_file"][filename][0]
     # the same content hash
-    assert files_hash3["in_file"][2] == files_hash2["in_file"][2]
+    assert files_hash3["in_file"][filename][1] == files_hash2["in_file"][filename][1]
+
+    # setting the in_file again
+    my_inp.in_file = file
+    # filename should be removed from files_hash
+    assert my_inp.files_hash["in_file"] == {}
+    # will be saved again when hash is calculated
+    assert my_inp.hash == hash3
+    assert filename in my_inp.files_hash["in_file"]
 
 
 def test_input_file_hash_4(tmpdir):

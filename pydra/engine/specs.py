@@ -5,7 +5,7 @@ import typing as ty
 import inspect
 import re
 
-from .helpers_file import template_update_single, is_existing_file
+from .helpers_file import template_update_single
 
 
 def attr_fields(x):
@@ -66,10 +66,14 @@ class SpecInfo:
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
 
-    inp_hash = None
-    # a flag to check if anything has changed since the last hash was calculated
-    changed = True
-    files_hash = None
+    def __attrs_post_init__(self):
+        self.files_hash = {}
+        for field in attr_fields(self):
+            if (
+                field.name not in ["_graph_checksums", "bindings", "files_hash"]
+                and field.metadata.get("output_file_template") is None
+            ):
+                self.files_hash[field.name] = {}
 
     def __setattr__(self, name, value):
         """changing settatr, so the converter and validator is run
@@ -86,11 +90,10 @@ class BaseSpec:
             # if the type has a converter, e.g., MultiInputObj
             if hasattr(tp, "converter"):
                 value = tp.converter(value)
+            self.files_hash[name] = {}
             super().__setattr__(name, value)
             # validate all fields that have set a validator
             attr.validate(self)
-            # TODO: consider using on_setattr
-            super().__setattr__("changed", True)
 
     def collect_additional_outputs(self, inputs, output_dir):
         """Get additional outputs."""
@@ -101,24 +104,11 @@ class BaseSpec:
         """Compute a basic hash for any given set of fields."""
         from .helpers import hash_value, hash_function
 
-        # if inp_hash already calculated and nothing has changed, the old value can be used
-        if self.changed is False and self.inp_hash:
-            # if there are files in self.files_hash, checking if they didn't changed
-            check_files = [
-                Path(val[0]).stat().st_mtime == val[1]
-                for val in self.files_hash.values()
-            ]
-            if all(check_files):
-                return self.inp_hash
-        if self.files_hash is None:
-            self.files_hash = {}
         inp_dict = {}
         for field in attr_fields(self):
             if field.name in [
                 "_graph_checksums",
                 "bindings",
-                "inp_hash",
-                "changed",
                 "files_hash",
             ] or field.metadata.get("output_file_template"):
                 continue
@@ -126,40 +116,15 @@ class BaseSpec:
             if getattr(self, field.name) is attr.NOTHING:
                 continue
             value = getattr(self, field.name)
-            # checking if the field name is in the dictionary with pre-computed hash values for files
-            if field.name in self.files_hash:
-                filename, mtime, cont_hash = self.files_hash[field.name]
-                # if the name of the file and the time of last modification is the same,
-                # we are reusing the content hash value
-                if (
-                    str(Path(value)) == filename
-                    and Path(value).stat().st_mtime == mtime
-                ):
-                    inp_dict[field.name] = cont_hash
-                    continue
-
             inp_dict[field.name] = hash_value(
-                value=value, tp=field.type, metadata=field.metadata
+                value=value,
+                tp=field.type,
+                metadata=field.metadata,
+                precalculated=self.files_hash[field.name],
             )
-            # if file/dir, the hash value will be saved to prevent recomputation
-            if (
-                field.type in [File, Directory]
-                or "pydra.engine.specs.File" in str(field.type)
-                or "pydra.engine.specs.File" in str(field.type)
-            ) and is_existing_file(value):
-                # saving tuple with full pathname, time modification and hash value
-                self.files_hash[field.name] = (
-                    str(Path(value)),
-                    Path(value).stat().st_mtime,
-                    inp_dict[field.name],
-                )
-
         inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph_checksums"):
             inp_hash = hash_function((inp_hash, self._graph_checksums))
-        # setting inp_hash and changing the flag to False
-        self.inp_hash = inp_hash
-        self.changed = False
         return inp_hash
 
     def retrieve_values(self, wf, state_index=None):

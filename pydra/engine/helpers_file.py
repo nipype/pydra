@@ -66,7 +66,9 @@ def split_filename(fname):
     return pth, fname, ext
 
 
-def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
+def hash_file(
+    afile, chunk_len=8192, crypto=sha256, raise_notfound=True, precalculated=None
+):
     """Compute hash of a file using 'crypto' module."""
     from .specs import LazyField
 
@@ -77,6 +79,14 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
             raise RuntimeError('File "%s" not found.' % afile)
         return None
 
+    # if the path exists already in precalculated
+    # the time of the last modification will be compared
+    # and the precalculated hash value will be used if the file has not change
+    if precalculated and str(Path(afile)) in precalculated:
+        pre_mtime, pre_cont_hash = precalculated[str(Path(afile))]
+        if Path(afile).stat().st_mtime == pre_mtime:
+            return pre_cont_hash
+
     crypto_obj = crypto()
     with open(afile, "rb") as fp:
         while True:
@@ -84,7 +94,11 @@ def hash_file(afile, chunk_len=8192, crypto=sha256, raise_notfound=True):
             if not data:
                 break
             crypto_obj.update(data)
-    return crypto_obj.hexdigest()
+
+    cont_hash = crypto_obj.hexdigest()
+    if precalculated is not None:
+        precalculated[str(Path(afile))] = (Path(afile).stat().st_mtime, cont_hash)
+    return cont_hash
 
 
 def hash_dir(
@@ -93,6 +107,7 @@ def hash_dir(
     ignore_hidden_files=False,
     ignore_hidden_dirs=False,
     raise_notfound=True,
+    precalculated=None,
 ):
     """Compute hash of directory contents.
 
@@ -142,7 +157,7 @@ def hash_dir(
             if not is_existing_file(dpath / filename):
                 file_hashes.append(str(dpath / filename))
             else:
-                this_hash = hash_file(dpath / filename)
+                this_hash = hash_file(dpath / filename, precalculated=precalculated)
                 file_hashes.append(this_hash)
 
     crypto_obj = crypto()

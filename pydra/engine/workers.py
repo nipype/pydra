@@ -213,7 +213,7 @@ class SlurmWorker(DistributedWorker):
             cache_dir = runnable.cache_dir
             name = runnable.name
             uid = runnable.uid
-        else:
+        else:  # runnable is a tuple (ind, pkl file, task)
             cache_dir = runnable[-1].cache_dir
             name = runnable[-1].name
             uid = runnable[-1].uid_states()[runnable[0]]
