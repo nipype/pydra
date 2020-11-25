@@ -185,7 +185,6 @@ class TaskBase:
         self.allow_cache_override = True
         self._checksum = None
         self._uid = None
-        self._uid_states = None
         # if True the results are not checked (does not propagate to nodes)
         self.task_rerun = rerun
 
@@ -303,19 +302,6 @@ class TaskBase:
         if not self._uid:
             self._uid = str(uuid4())
         return self._uid
-
-    def uid_states(self):
-        """ setting a list of the unique id numbers for the task with a splitter
-            It will be used to create unique names for slurm scripts etc.
-            without a need to run checksum
-        """
-        if self._uid_states is None:
-            self._uid_states = []
-            if not hasattr(self.state, "inputs_ind"):
-                self.state.prepare_states(self.inputs)
-            for ind in range(len(self.state.inputs_ind)):
-                self._uid_states.append(str(uuid4()))
-        return self._uid_states
 
     def set_state(self, splitter, combiner=None):
         """

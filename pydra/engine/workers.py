@@ -216,7 +216,7 @@ class SlurmWorker(DistributedWorker):
         else:  # runnable is a tuple (ind, pkl file, task)
             cache_dir = runnable[-1].cache_dir
             name = runnable[-1].name
-            uid = runnable[-1].uid_states()[runnable[0]]
+            uid = f"{runnable[-1].uid}_{runnable[0]}"
 
         return self._submit_job(batch_script, name=name, uid=uid, cache_dir=cache_dir)
 
@@ -228,7 +228,7 @@ class SlurmWorker(DistributedWorker):
         else:
             ind = task[0]
             cache_dir = task[-1].cache_dir
-            uid = task[-1].uid_states()[ind]
+            uid = f"{task[-1].uid}_{ind}"
 
         script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
         script_dir.mkdir(parents=True, exist_ok=True)
