@@ -66,17 +66,31 @@ class SpecInfo:
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
 
+    def __attrs_post_init__(self):
+        self.files_hash = {}
+        for field in attr_fields(self):
+            if (
+                field.name not in ["_graph_checksums", "bindings", "files_hash"]
+                and field.metadata.get("output_file_template") is None
+            ):
+                self.files_hash[field.name] = {}
+
     def __setattr__(self, name, value):
         """changing settatr, so the converter and validator is run
         if input is set after __init__
         """
-        if inspect.stack()[1][3] == "__init__":  # or name.startswith("_"):
+        if inspect.stack()[1][3] == "__init__" or name in [
+            "inp_hash",
+            "changed",
+            "files_hash",
+        ]:
             super().__setattr__(name, value)
         else:
             tp = attr.fields_dict(self.__class__)[name].type
             # if the type has a converter, e.g., MultiInputObj
             if hasattr(tp, "converter"):
                 value = tp.converter(value)
+            self.files_hash[name] = {}
             super().__setattr__(name, value)
             # validate all fields that have set a validator
             attr.validate(self)
@@ -92,21 +106,26 @@ class BaseSpec:
 
         inp_dict = {}
         for field in attr_fields(self):
-            if field.name in ["_graph_checksums", "bindings"] or field.metadata.get(
-                "output_file_template"
-            ):
+            if field.name in [
+                "_graph_checksums",
+                "bindings",
+                "files_hash",
+            ] or field.metadata.get("output_file_template"):
                 continue
             # removing values that are notset from hash calculation
             if getattr(self, field.name) is attr.NOTHING:
                 continue
+            value = getattr(self, field.name)
             inp_dict[field.name] = hash_value(
-                value=getattr(self, field.name), tp=field.type, metadata=field.metadata
+                value=value,
+                tp=field.type,
+                metadata=field.metadata,
+                precalculated=self.files_hash[field.name],
             )
         inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph_checksums"):
-            return hash_function((inp_hash, self._graph_checksums))
-        else:
-            return inp_hash
+            inp_hash = hash_function((inp_hash, self._graph_checksums))
+        return inp_hash
 
     def retrieve_values(self, wf, state_index=None):
         """Get values contained by this spec."""

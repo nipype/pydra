@@ -1,6 +1,7 @@
 """Handle execution backends."""
 import asyncio
 import time
+from uuid import uuid4
 from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker, DaskWorker
 from .core import is_workflow
 from .helpers import get_open_loop, load_and_run_async
@@ -51,9 +52,6 @@ class Submitter:
                 runnable.create_connections(nd)
                 if nd.allow_cache_override:
                     nd.cache_dir = runnable.cache_dir
-            runnable.inputs._graph_checksums = [
-                nd.checksum for nd in runnable.graph_sorted
-            ]
         if is_workflow(runnable) and runnable.state is None:
             self.loop.run_until_complete(self.submit_workflow(runnable, rerun=rerun))
         else:
@@ -158,6 +156,9 @@ class Submitter:
         # creating a copy of the graph that will be modified
         # the copy contains new lists with original runnable objects
         graph_copy = wf.graph.copy()
+        # resetting uid for nodes in the copied workflows
+        for nd in graph_copy.nodes:
+            nd._uid = uuid4().hex
         # keep track of pending futures
         task_futures = set()
         tasks, tasks_follow_errored = get_runnable_tasks(graph_copy)
@@ -181,8 +182,6 @@ class Submitter:
                 logger.debug(f"Retrieving inputs for {task}")
                 # TODO: add state idx to retrieve values to reduce waiting
                 task.inputs.retrieve_values(wf)
-                # checksum has to be updated, so resetting
-                task._checksum = None
                 if is_workflow(task) and not task.state:
                     await self.submit_workflow(task, rerun=rerun)
                 else:

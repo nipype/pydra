@@ -1176,7 +1176,7 @@ def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
     """
     cmd = "cp"
     file = tmpdir.mkdir("data_inp").join("file.txt")
-    file.write("content")
+    file.write("content\n")
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1228,7 +1228,7 @@ def test_shell_cmd_inputspec_9a(tmpdir, plugin, results_function):
     """
     cmd = "cp"
     file = tmpdir.mkdir("data.inp").join("file.txt")
-    file.write("content")
+    file.write("content\n")
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1275,7 +1275,7 @@ def test_shell_cmd_inputspec_9b(tmpdir, plugin, results_function):
     """
     cmd = "cp"
     file = tmpdir.join("file.txt")
-    file.write("content")
+    file.write("content\n")
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1326,7 +1326,7 @@ def test_shell_cmd_inputspec_9c(tmpdir, plugin, results_function):
     """
     cmd = "cp"
     file = tmpdir.join("file.txt")
-    file.write("content")
+    file.write("content\n")
 
     my_input_spec = SpecInfo(
         name="Input",
