@@ -1456,7 +1456,7 @@ def test_shell_cmd_inputspec_10_err(tmpdir):
     )
     shelly.cache_dir = tmpdir
 
-    with pytest.raises(AttributeError) as e:
+    with pytest.raises(FileNotFoundError):
         res = shelly()
 
 
