@@ -542,7 +542,25 @@ class ShellOutSpec:
             else:
                 return Path(value)
         elif "callable" in fld.metadata:
-            return fld.metadata["callable"](fld.name, output_dir)
+            call_args = inspect.getargspec(fld.metadata["callable"])
+            call_args_val = {}
+            for argnm in call_args.args:
+                if argnm == "field":
+                    call_args_val[argnm] = fld
+                elif argnm == "output_dir":
+                    call_args_val[argnm] = output_dir
+                elif argnm == "inputs":
+                    call_args_val[argnm] = inputs
+                else:
+                    try:
+                        call_args_val[argnm] = getattr(inputs, argnm)
+                    except AttributeError:
+                        raise AttributeError(
+                            f"arguments of the callable function from {fld.name} "
+                            f"has to be in inputs or be field or output_dir, "
+                            f"but {argnm} is used"
+                        )
+            return fld.metadata["callable"](**call_args_val)
         else:
             raise Exception("(_field_metadata) is not a current valid metadata key.")
 
