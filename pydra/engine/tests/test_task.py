@@ -1143,7 +1143,7 @@ def test_singularity_cmd(tmpdir):
     singu = SingularityTask(name="singi", executable="pwd", image=image)
     assert (
         singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} pwd"
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} pwd"
     )
     singu.inputs.bindings = [
         ("/local/path", "/container/path", "ro"),
@@ -1151,7 +1151,7 @@ def test_singularity_cmd(tmpdir):
     ]
     assert singu.cmdline == (
         "singularity exec -B /local/path:/container/path:ro"
-        f" -B /local2:/container2:rw -B {singu.output_dir}:/output_pydra:rw {image} pwd"
+        f" -B /local2:/container2:rw -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} pwd"
     )
 
 

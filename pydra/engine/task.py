@@ -833,9 +833,8 @@ class SingularityTask(ContainerTask):
 
         if self.inputs.container_xargs is not None:
             cargs.extend(self.inputs.container_xargs)
-        cargs.append(image)
 
-        # insert bindings before image
-        idx = len(cargs) - 1
-        cargs[idx:-1] = self.binds("-B", ind)
+        cargs.extend(self.binds("-B", ind))
+        cargs.extend(["--pwd", str(self.output_cpath)])
+        cargs.append(image)
         return cargs

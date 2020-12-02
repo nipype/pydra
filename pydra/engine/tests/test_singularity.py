@@ -30,11 +30,11 @@ def test_singularity_1_nosubm(tmpdir):
     assert singu.inputs.container == "singularity"
     assert (
         singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {cmd}"
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {cmd}"
     )
 
     res = singu()
-    assert "SingularityTask" in res.output.stdout
+    assert "output_pydra" in res.output.stdout
     assert res.output.return_code == 0
 
 
@@ -48,7 +48,7 @@ def test_singularity_2_nosubm(tmpdir):
     singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
     assert (
         singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {' '.join(cmd)}"
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {' '.join(cmd)}"
     )
 
     res = singu()
@@ -66,7 +66,7 @@ def test_singularity_2(plugin, tmpdir):
     singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
     assert (
         singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {' '.join(cmd)}"
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {' '.join(cmd)}"
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -91,7 +91,7 @@ def test_singularity_2_singuflag(plugin, tmpdir):
     )
     assert (
         shingu.cmdline
-        == f"singularity exec -B {shingu.output_dir}:/output_pydra:rw {image} {' '.join(cmd)}"
+        == f"singularity exec -B {shingu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {' '.join(cmd)}"
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -115,7 +115,7 @@ def test_singularity_2a(plugin, tmpdir):
     )
     assert (
         singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {cmd_exec} {' '.join(cmd_args)}"
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {cmd_exec} {' '.join(cmd_args)}"
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -214,7 +214,7 @@ def test_singularity_st_1(plugin, tmpdir):
     assert singu.state.splitter == "singu.executable"
 
     res = singu(plugin=plugin)
-    assert "SingularityTask" in res[0].output.stdout
+    assert "/output_pydra" in res[0].output.stdout
     assert res[1].output.stdout == ""
     assert res[0].output.return_code == res[1].output.return_code == 0
 
@@ -249,9 +249,9 @@ def test_singularity_st_3(plugin, tmpdir):
     assert singu.state.splitter == ["singu.image", "singu.executable"]
     res = singu(plugin=plugin)
 
-    assert "SingularityTask" in res[0].output.stdout
+    assert "/output_pydra" in res[0].output.stdout
     assert "Alpine" in res[1].output.stdout
-    assert "SingularityTask" in res[2].output.stdout
+    assert "/output_pydra" in res[2].output.stdout
     assert "Ubuntu" in res[3].output.stdout
 
 
