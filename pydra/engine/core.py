@@ -6,7 +6,8 @@ import logging
 import os
 from pathlib import Path
 import typing as ty
-from copy import deepcopy, copy
+from copy import deepcopy
+from uuid import uuid4
 
 import cloudpickle as cp
 from filelock import SoftFileLock
@@ -163,7 +164,6 @@ class TaskBase:
 
         # checking if metadata is set properly
         self.inputs.check_metadata()
-        self.state_inputs = inputs
         # dictionary to save the connections with lazy fields
         self.inp_lf = {}
         self.state = None
@@ -184,6 +184,7 @@ class TaskBase:
         self.cache_locations = cache_locations
         self.allow_cache_override = True
         self._checksum = None
+        self._uid = uuid4().hex
         # if True the results are not checked (does not propagate to nodes)
         self.task_rerun = rerun
 
@@ -262,6 +263,9 @@ class TaskBase:
             TODO
 
         """
+        if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
+            self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
+
         if state_index is not None:
             inputs_copy = deepcopy(self.inputs)
             for key, ind in self.state.inputs_ind[state_index].items():
@@ -288,6 +292,14 @@ class TaskBase:
             for ind in range(len(self.state.inputs_ind)):
                 checksum_list.append(self.checksum_states(state_index=ind))
             return checksum_list
+
+    @property
+    def uid(self):
+        """ the unique id number for the task
+            It will be used to create unique names for slurm scripts etc.
+            without a need to run checksum
+        """
+        return self._uid
 
     def set_state(self, splitter, combiner=None):
         """
@@ -410,7 +422,10 @@ class TaskBase:
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached - see scenarios in __init__()
         self.hooks.pre_run(self)
-        # TODO add signal handler for processes killed after lock acquisition
+        # adding info file with the checksum in case the task was cancelled
+        # and the lockfile has to be removed
+        with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
+            json.dump({"checksum": self.checksum}, jsonfile)
         with SoftFileLock(lockfile):
             if not (rerun or self.task_rerun):
                 result = self.result()
@@ -444,6 +459,8 @@ class TaskBase:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
                 save(odir, result=result, task=self)
+                # removing the additional file with the chcksum
+                (self.cache_dir / f"{self.uid}_info.json").unlink()
                 # # function etc. shouldn't change anyway, so removing
                 orig_inputs = dict(
                     (k, v) for (k, v) in orig_inputs.items() if not k.startswith("_")
@@ -481,7 +498,6 @@ class TaskBase:
             )
         if kwargs:
             self.inputs = attr.evolve(self.inputs, **kwargs)
-            self.state_inputs = kwargs
         if not self.state or splitter != self.state.splitter:
             self.set_state(splitter)
         return self
@@ -548,8 +564,8 @@ class TaskBase:
         """ Pickling the tasks with full inputs"""
         pkl_files = self.cache_dir / "pkl_files"
         pkl_files.mkdir(exist_ok=True, parents=True)
-        task_main_path = pkl_files / f"{self.name}_{self.checksum}_task.pklz"
-        save(task_path=pkl_files, task=self, name_prefix=f"{self.name}_{self.checksum}")
+        task_main_path = pkl_files / f"{self.name}_{self.uid}_task.pklz"
+        save(task_path=pkl_files, task=self, name_prefix=f"{self.name}_{self.uid}")
         return task_main_path
 
     @property
@@ -935,7 +951,6 @@ class Workflow(TaskBase):
                 "Workflow output cannot be None, use set_output to define output(s)"
             )
         checksum = self.checksum
-        lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached
         if not (rerun or self.task_rerun):
             result = self.result()
@@ -953,6 +968,11 @@ class Workflow(TaskBase):
             task.cache_locations = task._cache_locations + self.cache_locations
             self.create_connections(task)
         # TODO add signal handler for processes killed after lock acquisition
+        # adding info file with the checksum in case the task was cancelled
+        # and the lockfile has to be removed
+        with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
+            json.dump({"checksum": checksum}, jsonfile)
+        lockfile = self.cache_dir / (checksum + ".lock")
         self.hooks.pre_run(self)
         with SoftFileLock(lockfile):
             # # Let only one equivalent process run
@@ -977,6 +997,8 @@ class Workflow(TaskBase):
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
                 save(odir, result=result, task=self)
+                # removing the additional file with the chcksum
+                (self.cache_dir / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         return result

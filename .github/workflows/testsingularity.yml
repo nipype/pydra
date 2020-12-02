@@ -14,8 +14,8 @@ jobs:
     steps:
       - name: Set env
         run: |
-          echo ::set-env name=RELEASE_VERSION::v3.5.0
-          echo ::set-env name=NO_ET::TRUE
+          echo "RELEASE_VERSION=v3.5.0" >> $GITHUB_ENV
+          echo "NO_ET=TRUE" >> $GITHUB_ENV
       - name: Setup Singularity
         uses: actions/checkout@v2
         with:

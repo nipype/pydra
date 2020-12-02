@@ -41,6 +41,14 @@ class MultiOutputObj:
             return value
 
 
+class MultiInputFile(MultiInputObj):
+    """A ty.List[File] object, converter changes a single file path to a list"""
+
+
+class MultiOutputFile(MultiOutputObj):
+    """A ty.List[File] object, converter changes an 1-el list to the single value"""
+
+
 @attr.s(auto_attribs=True, kw_only=True)
 class SpecInfo:
     """Base data structure for metadata of specifications."""
@@ -58,17 +66,31 @@ class SpecInfo:
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
 
+    def __attrs_post_init__(self):
+        self.files_hash = {}
+        for field in attr_fields(self):
+            if (
+                field.name not in ["_graph_checksums", "bindings", "files_hash"]
+                and field.metadata.get("output_file_template") is None
+            ):
+                self.files_hash[field.name] = {}
+
     def __setattr__(self, name, value):
         """changing settatr, so the converter and validator is run
         if input is set after __init__
         """
-        if inspect.stack()[1][3] == "__init__":  # or name.startswith("_"):
+        if inspect.stack()[1][3] == "__init__" or name in [
+            "inp_hash",
+            "changed",
+            "files_hash",
+        ]:
             super().__setattr__(name, value)
         else:
             tp = attr.fields_dict(self.__class__)[name].type
             # if the type has a converter, e.g., MultiInputObj
             if hasattr(tp, "converter"):
                 value = tp.converter(value)
+            self.files_hash[name] = {}
             super().__setattr__(name, value)
             # validate all fields that have set a validator
             attr.validate(self)
@@ -84,21 +106,26 @@ class BaseSpec:
 
         inp_dict = {}
         for field in attr_fields(self):
-            if field.name in ["_graph_checksums", "bindings"] or field.metadata.get(
-                "output_file_template"
-            ):
+            if field.name in [
+                "_graph_checksums",
+                "bindings",
+                "files_hash",
+            ] or field.metadata.get("output_file_template"):
                 continue
             # removing values that are notset from hash calculation
             if getattr(self, field.name) is attr.NOTHING:
                 continue
+            value = getattr(self, field.name)
             inp_dict[field.name] = hash_value(
-                value=getattr(self, field.name), tp=field.type, metadata=field.metadata
+                value=value,
+                tp=field.type,
+                metadata=field.metadata,
+                precalculated=self.files_hash[field.name],
             )
         inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph_checksums"):
-            return hash_function((inp_hash, self._graph_checksums))
-        else:
-            return inp_hash
+            inp_hash = hash_function((inp_hash, self._graph_checksums))
+        return inp_hash
 
     def retrieve_values(self, wf, state_index=None):
         """Get values contained by this spec."""
@@ -145,7 +172,11 @@ class BaseSpec:
                     # will check after adding all fields to names
                     require_to_check[fld.name] = mdata["requires"]
 
-            if fld.type is File:
+            if (
+                fld.type in [File, Directory]
+                or "pydra.engine.specs.File" in str(fld.type)
+                or "pydra.engine.specs.Directory" in str(fld.type)
+            ):
                 self._file_check_n_bindings(fld)
 
         for nm, required in require_to_check.items():
@@ -155,9 +186,22 @@ class BaseSpec:
 
     def _file_check_n_bindings(self, field):
         """for tasks without container, this is simple check if the file exists"""
-        file = Path(getattr(self, field.name))
-        if not file.exists():
-            raise AttributeError(f"the file from the {field.name} input does not exist")
+        if isinstance(getattr(self, field.name), list):
+            # if value is a list and type is a list of Files/Directory, checking all elements
+            if field.type in [ty.List[File], ty.List[Directory]]:
+                for el in getattr(self, field.name):
+                    file = Path(el)
+                    if not file.exists() and field.type in [File, Directory]:
+                        raise FileNotFoundError(
+                            f"the file from the {field.name} input does not exist"
+                        )
+        else:
+            file = Path(getattr(self, field.name))
+            # error should be raised only if the type is strictly File or Directory
+            if not file.exists() and field.type in [File, Directory]:
+                raise FileNotFoundError(
+                    f"the file from the {field.name} input does not exist"
+                )
 
     def check_metadata(self):
         """Check contained metadata."""
@@ -400,7 +444,7 @@ class ShellOutSpec:
         additional_out = {}
         for fld in attr_fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:
-                if fld.type is File:
+                if fld.type in [File, MultiOutputFile]:
                     # assuming that field should have either default or metadata, but not both
                     if (
                         fld.default is None or fld.default == attr.NOTHING
@@ -493,7 +537,10 @@ class ShellOutSpec:
             value = template_update_single(
                 fld, inputs_templ, output_dir=output_dir, spec_type="output"
             )
-            return Path(value)
+            if fld.type is MultiOutputFile and type(value) is list:
+                return [Path(val) for val in value]
+            else:
+                return Path(value)
         elif "callable" in fld.metadata:
             call_args = inspect.getargspec(fld.metadata["callable"])
             call_args_val = {}
@@ -613,6 +660,8 @@ class ContainerSpec(ShellSpec):
     """Mount points to be bound into the container."""
 
     def _file_check_n_bindings(self, field):
+        if field.name == "image":
+            return
         file = Path(getattr(self, field.name))
         if field.metadata.get("container_path"):
             # if the path is in a container the input should be treated as a str (hash as a str)
@@ -624,8 +673,9 @@ class ContainerSpec(ShellSpec):
             if self.bindings is None:
                 self.bindings = []
             self.bindings.append((file.parent, f"/pydra_inp_{field.name}", "ro"))
-        else:
-            raise Exception(
+        # error should be raised only if the type is strictly File or Directory
+        elif field.type in [File, Directory]:
+            raise FileNotFoundError(
                 f"the file from {field.name} input does not exist, "
                 f"if the file comes from the container, "
                 f"use field.metadata['container_path']=True"

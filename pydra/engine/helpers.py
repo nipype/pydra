@@ -8,6 +8,7 @@ from filelock import SoftFileLock
 import os
 import sys
 from hashlib import sha256
+from uuid import uuid4
 import subprocess as sp
 import getpass
 import re
@@ -27,6 +28,8 @@ from .specs import (
     LazyField,
     MultiOutputObj,
     MultiInputObj,
+    MultiInputFile,
+    MultiOutputFile,
 )
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 
@@ -311,7 +314,15 @@ def custom_validator(instance, attribute, value):
         or value is None
         or attribute.name.startswith("_")  # e.g. _func
         or isinstance(value, LazyField)
-        or tp_attr in [ty.Any, inspect._empty, MultiOutputObj, MultiInputObj]
+        or tp_attr
+        in [
+            ty.Any,
+            inspect._empty,
+            MultiOutputObj,
+            MultiInputObj,
+            MultiOutputFile,
+            MultiInputFile,
+        ]
     ):
         check_type = False  # no checking of the type
     elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:
@@ -651,14 +662,16 @@ def hash_function(obj):
     return sha256(str(obj).encode()).hexdigest()
 
 
-def hash_value(value, tp=None, metadata=None):
+def hash_value(value, tp=None, metadata=None, precalculated=None):
     """calculating hash or returning values recursively"""
     if metadata is None:
         metadata = {}
     if isinstance(value, (tuple, list)):
-        return [hash_value(el, tp, metadata) for el in value]
+        return [hash_value(el, tp, metadata, precalculated) for el in value]
     elif isinstance(value, dict):
-        dict_hash = {k: hash_value(v, tp, metadata) for (k, v) in value.items()}
+        dict_hash = {
+            k: hash_value(v, tp, metadata, precalculated) for (k, v) in value.items()
+        }
         # returning a sorted object
         return [list(el) for el in sorted(dict_hash.items(), key=lambda x: x[0])]
     else:  # not a container
@@ -667,13 +680,13 @@ def hash_value(value, tp=None, metadata=None):
             and is_existing_file(value)
             and "container_path" not in metadata
         ):
-            return hash_file(value)
+            return hash_file(value, precalculated=precalculated)
         elif (
             (tp is File or "pydra.engine.specs.Directory" in str(tp))
             and is_existing_file(value)
             and "container_path" not in metadata
         ):
-            return hash_dir(value)
+            return hash_dir(value, precalculated=precalculated)
         else:
             return value
 
@@ -793,6 +806,8 @@ def load_task(task_pkl, ind=None):
         _, inputs_dict = task.get_input_el(ind)
         task.inputs = attr.evolve(task.inputs, **inputs_dict)
         task.state = None
+        # resetting uid for task
+        task._uid = uuid4().hex
     return task
 
 
