@@ -153,7 +153,11 @@ class BaseSpec:
                     # will check after adding all fields to names
                     require_to_check[fld.name] = mdata["requires"]
 
-            if fld.type is File:
+            if (
+                fld.type in [File, Directory]
+                or "pydra.engine.specs.File" in str(fld.type)
+                or "pydra.engine.specs.Directory" in str(fld.type)
+            ):
                 self._file_check_n_bindings(fld)
 
         for nm, required in require_to_check.items():
@@ -163,9 +167,22 @@ class BaseSpec:
 
     def _file_check_n_bindings(self, field):
         """for tasks without container, this is simple check if the file exists"""
-        file = Path(getattr(self, field.name))
-        if not file.exists():
-            raise AttributeError(f"the file from the {field.name} input does not exist")
+        if isinstance(getattr(self, field.name), list):
+            # if value is a list and type is a list of Files/Directory, checking all elements
+            if field.type in [ty.List[File], ty.List[Directory]]:
+                for el in getattr(self, field.name):
+                    file = Path(el)
+                    if not file.exists() and field.type in [File, Directory]:
+                        raise FileNotFoundError(
+                            f"the file from the {field.name} input does not exist"
+                        )
+        else:
+            file = Path(getattr(self, field.name))
+            # error should be raised only if the type is strictly File or Directory
+            if not file.exists() and field.type in [File, Directory]:
+                raise FileNotFoundError(
+                    f"the file from the {field.name} input does not exist"
+                )
 
     def check_metadata(self):
         """Check contained metadata."""
@@ -606,6 +623,8 @@ class ContainerSpec(ShellSpec):
     """Mount points to be bound into the container."""
 
     def _file_check_n_bindings(self, field):
+        if field.name == "image":
+            return
         file = Path(getattr(self, field.name))
         if field.metadata.get("container_path"):
             # if the path is in a container the input should be treated as a str (hash as a str)
@@ -617,8 +636,9 @@ class ContainerSpec(ShellSpec):
             if self.bindings is None:
                 self.bindings = []
             self.bindings.append((file.parent, f"/pydra_inp_{field.name}", "ro"))
-        else:
-            raise Exception(
+        # error should be raised only if the type is strictly File or Directory
+        elif field.type in [File, Directory]:
+            raise FileNotFoundError(
                 f"the file from {field.name} input does not exist, "
                 f"if the file comes from the container, "
                 f"use field.metadata['container_path']=True"

@@ -660,9 +660,17 @@ def _element_formatting(template, fld_name, fld_value, keep_extension):
 
 
 def is_local_file(f):
-    from .specs import File
+    # breakpoint()
+    from .specs import File, Directory, MultiInputFile
 
-    return f.type is File and "container_path" not in f.metadata
+    if "container_path" not in f.metadata and (
+        f.type in [File, Directory, MultiInputFile]
+        or "pydra.engine.specs.File" in str(f.type)
+        or "pydra.engine.specs.Directory" in str(f.type)
+    ):
+        return True
+    else:
+        return False
 
 
 def is_existing_file(value):

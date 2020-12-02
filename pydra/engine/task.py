@@ -234,8 +234,14 @@ class ShellCommandTask(TaskBase):
             )
 
         if type_cont == "docker":
+            # changing base class of spec if user defined
+            if "input_spec" in kwargs:
+                kwargs["input_spec"].bases = (DockerSpec,)
             return DockerTask(image=image, bindings=bind, *args, **kwargs)
         elif type_cont == "singularity":
+            # changing base class of spec if user defined
+            if "input_spec" in kwargs:
+                kwargs["input_spec"].bases = (SingularitySpec,)
             return SingularityTask(image=image, bindings=bind, *args, **kwargs)
         else:
             raise Exception(
@@ -376,14 +382,13 @@ class ShellCommandTask(TaskBase):
         if value is attr.NOTHING or value is None:
             return None
         if check_file:
-            if is_local_file(field):
+            if is_local_file(field) and getattr(self, "bind_paths", None):
                 value = str(value)
                 # changing path to the cpath (the directory should be mounted)
-                if getattr(self, "bind_paths", None):
-                    lpath = Path(value)
-                    cdir = self.bind_paths(ind=ind)[lpath.parent][0]
-                    cpath = cdir.joinpath(lpath.name)
-                    value = str(cpath)
+                lpath = Path(value)
+                cdir = self.bind_paths(ind=ind)[lpath.parent][0]
+                cpath = cdir.joinpath(lpath.name)
+                value = str(cpath)
         return value
 
     def _command_shelltask_executable(self, field, state_ind, ind):
