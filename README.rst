@@ -78,7 +78,7 @@ Pydra requires Python 3.7+. To install in developer mode:
 
     git clone git@github.com:nipype/pydra.git
     cd pydra
-    pip install -e .[dev]
+    pip install -e ".[dev]"
 
 
 In order to run pydra's test locally:
@@ -94,7 +94,7 @@ If you want to test execution with Dask:
 
     git clone git@github.com:nipype/pydra.git
     cd pydra
-    pip install -e .[dask]
+    pip install -e ".[dask]"
 
 
 
