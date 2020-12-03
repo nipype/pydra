@@ -460,6 +460,8 @@ class ShellOutSpec:
                         additional_out[fld.name] = self._field_metadata(
                             fld, inputs, output_dir
                         )
+                elif fld.type in [Directory]:
+                    pass
                 else:
                     raise Exception("not implemented (collect_additional_output)")
         return additional_out
