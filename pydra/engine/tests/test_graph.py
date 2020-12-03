@@ -1,10 +1,12 @@
 from ..graph import DiGraph
+from .utils import DOT_FLAG
 import pytest
 
 
 class ObjTest:
     def __init__(self, name):
         self.name = name
+        self.state = None
 
 
 A = ObjTest("a")
@@ -335,6 +337,70 @@ def test_remove_add_2():
     assert graph.sorted_nodes_names == ["d", "a", "b", "c"]
 
 
+def test_remove_all_successors_1():
+    """a -> b (removing successors of A)"""
+    graph = DiGraph(nodes=[A, B], edges=[(A, B)])
+    assert set(graph.nodes_names_map.keys()) == {"a", "b"}
+    assert graph.edges_names == [("a", "b")]
+
+    graph.sorting()
+    assert graph.sorted_nodes_names == ["a", "b"]
+
+    graph.remove_nodes(A)
+
+    nodes_removed = graph.remove_successors_nodes(A)
+    assert nodes_removed == {"b"}
+    assert graph.sorted_nodes_names == []
+    assert graph.edges_names == []
+
+
+def test_remove_all_successors_2():
+    """a-> b -> c; a -> c; d (removing successors of A)"""
+    graph = DiGraph(nodes=[B, A, C, D], edges=[(A, B), (B, C), (A, C)])
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d"}
+    assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "c")]
+
+    graph.sorting()
+    assert graph.sorted_nodes_names == ["a", "d", "b", "c"]
+
+    graph.remove_nodes(A)
+    nodes_removed = graph.remove_successors_nodes(A)
+    assert nodes_removed == {"b", "c"}
+
+    assert graph.edges_names == []
+    assert graph.sorted_nodes_names == ["d"]
+
+
+def test_remove_all_successors_3():
+    """a -> c; b -> c; c -> d (removing successors of A)"""
+    graph = DiGraph(nodes=[A, B, C, D], edges=[(A, C), (B, C), (C, D)])
+    assert set(graph.nodes_names_map.keys()) == {"a", "c", "b", "d"}
+    assert graph.edges_names == [("a", "c"), ("b", "c"), ("c", "d")]
+
+    graph.sorting()
+    assert graph.sorted_nodes_names == ["a", "b", "c", "d"]
+
+    graph.remove_nodes(A)
+    graph.remove_successors_nodes(A)
+    assert graph.edges_names == []
+    assert graph.sorted_nodes_names == ["b"]
+
+
+def test_remove_all_successors_4():
+    """ a-> b -> c; a -> d -> e (removing A and later D)"""
+    graph = DiGraph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
+    assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d", "e"}
+    assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "d"), ("d", "e")]
+
+    graph.sorting()
+    assert graph.sorted_nodes_names == ["a", "b", "d", "c", "e"]
+
+    graph.remove_nodes(A)
+    graph.remove_successors_nodes(A)
+    assert graph.edges_names == []
+    assert graph.sorted_nodes_names == []
+
+
 def test_maxpath_1():
     """a -> b"""
     graph = DiGraph(nodes=[B, A], edges=[(A, B)])
@@ -388,3 +454,64 @@ def test_copy_1():
     assert id(graph.nodes[0]) == id(graph_copy.nodes[0])
     assert graph.edges == graph_copy.edges
     assert id(graph.edges) != (graph_copy.edges)
+
+
+def test_dotfile_1(tmpdir):
+    """dotfile for graph: a -> b"""
+    graph = DiGraph(nodes=[A, B], edges=[(A, B)])
+    dotfile = graph.create_dotfile_simple(outdir=tmpdir)
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "a" in dotstr_lines
+    assert "b" in dotstr_lines
+    assert "a -> b" in dotstr_lines
+
+    if DOT_FLAG:
+        formatted_dot = graph.export_graph(dotfile)
+        assert formatted_dot.exists()
+
+
+def test_dotfile_2(tmpdir):
+    """dotfile for graph: a -> b -> d, a -> c -> d"""
+    graph = DiGraph(nodes=[A, B, C, D], edges=[(A, B), (A, C), (B, D), (C, D)])
+    dotfile = graph.create_dotfile_simple(outdir=tmpdir)
+    dotstr_lines = dotfile.read_text().split("\n")
+    for el in ["a", "b", "c", "d"]:
+        assert el in dotstr_lines
+    for el in ["a -> b", "a -> c", "b -> d", "c -> d"]:
+        assert el in dotstr_lines
+
+    if DOT_FLAG:
+        formatted_dot = graph.export_graph(dotfile)
+        assert formatted_dot.exists()
+
+
+def test_dotfile_2nest(tmpdir):
+    """nested dotfile for graph: a -> b -> d, a -> c -> d
+    (should be the same as default type, i.e. type=simple)
+    """
+    graph = DiGraph(nodes=[A, B, C, D], edges=[(A, B), (A, C), (B, D), (C, D)])
+    dotfile = graph.create_dotfile_nested(outdir=tmpdir)
+    dotstr_lines = dotfile.read_text().split("\n")
+    for el in ["a", "b", "c", "d"]:
+        assert el in dotstr_lines
+    for el in ["a -> b", "a -> c", "b -> d", "c -> d"]:
+        assert el in dotstr_lines
+
+    if DOT_FLAG:
+        formatted_dot = graph.export_graph(dotfile)
+        assert formatted_dot.exists()
+
+
+def test_dotfile_3(tmpdir):
+    """nested dotfile for graph: a -> c, b -> c, c -> d"""
+    graph = DiGraph(nodes=[A, B, C, D], edges=[(A, C), (B, C), (C, D)])
+    dotfile = graph.create_dotfile_simple(outdir=tmpdir)
+    dotstr_lines = dotfile.read_text().split("\n")
+    for nm in ["a", "b", "c", "d"]:
+        assert nm in dotstr_lines
+    for ed in ["a -> c", "b -> c", "c -> d"]:
+        assert ed in dotstr_lines
+
+    if DOT_FLAG:
+        formatted_dot = graph.export_graph(dotfile)
+        assert formatted_dot.exists()

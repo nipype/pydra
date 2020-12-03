@@ -1,13 +1,14 @@
-# -*- coding: utf-8 -*-
-
 import typing as ty
 import os, sys
+import attr
 import pytest
 
 from ... import mark
+from ..core import Workflow
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
-from .utils import gen_basic_wf
+from .utils import gen_basic_wf, use_validator
+from ..specs import MultiInputObj, MultiOutputObj, SpecInfo, FunctionSpec, BaseSpec
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -36,10 +37,10 @@ def test_name_conflict():
     assert "Cannot use names of attributes or methods" in str(excinfo2.value)
 
 
-def test_numpy():
+def test_numpy(use_validator):
     """ checking if mark.task works for numpy functions"""
     np = pytest.importorskip("numpy")
-    fft = mark.annotate({"a": np.ndarray, "return": float})(np.fft.fft)
+    fft = mark.annotate({"a": np.ndarray, "return": np.ndarray})(np.fft.fft)
     fft = mark.task(fft)()
     arr = np.array([[1, 10], [2, 20]])
     fft.inputs.a = arr
@@ -56,7 +57,7 @@ def test_checksum():
     )
 
 
-def test_annotated_func():
+def test_annotated_func(use_validator):
     @mark.task
     def testfunc(
         a: int, b: float = 0.1
@@ -70,7 +71,7 @@ def test_annotated_func():
     assert getattr(funky.inputs, "a") == 1
     assert getattr(funky.inputs, "b") == 0.1
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["out_out"])
+    assert set(funky.output_names) == {"out_out"}
     # assert funky.inputs.hash == '17772c3aec9540a8dd3e187eecd2301a09c9a25c6e371ddd86e31e3a1ecfeefa'
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
@@ -100,7 +101,7 @@ def test_annotated_func():
     ]
 
 
-def test_annotated_func_multreturn():
+def test_annotated_func_multreturn(use_validator):
     """ the function has two elements in the return statement"""
 
     @mark.task
@@ -109,14 +110,14 @@ def test_annotated_func_multreturn():
     ) -> ty.NamedTuple("Output", [("fractional", float), ("integer", int)]):
         import math
 
-        return math.modf(a)
+        return math.modf(a)[0], int(math.modf(a)[1])
 
     funky = testfunc(a=3.5)
     assert hasattr(funky.inputs, "a")
     assert hasattr(funky.inputs, "_func")
     assert getattr(funky.inputs, "a") == 3.5
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["fractional", "integer"])
+    assert set(funky.output_names) == {"fractional", "integer"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     result = funky()
@@ -139,7 +140,250 @@ def test_annotated_func_multreturn():
     ]
 
 
-def test_annotated_func_multreturn_exception():
+def test_annotated_input_func_1(use_validator):
+    """ the function with annotated input (float)"""
+
+    @mark.task
+    def testfunc(a: float):
+        return a
+
+    funky = testfunc(a=3.5)
+    assert getattr(funky.inputs, "a") == 3.5
+
+
+def test_annotated_input_func_2(use_validator):
+    """ the function with annotated input (int, but float provided)"""
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a=3.5)
+
+
+def test_annotated_input_func_2a(use_validator):
+    """ the function with annotated input (int, but float provided)"""
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    funky = testfunc()
+    with pytest.raises(TypeError):
+        funky.inputs.a = 3.5
+
+
+def test_annotated_input_func_3(use_validator):
+    """ the function with annotated input (list)"""
+
+    @mark.task
+    def testfunc(a: list):
+        return sum(a)
+
+    funky = testfunc(a=[1, 3.5])
+    assert getattr(funky.inputs, "a") == [1, 3.5]
+
+
+def test_annotated_input_func_3a():
+    """ the function with annotated input (list of floats)"""
+
+    @mark.task
+    def testfunc(a: ty.List[float]):
+        return sum(a)
+
+    funky = testfunc(a=[1.0, 3.5])
+    assert getattr(funky.inputs, "a") == [1.0, 3.5]
+
+
+def test_annotated_input_func_3b(use_validator):
+    """ the function with annotated input
+    (list of floats - int and float provided, should be fine)
+    """
+
+    @mark.task
+    def testfunc(a: ty.List[float]):
+        return sum(a)
+
+    funky = testfunc(a=[1, 3.5])
+    assert getattr(funky.inputs, "a") == [1, 3.5]
+
+
+def test_annotated_input_func_3c_excep(use_validator):
+    """ the function with annotated input
+    (list of ints - int and float provided, should raise an error)
+    """
+
+    @mark.task
+    def testfunc(a: ty.List[int]):
+        return sum(a)
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a=[1, 3.5])
+
+
+def test_annotated_input_func_4(use_validator):
+    """ the function with annotated input (dictionary)"""
+
+    @mark.task
+    def testfunc(a: dict):
+        return sum(a.values())
+
+    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+
+
+def test_annotated_input_func_4a(use_validator):
+    """ the function with annotated input (dictionary of floats)"""
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, float]):
+        return sum(a.values())
+
+    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+
+
+def test_annotated_input_func_4b_excep(use_validator):
+    """ the function with annotated input (dictionary of ints, but float provided)"""
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, int]):
+        return sum(a.values())
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a={"el1": 1, "el2": 3.5})
+
+
+def test_annotated_input_func_5(use_validator):
+    """ the function with annotated more complex input type (ty.List in ty.Dict)
+        the validator should simply check if values of dict are lists
+        so no error for 3.5
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.List[int]]):
+        return sum(a["el1"])
+
+    funky = testfunc(a={"el1": [1, 3.5]})
+    assert getattr(funky.inputs, "a") == {"el1": [1, 3.5]}
+
+
+def test_annotated_input_func_5a_except(use_validator):
+    """ the function with annotated more complex input type (ty.Dict in ty.Dict)
+        list is provided as a dict value (instead a dict), so error is raised
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.Dict[str, float]]):
+        return sum(a["el1"])
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a={"el1": [1, 3.5]})
+
+
+def test_annotated_input_func_6(use_validator):
+    """ the function with annotated more complex input type (ty.Union in ty.Dict)
+        the validator should unpack values from the Union
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.Union[float, int]]):
+        return sum(a["el1"])
+
+    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+
+
+def test_annotated_input_func_6a_excep(use_validator):
+    """ the function with annotated more complex input type (ty.Union in ty.Dict)
+        the validator should unpack values from the Union and raise an error for 3.5
+    """
+
+    @mark.task
+    def testfunc(a: ty.Dict[str, ty.Union[str, int]]):
+        return sum(a["el1"])
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a={"el1": 1, "el2": 3.5})
+
+
+def test_annotated_input_func_7(use_validator):
+    """ the function with annotated input (float)
+        the task has a splitter, so list of float is provided
+        it should work, the validator tries to guess if this is a field with a splitter
+    """
+
+    @mark.task
+    def testfunc(a: float):
+        return a
+
+    funky = testfunc(a=[3.5, 2.1]).split("a")
+    assert getattr(funky.inputs, "a") == [3.5, 2.1]
+
+
+def test_annotated_input_func_7a_excep(use_validator):
+    """ the function with annotated input (int) and splitter
+        list of float provided - should raise an error (list of int would be fine)
+    """
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    with pytest.raises(TypeError):
+        funky = testfunc(a=[3.5, 2.1]).split("a")
+
+
+def test_annotated_input_func_8():
+    """ the function with annotated input as MultiInputObj
+        a single value is provided and should be converted to a list
+    """
+
+    @mark.task
+    def testfunc(a: MultiInputObj):
+        return len(a)
+
+    funky = testfunc(a=3.5)
+    assert getattr(funky.inputs, "a") == [3.5]
+    res = funky()
+    assert res.output.out == 1
+
+
+def test_annotated_input_func_8a():
+    """ the function with annotated input as MultiInputObj
+        a 1-el list is provided so shouldn't be changed
+    """
+
+    @mark.task
+    def testfunc(a: MultiInputObj):
+        return len(a)
+
+    funky = testfunc(a=[3.5])
+    assert getattr(funky.inputs, "a") == [3.5]
+    res = funky()
+    assert res.output.out == 1
+
+
+def test_annotated_input_func_8b():
+    """ the function with annotated input as MultiInputObj
+        a single value is provided after initial. the task
+        (input should still be converted to a list)
+    """
+
+    @mark.task
+    def testfunc(a: MultiInputObj):
+        return len(a)
+
+    funky = testfunc()
+    # setting a after init
+    funky.inputs.a = 3.5
+    assert getattr(funky.inputs, "a") == [3.5]
+    res = funky()
+    assert res.output.out == 1
+
+
+def test_annotated_func_multreturn_exception(use_validator):
     """function has two elements in the return statement,
         but three element provided in the spec - should raise an error
     """
@@ -172,7 +416,7 @@ def test_halfannotated_func():
     assert getattr(funky.inputs, "a") == 10
     assert getattr(funky.inputs, "b") == 20
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["out"])
+    assert set(funky.output_names) == {"out"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     result = funky()
@@ -213,7 +457,7 @@ def test_halfannotated_func_multreturn():
     assert getattr(funky.inputs, "a") == 10
     assert getattr(funky.inputs, "b") == 20
     assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == set(["out1", "out2"])
+    assert set(funky.output_names) == {"out1", "out2"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     result = funky()
@@ -304,6 +548,385 @@ def test_notannotated_func_multreturn():
     assert result.output.out == (20.2, 13.8)
 
 
+def test_input_spec_func_1(use_validator):
+    """ the function w/o annotated, but input_spec is used """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("a", attr.ib(type=float, metadata={"help_string": "input a"}))],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    assert getattr(funky.inputs, "a") == 3.5
+
+
+def test_input_spec_func_1a_except(use_validator):
+    """ the function w/o annotated, but input_spec is used
+    a TypeError is raised (float is provided instead of int)
+    """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("a", attr.ib(type=int, metadata={"help_string": "input a"}))],
+        bases=(FunctionSpec,),
+    )
+    with pytest.raises(TypeError):
+        funky = testfunc(a=3.5, input_spec=my_input_spec)
+
+
+def test_input_spec_func_1b_except(use_validator):
+    """ the function w/o annotated, but input_spec is used
+     metadata checks raise an error
+     """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "a",
+                attr.ib(type=float, metadata={"position": 1, "help_string": "input a"}),
+            )
+        ],
+        bases=(FunctionSpec,),
+    )
+    with pytest.raises(AttributeError, match="only these keys are supported"):
+        funky = testfunc(a=3.5, input_spec=my_input_spec)
+
+
+def test_input_spec_func_1d_except(use_validator):
+    """ the function w/o annotated, but input_spec is used
+    input_spec doesn't contain 'a' input, an error is raised
+    """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(name="Input", fields=[], bases=(FunctionSpec,))
+    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        funky()
+
+
+def test_input_spec_func_2(use_validator):
+    """ the function with annotation, and the task has input_spec,
+    input_spec changes the type of the input (so error is not raised)
+    """
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("a", attr.ib(type=float, metadata={"help_string": "input a"}))],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    assert getattr(funky.inputs, "a") == 3.5
+
+
+def test_input_spec_func_2a(use_validator):
+    """ the function with annotation, and the task has input_spec,
+    input_spec changes the type of the input (so error is not raised)
+    using the shorter syntax
+    """
+
+    @mark.task
+    def testfunc(a: int):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[("a", float, {"help_string": "input a"})],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    assert getattr(funky.inputs, "a") == 3.5
+
+
+def test_input_spec_func_3(use_validator):
+    """ the function w/o annotated, but input_spec is used
+    additional keys (allowed_values) are used in metadata
+    """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "a",
+                attr.ib(
+                    type=int,
+                    metadata={"help_string": "input a", "allowed_values": [0, 1, 2]},
+                ),
+            )
+        ],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=2, input_spec=my_input_spec)
+    assert getattr(funky.inputs, "a") == 2
+
+
+def test_input_spec_func_3a_except(use_validator):
+    """ the function w/o annotated, but input_spec is used
+    allowed_values is used in metadata and the ValueError is raised
+    """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "a",
+                attr.ib(
+                    type=int,
+                    metadata={"help_string": "input a", "allowed_values": [0, 1, 2]},
+                ),
+            )
+        ],
+        bases=(FunctionSpec,),
+    )
+
+    with pytest.raises(ValueError, match="value of a has to be"):
+        funky = testfunc(a=3, input_spec=my_input_spec)
+
+
+def test_input_spec_func_4(use_validator):
+    """ the function with a default value for b
+    but b is set as mandatory in the input_spec, so error is raised if not provided
+    """
+
+    @mark.task
+    def testfunc(a, b=1):
+        return a + b
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "a",
+                attr.ib(
+                    type=int, metadata={"help_string": "input a", "mandatory": True}
+                ),
+            ),
+            (
+                "b",
+                attr.ib(
+                    type=int, metadata={"help_string": "input b", "mandatory": True}
+                ),
+            ),
+        ],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=2, input_spec=my_input_spec)
+    with pytest.raises(Exception, match="b is mandatory"):
+        funky()
+
+
+def test_input_spec_func_4a(use_validator):
+    """ the function with a default value for b and metadata in the input_spec
+    has a different default value, so value from the function is overwritten
+    """
+
+    @mark.task
+    def testfunc(a, b=1):
+        return a + b
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "a",
+                attr.ib(
+                    type=int, metadata={"help_string": "input a", "mandatory": True}
+                ),
+            ),
+            ("b", attr.ib(type=int, default=10, metadata={"help_string": "input b"})),
+        ],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=2, input_spec=my_input_spec)
+    res = funky()
+    assert res.output.out == 12
+
+
+def test_input_spec_func_5():
+    """ the FunctionTask with input_spec, a input has MultiInputObj type
+        a single value is provided and should be converted to a list
+    """
+
+    @mark.task
+    def testfunc(a):
+        return len(a)
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            ("a", attr.ib(type=MultiInputObj, metadata={"help_string": "input a"}))
+        ],
+        bases=(FunctionSpec,),
+    )
+
+    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    assert getattr(funky.inputs, "a") == [3.5]
+    res = funky()
+    assert res.output.out == 1
+
+
+def test_output_spec_func_1(use_validator):
+    """ the function w/o annotated, but output_spec is used """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("out1", attr.ib(type=float, metadata={"help_string": "output"}))],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, output_spec=my_output_spec)
+    res = funky()
+    assert res.output.out1 == 3.5
+
+
+def test_output_spec_func_1a_except(use_validator):
+    """ the function w/o annotated, but output_spec is used
+        float returned instead of int - TypeError
+    """
+
+    @mark.task
+    def testfunc(a):
+        return a
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("out1", attr.ib(type=int, metadata={"help_string": "output"}))],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, output_spec=my_output_spec)
+    with pytest.raises(TypeError):
+        res = funky()
+
+
+def test_output_spec_func_2(use_validator):
+    """ the function w/o annotated, but output_spec is used
+    output_spec changes the type of the output (so error is not raised)
+    """
+
+    @mark.task
+    def testfunc(a) -> int:
+        return a
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("out1", attr.ib(type=float, metadata={"help_string": "output"}))],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, output_spec=my_output_spec)
+    res = funky()
+    assert res.output.out1 == 3.5
+
+
+def test_output_spec_func_2a(use_validator):
+    """ the function w/o annotated, but output_spec is used
+    output_spec changes the type of the output (so error is not raised)
+    using a shorter syntax
+    """
+
+    @mark.task
+    def testfunc(a) -> int:
+        return a
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("out1", float, {"help_string": "output"})],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, output_spec=my_output_spec)
+    res = funky()
+    assert res.output.out1 == 3.5
+
+
+def test_output_spec_func_3(use_validator):
+    """ the function w/o annotated, but output_spec is used
+    MultiOutputObj is used, output is a 2-el list, so converter doesn't do anything
+    """
+
+    @mark.task
+    def testfunc(a, b):
+        return [a, b]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out_list",
+                attr.ib(type=MultiOutputObj, metadata={"help_string": "output"}),
+            )
+        ],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, b=1, output_spec=my_output_spec)
+    res = funky()
+    assert res.output.out_list == [3.5, 1]
+
+
+def test_output_spec_func_4(use_validator):
+    """ the function w/o annotated, but output_spec is used
+    MultiOutputObj is used, output is a 1el list, so converter return the element
+    """
+
+    @mark.task
+    def testfunc(a):
+        return [a]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out_1el",
+                attr.ib(type=MultiOutputObj, metadata={"help_string": "output"}),
+            )
+        ],
+        bases=(BaseSpec,),
+    )
+
+    funky = testfunc(a=3.5, output_spec=my_output_spec)
+    res = funky()
+    assert res.output.out_1el == 3.5
+
+
 def test_exception_func():
     @mark.task
     def raise_exception(c, d):
@@ -338,7 +961,7 @@ def test_result_none_2():
     assert res.output.out2 is None
 
 
-def test_audit_prov(tmpdir):
+def test_audit_prov(tmpdir, use_validator):
     @mark.task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
@@ -350,16 +973,100 @@ def test_audit_prov(tmpdir):
 
     # saving the audit message into the file
     funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
-    message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
-    funky.messenger_args = dict(message_dir=message_path)
     funky()
+    # this should be the default loctaion
+    message_path = tmpdir / funky.checksum / "messages"
+    assert (tmpdir / funky.checksum / "messages").exists()
 
     collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
 
 
-def test_audit_all(tmpdir):
+def test_audit_prov_messdir_1(tmpdir, use_validator):
+    """customized messenger dir"""
+
+    @mark.task
+    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+        return a + b
+
+    # printing the audit message
+    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky.cache_dir = tmpdir
+    funky()
+
+    # saving the audit message into the file
+    funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    # user defined path
+    message_path = tmpdir / funky.checksum / "my_messages"
+    funky.cache_dir = tmpdir
+    # providing messenger_dir for audit
+    funky.audit.messenger_args = dict(message_dir=message_path)
+    funky()
+    assert (tmpdir / funky.checksum / "my_messages").exists()
+
+    collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
+    assert (tmpdir / funky.checksum / "messages.jsonld").exists()
+
+
+def test_audit_prov_messdir_2(tmpdir, use_validator):
+    """customized messenger dir in init"""
+
+    @mark.task
+    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+        return a + b
+
+    # printing the audit message
+    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky.cache_dir = tmpdir
+    funky()
+
+    # user defined path (doesnt depend on checksum, can be defined before init)
+    message_path = tmpdir / "my_messages"
+    # saving the audit message into the file
+    funky = testfunc(
+        a=2,
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+        messenger_args=dict(message_dir=message_path),
+    )
+    funky.cache_dir = tmpdir
+    # providing messenger_dir for audit
+    funky()
+    assert (tmpdir / "my_messages").exists()
+
+    collect_messages(tmpdir, message_path, ld_op="compact")
+    assert (tmpdir / "messages.jsonld").exists()
+
+
+def test_audit_prov_wf(tmpdir, use_validator):
+    """FileMessenger for wf"""
+
+    @mark.task
+    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+        return a + b
+
+    wf = Workflow(
+        name="wf",
+        input_spec=["x"],
+        cache_dir=tmpdir,
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+    )
+    wf.add(testfunc(name="testfunc", a=wf.lzin.x))
+    wf.set_output([("out", wf.testfunc.lzout.out)])
+    wf.inputs.x = 2
+
+    wf(plugin="cf")
+    # default path
+    message_path = tmpdir / wf.checksum / "messages"
+    assert message_path.exists()
+
+    collect_messages(tmpdir / wf.checksum, message_path, ld_op="compact")
+    assert (tmpdir / wf.checksum / "messages.jsonld").exists()
+
+
+def test_audit_all(tmpdir, use_validator):
     @mark.task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
@@ -367,7 +1074,7 @@ def test_audit_all(tmpdir):
     funky = testfunc(a=2, audit_flags=AuditFlag.ALL, messengers=FileMessenger())
     message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
-    funky.messenger_args = dict(message_dir=message_path)
+    funky.audit.messenger_args = dict(message_dir=message_path)
     funky()
     from glob import glob
 
@@ -402,7 +1109,7 @@ def test_container_cmds(tmpdir):
     containy = DockerTask(name="containy", executable="pwd")
     with pytest.raises(AttributeError) as excinfo:
         containy.cmdline
-    assert "not specified" in str(excinfo.value)
+    assert "mandatory" in str(excinfo.value)
     containy.inputs.image = "busybox"
     assert containy.cmdline
 
@@ -436,7 +1143,7 @@ def test_singularity_cmd(tmpdir):
     singu = SingularityTask(name="singi", executable="pwd", image=image)
     assert (
         singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} pwd"
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} pwd"
     )
     singu.inputs.bindings = [
         ("/local/path", "/container/path", "ro"),
@@ -444,7 +1151,7 @@ def test_singularity_cmd(tmpdir):
     ]
     assert singu.cmdline == (
         "singularity exec -B /local/path:/container/path:ro"
-        f" -B /local2:/container2:rw -B {singu.output_dir}:/output_pydra:rw {image} pwd"
+        f" -B /local2:/container2:rw -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} pwd"
     )
 
 
@@ -468,7 +1175,7 @@ def test_functask_callable(tmpdir):
     assert foo2.plugin == "cf"
 
 
-def test_taskhooks(tmpdir, capsys):
+def test_taskhooks_1(tmpdir, capsys):
     foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
     assert foo.hooks
     # ensure all hooks are defined
@@ -520,3 +1227,78 @@ def test_taskhooks(tmpdir, capsys):
     for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):
         hook = getattr(foo.hooks, attr)
         assert hook() is None
+
+
+def test_taskhooks_2(tmpdir, capsys):
+    """checking order of the hooks; using task's attributes"""
+    foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
+
+    def myhook_prerun(task, *args):
+        print(f"i. prerun hook was called from {task.name}")
+
+    def myhook_prerun_task(task, *args):
+        print(f"ii. prerun task hook was called {task.name}")
+
+    def myhook_postrun_task(task, *args):
+        print(f"iii. postrun task hook was called {task.name}")
+
+    def myhook_postrun(task, *args):
+        print(f"iv. postrun hook was called {task.name}")
+
+    foo.hooks.pre_run = myhook_prerun
+    foo.hooks.post_run = myhook_postrun
+    foo.hooks.pre_run_task = myhook_prerun_task
+    foo.hooks.post_run_task = myhook_postrun_task
+    foo()
+
+    captured = capsys.readouterr()
+    hook_messages = captured.out.strip().split("\n")
+    # checking the order of the hooks
+    assert "i. prerun hook" in hook_messages[0]
+    assert "ii. prerun task hook" in hook_messages[1]
+    assert "iii. postrun task hook" in hook_messages[2]
+    assert "iv. postrun hook" in hook_messages[3]
+
+
+def test_taskhooks_3(tmpdir, capsys):
+    """checking results in the post run hooks"""
+    foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
+
+    def myhook_postrun_task(task, result, *args):
+        print(f"postrun task hook, the result is {result.output.out}")
+
+    def myhook_postrun(task, result, *args):
+        print(f"postrun hook, the result is {result.output.out}")
+
+    foo.hooks.post_run = myhook_postrun
+    foo.hooks.post_run_task = myhook_postrun_task
+    foo()
+
+    captured = capsys.readouterr()
+    hook_messages = captured.out.strip().split("\n")
+    # checking that the postrun hooks have access to results
+    assert "postrun task hook, the result is 3" in hook_messages[0]
+    assert "postrun hook, the result is 3" in hook_messages[1]
+
+
+def test_taskhooks_4(tmpdir, capsys):
+    """task raises an error: postrun task should be called, postrun shouldn't be called"""
+    foo = funaddtwo(name="foo", a="one", cache_dir=tmpdir)
+
+    def myhook_postrun_task(task, result, *args):
+        print(f"postrun task hook was called, result object is {result}")
+
+    def myhook_postrun(task, result, *args):
+        print(f"postrun hook should not be called")
+
+    foo.hooks.post_run = myhook_postrun
+    foo.hooks.post_run_task = myhook_postrun_task
+
+    with pytest.raises(Exception):
+        foo()
+
+    captured = capsys.readouterr()
+    hook_messages = captured.out.strip().split("\n")
+    # only post run task hook should be called
+    assert len(hook_messages) == 1
+    assert "postrun task hook was called" in hook_messages[0]

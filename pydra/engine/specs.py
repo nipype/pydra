@@ -2,6 +2,10 @@
 import attr
 from pathlib import Path
 import typing as ty
+import inspect
+import re
+
+from .helpers_file import template_update_single
 
 
 def attr_fields(x):
@@ -16,6 +20,35 @@ class Directory:
     """An :obj:`os.pathlike` object, designating a folder."""
 
 
+class MultiInputObj:
+    """A ty.List[ty.Any] object, converter changes a single values to a list"""
+
+    @classmethod
+    def converter(cls, value):
+        from .helpers import ensure_list
+
+        return ensure_list(value)
+
+
+class MultiOutputObj:
+    """A ty.List[ty.Any] object, converter changes an 1-el list to the single value"""
+
+    @classmethod
+    def converter(cls, value):
+        if isinstance(value, list) and len(value) == 1:
+            return value[0]
+        else:
+            return value
+
+
+class MultiInputFile(MultiInputObj):
+    """A ty.List[File] object, converter changes a single file path to a list"""
+
+
+class MultiOutputFile(MultiOutputObj):
+    """A ty.List[File] object, converter changes an 1-el list to the single value"""
+
+
 @attr.s(auto_attribs=True, kw_only=True)
 class SpecInfo:
     """Base data structure for metadata of specifications."""
@@ -23,16 +56,46 @@ class SpecInfo:
     name: str
     """A name for the specification."""
     fields: ty.List[ty.Tuple] = attr.ib(factory=list)
-    """List of names of fields (inputs or outputs)."""
+    """List of names of fields (can be inputs or outputs)."""
     bases: ty.Tuple[ty.Type] = attr.ib(factory=tuple)
-    """Keeps track of this specification inheritance."""
+    """Keeps track of specification inheritance.
+       Should be a tuple containing at least one BaseSpec """
 
 
 @attr.s(auto_attribs=True, kw_only=True)
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
 
-    def collect_additional_outputs(self, input_spec, inputs, output_dir):
+    def __attrs_post_init__(self):
+        self.files_hash = {}
+        for field in attr_fields(self):
+            if (
+                field.name not in ["_graph_checksums", "bindings", "files_hash"]
+                and field.metadata.get("output_file_template") is None
+            ):
+                self.files_hash[field.name] = {}
+
+    def __setattr__(self, name, value):
+        """changing settatr, so the converter and validator is run
+        if input is set after __init__
+        """
+        if inspect.stack()[1][3] == "__init__" or name in [
+            "inp_hash",
+            "changed",
+            "files_hash",
+        ]:
+            super().__setattr__(name, value)
+        else:
+            tp = attr.fields_dict(self.__class__)[name].type
+            # if the type has a converter, e.g., MultiInputObj
+            if hasattr(tp, "converter"):
+                value = tp.converter(value)
+            self.files_hash[name] = {}
+            super().__setattr__(name, value)
+            # validate all fields that have set a validator
+            attr.validate(self)
+
+    def collect_additional_outputs(self, inputs, output_dir):
         """Get additional outputs."""
         return {}
 
@@ -43,21 +106,26 @@ class BaseSpec:
 
         inp_dict = {}
         for field in attr_fields(self):
-            if field.name in ["_graph_checksums", "bindings"] or field.metadata.get(
-                "output_file_template"
-            ):
+            if field.name in [
+                "_graph_checksums",
+                "bindings",
+                "files_hash",
+            ] or field.metadata.get("output_file_template"):
                 continue
             # removing values that are notset from hash calculation
             if getattr(self, field.name) is attr.NOTHING:
                 continue
+            value = getattr(self, field.name)
             inp_dict[field.name] = hash_value(
-                value=getattr(self, field.name), tp=field.type, metadata=field.metadata
+                value=value,
+                tp=field.type,
+                metadata=field.metadata,
+                precalculated=self.files_hash[field.name],
             )
         inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph_checksums"):
-            return hash_function((inp_hash, self._graph_checksums))
-        else:
-            return inp_hash
+            inp_hash = hash_function((inp_hash, self._graph_checksums))
+        return inp_hash
 
     def retrieve_values(self, wf, state_index=None):
         """Get values contained by this spec."""
@@ -70,11 +138,73 @@ class BaseSpec:
         for field, value in temp_values.items():
             setattr(self, field, value)
 
+    def check_fields_input_spec(self):
+        """
+        Check fields from input spec based on the medatada.
+
+        e.g., if xor, requires are fulfilled, if value provided when mandatory.
+
+        """
+        fields = attr_fields(self)
+        names = []
+        require_to_check = {}
+        for fld in fields:
+            mdata = fld.metadata
+            # checking if the mandatory field is provided
+            if getattr(self, fld.name) is attr.NOTHING:
+                if mdata.get("mandatory"):
+                    raise AttributeError(
+                        f"{fld.name} is mandatory, but no value provided"
+                    )
+                else:
+                    continue
+            names.append(fld.name)
+
+            # checking if fields meet the xor and requires are
+            if "xor" in mdata:
+                if [el for el in mdata["xor"] if (el in names and el != fld.name)]:
+                    raise AttributeError(
+                        f"{fld.name} is mutually exclusive with {mdata['xor']}"
+                    )
+
+            if "requires" in mdata:
+                if [el for el in mdata["requires"] if el not in names]:
+                    # will check after adding all fields to names
+                    require_to_check[fld.name] = mdata["requires"]
+
+            if (
+                fld.type in [File, Directory]
+                or "pydra.engine.specs.File" in str(fld.type)
+                or "pydra.engine.specs.Directory" in str(fld.type)
+            ):
+                self._file_check_n_bindings(fld)
+
+        for nm, required in require_to_check.items():
+            required_notfound = [el for el in required if el not in names]
+            if required_notfound:
+                raise AttributeError(f"{nm} requires {required_notfound}")
+
+    def _file_check_n_bindings(self, field):
+        """for tasks without container, this is simple check if the file exists"""
+        if isinstance(getattr(self, field.name), list):
+            # if value is a list and type is a list of Files/Directory, checking all elements
+            if field.type in [ty.List[File], ty.List[Directory]]:
+                for el in getattr(self, field.name):
+                    file = Path(el)
+                    if not file.exists() and field.type in [File, Directory]:
+                        raise FileNotFoundError(
+                            f"the file from the {field.name} input does not exist"
+                        )
+        else:
+            file = Path(getattr(self, field.name))
+            # error should be raised only if the type is strictly File or Directory
+            if not file.exists() and field.type in [File, Directory]:
+                raise FileNotFoundError(
+                    f"the file from the {field.name} input does not exist"
+                )
+
     def check_metadata(self):
         """Check contained metadata."""
-
-    def check_fields_input_spec(self):
-        """Check input fields."""
 
     def template_update(self):
         """Update template."""
@@ -121,6 +251,19 @@ class Result:
             state["output"] = klass(**state["output"])
         self.__dict__.update(state)
 
+    def get_output_field(self, field_name):
+        """Used in get_values in Workflow
+
+        Parameters
+        ----------
+        field_name : `str`
+            Name of field in LazyField object
+        """
+        if field_name == "all_":
+            return attr.asdict(self.output)
+        else:
+            return getattr(self.output, field_name)
+
 
 @attr.s(auto_attribs=True, kw_only=True)
 class RuntimeSpec:
@@ -145,6 +288,56 @@ class RuntimeSpec:
     outdir: ty.Optional[str] = None
     container: ty.Optional[str] = "shell"
     network: bool = False
+
+
+@attr.s(auto_attribs=True, kw_only=True)
+class FunctionSpec(BaseSpec):
+    """Specification for a process invoked from a shell."""
+
+    def check_metadata(self):
+        """
+        Check the metadata for fields in input_spec and fields.
+
+        Also sets the default values when available and needed.
+
+        """
+        supported_keys = {
+            "allowed_values",
+            "copyfile",
+            "help_string",
+            "mandatory",
+            # "readonly", #likely not needed
+            # "output_field_name", #likely not needed
+            # "output_file_template", #likely not needed
+            "requires",
+            "keep_extension",
+            "xor",
+            "sep",
+        }
+        # special inputs, don't have to follow rules for standard inputs
+        special_input = ["_func", "_graph_checksums"]
+
+        fields = [fld for fld in attr_fields(self) if fld.name not in special_input]
+        for fld in fields:
+            mdata = fld.metadata
+            # checking keys from metadata
+            if set(mdata.keys()) - supported_keys:
+                raise AttributeError(
+                    f"only these keys are supported {supported_keys}, but "
+                    f"{set(mdata.keys()) - supported_keys} provided"
+                )
+            # checking if the help string is provided (required field)
+            if "help_string" not in mdata:
+                raise AttributeError(f"{fld.name} doesn't have help_string field")
+            # not allowing for default if the field is mandatory
+            if not fld.default == attr.NOTHING and mdata.get("mandatory"):
+                raise AttributeError(
+                    "default value should not be set when the field is mandatory"
+                )
+            # setting default if value not provided and default is available
+            if getattr(self, fld.name) is None:
+                if not fld.default == attr.NOTHING:
+                    setattr(self, fld.name, fld.default)
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -193,12 +386,14 @@ class ShellSpec(BaseSpec):
             "copyfile",
             "help_string",
             "mandatory",
+            "readonly",
             "output_field_name",
             "output_file_template",
             "position",
             "requires",
-            "separate_ext",
+            "keep_extension",
             "xor",
+            "sep",
         }
         # special inputs, don't have to follow rules for standard inputs
         special_input = ["_func", "_graph_checksums"]
@@ -208,22 +403,23 @@ class ShellSpec(BaseSpec):
             mdata = fld.metadata
             # checking keys from metadata
             if set(mdata.keys()) - supported_keys:
-                raise Exception(
+                raise AttributeError(
                     f"only these keys are supported {supported_keys}, but "
                     f"{set(mdata.keys()) - supported_keys} provided"
                 )
             # checking if the help string is provided (required field)
             if "help_string" not in mdata:
-                raise Exception(f"{fld.name} doesn't have help_string field")
-
+                raise AttributeError(f"{fld.name} doesn't have help_string field")
             # assuming that fields with output_file_template shouldn't have default
-            if not fld.default == attr.NOTHING and mdata.get("output_file_template"):
-                raise Exception(
+            if fld.default not in [attr.NOTHING, True, False] and mdata.get(
+                "output_file_template"
+            ):
+                raise AttributeError(
                     "default value should not be set together with output_file_template"
                 )
             # not allowing for default if the field is mandatory
             if not fld.default == attr.NOTHING and mdata.get("mandatory"):
-                raise Exception(
+                raise AttributeError(
                     "default value should not be set when the field is mandatory"
                 )
             # setting default if value not provided and default is available
@@ -231,69 +427,9 @@ class ShellSpec(BaseSpec):
                 if not fld.default == attr.NOTHING:
                     setattr(self, fld.name, fld.default)
 
-    def check_fields_input_spec(self):
-        """
-        Check fields from input spec based on the medatada.
-
-        e.g., if xor, requires are fulfilled, if value provided when mandatory.
-
-        """
-        fields = attr_fields(self)
-        names = []
-        require_to_check = {}
-        for fld in fields:
-            mdata = fld.metadata
-            # checking if the mandatory field is provided
-            if getattr(self, fld.name) is attr.NOTHING:
-                if mdata.get("mandatory"):
-                    raise Exception(f"{fld.name} is mandatory, but no value provided")
-                else:
-                    continue
-            names.append(fld.name)
-
-            # checking if fields meet the xor and requires are
-            if "xor" in mdata:
-                if [el for el in mdata["xor"] if el in names]:
-                    raise Exception(
-                        f"{fld.name} is mutually exclusive with {mdata['xor']}"
-                    )
-
-            if "requires" in mdata:
-                if [el for el in mdata["requires"] if el not in names]:
-                    # will check after adding all fields to names
-                    require_to_check[fld.name] = mdata["requires"]
-
-            if fld.type is File:
-                self._file_check(fld)
-
-        for nm, required in require_to_check.items():
-            required_notfound = [el for el in required if el not in names]
-            if required_notfound:
-                raise Exception(f"{nm} requires {required_notfound}")
-
-            # TODO: types might be checked here
-        self._type_checking()
-
-    def _file_check(self, field):
-        file = Path(getattr(self, field.name))
-        if not file.exists():
-            raise Exception(f"the file from the {field.name} input does not exist")
-
-    def _type_checking(self):
-        """Use fld.type to check the types TODO.
-
-        This may be done through attr validators.
-
-        """
-        fields = attr_fields(self)
-        allowed_keys = ["min_val", "max_val", "range", "enum"]  # noqa
-        for fld in fields:
-            # TODO
-            pass
-
 
 @attr.s(auto_attribs=True, kw_only=True)
-class ShellOutSpec(BaseSpec):
+class ShellOutSpec:
     """Output specification of a generic shell process."""
 
     return_code: int
@@ -303,18 +439,20 @@ class ShellOutSpec(BaseSpec):
     stderr: ty.Union[File, str]
     """The process' standard input."""
 
-    def collect_additional_outputs(self, input_spec, inputs, output_dir):
+    def collect_additional_outputs(self, inputs, output_dir):
         """Collect additional outputs from shelltask output_spec."""
         additional_out = {}
         for fld in attr_fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:
-                if fld.type is File:
+                if fld.type in [File, MultiOutputFile]:
                     # assuming that field should have either default or metadata, but not both
                     if (
                         fld.default is None or fld.default == attr.NOTHING
                     ) and not fld.metadata:  # TODO: is it right?
-                        raise Exception("File has to have default value or metadata")
-                    elif not fld.default == attr.NOTHING:
+                        raise AttributeError(
+                            "File has to have default value or metadata"
+                        )
+                    elif fld.default != attr.NOTHING:
                         additional_out[fld.name] = self._field_defaultvalue(
                             fld, output_dir
                         )
@@ -323,13 +461,43 @@ class ShellOutSpec(BaseSpec):
                             fld, inputs, output_dir
                         )
                 else:
-                    raise Exception("not implemented")
+                    raise Exception("not implemented (collect_additional_output)")
         return additional_out
+
+    def generated_output_names(self, inputs, output_dir):
+        """ Returns a list of all outputs that will be generated by the task.
+            Takes into account the task input and the requires list for the output fields.
+            TODO: should be in all Output specs?
+        """
+        # checking the input (if all mandatory fields are provided, etc.)
+        inputs.check_fields_input_spec()
+        output_names = ["return_code", "stdout", "stderr"]
+        for fld in attr_fields(self):
+            if fld.name not in ["return_code", "stdout", "stderr"]:
+                if fld.type is File:
+                    # assuming that field should have either default or metadata, but not both
+                    if (
+                        fld.default is None or fld.default == attr.NOTHING
+                    ) and not fld.metadata:  # TODO: is it right?
+                        raise AttributeError(
+                            "File has to have default value or metadata"
+                        )
+                    elif fld.default != attr.NOTHING:
+                        output_names.append(fld.name)
+                    elif (
+                        fld.metadata
+                        and self._field_metadata(fld, inputs, output_dir)
+                        != attr.NOTHING
+                    ):
+                        output_names.append(fld.name)
+                else:
+                    raise Exception("not implemented (collect_additional_output)")
+        return output_names
 
     def _field_defaultvalue(self, fld, output_dir):
         """Collect output file if the default value specified."""
         if not isinstance(fld.default, (str, Path)):
-            raise Exception(
+            raise AttributeError(
                 f"{fld.name} is a File, so default value "
                 f"should be a string or a Path, "
                 f"{fld.default} provided"
@@ -344,7 +512,7 @@ class ShellOutSpec(BaseSpec):
             if default.exists():
                 return default
             else:
-                raise Exception(f"file {default} does not exist")
+                raise AttributeError(f"file {default} does not exist")
         else:
             all_files = list(Path(default.parent).expanduser().glob(default.name))
             if len(all_files) > 1:
@@ -352,34 +520,116 @@ class ShellOutSpec(BaseSpec):
             elif len(all_files) == 1:
                 return all_files[0]
             else:
-                raise Exception(f"no file matches {default.name}")
+                raise AttributeError(f"no file matches {default.name}")
 
     def _field_metadata(self, fld, inputs, output_dir):
         """Collect output file if metadata specified."""
+        if self._check_requires(fld, inputs) is False:
+            return attr.NOTHING
+
         if "value" in fld.metadata:
             return output_dir / fld.metadata["value"]
+        # this block is only run if "output_file_template" is provided in output_spec
+        # if the field is set in input_spec with output_file_template,
+        # than the field already should have value
         elif "output_file_template" in fld.metadata:
-            sfx_tmpl = (output_dir / fld.metadata["output_file_template"]).suffixes
-            if sfx_tmpl:
-                # removing suffix from input field if template has it's own suffix
-                inputs_templ = {
-                    k: v.split(".")[0]
-                    for k, v in inputs.__dict__.items()
-                    if isinstance(v, str)
-                }
-            else:
-                inputs_templ = {
-                    k: v for k, v in inputs.__dict__.items() if isinstance(v, str)
-                }
-            out_path = output_dir / fld.metadata["output_file_template"].format(
-                **inputs_templ
+            inputs_templ = attr.asdict(inputs)
+            value = template_update_single(
+                fld, inputs_templ, output_dir=output_dir, spec_type="output"
             )
-            return out_path
-
+            if fld.type is MultiOutputFile and type(value) is list:
+                return [Path(val) for val in value]
+            else:
+                return Path(value)
         elif "callable" in fld.metadata:
-            return fld.metadata["callable"](fld.name, output_dir)
+            call_args = inspect.getargspec(fld.metadata["callable"])
+            call_args_val = {}
+            for argnm in call_args.args:
+                if argnm == "field":
+                    call_args_val[argnm] = fld
+                elif argnm == "output_dir":
+                    call_args_val[argnm] = output_dir
+                elif argnm == "inputs":
+                    call_args_val[argnm] = inputs
+                else:
+                    try:
+                        call_args_val[argnm] = getattr(inputs, argnm)
+                    except AttributeError:
+                        raise AttributeError(
+                            f"arguments of the callable function from {fld.name} "
+                            f"has to be in inputs or be field or output_dir, "
+                            f"but {argnm} is used"
+                        )
+            return fld.metadata["callable"](**call_args_val)
         else:
-            raise Exception("not implemented")
+            raise Exception("(_field_metadata) is not a current valid metadata key.")
+
+    def _check_requires(self, fld, inputs):
+        """ checking if all fields from the requires and template are set in the input
+            if requires is a list of list, checking if at least one list has all elements set
+        """
+        from .helpers import ensure_list
+
+        if "requires" in fld.metadata:
+            # if requires is a list of list it is treated as el[0] OR el[1] OR...
+            if all([isinstance(el, list) for el in fld.metadata["requires"]]):
+                field_required_OR = fld.metadata["requires"]
+            # if requires is a list of tuples/strings - I'm creating a 1-el nested list
+            elif all([isinstance(el, (str, tuple)) for el in fld.metadata["requires"]]):
+                field_required_OR = [fld.metadata["requires"]]
+            else:
+                raise Exception(
+                    f"requires field can be a list of list, or a list "
+                    f"of strings/tuples, but {fld.metadata['requires']} "
+                    f"provided for {fld.name}"
+                )
+        else:
+            field_required_OR = [[]]
+
+        for field_required in field_required_OR:
+            # if the output has output_file_template field, adding all input fields from the template to requires
+            if "output_file_template" in fld.metadata:
+                inp_fields = re.findall("{\w+}", fld.metadata["output_file_template"])
+                field_required += [
+                    el[1:-1] for el in inp_fields if el[1:-1] not in field_required
+                ]
+
+        # it's a flag, of the field from the list is not in input it will be changed to False
+        required_found = True
+        for field_required in field_required_OR:
+            required_found = True
+            # checking if the input fields from requires have set values
+            for inp in field_required:
+                if isinstance(inp, str):  # name of the input field
+                    if not hasattr(inputs, inp):
+                        raise Exception(
+                            f"{inp} is not a valid input field, can't be used in requires"
+                        )
+                    elif getattr(inputs, inp) in [attr.NOTHING, None]:
+                        required_found = False
+                        break
+                elif isinstance(inp, tuple):  # (name, allowed values)
+                    inp, allowed_val = inp[0], ensure_list(inp[1])
+                    if not hasattr(inputs, inp):
+                        raise Exception(
+                            f"{inp} is not a valid input field, can't be used in requires"
+                        )
+                    elif getattr(inputs, inp) not in allowed_val:
+                        required_found = False
+                        break
+                else:
+                    raise Exception(
+                        f"each element of the requires element should be a string or a tuple, "
+                        f"but {inp} is found in {field_required}"
+                    )
+            # if the specific list from field_required_OR has all elements set, no need to check more
+            if required_found:
+                break
+
+        if required_found:
+            return True
+        else:
+            return False
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -409,7 +659,9 @@ class ContainerSpec(ShellSpec):
     ] = attr.ib(default=None, metadata={"help_string": "bindings"})
     """Mount points to be bound into the container."""
 
-    def _file_check(self, field):
+    def _file_check_n_bindings(self, field):
+        if field.name == "image":
+            return
         file = Path(getattr(self, field.name))
         if field.metadata.get("container_path"):
             # if the path is in a container the input should be treated as a str (hash as a str)
@@ -421,8 +673,9 @@ class ContainerSpec(ShellSpec):
             if self.bindings is None:
                 self.bindings = []
             self.bindings.append((file.parent, f"/pydra_inp_{field.name}", "ro"))
-        else:
-            raise Exception(
+        # error should be raised only if the type is strictly File or Directory
+        elif field.type in [File, Directory]:
+            raise FileNotFoundError(
                 f"the file from {field.name} input does not exist, "
                 f"if the file comes from the container, "
                 f"use field.metadata['container_path']=True"
@@ -454,7 +707,7 @@ class LazyField:
         elif attr_type == "output":
             self.fields = node.output_names
         else:
-            raise ValueError("LazyField: Unknown attr_type: {}".format(attr_type))
+            raise ValueError(f"LazyField: Unknown attr_type: {attr_type}")
         self.attr_type = attr_type
         self.field = None
 
@@ -465,7 +718,7 @@ class LazyField:
         if name in dir(self):
             return self.__getattribute__(name)
         raise AttributeError(
-            "Task {0} has no {1} attribute {2}".format(self.name, self.attr_type, name)
+            f"Task {self.name} has no {self.attr_type} attribute {name}"
         )
 
     def __getstate__(self):
@@ -479,7 +732,7 @@ class LazyField:
         self.__dict__.update(state)
 
     def __repr__(self):
-        return "LF('{0}', '{1}')".format(self.name, self.field)
+        return f"LF('{self.name}', '{self.field}')"
 
     def get_value(self, wf, state_index=None):
         """Return the value of a lazy field."""
@@ -492,24 +745,26 @@ class LazyField:
                 if len(result) and isinstance(result[0], list):
                     results_new = []
                     for res_l in result:
-                        if self.field == "all_":
-                            res_l_new = [attr.asdict(res.output) for res in res_l]
-                        else:
-                            res_l_new = [
-                                getattr(res.output, self.field) for res in res_l
-                            ]
+                        res_l_new = []
+                        for res in res_l:
+                            if res.errored:
+                                raise ValueError("Error from get_value")
+                            else:
+                                res_l_new.append(res.get_output_field(self.field))
                         results_new.append(res_l_new)
                     return results_new
                 else:
-                    if self.field == "all_":
-                        return [attr.asdict(res.output) for res in result]
-                    else:
-                        return [getattr(res.output, self.field) for res in result]
+                    results_new = []
+                    for res in result:
+                        if res.errored:
+                            raise ValueError("Error from get_value")
+                        else:
+                            results_new.append(res.get_output_field(self.field))
+                    return results_new
             else:
-                if self.field == "all_":
-                    return attr.asdict(result.output)
-                else:
-                    return getattr(result.output, self.field)
+                if result.errored:
+                    raise ValueError("Error from get_value")
+                return result.get_output_field(self.field)
 
 
 def donothing(*args, **kwargs):

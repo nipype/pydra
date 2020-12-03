@@ -43,6 +43,7 @@ import cloudpickle as cp
 import inspect
 import typing as ty
 from pathlib import Path
+import warnings
 
 from .core import TaskBase, is_lazy
 from ..utils.messenger import AuditFlag
@@ -57,7 +58,13 @@ from .specs import (
     SingularitySpec,
     attr_fields,
 )
-from .helpers import ensure_list, execute
+from .helpers import (
+    ensure_list,
+    execute,
+    position_adjustment,
+    argstr_formatting,
+    output_from_inputfields,
+)
 from .helpers_file import template_update, is_local_file
 
 
@@ -70,11 +77,11 @@ class FunctionTask(TaskBase):
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
-        input_spec: ty.Optional[SpecInfo] = None,
+        input_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
         messenger_args=None,
         messengers=None,
         name=None,
-        output_spec: ty.Optional[BaseSpec] = None,
+        output_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
         rerun=False,
         **kwargs,
     ):
@@ -104,31 +111,26 @@ class FunctionTask(TaskBase):
 
         """
         if input_spec is None:
-            input_spec = SpecInfo(
-                name="Inputs",
-                fields=[
+            fields = []
+            for val in inspect.signature(func).parameters.values():
+                if val.default is not inspect.Signature.empty:
+                    val_dflt = val.default
+                else:
+                    val_dflt = attr.NOTHING
+                fields.append(
                     (
                         val.name,
                         attr.ib(
-                            default=val.default,
+                            default=val_dflt,
                             type=val.annotation,
                             metadata={
                                 "help_string": f"{val.name} parameter from {func.__name__}"
                             },
                         ),
                     )
-                    if val.default is not inspect.Signature.empty
-                    else (
-                        val.name,
-                        attr.ib(
-                            type=val.annotation, metadata={"help_string": val.name}
-                        ),
-                    )
-                    for val in inspect.signature(func).parameters.values()
-                ]
-                + [("_func", attr.ib(default=cp.dumps(func), type=str))],
-                bases=(BaseSpec,),
-            )
+                )
+            fields.append(("_func", attr.ib(default=cp.dumps(func), type=str)))
+            input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
         else:
             input_spec.fields.append(
                 ("_func", attr.ib(default=cp.dumps(func), type=str))
@@ -136,7 +138,7 @@ class FunctionTask(TaskBase):
         self.input_spec = input_spec
         if name is None:
             name = func.__name__
-        super(FunctionTask, self).__init__(
+        super().__init__(
             name,
             inputs=kwargs,
             audit_flags=audit_flags,
@@ -153,6 +155,8 @@ class FunctionTask(TaskBase):
                 )
             else:
                 return_info = func.__annotations__["return"]
+                # e.g. python annotation: fun() -> ty.NamedTuple("Output", [("out", float)])
+                # or pydra decorator: @pydra.mark.annotate({"return": ty.NamedTuple(...)})
                 if hasattr(return_info, "__name__") and hasattr(
                     return_info, "__annotations__"
                 ):
@@ -161,37 +165,31 @@ class FunctionTask(TaskBase):
                         fields=list(return_info.__annotations__.items()),
                         bases=(BaseSpec,),
                     )
-                # Objects like int, float, list, tuple, and dict do not have __name__ attribute.
-                elif hasattr(return_info, "__annotations__"):
-                    output_spec = SpecInfo(
-                        name="Output",
-                        fields=list(return_info.__annotations__.items()),
-                        bases=(BaseSpec,),
-                    )
+                # e.g. python annotation: fun() -> {"out": int}
+                # or pydra decorator: @pydra.mark.annotate({"return": {"out": int}})
                 elif isinstance(return_info, dict):
                     output_spec = SpecInfo(
                         name="Output",
                         fields=list(return_info.items()),
                         bases=(BaseSpec,),
                     )
+                # e.g. python annotation: fun() -> (int, int)
+                # or pydra decorator: @pydra.mark.annotate({"return": (int, int)})
+                elif isinstance(return_info, tuple):
+                    output_spec = SpecInfo(
+                        name="Output",
+                        fields=[
+                            ("out{}".format(n + 1), t)
+                            for n, t in enumerate(return_info)
+                        ],
+                        bases=(BaseSpec,),
+                    )
+                # e.g. python annotation: fun() -> int
+                # or pydra decorator: @pydra.mark.annotate({"return": int})
                 else:
-                    if not isinstance(return_info, tuple):
-                        output_spec = SpecInfo(
-                            name="Output",
-                            fields=[("out", return_info)],
-                            bases=(BaseSpec,),
-                        )
-                    else:
-                        output_spec = SpecInfo(
-                            name="Output",
-                            fields=[
-                                ("out{}".format(n + 1), t)
-                                for n, t in enumerate(return_info)
-                            ],
-                            bases=(BaseSpec,),
-                        )
-        elif "return" in func.__annotations__:
-            raise NotImplementedError("Branch not implemented")
+                    output_spec = SpecInfo(
+                        name="Output", fields=[("out", return_info)], bases=(BaseSpec,)
+                    )
         self.output_spec = output_spec
 
     def _run_task(self):
@@ -201,7 +199,7 @@ class FunctionTask(TaskBase):
         output = cp.loads(self.inputs._func)(**inputs)
         output_names = [el[0] for el in self.output_spec.fields]
         if output is None:
-            self.output_ = dict((nm, None) for nm in output_names)
+            self.output_ = {nm: None for nm in output_names}
         else:
             if len(output_names) == 1:
                 # if only one element in the fields, everything should be returned together
@@ -219,9 +217,12 @@ class FunctionTask(TaskBase):
 class ShellCommandTask(TaskBase):
     """Wrap a shell command as a task element."""
 
+    input_spec = None
+    output_spec = None
+
     def __new__(cls, container_info=None, *args, **kwargs):
         if not container_info:
-            return super(ShellCommandTask, cls).__new__(cls)
+            return super().__new__(cls)
 
         if len(container_info) == 3:
             type_cont, image, bind = container_info
@@ -233,8 +234,14 @@ class ShellCommandTask(TaskBase):
             )
 
         if type_cont == "docker":
+            # changing base class of spec if user defined
+            if "input_spec" in kwargs:
+                kwargs["input_spec"].bases = (DockerSpec,)
             return DockerTask(image=image, bindings=bind, *args, **kwargs)
         elif type_cont == "singularity":
+            # changing base class of spec if user defined
+            if "input_spec" in kwargs:
+                kwargs["input_spec"].bases = (SingularitySpec,)
             return SingularityTask(image=image, bindings=bind, *args, **kwargs)
         else:
             raise Exception(
@@ -278,15 +285,30 @@ class ShellCommandTask(TaskBase):
             TODO
 
         """
-        if input_spec is None:
-            input_spec = SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
-        self.input_spec = input_spec
-        if output_spec is None:
-            output_spec = SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
 
-        self.output_spec = output_spec
+        # using provided spec, class attribute or setting the default SpecInfo
+        self.input_spec = (
+            input_spec
+            or self.input_spec
+            or SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
+        )
+        self.output_spec = (
+            output_spec
+            or self.output_spec
+            or SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
+        )
+        self.output_spec = output_from_inputfields(self.output_spec, self.input_spec)
 
-        super(ShellCommandTask, self).__init__(
+        for special_inp in ["executable", "args"]:
+            if hasattr(self, special_inp):
+                if special_inp not in kwargs:
+                    kwargs[special_inp] = getattr(self, special_inp)
+                elif kwargs[special_inp] != getattr(self, special_inp):
+                    warnings.warn(
+                        f"you are changing the executable from {getattr(self, special_inp)} to {kwargs[special_inp]}"
+                    )
+
+        super().__init__(
             name=name,
             inputs=kwargs,
             audit_flags=audit_flags,
@@ -314,56 +336,154 @@ class ShellCommandTask(TaskBase):
     def _command_args_single(self, state_ind, ind=None):
         """Get command line arguments for a single state"""
         pos_args = []  # list for (position, command arg)
+        self._positions_provided = []
         for f in attr_fields(self.inputs):
-            if f.name == "executable":
-                pos = 0  # executable should be the first el. of the command
-            elif f.name == "args":
-                pos = -1  # assuming that args is the last el. of the command
-            # if inp has position than it should be treated as a part of the command
-            # metadata["position"] is the position in the command
-            elif "position" in f.metadata:
-                pos = f.metadata["position"]
-                if not isinstance(pos, int) or pos < 1:
-                    raise Exception(
-                        f"position should be an integer > 0, but {pos} given"
-                    )
-            else:
+            # these inputs will eb used in container_args
+            if isinstance(self, ContainerTask) and f.name in [
+                "container",
+                "image",
+                "container_xargs",
+                "bindings",
+            ]:
                 continue
-            cmd_add = []
-            if "argstr" in f.metadata:
-                cmd_add.append(f.metadata["argstr"])
-            # if f.metadata.get("copyfile") in [True, False]:
-            #    value = str(self.inputs.map_copyfiles[f.name])
-            # else:
-            if self.state and f"{self.name}.{f.name}" in state_ind:
-                value = getattr(self.inputs, f.name)[state_ind[f"{self.name}.{f.name}"]]
+            elif f.name == "executable":
+                pos_args.append(
+                    self._command_shelltask_executable(
+                        field=f, state_ind=state_ind, ind=ind
+                    )
+                )
+            elif f.name == "args":
+                pos_val = self._command_shelltask_args(
+                    field=f, state_ind=state_ind, ind=ind
+                )
+                if pos_val:
+                    pos_args.append(pos_val)
             else:
-                value = getattr(self.inputs, f.name)
-            if is_local_file(f):
+                pos_val = self._command_pos_args(field=f, state_ind=state_ind, ind=ind)
+                if pos_val:
+                    pos_args.append(pos_val)
+
+        # sorted elements of the command
+        cmd_args = position_adjustment(pos_args)
+        return cmd_args
+
+    def _field_value(self, field, state_ind, ind, check_file=False):
+        """
+        Checking value of the specific field, if value is not set, None is returned.
+        If state_ind and ind, taking a specific element of the field.
+        If check_file is True, checking if field is a a local file
+        and settings bindings if needed.
+        """
+        name = f"{self.name}.{field.name}"
+        if self.state and name in state_ind:
+            value = getattr(self.inputs, field.name)[state_ind[name]]
+        else:
+            value = getattr(self.inputs, field.name)
+        if value is attr.NOTHING or value is None:
+            return None
+        if check_file:
+            if is_local_file(field) and getattr(self, "bind_paths", None):
                 value = str(value)
-            # changing path to the cpath (the directory should be mounted)
-            if getattr(self, "bind_paths", None) and is_local_file(f):
+                # changing path to the cpath (the directory should be mounted)
                 lpath = Path(value)
                 cdir = self.bind_paths(ind=ind)[lpath.parent][0]
                 cpath = cdir.joinpath(lpath.name)
                 value = str(cpath)
-            if f.type is bool:
-                if value is not True:
-                    break
+        return value
+
+    def _command_shelltask_executable(self, field, state_ind, ind):
+        """Returining position and value for executable ShellTask input"""
+        pos = 0  # executable should be the first el. of the command
+        value = self._field_value(field=field, state_ind=state_ind, ind=ind)
+        if value is None:
+            raise Exception("executable has to be set")
+        return pos, ensure_list(value, tuple2list=True)
+
+    def _command_shelltask_args(self, field, state_ind, ind):
+        """Returining position and value for args ShellTask input"""
+        pos = -1  # assuming that args is the last el. of the command
+        value = self._field_value(
+            field=field, state_ind=state_ind, ind=ind, check_file=True
+        )
+        if value is None:
+            return None
+        else:
+            return pos, ensure_list(value, tuple2list=True)
+
+    def _command_pos_args(self, field, state_ind, ind):
+        """
+        Checking all additional input fields, setting pos to None, if position not set.
+        Creating a list with additional parts of the command that comes from
+        the specific field.
+        """
+        argstr = field.metadata.get("argstr", None)
+        if argstr is None:
+            # assuming that input that has no arstr is not used in the command
+            return None
+        pos = field.metadata.get("position", None)
+        if pos is None:
+            # position will be set at the end
+            pass
+        elif not isinstance(pos, int):
+            raise Exception(f"position should be an integer, but {pos} given")
+        elif pos == 0:
+            raise Exception(f"position can't be 0")
+        elif pos < 0:  # position -1 is for args
+            pos = pos - 1
+        # checking if the position is not already used
+        elif pos in self._positions_provided:
+            raise Exception(
+                f"{field.name} can't have provided position, {pos} is already used"
+            )
+        self._positions_provided.append(pos)
+        value = self._field_value(
+            field=field, state_ind=state_ind, ind=ind, check_file=True
+        )
+        if field.metadata.get("readonly", False) and value is not None:
+            raise Exception(f"{field.name} is read only, the value can't be provided")
+        elif value is None and not field.metadata.get("readonly", False):
+            return None
+
+        cmd_add = []
+        if field.type is bool:
+            # if value is simply True the original argstr is used,
+            # if False, nothing is added to the command
+            if value is True:
+                cmd_add.append(argstr)
+        else:
+            sep = field.metadata.get("sep", " ")
+            if argstr.endswith("...") and isinstance(value, list):
+                argstr = argstr.replace("...", "")
+                # if argstr has a more complex form, with "{input_field}"
+                if "{" in argstr and "}" in argstr:
+                    argstr_formatted_l = []
+                    for val in value:
+                        argstr_f = argstr_formatting(
+                            argstr, self.inputs, value_updates={field.name: val}
+                        )
+                        argstr_formatted_l.append(argstr_f)
+                    cmd_el_str = sep.join(argstr_formatted_l)
+                else:  # argstr has a simple form, e.g. "-f", or "--f"
+                    cmd_el_str = sep.join([f" {argstr} {val}" for val in value])
             else:
-                cmd_add += ensure_list(value, tuple2list=True)
-            if cmd_add is not None:
-                pos_args.append((pos, cmd_add))
-        # sorting all elements of the command
-        pos_args.sort()
-        # if args available, they should be moved at the of the list
-        if pos_args[0][0] == -1:
-            pos_args.append(pos_args.pop(0))
-        # dropping the position index
-        cmd_args = []
-        for el in pos_args:
-            cmd_args += el[1]
-        return cmd_args
+                # in case there are ... when input is not a list
+                argstr = argstr.replace("...", "")
+                if isinstance(value, list):
+                    cmd_el_str = sep.join([str(val) for val in value])
+                    value = cmd_el_str
+                # if argstr has a more complex form, with "{input_field}"
+                if "{" in argstr and "}" in argstr:
+                    cmd_el_str = argstr_formatting(argstr, self.inputs)
+                else:  # argstr has a simple form, e.g. "-f", or "--f"
+                    if value:
+                        cmd_el_str = f"{argstr} {value}"
+                    else:
+                        cmd_el_str = ""
+            # removing double spacing
+            cmd_el_str = cmd_el_str.strip().replace("  ", " ")
+            if cmd_el_str:
+                cmd_add += cmd_el_str.split(" ")
+        return pos, cmd_add
 
     @property
     def cmdline(self):
@@ -372,8 +492,10 @@ class ShellCommandTask(TaskBase):
         """
         if is_lazy(self.inputs):
             raise Exception("can't return cmdline, self.inputs has LazyFields")
+        # checking the inputs fields before returning the command line
+        self.inputs.check_fields_input_spec()
         orig_inputs = attr.asdict(self.inputs)
-        modified_inputs = template_update(self.inputs)
+        modified_inputs = template_update(self.inputs, output_dir=self.output_dir)
         if modified_inputs is not None:
             self.inputs = attr.evolve(self.inputs, **modified_inputs)
         if isinstance(self, ContainerTask):
@@ -458,7 +580,7 @@ class ContainerTask(ShellCommandTask):
         if input_spec is None:
             input_spec = SpecInfo(name="Inputs", fields=[], bases=(ContainerSpec,))
         self.output_cpath = Path(output_cpath)
-        super(ContainerTask, self).__init__(
+        super().__init__(
             name=name,
             input_spec=input_spec,
             output_spec=output_spec,
@@ -520,7 +642,7 @@ class ContainerTask(ShellCommandTask):
         """
         bargs = []
         for (key, val) in self.bind_paths(ind).items():
-            bargs.extend([opt, "{0}:{1}:{2}".format(key, val[0], val[1])])
+            bargs.extend([opt, f"{key}:{val[0]}:{val[1]}"])
         return bargs
 
 
@@ -572,7 +694,7 @@ class DockerTask(ContainerTask):
             if input_spec is None:
                 input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
 
-            super(DockerTask, self).__init__(
+            super().__init__(
                 name=name,
                 input_spec=input_spec,
                 output_spec=output_spec,
@@ -669,7 +791,7 @@ class SingularityTask(ContainerTask):
                 input_spec = SpecInfo(
                     name="Inputs", fields=[], bases=(SingularitySpec,)
                 )
-            super(SingularityTask, self).__init__(
+            super().__init__(
                 input_spec=input_spec,
                 output_spec=output_spec,
                 audit_flags=audit_flags,
@@ -711,9 +833,8 @@ class SingularityTask(ContainerTask):
 
         if self.inputs.container_xargs is not None:
             cargs.extend(self.inputs.container_xargs)
-        cargs.append(image)
 
-        # insert bindings before image
-        idx = len(cargs) - 1
-        cargs[idx:-1] = self.binds("-B", ind)
+        cargs.extend(self.binds("-B", ind))
+        cargs.extend(["--pwd", str(self.output_cpath)])
+        cargs.append(image)
         return cargs

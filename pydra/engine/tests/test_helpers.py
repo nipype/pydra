@@ -8,7 +8,14 @@ import pytest
 import cloudpickle as cp
 
 from .utils import multiply, raise_xeq1
-from ..helpers import hash_value, hash_function, get_available_cpus, save, load_and_run
+from ..helpers import (
+    hash_value,
+    hash_function,
+    get_available_cpus,
+    save,
+    load_and_run,
+    position_adjustment,
+)
 from .. import helpers_file
 from ..specs import File, Directory
 from ..core import Workflow
@@ -263,7 +270,7 @@ def test_load_and_run_wf(tmpdir):
 
     wf = Workflow(name="wf", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
-    wf.split(("x"))
+    wf.split("x")
     wf.inputs.x = [1, 2]
     wf.inputs.y = 10
 
@@ -284,3 +291,18 @@ def test_load_and_run_wf(tmpdir):
     result_1 = cp.loads(resultfile_1.read_bytes())
     assert result_0.output.out == 10
     assert result_1.output.out == 20
+
+
+@pytest.mark.parametrize(
+    "pos_args",
+    [
+        [(2, "b"), (1, "a"), (3, "c")],
+        [(-2, "b"), (1, "a"), (-1, "c")],
+        [(None, "b"), (1, "a"), (-1, "c")],
+        [(-3, "b"), (None, "a"), (-1, "c")],
+        [(None, "b"), (1, "a"), (None, "c")],
+    ],
+)
+def test_position_adjustment(pos_args):
+    final_args = position_adjustment(pos_args)
+    assert final_args == ["a", "b", "c"]

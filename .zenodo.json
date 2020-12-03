@@ -21,9 +21,19 @@
       "orcid": "0000-0001-8435-6191"
     },
     {
+      "affiliation": "MIT",
+      "name": "Lo, Nicol",
+      "orcid": "0000-0002-7522-686X"
+    },
+    {
       "affiliation": "Stony Brook University",
       "name": "Kaczmarzyk, Jakub",
       "orcid": "0000-0002-5544-7577"
+    },
+    {
+      "affiliation": "Montréal Neurological Institute, McGill University, Montréal, Canada",
+      "name": "Herholz, Peer",
+      "orcid": "0000-0002-9840-6257"
     },
     {
       "affiliation": "National Institute of Mental Health",
@@ -31,14 +41,19 @@
       "orcid": "0000-0003-4613-6643"
     },
     {
+      "affiliation": "Harvard, MIT",
+      "name": "Mentch, Jeff",
+      "orcid": "0000-0002-7762-8678"
+    },
+    {
+      "affiliation": "Microsoft, Station Q",
+      "name": "Nijholt, Bas",
+      "orcid": "0000-0003-0383-4986"
+    },
+    {
       "affiliation": "MIT, HMS",
       "name": "Ghosh, Satrajit",
       "orcid": "0000-0002-5312-6729"
-    },
-    {
-      "affiliation": "MIT",
-      "name": "Lo, Nicol",
-      "orcid": "0000-0002-7522-686X"
     }
   ],
   "keywords": [

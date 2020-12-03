@@ -1,12 +1,15 @@
 """Data structure to support :class:`~pydra.engine.core.Workflow` tasks."""
 from copy import copy
+from pathlib import Path
+import subprocess as sp
+
 from .helpers import ensure_list
 
 
 class DiGraph:
     """A simple Directed Graph object."""
 
-    def __init__(self, nodes=None, edges=None):
+    def __init__(self, name=None, nodes=None, edges=None):
         """
         Initialize a directed graph.
 
@@ -19,6 +22,7 @@ class DiGraph:
             the graph.
 
         """
+        self.name = name
         self._nodes = []
         self.nodes = nodes
         self._edges = []
@@ -26,6 +30,7 @@ class DiGraph:
         self._create_connections()
         self._sorted_nodes = None
         self._node_wip = []
+        self._nodes_details = {}
 
     def copy(self):
         """
@@ -93,6 +98,20 @@ class DiGraph:
         return [(edg[0].name, edg[1].name) for edg in self._edges]
 
     @property
+    def nodes_details(self):
+        """ dictionary with details of the nodes
+            for each task, there are inputs/outputs and connections
+            (with input/output fields names)
+        """
+        # removing repeated fields from inputs and outputs
+        for el in self._nodes_details.values():
+            el["inputs"] = list(set(el["inputs"]))
+            el["inputs"].sort()
+            el["outputs"] = list(set(el["outputs"]))
+            el["outputs"].sort()
+        return self._nodes_details
+
+    @property
     def sorted_nodes(self):
         """Return sorted nodes (runs sorting if needed)."""
         if self._sorted_nodes is None:
@@ -135,6 +154,19 @@ class DiGraph:
         if self._sorted_nodes is not None:
             # starting from the previous sorted list, so it's faster
             self.sorting(presorted=self.sorted_nodes + [])
+
+    def add_edges_description(self, new_edge_details):
+        """ adding detailed description of the connections, filling _nodes_details"""
+        in_nd, in_fld, out_nd, out_fld = new_edge_details
+        for key in [in_nd, out_nd]:
+            self._nodes_details.setdefault(
+                key, {"inputs": [], "outputs": [], "connections": []}
+            )
+
+        if (in_fld, out_nd, out_fld) not in self._nodes_details[in_nd]["connections"]:
+            self._nodes_details[in_nd]["connections"].append((in_fld, out_nd, out_fld))
+            self._nodes_details[in_nd]["inputs"].append(in_fld)
+            self._nodes_details[out_nd]["outputs"].append(out_fld)
 
     def sorting(self, presorted=None):
         """
@@ -186,7 +218,7 @@ class DiGraph:
                 remaining_nodes.append(nd)
         return sorted_part, remaining_nodes
 
-    def remove_nodes(self, nodes):
+    def remove_nodes(self, nodes, check_ready=True):
         """
         Mark nodes for removal from the graph, re-sorting if needed.
 
@@ -201,13 +233,15 @@ class DiGraph:
         ----------
         nodes : :obj:`list`
             List of nodes to be marked for removal.
+        check_ready : :obj: `bool`
+            checking if the node is ready to be removed
 
         """
         nodes = ensure_list(nodes)
         for nd in nodes:
             if nd not in self.nodes:
                 raise Exception(f"{nd} is not present in the graph")
-            if self.predecessors[nd.name]:
+            if self.predecessors[nd.name] and check_ready:
                 raise Exception("this node shoudn't be run, has to wait")
             self.nodes.remove(nd)
             # adding the node to self._node_wip as for
@@ -244,6 +278,49 @@ class DiGraph:
             self.predecessors.pop(nd.name)
             self._node_wip.remove(nd)
 
+    def remove_previous_connections(self, nodes):
+        """
+        Remove connections that the node has with predecessors.
+
+        Also prunes the nodes from ``_node_wip``.
+
+        Parameters
+        ----------
+        nodes : :obj:`list`
+            List of nodes which connections are to be removed.
+
+        """
+        nodes = ensure_list(nodes)
+        for nd in nodes:
+            for nd_out in self.predecessors[nd.name]:
+                if nd_out.name in self.successors:
+                    self.successors[nd_out.name].remove(nd)
+                self.edges.remove((nd_out, nd))
+            self.successors.pop(nd.name)
+            self.predecessors.pop(nd.name)
+            self._node_wip.remove(nd)
+
+    def _checking_successors_nodes(self, node, remove=True):
+        if self.successors[node.name]:
+            for nd_in in self.successors[node.name]:
+                self._successors_all.append(nd_in)
+                self._checking_successors_nodes(node=nd_in)
+        else:
+            return True
+
+    def remove_successors_nodes(self, node):
+        """ Removing all the nodes that follow the node"""
+        self._successors_all = []
+        self._checking_successors_nodes(node=node, remove=False)
+        self.remove_nodes_connections(nodes=node)
+        nodes_removed = []
+        for nd in self._successors_all:
+            if nd in self.nodes:
+                nodes_removed.append(nd.name)
+                self.remove_nodes(nodes=nd, check_ready=False)
+                self.remove_previous_connections(nodes=nd)
+        return set(nodes_removed)
+
     def _checking_path(self, node_name, first_name, path=0):
         """Calculate all paths using connections list (re-entering function)."""
         if not self.successors[node_name]:
@@ -273,3 +350,208 @@ class DiGraph:
         for nm in first_nodes:
             self.max_paths[nm] = {}
             self._checking_path(node_name=nm, first_name=nm)
+
+    def create_dotfile_simple(self, outdir, name="graph"):
+        """ creates a simple dotfile (no nested structure)"""
+        from .core import is_workflow
+
+        dotstr = "digraph G {\n"
+        for nd in self.nodes:
+            if is_workflow(nd):
+                if nd.state:
+                    # adding color for wf with a state
+                    dotstr += f"{nd.name} [shape=box, color=blue]\n"
+                else:
+                    dotstr += f"{nd.name} [shape=box]\n"
+            else:
+                if nd.state:
+                    # adding color for nd with a state
+                    dotstr += f"{nd.name} [color=blue]\n"
+                else:
+                    dotstr += f"{nd.name}\n"
+        for ed in self.edges:
+            # if the tails nd has a final state, than the state is passed
+            # to the next node and the arrow is blue
+            if ed[0].state and ed[0].state.splitter_rpn_final:
+                dotstr += f"{ed[0].name} -> {ed[1].name} [color=blue]\n"
+            else:
+                dotstr += f"{ed[0].name} -> {ed[1].name}\n"
+
+        dotstr += "}"
+        Path(outdir).mkdir(parents=True, exist_ok=True)
+        dotfile = Path(outdir) / f"{name}.dot"
+        dotfile.write_text(dotstr)
+        return dotfile
+
+    def create_dotfile_detailed(self, outdir, name="graph_det"):
+        """ creates a detailed dotfile (detailed connections - input/output fields,
+        but no nested structure)
+        """
+        dotstr = "digraph structs {\n"
+        dotstr += "node [shape=record];\n"
+        if not self._nodes_details:
+            raise Exception("node_details is empty, detailed dotfile can't be created")
+        for nd_nm, nd_det in self.nodes_details.items():
+            if nd_nm == self.name:  # the main workflow itself
+                # wf inputs
+                wf_inputs_str = f'{{<{nd_det["outputs"][0]}> {nd_det["outputs"][0]}'
+                for el in nd_det["outputs"][1:]:
+                    wf_inputs_str += f" | <{el}> {el}"
+                wf_inputs_str += "}"
+                dotstr += f'struct_{nd_nm} [color=red, label="{{WORKFLOW INPUT: | {wf_inputs_str}}}"];\n'
+                # wf outputs
+                wf_outputs_str = f'{{<{nd_det["inputs"][0]}> {nd_det["inputs"][0]}'
+                for el in nd_det["inputs"][1:]:
+                    wf_outputs_str += f" | <{el}> {el}"
+                wf_outputs_str += "}"
+                dotstr += f'struct_{nd_nm}_out [color=red, label="{{WORKFLOW OUTPUT: | {wf_outputs_str}}}"];\n'
+                # connections to the wf outputs
+                for con in nd_det["connections"]:
+                    dotstr += (
+                        f"struct_{con[1]}:{con[2]} -> struct_{nd_nm}_out:{con[0]};\n"
+                    )
+            else:  # elements of the main workflow
+                inputs_str = "{INPUT:"
+                for inp in nd_det["inputs"]:
+                    inputs_str += f" | <{inp}> {inp}"
+                inputs_str += "}"
+                outputs_str = "{OUTPUT:"
+                for out in nd_det["outputs"]:
+                    outputs_str += f" | <{out}> {out}"
+                outputs_str += "}"
+                dotstr += f'struct_{nd_nm} [shape=record, label="{inputs_str} | {nd_nm} | {outputs_str}"];\n'
+                # connections between elements
+                for con in nd_det["connections"]:
+                    dotstr += f"struct_{con[1]}:{con[2]} -> struct_{nd_nm}:{con[0]};\n"
+        dotstr += "}"
+        Path(outdir).mkdir(parents=True, exist_ok=True)
+        dotfile = Path(outdir) / f"{name}.dot"
+        dotfile.write_text(dotstr)
+        return dotfile
+
+    def create_dotfile_nested(self, outdir, name="graph"):
+        """dotfile that includes the nested structures for workflows"""
+        dotstr = "digraph G {\ncompound=true \n"
+        dotstr += self._create_dotfile_single_graph(nodes=self.nodes, edges=self.edges)
+        dotstr += "}"
+        Path(outdir).mkdir(parents=True, exist_ok=True)
+        dotfile = Path(outdir) / f"{name}.dot"
+        dotfile.write_text(dotstr)
+        return dotfile
+
+    def _create_dotfile_single_graph(self, nodes, edges):
+        from .core import is_workflow
+
+        wf_asnd = []
+        dotstr = ""
+        for nd in nodes:
+            if is_workflow(nd):
+                wf_asnd.append(nd.name)
+                for task in nd.graph.nodes:
+                    nd.create_connections(task)
+                dotstr += f"subgraph cluster_{nd.name} {{\n" f"label = {nd.name} \n"
+                dotstr += self._create_dotfile_single_graph(
+                    nodes=nd.graph.nodes, edges=nd.graph.edges
+                )
+                if nd.state:
+                    dotstr += "color=blue\n"
+                dotstr += "}\n"
+            else:
+                if nd.state:
+                    dotstr += f"{nd.name} [color=blue]\n"
+                else:
+                    dotstr += f"{nd.name}\n"
+
+        dotstr_edg = ""
+        for ed in edges:
+            if ed[0].name in wf_asnd and ed[1].name in wf_asnd:
+                head_nd = list(ed[1].nodes)[0].name
+                tail_nd = list(ed[0].nodes)[-1].name
+                dotstr_edg += (
+                    f"{tail_nd} -> {head_nd} "
+                    f"[ltail=cluster_{ed[0].name}, "
+                    f"lhead=cluster_{ed[1].name}]\n"
+                )
+            elif ed[0].name in wf_asnd:
+                tail_nd = list(ed[0].nodes)[-1].name
+                dotstr_edg += (
+                    f"{tail_nd} -> {ed[1].name} [ltail=cluster_{ed[0].name}]\n"
+                )
+            elif ed[1].name in wf_asnd:
+                head_nd = list(ed[1].nodes)[0].name
+                dotstr_edg += (
+                    f"{ed[0].name} -> {head_nd} [lhead=cluster_{ed[1].name}]\n"
+                )
+            else:
+                dotstr_edg += f"{ed[0].name} -> {ed[1].name}\n"
+            # if tail has a state and a final splitter (not combined) than the state
+            # is passed to the next state and the arrow is blue
+            if ed[0].state and ed[0].state.splitter_rpn_final:
+                dotstr_edg = dotstr_edg[:-1] + " [color=blue]\n"
+        dotstr = dotstr + dotstr_edg
+        return dotstr
+
+    def export_graph(self, dotfile, ext="png"):
+        """ exporting dotfile to other format, equires the dot command"""
+        available_ext = [
+            "bmp",
+            "canon",
+            "cgimage",
+            "cmap",
+            "cmapx",
+            "cmapx_np",
+            "dot",
+            "dot_json",
+            "eps",
+            "exr",
+            "fig",
+            "gif",
+            "gv",
+            "icns",
+            "ico",
+            "imap",
+            "imap_np",
+            "ismap",
+            "jp2",
+            "jpe",
+            "jpeg",
+            "jpg",
+            "json",
+            "json0",
+            "mp",
+            "pct",
+            "pdf",
+            "pic",
+            "pict",
+            "plain",
+            "plain-ext",
+            "png",
+            "pov",
+            "ps",
+            "ps2",
+            "psd",
+            "sgi",
+            "svg",
+            "svgz",
+            "tga",
+            "tif",
+            "tiff",
+            "tk",
+            "vml",
+            "vmlz",
+            "xdot",
+            "xdot1.2",
+            "xdot1.4",
+            "xdot_json",
+        ]
+        if ext not in available_ext:
+            raise Exception(f"unvalid extension - {ext}, chose from {available_ext}")
+
+        dot_check = sp.run(["which", "dot"], stdout=sp.PIPE, stderr=sp.PIPE)
+        if not dot_check.stdout:
+            raise Exception(f"dot command not available, can't create a {ext} file")
+
+        formatted_dot = dotfile.with_suffix(f".{ext}")
+        cmd = f"dot -T{ext} -o {formatted_dot} {dotfile}"
+        sp.run(cmd.split(), stdout=sp.PIPE, stderr=sp.PIPE)
+        return formatted_dot

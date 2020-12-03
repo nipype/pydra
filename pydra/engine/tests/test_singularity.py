@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import os, shutil
 import subprocess as sp
 import pytest
@@ -32,11 +30,11 @@ def test_singularity_1_nosubm(tmpdir):
     assert singu.inputs.container == "singularity"
     assert (
         singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {cmd}"
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {cmd}"
     )
 
     res = singu()
-    assert "SingularityTask" in res.output.stdout
+    assert "output_pydra" in res.output.stdout
     assert res.output.return_code == 0
 
 
@@ -50,7 +48,7 @@ def test_singularity_2_nosubm(tmpdir):
     singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
     assert (
         singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {' '.join(cmd)}"
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {' '.join(cmd)}"
     )
 
     res = singu()
@@ -68,7 +66,7 @@ def test_singularity_2(plugin, tmpdir):
     singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
     assert (
         singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {' '.join(cmd)}"
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {' '.join(cmd)}"
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -93,7 +91,7 @@ def test_singularity_2_singuflag(plugin, tmpdir):
     )
     assert (
         shingu.cmdline
-        == f"singularity exec -B {shingu.output_dir}:/output_pydra:rw {image} {' '.join(cmd)}"
+        == f"singularity exec -B {shingu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {' '.join(cmd)}"
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -117,7 +115,7 @@ def test_singularity_2a(plugin, tmpdir):
     )
     assert (
         singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw {image} {cmd_exec} {' '.join(cmd_args)}"
+        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} {cmd_exec} {' '.join(cmd_args)}"
     )
 
     with Submitter(plugin=plugin) as sub:
@@ -216,7 +214,7 @@ def test_singularity_st_1(plugin, tmpdir):
     assert singu.state.splitter == "singu.executable"
 
     res = singu(plugin=plugin)
-    assert "SingularityTask" in res[0].output.stdout
+    assert "/output_pydra" in res[0].output.stdout
     assert res[1].output.stdout == ""
     assert res[0].output.return_code == res[1].output.return_code == 0
 
@@ -251,9 +249,9 @@ def test_singularity_st_3(plugin, tmpdir):
     assert singu.state.splitter == ["singu.image", "singu.executable"]
     res = singu(plugin=plugin)
 
-    assert "SingularityTask" in res[0].output.stdout
+    assert "/output_pydra" in res[0].output.stdout
     assert "Alpine" in res[1].output.stdout
-    assert "SingularityTask" in res[2].output.stdout
+    assert "/output_pydra" in res[2].output.stdout
     assert "Ubuntu" in res[3].output.stdout
 
 
@@ -395,6 +393,7 @@ def test_singularity_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -437,7 +436,7 @@ def test_singularity_inputspec_1a(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename,
-                    metadata={"position": 1, "help_string": "input file"},
+                    metadata={"position": 1, "argstr": "", "help_string": "input file"},
                 ),
             )
         ],
@@ -477,7 +476,12 @@ def test_singularity_inputspec_2(plugin, tmpdir):
             (
                 "file1",
                 attr.ib(
-                    type=File, metadata={"position": 1, "help_string": "input file 1"}
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file 1",
+                    },
                 ),
             ),
             (
@@ -485,7 +489,11 @@ def test_singularity_inputspec_2(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename_2,
-                    metadata={"position": 2, "help_string": "input file 2"},
+                    metadata={
+                        "position": 2,
+                        "argstr": "",
+                        "help_string": "input file 2",
+                    },
                 ),
             ),
         ],
@@ -530,13 +538,22 @@ def test_singularity_inputspec_2a_except(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename_1,
-                    metadata={"position": 1, "help_string": "input file 1"},
+                    metadata={
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file 1",
+                    },
                 ),
             ),
             (
                 "file2",
                 attr.ib(
-                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                    type=File,
+                    metadata={
+                        "position": 2,
+                        "argstr": "",
+                        "help_string": "input file 2",
+                    },
                 ),
             ),
         ],
@@ -581,13 +598,22 @@ def test_singularity_inputspec_2a(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename_1,
-                    metadata={"position": 1, "help_string": "input file 1"},
+                    metadata={
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file 1",
+                    },
                 ),
             ),
             (
                 "file2",
                 attr.ib(
-                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                    type=File,
+                    metadata={
+                        "position": 2,
+                        "argstr": "",
+                        "help_string": "input file 2",
+                    },
                 ),
             ),
         ],
@@ -630,6 +656,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
                     type=File,
                     metadata={
                         "position": 1,
+                        "argstr": "",
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": True,
@@ -664,10 +691,10 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
     assert res.output.out_file.exists()
     # the file is  copied, and than it is changed in place
     assert res.output.out_file.parent == singu.output_dir
-    with open(res.output.out_file, "r") as f:
+    with open(res.output.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
-    with open(file, "r") as f:
+    with open(file) as f:
         assert "hello from pydra\n" == f.read()
 
 
@@ -697,6 +724,7 @@ def test_singularity_inputspec_state_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -747,6 +775,7 @@ def test_singularity_inputspec_state_1b(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -790,6 +819,7 @@ def test_singularity_wf_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -845,6 +875,7 @@ def test_singularity_wf_state_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -902,6 +933,7 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),

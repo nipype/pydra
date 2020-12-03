@@ -1,5 +1,6 @@
 from pathlib import Path
 import typing as ty
+from copy import deepcopy
 
 from ..specs import (
     BaseSpec,
@@ -101,6 +102,10 @@ class NodeTesting:
         class Result:
             def __init__(self):
                 self.output = Output()
+                self.errored = False
+
+            def get_output_field(self, field):
+                return getattr(self.output, field)
 
         return Result()
 
@@ -237,6 +242,59 @@ def test_input_file_hash_2a(tmpdir):
 
 
 def test_input_file_hash_3(tmpdir):
+    """ input spec with File types, checking when the hash and file_hash change"""
+    file = tmpdir.join("in_file_1.txt")
+    with open(file, "w") as f:
+        f.write("hello")
+
+    input_spec = SpecInfo(
+        name="Inputs", fields=[("in_file", File), ("in_int", int)], bases=(BaseSpec,)
+    )
+    inputs = make_klass(input_spec)
+
+    my_inp = inputs(in_file=file, in_int=3)
+    # original hash and files_hash (dictionary contains info about files)
+    hash1 = my_inp.hash
+    files_hash1 = deepcopy(my_inp.files_hash)
+    # file name should be in files_hash1[in_file]
+    filename = str(Path(file))
+    assert filename in files_hash1["in_file"]
+
+    # changing int input
+    my_inp.in_int = 5
+    hash2 = my_inp.hash
+    files_hash2 = deepcopy(my_inp.files_hash)
+    # hash should be different
+    assert hash1 != hash2
+    # files_hash should be the same, and the tuple for filename shouldn't be recomputed
+    assert files_hash1 == files_hash2
+    assert id(files_hash1["in_file"][filename]) == id(files_hash2["in_file"][filename])
+
+    # recreating the file
+    with open(file, "w") as f:
+        f.write("hello")
+
+    hash3 = my_inp.hash
+    files_hash3 = deepcopy(my_inp.files_hash)
+    # hash should be the same,
+    # but the entry for in_file in files_hash should be different (modification time)
+    assert hash3 == hash2
+    assert files_hash3["in_file"][filename] != files_hash2["in_file"][filename]
+    # different timestamp
+    assert files_hash3["in_file"][filename][0] != files_hash2["in_file"][filename][0]
+    # the same content hash
+    assert files_hash3["in_file"][filename][1] == files_hash2["in_file"][filename][1]
+
+    # setting the in_file again
+    my_inp.in_file = file
+    # filename should be removed from files_hash
+    assert my_inp.files_hash["in_file"] == {}
+    # will be saved again when hash is calculated
+    assert my_inp.hash == hash3
+    assert filename in my_inp.files_hash["in_file"]
+
+
+def test_input_file_hash_4(tmpdir):
     """ input spec with nested list, that contain ints and Files,
         checking changes in checksums
     """
@@ -274,7 +332,7 @@ def test_input_file_hash_3(tmpdir):
     assert hash1 != hash3
 
 
-def test_input_file_hash_4(tmpdir):
+def test_input_file_hash_5(tmpdir):
     """ input spec with File in nested containers, checking changes in checksums"""
     file = tmpdir.join("in_file_1.txt")
     with open(file, "w") as f:

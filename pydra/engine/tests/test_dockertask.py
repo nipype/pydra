@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import os
 import pytest
 import attr
@@ -7,7 +5,7 @@ import attr
 from ..task import DockerTask, ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec
+from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec, ShellSpec
 from .utils import no_win, need_docker
 
 
@@ -659,7 +657,7 @@ def test_docker_outputspec_1(plugin, tmpdir):
 
 @no_win
 @need_docker
-def test_docker_inputspec_1(plugin, tmpdir):
+def test_docker_inputspec_1(tmpdir):
     """ a simple customized input spec for docker task """
     filename = str(tmpdir.join("file_pydra.txt"))
     with open(filename, "w") as f:
@@ -677,6 +675,7 @@ def test_docker_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -700,7 +699,7 @@ def test_docker_inputspec_1(plugin, tmpdir):
 
 @no_win
 @need_docker
-def test_docker_inputspec_1a(plugin, tmpdir):
+def test_docker_inputspec_1a(tmpdir):
     """ a simple customized input spec for docker task
         a default value is used
     """
@@ -718,7 +717,7 @@ def test_docker_inputspec_1a(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename,
-                    metadata={"position": 1, "help_string": "input file"},
+                    metadata={"position": 1, "argstr": "", "help_string": "input file"},
                 ),
             )
         ],
@@ -730,6 +729,50 @@ def test_docker_inputspec_1a(plugin, tmpdir):
         image="busybox",
         executable=cmd,
         input_spec=my_input_spec,
+        strip=True,
+    )
+
+    res = docky()
+    assert res.output.stdout == "hello from pydra"
+
+
+@no_win
+@need_docker
+def test_docker_inputspec_1_dockerflag(tmpdir):
+    """ a simple customized input spec for docker task
+        using ShellTask with container_info
+    """
+    filename = str(tmpdir.join("file_pydra.txt"))
+    with open(filename, "w") as f:
+        f.write("hello from pydra")
+
+    cmd = "cat"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    docky = ShellCommandTask(
+        name="docky",
+        executable=cmd,
+        file=filename,
+        input_spec=my_input_spec,
+        container_info=("docker", "busybox"),
         strip=True,
     )
 
@@ -757,7 +800,12 @@ def test_docker_inputspec_2(plugin, tmpdir):
             (
                 "file1",
                 attr.ib(
-                    type=File, metadata={"position": 1, "help_string": "input file 1"}
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file 1",
+                    },
                 ),
             ),
             (
@@ -765,7 +813,11 @@ def test_docker_inputspec_2(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename_2,
-                    metadata={"position": 2, "help_string": "input file 2"},
+                    metadata={
+                        "position": 2,
+                        "argstr": "",
+                        "help_string": "input file 2",
+                    },
                 ),
             ),
         ],
@@ -809,13 +861,22 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename_1,
-                    metadata={"position": 1, "help_string": "input file 1"},
+                    metadata={
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file 1",
+                    },
                 ),
             ),
             (
                 "file2",
                 attr.ib(
-                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                    type=File,
+                    metadata={
+                        "position": 2,
+                        "argstr": "",
+                        "help_string": "input file 2",
+                    },
                 ),
             ),
         ],
@@ -861,13 +922,22 @@ def test_docker_inputspec_2a(plugin, tmpdir):
                 attr.ib(
                     type=File,
                     default=filename_1,
-                    metadata={"position": 1, "help_string": "input file 1"},
+                    metadata={
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file 1",
+                    },
                 ),
             ),
             (
                 "file2",
                 attr.ib(
-                    type=File, metadata={"position": 2, "help_string": "input file 2"}
+                    type=File,
+                    metadata={
+                        "position": 2,
+                        "argstr": "",
+                        "help_string": "input file 2",
+                    },
                 ),
             ),
         ],
@@ -889,6 +959,7 @@ def test_docker_inputspec_2a(plugin, tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.xfail(reason="'docker' not in /proc/1/cgroup on ubuntu; TODO")
 def test_docker_inputspec_3(plugin, tmpdir):
     """ input file is in the container, so metadata["container_path"]: True,
         the input will be treated as a str """
@@ -906,6 +977,7 @@ def test_docker_inputspec_3(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                         "container_path": True,
                     },
@@ -951,6 +1023,7 @@ def test_docker_inputspec_3a(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -995,6 +1068,7 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
                     type=File,
                     metadata={
                         "position": 1,
+                        "argstr": "",
                         "help_string": "orig file",
                         "mandatory": True,
                         "copyfile": True,
@@ -1028,10 +1102,10 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
     assert res.output.out_file.exists()
     # the file is  copied, and than it is changed in place
     assert res.output.out_file.parent == docky.output_dir
-    with open(res.output.out_file, "r") as f:
+    with open(res.output.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
-    with open(file, "r") as f:
+    with open(file) as f:
         assert "hello from pydra\n" == f.read()
 
 
@@ -1061,6 +1135,7 @@ def test_docker_inputspec_state_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -1110,6 +1185,7 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -1152,6 +1228,7 @@ def test_docker_wf_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -1207,6 +1284,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
@@ -1264,6 +1342,7 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
                     metadata={
                         "mandatory": True,
                         "position": 1,
+                        "argstr": "",
                         "help_string": "input file",
                     },
                 ),
