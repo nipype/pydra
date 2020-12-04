@@ -401,7 +401,7 @@ class TaskBase:
         plugin = plugin or self.plugin
         if plugin:
             submitter = Submitter(plugin=plugin)
-        elif self.state:
+        elif submitter is None and self.state:
             submitter = Submitter()
 
         if submitter:
