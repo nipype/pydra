@@ -19,6 +19,20 @@ class File:
 class Directory:
     """An :obj:`os.pathlike` object, designating a folder."""
 
+class Int:
+    """An Int object, designating a whole number."""
+
+class Float:
+    """"""
+
+class Bool:
+    """"""
+
+class Str:
+    """"""
+
+class List:
+    """"""
 
 class MultiInputObj:
     """A ty.List[ty.Any] object, converter changes a single values to a list"""
@@ -444,7 +458,7 @@ class ShellOutSpec:
         additional_out = {}
         for fld in attr_fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:
-                if fld.type in [File, MultiOutputFile]:
+                if fld.type in [File, MultiOutputFile, Directory, Float, Bool, Str, List]:
                     # assuming that field should have either default or metadata, but not both
                     if (
                         fld.default is None or fld.default == attr.NOTHING
@@ -460,8 +474,20 @@ class ShellOutSpec:
                         additional_out[fld.name] = self._field_metadata(
                             fld, inputs, output_dir
                         )
-                elif fld.type in [Directory]:
-                    pass
+#                elif fld.type in [Directory]:
+#                    pass
+#                elif fld.type in [Int]:
+#                    raise Exception("not implemented (collect_additional_output)")
+#                elif fld.type in [Float]:
+#                    raise Exception("not implemented (collect_additional_output)")
+#                elif fld.type in [File]:
+#                    raise Exception("not implemented (collect_additional_output)")
+#                elif fld.type in [Bool]:
+#                    raise Exception("not implemented (collect_additional_output)")
+#                elif fld.type in [Str]:
+#                    raise Exception("not implemented (collect_additional_output)")
+#                elif fld.type in [List]:
+#                    raise Exception("not implemented (collect_additional_output)")                
                 else:
                     raise Exception("not implemented (collect_additional_output)")
         return additional_out
