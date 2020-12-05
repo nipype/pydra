@@ -181,9 +181,7 @@ class SlurmWorker(DistributedWorker):
         "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
     )
 
-    def __init__(
-        self, loop=None, max_jobs=None, poll_delay=1, sbatch_args=None, **kwargs
-    ):
+    def __init__(self, loop=None, max_jobs=None, poll_delay=1, sbatch_args=None):
         """
         Initialize SLURM Worker.
 
