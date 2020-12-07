@@ -458,7 +458,7 @@ class ShellOutSpec:
         additional_out = {}
         for fld in attr_fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:
-                if fld.type in [File, MultiOutputFile, Directory, Float, Bool, Str, List]:
+                if fld.type in [File, MultiOutputFile, Directory, Float, Bool, Str, List]: 
                     # assuming that field should have either default or metadata, but not both
                     if (
                         fld.default is None or fld.default == attr.NOTHING
@@ -474,20 +474,13 @@ class ShellOutSpec:
                         additional_out[fld.name] = self._field_metadata(
                             fld, inputs, output_dir
                         )
-#                elif fld.type in [Directory]:
-#                    pass
-#                elif fld.type in [Int]:
-#                    raise Exception("not implemented (collect_additional_output)")
-#                elif fld.type in [Float]:
-#                    raise Exception("not implemented (collect_additional_output)")
-#                elif fld.type in [File]:
-#                    raise Exception("not implemented (collect_additional_output)")
-#                elif fld.type in [Bool]:
-#                    raise Exception("not implemented (collect_additional_output)")
-#                elif fld.type in [Str]:
-#                    raise Exception("not implemented (collect_additional_output)")
-#                elif fld.type in [List]:
-#                    raise Exception("not implemented (collect_additional_output)")                
+#                        if fld.type in [Float, Bool, Str, List]:
+#                            if not (#something):
+#                                raise AttributeError(
+#                                    f"{fld.type} has to have a callable in metadata"
+#                                )
+#                            else:
+#                                additional_out["callable"] = # Get the callable 
                 else:
                     raise Exception("not implemented (collect_additional_output)")
         return additional_out
