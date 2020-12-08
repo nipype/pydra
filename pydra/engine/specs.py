@@ -458,7 +458,7 @@ class ShellOutSpec:
         additional_out = {}
         for fld in attr_fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:
-                if fld.type in [File, MultiOutputFile, Directory, Float, Bool, Str, List]: 
+                if fld.type in [File, MultiOutputFile, Directory, Int, Float, Bool, Str, List]: 
                     # assuming that field should have either default or metadata, but not both
                     if (
                         fld.default is None or fld.default == attr.NOTHING
