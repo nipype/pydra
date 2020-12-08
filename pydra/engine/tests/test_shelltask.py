@@ -15,6 +15,7 @@ from ..specs import (
     File,
     MultiOutputFile,
     MultiInputObj,
+    Int,
 )
 from .utils import result_no_submitter, result_submitter, use_validator
 
@@ -2616,6 +2617,34 @@ def test_shell_cmd_outputspec_4b_error():
     shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
     with pytest.raises(AttributeError, match="ble"):
         shelly()
+
+
+def test_shell_cmd_outputspec_4c_error():
+    """
+        customised output_spec, adding Int to the output,
+        requiring a function to collect output
+    """
+    cmd = "echo"
+    args = ["newfile_1.txt", "newfile_2.txt"]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out",
+                attr.ib(
+                    type=Int, metadata={"help_string": "output file", "value": "val"}
+                ),
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
+    ).split("args")
+    with pytest.raises(Exception) as e:
+        shelly()
+    assert "has to have a callable" in str(e.value)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
