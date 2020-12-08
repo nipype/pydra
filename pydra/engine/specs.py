@@ -25,19 +25,19 @@ class Int:
 
 
 class Float:
-    """"""
+    """A Float object, designating a decimal number"""
 
 
 class Bool:
-    """"""
+    """A Boolean object, designating a True/False value"""
 
 
 class Str:
-    """"""
+    """A String object, designating a string"""
 
 
 class List:
-    """"""
+    """A List object, designating a list of objects"""
 
 
 class MultiInputObj:
