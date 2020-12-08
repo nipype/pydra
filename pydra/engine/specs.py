@@ -19,20 +19,26 @@ class File:
 class Directory:
     """An :obj:`os.pathlike` object, designating a folder."""
 
+
 class Int:
     """An Int object, designating a whole number."""
+
 
 class Float:
     """"""
 
+
 class Bool:
     """"""
+
 
 class Str:
     """"""
 
+
 class List:
     """"""
+
 
 class MultiInputObj:
     """A ty.List[ty.Any] object, converter changes a single values to a list"""
@@ -458,7 +464,16 @@ class ShellOutSpec:
         additional_out = {}
         for fld in attr_fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:
-                if fld.type in [File, MultiOutputFile, Directory, Int, Float, Bool, Str, List]: 
+                if fld.type in [
+                    File,
+                    MultiOutputFile,
+                    Directory,
+                    Int,
+                    Float,
+                    Bool,
+                    Str,
+                    List,
+                ]:
                     # assuming that field should have either default or metadata, but not both
                     if (
                         fld.default is None or fld.default == attr.NOTHING
@@ -471,16 +486,17 @@ class ShellOutSpec:
                             fld, output_dir
                         )
                     elif fld.metadata:
-                        additional_out[fld.name] = self._field_metadata(
-                            fld, inputs, output_dir
-                        )
-#                        if fld.type in [Float, Bool, Str, List]:
-#                            if not (#something):
-#                                raise AttributeError(
-#                                    f"{fld.type} has to have a callable in metadata"
-#                                )
-#                            else:
-#                                additional_out["callable"] = # Get the callable 
+                        if (
+                            fld.type in [Int, Float, Bool, Str, List]
+                            and "callable" not in fld.metadata
+                        ):
+                            raise AttributeError(
+                                f"{fld.type} has to have a callable in metadata"
+                            )
+                        else:
+                            additional_out[fld.name] = self._field_metadata(
+                                fld, inputs, output_dir
+                            )
                 else:
                     raise Exception("not implemented (collect_additional_output)")
         return additional_out
