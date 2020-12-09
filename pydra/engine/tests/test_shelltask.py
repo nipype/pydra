@@ -15,7 +15,6 @@ from ..specs import (
     File,
     MultiOutputFile,
     MultiInputObj,
-    Int,
 )
 from .utils import result_no_submitter, result_submitter, use_validator
 
@@ -2633,7 +2632,7 @@ def test_shell_cmd_outputspec_4c_error():
             (
                 "out",
                 attr.ib(
-                    type=Int, metadata={"help_string": "output file", "value": "val"}
+                    type=int, metadata={"help_string": "output file", "value": "val"}
                 ),
             )
         ],

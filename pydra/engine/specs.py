@@ -20,26 +20,6 @@ class Directory:
     """An :obj:`os.pathlike` object, designating a folder."""
 
 
-class Int:
-    """An Int object, designating a whole number."""
-
-
-class Float:
-    """A Float object, designating a decimal number"""
-
-
-class Bool:
-    """A Boolean object, designating a True/False value"""
-
-
-class Str:
-    """A String object, designating a string"""
-
-
-class List:
-    """A List object, designating a list of objects"""
-
-
 class MultiInputObj:
     """A ty.List[ty.Any] object, converter changes a single values to a list"""
 
@@ -468,11 +448,11 @@ class ShellOutSpec:
                     File,
                     MultiOutputFile,
                     Directory,
-                    Int,
-                    Float,
-                    Bool,
-                    Str,
-                    List,
+                    int,
+                    float,
+                    bool,
+                    str,
+                    list,
                 ]:
                     # assuming that field should have either default or metadata, but not both
                     if (
@@ -487,7 +467,7 @@ class ShellOutSpec:
                         )
                     elif fld.metadata:
                         if (
-                            fld.type in [Int, Float, Bool, Str, List]
+                            fld.type in [int, float, bool, str, list]
                             and "callable" not in fld.metadata
                         ):
                             raise AttributeError(
