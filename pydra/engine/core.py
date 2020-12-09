@@ -392,26 +392,28 @@ class TaskBase:
             return [self._cache_dir / checksum for checksum in self.checksum_states()]
         return self._cache_dir / self.checksum
 
-    def __call__(self, submitter=None, plugin=None, rerun=False, **kwargs):
+    def __call__(
+        self, submitter=None, plugin=None, plugin_kwargs=None, rerun=False, **kwargs
+    ):
         """Make tasks callable themselves."""
         from .submitter import Submitter
 
         if submitter and plugin:
             raise Exception("Specify submitter OR plugin, not both")
-        plugin = plugin or self.plugin
-        if plugin:
-            submitter = Submitter(plugin=plugin)
-        elif self.state:
-            submitter = Submitter()
+        elif submitter:
+            pass
+        # if there is plugin provided or the task is a Workflow or has a state,
+        # the submitter will be created using provided plugin, self.plugin or "cf"
+        elif plugin or self.state or is_workflow(self):
+            plugin = plugin or self.plugin or "cf"
+            if plugin_kwargs is None:
+                plugin_kwargs = {}
+            submitter = Submitter(plugin=plugin, **plugin_kwargs)
 
         if submitter:
             with submitter as sub:
                 res = sub(self)
-        else:
-            if is_workflow(self):
-                raise NotImplementedError(
-                    "TODO: linear workflow execution - assign submitter or plugin for now"
-                )
+        else:  # tasks without state could be run without a submitter
             res = self._run(rerun=rerun, **kwargs)
         return res
 

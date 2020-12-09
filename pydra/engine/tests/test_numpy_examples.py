@@ -17,7 +17,7 @@ def arrayout(val):
     return np.array([val, val])
 
 
-def test_multiout(plugin, tmpdir):
+def test_multiout(tmpdir):
     """ testing a simple function that returns a numpy array"""
     wf = Workflow("wf", input_spec=["val"], val=2)
     wf.add(arrayout(name="mo", val=wf.lzin.val))
@@ -25,7 +25,7 @@ def test_multiout(plugin, tmpdir):
     wf.set_output([("array", wf.mo.lzout.b)])
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin=plugin, n_procs=2) as sub:
+    with Submitter(plugin="cf", n_procs=2) as sub:
         sub(runnable=wf)
 
     results = wf.result(return_inputs=True)
@@ -34,7 +34,7 @@ def test_multiout(plugin, tmpdir):
     assert np.array_equal(results[1].output.array, np.array([2, 2]))
 
 
-def test_multiout_st(plugin, tmpdir):
+def test_multiout_st(tmpdir):
     """ testing a simple function that returns a numpy array, adding splitter"""
     wf = Workflow("wf", input_spec=["val"], val=[0, 1, 2])
     wf.add(arrayout(name="mo", val=wf.lzin.val))
@@ -43,7 +43,7 @@ def test_multiout_st(plugin, tmpdir):
     wf.set_output([("array", wf.mo.lzout.b)])
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin=plugin, n_procs=2) as sub:
+    with Submitter(plugin="cf", n_procs=2) as sub:
         sub(runnable=wf)
 
     results = wf.result(return_inputs=True)
