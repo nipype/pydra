@@ -2914,6 +2914,43 @@ def test_shell_cmd_outputspec_7b_error():
     assert "has to have a callable" in str(e.value)
 
 
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_7c_error(tmpdir, plugin, results_function):
+    """
+        customised output_spec, adding Int to the output,
+        requiring a callable with parameter stdout
+    """
+    cmd = "echo"
+    args = ["newfile_1.txt", "newfile_2.txt"]
+    
+    def get_file_index(stdout):
+        stdout = re.sub(r'.*_', "", stdout)
+        stdout = re.sub(r'.txt', "", stdout)
+        print(stdout)
+        return int(stdout)
+    
+
+    my_input_spec = pydra.specs.SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "text",
+                attr.ib(
+                    type=File,
+                    metadata={"position": 1, "argstr": "", "help_string": "text", "mandatory": True},
+                    ),
+            )
+        ],
+        bases=(pydra.specs.ShellSpec,),
+    )
+    
+    shelly = pydra.ShellCommandTask(
+        name="shelly", executable=cmd_exec, NOT_DEFINED=hello, input_spec=my_input_spec
+    ) 
+
+    results = results_function(shelly, plugin)
+    print(results)
+
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_state_outputspec_1(plugin, results_function, tmpdir):
