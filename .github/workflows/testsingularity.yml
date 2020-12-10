@@ -40,8 +40,9 @@ jobs:
           cd ..
       - name: Echo singularity version
         run: |
+          echo "${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64/bin/" >> $GITHUB_PATH
           echo ${{ github.ref }}
-          ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64/bin/singularity --version
+          singularity --version
 
 
       - name: Set up Python ${{ matrix.python-version }}
