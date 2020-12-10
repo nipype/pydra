@@ -439,9 +439,14 @@ class ShellOutSpec:
     stderr: ty.Union[File, str]
     """The process' standard input."""
 
-    def collect_additional_outputs(self, inputs, output_dir):
+    def collect_additional_outputs(self, inputs, output_dir, outputs):
         """Collect additional outputs from shelltask output_spec."""
         additional_out = {}
+#        for fld in attr_fields(self):
+#            if fld.name == "stdout":
+#                stdout = str(fld)
+#            if fld.name == "stderr":
+#                stderr = str(fld)
         for fld in attr_fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:
                 if fld.type in [
@@ -475,7 +480,7 @@ class ShellOutSpec:
                             )
                         else:
                             additional_out[fld.name] = self._field_metadata(
-                                fld, inputs, output_dir
+                                fld, inputs, output_dir,outputs 
                             )
                 else:
                     raise Exception("not implemented (collect_additional_output)")
@@ -503,7 +508,7 @@ class ShellOutSpec:
                         output_names.append(fld.name)
                     elif (
                         fld.metadata
-                        and self._field_metadata(fld, inputs, output_dir)
+                        and self._field_metadata(fld, inputs, output_dir, outputs)
                         != attr.NOTHING
                     ):
                         output_names.append(fld.name)
@@ -539,7 +544,7 @@ class ShellOutSpec:
             else:
                 raise AttributeError(f"no file matches {default.name}")
 
-    def _field_metadata(self, fld, inputs, output_dir):
+    def _field_metadata(self, fld, inputs, output_dir, outputs=None):
         """Collect output file if metadata specified."""
         if self._check_requires(fld, inputs) is False:
             return attr.NOTHING
@@ -568,6 +573,10 @@ class ShellOutSpec:
                     call_args_val[argnm] = output_dir
                 elif argnm == "inputs":
                     call_args_val[argnm] = inputs
+                elif argnm == "stdout":
+                    call_args_val[argnm] = outputs["stdout"]
+                elif argnm == "stderr":
+                    call_args_val[argnm] = outputs["stderr"]
                 else:
                     try:
                         call_args_val[argnm] = getattr(inputs, argnm)
