@@ -17,6 +17,10 @@ need_singularity = pytest.mark.skipif(
     shutil.which("singularity") is None, reason="no singularity available"
 )
 
+need_slurm = pytest.mark.skipif(
+    not bool(shutil.which("sbatch")), reason="no singularity available"
+)
+
 
 @need_singularity
 def test_singularity_1_nosubm(tmpdir):
@@ -256,19 +260,20 @@ def test_singularity_st_3(plugin, tmpdir):
 
 
 @need_singularity
+@need_slurm
 @pytest.mark.xfail(
     reason="slurm can complain if the number of submitted jobs exceeds the limit"
 )
 @pytest.mark.parametrize("n", [10, 50, 100])
-def test_singularity_st_4(plugin, tmpdir, n):
-    """ splitter over args (checking bigger splitters)"""
+def test_singularity_st_4(tmpdir, n):
+    """ splitter over args (checking bigger splitters if slurm available)"""
     args_n = list(range(n))
     image = "library://sylabsed/linux/alpine"
     singu = SingularityTask(
         name="singu", executable="echo", image=image, cache_dir=tmpdir, args=args_n
     ).split("args")
     assert singu.state.splitter == "singu.args"
-    res = singu(plugin=plugin)
+    res = singu(plugin="slurm")
     assert "1" in res[1].output.stdout
     assert str(n - 1) in res[-1].output.stdout
     assert res[0].output.return_code == res[1].output.return_code == 0
