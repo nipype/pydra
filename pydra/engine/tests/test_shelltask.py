@@ -3,7 +3,7 @@ import typing as ty
 import os, sys
 import pytest
 from pathlib import Path
-
+import re
 
 from ..task import ShellCommandTask
 from ..submitter import Submitter
@@ -2864,6 +2864,51 @@ def test_shell_cmd_outputspec_6a(tmpdir, plugin, results_function):
     assert res.output.stdout == ""
     assert res.output.new_files.exists()
 
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_7(tmpdir, plugin, results_function):
+    cmd = "echo"
+    args = ["newfile_1.txt", "newfile_2.txt"]
+    
+    def get_file_index(stdout):
+        stdout = re.sub(r'.*_', "", stdout)
+        stdout = re.sub(r'.txt', "", stdout)
+        print(stdout)
+        return int(stdout)
+    
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out1",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "output_file_template": "{args}",
+                        "help_string": "output file",
+                    },
+                ),
+            ),
+            (
+                "out_file_index",
+                attr.ib(
+                    type=int,
+                    metadata={
+                        "help_string": "output file",
+                        "callable": get_file_index,
+                    },
+                ),
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    
+    
+    shelly = ShellCommandTask(name="shelly", executable=cmd, args=args, output_spec=my_output_spec).split("args")
+   
+    results = results_function(shelly, plugin)
+    for index, res in enumerate(results):
+        assert res.output.out_file_index == index+1
+
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_state_outputspec_1(plugin, results_function, tmpdir):
@@ -2903,7 +2948,6 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function, tmpdir):
     for i in range(len(args)):
         assert res[i].output.stdout == ""
         assert res[i].output.out1.exists()
-
 
 # customised output_spec for tasks in workflows
 
