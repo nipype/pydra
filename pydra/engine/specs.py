@@ -442,11 +442,6 @@ class ShellOutSpec:
     def collect_additional_outputs(self, inputs, output_dir, outputs):
         """Collect additional outputs from shelltask output_spec."""
         additional_out = {}
-#        for fld in attr_fields(self):
-#            if fld.name == "stdout":
-#                stdout = str(fld)
-#            if fld.name == "stderr":
-#                stderr = str(fld)
         for fld in attr_fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:
                 if fld.type in [
@@ -471,20 +466,18 @@ class ShellOutSpec:
                             fld, output_dir
                         )
                     elif fld.metadata:
-                        if (
-                            fld.type in [int, float, bool, str, list]
-                        ):
+                        if fld.type in [int, float, bool, str, list]:
                             if "callable" not in fld.metadata:
                                 raise AttributeError(
                                     f"{fld.type} has to have a callable in metadata"
                                 )
                             else:
                                 additional_out[fld.name] = self._field_metadata(
-                                fld, inputs, output_dir,outputs
-                            )
+                                    fld, inputs, output_dir, outputs
+                                )
                         else:
                             additional_out[fld.name] = self._field_metadata(
-                                fld, inputs, output_dir 
+                                fld, inputs, output_dir
                             )
                 else:
                     raise Exception("not implemented (collect_additional_output)")
