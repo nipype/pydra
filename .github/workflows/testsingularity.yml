@@ -34,7 +34,7 @@ jobs:
       - name: Build
         run: |
           cd singularity
-          ./mconfig -p /usr/local/
+          ./mconfig --without-suid -p /usr/local/
           make -C ./builddir
           sudo make -C ./builddir install
           cd ..
