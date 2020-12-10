@@ -95,7 +95,7 @@ class BaseSpec:
             # validate all fields that have set a validator
             attr.validate(self)
 
-    def collect_additional_outputs(self, inputs, output_dir):
+    def collect_additional_outputs(self, inputs, output_dir, outputs):
         """Get additional outputs."""
         return {}
 
