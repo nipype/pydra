@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8]
+        python-version: [3.7, 3.8, 3.9]
       fail-fast: False
 
     steps:
@@ -34,14 +34,14 @@ jobs:
       - name: Build
         run: |
           cd singularity
-          ./mconfig --without-suid -p ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64
+          ./mconfig --without-suid -p /usr/local/
           make -C ./builddir
           sudo make -C ./builddir install
           cd ..
       - name: Echo singularity version
         run: |
           echo ${{ github.ref }}
-          ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64/bin/singularity --version
+          singularity --version
 
 
       - name: Set up Python ${{ matrix.python-version }}
