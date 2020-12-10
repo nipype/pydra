@@ -2618,7 +2618,6 @@ def test_shell_cmd_outputspec_4b_error():
         shelly()
 
 
-
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_5(plugin, results_function, tmpdir):
     """
@@ -2837,6 +2836,7 @@ def test_shell_cmd_outputspec_6a(tmpdir, plugin, results_function):
     assert res.output.stdout == ""
     assert res.output.new_files.exists()
 
+
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
     """
@@ -2845,10 +2845,10 @@ def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
     """
     cmd = "echo"
     args = ["newfile_1.txt", "newfile_2.txt"]
-    
+
     def get_file_index(stdout):
-        stdout = re.sub(r'.*_', "", stdout)
-        stdout = re.sub(r'.txt', "", stdout)
+        stdout = re.sub(r".*_", "", stdout)
+        stdout = re.sub(r".txt", "", stdout)
         print(stdout)
         return int(stdout)
 
@@ -2872,10 +2872,7 @@ def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
                 "out_file_index",
                 attr.ib(
                     type=int,
-                    metadata={
-                        "help_string": "output file",
-                        "callable": get_file_index,
-                    },
+                    metadata={"help_string": "output file", "callable": get_file_index},
                 ),
             ),
             (
@@ -2891,13 +2888,14 @@ def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
         ],
         bases=(ShellOutSpec,),
     )
-    
-    
-    shelly = ShellCommandTask(name="shelly", executable=cmd, args=args, output_spec=my_output_spec).split("args")
-   
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
+    ).split("args")
+
     results = results_function(shelly, plugin)
     for index, res in enumerate(results):
-        assert res.output.out_file_index == index+1
+        assert res.output.out_file_index == index + 1
         assert res.output.stderr_field == f"stderr: {res.output.stderr}"
 
 
@@ -2927,7 +2925,6 @@ def test_shell_cmd_outputspec_7b_error():
     with pytest.raises(Exception) as e:
         shelly()
     assert "has to have a callable" in str(e.value)
-
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -2968,6 +2965,7 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function, tmpdir):
     for i in range(len(args)):
         assert res[i].output.stdout == ""
         assert res[i].output.out1.exists()
+
 
 # customised output_spec for tasks in workflows
 
