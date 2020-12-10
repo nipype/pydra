@@ -2618,33 +2618,6 @@ def test_shell_cmd_outputspec_4b_error():
         shelly()
 
 
-def test_shell_cmd_outputspec_4c_error():
-    """
-        customised output_spec, adding Int to the output,
-        requiring a function to collect output
-    """
-    cmd = "echo"
-    args = ["newfile_1.txt", "newfile_2.txt"]
-
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[
-            (
-                "out",
-                attr.ib(
-                    type=int, metadata={"help_string": "output file", "value": "val"}
-                ),
-            )
-        ],
-        bases=(ShellOutSpec,),
-    )
-    shelly = ShellCommandTask(
-        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
-    ).split("args")
-    with pytest.raises(Exception) as e:
-        shelly()
-    assert "has to have a callable" in str(e.value)
-
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_5(plugin, results_function, tmpdir):
@@ -2866,6 +2839,10 @@ def test_shell_cmd_outputspec_6a(tmpdir, plugin, results_function):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_7(tmpdir, plugin, results_function):
+    """
+        customised output_spec, adding Int to the output,
+        requiring a callable with parameter stdout
+    """
     cmd = "echo"
     args = ["newfile_1.txt", "newfile_2.txt"]
     
@@ -2908,6 +2885,34 @@ def test_shell_cmd_outputspec_7(tmpdir, plugin, results_function):
     results = results_function(shelly, plugin)
     for index, res in enumerate(results):
         assert res.output.out_file_index == index+1
+
+def test_shell_cmd_outputspec_7b_error():
+    """
+        customised output_spec, adding Int to the output,
+        requiring a function to collect output
+    """
+    cmd = "echo"
+    args = ["newfile_1.txt", "newfile_2.txt"]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out",
+                attr.ib(
+                    type=int, metadata={"help_string": "output file", "value": "val"}
+                ),
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
+    ).split("args")
+    with pytest.raises(Exception) as e:
+        shelly()
+    assert "has to have a callable" in str(e.value)
+
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
