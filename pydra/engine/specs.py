@@ -473,14 +473,18 @@ class ShellOutSpec:
                     elif fld.metadata:
                         if (
                             fld.type in [int, float, bool, str, list]
-                            and "callable" not in fld.metadata
                         ):
-                            raise AttributeError(
-                                f"{fld.type} has to have a callable in metadata"
+                            if "callable" not in fld.metadata:
+                                raise AttributeError(
+                                    f"{fld.type} has to have a callable in metadata"
+                                )
+                            else:
+                                additional_out[fld.name] = self._field_metadata(
+                                fld, inputs, output_dir,outputs
                             )
                         else:
                             additional_out[fld.name] = self._field_metadata(
-                                fld, inputs, output_dir,outputs 
+                                fld, inputs, output_dir 
                             )
                 else:
                     raise Exception("not implemented (collect_additional_output)")
@@ -508,7 +512,7 @@ class ShellOutSpec:
                         output_names.append(fld.name)
                     elif (
                         fld.metadata
-                        and self._field_metadata(fld, inputs, output_dir, outputs)
+                        and self._field_metadata(fld, inputs, output_dir)
                         != attr.NOTHING
                     ):
                         output_names.append(fld.name)
