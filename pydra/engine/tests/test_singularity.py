@@ -260,7 +260,7 @@ def test_singularity_st_3(plugin, tmpdir):
     reason="slurm can complain if the number of submitted jobs exceeds the limit"
 )
 @pytest.mark.parametrize("n", [10, 50, 100])
-def test_singularity_st_1_pr(plugin, tmpdir, n):
+def test_singularity_st_4(plugin, tmpdir, n):
     """ splitter over args (checking bigger splitters)"""
     args_n = list(range(n))
     image = "library://sylabsed/linux/alpine"
