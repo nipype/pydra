@@ -543,7 +543,7 @@ class ShellOutSpec:
             else:
                 raise AttributeError(f"no file matches {default.name}")
 
-    def _field_metadata(self, fld, inputs, output_dir, outputs):
+    def _field_metadata(self, fld, inputs, output_dir, outputs=None):
         """Collect output file if metadata specified."""
         if self._check_requires(fld, inputs) is False:
             return attr.NOTHING
