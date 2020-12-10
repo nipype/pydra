@@ -466,19 +466,21 @@ class ShellOutSpec:
                             fld, output_dir
                         )
                     elif fld.metadata:
-                        if fld.type in [int, float, bool, str, list]:
-                            if "callable" not in fld.metadata:
-                                raise AttributeError(
-                                    f"{fld.type} has to have a callable in metadata"
-                                )
-                            else:
-                                additional_out[fld.name] = self._field_metadata(
-                                    fld, inputs, output_dir, outputs
-                                )
+                        if (
+                            fld.type in [int, float, bool, str, list]
+                            and "callable" not in fld.metadata
+                        ):
+                            raise AttributeError(
+                                f"{fld.type} has to have a callable in metadata"
+                            )
                         else:
                             additional_out[fld.name] = self._field_metadata(
-                                fld, inputs, output_dir
+                                fld, inputs, output_dir, outputs
                             )
+                #                        else:
+                #                            additional_out[fld.name] = self._field_metadata(
+                #                                fld, inputs, output_dir, outputs
+                #                            )
                 else:
                     raise Exception("not implemented (collect_additional_output)")
         return additional_out
@@ -505,7 +507,7 @@ class ShellOutSpec:
                         output_names.append(fld.name)
                     elif (
                         fld.metadata
-                        and self._field_metadata(fld, inputs, output_dir)
+                        and self._field_metadata(fld, inputs, output_dir, outputs=None)
                         != attr.NOTHING
                     ):
                         output_names.append(fld.name)
@@ -541,7 +543,7 @@ class ShellOutSpec:
             else:
                 raise AttributeError(f"no file matches {default.name}")
 
-    def _field_metadata(self, fld, inputs, output_dir, outputs=None):
+    def _field_metadata(self, fld, inputs, output_dir, outputs):
         """Collect output file if metadata specified."""
         if self._check_requires(fld, inputs) is False:
             return attr.NOTHING
