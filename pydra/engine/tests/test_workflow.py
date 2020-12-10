@@ -129,6 +129,20 @@ def test_wf_1_call_plug(plugin, tmpdir):
     assert wf.output_dir.exists()
 
 
+def test_wf_1_call_noplug_nosubm(plugin, tmpdir):
+    """using wf.__call_ without plugin or submitter"""
+    wf = Workflow(name="wf_1", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 2
+    wf.cache_dir = tmpdir
+
+    wf()
+    results = wf.result()
+    assert 4 == results.output.out
+    assert wf.output_dir.exists()
+
+
 def test_wf_1_call_exception(plugin, tmpdir):
     """using wf.__call_ with plugin and submitter - should raise an exception"""
     wf = Workflow(name="wf_1", input_spec=["x"])
@@ -152,7 +166,6 @@ def test_wf_2(plugin, tmpdir):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.inputs.y = 3
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -175,7 +188,6 @@ def test_wf_2a(plugin, tmpdir):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.inputs.y = 3
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -199,7 +211,6 @@ def test_wf_2b(plugin, tmpdir):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.inputs.y = 3
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -224,7 +235,6 @@ def test_wf_2c_multoutp(plugin, tmpdir):
     wf.set_output([("out_add2", wf.add2.lzout.out), ("out_mult", wf.mult.lzout.out)])
     wf.inputs.x = 2
     wf.inputs.y = 3
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -250,7 +260,6 @@ def test_wf_2d_outpasdict(plugin, tmpdir):
     wf.set_output({"out_add2": wf.add2.lzout.out, "out_mult": wf.mult.lzout.out})
     wf.inputs.x = 2
     wf.inputs.y = 3
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -309,7 +318,6 @@ def test_wf_4(plugin, tmpdir):
     wf.add(add2(name="add2", x=wf.addvar.lzout.out))
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -330,7 +338,6 @@ def test_wf_4a(plugin, tmpdir):
     wf.add(add2(name="add2", x=wf.addvar.lzout.out))
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -435,7 +442,6 @@ def test_wf_st_1(plugin, tmpdir):
     wf.split("x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     checksum_before = wf.checksum
@@ -461,7 +467,6 @@ def test_wf_st_1_call_subm(plugin, tmpdir):
     wf.split("x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -478,7 +483,33 @@ def test_wf_st_1_call_subm(plugin, tmpdir):
 
 
 def test_wf_st_1_call_plug(plugin, tmpdir):
-    """ Workflow with one task, a splitter for the workflow"""
+    """ Workflow with one task, a splitter for the workflow
+        using Workflow.__call__(plugin)
+    """
+    wf = Workflow(name="wf_spl_1", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+
+    wf.split("x")
+    wf.inputs.x = [1, 2]
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.cache_dir = tmpdir
+
+    wf(plugin=plugin)
+
+    results = wf.result()
+    # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
+    assert results[0].output.out == 3
+    assert results[1].output.out == 4
+    # checking all directories
+    assert wf.output_dir
+    for odir in wf.output_dir:
+        assert odir.exists()
+
+
+def test_wf_st_1_call_selfplug(plugin, tmpdir):
+    """ Workflow with one task, a splitter for the workflow
+        using Workflow.__call__() and using self.plugin
+    """
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
@@ -488,8 +519,31 @@ def test_wf_st_1_call_plug(plugin, tmpdir):
     wf.plugin = plugin
     wf.cache_dir = tmpdir
 
-    wf(plugin=plugin)
+    wf()
+    results = wf.result()
+    # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
+    assert results[0].output.out == 3
+    assert results[1].output.out == 4
+    # checking all directories
+    assert wf.output_dir
+    for odir in wf.output_dir:
+        assert odir.exists()
 
+
+def test_wf_st_1_call_noplug_nosubm(plugin, tmpdir):
+    """ Workflow with one task, a splitter for the workflow
+        using Workflow.__call__()  without plugin and submitter
+        (a submitter should be created within the __call__ function)
+    """
+    wf = Workflow(name="wf_spl_1", input_spec=["x"])
+    wf.add(add2(name="add2", x=wf.lzin.x))
+
+    wf.split("x")
+    wf.inputs.x = [1, 2]
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.cache_dir = tmpdir
+
+    wf()
     results = wf.result()
     # expected: [({"test7.x": 1}, 3), ({"test7.x": 2}, 4)]
     assert results[0].output.out == 3
@@ -528,7 +582,6 @@ def test_wf_ndst_1(plugin, tmpdir):
     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     checksum_before = wf.checksum
@@ -550,7 +603,6 @@ def test_wf_ndst_updatespl_1(plugin, tmpdir):
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
     wf.add2.split("x")
 
@@ -575,7 +627,6 @@ def test_wf_ndst_updatespl_1a(plugin, tmpdir):
     task_add2.split("x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -599,7 +650,6 @@ def test_wf_ndst_updateinp_1(plugin, tmpdir):
     wf.inputs.x = [1, 2]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.add2.split("x")
     wf.add2.inputs.x = wf.lzin.y
     wf.cache_dir = tmpdir
@@ -620,7 +670,6 @@ def test_wf_ndst_noinput_1(plugin, tmpdir):
     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
     wf.inputs.x = []
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     checksum_before = wf.checksum
@@ -642,7 +691,6 @@ def test_wf_st_2(plugin, tmpdir):
     wf.split("x").combine(combiner="x")
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -664,7 +712,6 @@ def test_wf_ndst_2(plugin, tmpdir):
     wf.add(add2(name="add2", x=wf.lzin.x).split("x").combine(combiner="x"))
     wf.inputs.x = [1, 2]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -688,7 +735,6 @@ def test_wf_st_3(plugin, tmpdir):
     wf.inputs.y = [11, 12]
     wf.split(("x", "y"))
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -735,7 +781,6 @@ def test_wf_ndst_3(plugin, tmpdir):
     wf.inputs.x = [1, 2]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -757,7 +802,6 @@ def test_wf_st_4(plugin, tmpdir):
     wf.split(("x", "y"), x=[1, 2], y=[11, 12])
     wf.combine("x")
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -782,7 +826,6 @@ def test_wf_ndst_4(plugin, tmpdir):
     wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("mult.x"))
 
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
     wf.inputs.a = [1, 2]
     wf.inputs.b = [11, 12]
@@ -854,7 +897,6 @@ def test_wf_st_6(plugin, tmpdir):
     wf.split(["x", "y"], x=[1, 2, 3], y=[11, 12])
     wf.combine("x")
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -881,7 +923,6 @@ def test_wf_ndst_6(plugin, tmpdir):
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -903,7 +944,6 @@ def test_wf_ndst_7(plugin, tmpdir):
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = 11
     wf.set_output([("out", wf.iden.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -926,7 +966,6 @@ def test_wf_ndst_8(plugin, tmpdir):
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.iden.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -952,7 +991,6 @@ def test_wf_ndst_9(plugin, tmpdir):
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.iden.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -977,7 +1015,6 @@ def test_wf_3sernd_ndst_1(plugin, tmpdir):
     wf.inputs.x = [1, 2]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.add2_2nd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1058,7 +1095,6 @@ def test_wf_3nd_st_2(plugin, tmpdir):
     wf.split(["x", "y"], x=[1, 2, 3], y=[11, 12]).combine("x")
 
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1211,7 +1247,6 @@ def test_wf_3nd_ndst_4(plugin, tmpdir):
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1282,7 +1317,6 @@ def test_wf_3nd_ndst_5(plugin, tmpdir):
     wf.inputs.z = [10, 100]
 
     wf.set_output([("out", wf.addvar.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1314,7 +1348,6 @@ def test_wf_3nd_ndst_6(plugin, tmpdir):
     wf.inputs.x = [1, 2]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1340,7 +1373,6 @@ def test_wf_ndstLR_1(plugin, tmpdir):
     wf.inputs.x = [1, 2]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1371,7 +1403,6 @@ def test_wf_ndstLR_1a(plugin, tmpdir):
     wf.inputs.x = [1, 2]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1405,7 +1436,6 @@ def test_wf_ndstLR_2(plugin, tmpdir):
     wf.inputs.y = [10, 20]
     wf.inputs.z = [100, 200]
     wf.set_output([("out", wf.addvar.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1455,7 +1485,6 @@ def test_wf_ndstLR_2a(plugin, tmpdir):
     wf.inputs.y = [10, 20]
     wf.inputs.z = [100, 200]
     wf.set_output([("out", wf.addvar.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1501,7 +1530,6 @@ def test_wf_ndstinner_1(plugin, tmpdir):
     wf.add(add2(name="add2", x=wf.list.lzout.out).split("x"))
     wf.inputs.x = 1
     wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1527,7 +1555,6 @@ def test_wf_ndstinner_2(plugin, tmpdir):
     wf.inputs.x = 1
     wf.inputs.y = 10
     wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1553,7 +1580,6 @@ def test_wf_ndstinner_3(plugin, tmpdir):
     wf.inputs.x = 1
     wf.inputs.y = [10, 100]
     wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1581,7 +1607,6 @@ def test_wf_ndstinner_4(plugin, tmpdir):
     wf.inputs.x = 1
     wf.inputs.y = 10
     wf.set_output([("out_list", wf.list.lzout.out), ("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1611,7 +1636,6 @@ def test_wf_st_singl_1(plugin, tmpdir):
     wf.split("x", x=[1, 2], y=11)
     wf.combine("x")
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1636,7 +1660,6 @@ def test_wf_ndst_singl_1(plugin, tmpdir):
     wf.inputs.x = [1, 2]
     wf.inputs.y = 11
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1660,7 +1683,6 @@ def test_wf_st_singl_2(plugin, tmpdir):
     wf.split("x", x=[1, 2, 3], y=11)
 
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1689,7 +1711,6 @@ def test_wf_ndst_singl_2(plugin, tmpdir):
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = 11
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1717,7 +1738,6 @@ def test_wfasnd_1(plugin, tmpdir):
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1742,7 +1762,6 @@ def test_wfasnd_wfinp_1(plugin, tmpdir):
     wf.add(wfnd)
     wf.inputs.x = 2
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     checksum_before = wf.checksum
@@ -1770,7 +1789,6 @@ def test_wfasnd_wfndupdate(plugin, tmpdir):
     wfnd.inputs.x = wf.lzin.x
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1802,7 +1820,6 @@ def test_wfasnd_wfndupdate_rerun(plugin, tmpdir):
     # trying to set after add...
     wf.wfnd.inputs.x = wf.lzin.x
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1817,7 +1834,6 @@ def test_wfasnd_wfndupdate_rerun(plugin, tmpdir):
     wf.inputs.x = wf_o.lzin.x
     wf_o.add(wf)
     wf_o.set_output([("out", wf_o.wf.lzout.out)])
-    wf_o.plugin = plugin
     wf_o.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1842,7 +1858,6 @@ def test_wfasnd_st_1(plugin, tmpdir):
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     checksum_before = wf.checksum
@@ -1870,7 +1885,6 @@ def test_wfasnd_st_updatespl_1(plugin, tmpdir):
     wf.add(wfnd)
     wfnd.split("x")
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1897,7 +1911,6 @@ def test_wfasnd_ndst_1(plugin, tmpdir):
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1918,14 +1931,12 @@ def test_wfasnd_ndst_updatespl_1(plugin, tmpdir):
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
     # TODO: without this the test is failing
-    wfnd.plugin = plugin
     wfnd.inputs.x = [2, 4]
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
     wfnd.add2.split("x")
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1951,7 +1962,6 @@ def test_wfasnd_wfst_1(plugin, tmpdir):
     wf.split("x")
     wf.inputs.x = [2, 4]
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -1984,7 +1994,6 @@ def test_wfasnd_st_2(plugin, tmpdir):
     wf.add(wfnd)
     wf.add(add2(name="add2", x=wf.wfnd.lzout.out))
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -2012,7 +2021,6 @@ def test_wfasnd_wfst_2(plugin, tmpdir):
     wf.inputs.x = [2, 4]
     wf.inputs.y = [1, 10]
     wf.set_output([("out", wf.add2.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -2046,7 +2054,6 @@ def test_wfasnd_ndst_3(plugin, tmpdir):
     wf.add(wfnd)
 
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -2106,7 +2113,6 @@ def test_wfasnd_4(plugin, tmpdir):
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -2127,14 +2133,11 @@ def test_wfasnd_ndst_4(plugin, tmpdir):
     wfnd.add(add2(name="add2_1st", x=wfnd.lzin.x).split("x"))
     wfnd.add(add2(name="add2_2nd", x=wfnd.add2_1st.lzout.out))
     wfnd.set_output([("out", wfnd.add2_2nd.lzout.out)])
-    # TODO: without this the test is failing
-    wfnd.plugin = plugin
     wfnd.inputs.x = [2, 4]
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -2161,7 +2164,6 @@ def test_wfasnd_wfst_4(plugin, tmpdir):
     wf.split("x")
     wf.inputs.x = [2, 4]
     wf.set_output([("out", wf.wfnd.lzout.out)])
-    wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -2189,7 +2191,6 @@ def test_wf_nostate_cachedir(plugin, tmpdir):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.inputs.y = 3
-    wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -2214,7 +2215,6 @@ def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.inputs.x = 2
     wf.inputs.y = 3
-    wf.plugin = plugin
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -2241,7 +2241,6 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     wf1.set_output([("out", wf1.add2.lzout.out)])
     wf1.inputs.x = 2
     wf1.inputs.y = 3
-    wf1.plugin = plugin
 
     t0 = time.time()
     with Submitter(plugin=plugin) as sub:
@@ -2262,7 +2261,6 @@ def test_wf_nostate_cachelocations(plugin, tmpdir):
     wf2.set_output([("out", wf2.add2.lzout.out)])
     wf2.inputs.x = 2
     wf2.inputs.y = 3
-    wf2.plugin = plugin
 
     t0 = time.time()
     with Submitter(plugin=plugin) as sub:
@@ -3637,7 +3635,7 @@ def test_workflow_combine1(tmpdir):
         }
     )
     wf1.cache_dir = tmpdir
-    result = wf1(plugin="cf")
+    result = wf1()
 
     assert result.output.out_pow == [1, 1, 4, 8]
     assert result.output.out_iden1 == [[1, 4], [1, 8]]
@@ -3652,7 +3650,7 @@ def test_workflow_combine2(tmpdir):
     wf1.add(identity(name="identity", x=wf1.power.lzout.out).combine("power.b"))
     wf1.set_output({"out_pow": wf1.power.lzout.out, "out_iden": wf1.identity.lzout.out})
     wf1.cache_dir = tmpdir
-    result = wf1(plugin="cf")
+    result = wf1()
 
     assert result.output.out_pow == [[1, 4], [1, 8]]
     assert result.output.out_iden == [[1, 4], [1, 8]]
@@ -3672,7 +3670,6 @@ def test_wf_lzoutall_1(plugin, tmpdir):
     wf.set_output([("out", wf.add_sub.lzout.out_add)])
     wf.inputs.x = 2
     wf.inputs.y = 3
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -3694,7 +3691,6 @@ def test_wf_lzoutall_1a(plugin, tmpdir):
     wf.set_output([("out_all", wf.add_sub.lzout.all_)])
     wf.inputs.x = 2
     wf.inputs.y = 3
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
