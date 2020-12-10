@@ -34,13 +34,12 @@ jobs:
       - name: Build
         run: |
           cd singularity
-          ./mconfig --without-suid -p ${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64
+          ./mconfig -p /usr/local/
           make -C ./builddir
           sudo make -C ./builddir install
           cd ..
       - name: Echo singularity version
         run: |
-          echo "${{ runner.tool_cache }}/singularity/${{ env.RELEASE_VERSION }}/x64/bin/" >> $GITHUB_PATH
           echo ${{ github.ref }}
           singularity --version
 
