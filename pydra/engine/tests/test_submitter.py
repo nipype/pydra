@@ -23,17 +23,30 @@ def sleep_add_one(x):
 
 def test_callable_wf(plugin, tmpdir):
     wf = gen_basic_wf()
+    res = wf()
+    assert res.output.out == 9
+    del wf, res
 
-    with pytest.raises(NotImplementedError):
-        wf()
-
+    # providing plugin
+    wf = gen_basic_wf()
     res = wf(plugin="cf")
     assert res.output.out == 9
     del wf, res
 
+    # providing plugin_kwargs
+    wf = gen_basic_wf()
+    res = wf(plugin="cf", plugin_kwargs={"n_procs": 2})
+    assert res.output.out == 9
+    del wf, res
+
+    # providing wrong plugin_kwargs
+    wf = gen_basic_wf()
+    with pytest.raises(TypeError, match="an unexpected keyword argument"):
+        wf(plugin="cf", plugin_kwargs={"sbatch_args": "-N2"})
+
+    # providing submitter
     wf = gen_basic_wf()
     wf.cache_dir = tmpdir
-
     sub = Submitter(plugin)
     res = wf(submitter=sub)
     assert res.output.out == 9
