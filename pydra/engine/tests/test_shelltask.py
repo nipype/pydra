@@ -2878,7 +2878,7 @@ def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
             (
                 "stderr_field",
                 attr.ib(
-                    type=int,
+                    type=str,
                     metadata={
                         "help_string": "The standard error output",
                         "callable": get_stderr,
