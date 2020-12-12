@@ -470,6 +470,7 @@ class TaskBase:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
                 save(odir, result=result, task=self)
+                self.output_ = None
                 # removing the additional file with the chcksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 # # function etc. shouldn't change anyway, so removing
