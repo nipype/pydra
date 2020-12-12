@@ -95,7 +95,7 @@ class BaseSpec:
             # validate all fields that have set a validator
             attr.validate(self)
 
-    def collect_additional_outputs(self, inputs, output_dir):
+    def collect_additional_outputs(self, inputs, output_dir, outputs):
         """Get additional outputs."""
         return {}
 
@@ -439,12 +439,21 @@ class ShellOutSpec:
     stderr: ty.Union[File, str]
     """The process' standard input."""
 
-    def collect_additional_outputs(self, inputs, output_dir):
+    def collect_additional_outputs(self, inputs, output_dir, outputs):
         """Collect additional outputs from shelltask output_spec."""
         additional_out = {}
         for fld in attr_fields(self):
             if fld.name not in ["return_code", "stdout", "stderr"]:
-                if fld.type in [File, MultiOutputFile]:
+                if fld.type in [
+                    File,
+                    MultiOutputFile,
+                    Directory,
+                    int,
+                    float,
+                    bool,
+                    str,
+                    list,
+                ]:
                     # assuming that field should have either default or metadata, but not both
                     if (
                         fld.default is None or fld.default == attr.NOTHING
@@ -457,9 +466,21 @@ class ShellOutSpec:
                             fld, output_dir
                         )
                     elif fld.metadata:
-                        additional_out[fld.name] = self._field_metadata(
-                            fld, inputs, output_dir
-                        )
+                        if (
+                            fld.type in [int, float, bool, str, list]
+                            and "callable" not in fld.metadata
+                        ):
+                            raise AttributeError(
+                                f"{fld.type} has to have a callable in metadata"
+                            )
+                        else:
+                            additional_out[fld.name] = self._field_metadata(
+                                fld, inputs, output_dir, outputs
+                            )
+                #                        else:
+                #                            additional_out[fld.name] = self._field_metadata(
+                #                                fld, inputs, output_dir, outputs
+                #                            )
                 else:
                     raise Exception("not implemented (collect_additional_output)")
         return additional_out
@@ -486,7 +507,7 @@ class ShellOutSpec:
                         output_names.append(fld.name)
                     elif (
                         fld.metadata
-                        and self._field_metadata(fld, inputs, output_dir)
+                        and self._field_metadata(fld, inputs, output_dir, outputs=None)
                         != attr.NOTHING
                     ):
                         output_names.append(fld.name)
@@ -522,7 +543,7 @@ class ShellOutSpec:
             else:
                 raise AttributeError(f"no file matches {default.name}")
 
-    def _field_metadata(self, fld, inputs, output_dir):
+    def _field_metadata(self, fld, inputs, output_dir, outputs=None):
         """Collect output file if metadata specified."""
         if self._check_requires(fld, inputs) is False:
             return attr.NOTHING
@@ -551,6 +572,10 @@ class ShellOutSpec:
                     call_args_val[argnm] = output_dir
                 elif argnm == "inputs":
                     call_args_val[argnm] = inputs
+                elif argnm == "stdout":
+                    call_args_val[argnm] = outputs["stdout"]
+                elif argnm == "stderr":
+                    call_args_val[argnm] = outputs["stderr"]
                 else:
                     try:
                         call_args_val[argnm] = getattr(inputs, argnm)

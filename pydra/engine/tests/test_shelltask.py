@@ -3,7 +3,7 @@ import typing as ty
 import os, sys
 import pytest
 from pathlib import Path
-
+import re
 
 from ..task import ShellCommandTask
 from ..submitter import Submitter
@@ -2835,6 +2835,96 @@ def test_shell_cmd_outputspec_6a(tmpdir, plugin, results_function):
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.new_files.exists()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
+    """
+        customised output_spec, adding int and str to the output,
+        requiring two callables with parameters stdout and stderr
+    """
+    cmd = "echo"
+    args = ["newfile_1.txt", "newfile_2.txt"]
+
+    def get_file_index(stdout):
+        stdout = re.sub(r".*_", "", stdout)
+        stdout = re.sub(r".txt", "", stdout)
+        print(stdout)
+        return int(stdout)
+
+    def get_stderr(stderr):
+        return f"stderr: {stderr}"
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out1",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "output_file_template": "{args}",
+                        "help_string": "output file",
+                    },
+                ),
+            ),
+            (
+                "out_file_index",
+                attr.ib(
+                    type=int,
+                    metadata={"help_string": "output file", "callable": get_file_index},
+                ),
+            ),
+            (
+                "stderr_field",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": "The standard error output",
+                        "callable": get_stderr,
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
+    ).split("args")
+
+    results = results_function(shelly, plugin)
+    for index, res in enumerate(results):
+        assert res.output.out_file_index == index + 1
+        assert res.output.stderr_field == f"stderr: {res.output.stderr}"
+
+
+def test_shell_cmd_outputspec_7b_error():
+    """
+        customised output_spec, adding Int to the output,
+        requiring a function to collect output
+    """
+    cmd = "echo"
+    args = ["newfile_1.txt", "newfile_2.txt"]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out",
+                attr.ib(
+                    type=int, metadata={"help_string": "output file", "value": "val"}
+                ),
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
+    ).split("args")
+    with pytest.raises(Exception) as e:
+        shelly()
+    assert "has to have a callable" in str(e.value)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
