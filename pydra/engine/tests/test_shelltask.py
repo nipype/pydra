@@ -2928,6 +2928,52 @@ def test_shell_cmd_outputspec_7b_error():
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_7c(tmpdir, plugin, results_function):
+    """
+        customised output_spec, adding Directory to the output,
+    """
+
+    def get_lowest_directory(directory_path):
+        return str(directory_path).replace(str(Path(directory_path).parents[0]), "")
+
+    cmd = "mkdir"
+    args = [f"{tmpdir}/dir1", f"{tmpdir}/dir2"]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "resultsDir",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "output_file_template": "{args}",
+                        "help_string": "output file",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        args=args,
+        output_spec=my_output_spec,
+        resultsDir="outdir",
+    ).split("args")
+
+    with Submitter(plugin=plugin) as sub:
+        shelly(submitter=sub)
+    res = shelly.result()
+
+    for index, arg_dir in enumerate(args):
+        assert Path(Path(tmpdir) / Path(arg_dir)).exists() == True
+        assert get_lowest_directory(arg_dir) == f"/dir{index+1}"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_state_outputspec_1(plugin, results_function, tmpdir):
     """
         providing output name by providing output_file_template
