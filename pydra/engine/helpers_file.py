@@ -556,6 +556,7 @@ def template_update_single(field, inputs_dict, output_dir=None, spec_type="input
     based on the value from inputs_dict
     (checking the types of the fields, that have "output_file_template)"
     """
+
     from .specs import File, MultiOutputFile, Directory
 
     if spec_type == "input":
@@ -575,15 +576,15 @@ def template_update_single(field, inputs_dict, output_dir=None, spec_type="input
             )
     elif spec_type == "output":
         if field.type not in [
-                    File,
-                    MultiOutputFile,
-                    Directory,
-                    int,
-                    float,
-                    bool,
-                    str,
-                    list,
-                ]: 
+            File,
+            MultiOutputFile,
+            Directory,
+            int,
+            float,
+            bool,
+            str,
+            list,
+        ]:
             raise Exception(
                 f"output {field.name} should be a File, but {field.type} set as the type"
             )

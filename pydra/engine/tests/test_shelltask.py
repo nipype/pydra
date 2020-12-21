@@ -2937,32 +2937,14 @@ def test_shell_cmd_outputspec_7c(tmpdir, plugin, results_function):
     def get_lowest_directory(directory_path):
         return str(directory_path).replace(str(Path(directory_path).parents[0]), "")
 
-    cmd = "touch"
-    args = ["newfile_1.txt", "newfile_2.txt"]
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "resultsDir",
-                attr.ib(
-                    type=Directory,
-                    metadata={
-                        # "position": 1,
-                        # "argstr": "",
-                        "help_string": "output file",
-                        "mandatory": True,
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
+    cmd = "mkdir"
+    args = [f"{tmpdir}/dir1", f"{tmpdir}/dir2"]
 
     my_output_spec = SpecInfo(
         name="Output",
         fields=[
             (
-                "out1",
+                "resultsDir",
                 attr.ib(
                     type=File,
                     metadata={
@@ -2970,54 +2952,26 @@ def test_shell_cmd_outputspec_7c(tmpdir, plugin, results_function):
                         "help_string": "output file",
                     },
                 ),
-            ),
-            (
-                "resultsDir",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "output_file_template": "{resultsDir}",
-                        "help_string": "output file",
-                    },
-                ),
-            ),
+            )
         ],
         bases=(ShellOutSpec,),
     )
 
-    args_with_dir = [str(Path(tmpdir) / Path(x)) for x in args]
-
-    #    assert args_with_dir == ""
-    #
-    #    args_with_dir = [f"test_{x}" for x in args]
-
-    # args_with_dir = args
-
-    # args = [f'{tmpdir}/newfile_1.txt', f'{tmpdir}/newfile_2.txt']
-
     shelly = ShellCommandTask(
         name="shelly",
         executable=cmd,
-        args=args_with_dir,
+        args=args,
         output_spec=my_output_spec,
-        input_spec=my_input_spec,
-        resultsDir=tmpdir,
+        resultsDir="outdir",
     ).split("args")
 
     with Submitter(plugin=plugin) as sub:
         shelly(submitter=sub)
     res = shelly.result()
 
-    for arg_file in args:
-        assert (Path(tmpdir) / arg_file).exists() == True
-
-
-#    for index, result in enumerate(res):
-#        assert (
-#            Path(f"{tmpdir}/newfile_{index+1}.txt").name
-#            == Path(result.output.out1).name
-#        )
-#        assert get_lowest_directory(result.output.resultsDir) == get_lowest_directory(tmpdir)
+    for index, arg_dir in enumerate(args):
+        assert Path(Path(tmpdir) / Path(arg_dir)).exists() == True
+        assert get_lowest_directory(arg_dir) == f"/dir{index+1}"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
