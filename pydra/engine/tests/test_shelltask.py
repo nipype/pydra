@@ -13,6 +13,7 @@ from ..specs import (
     ShellSpec,
     SpecInfo,
     File,
+    Directory,
     MultiOutputFile,
     MultiInputObj,
 )
@@ -2925,6 +2926,110 @@ def test_shell_cmd_outputspec_7b_error():
     with pytest.raises(Exception) as e:
         shelly()
     assert "has to have a callable" in str(e.value)
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_7c(tmpdir, plugin, results_function):
+    """
+        customised output_spec, adding Directory to the output named by args
+    """
+
+    def get_lowest_directory(directory_path):
+        return str(directory_path).replace(str(Path(directory_path).parents[0]), "")
+
+    cmd = "mkdir"
+    args = [f"{tmpdir}/dir1", f"{tmpdir}/dir2"]
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "resultsDir",
+                attr.ib(
+                    type=Directory,
+                    metadata={
+                        "output_file_template": "{args}",
+                        "help_string": "output file",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        args=args,
+        output_spec=my_output_spec,
+        resultsDir="outdir",
+    ).split("args")
+
+    res = results_function(shelly, plugin)
+    for index, arg_dir in enumerate(args):
+        assert Path(Path(tmpdir) / Path(arg_dir)).exists() == True
+        assert get_lowest_directory(arg_dir) == f"/dir{index+1}"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_7d(tmpdir, plugin, results_function):
+    """
+        customised output_spec, adding Directory to the output named by input spec
+    """
+
+    def get_lowest_directory(directory_path):
+        return str(directory_path).replace(str(Path(directory_path).parents[0]), "")
+
+    cmd = "mkdir"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "resultsDir",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "new directory",
+                        "argstr": "",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "resultsDir",
+                attr.ib(
+                    type=Directory,
+                    metadata={
+                        "output_file_template": "{resultsDir}",
+                        "help_string": "output file",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        output_spec=my_output_spec,
+        resultsDir=Path(tmpdir) / Path("test"),
+    )
+
+    res = results_function(shelly, plugin)
+    assert (Path(tmpdir) / Path("test")).exists() == True
+    assert get_lowest_directory(res.output.resultsDir) == get_lowest_directory(
+        Path(tmpdir) / Path("test")
+    )
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
