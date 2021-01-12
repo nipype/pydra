@@ -648,12 +648,9 @@ def get_open_loop():
     """
     if os.name == "nt":
         loop = asyncio.ProactorEventLoop()  # for subprocess' pipes on Windows
-        asyncio.set_event_loop(loop)
     else:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        loop = asyncio.SelectorEventLoop()
+    asyncio.set_event_loop(loop)
     return loop
 
 
