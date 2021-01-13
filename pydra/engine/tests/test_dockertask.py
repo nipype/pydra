@@ -738,6 +738,54 @@ def test_docker_inputspec_1a(tmpdir):
 
 @no_win
 @need_docker
+def test_docker_inputspec_1b(tmpdir):
+    """ a simple customized input spec for docker task
+        instead of using automatic binding I provide the bindings
+        and name of the file inside the container
+    """
+    filename = str(tmpdir.join("file_pydra.txt"))
+    with open(filename, "w") as f:
+        f.write("hello from pydra")
+
+    cmd = "cat"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file",
+                        "container_path": True,
+                    },
+                ),
+            )
+        ],
+        bases=(DockerSpec,),
+    )
+
+    docky = DockerTask(
+        name="docky",
+        image="busybox",
+        executable=cmd,
+        # container_path is set to True, so providing the filename inside the container
+        file="/in_container/file_pydra.txt",
+        bindings=[(str(tmpdir), "/in_container")],
+        input_spec=my_input_spec,
+        strip=True,
+    )
+
+    res = docky()
+    assert res.output.stdout == "hello from pydra"
+
+
+@no_win
+@need_docker
 def test_docker_inputspec_1_dockerflag(tmpdir):
     """ a simple customized input spec for docker task
         using ShellTask with container_info
