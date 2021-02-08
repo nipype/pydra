@@ -475,7 +475,7 @@ class ShellCommandTask(TaskBase):
                 if "{" in argstr and "}" in argstr:
                     cmd_el_str = argstr_formatting(argstr, self.inputs)
                 else:  # argstr has a simple form, e.g. "-f", or "--f"
-                    if value and value != "NOTHING":
+                    if value:
                         cmd_el_str = f"{argstr} {value}"
                     else:
                         cmd_el_str = ""

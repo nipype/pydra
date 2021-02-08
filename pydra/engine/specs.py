@@ -27,7 +27,10 @@ class MultiInputObj:
     def converter(cls, value):
         from .helpers import ensure_list
 
-        return ensure_list(value)
+        if value == attr.NOTHING:
+            return value
+        else:
+            return ensure_list(value)
 
 
 class MultiOutputObj:
