@@ -3,7 +3,7 @@ import typing as ty
 import pytest
 
 from ..task import ShellCommandTask
-from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
+from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File, MultiInputObj
 from .utils import use_validator
 
 
@@ -531,6 +531,52 @@ def test_shell_cmd_inputs_mandatory_1():
     with pytest.raises(Exception) as e:
         shelly.cmdline
     assert "mandatory" in str(e.value)
+
+
+def test_shell_cmd_inputs_not_given_1():
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "arg1",
+                attr.ib(
+                    type=MultiInputObj,
+                    metadata={
+                        "argstr": "--arg1",
+                        "help_string": "Command line argument 1",
+                    },
+                ),
+            ),
+            (
+                "arg2",
+                attr.ib(
+                    type=MultiInputObj,
+                    metadata={
+                        "argstr": "--arg2",
+                        "help_string": "Command line argument 2",
+                    },
+                ),
+            ),
+            (
+                "arg3",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "argstr": "--arg3",
+                        "help_string": "Command line argument 3",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly", executable="executable", input_spec=my_input_spec
+    )
+
+    shelly.inputs.arg2 = "argument2"
+
+    assert shelly.cmdline == f"executable --arg2 argument2"
 
 
 def test_shell_cmd_inputs_template_1():
