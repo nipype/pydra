@@ -673,7 +673,7 @@ def hash_value(value, tp=None, metadata=None, precalculated=None):
     """calculating hash or returning values recursively"""
     if metadata is None:
         metadata = {}
-    if isinstance(value, (tuple, list)):
+    if isinstance(value, (tuple, list, set)):
         return [hash_value(el, tp, metadata, precalculated) for el in value]
     elif isinstance(value, dict):
         dict_hash = {
@@ -694,8 +694,21 @@ def hash_value(value, tp=None, metadata=None, precalculated=None):
             and "container_path" not in metadata
         ):
             return hash_dir(value, precalculated=precalculated)
-        else:
+        elif type(value).__module__ == "numpy":  # numpy objects
+            return sha256(value.tostring()).hexdigest()
+        elif (
+            isinstance(
+                value, (int, float, complex, bool, str, bytes, LazyField, os.PathLike)
+            )
+            or value is None
+        ):
             return value
+        else:
+            warnings.warn(
+                f"pydra doesn't fully support hashing for {type(value)}, "
+                f"cp.dumps is used in hash functions, so it could depend on the system"
+            )
+            return sha256(cp.dumps(value)).hexdigest()
 
 
 def output_from_inputfields(output_spec, input_spec):
