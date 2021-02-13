@@ -127,6 +127,7 @@ def test_boutiques_wf_1(maskfile, plugin, tmpdir):
 @no_win
 @need_bosh_docker
 @pytest.mark.flaky(reruns=3)
+@pytest.mark.xfail(reason="issues with bosh for 4472771")
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
@@ -145,9 +146,10 @@ def test_boutiques_wf_2(maskfile, plugin, tmpdir):
             maskfile=wf.lzin.maskfile,
         )
     )
+    # used to be "3240521", but can't access anymore
     wf.add(
         BoshTask(
-            name="stat", zenodo_id="3240521", input_file=wf.bet.lzout.outfile, v=True
+            name="stat", zenodo_id="4472771", input_file=wf.bet.lzout.outfile, v=True
         )
     )
     wf.add(ShellCommandTask(name="cat", executable="cat", args=wf.stat.lzout.output))
