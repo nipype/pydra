@@ -109,6 +109,8 @@ def load_result(checksum, cache_locations):
     """
     if not cache_locations:
         return None
+    # TODO: if there are issues with loading, we might need to
+    # TODO: sleep and repeat loads (after checkin that there are no lock files!)
     for location in cache_locations:
         if (location / checksum).exists():
             result_file = location / checksum / "_result.pklz"
