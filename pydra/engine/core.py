@@ -433,15 +433,15 @@ class TaskBase:
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached - see scenarios in __init__()
         self.hooks.pre_run(self)
-        # adding info file with the checksum in case the task was cancelled
-        # and the lockfile has to be removed
-        with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
-            json.dump({"checksum": self.checksum}, jsonfile)
         with SoftFileLock(lockfile):
             if not (rerun or self.task_rerun):
                 result = self.result()
                 if result is not None:
                     return result
+            # adding info file with the checksum in case the task was cancelled
+            # and the lockfile has to be removed
+            with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
+                json.dump({"checksum": self.checksum}, jsonfile)
             # Let only one equivalent process run
             odir = self.output_dir
             if not self.can_resume and odir.exists():
@@ -965,11 +965,6 @@ class Workflow(TaskBase):
                 "Workflow output cannot be None, use set_output to define output(s)"
             )
         checksum = self.checksum
-        # Eagerly retrieve cached
-        if not (rerun or self.task_rerun):
-            result = self.result()
-            if result is not None:
-                return result
         # creating connections that were defined after adding tasks to the wf
         for task in self.graph.nodes:
             # if workflow has task_rerun=True and propagate_rerun=True,
@@ -981,15 +976,18 @@ class Workflow(TaskBase):
                     task.propagate_rerun = self.propagate_rerun
             task.cache_locations = task._cache_locations + self.cache_locations
             self.create_connections(task)
-        # TODO add signal handler for processes killed after lock acquisition
-        # adding info file with the checksum in case the task was cancelled
-        # and the lockfile has to be removed
-        with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
-            json.dump({"checksum": checksum}, jsonfile)
         lockfile = self.cache_dir / (checksum + ".lock")
         self.hooks.pre_run(self)
         with SoftFileLock(lockfile):
-            # # Let only one equivalent process run
+            # retrieve cached results
+            if not (rerun or self.task_rerun):
+                result = self.result()
+                if result is not None:
+                    return result
+            # adding info file with the checksum in case the task was cancelled
+            # and the lockfile has to be removed
+            with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
+                json.dump({"checksum": checksum}, jsonfile)
             odir = self.output_dir
             if not self.can_resume and odir.exists():
                 shutil.rmtree(odir)
@@ -1015,6 +1013,8 @@ class Workflow(TaskBase):
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
+        if result is None:
+            raise Exception("This should never happen, please open new issue")
         return result
 
     async def _run_task(self, submitter, rerun=False):
