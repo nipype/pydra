@@ -62,7 +62,7 @@ The metadata dictionary for `output_spec` can include:
    A short description of the input field. The same as in `input_spec`.
 
 `output_file_template` (`str`):
-   If provided, the field is treated also as an output field and it is added to the output spec.
+   If provided the output file name (or list of file names) is created using the template.
    The template can use other fields, e.g. `{file1}`. The same as in `input_spec`.
 
 `output_field_name` (`str`, used together with `output_file_template`)
@@ -79,3 +79,10 @@ The metadata dictionary for `output_spec` can include:
    The fields do not have to be a part of the `output_file_template` and
    if any field from the list is not provided in the input, a `NOTHING` is returned for the specific output.
    This has a different meaning than the `requires` form the `input_spec`.
+
+`callable` (`function`):
+   If provided the output file name (or list of file names) is created using the function.
+   The function can take `field` (the specific output field will be passed to the function),
+   `output_dir` (task `output_dir` wil be used), `stdout`, `stderr` (`stdout` and `stderr` of
+   the task will be sent) `inputs` (entire `inputs` will be passed) or any input field name
+   (a specific input field will be sent).
