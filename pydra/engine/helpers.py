@@ -696,19 +696,8 @@ def hash_value(value, tp=None, metadata=None, precalculated=None):
             return hash_dir(value, precalculated=precalculated)
         elif type(value).__module__ == "numpy":  # numpy objects
             return sha256(value.tostring()).hexdigest()
-        elif (
-            isinstance(
-                value, (int, float, complex, bool, str, bytes, LazyField, os.PathLike)
-            )
-            or value is None
-        ):
-            return value
         else:
-            warnings.warn(
-                f"pydra doesn't fully support hashing for {type(value)}, "
-                f"cp.dumps is used in hash functions, so it could depend on the system"
-            )
-            return sha256(cp.dumps(value)).hexdigest()
+            return value
 
 
 def output_from_inputfields(output_spec, input_spec):
