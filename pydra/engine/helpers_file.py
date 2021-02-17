@@ -510,10 +510,16 @@ def copyfile_input(inputs, output_dir):
             )
         file = getattr(inputs, fld.name)
         if copy in [True, False] and file != attr.NOTHING:
-            file = getattr(inputs, fld.name)
-            newfile = output_dir.joinpath(Path(getattr(inputs, fld.name)).name)
-            copyfile(file, newfile, copy=copy)
-            map_copyfiles[fld.name] = str(newfile)
+            if isinstance(file, list):
+                map_copyfiles[fld.name] = []
+                for el in file:
+                    newfile = output_dir.joinpath(Path(el).name)
+                    copyfile(el, newfile, copy=copy)
+                    map_copyfiles[fld.name].append(str(newfile))
+            else:
+                newfile = output_dir.joinpath(Path(file).name)
+                copyfile(file, newfile, copy=copy)
+                map_copyfiles[fld.name] = str(newfile)
     return map_copyfiles or None
 
 
