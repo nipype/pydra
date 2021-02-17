@@ -499,16 +499,17 @@ def ensure_list(filename):
 # not sure if this might be useful for Function Task
 def copyfile_input(inputs, output_dir):
     """Implement the base class method."""
-    from .specs import attr_fields, File
+    from .specs import attr_fields, File, MultiInputFile
 
     map_copyfiles = {}
     for fld in attr_fields(inputs):
         copy = fld.metadata.get("copyfile")
-        if copy is not None and fld.type is not File:
+        if copy is not None and fld.type not in [File, MultiInputFile]:
             raise Exception(
                 f"if copyfile set, field has to be a File " f"but {fld.type} provided"
             )
-        if copy in [True, False]:
+        file = getattr(inputs, fld.name)
+        if copy in [True, False] and file != attr.NOTHING:
             file = getattr(inputs, fld.name)
             newfile = output_dir.joinpath(Path(getattr(inputs, fld.name)).name)
             copyfile(file, newfile, copy=copy)
