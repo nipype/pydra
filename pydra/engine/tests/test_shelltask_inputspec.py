@@ -158,11 +158,42 @@ def test_shell_cmd_inputs_2_err():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA="inp1", inpB="inp1", input_spec=my_input_spec
+        executable="executable", inpA="inp1", inpB="inp2", input_spec=my_input_spec
     )
     with pytest.raises(Exception) as e:
         shelly.cmdline
     assert "1 is already used" in str(e.value)
+
+
+def test_shell_cmd_inputs_2_noerr():
+    """ additional inputs with provided positions
+    (duplication of teh position doesn't lead to error, since only one field has value)
+    """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=str,
+                    metadata={"position": 1, "help_string": "inpA", "argstr": ""},
+                ),
+            ),
+            (
+                "inpB",
+                attr.ib(
+                    type=str,
+                    metadata={"position": 1, "help_string": "inpB", "argstr": ""},
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="executable", inpA="inp1", input_spec=my_input_spec
+    )
+    shelly.cmdline
 
 
 def test_shell_cmd_inputs_3():

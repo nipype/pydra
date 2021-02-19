@@ -346,6 +346,10 @@ class ShellCommandTask(TaskBase):
                 "bindings",
             ]:
                 continue
+            elif getattr(self.inputs, f.name) is attr.NOTHING and not f.metadata.get(
+                "readonly"
+            ):
+                continue
             elif f.name == "executable":
                 pos_args.append(
                     self._command_shelltask_executable(
@@ -424,18 +428,22 @@ class ShellCommandTask(TaskBase):
         if pos is None:
             # position will be set at the end
             pass
-        elif not isinstance(pos, int):
-            raise Exception(f"position should be an integer, but {pos} given")
-        elif pos == 0:
-            raise Exception(f"position can't be 0")
-        elif pos < 0:  # position -1 is for args
-            pos = pos - 1
-        # checking if the position is not already used
-        elif pos in self._positions_provided:
-            raise Exception(
-                f"{field.name} can't have provided position, {pos} is already used"
-            )
-        self._positions_provided.append(pos)
+        else:
+            if not isinstance(pos, int):
+                raise Exception(f"position should be an integer, but {pos} given")
+            # checking if the position is not already used
+            if pos in self._positions_provided:
+                raise Exception(
+                    f"{field.name} can't have provided position, {pos} is already used"
+                )
+            else:
+                self._positions_provided.append(pos)
+
+            if pos >= 0:
+                pos = pos + 1  # position 0 is for executable
+            else:  # pos < 0:
+                pos = pos - 1  # position -1 is for args
+
         value = self._field_value(
             field=field, state_ind=state_ind, ind=ind, check_file=True
         )
