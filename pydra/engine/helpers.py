@@ -820,42 +820,39 @@ def load_task(task_pkl, ind=None):
     return task
 
 
-def position_adjustment(pos_args):
+def position_sort(args):
     """
-    sorting elements with the first element - position,
-    the negative positions should go to the end of the list
-    everything that has no position (i.e. it's None),
-    should go between elements with positive positions an with negative pos.
-    Returns a list of sorted args.
+    Sort objects by position, following Python indexing conventions.
+
+    Ordering is postive positions, lowest to highest, followed by unspecified
+    positions (``None``) and negative positions, lowest to highest.
+
+    >>> position_sort([(None, "d"), (-3, "e"), (2, "b"), (-2, "f"), (5, "c"), (1, "a")])
+    ['a', 'b', 'c', 'd', 'e', 'f']
+
+    Parameters
+    ----------
+    args : list of (int/None, object) tuples
+
+    Returns
+    -------
+    list of objects
     """
-    # sorting all elements of the command
-    try:
-        pos_args.sort()
-    except TypeError:  # if some positions are None
-        pos_args_none = []
-        pos_args_int = []
-        for el in pos_args:
-            if el[0] is None:
-                pos_args_none.append(el)
-            else:
-                pos_args_int.append(el)
-            pos_args_int.sort()
-        last_el = pos_args_int[-1][0]
-        for el_none in pos_args_none:
-            last_el += 1
-            pos_args_int.append((last_el, el_none[1]))
-        pos_args = pos_args_int
+    import bisect
+    pos, none, neg = [], [], []
+    for entry in args:
+        position = entry[0]
+        if position is None:
+            # Take existing order
+            none.append(entry[1])
+        elif position < 0:
+            # Sort negatives while collecting
+            bisect.insort(neg, entry)
+        else:
+            # Sort positives while collecting
+            bisect.insort(pos, entry)
 
-    # if args available, they should be moved at the of the list
-    while pos_args[0][0] < 0:
-        pos_args.append(pos_args.pop(0))
-
-    # dropping the position index
-    cmd_args = []
-    for el in pos_args:
-        cmd_args += el[1]
-
-    return cmd_args
+    return [arg for _, arg in pos] + none + [arg for _, arg in neg]
 
 
 def argstr_formatting(argstr, inputs, value_updates=None):

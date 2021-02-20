@@ -61,7 +61,7 @@ from .specs import (
 from .helpers import (
     ensure_list,
     execute,
-    position_adjustment,
+    position_sort,
     argstr_formatting,
     output_from_inputfields,
 )
@@ -367,9 +367,11 @@ class ShellCommandTask(TaskBase):
                 if pos_val:
                     pos_args.append(pos_val)
 
-        # sorted elements of the command
-        cmd_args = position_adjustment(pos_args)
-        return cmd_args
+        # Sort command and arguments by position
+        cmd_args = position_sort(pos_args)
+        # pos_args values are each a list of arguments, so concatenate lists after sorting
+        return sum(cmd_args, [])
+
 
     def _field_value(self, field, state_ind, ind, check_file=False):
         """
