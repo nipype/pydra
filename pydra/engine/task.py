@@ -372,7 +372,6 @@ class ShellCommandTask(TaskBase):
         # pos_args values are each a list of arguments, so concatenate lists after sorting
         return sum(cmd_args, [])
 
-
     def _field_value(self, field, state_ind, ind, check_file=False):
         """
         Checking value of the specific field, if value is not set, None is returned.

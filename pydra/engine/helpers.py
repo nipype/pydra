@@ -839,6 +839,7 @@ def position_sort(args):
     list of objects
     """
     import bisect
+
     pos, none, neg = [], [], []
     for entry in args:
         position = entry[0]
