@@ -129,8 +129,8 @@ In the example we used multiple keys in the metadata dictionary including `help_
    If no `argstr` is used the field is not part of the command.
 
 `position` (`int`):
-   Position of the field in the command, could be positive or negative integer.
-   If nothing is provided the field will be inserted between all fields with positive positions
+   Position of the field in the command, could be nonnegative or negative integer.
+   If nothing is provided the field will be inserted between all fields with nonnegative positions
    and fields with negative positions.
 
 `allowed_values` (`list`):
