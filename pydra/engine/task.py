@@ -427,10 +427,7 @@ class ShellCommandTask(TaskBase):
             # assuming that input that has no arstr is not used in the command
             return None
         pos = field.metadata.get("position", None)
-        if pos is None:
-            # position will be set at the end
-            pass
-        else:
+        if pos is not None:
             if not isinstance(pos, int):
                 raise Exception(f"position should be an integer, but {pos} given")
             # checking if the position is not already used
@@ -438,13 +435,12 @@ class ShellCommandTask(TaskBase):
                 raise Exception(
                     f"{field.name} can't have provided position, {pos} is already used"
                 )
-            else:
-                self._positions_provided.append(pos)
 
-            if pos >= 0:
-                pos = pos + 1  # position 0 is for executable
-            else:  # pos < 0:
-                pos = pos - 1  # position -1 is for args
+            self._positions_provided.append(pos)
+
+            # Shift non-negatives up to allow executable to be 0
+            # Shift negatives down to allow args to be -1
+            pos += 1 if pos >= 0 else -1
 
         value = self._field_value(
             field=field, state_ind=state_ind, ind=ind, check_file=True
