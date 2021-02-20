@@ -149,47 +149,31 @@ class FunctionTask(TaskBase):
             rerun=rerun,
         )
         if output_spec is None:
-            if "return" not in func.__annotations__:
-                output_spec = SpecInfo(
-                    name="Output", fields=[("out", ty.Any)], bases=(BaseSpec,)
-                )
-            else:
+            name = "Output"
+            fields = [("out", ty.Any)]
+            if "return" in func.__annotations__:
                 return_info = func.__annotations__["return"]
                 # e.g. python annotation: fun() -> ty.NamedTuple("Output", [("out", float)])
                 # or pydra decorator: @pydra.mark.annotate({"return": ty.NamedTuple(...)})
                 if hasattr(return_info, "__name__") and hasattr(
                     return_info, "__annotations__"
                 ):
-                    output_spec = SpecInfo(
-                        name=return_info.__name__,
-                        fields=list(return_info.__annotations__.items()),
-                        bases=(BaseSpec,),
-                    )
+                    name = return_info.__name__
+                    fields = list(return_info.__annotations__.items())
                 # e.g. python annotation: fun() -> {"out": int}
                 # or pydra decorator: @pydra.mark.annotate({"return": {"out": int}})
                 elif isinstance(return_info, dict):
-                    output_spec = SpecInfo(
-                        name="Output",
-                        fields=list(return_info.items()),
-                        bases=(BaseSpec,),
-                    )
+                    fields = list(return_info.items())
                 # e.g. python annotation: fun() -> (int, int)
                 # or pydra decorator: @pydra.mark.annotate({"return": (int, int)})
                 elif isinstance(return_info, tuple):
-                    output_spec = SpecInfo(
-                        name="Output",
-                        fields=[
-                            ("out{}".format(n + 1), t)
-                            for n, t in enumerate(return_info)
-                        ],
-                        bases=(BaseSpec,),
-                    )
+                    fields = [(f"out{i}", t) for i, t in enumerate(return_info, 1)]
                 # e.g. python annotation: fun() -> int
                 # or pydra decorator: @pydra.mark.annotate({"return": int})
                 else:
-                    output_spec = SpecInfo(
-                        name="Output", fields=[("out", return_info)], bases=(BaseSpec,)
-                    )
+                    fields = [("out", return_info)]
+            output_spec = SpecInfo(name=name, fields=fields, bases=(BaseSpec,))
+
         self.output_spec = output_spec
 
     def _run_task(self):
@@ -200,18 +184,16 @@ class FunctionTask(TaskBase):
         output_names = [el[0] for el in self.output_spec.fields]
         if output is None:
             self.output_ = {nm: None for nm in output_names}
+        elif len(output_names) == 1:
+            # if only one element in the fields, everything should be returned together
+            self.output_ = {output_names[0]: output}
+        elif isinstance(output, tuple) and len(output_names) == len(output):
+            self.output_ = dict(zip(output_names, output))
         else:
-            if len(output_names) == 1:
-                # if only one element in the fields, everything should be returned together
-                self.output_ = {output_names[0]: output}
-            else:
-                if isinstance(output, tuple) and len(output_names) == len(output):
-                    self.output_ = dict(zip(output_names, output))
-                else:
-                    raise Exception(
-                        f"expected {len(self.output_spec.fields)} elements, "
-                        f"but {output} were returned"
-                    )
+            raise RuntimeError(
+                f"expected {len(self.output_spec.fields)} elements, "
+                f"but {output} were returned"
+            )
 
 
 class ShellCommandTask(TaskBase):
