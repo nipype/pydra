@@ -4040,12 +4040,13 @@ def test_fsl():
     )
 
     # TODO: not sure why this has to be string
-    in_file = Path(os.path.dirname(os.path.abspath(__file__))) / "data" / "foo.nii"
+    in_file = Path(__file__).parent / "data_tests" / "test.nii.gz"
 
     # separate command into exec + args
     shelly = ShellCommandTask(
         name="bet_task", executable="bet", in_file=in_file, input_spec=bet_input_spec
     )
+    out_file = shelly.output_dir / "test_brain.nii.gz"
     assert shelly.inputs.executable == "bet"
-    assert shelly.cmdline == f"bet {in_file} {in_file}_brain"
+    assert shelly.cmdline == f"bet {in_file} {out_file}"
     # res = shelly(plugin="cf")
