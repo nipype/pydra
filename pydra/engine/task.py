@@ -310,42 +310,45 @@ class ShellCommandTask(TaskBase):
             command_args_list = []
             self.state.prepare_states(self.inputs)
             for ii, el in enumerate(self.state.states_ind):
-                command_args_list.append(self._command_args_single(el, ind=ii))
+                command_args_list.append(self._command_args_single(el, index=ii))
             return command_args_list
         else:
-            return self._command_args_single(self.inputs)
+            return self._command_args_single()
 
-    def _command_args_single(self, state_ind, ind=None):
-        """Get command line arguments for a single state"""
+    def _command_args_single(self, state_ind=None, index=None):
+        """Get command line arguments for a single state
+
+        Parameters
+        ----------
+        state_ind : dict[str, int]
+            Keys are inputs being mapped over, values are indices within that input
+        index : int
+            Index in flattened list of states
+        """
         pos_args = []  # list for (position, command arg)
         self._positions_provided = []
-        for f in attr_fields(self.inputs):
-            # these inputs will eb used in container_args
-            if isinstance(self, ContainerTask) and f.name in [
+        for field in attr_fields(self.inputs):
+            name, meta = field.name, field.metadata
+            # these inputs will be used in container_args
+            if isinstance(self, ContainerTask) and name in [
                 "container",
                 "image",
                 "container_xargs",
                 "bindings",
             ]:
                 continue
-            elif getattr(self.inputs, f.name) is attr.NOTHING and not f.metadata.get(
-                "readonly"
-            ):
+            if getattr(self.inputs, name) is attr.NOTHING and not meta.get("readonly"):
                 continue
-            elif f.name == "executable":
+            if name == "executable":
                 pos_args.append(
-                    self._command_shelltask_executable(
-                        field=f, state_ind=state_ind, ind=ind
-                    )
+                    self._command_shelltask_executable(field, state_ind, index)
                 )
-            elif f.name == "args":
-                pos_val = self._command_shelltask_args(
-                    field=f, state_ind=state_ind, ind=ind
-                )
+            elif name == "args":
+                pos_val = self._command_shelltask_args(field, state_ind, index)
                 if pos_val:
                     pos_args.append(pos_val)
             else:
-                pos_val = self._command_pos_args(field=f, state_ind=state_ind, ind=ind)
+                pos_val = self._command_pos_args(field, state_ind, index)
                 if pos_val:
                     pos_args.append(pos_val)
 
@@ -353,50 +356,39 @@ class ShellCommandTask(TaskBase):
         cmd_args = position_adjustment(pos_args)
         return cmd_args
 
-    def _field_value(self, field, state_ind, ind, check_file=False):
+    def _field_value(self, field, state_ind, index, check_file=False):
         """
         Checking value of the specific field, if value is not set, None is returned.
         If state_ind and ind, taking a specific element of the field.
-        If check_file is True, checking if field is a a local file
-        and settings bindings if needed.
+        check_file has no effect, but subclasses can use it to validate or modify
+        filenames.
         """
         name = f"{self.name}.{field.name}"
+        value = getattr(self.inputs, field.name)
         if self.state and name in state_ind:
-            value = getattr(self.inputs, field.name)[state_ind[name]]
-        else:
-            value = getattr(self.inputs, field.name)
-        if value is attr.NOTHING or value is None:
-            return None
-        if check_file:
-            if is_local_file(field) and getattr(self, "bind_paths", None):
-                value = str(value)
-                # changing path to the cpath (the directory should be mounted)
-                lpath = Path(value)
-                cdir = self.bind_paths(ind=ind)[lpath.parent][0]
-                cpath = cdir.joinpath(lpath.name)
-                value = str(cpath)
+            value = value[state_ind[name]]
+        if value == attr.NOTHING:
+            value = None
         return value
 
-    def _command_shelltask_executable(self, field, state_ind, ind):
+    def _command_shelltask_executable(self, field, state_ind, index):
         """Returining position and value for executable ShellTask input"""
         pos = 0  # executable should be the first el. of the command
-        value = self._field_value(field=field, state_ind=state_ind, ind=ind)
+        value = self._field_value(field, state_ind, index)
         if value is None:
-            raise Exception("executable has to be set")
+            raise ValueError("executable has to be set")
         return pos, ensure_list(value, tuple2list=True)
 
-    def _command_shelltask_args(self, field, state_ind, ind):
+    def _command_shelltask_args(self, field, state_ind, index):
         """Returining position and value for args ShellTask input"""
         pos = -1  # assuming that args is the last el. of the command
-        value = self._field_value(
-            field=field, state_ind=state_ind, ind=ind, check_file=True
-        )
+        value = self._field_value(field, state_ind, index, check_file=True)
         if value is None:
             return None
         else:
             return pos, ensure_list(value, tuple2list=True)
 
-    def _command_pos_args(self, field, state_ind, ind):
+    def _command_pos_args(self, field, state_ind, index):
         """
         Checking all additional input fields, setting pos to None, if position not set.
         Creating a list with additional parts of the command that comes from
@@ -426,9 +418,7 @@ class ShellCommandTask(TaskBase):
             else:  # pos < 0:
                 pos = pos - 1  # position -1 is for args
 
-        value = self._field_value(
-            field=field, state_ind=state_ind, ind=ind, check_file=True
-        )
+        value = self._field_value(field, state_ind, index, check_file=True)
         if field.metadata.get("readonly", False) and value is not None:
             raise Exception(f"{field.name} is read only, the value can't be provided")
         elif value is None and not field.metadata.get("readonly", False):
@@ -583,6 +573,22 @@ class ContainerTask(ShellCommandTask):
             **kwargs,
         )
 
+    def _field_value(self, field, state_ind, index, check_file=False):
+        """
+        Checking value of the specific field, if value is not set, None is returned.
+        If state_ind and ind, taking a specific element of the field.
+        If check_file is True, checking if field is a a local file
+        and settings bindings if needed.
+        """
+        value = super()._field_value(field, state_ind, index)
+        if value and check_file and is_local_file(field):
+            # changing path to the cpath (the directory should be mounted)
+            lpath = Path(str(value))
+            cdir = self.bind_paths(index)[lpath.parent][0]
+            cpath = cdir.joinpath(lpath.name)
+            value = str(cpath)
+        return value
+
     def container_check(self, container_type):
         """Get container-specific CLI arguments."""
         if self.inputs.container is None:
@@ -594,16 +600,22 @@ class ContainerTask(ShellCommandTask):
         if self.inputs.image is attr.NOTHING:
             raise AttributeError("Container image is not specified")
 
-    def bind_paths(self, ind=None):
-        """Return bound mount points: ``dict(lpath: (cpath, mode))``."""
+    def bind_paths(self, index=None):
+        """Get bound mount points
+
+        Returns
+        -------
+        mount points: dict
+            mapping from local path to tuple of container path + mode
+        """
         bind_paths = {}
         output_dir_cpath = None
         if self.inputs.bindings is None:
             self.inputs.bindings = []
-        if ind is None:
+        if index is None:
             output_dir = self.output_dir
         else:
-            output_dir = self.output_dir[ind]
+            output_dir = self.output_dir[index]
         for binding in self.inputs.bindings:
             if len(binding) == 3:
                 lpath, cpath, mode = binding
@@ -623,16 +635,16 @@ class ContainerTask(ShellCommandTask):
             bind_paths[output_dir] = (self.output_cpath, "rw")
         return bind_paths
 
-    def binds(self, opt, ind=None):
+    def binds(self, opt, index=None):
         """
         Specify mounts to bind from local filesystems to container and working directory.
 
-        Uses py:meth:`binds_paths`
+        Uses py:meth:`bind_paths`
 
         """
         bargs = []
-        for (key, val) in self.bind_paths(ind).items():
-            bargs.extend([opt, f"{key}:{val[0]}:{val[1]}"])
+        for lpath, (cpath, mode) in self.bind_paths(index).items():
+            bargs.extend([opt, f"{lpath}:{cpath}:{mode}"])
         return bargs
 
 
@@ -713,23 +725,23 @@ class DockerTask(ContainerTask):
                 if f"{self.name}.image" in el:
                     cargs_list.append(
                         self._container_args_single(
-                            self.inputs.image[el[f"{self.name}.image"]], ind=ii
+                            self.inputs.image[el[f"{self.name}.image"]], index=ii
                         )
                     )
                 else:
                     cargs_list.append(
-                        self._container_args_single(self.inputs.image, ind=ii)
+                        self._container_args_single(self.inputs.image, index=ii)
                     )
             return cargs_list
         else:
             return self._container_args_single(self.inputs.image)
 
-    def _container_args_single(self, image, ind=None):
+    def _container_args_single(self, image, index=None):
         cargs = ["docker", "run"]
         if self.inputs.container_xargs is not None:
             cargs.extend(self.inputs.container_xargs)
 
-        cargs.extend(self.binds("-v", ind))
+        cargs.extend(self.binds("-v", index))
         cargs.extend(["-w", str(self.output_cpath)])
         cargs.append(image)
 
@@ -807,24 +819,24 @@ class SingularityTask(ContainerTask):
                 if f"{self.name}.image" in el:
                     cargs_list.append(
                         self._container_args_single(
-                            self.inputs.image[el[f"{self.name}.image"]], ind=ii
+                            self.inputs.image[el[f"{self.name}.image"]], index=ii
                         )
                     )
                 else:
                     cargs_list.append(
-                        self._container_args_single(self.inputs.image, ind=ii)
+                        self._container_args_single(self.inputs.image, index=ii)
                     )
             return cargs_list
         else:
             return self._container_args_single(self.inputs.image)
 
-    def _container_args_single(self, image, ind=None):
+    def _container_args_single(self, image, index=None):
         cargs = ["singularity", "exec"]
 
         if self.inputs.container_xargs is not None:
             cargs.extend(self.inputs.container_xargs)
 
-        cargs.extend(self.binds("-B", ind))
+        cargs.extend(self.binds("-B", index))
         cargs.extend(["--pwd", str(self.output_cpath)])
         cargs.append(image)
         return cargs
