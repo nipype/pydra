@@ -8,8 +8,8 @@ import re
 from .helpers_file import template_update_single
 
 
-def attr_fields(x):
-    return x.__attrs_attrs__
+def attr_fields(spec, exclude_names=()):
+    return [field for field in spec.__attrs_attrs__ if field.name not in exclude_names]
 
 
 class File:
