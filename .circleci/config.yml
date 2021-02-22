@@ -16,7 +16,7 @@ docs_deploy: &docs
     - run:
         name: Install gh-pages tool
         command: |
-          npm install -g --silent gh-pages@2.0.1
+          npm install -g --silent gh-pages@3.1.0
     - checkout
     - run:
         name: Set git settings
@@ -30,7 +30,7 @@ docs_deploy: &docs
         command: touch docs/_build/html/.nojekyll
     - run:
         name: Deploy docs to gh-pages branch
-        command: gh-pages --dotfiles --message "doc(update) [skip ci]" --dist docs/_build/html
+        command: gh-pages --no-history --dotfiles --message "doc(update) [skip ci]" --dist docs/_build/html
 
 version: 2
 jobs:
