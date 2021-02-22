@@ -327,16 +327,11 @@ class ShellCommandTask(TaskBase):
         """
         pos_args = []  # list for (position, command arg)
         self._positions_provided = []
-        for field in attr_fields(self.inputs):
+        for field in attr_fields(
+            self.inputs,
+            exclude_names=("container", "image", "container_xargs", "bindings"),
+        ):
             name, meta = field.name, field.metadata
-            # these inputs will be used in container_args
-            if isinstance(self, ContainerTask) and name in [
-                "container",
-                "image",
-                "container_xargs",
-                "bindings",
-            ]:
-                continue
             if getattr(self.inputs, name) is attr.NOTHING and not meta.get("readonly"):
                 continue
             if name == "executable":

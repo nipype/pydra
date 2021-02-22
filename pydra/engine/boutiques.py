@@ -192,9 +192,7 @@ class BoshTask(ShellCommandTask):
     def _bosh_invocation_file(self, state_ind=None, index=None):
         """creating bosh invocation file - json file with inputs values"""
         input_json = {}
-        for f in attr_fields(self.inputs):
-            if f.name in ["executable", "args"]:
-                continue
+        for f in attr_fields(self.inputs, exclude_names=("executable", "args")):
             if self.state and f"{self.name}.{f.name}" in state_ind:
                 value = getattr(self.inputs, f.name)[state_ind[f"{self.name}.{f.name}"]]
             else:

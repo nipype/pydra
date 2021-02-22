@@ -8,8 +8,8 @@ import re
 from .helpers_file import template_update_single
 
 
-def attr_fields(x):
-    return x.__attrs_attrs__
+def attr_fields(spec, exclude_names=()):
+    return [field for field in spec.__attrs_attrs__ if field.name not in exclude_names]
 
 
 class File:
@@ -70,13 +70,13 @@ class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
 
     def __attrs_post_init__(self):
-        self.files_hash = {}
-        for field in attr_fields(self):
-            if (
-                field.name not in ["_graph_checksums", "bindings", "files_hash"]
-                and field.metadata.get("output_file_template") is None
-            ):
-                self.files_hash[field.name] = {}
+        self.files_hash = {
+            field.name: {}
+            for field in attr_fields(
+                self, exclude_names=("_graph_checksums", "bindings", "files_hash")
+            )
+            if field.metadata.get("output_file_template") is None
+        }
 
     def __setattr__(self, name, value):
         """changing settatr, so the converter and validator is run
@@ -108,14 +108,12 @@ class BaseSpec:
         from .helpers import hash_value, hash_function
 
         inp_dict = {}
-        for field in attr_fields(self):
-            if field.name in [
-                "_graph_checksums",
-                "bindings",
-                "files_hash",
-            ] or field.metadata.get("output_file_template"):
+        for field in attr_fields(
+            self, exclude_names=("_graph_checksums", "bindings", "files_hash")
+        ):
+            if field.metadata.get("output_file_template"):
                 continue
-            # removing values that are notset from hash calculation
+            # removing values that are not set from hash calculation
             if getattr(self, field.name) is attr.NOTHING:
                 continue
             value = getattr(self, field.name)
@@ -317,11 +315,7 @@ class FunctionSpec(BaseSpec):
             "xor",
             "sep",
         }
-        # special inputs, don't have to follow rules for standard inputs
-        special_input = ["_func", "_graph_checksums"]
-
-        fields = [fld for fld in attr_fields(self) if fld.name not in special_input]
-        for fld in fields:
+        for fld in attr_fields(self, exclude_names=("_func", "_graph_checksums")):
             mdata = fld.metadata
             # checking keys from metadata
             if set(mdata.keys()) - supported_keys:
@@ -398,11 +392,7 @@ class ShellSpec(BaseSpec):
             "xor",
             "sep",
         }
-        # special inputs, don't have to follow rules for standard inputs
-        special_input = ["_func", "_graph_checksums"]
-
-        fields = [fld for fld in attr_fields(self) if fld.name not in special_input]
-        for fld in fields:
+        for fld in attr_fields(self, exclude_names=("_func", "_graph_checksums")):
             mdata = fld.metadata
             # checking keys from metadata
             if set(mdata.keys()) - supported_keys:
@@ -445,47 +435,36 @@ class ShellOutSpec:
     def collect_additional_outputs(self, inputs, output_dir, outputs):
         """Collect additional outputs from shelltask output_spec."""
         additional_out = {}
-        for fld in attr_fields(self):
-            if fld.name not in ["return_code", "stdout", "stderr"]:
-                if fld.type in [
-                    File,
-                    MultiOutputFile,
-                    Directory,
-                    int,
-                    float,
-                    bool,
-                    str,
-                    list,
-                ]:
-                    # assuming that field should have either default or metadata, but not both
-                    if (
-                        fld.default is None or fld.default == attr.NOTHING
-                    ) and not fld.metadata:  # TODO: is it right?
-                        raise AttributeError(
-                            "File has to have default value or metadata"
-                        )
-                    elif fld.default != attr.NOTHING:
-                        additional_out[fld.name] = self._field_defaultvalue(
-                            fld, output_dir
-                        )
-                    elif fld.metadata:
-                        if (
-                            fld.type in [int, float, bool, str, list]
-                            and "callable" not in fld.metadata
-                        ):
-                            raise AttributeError(
-                                f"{fld.type} has to have a callable in metadata"
-                            )
-                        else:
-                            additional_out[fld.name] = self._field_metadata(
-                                fld, inputs, output_dir, outputs
-                            )
-                #                        else:
-                #                            additional_out[fld.name] = self._field_metadata(
-                #                                fld, inputs, output_dir, outputs
-                #                            )
-                else:
-                    raise Exception("not implemented (collect_additional_output)")
+        for fld in attr_fields(self, exclude_names=("return_code", "stdout", "stderr")):
+            if fld.type not in [
+                File,
+                MultiOutputFile,
+                Directory,
+                int,
+                float,
+                bool,
+                str,
+                list,
+            ]:
+                raise Exception("not implemented (collect_additional_output)")
+            # assuming that field should have either default or metadata, but not both
+            if (
+                fld.default is None or fld.default == attr.NOTHING
+            ) and not fld.metadata:  # TODO: is it right?
+                raise AttributeError("File has to have default value or metadata")
+            elif fld.default != attr.NOTHING:
+                additional_out[fld.name] = self._field_defaultvalue(fld, output_dir)
+            elif fld.metadata:
+                if (
+                    fld.type in [int, float, bool, str, list]
+                    and "callable" not in fld.metadata
+                ):
+                    raise AttributeError(
+                        f"{fld.type} has to have a callable in metadata"
+                    )
+                additional_out[fld.name] = self._field_metadata(
+                    fld, inputs, output_dir, outputs
+                )
         return additional_out
 
     def generated_output_names(self, inputs, output_dir):
@@ -496,26 +475,22 @@ class ShellOutSpec:
         # checking the input (if all mandatory fields are provided, etc.)
         inputs.check_fields_input_spec()
         output_names = ["return_code", "stdout", "stderr"]
-        for fld in attr_fields(self):
-            if fld.name not in ["return_code", "stdout", "stderr"]:
-                if fld.type is File:
-                    # assuming that field should have either default or metadata, but not both
-                    if (
-                        fld.default is None or fld.default == attr.NOTHING
-                    ) and not fld.metadata:  # TODO: is it right?
-                        raise AttributeError(
-                            "File has to have default value or metadata"
-                        )
-                    elif fld.default != attr.NOTHING:
-                        output_names.append(fld.name)
-                    elif (
-                        fld.metadata
-                        and self._field_metadata(fld, inputs, output_dir, outputs=None)
-                        != attr.NOTHING
-                    ):
-                        output_names.append(fld.name)
-                else:
-                    raise Exception("not implemented (collect_additional_output)")
+        for fld in attr_fields(self, exclude_names=("return_code", "stdout", "stderr")):
+            if fld.type is not File:
+                raise Exception("not implemented (collect_additional_output)")
+            # assuming that field should have either default or metadata, but not both
+            if (
+                fld.default in (None, attr.NOTHING) and not fld.metadata
+            ):  # TODO: is it right?
+                raise AttributeError("File has to have default value or metadata")
+            elif fld.default != attr.NOTHING:
+                output_names.append(fld.name)
+            elif (
+                fld.metadata
+                and self._field_metadata(fld, inputs, output_dir, outputs=None)
+                != attr.NOTHING
+            ):
+                output_names.append(fld.name)
         return output_names
 
     def _field_defaultvalue(self, fld, output_dir):
