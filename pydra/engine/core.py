@@ -3,7 +3,7 @@ import abc
 import attr
 import json
 import logging
-import os
+import os, sys
 from pathlib import Path
 import typing as ty
 from copy import deepcopy
@@ -13,6 +13,7 @@ import cloudpickle as cp
 from filelock import SoftFileLock
 import shutil
 from tempfile import mkdtemp
+from traceback import format_exception
 
 from . import state
 from . import helpers_state as hlpst
@@ -463,7 +464,9 @@ class TaskBase:
                 self._run_task()
                 result.output = self._collect_outputs(output_dir=odir)
             except Exception as e:
-                record_error(self.output_dir, e)
+                etype, eval, etr = sys.exc_info()
+                traceback = format_exception(etype, eval, etr)
+                record_error(self.output_dir, error=traceback)
                 result.errored = True
                 raise
             finally:
@@ -1001,7 +1004,9 @@ class Workflow(TaskBase):
                 await self._run_task(submitter, rerun=rerun)
                 result.output = self._collect_outputs()
             except Exception as e:
-                record_error(self.output_dir, e)
+                etype, eval, etr = sys.exc_info()
+                traceback = format_exception(etype, eval, etr)
+                record_error(self.output_dir, error=traceback)
                 result.errored = True
                 self._errored = True
                 raise
@@ -1095,7 +1100,10 @@ class Workflow(TaskBase):
                         f"Tasks {getattr(self, val.name)._errored} raised an error"
                     )
                 else:
-                    raise ValueError(f"Task {val.name} raised an error")
+                    raise ValueError(
+                        f"Task {val.name} raised an error, "
+                        f"full crash report is here: {getattr(self, val.name).output_dir / '_error.pklz'}"
+                    )
         return attr.evolve(output, **output_wf)
 
     def create_dotfile(self, type="simple", export=None, name=None):
