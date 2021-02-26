@@ -2,6 +2,9 @@ import typing as ty
 import os, sys
 import attr
 import pytest
+import cloudpickle as cp
+from pathlib import Path
+import re
 
 from ... import mark
 from ..core import Workflow
@@ -1302,3 +1305,59 @@ def test_taskhooks_4(tmpdir, capsys):
     # only post run task hook should be called
     assert len(hook_messages) == 1
     assert "postrun task hook was called" in hook_messages[0]
+
+
+def test_traceback(tmpdir):
+    """ checking if the error raised in a function is properly returned;
+        checking if there is an error filename in the error message that contains
+        full traceback including the line in the python function
+    """
+
+    @mark.task
+    def fun_error(x):
+        raise Exception("Error from the function")
+
+    task = fun_error(name="error", x=[3, 4], cache_dir=tmpdir).split("x")
+
+    with pytest.raises(Exception, match="from the function") as exinfo:
+        res = task()
+
+    # getting error file from the error message
+    error_file_match = str(exinfo.value).split("here: ")[-1].split("_error.pklz")[0]
+    error_file = Path(error_file_match) / "_error.pklz"
+    # checking if the file exists
+    assert error_file.exists()
+    # reading error message from the pickle file
+    error_tb = cp.loads(error_file.read_bytes())["error message"]
+    # the error traceback should be a list and should point to a specific line in the function
+    assert isinstance(error_tb, list)
+    assert "in fun_error" in error_tb[-2]
+
+
+def test_traceback_wf(tmpdir):
+    """ checking if the error raised in a function is properly returned by a workflow;
+        checking if there is an error filename in the error message that contains
+        full traceback including the line in the python function
+    """
+
+    @mark.task
+    def fun_error(x):
+        raise Exception("Error from the function")
+
+    wf = Workflow(name="wf", input_spec=["x"], x=[3, 4], cache_dir=tmpdir).split("x")
+    wf.add(fun_error(name="error", x=wf.lzin.x))
+    wf.set_output([("out", wf.error.lzout.out)])
+
+    with pytest.raises(Exception, match="Task error raised an error") as exinfo:
+        res = wf()
+
+    # getting error file from the error message
+    error_file_match = str(exinfo.value).split("here: ")[-1].split("_error.pklz")[0]
+    error_file = Path(error_file_match) / "_error.pklz"
+    # checking if the file exists
+    assert error_file.exists()
+    # reading error message from the pickle file
+    error_tb = cp.loads(error_file.read_bytes())["error message"]
+    # the error traceback should be a list and should point to a specific line in the function
+    assert isinstance(error_tb, list)
+    assert "in fun_error" in error_tb[-2]

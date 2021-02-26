@@ -784,10 +784,11 @@ def load_and_run(
     except Exception as excinfo:
         # creating result and error files if missing
         errorfile = task.output_dir / "_error.pklz"
-        if not resultfile.exists():
+        if not errorfile.exists():  # not sure if this is needed
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
             errorfile = record_error(task.output_dir, error=traceback)
+        if not resultfile.exists():  # not sure if this is needed
             result = Result(output=None, runtime=None, errored=True)
             save(task.output_dir, result=result)
         raise type(excinfo)(
