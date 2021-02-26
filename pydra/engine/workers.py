@@ -163,6 +163,13 @@ class ConcurrentFuturesWorker(Worker):
             res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
         else:  # it could be tuple that includes pickle files with tasks and inputs
             ind, task_main_pkl, task_orig = runnable
+            if task_orig.name == "img_extract_pdt":
+                import cloudpickle as cp
+                from hashlib import sha256
+
+                img = cp.loads(task_main_pkl.read_bytes()).inputs.img[0]
+                sha = sha256(cp.dumps(img)).hexdigest()
+                print("\n\n hash value in exec as coro ", sha)
             res = await self.loop.run_in_executor(
                 self.pool, load_and_run, task_main_pkl, ind, rerun
             )

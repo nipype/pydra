@@ -696,8 +696,19 @@ def hash_value(value, tp=None, metadata=None, precalculated=None):
             return hash_dir(value, precalculated=precalculated)
         elif type(value).__module__ == "numpy":  # numpy objects
             return sha256(value.tostring()).hexdigest()
-        else:
+        elif (
+            isinstance(
+                value, (int, float, complex, bool, str, bytes, LazyField, os.PathLike)
+            )
+            or value is None
+        ):
             return value
+        else:
+            warnings.warn(
+                f"pydra doesn't fully support hashing for {type(value)}, "
+                f"cp.dumps is used in hash functions, so it could depend on the system"
+            )
+            return sha256(cp.dumps(value)).hexdigest()
 
 
 def output_from_inputfields(output_spec, input_spec):
@@ -812,6 +823,10 @@ def load_task(task_pkl, ind=None):
     if isinstance(task_pkl, str):
         task_pkl = Path(task_pkl)
     task = cp.loads(task_pkl.read_bytes())
+    if task.name == "img_extract_pdt":
+        img0 = task.inputs.img[0]
+        sha0 = sha256(cp.dumps(img0)).hexdigest()
+        print("\n\n !!!!! hash value in load task", sha0)
     if ind is not None:
         _, inputs_dict = task.get_input_el(ind)
         task.inputs = attr.evolve(task.inputs, **inputs_dict)
