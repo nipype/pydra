@@ -4,10 +4,15 @@ from pydra.engine.specs import BaseSpec, SpecInfo
 from pydra.engine.core import TaskBase
 from pydra.engine.helpers import ensure_list
 
+try:
+    from typing import Literal
+except ImportError:  # PY37
+    from typing_extensions import Literal
+
 
 @attr.s(kw_only=True)
 class MergeInputSpec(BaseSpec):
-    axis: ty.Literal["vstack", "hstack"] = attr.ib(
+    axis: Literal["vstack", "hstack"] = attr.ib(
         default="vstack",
         metadata={
             "help_string": "Direction in which to merge, hstack requires same number of elements in each input."
