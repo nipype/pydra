@@ -161,7 +161,7 @@ class TaskBase:
                     raise ValueError(f"Unknown input set {inputs!r}")
                 inputs = self._input_sets[inputs]
 
-        self.inputs = attr.evolve(self.inputs, **inputs)
+            self.inputs = attr.evolve(self.inputs, **inputs)
 
         # checking if metadata is set properly
         self.inputs.check_metadata()
