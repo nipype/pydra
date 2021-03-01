@@ -1,6 +1,7 @@
 import attr
 import typing as ty
-from pydra.engine.specs import BaseSpec, SpecInfo
+import pydra
+from pydra.engine.specs import BaseSpec, SpecInfo, MultiInputObj, MultiOutputObj
 from pydra.engine.core import TaskBase
 from pydra.engine.helpers import ensure_list
 
@@ -117,3 +118,28 @@ class Merge(TaskBase):
             self.output_["out"] = [
                 [val[i] for val in lists] for i in range(len(lists[0]))
             ]
+
+
+@pydra.mark.task
+def Select(inlist: MultiInputObj, index: MultiInputObj) -> MultiOutputObj:
+    """
+    Task to select specific elements from a list
+
+    Examples
+    --------
+
+    >>> from pydra.tasks.core.sequences import Select
+    >>> sl = Select(name="sl")
+    >>> sl.inputs.inlist = [1, 2, 3, 4, 5]
+    >>> sl.inputs.index = [3]
+    >>> out = sl()
+    >>> out.output.out
+    4
+
+    >>> sl = Select(name="sl")
+    >>> out = sl(inlist=[1, 2, 3, 4, 5], index=[3, 4])
+    >>> out.output.out
+    [4, 5]
+
+    """
+    return [inlist[i] for i in index]
