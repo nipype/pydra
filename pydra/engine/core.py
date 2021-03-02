@@ -215,7 +215,7 @@ class TaskBase:
             state["input_spec"] = cp.loads(state["input_spec"])
         if "output_spec" in state:
             state["output_spec"] = cp.loads(state["output_spec"])
-        input_spec = state.get("input_spec", self.input_spec)
+        input_spec = state.get("input_spec", getattr(self, "input_spec", None))
         state["inputs"] = make_klass(input_spec)(**state["inputs"])
         self.__dict__.update(state)
 
