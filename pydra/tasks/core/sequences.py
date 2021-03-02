@@ -12,6 +12,58 @@ except ImportError:  # PY37
 
 
 @attr.s(kw_only=True)
+class SplitInputSpec(BaseSpec):
+    inlist: ty.List = attr.ib(metadata={"help_string": "List of values to split"})
+    splits: ty.List[int] = attr.ib(
+        metadata={
+            "help_string": "Number of outputs in each split - should add to number of inputs"
+        }
+    )
+    squeeze: bool = attr.ib(
+        default=False,
+        metadata={"help_string": "Unfold one-element splits removing the list"},
+    )
+
+
+class Split(TaskBase):
+    """
+    Task to split lists into multiple outputs
+
+    Examples
+    --------
+    >>> from pydra.tasks.core.sequences import Split
+    >>> sp = Split(name="sp", splits=[5, 4, 3, 2, 1])
+    >>> out = sp(inlist=list(range(15)))
+    >>> out.output.out1
+    [0, 1, 2, 3, 4]
+    >>> out.output.out2
+    [5, 6, 7, 8]
+    >>> out.output.out5
+    [14]
+    """
+
+    _task_version = "1"
+    input_spec = SplitInputSpec
+
+    def __init__(self, splits, *args, **kwargs):
+        self.output_spec = SpecInfo(
+            name="Outputs",
+            fields=[(f"out{i + 1}", list) for i in range(len(splits))],
+            bases=(BaseSpec,),
+        )
+        super().__init__(*args, **kwargs)
+        self.inputs.splits = splits
+
+    def _run_task(self):
+        self.output_ = {}
+        left = 0
+        for i, split in enumerate(self.inputs.splits, 1):
+            right = left + split
+            self.output_[f"out{i}"] = self.inputs.inlist[left:right]
+            left = right
+
+
+@attr.s(kw_only=True)
 class MergeInputSpec(BaseSpec):
     axis: Literal["vstack", "hstack"] = attr.ib(
         default="vstack",
