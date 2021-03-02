@@ -132,7 +132,9 @@ class TaskBase:
         self.name = name
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
-        klass = make_klass(self.input_spec)
+        klass = self.input_spec
+        if isinstance(klass, SpecInfo):
+            klass = make_klass(klass)
 
         self.inputs = klass(
             **{
