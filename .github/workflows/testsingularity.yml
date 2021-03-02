@@ -14,13 +14,13 @@ jobs:
     steps:
       - name: Set env
         run: |
-          echo "RELEASE_VERSION=v3.5.0" >> $GITHUB_ENV
+          echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
           echo "NO_ET=TRUE" >> $GITHUB_ENV
       - name: Setup Singularity
         uses: actions/checkout@v2
         with:
           repository: hpcng/singularity
-          ref: 'v3.5.0'
+          ref: 'v3.7.1'
           path: 'singularity'
       - name: Setup GO
         uses: actions/setup-go@v2
