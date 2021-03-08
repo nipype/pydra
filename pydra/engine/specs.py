@@ -12,6 +12,14 @@ def attr_fields(spec, exclude_names=()):
     return [field for field in spec.__attrs_attrs__ if field.name not in exclude_names]
 
 
+def attr_fields_dict(spec, exclude_names=()):
+    return {
+        field.name: field
+        for field in spec.__attrs_attrs__
+        if field.name not in exclude_names
+    }
+
+
 class File:
     """An :obj:`os.pathlike` object, designating a file."""
 
@@ -532,9 +540,8 @@ class ShellOutSpec:
         # if the field is set in input_spec with output_file_template,
         # than the field already should have value
         elif "output_file_template" in fld.metadata:
-            inputs_templ = attr.asdict(inputs)
             value = template_update_single(
-                fld, inputs_templ, output_dir=output_dir, spec_type="output"
+                fld, inputs=inputs, output_dir=output_dir, spec_type="output"
             )
             if fld.type is MultiOutputFile and type(value) is list:
                 return [Path(val) for val in value]

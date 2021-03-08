@@ -82,6 +82,34 @@ def test_shell_cmd_inputs_1b():
     assert shelly.cmdline == "executable inp-1 arg"
 
 
+def test_shell_cmd_inputs_1_st():
+    """ additional input with provided position, checking cmdline when splitter """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=str,
+                    metadata={"position": 1, "help_string": "inp1", "argstr": ""},
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable="executable",
+        args="arg",
+        inpA=["inp1", "inp2"],
+        input_spec=my_input_spec,
+    ).split("inpA")
+    # cmdline should be a list
+    assert shelly.cmdline[0] == "executable inp1 arg"
+    assert shelly.cmdline[1] == "executable inp2 arg"
+
+
 def test_shell_cmd_inputs_2():
     """ additional inputs with provided positions """
     my_input_spec = SpecInfo(
@@ -535,6 +563,32 @@ def test_shell_cmd_inputs_format_2():
         executable="executable", inpA=["el_1", "el_2"], input_spec=my_input_spec
     )
     assert shelly.cmdline == "executable -v el_1 -v el_2"
+
+
+def test_shell_cmd_inputs_format_3():
+    """ adding float formatting for argstr with input field"""
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=float,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "-v {inpA:.5f}",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="executable", inpA=0.007, input_spec=my_input_spec
+    )
+    assert shelly.cmdline == "executable -v 0.00700"
 
 
 def test_shell_cmd_inputs_mandatory_1():
@@ -1302,6 +1356,301 @@ def test_shell_cmd_inputs_template_8(tmpdir):
         shelly.cmdline
         == f"executable {tmpdir.join('a_file.t')} {str(shelly.output_dir / 'a_file_out.txt')}"
     )
+
+
+def test_shell_cmd_inputs_template_9(tmpdir):
+    """ additional inputs, one uses output_file_template with two fields:
+        one File and one ints - the output should be recreated from the template
+    """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "inpInt",
+                attr.ib(
+                    type=int,
+                    metadata={
+                        "position": 2,
+                        "help_string": "inp int",
+                        "argstr": "-i",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 3,
+                        "help_string": "outA",
+                        "argstr": "-o",
+                        "output_file_template": "{inpA}_{inpInt}_out.txt",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    inpA_file = tmpdir.join("inpA.t")
+    inpA_file.write("content")
+
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, inpA=inpA_file, inpInt=3
+    )
+
+    assert (
+        shelly.cmdline
+        == f"executable {tmpdir.join('inpA.t')} -i 3 -o {str(shelly.output_dir / 'inpA_3_out.txt')}"
+    )
+    # checking if outA in the output fields
+    assert shelly.output_names == ["return_code", "stdout", "stderr", "outA"]
+
+
+def test_shell_cmd_inputs_template_9a(tmpdir):
+    """ additional inputs, one uses output_file_template with two fields:
+        one file and one string without extension - should be fine
+    """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "inpStr",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 2,
+                        "help_string": "inp str",
+                        "argstr": "-i",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 3,
+                        "help_string": "outA",
+                        "argstr": "-o",
+                        "output_file_template": "{inpA}_{inpStr}_out.txt",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    inpA_file = tmpdir.join("inpA.t")
+    inpA_file.write("content")
+
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, inpA=inpA_file, inpStr="hola"
+    )
+
+    assert (
+        shelly.cmdline
+        == f"executable {tmpdir.join('inpA.t')} -i hola -o {str(shelly.output_dir / 'inpA_hola_out.txt')}"
+    )
+    # checking if outA in the output fields
+    assert shelly.output_names == ["return_code", "stdout", "stderr", "outA"]
+
+
+def test_shell_cmd_inputs_template_9b_err(tmpdir):
+    """ output_file_template with two fields that are both Files,
+        an exception should be raised
+    """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "inpFile",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 2,
+                        "help_string": "inp file",
+                        "argstr": "-i",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 3,
+                        "help_string": "outA",
+                        "argstr": "-o",
+                        "output_file_template": "{inpA}_{inpFile}_out.txt",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    inpA_file = tmpdir.join("inpA.t")
+    inpA_file.write("content")
+
+    inpFile_file = tmpdir.join("inpFile.t")
+    inpFile_file.write("content")
+
+    shelly = ShellCommandTask(
+        executable="executable",
+        input_spec=my_input_spec,
+        inpA=inpA_file,
+        inpFile=inpFile_file,
+    )
+    # the template has two files so the exception should be raised
+    with pytest.raises(Exception, match="can't have multiple paths"):
+        shelly.cmdline
+
+
+def test_shell_cmd_inputs_template_9c_err(tmpdir):
+    """ output_file_template with two fields: a file and a string with extension,
+        that should be used as an additional file and the exception should be raised
+    """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "inpStr",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 2,
+                        "help_string": "inp str with extension",
+                        "argstr": "-i",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 3,
+                        "help_string": "outA",
+                        "argstr": "-o",
+                        "output_file_template": "{inpA}_{inpStr}_out.txt",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    inpA_file = tmpdir.join("inpA.t")
+    inpA_file.write("content")
+
+    shelly = ShellCommandTask(
+        executable="executable",
+        input_spec=my_input_spec,
+        inpA=inpA_file,
+        inpStr="hola.txt",
+    )
+    # inptStr has an extension so should be treated as a second file in the template formatting
+    # and teh exception should be raised
+    with pytest.raises(Exception, match="can't have multiple paths"):
+        shelly.cmdline
+
+
+def test_shell_cmd_inputs_template_10():
+    """ output_file_template uses a float field with formatting"""
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=float,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "{inpA:.1f}",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 2,
+                        "help_string": "outA",
+                        "argstr": "-o",
+                        "output_file_template": "file_{inpA:.1f}_out",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, inpA=3.3456
+    )
+    # outA has argstr in the metadata fields, so it's a part of the command line
+    # the full path will be use din the command line
+    assert (
+        shelly.cmdline == f"executable 3.3 -o {str(shelly.output_dir / 'file_3.3_out')}"
+    )
+    # checking if outA in the output fields
+    assert shelly.output_names == ["return_code", "stdout", "stderr", "outA"]
 
 
 # TODO: after deciding how we use requires/templates

@@ -1056,6 +1056,48 @@ def test_shell_cmd_inputspec_7b(plugin, results_function, tmpdir):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_7c(plugin, results_function, tmpdir):
+    """
+        providing output name using input_spec,
+        using name_tamplate with txt extension (extension from args should be removed
+    """
+    cmd = "touch"
+    args = "newfile_tmp.txt"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out1",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{args}.txt",
+                        "help_string": "output file",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        args=args,
+        input_spec=my_input_spec,
+        cache_dir=tmpdir,
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.out1.exists()
+    # checking if the file is created in a good place
+    assert shelly.output_dir == res.output.out1.parent
+    assert res.output.out1.name == "newfile_tmp.txt"
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
     """
         providing new file and output name using input_spec,
