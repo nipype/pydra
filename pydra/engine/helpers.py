@@ -867,6 +867,8 @@ def argstr_formatting(argstr, inputs, value_updates=None):
         inputs_dict.update(value_updates)
     # getting all fields that should be formatted, i.e. {field_name}, ...
     inp_fields = re.findall("{\w+}", argstr)
+    inp_fields_float = re.findall("{\w+:[0-9.]+f}", argstr)
+    inp_fields += [re.sub(":[0-9.]+f", "", el) for el in inp_fields_float]
     val_dict = {}
     for fld in inp_fields:
         fld_name = fld[1:-1]  # extracting the name form {field_name}
