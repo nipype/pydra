@@ -695,7 +695,10 @@ def hash_value(value, tp=None, metadata=None, precalculated=None):
         ):
             return hash_dir(value, precalculated=precalculated)
         elif type(value).__module__ == "numpy":  # numpy objects
-            return sha256(value.tostring()).hexdigest()
+            return [
+                hash_value(el, tp, metadata, precalculated)
+                for el in ensure_list(value.tolist())
+            ]
         else:
             return value
 

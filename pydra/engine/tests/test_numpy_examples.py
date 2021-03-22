@@ -2,10 +2,13 @@ import numpy as np
 import typing as ty
 import importlib
 import pytest
+import pickle as pk
 
 from ..submitter import Submitter
 from ..core import Workflow
 from ...mark import task, annotate
+from .utils import identity
+from ..helpers import hash_value
 
 if importlib.util.find_spec("numpy") is None:
     pytest.skip("can't find numpy library", allow_module_level=True)
@@ -51,3 +54,43 @@ def test_multiout_st(tmpdir):
     assert results[0] == {"wf.val": [0, 1, 2]}
     for el in range(3):
         assert np.array_equal(results[1].output.array[el], np.array([el, el]))
+
+
+def test_numpy_hash_1():
+    """hashing check for numeric numpy array"""
+    A = np.array([1, 2])
+    A_pk = pk.loads(pk.dumps(A))
+    assert (A == A_pk).all()
+    assert hash_value(A) == hash_value(A_pk)
+
+
+def test_numpy_hash_2():
+    """hashing check for numpy array of type object"""
+    A = np.array([["NDAR"]], dtype=object)
+    A_pk = pk.loads(pk.dumps(A))
+    assert (A == A_pk).all()
+    assert hash_value(A) == hash_value(A_pk)
+
+
+def test_task_numpyinput_1(tmpdir):
+    """ task with numeric numpy array as an input"""
+    nn = identity(name="NA", x=[np.array([1, 2]), np.array([3, 4])])
+    nn.cache_dir = tmpdir
+    nn.split("x")
+    # checking the results
+    results = nn()
+    assert (results[0].output.out == np.array([1, 2])).all()
+    assert (results[1].output.out == np.array([3, 4])).all()
+
+
+def test_task_numpyinput_2(tmpdir):
+    """ task with numpy array of type object as an input"""
+    nn = identity(
+        name="NA",
+        x=[np.array(["VAL1"], dtype=object), np.array(["VAL2"], dtype=object)],
+    )
+    nn.cache_dir = tmpdir
+    nn.split("x")
+    # checking the results
+    results = nn()
+    assert (results[0].output.out == np.array(["VAL1"], dtype=object)).all()
