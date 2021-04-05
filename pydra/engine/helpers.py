@@ -63,6 +63,8 @@ def ensure_list(obj, tuple2list=False):
         return list(obj)
     elif isinstance(obj, list):
         return obj
+    elif isinstance(obj, LazyField):
+        return obj
     return [obj]
 
 
