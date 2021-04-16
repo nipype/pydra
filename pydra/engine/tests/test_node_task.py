@@ -14,6 +14,7 @@ from .utils import (
     fun_dict,
     fun_file,
     fun_file_list,
+    op_4var,
 )
 
 from ..core import TaskBase
@@ -1067,6 +1068,22 @@ def test_task_state_6a(plugin, tmpdir):
     assert nn.output_dir
     for odir in nn.output_dir:
         assert odir.exists()
+
+
+def test_task_state_7(tmpdir):
+    task_4var = op_4var(
+        name="op_4var",
+        a="a1",
+        b=[["b1", "b2"], ["b3", "b4"]],
+        c=["c1", "c2"],
+        d=["d1", "d2"],
+        cache_dir=tmpdir,
+    )
+    task_4var.split(("b", ["c", "d"]), cont_dim={"b": 2})
+    task_4var()
+    res = task_4var.result()
+    assert len(res) == 4
+    assert res[3].output.out == "a1 b4 c2 d2"
 
 
 @pytest.mark.flaky(reruns=2)  # when dask

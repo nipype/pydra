@@ -45,6 +45,11 @@ else:
 
 
 @mark.task
+def op_4var(a, b, c, d):
+    return f"{a} {b} {c} {d}"
+
+
+@mark.task
 def fun_addtwo(a):
     import time
 
