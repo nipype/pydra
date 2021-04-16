@@ -158,6 +158,26 @@ def test_wf_1_call_exception(plugin, tmpdir):
         assert "Specify submitter OR plugin" in str(e.value)
 
 
+def test_wf_1_inp_in_call(tmpdir):
+    """ Defining input in __call__"""
+    wf = Workflow(name="wf_1", input_spec=["x"], cache_dir=tmpdir)
+    wf.add(add2(name="add2", x=wf.lzin.x))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 1
+    results = wf(x=2)
+    assert 4 == results.output.out
+
+
+def test_wf_1_upd_in_run(tmpdir):
+    """ Updating input in __call__ """
+    wf = Workflow(name="wf_1", input_spec=["x"], cache_dir=tmpdir)
+    wf.add(add2(name="add2", x=wf.lzin.x))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    wf.inputs.x = 1
+    results = wf(x=2)
+    assert 4 == results.output.out
+
+
 def test_wf_2(plugin, tmpdir):
     """ workflow with 2 tasks, no splitter"""
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
@@ -552,6 +572,27 @@ def test_wf_st_1_call_noplug_nosubm(plugin, tmpdir):
     assert wf.output_dir
     for odir in wf.output_dir:
         assert odir.exists()
+
+
+def test_wf_st_1_inp_in_call(tmpdir):
+    """ Defining input in __call__"""
+    wf = Workflow(name="wf_spl_1", input_spec=["x"], cache_dir=tmpdir).split("x")
+    wf.add(add2(name="add2", x=wf.lzin.x))
+    wf.set_output([("out", wf.add2.lzout.out)])
+    results = wf(x=[1, 2])
+    assert results[0].output.out == 3
+    assert results[1].output.out == 4
+
+
+def test_wf_st_1_upd_inp_call(tmpdir):
+    """ Updating input in __call___"""
+    wf = Workflow(name="wf_spl_1", input_spec=["x"], cache_dir=tmpdir).split("x")
+    wf.add(add2(name="add2", x=wf.lzin.x))
+    wf.inputs.x = [11, 22]
+    wf.set_output([("out", wf.add2.lzout.out)])
+    results = wf(x=[1, 2])
+    assert results[0].output.out == 3
+    assert results[1].output.out == 4
 
 
 def test_wf_st_noinput_1(plugin, tmpdir):
