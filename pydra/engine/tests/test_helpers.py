@@ -14,7 +14,7 @@ from ..helpers import (
     get_available_cpus,
     save,
     load_and_run,
-    position_adjustment,
+    position_sort,
 )
 from .. import helpers_file
 from ..specs import File, Directory
@@ -303,6 +303,6 @@ def test_load_and_run_wf(tmpdir):
         [(None, "b"), (1, "a"), (None, "c")],
     ],
 )
-def test_position_adjustment(pos_args):
-    final_args = position_adjustment(pos_args)
+def test_position_sort(pos_args):
+    final_args = position_sort(pos_args)
     assert final_args == ["a", "b", "c"]

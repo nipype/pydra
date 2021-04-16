@@ -8,14 +8,29 @@ from filelock import SoftFileLock
 import os
 import sys
 from hashlib import sha256
+from uuid import uuid4
 import subprocess as sp
 import getpass
-import uuid
+import re
 from time import strftime
 from traceback import format_exception
+import typing as ty
+import inspect
+import warnings
 
 
-from .specs import Runtime, File, Directory, attr_fields, Result
+from .specs import (
+    Runtime,
+    File,
+    Directory,
+    attr_fields,
+    Result,
+    LazyField,
+    MultiOutputObj,
+    MultiInputObj,
+    MultiInputFile,
+    MultiOutputFile,
+)
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 
 
@@ -41,10 +56,13 @@ def ensure_list(obj, tuple2list=False):
     """
     if obj is None:
         return []
-    if isinstance(obj, list):
+    # list or numpy.array (this might need some extra flag in case an array has to be converted)
+    elif isinstance(obj, list) or hasattr(obj, "__array__"):
         return obj
     elif tuple2list and isinstance(obj, tuple):
         return list(obj)
+    elif isinstance(obj, list):
+        return obj
     return [obj]
 
 
@@ -91,6 +109,8 @@ def load_result(checksum, cache_locations):
     """
     if not cache_locations:
         return None
+    # TODO: if there are issues with loading, we might need to
+    # TODO: sleep and repeat loads (after checkin that there are no lock files!)
     for location in cache_locations:
         if (location / checksum).exists():
             result_file = location / checksum / "_result.pklz"
@@ -140,8 +160,14 @@ def copyfile_workflow(wf_path, result):
     """ if file in the wf results, the file will be copied to the workflow directory"""
     for field in attr_fields(result.output):
         value = getattr(result.output, field.name)
-        new_value = _copyfile_single_value(wf_path=wf_path, value=value)
-        if new_value != value:
+        # if the field is a path or it can contain a path _copyfile_single_value is run
+        # to move all files and directories to the workflow directory
+        if field.type in [File, Directory, MultiOutputObj] or type(value) in [
+            list,
+            tuple,
+            dict,
+        ]:
+            new_value = _copyfile_single_value(wf_path=wf_path, value=value)
             setattr(result.output, field.name, new_value)
     return result
 
@@ -232,10 +258,12 @@ def make_klass(spec):
         newfields = dict()
         for item in fields:
             if len(item) == 2:
+                name = item[0]
                 if isinstance(item[1], attr._make._CountingAttr):
-                    newfields[item[0]] = item[1]
+                    newfields[name] = item[1]
+                    newfields[name].validator(custom_validator)
                 else:
-                    newfields[item[0]] = attr.ib(type=item[1])
+                    newfields[name] = attr.ib(type=item[1], validator=custom_validator)
             else:
                 if (
                     any([isinstance(ii, attr._make._CountingAttr) for ii in item])
@@ -251,15 +279,210 @@ def make_klass(spec):
                         name, tp = item[:2]
                         if isinstance(item[-1], dict) and "help_string" in item[-1]:
                             mdata = item[-1]
-                            newfields[name] = attr.ib(type=tp, metadata=mdata)
+                            newfields[name] = attr.ib(
+                                type=tp, metadata=mdata, validator=custom_validator
+                            )
                         else:
                             dflt = item[-1]
-                            newfields[name] = attr.ib(type=tp, default=dflt)
+                            newfields[name] = attr.ib(
+                                type=tp, default=dflt, validator=custom_validator
+                            )
                     elif len(item) == 4:
                         name, tp, dflt, mdata = item
-                        newfields[name] = attr.ib(type=tp, default=dflt, metadata=mdata)
+                        newfields[name] = attr.ib(
+                            type=tp,
+                            default=dflt,
+                            metadata=mdata,
+                            validator=custom_validator,
+                        )
+            # if type has converter, e.g. MultiInputObj
+            if hasattr(newfields[name].type, "converter"):
+                newfields[name].converter = newfields[name].type.converter
         fields = newfields
     return attr.make_class(spec.name, fields, bases=spec.bases, kw_only=True)
+
+
+def custom_validator(instance, attribute, value):
+    """simple custom validation
+    take into account ty.Union, ty.List, ty.Dict (but only one level depth)
+    adding an additional validator, if allowe_values provided
+    """
+    validators = []
+    tp_attr = attribute.type
+    # a flag that could be changed to False, if the type is not recognized
+    check_type = True
+    if (
+        value is attr.NOTHING
+        or value is None
+        or attribute.name.startswith("_")  # e.g. _func
+        or isinstance(value, LazyField)
+        or tp_attr
+        in [
+            ty.Any,
+            inspect._empty,
+            MultiOutputObj,
+            MultiInputObj,
+            MultiOutputFile,
+            MultiInputFile,
+        ]
+    ):
+        check_type = False  # no checking of the type
+    elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:
+        tp = _single_type_update(tp_attr, name=attribute.name)
+        cont_type = None
+    else:  # more complex types
+        cont_type, tp_attr_list = _check_special_type(tp_attr, name=attribute.name)
+        if cont_type is ty.Union:
+            tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
+        elif cont_type is list:
+            tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
+        elif cont_type is dict:
+            # assuming that it should have length of 2 for keys and values
+            if len(tp_attr_list) != 2:
+                check_type = False
+            else:
+                tp_attr_key, tp_attr_val = tp_attr_list
+            # updating types separately for keys and values
+            tp_k, check_k = _types_updates([tp_attr_key], name=attribute.name)
+            tp_v, check_v = _types_updates([tp_attr_val], name=attribute.name)
+            # assuming that I have to be able to check keys and values
+            if not (check_k and check_v):
+                check_type = False
+            else:
+                tp = {"key": tp_k, "val": tp_v}
+        else:
+            warnings.warn(
+                f"no type check for {attribute.name} field, no type check implemented for value {value} and type {tp_attr}"
+            )
+            check_type = False
+
+    if check_type:
+        validators.append(_type_validator(instance, attribute, value, tp, cont_type))
+
+    # checking additional requirements for values (e.g. allowed_values)
+    meta_attr = attribute.metadata
+    if "allowed_values" in meta_attr:
+        validators.append(_allowed_values_validator(isinstance, attribute, value))
+    return validators
+
+
+def _type_validator(instance, attribute, value, tp, cont_type):
+    """ creating a customized type validator,
+    uses validator.deep_iterable/mapping if the field is a container
+    (i.e. ty.List or ty.Dict),
+    it also tries to guess when the value is a list due to the splitter
+    and validates the elements
+    """
+    if cont_type is None or cont_type is ty.Union:
+        # if tp is not (list,), we are assuming that the value is a list
+        # due to the splitter, so checking the member types
+        if isinstance(value, list) and tp != (list,):
+            return attr.validators.deep_iterable(
+                member_validator=attr.validators.instance_of(
+                    tp + (attr._make._Nothing,)
+                )
+            )(instance, attribute, value)
+        else:
+            return attr.validators.instance_of(tp + (attr._make._Nothing,))(
+                instance, attribute, value
+            )
+    elif cont_type is list:
+        return attr.validators.deep_iterable(
+            member_validator=attr.validators.instance_of(tp + (attr._make._Nothing,))
+        )(instance, attribute, value)
+    elif cont_type is dict:
+        return attr.validators.deep_mapping(
+            key_validator=attr.validators.instance_of(tp["key"]),
+            value_validator=attr.validators.instance_of(
+                tp["val"] + (attr._make._Nothing,)
+            ),
+        )(instance, attribute, value)
+    else:
+        raise Exception(
+            f"container type of {attribute.name} should be None, list, dict or ty.Union, and not {cont_type}"
+        )
+
+
+def _types_updates(tp_list, name):
+    """updating the type's tuple with possible additional types"""
+    tp_upd_list = []
+    check = True
+    for tp_el in tp_list:
+        tp_upd = _single_type_update(tp_el, name, simplify=True)
+        if tp_upd is None:
+            check = False
+            break
+        else:
+            tp_upd_list += list(tp_upd)
+    tp_upd = tuple(set(tp_upd_list))
+    return tp_upd, check
+
+
+def _single_type_update(tp, name, simplify=False):
+    """ updating a single type with other related types - e.g. adding bytes for str
+        if simplify is True, than changing typing.List to list etc.
+        (assuming that I validate only one depth, so have to simplify at some point)
+    """
+    if isinstance(tp, type) or tp in [File, Directory]:
+        if tp is str:
+            return (str, bytes)
+        elif tp in [File, Directory, os.PathLike]:
+            return (os.PathLike, str)
+        elif tp is float:
+            return (float, int)
+        else:
+            return (tp,)
+    elif simplify is True:
+        warnings.warn(f"simplify validator for {name} field, checking only one depth")
+        cont_tp, types_list = _check_special_type(tp, name=name)
+        if cont_tp is list:
+            return (list,)
+        elif cont_tp is dict:
+            return (dict,)
+        elif cont_tp is ty.Union:
+            return types_list
+        else:
+            warnings.warn(
+                f"no type check for {name} field, type check not implemented for type of {tp}"
+            )
+            return None
+    else:
+        warnings.warn(
+            f"no type check for {name} field, type check not implemented for type - {tp}, consider using simplify=True"
+        )
+        return None
+
+
+def _check_special_type(tp, name):
+    """checking if the type is a container: ty.List, ty.Dict or ty.Union """
+    if sys.version_info.minor >= 8:
+        return ty.get_origin(tp), ty.get_args(tp)
+    else:
+        if isinstance(tp, type):  # simple type
+            return None, ()
+        else:
+            if tp._name == "List":
+                return list, tp.__args__
+            elif tp._name == "Dict":
+                return dict, tp.__args__
+            elif tp.__origin__ is ty.Union:
+                return ty.Union, tp.__args__
+            else:
+                warnings.warn(
+                    f"not type check for {name} field, type check not implemented for type {tp}"
+                )
+                return None, ()
+
+
+def _allowed_values_validator(instance, attribute, value):
+    """ checking if the values is in allowed_values"""
+    allowed = attribute.metadata["allowed_values"]
+    if value is attr.NOTHING:
+        pass
+    elif value not in allowed:
+        raise ValueError(
+            f"value of {attribute.name} has to be from {allowed}, but {value} provided"
+        )
 
 
 async def read_stream_and_display(stream, display):
@@ -427,12 +650,17 @@ def get_open_loop():
     """
     if os.name == "nt":
         loop = asyncio.ProactorEventLoop()  # for subprocess' pipes on Windows
-        asyncio.set_event_loop(loop)
     else:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
+        try:
+            loop = asyncio.get_event_loop()
+        # in case RuntimeError: There is no current event loop in thread 'MainThread'
+        except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+        else:
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
     return loop
 
 
@@ -441,14 +669,16 @@ def hash_function(obj):
     return sha256(str(obj).encode()).hexdigest()
 
 
-def hash_value(value, tp=None, metadata=None):
+def hash_value(value, tp=None, metadata=None, precalculated=None):
     """calculating hash or returning values recursively"""
     if metadata is None:
         metadata = {}
-    if isinstance(value, (tuple, list)):
-        return [hash_value(el, tp, metadata) for el in value]
+    if isinstance(value, (tuple, list, set)):
+        return [hash_value(el, tp, metadata, precalculated) for el in value]
     elif isinstance(value, dict):
-        dict_hash = {k: hash_value(v, tp, metadata) for (k, v) in value.items()}
+        dict_hash = {
+            k: hash_value(v, tp, metadata, precalculated) for (k, v) in value.items()
+        }
         # returning a sorted object
         return [list(el) for el in sorted(dict_hash.items(), key=lambda x: x[0])]
     else:  # not a container
@@ -457,60 +687,51 @@ def hash_value(value, tp=None, metadata=None):
             and is_existing_file(value)
             and "container_path" not in metadata
         ):
-            return hash_file(value)
+            return hash_file(value, precalculated=precalculated)
         elif (
             (tp is File or "pydra.engine.specs.Directory" in str(tp))
             and is_existing_file(value)
             and "container_path" not in metadata
         ):
-            return hash_dir(value)
+            return hash_dir(value, precalculated=precalculated)
+        elif type(value).__module__ == "numpy":  # numpy objects
+            return [
+                hash_value(el, tp, metadata, precalculated)
+                for el in ensure_list(value.tolist())
+            ]
         else:
             return value
 
 
-def output_names_from_inputfields(inputs):
-    """
-    Collect outputs from input fields with output_file_template.
-
-    Parameters
-    ----------
-    inputs :
-        TODO
-
-    """
-    output_names = []
-    for fld in attr_fields(inputs):
-        if "output_file_template" in fld.metadata:
-            if "output_field_name" in fld.metadata:
-                field_name = fld.metadata["output_field_name"]
-            else:
-                field_name = fld.name
-            output_names.append(field_name)
-    return output_names
-
-
-def output_from_inputfields(output_spec, inputs):
+def output_from_inputfields(output_spec, input_spec):
     """
     Collect values from output from input fields.
+    If names_only is False, the output_spec is updated,
+    if names_only is True only the names are returned
 
     Parameters
     ----------
     output_spec :
         TODO
-    inputs :
+    input_spec :
         TODO
 
     """
-    for fld in attr_fields(inputs):
+    current_output_spec_names = [f.name for f in attr.fields(make_klass(output_spec))]
+    new_fields = []
+    for fld in attr.fields(make_klass(input_spec)):
         if "output_file_template" in fld.metadata:
-            value = getattr(inputs, fld.name)
             if "output_field_name" in fld.metadata:
                 field_name = fld.metadata["output_field_name"]
             else:
                 field_name = fld.name
-            output_spec.fields.append(
-                (field_name, attr.ib(type=File, metadata={"value": value}))
-            )
+            # not adding if the field already in teh output_spec
+            if field_name not in current_output_spec_names:
+                # TODO: should probably remove some of the keys
+                new_fields.append(
+                    (field_name, attr.ib(type=File, metadata=fld.metadata))
+                )
+    output_spec.fields += new_fields
     return output_spec
 
 
@@ -566,10 +787,11 @@ def load_and_run(
     except Exception as excinfo:
         # creating result and error files if missing
         errorfile = task.output_dir / "_error.pklz"
-        if not resultfile.exists():
+        if not errorfile.exists():  # not sure if this is needed
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
             errorfile = record_error(task.output_dir, error=traceback)
+        if not resultfile.exists():  # not sure if this is needed
             result = Result(output=None, runtime=None, errored=True)
             save(task.output_dir, result=result)
         raise type(excinfo)(
@@ -597,42 +819,77 @@ def load_task(task_pkl, ind=None):
         _, inputs_dict = task.get_input_el(ind)
         task.inputs = attr.evolve(task.inputs, **inputs_dict)
         task.state = None
+        # resetting uid for task
+        task._uid = uuid4().hex
     return task
 
 
-def position_adjustment(pos_args):
+def position_sort(args):
     """
-    sorting elements with the first element - position,
-    the negative positions should go to the end of the list
-    everything that has no position (i.e. it's None),
-    should go between elements with positive positions an with negative pos.
-    Returns a list of sorted args.
+    Sort objects by position, following Python indexing conventions.
+
+    Ordering is postive positions, lowest to highest, followed by unspecified
+    positions (``None``) and negative positions, lowest to highest.
+
+    >>> position_sort([(None, "d"), (-3, "e"), (2, "b"), (-2, "f"), (5, "c"), (1, "a")])
+    ['a', 'b', 'c', 'd', 'e', 'f']
+
+    Parameters
+    ----------
+    args : list of (int/None, object) tuples
+
+    Returns
+    -------
+    list of objects
     """
-    # sorting all elements of the command
-    try:
-        pos_args.sort()
-    except TypeError:  # if some positions are None
-        pos_args_none = []
-        pos_args_int = []
-        for el in pos_args:
-            if el[0] is None:
-                pos_args_none.append(el)
-            else:
-                pos_args_int.append(el)
-            pos_args_int.sort()
-        last_el = pos_args_int[-1][0]
-        for el_none in pos_args_none:
-            last_el += 1
-            pos_args_int.append((last_el, el_none[1]))
-        pos_args = pos_args_int
+    import bisect
 
-    # if args available, they should be moved at the of the list
-    while pos_args[0][0] < 0:
-        pos_args.append(pos_args.pop(0))
+    pos, none, neg = [], [], []
+    for entry in args:
+        position = entry[0]
+        if position is None:
+            # Take existing order
+            none.append(entry[1])
+        elif position < 0:
+            # Sort negatives while collecting
+            bisect.insort(neg, entry)
+        else:
+            # Sort positives while collecting
+            bisect.insort(pos, entry)
 
-    # dropping the position index
-    cmd_args = []
-    for el in pos_args:
-        cmd_args += el[1]
+    return [arg for _, arg in pos] + none + [arg for _, arg in neg]
 
-    return cmd_args
+
+def argstr_formatting(argstr, inputs, value_updates=None):
+    """ formatting argstr that have form {field_name},
+    using values from inputs and updating with value_update if provided
+    """
+    inputs_dict = attr.asdict(inputs)
+    # if there is a value that has to be updated (e.g. single value from a list)
+    if value_updates:
+        inputs_dict.update(value_updates)
+    # getting all fields that should be formatted, i.e. {field_name}, ...
+    inp_fields = re.findall("{\w+}", argstr)
+    inp_fields_float = re.findall("{\w+:[0-9.]+f}", argstr)
+    inp_fields += [re.sub(":[0-9.]+f", "", el) for el in inp_fields_float]
+    val_dict = {}
+    for fld in inp_fields:
+        fld_name = fld[1:-1]  # extracting the name form {field_name}
+        fld_value = inputs_dict[fld_name]
+        if fld_value is attr.NOTHING:
+            # if value is NOTHING, nothing should be added to the command
+            val_dict[fld_name] = ""
+        else:
+            val_dict[fld_name] = fld_value
+
+    # formatting string based on the val_dict
+    argstr_formatted = argstr.format(**val_dict)
+    # removing extra commas and spaces after removing the field that have NOTHING
+    argstr_formatted = (
+        argstr_formatted.replace("[ ", "[")
+        .replace(" ]", "]")
+        .replace("[,", "[")
+        .replace(",]", "]")
+        .strip()
+    )
+    return argstr_formatted

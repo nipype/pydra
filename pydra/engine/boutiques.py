@@ -178,9 +178,9 @@ class BoshTask(ShellCommandTask):
         spec = SpecInfo(name="Outputs", fields=fields, bases=(ShellOutSpec,))
         return spec
 
-    def _command_args_single(self, state_ind, ind=None):
+    def _command_args_single(self, state_ind=None, index=None):
         """Get command line arguments for a single state"""
-        input_filepath = self._bosh_invocation_file(state_ind=state_ind, ind=ind)
+        input_filepath = self._bosh_invocation_file(state_ind=state_ind, index=index)
         cmd_list = (
             self.inputs.executable
             + [str(self.bosh_file), input_filepath]
@@ -189,12 +189,10 @@ class BoshTask(ShellCommandTask):
         )
         return cmd_list
 
-    def _bosh_invocation_file(self, state_ind, ind=None):
+    def _bosh_invocation_file(self, state_ind=None, index=None):
         """creating bosh invocation file - json file with inputs values"""
         input_json = {}
-        for f in attr_fields(self.inputs):
-            if f.name in ["executable", "args"]:
-                continue
+        for f in attr_fields(self.inputs, exclude_names=("executable", "args")):
             if self.state and f"{self.name}.{f.name}" in state_ind:
                 value = getattr(self.inputs, f.name)[state_ind[f"{self.name}.{f.name}"]]
             else:
@@ -208,7 +206,7 @@ class BoshTask(ShellCommandTask):
 
                 input_json[f.name] = value
 
-        filename = self.cache_dir / f"{self.name}-{ind}.json"
+        filename = self.cache_dir / f"{self.name}-{index}.json"
         with open(filename, "w") as jsonfile:
             json.dump(input_json, jsonfile)
 

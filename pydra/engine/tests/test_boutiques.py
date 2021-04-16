@@ -26,11 +26,12 @@ Infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_boutiques_1(maskfile, plugin, results_function):
+def test_boutiques_1(maskfile, plugin, results_function, tmpdir):
     """ simple task to run fsl.bet using BoshTask"""
     btask = BoshTask(name="NA", zenodo_id="1482743")
     btask.inputs.infile = Infile
     btask.inputs.maskfile = maskfile
+    btask.cache_dir = tmpdir
     res = results_function(btask, plugin)
 
     assert res.output.return_code == 0
@@ -97,11 +98,12 @@ def test_boutiques_spec_2():
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-def test_boutiques_wf_1(maskfile, plugin):
+def test_boutiques_wf_1(maskfile, plugin, tmpdir):
     """ wf with one task that runs fsl.bet using BoshTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
     wf.inputs.maskfile = maskfile
     wf.inputs.infile = Infile
+    wf.cache_dir = tmpdir
 
     wf.add(
         BoshTask(
@@ -125,14 +127,16 @@ def test_boutiques_wf_1(maskfile, plugin):
 @no_win
 @need_bosh_docker
 @pytest.mark.flaky(reruns=3)
+@pytest.mark.xfail(reason="issues with bosh for 4472771")
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-def test_boutiques_wf_2(maskfile, plugin):
+def test_boutiques_wf_2(maskfile, plugin, tmpdir):
     """ wf with two BoshTasks (fsl.bet and fsl.stats) and one ShellTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
     wf.inputs.maskfile = maskfile
     wf.inputs.infile = Infile
+    wf.cache_dir = tmpdir
 
     wf.add(
         BoshTask(
@@ -142,9 +146,10 @@ def test_boutiques_wf_2(maskfile, plugin):
             maskfile=wf.lzin.maskfile,
         )
     )
+    # used to be "3240521", but can't access anymore
     wf.add(
         BoshTask(
-            name="stat", zenodo_id="3240521", input_file=wf.bet.lzout.outfile, v=True
+            name="stat", zenodo_id="4472771", input_file=wf.bet.lzout.outfile, v=True
         )
     )
     wf.add(ShellCommandTask(name="cat", executable="cat", args=wf.stat.lzout.output))

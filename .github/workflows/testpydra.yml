@@ -1,0 +1,58 @@
+name: Pydra
+
+on: [push, pull_request]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        python-version: [3.7, 3.8, 3.9]
+        install: [install, develop, wheel]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Disable etelemetry
+      run:  echo "NO_ET=TRUE" >> $GITHUB_ENV
+    - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Update build tools
+      run: python -m pip install --upgrade pip setuptools
+
+
+    - name: Install Pydra tests dependencies (develop or setup.py install)
+      if: matrix.install == 'develop' || matrix.install == 'install'
+      run: pip install ".[test]"
+
+
+    - name: Install dependencies (setup.py install)
+      if: matrix.install == 'install'
+      run: python setup.py install
+
+    - name: Install dependencies (wheel)
+      if: matrix.install == 'wheel'
+      run: |
+        python setup.py bdist_wheel
+        pip install dist/*.whl
+
+
+    - name: Install Pydra tests dependencies (wheel)
+      if: matrix.install == 'wheel'
+      run: pip install "$( ls dist/pydra*.whl )[test]"
+
+
+    - name: Pytest
+      run: pytest -vs -n auto --cov pydra  --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra
+
+
+    - name: Upload to codecov
+      run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW

@@ -1,10 +1,12 @@
 from ..graph import DiGraph
+from .utils import DOT_FLAG
 import pytest
 
 
 class ObjTest:
     def __init__(self, name):
         self.name = name
+        self.state = None
 
 
 A = ObjTest("a")
@@ -452,3 +454,64 @@ def test_copy_1():
     assert id(graph.nodes[0]) == id(graph_copy.nodes[0])
     assert graph.edges == graph_copy.edges
     assert id(graph.edges) != (graph_copy.edges)
+
+
+def test_dotfile_1(tmpdir):
+    """dotfile for graph: a -> b"""
+    graph = DiGraph(nodes=[A, B], edges=[(A, B)])
+    dotfile = graph.create_dotfile_simple(outdir=tmpdir)
+    dotstr_lines = dotfile.read_text().split("\n")
+    assert "a" in dotstr_lines
+    assert "b" in dotstr_lines
+    assert "a -> b" in dotstr_lines
+
+    if DOT_FLAG:
+        formatted_dot = graph.export_graph(dotfile)
+        assert formatted_dot.exists()
+
+
+def test_dotfile_2(tmpdir):
+    """dotfile for graph: a -> b -> d, a -> c -> d"""
+    graph = DiGraph(nodes=[A, B, C, D], edges=[(A, B), (A, C), (B, D), (C, D)])
+    dotfile = graph.create_dotfile_simple(outdir=tmpdir)
+    dotstr_lines = dotfile.read_text().split("\n")
+    for el in ["a", "b", "c", "d"]:
+        assert el in dotstr_lines
+    for el in ["a -> b", "a -> c", "b -> d", "c -> d"]:
+        assert el in dotstr_lines
+
+    if DOT_FLAG:
+        formatted_dot = graph.export_graph(dotfile)
+        assert formatted_dot.exists()
+
+
+def test_dotfile_2nest(tmpdir):
+    """nested dotfile for graph: a -> b -> d, a -> c -> d
+    (should be the same as default type, i.e. type=simple)
+    """
+    graph = DiGraph(nodes=[A, B, C, D], edges=[(A, B), (A, C), (B, D), (C, D)])
+    dotfile = graph.create_dotfile_nested(outdir=tmpdir)
+    dotstr_lines = dotfile.read_text().split("\n")
+    for el in ["a", "b", "c", "d"]:
+        assert el in dotstr_lines
+    for el in ["a -> b", "a -> c", "b -> d", "c -> d"]:
+        assert el in dotstr_lines
+
+    if DOT_FLAG:
+        formatted_dot = graph.export_graph(dotfile)
+        assert formatted_dot.exists()
+
+
+def test_dotfile_3(tmpdir):
+    """nested dotfile for graph: a -> c, b -> c, c -> d"""
+    graph = DiGraph(nodes=[A, B, C, D], edges=[(A, C), (B, C), (C, D)])
+    dotfile = graph.create_dotfile_simple(outdir=tmpdir)
+    dotstr_lines = dotfile.read_text().split("\n")
+    for nm in ["a", "b", "c", "d"]:
+        assert nm in dotstr_lines
+    for ed in ["a -> c", "b -> c", "c -> d"]:
+        assert ed in dotstr_lines
+
+    if DOT_FLAG:
+        formatted_dot = graph.export_graph(dotfile)
+        assert formatted_dot.exists()
