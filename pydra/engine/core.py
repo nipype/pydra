@@ -69,7 +69,7 @@ class TaskBase:
 
 
     cache_dir : :obj:`os.pathlike` or None
-        Path to directory to store cache.  Save new cache here if prior cache couldn't be
+        Path to directory to store output.  Save new cache here if prior cache couldn't be
         found here or in `cache_locations`.
     cache_locations : obj:`os.pathlike` or :obj:`list` of :obj:`os.pathlike` or None
         Path or list of paths to search for cached results.  Reuse cache if found.
@@ -139,7 +139,7 @@ class TaskBase:
             Configure provenance tracking. Default is no provenance tracking.
             See available flags at :class:`~pydra.utils.messenger.AuditFlag`.
         cache_dir : :obj:`os.pathlike` or None
-            Path to directory to store cache.  Save new cache here if prior cache couldn't be
+            Path to directory to store output.  Save new cache here if prior cache couldn't be
             found here or in `cache_locations`.
         cache_locations : obj:`os.pathlike` or :obj:`list` of :obj:`os.pathlike` or None
             Path or list of paths to search for cached results.  Reuse cache if found.
@@ -273,7 +273,7 @@ class TaskBase:
 
           * Used to create name of cache directory and to create graph checksums.
           * If task has a splitter, the hash of the splitter is used in checksum calculation
-          * Hash from self.inputs is used to calculate the tasj checksum, but the value
+          * Hash from self.inputs is used to calculate the task checksum, but the value
             of inputs are not required for the calculation itself (inputs can be a `LazyField`
             object which will be calculated later, or empty if the task doesn't
             require any inputs).
