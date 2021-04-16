@@ -422,6 +422,7 @@ class TaskBase:
 
         if submitter:
             with submitter as sub:
+                self.inputs = attr.evolve(self.inputs, **kwargs)
                 res = sub(self)
         else:  # tasks without state could be run without a submitter
             res = self._run(rerun=rerun, **kwargs)
@@ -961,7 +962,6 @@ class Workflow(TaskBase):
                 )
 
     async def _run(self, submitter=None, rerun=False, **kwargs):
-        # self.inputs = dc.replace(self.inputs, **kwargs) don't need it?
         # output_spec needs to be set using set_output or at workflow initialization
         if self.output_spec is None:
             raise ValueError(
