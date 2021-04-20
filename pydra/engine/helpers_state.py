@@ -747,15 +747,25 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
                     "first".format(comb, groups_stack[-1])
                 )
     groups_final = {inp: gr for (inp, gr) in groups.items() if inp not in combiner_all}
-    gr_final = list(set(groups_final.values()))
+    gr_final = set()
+    for el in groups_final.values():
+        gr_final.update(ensure_list(el))
+    gr_final = list(gr_final)
     map_gr_nr = {nr: i for (i, nr) in enumerate(sorted(gr_final))}
-    groups_final = {inp: map_gr_nr[gr] for (inp, gr) in groups_final.items()}
+    groups_final_map = {}
+    for (inp, gr) in groups_final.items():
+        if isinstance(gr, int):
+            groups_final_map[inp] = map_gr_nr[gr]
+        elif isinstance(gr, list):
+            groups_final_map[inp] = [map_gr_nr[el] for el in gr]
+        else:
+            raise Exception("gr should be an int or a list, something wrong")
     for i, groups_l in enumerate(groups_stack_final):
         groups_stack_final[i] = [map_gr_nr[gr] for gr in groups_l]
 
     keys_final = [key for key in keys if key not in combiner_all]
     # TODO: not sure if I have to calculate and return keys, groups, groups_stack
-    return keys_final, groups_final, groups_stack_final, combiner_all
+    return keys_final, groups_final_map, groups_stack_final, combiner_all
 
 
 def map_splits(split_iter, inputs, cont_dim=None):

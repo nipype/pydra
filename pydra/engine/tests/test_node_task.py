@@ -14,6 +14,7 @@ from .utils import (
     fun_dict,
     fun_file,
     fun_file_list,
+    op_4var,
 )
 
 from ..core import TaskBase
@@ -1358,6 +1359,77 @@ def test_task_state_comb_order():
     results_ba = nn_ba()
     combined_results_ba = [res.output.out for res in results_ba]
     assert combined_results_ba == [13, 15, 23, 25]
+
+
+# Testing with container dimensions for the input
+
+
+def test_task_state_contdim_1(tmpdir):
+    """ task with a spliter and container dimension for one of the value"""
+    task_4var = op_4var(
+        name="op_4var",
+        a="a1",
+        b=[["b1", "b2"], ["b3", "b4"]],
+        c=["c1", "c2"],
+        d=["d1", "d2"],
+        cache_dir=tmpdir,
+    )
+    task_4var.split(("b", ["c", "d"]), cont_dim={"b": 2})
+    task_4var()
+    res = task_4var.result()
+    assert len(res) == 4
+    assert res[3].output.out == "a1 b4 c2 d2"
+
+
+def test_task_state_contdim_2(tmpdir):
+    """ task with a splitter and container dimension for one of the value"""
+    task_4var = op_4var(
+        name="op_4var",
+        a=["a1", "a2"],
+        b=[["b1", "b2"], ["b3", "b4"]],
+        c=["c1", "c2"],
+        d=["d1", "d2"],
+        cache_dir=tmpdir,
+    )
+    task_4var.split(["a", ("b", ["c", "d"])], cont_dim={"b": 2})
+    task_4var()
+    res = task_4var.result()
+    assert len(res) == 8
+    assert res[7].output.out == "a2 b4 c2 d2"
+
+
+def test_task_state_comb_contdim_1(tmpdir):
+    """ task with a splitter-combiner, and container dimension for one of the value"""
+    task_4var = op_4var(
+        name="op_4var",
+        a="a1",
+        b=[["b1", "b2"], ["b3", "b4"]],
+        c=["c1", "c2"],
+        d=["d1", "d2"],
+        cache_dir=tmpdir,
+    )
+    task_4var.split(("b", ["c", "d"]), cont_dim={"b": 2}).combine("b")
+    task_4var()
+    res = task_4var.result()
+    assert len(res) == 4
+    assert res[3].output.out == "a1 b4 c2 d2"
+
+
+def test_task_state_comb_contdim_2(tmpdir):
+    """ task with a splitter-combiner, and container dimension for one of the value"""
+    task_4var = op_4var(
+        name="op_4var",
+        a=["a1", "a2"],
+        b=[["b1", "b2"], ["b3", "b4"]],
+        c=["c1", "c2"],
+        d=["d1", "d2"],
+        cache_dir=tmpdir,
+    )
+    task_4var.split(["a", ("b", ["c", "d"])], cont_dim={"b": 2}).combine("a")
+    task_4var()
+    res = task_4var.result()
+    assert len(res) == 4
+    assert res[3][1].output.out == "a2 b4 c2 d2"
 
 
 # Testing caching for tasks with states

@@ -104,7 +104,7 @@ class Submitter:
         """
         futures = set()
         if runnable.state:
-            runnable.state.prepare_states(runnable.inputs)
+            runnable.state.prepare_states(runnable.inputs, cont_dim=runnable.cont_dim)
             runnable.state.prepare_inputs()
             logger.debug(
                 f"Expanding {runnable} into {len(runnable.state.states_val)} states"
