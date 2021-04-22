@@ -367,7 +367,7 @@ def custom_validator(instance, attribute, value):
 
 
 def _type_validator(instance, attribute, value, tp, cont_type):
-    """ creating a customized type validator,
+    """creating a customized type validator,
     uses validator.deep_iterable/mapping if the field is a container
     (i.e. ty.List or ty.Dict),
     it also tries to guess when the value is a list due to the splitter
@@ -419,9 +419,9 @@ def _types_updates(tp_list, name):
 
 
 def _single_type_update(tp, name, simplify=False):
-    """ updating a single type with other related types - e.g. adding bytes for str
-        if simplify is True, than changing typing.List to list etc.
-        (assuming that I validate only one depth, so have to simplify at some point)
+    """updating a single type with other related types - e.g. adding bytes for str
+    if simplify is True, than changing typing.List to list etc.
+    (assuming that I validate only one depth, so have to simplify at some point)
     """
     if isinstance(tp, type) or tp in [File, Directory]:
         if tp is str:
@@ -767,9 +767,9 @@ def load_and_run(
     task_pkl, ind=None, rerun=False, submitter=None, plugin=None, **kwargs
 ):
     """
-     loading a task from a pickle file, settings proper input
-     and running the task
-     """
+    loading a task from a pickle file, settings proper input
+    and running the task
+    """
     try:
         task = load_task(task_pkl=task_pkl, ind=ind)
     except Exception as excinfo:
@@ -861,7 +861,7 @@ def position_sort(args):
 
 
 def argstr_formatting(argstr, inputs, value_updates=None):
-    """ formatting argstr that have form {field_name},
+    """formatting argstr that have form {field_name},
     using values from inputs and updating with value_update if provided
     """
     inputs_dict = attr.asdict(inputs)
@@ -893,3 +893,29 @@ def argstr_formatting(argstr, inputs, value_updates=None):
         .strip()
     )
     return argstr_formatted
+
+
+from filelock import Timeout
+
+
+class PydraFileLock:
+    """Wrapper for filelock's SoftFileLock that makes it work with asyncio."""
+
+    def __init__(self, lockfile):
+        self.lockfile = lockfile
+
+    async def __aenter__(self):
+        lock = SoftFileLock(self.lockfile)
+        acquired_lock = False
+        while not acquired_lock:
+            try:
+                lock.acquire(timeout=0)
+                acquired_lock = True
+            except Timeout:
+                await asyncio.sleep(1)
+        self.lock = lock
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        self.lock.release()
+        return None
