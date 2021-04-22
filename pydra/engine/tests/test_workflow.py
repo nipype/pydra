@@ -4589,7 +4589,7 @@ def test_duplicate_input_on_split_wf(tmpdir):
     assert res[0].output.out1 == "test" and res[1].output.out1 == "test"
 
 
-def test_inner_outer_wf_duplicate():
+def test_inner_outer_wf_duplicate(tmpdir):
     """ checking if the execution gets stuck if there is an inner and outer workflows
         thar run two nodes with the exact same inputs.
     """
