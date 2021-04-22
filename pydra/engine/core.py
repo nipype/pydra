@@ -119,7 +119,6 @@ class TaskBase:
             TODO
         messengers :
             TODO
-
         """
         from .. import check_latest_version
 
@@ -168,6 +167,7 @@ class TaskBase:
         # dictionary to save the connections with lazy fields
         self.inp_lf = {}
         self.state = None
+        self.cont_dim = {}
         self._output = {}
         self._result = {}
         # flag that says if node finished all jobs
@@ -270,11 +270,10 @@ class TaskBase:
         if state_index is not None:
             inputs_copy = deepcopy(self.inputs)
             for key, ind in self.state.inputs_ind[state_index].items():
-                setattr(
-                    inputs_copy,
-                    key.split(".")[1],
-                    getattr(inputs_copy, key.split(".")[1])[ind],
+                val = self._extract_input_el(
+                    inputs=inputs_copy, inp_nm=key.split(".")[1], ind=ind
                 )
+                setattr(inputs_copy, key.split(".")[1], val)
             # setting files_hash again in case it was cleaned by setting specific element
             # that might be important for outer splitter of input variable with big files
             # the file can be changed with every single index even if there are only two files
@@ -297,7 +296,7 @@ class TaskBase:
         else:
             checksum_list = []
             if not hasattr(self.state, "inputs_ind"):
-                self.state.prepare_states(self.inputs)
+                self.state.prepare_states(self.inputs, cont_dim=self.cont_dim)
                 self.state.prepare_inputs()
             for ind in range(len(self.state.inputs_ind)):
                 checksum_list.append(self.checksum_states(state_index=ind))
@@ -495,7 +494,7 @@ class TaskBase:
         )
         return attr.evolve(output, **run_output, **other_output)
 
-    def split(self, splitter, overwrite=False, **kwargs):
+    def split(self, splitter, overwrite=False, cont_dim=None, **kwargs):
         """
         Run this task parametrically over lists of splitted inputs.
 
@@ -505,6 +504,10 @@ class TaskBase:
             TODO
         overwrite : :obj:`bool`
             TODO
+        cont_dim : :obj:`dict`
+            Container dimensions for specific inputs, used in the splitter.
+            If input name is not in cont_dim, it is assumed that the input values has
+            a container dimension of 1, so only the most outer dim will be used for splitting.
 
         """
         splitter = hlpst.add_name_splitter(splitter, self.name)
@@ -514,6 +517,9 @@ class TaskBase:
                 "splitter has been already set, "
                 "if you want to overwrite it - use overwrite=True"
             )
+        if cont_dim:
+            for key, vel in cont_dim.items():
+                self.cont_dim[f"{self.name}.{key}"] = vel
         if kwargs:
             self.inputs = attr.evolve(self.inputs, **kwargs)
         if not self.state or splitter != self.state.splitter:
@@ -557,6 +563,24 @@ class TaskBase:
             self.set_state(splitter=self.state.splitter, combiner=self.combiner)
             return self
 
+    def _extract_input_el(self, inputs, inp_nm, ind):
+        """
+        Extracting element of the inputs taking into account
+        container dimension of the specific element that can be set in self.cont_dim.
+        If input name is not in cont_dim, it is assumed that the input values has
+        a container dimension of 1, so only the most outer dim will be used for splitting.
+        If
+        """
+        if f"{self.name}.{inp_nm}" in self.cont_dim:
+            return list(
+                hlpst.flatten(
+                    ensure_list(getattr(inputs, inp_nm)),
+                    max_depth=self.cont_dim[f"{self.name}.{inp_nm}"],
+                )
+            )[ind]
+        else:
+            return getattr(inputs, inp_nm)[ind]
+
     def get_input_el(self, ind):
         """Collect all inputs required to run the node (for specific state element)."""
         if ind is not None:
@@ -566,9 +590,11 @@ class TaskBase:
             inputs_dict = {}
             for inp in set(self.input_names):
                 if f"{self.name}.{inp}" in input_ind:
-                    inputs_dict[inp] = getattr(self.inputs, inp)[
-                        input_ind[f"{self.name}.{inp}"]
-                    ]
+                    inputs_dict[inp] = self._extract_input_el(
+                        inputs=self.inputs,
+                        inp_nm=inp,
+                        ind=input_ind[f"{self.name}.{inp}"],
+                    )
                 else:
                     inputs_dict[inp] = getattr(self.inputs, inp)
             return state_dict, inputs_dict
