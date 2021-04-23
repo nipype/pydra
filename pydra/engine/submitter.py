@@ -2,7 +2,13 @@
 import asyncio
 import time
 from uuid import uuid4
-from .workers import SerialWorker, ConcurrentFuturesWorker, SlurmWorker, DaskWorker
+from .workers import (
+    SerialWorker,
+    ConcurrentFuturesWorker,
+    SlurmWorker,
+    DaskWorker,
+    SGEWorker,
+)
 from .core import is_workflow
 from .helpers import get_open_loop, load_and_run_async
 
@@ -37,6 +43,8 @@ class Submitter:
             self.worker = SlurmWorker(**kwargs)
         elif self.plugin == "dask":
             self.worker = DaskWorker(**kwargs)
+        elif self.plugin == "sge":
+            self.worker = SGEWorker(**kwargs)
         else:
             raise Exception(f"plugin {self.plugin} not available")
         self.worker.loop = self.loop
