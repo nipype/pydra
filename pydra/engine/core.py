@@ -10,7 +10,7 @@ from copy import deepcopy
 from uuid import uuid4
 
 import cloudpickle as cp
-from filelock import SoftFileLock, Timeout
+from filelock import SoftFileLock
 import asyncio
 import shutil
 from tempfile import mkdtemp
@@ -37,6 +37,7 @@ from .helpers import (
     ensure_list,
     record_error,
     hash_function,
+    PydraFileLock,
 )
 from .helpers_file import copyfile_input, template_update
 from .graph import DiGraph
@@ -1008,51 +1009,42 @@ class Workflow(TaskBase):
             self.create_connections(task)
         lockfile = self.cache_dir / (checksum + ".lock")
         self.hooks.pre_run(self)
-        lock = SoftFileLock(lockfile)
-        acquired_lock = False
-        while not acquired_lock:
+        async with PydraFileLock(lockfile):
+            # retrieve cached results
+            if not (rerun or self.task_rerun):
+                result = self.result()
+                if result is not None:
+                    return result
+            # adding info file with the checksum in case the task was cancelled
+            # and the lockfile has to be removed
+            with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
+                json.dump({"checksum": checksum}, jsonfile)
+            odir = self.output_dir
+            if not self.can_resume and odir.exists():
+                shutil.rmtree(odir)
+            cwd = os.getcwd()
+            odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
+            self.audit.start_audit(odir=odir)
+            result = Result(output=None, runtime=None, errored=False)
+            self.hooks.pre_run_task(self)
             try:
-                lock.acquire(timeout=0)
-                acquired_lock = True
-            except Timeout:
-                await asyncio.sleep(1)
-
-        # retrieve cached results
-        if not (rerun or self.task_rerun):
-            result = self.result()
-            if result is not None:
-                return result
-        # adding info file with the checksum in case the task was cancelled
-        # and the lockfile has to be removed
-        with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
-            json.dump({"checksum": checksum}, jsonfile)
-        odir = self.output_dir
-        if not self.can_resume and odir.exists():
-            shutil.rmtree(odir)
-        cwd = os.getcwd()
-        odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-        self.audit.start_audit(odir=odir)
-        result = Result(output=None, runtime=None, errored=False)
-        self.hooks.pre_run_task(self)
-        try:
-            self.audit.monitor()
-            await self._run_task(submitter, rerun=rerun)
-            result.output = self._collect_outputs()
-        except Exception as e:
-            etype, eval, etr = sys.exc_info()
-            traceback = format_exception(etype, eval, etr)
-            record_error(self.output_dir, error=traceback)
-            result.errored = True
-            self._errored = True
-            raise
-        finally:
-            self.hooks.post_run_task(self, result)
-            self.audit.finalize_audit(result=result)
-            save(odir, result=result, task=self)
-            # removing the additional file with the chcksum
-            (self.cache_dir / f"{self.uid}_info.json").unlink()
-            os.chdir(cwd)
-        lock.release()
+                self.audit.monitor()
+                await self._run_task(submitter, rerun=rerun)
+                result.output = self._collect_outputs()
+            except Exception as e:
+                etype, eval, etr = sys.exc_info()
+                traceback = format_exception(etype, eval, etr)
+                record_error(self.output_dir, error=traceback)
+                result.errored = True
+                self._errored = True
+                raise
+            finally:
+                self.hooks.post_run_task(self, result)
+                self.audit.finalize_audit(result=result)
+                save(odir, result=result, task=self)
+                # removing the additional file with the chcksum
+                (self.cache_dir / f"{self.uid}_info.json").unlink()
+                os.chdir(cwd)
         self.hooks.post_run(self, result)
         if result is None:
             raise Exception("This should never happen, please open new issue")
