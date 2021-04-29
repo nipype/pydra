@@ -4,7 +4,7 @@ import asyncio.subprocess as asp
 import attr
 import cloudpickle as cp
 from pathlib import Path
-from filelock import SoftFileLock
+from filelock import SoftFileLock, Timeout
 import os
 import sys
 from hashlib import sha256
@@ -895,3 +895,29 @@ def argstr_formatting(argstr, inputs, value_updates=None):
         .strip()
     )
     return argstr_formatted
+
+
+class PydraFileLock:
+    """Wrapper for filelock's SoftFileLock that makes it work with asyncio."""
+
+    def __init__(self, lockfile):
+        self.lockfile = lockfile
+        self.timeout = 0.1
+
+    async def __aenter__(self):
+        lock = SoftFileLock(self.lockfile)
+        acquired_lock = False
+        while not acquired_lock:
+            try:
+                lock.acquire(timeout=0)
+                acquired_lock = True
+            except Timeout:
+                await asyncio.sleep(self.timeout)
+                if self.timeout <= 2:
+                    self.timeout = self.timeout * 2
+        self.lock = lock
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        self.lock.release()
+        return None

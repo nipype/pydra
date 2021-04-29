@@ -36,6 +36,7 @@ from .helpers import (
     ensure_list,
     record_error,
     hash_function,
+    PydraFileLock,
 )
 from .helpers_file import copyfile_input, template_update
 from .graph import DiGraph
@@ -1007,7 +1008,7 @@ class Workflow(TaskBase):
             self.create_connections(task)
         lockfile = self.cache_dir / (checksum + ".lock")
         self.hooks.pre_run(self)
-        with SoftFileLock(lockfile):
+        async with PydraFileLock(lockfile):
             # retrieve cached results
             if not (rerun or self.task_rerun):
                 result = self.result()
