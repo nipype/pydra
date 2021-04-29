@@ -3,8 +3,18 @@ import typing as ty
 import pytest
 
 from ..task import ShellCommandTask
-from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File, MultiInputObj
+from ..specs import (
+    ShellOutSpec,
+    ShellSpec,
+    SpecInfo,
+    File,
+    MultiInputObj,
+    MultiInputFile,
+    MultiOutputFile,
+)
 from .utils import use_validator
+from ..core import Workflow
+from ..submitter import Submitter
 
 
 def test_shell_cmd_execargs_1():
@@ -1651,6 +1661,57 @@ def test_shell_cmd_inputs_template_10():
     )
     # checking if outA in the output fields
     assert shelly.output_names == ["return_code", "stdout", "stderr", "outA"]
+
+
+def test_shell_cmd_inputs_template_11():
+    input_fields = [
+        (
+            "inputFiles",
+            attr.ib(
+                type=MultiInputFile,
+                metadata={
+                    "argstr": "--inputFiles ...",
+                    "help_string": "The list of input image files to be segmented.",
+                },
+            ),
+        )
+    ]
+
+    output_fields = [
+        (
+            "outputFiles",
+            attr.ib(
+                type=MultiOutputFile,
+                metadata={
+                    "help_string": "Corrected Output Images: should specify the same number of images as inputVolume, if only one element is given, then it is used as a file pattern where %s is replaced by the imageVolumeType, and %d by the index list location.",
+                    "output_file_template": "{inputFiles}",
+                },
+            ),
+        )
+    ]
+
+    input_spec = SpecInfo(name="Input", fields=input_fields, bases=(ShellSpec,))
+    output_spec = SpecInfo(name="Output", fields=output_fields, bases=(ShellOutSpec,))
+
+    task = ShellCommandTask(
+        name="echoMultiple",
+        executable="echo",
+        input_spec=input_spec,
+        output_spec=output_spec,
+    )
+    wf = Workflow(name="wf", input_spec=["inputFiles"], inputFiles=["test1", "test2"])
+
+    task.inputs.inputFiles = wf.lzin.inputFiles
+
+    wf.add(task)
+    wf.set_output([("out", wf.echoMultiple.lzout.outputFiles)])
+
+    with Submitter(plugin="cf") as sub:
+        sub(wf)
+    result = wf.result()
+
+    for out_file in result.output.out:
+        assert out_file.name == "test1" or out_file.name == "test2"
 
 
 # TODO: after deciding how we use requires/templates
