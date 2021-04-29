@@ -900,6 +900,7 @@ class PydraFileLock:
 
     def __init__(self, lockfile):
         self.lockfile = lockfile
+        self.timeout = 0.1
 
     async def __aenter__(self):
         lock = SoftFileLock(self.lockfile)
@@ -909,7 +910,9 @@ class PydraFileLock:
                 lock.acquire(timeout=0)
                 acquired_lock = True
             except Timeout:
-                await asyncio.sleep(1)
+                await asyncio.sleep(self.timeout)
+                if self.timeout <= 2:
+                    self.timeout = self.timeout * 2
         self.lock = lock
         return self
 
