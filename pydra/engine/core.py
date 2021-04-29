@@ -11,7 +11,6 @@ from uuid import uuid4
 
 import cloudpickle as cp
 from filelock import SoftFileLock
-import asyncio
 import shutil
 from tempfile import mkdtemp
 from traceback import format_exception
