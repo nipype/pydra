@@ -27,6 +27,7 @@ from .utils import (
 )
 from ..submitter import Submitter
 from ..core import Workflow
+from ... import mark
 
 
 def test_wf_name_conflict1():
@@ -4561,3 +4562,79 @@ def test_graph_5(tmpdir):
     if DOT_FLAG:
         name = f"graph_{sys._getframe().f_code.co_name}"
         exporting_graphs(wf=wf, name=name)
+
+
+@pytest.mark.timeout(20)
+def test_duplicate_input_on_split_wf(tmpdir):
+    """ checking if the workflow gets stuck if it has to run two tasks with equal checksum;
+        This can occur when splitting on a list containing duplicate values.
+    """
+    text = ["test"] * 2
+
+    @mark.task
+    def printer(a):
+        return a
+
+    wf = Workflow(name="wf", input_spec=["text"], cache_dir=tmpdir)
+    wf.split(("text"), text=text)
+
+    wf.add(printer(name="printer1", a=wf.lzin.text))
+
+    wf.set_output([("out1", wf.printer1.lzout.out)])
+
+    with Submitter(plugin="cf", n_procs=6) as sub:
+        sub(wf)
+
+    res = wf.result()
+
+    assert res[0].output.out1 == "test" and res[1].output.out1 == "test"
+
+
+@pytest.mark.timeout(40)
+def test_inner_outer_wf_duplicate(tmpdir):
+    """ checking if the execution gets stuck if there is an inner and outer workflows
+        thar run two nodes with the exact same inputs.
+    """
+    task_list = ["First", "Second"]
+    start_list = [3]
+
+    @mark.task
+    def one_arg(start_number):
+        for k in range(10):
+            start_number += 1
+        return start_number
+
+    @mark.task
+    def one_arg_inner(start_number):
+        for k in range(10):
+            start_number += 1
+        return start_number
+
+    # Outer workflow
+    test_outer = Workflow(
+        name="test_outer", input_spec=["start_number", "task_name"], cache_dir=tmpdir
+    )
+    # Splitting on both arguments
+    test_outer.split(
+        ["start_number", "task_name"], start_number=start_list, task_name=task_list
+    )
+
+    # Inner Workflow
+    test_inner = Workflow(name="test_inner", input_spec=["start_number1"])
+    test_inner.add(
+        one_arg_inner(name="Ilevel1", start_number=test_inner.lzin.start_number1)
+    )
+    test_inner.set_output([("res", test_inner.Ilevel1.lzout.out)])
+
+    # Outer workflow has two nodes plus the inner workflow
+    test_outer.add(one_arg(name="level1", start_number=test_outer.lzin.start_number))
+    test_outer.add(test_inner)
+    test_inner.inputs.start_number1 = test_outer.level1.lzout.out
+
+    test_outer.set_output([("res2", test_outer.test_inner.lzout.res)])
+
+    with Submitter(plugin="cf") as sub:
+        sub(test_outer)
+
+    res = test_outer.result()
+    assert res[0].output.res2 == 23 and res[1].output.res2 == 23
