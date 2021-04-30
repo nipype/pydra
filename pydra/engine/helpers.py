@@ -159,7 +159,7 @@ def save(task_path: Path, result=None, task=None, name_prefix=None):
 
 
 def copyfile_workflow(wf_path, result):
-    """ if file in the wf results, the file will be copied to the workflow directory"""
+    """if file in the wf results, the file will be copied to the workflow directory"""
     for field in attr_fields(result.output):
         value = getattr(result.output, field.name)
         # if the field is a path or it can contain a path _copyfile_single_value is run
@@ -175,7 +175,7 @@ def copyfile_workflow(wf_path, result):
 
 
 def _copyfile_single_value(wf_path, value):
-    """ checking a single value for files that need to be copied to the wf dir"""
+    """checking a single value for files that need to be copied to the wf dir"""
     if isinstance(value, (tuple, list)):
         return [_copyfile_single_value(wf_path, val) for val in value]
     elif isinstance(value, dict):
@@ -369,7 +369,7 @@ def custom_validator(instance, attribute, value):
 
 
 def _type_validator(instance, attribute, value, tp, cont_type):
-    """ creating a customized type validator,
+    """creating a customized type validator,
     uses validator.deep_iterable/mapping if the field is a container
     (i.e. ty.List or ty.Dict),
     it also tries to guess when the value is a list due to the splitter
@@ -421,9 +421,9 @@ def _types_updates(tp_list, name):
 
 
 def _single_type_update(tp, name, simplify=False):
-    """ updating a single type with other related types - e.g. adding bytes for str
-        if simplify is True, than changing typing.List to list etc.
-        (assuming that I validate only one depth, so have to simplify at some point)
+    """updating a single type with other related types - e.g. adding bytes for str
+    if simplify is True, than changing typing.List to list etc.
+    (assuming that I validate only one depth, so have to simplify at some point)
     """
     if isinstance(tp, type) or tp in [File, Directory]:
         if tp is str:
@@ -456,7 +456,7 @@ def _single_type_update(tp, name, simplify=False):
 
 
 def _check_special_type(tp, name):
-    """checking if the type is a container: ty.List, ty.Dict or ty.Union """
+    """checking if the type is a container: ty.List, ty.Dict or ty.Union"""
     if sys.version_info.minor >= 8:
         return ty.get_origin(tp), ty.get_args(tp)
     else:
@@ -477,7 +477,7 @@ def _check_special_type(tp, name):
 
 
 def _allowed_values_validator(instance, attribute, value):
-    """ checking if the values is in allowed_values"""
+    """checking if the values is in allowed_values"""
     allowed = attribute.metadata["allowed_values"]
     if value is attr.NOTHING:
         pass
@@ -769,9 +769,9 @@ def load_and_run(
     task_pkl, ind=None, rerun=False, submitter=None, plugin=None, **kwargs
 ):
     """
-     loading a task from a pickle file, settings proper input
-     and running the task
-     """
+    loading a task from a pickle file, settings proper input
+    and running the task
+    """
     try:
         task = load_task(task_pkl=task_pkl, ind=ind)
     except Exception as excinfo:
@@ -813,7 +813,7 @@ async def load_and_run_async(task_pkl, ind=None, submitter=None, rerun=False, **
 
 
 def load_task(task_pkl, ind=None):
-    """ loading a task from a pickle file, settings proper input for the specific ind"""
+    """loading a task from a pickle file, settings proper input for the specific ind"""
     if isinstance(task_pkl, str):
         task_pkl = Path(task_pkl)
     task = cp.loads(task_pkl.read_bytes())
@@ -863,7 +863,7 @@ def position_sort(args):
 
 
 def argstr_formatting(argstr, inputs, value_updates=None):
-    """ formatting argstr that have form {field_name},
+    """formatting argstr that have form {field_name},
     using values from inputs and updating with value_update if provided
     """
     inputs_dict = attr.asdict(inputs)

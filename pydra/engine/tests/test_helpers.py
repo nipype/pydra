@@ -207,7 +207,7 @@ def test_get_available_cpus():
 
 
 def test_load_and_run(tmpdir):
-    """ testing load_and_run for pickled task"""
+    """testing load_and_run for pickled task"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
 
     task = multiply(name="mult", x=[1, 2], y=10).split("x")
@@ -226,7 +226,7 @@ def test_load_and_run(tmpdir):
 
 
 def test_load_and_run_exception_load(tmpdir):
-    """ testing raising exception and saving info in crashfile when when load_and_run"""
+    """testing raising exception and saving info in crashfile when when load_and_run"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
     task = raise_xeq1(name="raise", x=[1, 2]).split("x")
     with pytest.raises(FileNotFoundError) as excinfo:
@@ -234,7 +234,7 @@ def test_load_and_run_exception_load(tmpdir):
 
 
 def test_load_and_run_exception_run(tmpdir):
-    """ testing raising exception and saving info in crashfile when when load_and_run"""
+    """testing raising exception and saving info in crashfile when when load_and_run"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
 
     task = raise_xeq1(name="raise", x=[1, 2]).split("x")
@@ -265,7 +265,7 @@ def test_load_and_run_exception_run(tmpdir):
 
 
 def test_load_and_run_wf(tmpdir):
-    """ testing load_and_run for pickled task"""
+    """testing load_and_run for pickled task"""
     wf_pkl = Path(tmpdir.join("wf_main.pkl"))
 
     wf = Workflow(name="wf", input_spec=["x", "y"])

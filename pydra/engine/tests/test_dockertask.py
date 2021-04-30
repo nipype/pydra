@@ -12,8 +12,8 @@ from .utils import no_win, need_docker
 @no_win
 @need_docker
 def test_docker_1_nosubm():
-    """ simple command in a container, a default bindings and working directory is added
-        no submitter
+    """simple command in a container, a default bindings and working directory is added
+    no submitter
     """
     cmd = "whoami"
     docky = DockerTask(name="docky", executable=cmd, image="busybox")
@@ -34,8 +34,8 @@ def test_docker_1_nosubm():
 @no_win
 @need_docker
 def test_docker_1(plugin):
-    """ simple command in a container, a default bindings and working directory is added
-        using submitter
+    """simple command in a container, a default bindings and working directory is added
+    using submitter
     """
     cmd = "whoami"
     docky = DockerTask(name="docky", executable=cmd, image="busybox")
@@ -53,8 +53,8 @@ def test_docker_1(plugin):
 @no_win
 @need_docker
 def test_docker_1_dockerflag(plugin):
-    """ simple command in a container, a default bindings and working directory is added
-        using ShellComandTask with container_info=("docker", image)
+    """simple command in a container, a default bindings and working directory is added
+    using ShellComandTask with container_info=("docker", image)
     """
     cmd = "whoami"
     shocky = ShellCommandTask(
@@ -86,8 +86,8 @@ def test_docker_1_dockerflag_exception(plugin):
 @no_win
 @need_docker
 def test_docker_2_nosubm():
-    """ a command with arguments, cmd and args given as executable
-        no submitter
+    """a command with arguments, cmd and args given as executable
+    no submitter
     """
     cmd = ["echo", "hail", "pydra"]
     docky = DockerTask(name="docky", executable=cmd, image="busybox")
@@ -106,8 +106,8 @@ def test_docker_2_nosubm():
 @no_win
 @need_docker
 def test_docker_2(plugin):
-    """ a command with arguments, cmd and args given as executable
-        using submitter
+    """a command with arguments, cmd and args given as executable
+    using submitter
     """
     cmd = ["echo", "hail", "pydra"]
     docky = DockerTask(name="docky", executable=cmd, image="busybox")
@@ -128,8 +128,8 @@ def test_docker_2(plugin):
 @no_win
 @need_docker
 def test_docker_2_dockerflag(plugin):
-    """ a command with arguments, cmd and args given as executable
-        using ShellComandTask with container_info=("docker", image)
+    """a command with arguments, cmd and args given as executable
+    using ShellComandTask with container_info=("docker", image)
     """
     cmd = ["echo", "hail", "pydra"]
     shocky = ShellCommandTask(
@@ -152,8 +152,8 @@ def test_docker_2_dockerflag(plugin):
 @no_win
 @need_docker
 def test_docker_2a_nosubm():
-    """ a command with arguments, using executable and args
-        no submitter
+    """a command with arguments, using executable and args
+    no submitter
     """
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
@@ -177,8 +177,8 @@ def test_docker_2a_nosubm():
 @no_win
 @need_docker
 def test_docker_2a(plugin):
-    """ a command with arguments, using executable and args
-        using submitter
+    """a command with arguments, using executable and args
+    using submitter
     """
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
@@ -204,8 +204,8 @@ def test_docker_2a(plugin):
 @no_win
 @need_docker
 def test_docker_3(plugin, tmpdir):
-    """ a simple command in container with bindings,
-        creating directory in tmp dir and checking if it is in the container
+    """a simple command in container with bindings,
+    creating directory in tmp dir and checking if it is in the container
     """
     # creating a new directory
     tmpdir.mkdir("new_dir")
@@ -227,9 +227,9 @@ def test_docker_3(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_3_dockerflag(plugin, tmpdir):
-    """ a simple command in container with bindings,
-        creating directory in tmp dir and checking if it is in the container
-        using ShellComandTask with container_info=("docker", image)
+    """a simple command in container with bindings,
+    creating directory in tmp dir and checking if it is in the container
+    using ShellComandTask with container_info=("docker", image)
     """
     # creating a new directory
     tmpdir.mkdir("new_dir")
@@ -253,9 +253,9 @@ def test_docker_3_dockerflag(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_3_dockerflagbind(plugin, tmpdir):
-    """ a simple command in container with bindings,
-        creating directory in tmp dir and checking if it is in the container
-        using ShellComandTask with container_info=("docker", image)
+    """a simple command in container with bindings,
+    creating directory in tmp dir and checking if it is in the container
+    using ShellComandTask with container_info=("docker", image)
     """
     # creating a new directory
     tmpdir.mkdir("new_dir")
@@ -279,8 +279,8 @@ def test_docker_3_dockerflagbind(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_4(plugin, tmpdir):
-    """ task reads the file that is bounded to the container
-        specifying bindings,
+    """task reads the file that is bounded to the container
+    specifying bindings,
     """
     with open(tmpdir.join("file_pydra.txt"), "w") as f:
         f.write("hello from pydra")
@@ -305,9 +305,9 @@ def test_docker_4(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_4_dockerflag(plugin, tmpdir):
-    """ task reads the file that is bounded to the container
-        specifying bindings,
-        using ShellComandTask with container_info=("docker", image, bindings)
+    """task reads the file that is bounded to the container
+    specifying bindings,
+    using ShellComandTask with container_info=("docker", image, bindings)
     """
     with open(tmpdir.join("file_pydra.txt"), "w") as f:
         f.write("hello from pydra")
@@ -334,8 +334,8 @@ def test_docker_4_dockerflag(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_st_1(plugin):
-    """ commands without arguments in container
-        splitter = executable
+    """commands without arguments in container
+    splitter = executable
     """
     cmd = ["pwd", "whoami"]
     docky = DockerTask(name="docky", executable=cmd, image="busybox").split(
@@ -358,8 +358,8 @@ def test_docker_st_1(plugin):
 @no_win
 @need_docker
 def test_docker_st_2(plugin):
-    """ command with arguments in docker, checking the distribution
-        splitter = image
+    """command with arguments in docker, checking the distribution
+    splitter = image
     """
     cmd = ["cat", "/etc/issue"]
     docky = DockerTask(name="docky", executable=cmd, image=["debian", "ubuntu"]).split(
@@ -382,8 +382,7 @@ def test_docker_st_2(plugin):
 @no_win
 @need_docker
 def test_docker_st_3(plugin):
-    """ outer splitter image and executable
-    """
+    """outer splitter image and executable"""
     cmd = ["whoami", ["cat", "/etc/issue"]]
     docky = DockerTask(name="docky", executable=cmd, image=["debian", "ubuntu"]).split(
         ["image", "executable"]
@@ -400,8 +399,7 @@ def test_docker_st_3(plugin):
 @no_win
 @need_docker
 def test_docker_st_4(plugin):
-    """ outer splitter image and executable, combining with images
-    """
+    """outer splitter image and executable, combining with images"""
     cmd = ["whoami", ["cat", "/etc/issue"]]
     docky = (
         DockerTask(name="docky", executable=cmd, image=["debian", "ubuntu"])
@@ -442,9 +440,9 @@ def test_docker_st_4(plugin):
 @no_win
 @need_docker
 def test_wf_docker_1(plugin, tmpdir):
-    """ a workflow with two connected task
-        the first one read the file that is bounded to the container,
-        the second uses echo
+    """a workflow with two connected task
+    the first one read the file that is bounded to the container,
+    the second uses echo
     """
     with open(tmpdir.join("file_pydra.txt"), "w") as f:
         f.write("hello from pydra")
@@ -486,10 +484,10 @@ def test_wf_docker_1(plugin, tmpdir):
 @no_win
 @need_docker
 def test_wf_docker_1_dockerflag(plugin, tmpdir):
-    """ a workflow with two connected task
-        the first one read the file that is bounded to the container,
-        the second uses echo
-        using ShellComandTask with container_info
+    """a workflow with two connected task
+    the first one read the file that is bounded to the container,
+    the second uses echo
+    using ShellComandTask with container_info
     """
     with open(tmpdir.join("file_pydra.txt"), "w") as f:
         f.write("hello from pydra")
@@ -526,8 +524,8 @@ def test_wf_docker_1_dockerflag(plugin, tmpdir):
 @no_win
 @need_docker
 def test_wf_docker_2pre(plugin, tmpdir):
-    """ a workflow with two connected task that run python scripts
-        the first one creates a text file and the second one reads the file
+    """a workflow with two connected task that run python scripts
+    the first one creates a text file and the second one reads the file
     """
 
     scripts_dir = os.path.join(os.path.dirname(__file__), "data_tests")
@@ -547,8 +545,8 @@ def test_wf_docker_2pre(plugin, tmpdir):
 @no_win
 @need_docker
 def test_wf_docker_2(plugin, tmpdir):
-    """ a workflow with two connected task that run python scripts
-        the first one creates a text file and the second one reads the file
+    """a workflow with two connected task that run python scripts
+    the first one creates a text file and the second one reads the file
     """
 
     scripts_dir = os.path.join(os.path.dirname(__file__), "data_tests")
@@ -587,9 +585,9 @@ def test_wf_docker_2(plugin, tmpdir):
 @no_win
 @need_docker
 def test_wf_docker_3(plugin, tmpdir):
-    """ a workflow with two connected task
-        the first one read the file that contains the name of the image,
-        the output is passed to the second task as the image used to run the task
+    """a workflow with two connected task
+    the first one read the file that contains the name of the image,
+    the output is passed to the second task as the image used to run the task
     """
     with open(tmpdir.join("image.txt"), "w") as f:
         f.write("ubuntu")
@@ -631,8 +629,8 @@ def test_wf_docker_3(plugin, tmpdir):
 @need_docker
 def test_docker_outputspec_1(plugin, tmpdir):
     """
-        customised output_spec, adding files to the output, providing specific pathname
-        output_path is automatically added to the bindings
+    customised output_spec, adding files to the output, providing specific pathname
+    output_path is automatically added to the bindings
     """
     cmd = ["touch", "newfile_tmp.txt"]
     my_output_spec = SpecInfo(
@@ -658,7 +656,7 @@ def test_docker_outputspec_1(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_inputspec_1(tmpdir):
-    """ a simple customized input spec for docker task """
+    """a simple customized input spec for docker task"""
     filename = str(tmpdir.join("file_pydra.txt"))
     with open(filename, "w") as f:
         f.write("hello from pydra")
@@ -700,8 +698,8 @@ def test_docker_inputspec_1(tmpdir):
 @no_win
 @need_docker
 def test_docker_inputspec_1a(tmpdir):
-    """ a simple customized input spec for docker task
-        a default value is used
+    """a simple customized input spec for docker task
+    a default value is used
     """
     filename = str(tmpdir.join("file_pydra.txt"))
     with open(filename, "w") as f:
@@ -739,9 +737,9 @@ def test_docker_inputspec_1a(tmpdir):
 @no_win
 @need_docker
 def test_docker_inputspec_1b(tmpdir):
-    """ a simple customized input spec for docker task
-        instead of using automatic binding I provide the bindings
-        and name of the file inside the container
+    """a simple customized input spec for docker task
+    instead of using automatic binding I provide the bindings
+    and name of the file inside the container
     """
     filename = str(tmpdir.join("file_pydra.txt"))
     with open(filename, "w") as f:
@@ -787,8 +785,8 @@ def test_docker_inputspec_1b(tmpdir):
 @no_win
 @need_docker
 def test_docker_inputspec_1_dockerflag(tmpdir):
-    """ a simple customized input spec for docker task
-        using ShellTask with container_info
+    """a simple customized input spec for docker task
+    using ShellTask with container_info
     """
     filename = str(tmpdir.join("file_pydra.txt"))
     with open(filename, "w") as f:
@@ -831,7 +829,7 @@ def test_docker_inputspec_1_dockerflag(tmpdir):
 @no_win
 @need_docker
 def test_docker_inputspec_2(plugin, tmpdir):
-    """ a customized input spec with two fields for docker task """
+    """a customized input spec with two fields for docker task"""
     filename_1 = tmpdir.join("file_pydra.txt")
     with open(filename_1, "w") as f:
         f.write("hello from pydra\n")
@@ -888,8 +886,8 @@ def test_docker_inputspec_2(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_inputspec_2a_except(plugin, tmpdir):
-    """ a customized input spec with two fields
-        first one uses a default, and second doesn't - raises a dataclass exception
+    """a customized input spec with two fields
+    first one uses a default, and second doesn't - raises a dataclass exception
     """
     filename_1 = tmpdir.join("file_pydra.txt")
     with open(filename_1, "w") as f:
@@ -948,9 +946,9 @@ def test_docker_inputspec_2a_except(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_inputspec_2a(plugin, tmpdir):
-    """ a customized input spec with two fields
-        first one uses a default value
-        this is fine even if the second field is not using any defaults
+    """a customized input spec with two fields
+    first one uses a default value
+    this is fine even if the second field is not using any defaults
     """
     filename_1 = tmpdir.join("file_pydra.txt")
     with open(filename_1, "w") as f:
@@ -1009,8 +1007,8 @@ def test_docker_inputspec_2a(plugin, tmpdir):
 @need_docker
 @pytest.mark.xfail(reason="'docker' not in /proc/1/cgroup on ubuntu; TODO")
 def test_docker_inputspec_3(plugin, tmpdir):
-    """ input file is in the container, so metadata["container_path"]: True,
-        the input will be treated as a str """
+    """input file is in the container, so metadata["container_path"]: True,
+    the input will be treated as a str"""
     filename = "/proc/1/cgroup"
 
     cmd = "cat"
@@ -1053,9 +1051,9 @@ def test_docker_inputspec_3(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_inputspec_3a(plugin, tmpdir):
-    """ input file does not exist in the local file system,
-        but metadata["container_path"] is not used,
-        so exception is raised
+    """input file does not exist in the local file system,
+    but metadata["container_path"] is not used,
+    so exception is raised
     """
     filename = "/_proc/1/cgroup"
 
@@ -1097,9 +1095,9 @@ def test_docker_inputspec_3a(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
-    """ shelltask changes a file in place,
-        adding copyfile=True to the file-input from input_spec
-        hardlink or copy in the output_dir should be created
+    """shelltask changes a file in place,
+    adding copyfile=True to the file-input from input_spec
+    hardlink or copy in the output_dir should be created
     """
     file = tmpdir.join("file_pydra.txt")
     with open(file, "w") as f:
@@ -1160,8 +1158,8 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_inputspec_state_1(plugin, tmpdir):
-    """ a customised input spec for a docker file with a splitter,
-        splitter is on files
+    """a customised input spec for a docker file with a splitter,
+    splitter is on files
     """
     filename_1 = tmpdir.join("file_pydra.txt")
     with open(filename_1, "w") as f:
@@ -1209,9 +1207,9 @@ def test_docker_inputspec_state_1(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_inputspec_state_1b(plugin, tmpdir):
-    """ a customised input spec for a docker file with a splitter,
-        files from the input spec have the same path in the local os and the container,
-        so hash is calculated and the test works fine
+    """a customised input spec for a docker file with a splitter,
+    files from the input spec have the same path in the local os and the container,
+    so hash is calculated and the test works fine
     """
     file_1 = tmpdir.join("file_pydra.txt")
     file_2 = tmpdir.join("file_nice.txt")
@@ -1259,7 +1257,7 @@ def test_docker_inputspec_state_1b(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_wf_inputspec_1(plugin, tmpdir):
-    """ a customized input spec for workflow with docker tasks """
+    """a customized input spec for workflow with docker tasks"""
     filename = tmpdir.join("file_pydra.txt")
     with open(filename, "w") as f:
         f.write("hello from pydra")
@@ -1311,7 +1309,7 @@ def test_docker_wf_inputspec_1(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_wf_state_inputspec_1(plugin, tmpdir):
-    """ a customized input spec for workflow with docker tasks that has a state"""
+    """a customized input spec for workflow with docker tasks that has a state"""
     file_1 = tmpdir.join("file_pydra.txt")
     file_2 = tmpdir.join("file_nice.txt")
     with open(file_1, "w") as f:
@@ -1369,7 +1367,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmpdir):
 @no_win
 @need_docker
 def test_docker_wf_ndst_inputspec_1(plugin, tmpdir):
-    """ a customized input spec for workflow with docker tasks with states"""
+    """a customized input spec for workflow with docker tasks with states"""
     file_1 = tmpdir.join("file_pydra.txt")
     file_2 = tmpdir.join("file_nice.txt")
     with open(file_1, "w") as f:

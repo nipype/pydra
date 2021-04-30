@@ -31,7 +31,7 @@ from ... import mark
 
 
 def test_wf_name_conflict1():
-    """ raise error when workflow name conflicts with a class attribute or method"""
+    """raise error when workflow name conflicts with a class attribute or method"""
     with pytest.raises(ValueError) as excinfo1:
         wf = Workflow(name="result", input_spec=["x"])
     assert "Cannot use names of attributes or methods" in str(excinfo1.value)
@@ -41,7 +41,7 @@ def test_wf_name_conflict1():
 
 
 def test_wf_name_conflict2():
-    """ raise error when a task with the same name is already added to workflow """
+    """raise error when a task with the same name is already added to workflow"""
     wf = Workflow(name="wf_1", input_spec=["x"])
     wf.add(add2(name="task_name", x=wf.lzin.x))
     with pytest.raises(ValueError) as excinfo:
@@ -50,7 +50,7 @@ def test_wf_name_conflict2():
 
 
 def test_wf_no_output(plugin, tmpdir):
-    """ Raise error when output isn't set with set_output"""
+    """Raise error when output isn't set with set_output"""
     wf = Workflow(name="wf_1", input_spec=["x"], cache_dir=tmpdir)
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.inputs.x = 2
@@ -62,7 +62,7 @@ def test_wf_no_output(plugin, tmpdir):
 
 
 def test_wf_1(plugin, tmpdir):
-    """ workflow with one task and no splitter"""
+    """workflow with one task and no splitter"""
     wf = Workflow(name="wf_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.set_output([("out", wf.add2.lzout.out)])
@@ -80,8 +80,8 @@ def test_wf_1(plugin, tmpdir):
 
 
 def test_wf_1a_outpastuple(plugin, tmpdir):
-    """ workflow with one task and no splitter
-        set_output takes a tuple
+    """workflow with one task and no splitter
+    set_output takes a tuple
     """
     wf = Workflow(name="wf_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
@@ -160,7 +160,7 @@ def test_wf_1_call_exception(plugin, tmpdir):
 
 
 def test_wf_1_inp_in_call(tmpdir):
-    """ Defining input in __call__"""
+    """Defining input in __call__"""
     wf = Workflow(name="wf_1", input_spec=["x"], cache_dir=tmpdir)
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.set_output([("out", wf.add2.lzout.out)])
@@ -170,7 +170,7 @@ def test_wf_1_inp_in_call(tmpdir):
 
 
 def test_wf_1_upd_in_run(tmpdir):
-    """ Updating input in __call__ """
+    """Updating input in __call__"""
     wf = Workflow(name="wf_1", input_spec=["x"], cache_dir=tmpdir)
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.set_output([("out", wf.add2.lzout.out)])
@@ -180,7 +180,7 @@ def test_wf_1_upd_in_run(tmpdir):
 
 
 def test_wf_2(plugin, tmpdir):
-    """ workflow with 2 tasks, no splitter"""
+    """workflow with 2 tasks, no splitter"""
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
@@ -198,8 +198,8 @@ def test_wf_2(plugin, tmpdir):
 
 
 def test_wf_2a(plugin, tmpdir):
-    """ workflow with 2 tasks, no splitter
-        creating add2_task first (before calling add method),
+    """workflow with 2 tasks, no splitter
+    creating add2_task first (before calling add method),
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
@@ -220,9 +220,9 @@ def test_wf_2a(plugin, tmpdir):
 
 
 def test_wf_2b(plugin, tmpdir):
-    """ workflow with 2 tasks, no splitter
-        creating add2_task first (before calling add method),
-        adding inputs.x after add method
+    """workflow with 2 tasks, no splitter
+    creating add2_task first (before calling add method),
+    adding inputs.x after add method
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
@@ -244,8 +244,8 @@ def test_wf_2b(plugin, tmpdir):
 
 
 def test_wf_2c_multoutp(plugin, tmpdir):
-    """ workflow with 2 tasks, no splitter
-        setting multiple outputs for the workflow
+    """workflow with 2 tasks, no splitter
+    setting multiple outputs for the workflow
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
@@ -269,8 +269,8 @@ def test_wf_2c_multoutp(plugin, tmpdir):
 
 
 def test_wf_2d_outpasdict(plugin, tmpdir):
-    """ workflow with 2 tasks, no splitter
-        setting multiple outputs using a dictionary
+    """workflow with 2 tasks, no splitter
+    setting multiple outputs using a dictionary
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
@@ -295,7 +295,7 @@ def test_wf_2d_outpasdict(plugin, tmpdir):
 
 @pytest.mark.flaky(reruns=3)  # when dask
 def test_wf_3(plugin_dask_opt, tmpdir):
-    """ testing None value for an input"""
+    """testing None value for an input"""
     wf = Workflow(name="wf_3", input_spec=["x", "y"])
     wf.add(fun_addvar_none(name="addvar", a=wf.lzin.x, b=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.addvar.lzout.out))
@@ -314,8 +314,8 @@ def test_wf_3(plugin_dask_opt, tmpdir):
 
 @pytest.mark.xfail(reason="the task error doesn't propagate")
 def test_wf_3a_exception(plugin, tmpdir):
-    """ testinh wf without set input, attr.NOTHING should be set
-        and the function should raise an exception
+    """testinh wf without set input, attr.NOTHING should be set
+    and the function should raise an exception
     """
     wf = Workflow(name="wf_3", input_spec=["x", "y"])
     wf.add(fun_addvar_none(name="addvar", a=wf.lzin.x, b=wf.lzin.y))
@@ -350,9 +350,9 @@ def test_wf_4(plugin, tmpdir):
 
 
 def test_wf_4a(plugin, tmpdir):
-    """ wf with a task that doesn't set one input,
-        the unset input is send to the task input,
-        so the task should use the function default value
+    """wf with a task that doesn't set one input,
+    the unset input is send to the task input,
+    so the task should use the function default value
     """
     wf = Workflow(name="wf_4a", input_spec=["x", "y"])
     wf.add(fun_addvar_default(name="addvar", a=wf.lzin.x, y=wf.lzin.y))
@@ -370,8 +370,8 @@ def test_wf_4a(plugin, tmpdir):
 
 
 def test_wf_5(plugin, tmpdir):
-    """ wf with two outputs connected to the task outputs
-        one set_output
+    """wf with two outputs connected to the task outputs
+    one set_output
     """
     wf = Workflow(name="wf_5", input_spec=["x", "y"], x=3, y=2)
     wf.add(fun_addsubvar(name="addsub", a=wf.lzin.x, b=wf.lzin.y))
@@ -387,8 +387,8 @@ def test_wf_5(plugin, tmpdir):
 
 
 def test_wf_5a(plugin, tmpdir):
-    """ wf with two outputs connected to the task outputs,
-        set_output set twice
+    """wf with two outputs connected to the task outputs,
+    set_output set twice
     """
     wf = Workflow(name="wf_5", input_spec=["x", "y"], x=3, y=2)
     wf.add(fun_addsubvar(name="addsub", a=wf.lzin.x, b=wf.lzin.y))
@@ -405,7 +405,7 @@ def test_wf_5a(plugin, tmpdir):
 
 
 def test_wf_5b_exception(tmpdir):
-    """  set_output used twice with the same name - exception should be raised """
+    """set_output used twice with the same name - exception should be raised"""
     wf = Workflow(name="wf_5", input_spec=["x", "y"], x=3, y=2)
     wf.add(fun_addsubvar(name="addsub", a=wf.lzin.x, b=wf.lzin.y))
     wf.set_output([("out", wf.addsub.lzout.sum)])
@@ -417,8 +417,8 @@ def test_wf_5b_exception(tmpdir):
 
 
 def test_wf_6(plugin, tmpdir):
-    """ wf with two tasks and two outputs connected to both tasks,
-        one set_output
+    """wf with two tasks and two outputs connected to both tasks,
+    one set_output
     """
     wf = Workflow(name="wf_6", input_spec=["x", "y"], x=2, y=3)
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
@@ -436,8 +436,8 @@ def test_wf_6(plugin, tmpdir):
 
 
 def test_wf_6a(plugin, tmpdir):
-    """ wf with two tasks and two outputs connected to both tasks,
-        set_output used twice
+    """wf with two tasks and two outputs connected to both tasks,
+    set_output used twice
     """
     wf = Workflow(name="wf_6", input_spec=["x", "y"], x=2, y=3)
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
@@ -456,7 +456,7 @@ def test_wf_6a(plugin, tmpdir):
 
 
 def test_wf_st_1(plugin, tmpdir):
-    """ Workflow with one task, a splitter for the workflow"""
+    """Workflow with one task, a splitter for the workflow"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
@@ -481,7 +481,7 @@ def test_wf_st_1(plugin, tmpdir):
 
 
 def test_wf_st_1_call_subm(plugin, tmpdir):
-    """ Workflow with one task, a splitter for the workflow"""
+    """Workflow with one task, a splitter for the workflow"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
@@ -504,8 +504,8 @@ def test_wf_st_1_call_subm(plugin, tmpdir):
 
 
 def test_wf_st_1_call_plug(plugin, tmpdir):
-    """ Workflow with one task, a splitter for the workflow
-        using Workflow.__call__(plugin)
+    """Workflow with one task, a splitter for the workflow
+    using Workflow.__call__(plugin)
     """
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
@@ -528,8 +528,8 @@ def test_wf_st_1_call_plug(plugin, tmpdir):
 
 
 def test_wf_st_1_call_selfplug(plugin, tmpdir):
-    """ Workflow with one task, a splitter for the workflow
-        using Workflow.__call__() and using self.plugin
+    """Workflow with one task, a splitter for the workflow
+    using Workflow.__call__() and using self.plugin
     """
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
@@ -552,9 +552,9 @@ def test_wf_st_1_call_selfplug(plugin, tmpdir):
 
 
 def test_wf_st_1_call_noplug_nosubm(plugin, tmpdir):
-    """ Workflow with one task, a splitter for the workflow
-        using Workflow.__call__()  without plugin and submitter
-        (a submitter should be created within the __call__ function)
+    """Workflow with one task, a splitter for the workflow
+    using Workflow.__call__()  without plugin and submitter
+    (a submitter should be created within the __call__ function)
     """
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
@@ -576,7 +576,7 @@ def test_wf_st_1_call_noplug_nosubm(plugin, tmpdir):
 
 
 def test_wf_st_1_inp_in_call(tmpdir):
-    """ Defining input in __call__"""
+    """Defining input in __call__"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"], cache_dir=tmpdir).split("x")
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.set_output([("out", wf.add2.lzout.out)])
@@ -586,7 +586,7 @@ def test_wf_st_1_inp_in_call(tmpdir):
 
 
 def test_wf_st_1_upd_inp_call(tmpdir):
-    """ Updating input in __call___"""
+    """Updating input in __call___"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"], cache_dir=tmpdir).split("x")
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.inputs.x = [11, 22]
@@ -597,7 +597,7 @@ def test_wf_st_1_upd_inp_call(tmpdir):
 
 
 def test_wf_st_noinput_1(plugin, tmpdir):
-    """ Workflow with one task, a splitter for the workflow"""
+    """Workflow with one task, a splitter for the workflow"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
@@ -619,7 +619,7 @@ def test_wf_st_noinput_1(plugin, tmpdir):
 
 
 def test_wf_ndst_1(plugin, tmpdir):
-    """ workflow with one task, a splitter on the task level"""
+    """workflow with one task, a splitter on the task level"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
     wf.inputs.x = [1, 2]
@@ -638,8 +638,8 @@ def test_wf_ndst_1(plugin, tmpdir):
 
 
 def test_wf_ndst_updatespl_1(plugin, tmpdir):
-    """ workflow with one task,
-        a splitter on the task level is added *after* calling add
+    """workflow with one task,
+    a splitter on the task level is added *after* calling add
     """
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
@@ -660,8 +660,8 @@ def test_wf_ndst_updatespl_1(plugin, tmpdir):
 
 
 def test_wf_ndst_updatespl_1a(plugin, tmpdir):
-    """ workflow with one task (initialize before calling add),
-        a splitter on the task level is added *after* calling add
+    """workflow with one task (initialize before calling add),
+    a splitter on the task level is added *after* calling add
     """
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     task_add2 = add2(name="add2", x=wf.lzin.x)
@@ -683,9 +683,9 @@ def test_wf_ndst_updatespl_1a(plugin, tmpdir):
 
 
 def test_wf_ndst_updateinp_1(plugin, tmpdir):
-    """ workflow with one task,
-        a splitter on the task level,
-        updating input of the task after calling add
+    """workflow with one task,
+    a splitter on the task level,
+    updating input of the task after calling add
     """
     wf = Workflow(name="wf_spl_1", input_spec=["x", "y"])
     wf.add(add2(name="add2", x=wf.lzin.x))
@@ -707,7 +707,7 @@ def test_wf_ndst_updateinp_1(plugin, tmpdir):
 
 
 def test_wf_ndst_noinput_1(plugin, tmpdir):
-    """ workflow with one task, a splitter on the task level"""
+    """workflow with one task, a splitter on the task level"""
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
     wf.inputs.x = []
@@ -726,7 +726,7 @@ def test_wf_ndst_noinput_1(plugin, tmpdir):
 
 
 def test_wf_st_2(plugin, tmpdir):
-    """ workflow with one task, splitters and combiner for workflow"""
+    """workflow with one task, splitters and combiner for workflow"""
     wf = Workflow(name="wf_st_2", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x))
 
@@ -749,7 +749,7 @@ def test_wf_st_2(plugin, tmpdir):
 
 
 def test_wf_ndst_2(plugin, tmpdir):
-    """ workflow with one task, splitters and combiner on the task level"""
+    """workflow with one task, splitters and combiner on the task level"""
     wf = Workflow(name="wf_ndst_2", input_spec=["x"])
     wf.add(add2(name="add2", x=wf.lzin.x).split("x").combine(combiner="x"))
     wf.inputs.x = [1, 2]
@@ -769,7 +769,7 @@ def test_wf_ndst_2(plugin, tmpdir):
 
 
 def test_wf_st_3(plugin, tmpdir):
-    """ workflow with 2 tasks, splitter on wf level"""
+    """workflow with 2 tasks, splitter on wf level"""
     wf = Workflow(name="wfst_3", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
@@ -836,7 +836,7 @@ def test_wf_ndst_3(plugin, tmpdir):
 
 
 def test_wf_st_4(plugin, tmpdir):
-    """ workflow with two tasks, scalar splitter and combiner for the workflow"""
+    """workflow with two tasks, scalar splitter and combiner for the workflow"""
     wf = Workflow(name="wf_st_4", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
@@ -862,7 +862,7 @@ def test_wf_st_4(plugin, tmpdir):
 
 
 def test_wf_ndst_4(plugin, tmpdir):
-    """ workflow with two tasks, scalar splitter and combiner on tasks level"""
+    """workflow with two tasks, scalar splitter and combiner on tasks level"""
     wf = Workflow(name="wf_ndst_4", input_spec=["a", "b"])
     wf.add(multiply(name="mult", x=wf.lzin.a, y=wf.lzin.b).split(("x", "y")))
     wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("mult.x"))
@@ -885,7 +885,7 @@ def test_wf_ndst_4(plugin, tmpdir):
 
 
 def test_wf_st_5(plugin, tmpdir):
-    """ workflow with two tasks, outer splitter and no combiner"""
+    """workflow with two tasks, outer splitter and no combiner"""
     wf = Workflow(name="wf_st_5", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
@@ -909,7 +909,7 @@ def test_wf_st_5(plugin, tmpdir):
 
 
 def test_wf_ndst_5(plugin, tmpdir):
-    """ workflow with two tasks, outer splitter on tasks level and no combiner"""
+    """workflow with two tasks, outer splitter on tasks level and no combiner"""
     wf = Workflow(name="wf_ndst_5", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
@@ -931,7 +931,7 @@ def test_wf_ndst_5(plugin, tmpdir):
 
 
 def test_wf_st_6(plugin, tmpdir):
-    """ workflow with two tasks, outer splitter and combiner for the workflow"""
+    """workflow with two tasks, outer splitter and combiner for the workflow"""
     wf = Workflow(name="wf_st_6", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
@@ -958,7 +958,7 @@ def test_wf_st_6(plugin, tmpdir):
 
 
 def test_wf_ndst_6(plugin, tmpdir):
-    """ workflow with two tasks, outer splitter and combiner on tasks level"""
+    """workflow with two tasks, outer splitter and combiner on tasks level"""
     wf = Workflow(name="wf_ndst_6", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]))
     wf.add(add2(name="add2", x=wf.mult.lzout.out).combine("mult.x"))
@@ -979,7 +979,7 @@ def test_wf_ndst_6(plugin, tmpdir):
 
 
 def test_wf_ndst_7(plugin, tmpdir):
-    """ workflow with two tasks, outer splitter and (full) combiner for first node only"""
+    """workflow with two tasks, outer splitter and (full) combiner for first node only"""
     wf = Workflow(name="wf_ndst_6", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split("x").combine("x"))
     wf.add(identity(name="iden", x=wf.mult.lzout.out))
@@ -999,7 +999,7 @@ def test_wf_ndst_7(plugin, tmpdir):
 
 
 def test_wf_ndst_8(plugin, tmpdir):
-    """ workflow with two tasks, outer splitter and (partial) combiner for first task only"""
+    """workflow with two tasks, outer splitter and (partial) combiner for first task only"""
     wf = Workflow(name="wf_ndst_6", input_spec=["x", "y"])
     wf.add(
         multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]).combine("x")
@@ -1022,7 +1022,7 @@ def test_wf_ndst_8(plugin, tmpdir):
 
 
 def test_wf_ndst_9(plugin, tmpdir):
-    """ workflow with two tasks, outer splitter and (full) combiner for first task only"""
+    """workflow with two tasks, outer splitter and (full) combiner for first task only"""
     wf = Workflow(name="wf_ndst_6", input_spec=["x", "y"])
     wf.add(
         multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y)
@@ -1049,7 +1049,7 @@ def test_wf_ndst_9(plugin, tmpdir):
 
 
 def test_wf_3sernd_ndst_1(plugin, tmpdir):
-    """ workflow with three "serial" tasks, checking if the splitter is propagating"""
+    """workflow with three "serial" tasks, checking if the splitter is propagating"""
     wf = Workflow(name="wf_3sernd_ndst_1", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]))
     wf.add(add2(name="add2_1st", x=wf.mult.lzout.out))
@@ -1076,8 +1076,8 @@ def test_wf_3sernd_ndst_1(plugin, tmpdir):
 
 @pytest.mark.flaky(reruns=3)  # when dask
 def test_wf_3nd_st_1(plugin_dask_opt, tmpdir):
-    """ workflow with three tasks, third one connected to two previous tasks,
-        splitter on the workflow level
+    """workflow with three tasks, third one connected to two previous tasks,
+    splitter on the workflow level
     """
     wf = Workflow(name="wf_st_7", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x))
@@ -1104,8 +1104,8 @@ def test_wf_3nd_st_1(plugin_dask_opt, tmpdir):
 
 @pytest.mark.flaky(reruns=3)  # when dask
 def test_wf_3nd_ndst_1(plugin_dask_opt, tmpdir):
-    """ workflow with three tasks, third one connected to two previous tasks,
-        splitter on the tasks levels
+    """workflow with three tasks, third one connected to two previous tasks,
+    splitter on the tasks levels
     """
     wf = Workflow(name="wf_ndst_7", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
@@ -1127,8 +1127,8 @@ def test_wf_3nd_ndst_1(plugin_dask_opt, tmpdir):
 
 
 def test_wf_3nd_st_2(plugin, tmpdir):
-    """ workflow with three tasks, third one connected to two previous tasks,
-        splitter and partial combiner on the workflow level
+    """workflow with three tasks, third one connected to two previous tasks,
+    splitter and partial combiner on the workflow level
     """
     wf = Workflow(name="wf_st_8", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x))
@@ -1157,8 +1157,8 @@ def test_wf_3nd_st_2(plugin, tmpdir):
 
 
 def test_wf_3nd_ndst_2(plugin, tmpdir):
-    """ workflow with three tasks, third one connected to two previous tasks,
-        splitter and partial combiner on the tasks levels
+    """workflow with three tasks, third one connected to two previous tasks,
+    splitter and partial combiner on the tasks levels
     """
     wf = Workflow(name="wf_ndst_8", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
@@ -1186,8 +1186,8 @@ def test_wf_3nd_ndst_2(plugin, tmpdir):
 
 
 def test_wf_3nd_st_3(plugin, tmpdir):
-    """ workflow with three tasks, third one connected to two previous tasks,
-        splitter and partial combiner (from the second task) on the workflow level
+    """workflow with three tasks, third one connected to two previous tasks,
+    splitter and partial combiner (from the second task) on the workflow level
     """
     wf = Workflow(name="wf_st_9", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x))
@@ -1216,8 +1216,8 @@ def test_wf_3nd_st_3(plugin, tmpdir):
 
 
 def test_wf_3nd_ndst_3(plugin, tmpdir):
-    """ workflow with three tasks, third one connected to two previous tasks,
-        splitter and partial combiner (from the second task) on the tasks levels
+    """workflow with three tasks, third one connected to two previous tasks,
+    splitter and partial combiner (from the second task) on the tasks levels
     """
     wf = Workflow(name="wf_ndst_9", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
@@ -1245,8 +1245,8 @@ def test_wf_3nd_ndst_3(plugin, tmpdir):
 
 
 def test_wf_3nd_st_4(plugin, tmpdir):
-    """ workflow with three tasks, third one connected to two previous tasks,
-        splitter and full combiner on the workflow level
+    """workflow with three tasks, third one connected to two previous tasks,
+    splitter and full combiner on the workflow level
     """
     wf = Workflow(name="wf_st_10", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x))
@@ -1275,8 +1275,8 @@ def test_wf_3nd_st_4(plugin, tmpdir):
 
 
 def test_wf_3nd_ndst_4(plugin, tmpdir):
-    """ workflow with three tasks, third one connected to two previous tasks,
-        splitter and full combiner on the tasks levels
+    """workflow with three tasks, third one connected to two previous tasks,
+    splitter and full combiner on the tasks levels
     """
     wf = Workflow(name="wf_ndst_10", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
@@ -1303,8 +1303,8 @@ def test_wf_3nd_ndst_4(plugin, tmpdir):
 
 
 def test_wf_3nd_st_5(plugin, tmpdir):
-    """ workflow with three tasks (A->C, B->C) and three fields in the splitter,
-        splitter and partial combiner (from the second task) on the workflow level
+    """workflow with three tasks (A->C, B->C) and three fields in the splitter,
+    splitter and partial combiner (from the second task) on the workflow level
     """
     wf = Workflow(name="wf_st_9", input_spec=["x", "y", "z"])
     wf.add(add2(name="add2x", x=wf.lzin.x))
@@ -1341,8 +1341,8 @@ def test_wf_3nd_st_5(plugin, tmpdir):
 
 
 def test_wf_3nd_ndst_5(plugin, tmpdir):
-    """ workflow with three tasks (A->C, B->C) and three fields in the splitter,
-        all tasks have splitters and the last one has a partial combiner (from the 2nd)
+    """workflow with three tasks (A->C, B->C) and three fields in the splitter,
+    all tasks have splitters and the last one has a partial combiner (from the 2nd)
     """
     wf = Workflow(name="wf_st_9", input_spec=["x", "y", "z"])
     wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
@@ -1376,8 +1376,8 @@ def test_wf_3nd_ndst_5(plugin, tmpdir):
 
 
 def test_wf_3nd_ndst_6(plugin, tmpdir):
-    """ workflow with three tasks, third one connected to two previous tasks,
-        the third one uses scalar splitter from the previous ones and a combiner
+    """workflow with three tasks, third one connected to two previous tasks,
+    the third one uses scalar splitter from the previous ones and a combiner
     """
     wf = Workflow(name="wf_ndst_9", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
@@ -1405,9 +1405,9 @@ def test_wf_3nd_ndst_6(plugin, tmpdir):
 
 
 def test_wf_ndstLR_1(plugin, tmpdir):
-    """ Test workflow with 2 tasks, splitters on tasks levels
-        The second task has its own simple splitter
-        and the  Left part from the first task should be added
+    """Test workflow with 2 tasks, splitters on tasks levels
+    The second task has its own simple splitter
+    and the  Left part from the first task should be added
     """
     wf = Workflow(name="wf_ndst_3", input_spec=["x", "y"])
     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
@@ -1433,9 +1433,9 @@ def test_wf_ndstLR_1(plugin, tmpdir):
 
 
 def test_wf_ndstLR_1a(plugin, tmpdir):
-    """ Test workflow with 2 tasks, splitters on tasks levels
-        The second task has splitter that has Left part (from previous state)
-        and the Right part (it's onw splitter)
+    """Test workflow with 2 tasks, splitters on tasks levels
+    The second task has splitter that has Left part (from previous state)
+    and the Right part (it's onw splitter)
     """
     wf = Workflow(name="wf_ndst_3", input_spec=["x", "y"])
     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
@@ -1463,9 +1463,9 @@ def test_wf_ndstLR_1a(plugin, tmpdir):
 
 
 def test_wf_ndstLR_2(plugin, tmpdir):
-    """ Test workflow with 2 tasks, splitters on tasks levels
-        The second task has its own outer splitter
-        and the  Left part from the first task should be added
+    """Test workflow with 2 tasks, splitters on tasks levels
+    The second task has its own outer splitter
+    and the  Left part from the first task should be added
     """
     wf = Workflow(name="wf_ndst_3", input_spec=["x", "y", "z"])
     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
@@ -1512,9 +1512,9 @@ def test_wf_ndstLR_2(plugin, tmpdir):
 
 
 def test_wf_ndstLR_2a(plugin, tmpdir):
-    """ Test workflow with 2 tasks, splitters on tasks levels
-        The second task has splitter that has Left part (from previous state)
-        and the Right part (it's onw outer splitter)
+    """Test workflow with 2 tasks, splitters on tasks levels
+    The second task has splitter that has Left part (from previous state)
+    and the Right part (it's onw outer splitter)
     """
     wf = Workflow(name="wf_ndst_3", input_spec=["x", "y", "z"])
     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
@@ -1564,8 +1564,8 @@ def test_wf_ndstLR_2a(plugin, tmpdir):
 
 
 def test_wf_ndstinner_1(plugin, tmpdir):
-    """ workflow with 2 tasks,
-        the second task has inner splitter
+    """workflow with 2 tasks,
+    the second task has inner splitter
     """
     wf = Workflow(name="wf_st_3", input_spec=["x"])
     wf.add(list_output(name="list", x=wf.lzin.x))
@@ -1588,8 +1588,8 @@ def test_wf_ndstinner_1(plugin, tmpdir):
 
 
 def test_wf_ndstinner_2(plugin, tmpdir):
-    """ workflow with 2 tasks,
-        the second task has two inputs and inner splitter from one of the input
+    """workflow with 2 tasks,
+    the second task has two inputs and inner splitter from one of the input
     """
     wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
     wf.add(list_output(name="list", x=wf.lzin.x))
@@ -1613,8 +1613,8 @@ def test_wf_ndstinner_2(plugin, tmpdir):
 
 
 def test_wf_ndstinner_3(plugin, tmpdir):
-    """ workflow with 2 tasks,
-        the second task has two inputs and outer splitter that includes an inner field
+    """workflow with 2 tasks,
+    the second task has two inputs and outer splitter that includes an inner field
     """
     wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
     wf.add(list_output(name="list", x=wf.lzin.x))
@@ -1638,9 +1638,9 @@ def test_wf_ndstinner_3(plugin, tmpdir):
 
 
 def test_wf_ndstinner_4(plugin, tmpdir):
-    """ workflow with 3 tasks,
-        the second task has two inputs and inner splitter from one of the input,
-        the third task has no its own splitter
+    """workflow with 3 tasks,
+    the second task has two inputs and inner splitter from one of the input,
+    the third task has no its own splitter
     """
     wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
     wf.add(list_output(name="list", x=wf.lzin.x))
@@ -1670,7 +1670,7 @@ def test_wf_ndstinner_4(plugin, tmpdir):
 
 
 def test_wf_st_singl_1(plugin, tmpdir):
-    """ workflow with two tasks, only one input is in the splitter and combiner"""
+    """workflow with two tasks, only one input is in the splitter and combiner"""
     wf = Workflow(name="wf_st_5", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.add(add2(name="add2", x=wf.mult.lzout.out))
@@ -1693,8 +1693,8 @@ def test_wf_st_singl_1(plugin, tmpdir):
 
 
 def test_wf_ndst_singl_1(plugin, tmpdir):
-    """ workflow with two tasks, outer splitter and combiner on tasks level;
-        only one input is part of the splitter, the other is a single value
+    """workflow with two tasks, outer splitter and combiner on tasks level;
+    only one input is part of the splitter, the other is a single value
     """
     wf = Workflow(name="wf_ndst_5", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split("x"))
@@ -1714,9 +1714,9 @@ def test_wf_ndst_singl_1(plugin, tmpdir):
 
 
 def test_wf_st_singl_2(plugin, tmpdir):
-    """ workflow with three tasks, third one connected to two previous tasks,
-        splitter on the workflow level
-        only one input is part of the splitter, the other is a single value
+    """workflow with three tasks, third one connected to two previous tasks,
+    splitter on the workflow level
+    only one input is part of the splitter, the other is a single value
     """
     wf = Workflow(name="wf_st_6", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x))
@@ -1742,9 +1742,9 @@ def test_wf_st_singl_2(plugin, tmpdir):
 
 
 def test_wf_ndst_singl_2(plugin, tmpdir):
-    """ workflow with three tasks, third one connected to two previous tasks,
-        splitter on the tasks levels
-        only one input is part of the splitter, the other is a single value
+    """workflow with three tasks, third one connected to two previous tasks,
+    splitter on the tasks levels
+    only one input is part of the splitter, the other is a single value
     """
     wf = Workflow(name="wf_ndst_6", input_spec=["x", "y"])
     wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
@@ -1769,8 +1769,8 @@ def test_wf_ndst_singl_2(plugin, tmpdir):
 
 
 def test_wfasnd_1(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with one task and no splitter
+    """workflow as a node
+    workflow-node with one task and no splitter
     """
     wfnd = Workflow(name="wfnd", input_spec=["x"])
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
@@ -1792,9 +1792,9 @@ def test_wfasnd_1(plugin, tmpdir):
 
 
 def test_wfasnd_wfinp_1(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with one task and no splitter
-        input set for the main workflow
+    """workflow as a node
+    workflow-node with one task and no splitter
+    input set for the main workflow
     """
     wf = Workflow(name="wf", input_spec=["x"])
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
@@ -1818,9 +1818,9 @@ def test_wfasnd_wfinp_1(plugin, tmpdir):
 
 
 def test_wfasnd_wfndupdate(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with one task and no splitter
-        wfasnode input is updated to use the main workflow input
+    """workflow as a node
+    workflow-node with one task and no splitter
+    wfasnode input is updated to use the main workflow input
     """
 
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=2)
@@ -1842,10 +1842,10 @@ def test_wfasnd_wfndupdate(plugin, tmpdir):
 
 
 def test_wfasnd_wfndupdate_rerun(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with one task and no splitter
-        wfasnode is run first and later is
-        updated to use the main workflow input
+    """workflow as a node
+    workflow-node with one task and no splitter
+    wfasnode is run first and later is
+    updated to use the main workflow input
     """
 
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=2)
@@ -1887,9 +1887,9 @@ def test_wfasnd_wfndupdate_rerun(plugin, tmpdir):
 
 
 def test_wfasnd_st_1(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with one task,
-        splitter for wfnd
+    """workflow as a node
+    workflow-node with one task,
+    splitter for wfnd
     """
     wfnd = Workflow(name="wfnd", input_spec=["x"])
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
@@ -1914,9 +1914,9 @@ def test_wfasnd_st_1(plugin, tmpdir):
 
 
 def test_wfasnd_st_updatespl_1(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with one task,
-        splitter for wfnd is set after add
+    """workflow as a node
+    workflow-node with one task,
+    splitter for wfnd is set after add
     """
     wfnd = Workflow(name="wfnd", input_spec=["x"])
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
@@ -1939,9 +1939,9 @@ def test_wfasnd_st_updatespl_1(plugin, tmpdir):
 
 
 def test_wfasnd_ndst_1(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with one task,
-        splitter for node
+    """workflow as a node
+    workflow-node with one task,
+    splitter for node
     """
     wfnd = Workflow(name="wfnd", input_spec=["x"])
     wfnd.add(add2(name="add2", x=wfnd.lzin.x).split("x"))
@@ -1965,9 +1965,9 @@ def test_wfasnd_ndst_1(plugin, tmpdir):
 
 
 def test_wfasnd_ndst_updatespl_1(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with one task,
-        splitter for node added after add
+    """workflow as a node
+    workflow-node with one task,
+    splitter for node added after add
     """
     wfnd = Workflow(name="wfnd", input_spec=["x"])
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
@@ -1991,9 +1991,9 @@ def test_wfasnd_ndst_updatespl_1(plugin, tmpdir):
 
 
 def test_wfasnd_wfst_1(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with one task,
-        splitter for the main workflow
+    """workflow as a node
+    workflow-node with one task,
+    splitter for the main workflow
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
@@ -2021,9 +2021,9 @@ def test_wfasnd_wfst_1(plugin, tmpdir):
 
 
 def test_wfasnd_st_2(plugin, tmpdir):
-    """ workflow as a node,
-        the main workflow has two tasks,
-        splitter for wfnd
+    """workflow as a node,
+    the main workflow has two tasks,
+    splitter for wfnd
     """
     wfnd = Workflow(name="wfnd", input_spec=["x", "y"])
     wfnd.add(multiply(name="mult", x=wfnd.lzin.x, y=wfnd.lzin.y))
@@ -2048,9 +2048,9 @@ def test_wfasnd_st_2(plugin, tmpdir):
 
 
 def test_wfasnd_wfst_2(plugin, tmpdir):
-    """ workflow as a node,
-        the main workflow has two tasks,
-        splitter for the main workflow
+    """workflow as a node,
+    the main workflow has two tasks,
+    splitter for the main workflow
     """
     wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
     wfnd = Workflow(name="wfnd", input_spec=["x", "y"], x=wf.lzin.x, y=wf.lzin.y)
@@ -2081,9 +2081,9 @@ def test_wfasnd_wfst_2(plugin, tmpdir):
 
 
 def test_wfasnd_ndst_3(plugin, tmpdir):
-    """ workflow as the second node,
-        the main workflow has two tasks,
-        splitter for the first task
+    """workflow as the second node,
+    the main workflow has two tasks,
+    splitter for the first task
     """
     wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(("x", "y")))
@@ -2108,9 +2108,9 @@ def test_wfasnd_ndst_3(plugin, tmpdir):
 
 
 def test_wfasnd_wfst_3(plugin, tmpdir):
-    """ workflow as the second node,
-        the main workflow has two tasks,
-        splitter for the main workflow
+    """workflow as the second node,
+    the main workflow has two tasks,
+    splitter for the main workflow
     """
     wf = Workflow(name="wf_st_3", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
@@ -2143,8 +2143,8 @@ def test_wfasnd_wfst_3(plugin, tmpdir):
 
 
 def test_wfasnd_4(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with two tasks and no splitter
+    """workflow as a node
+    workflow-node with two tasks and no splitter
     """
     wfnd = Workflow(name="wfnd", input_spec=["x"])
     wfnd.add(add2(name="add2_1st", x=wfnd.lzin.x))
@@ -2167,9 +2167,9 @@ def test_wfasnd_4(plugin, tmpdir):
 
 
 def test_wfasnd_ndst_4(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with two tasks,
-        splitter for node
+    """workflow as a node
+    workflow-node with two tasks,
+    splitter for node
     """
     wfnd = Workflow(name="wfnd", input_spec=["x"])
     wfnd.add(add2(name="add2_1st", x=wfnd.lzin.x).split("x"))
@@ -2192,9 +2192,9 @@ def test_wfasnd_ndst_4(plugin, tmpdir):
 
 
 def test_wfasnd_wfst_4(plugin, tmpdir):
-    """ workflow as a node
-        workflow-node with two tasks,
-        splitter for the main workflow
+    """workflow as a node
+    workflow-node with two tasks,
+    splitter for the main workflow
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
@@ -2224,7 +2224,7 @@ def test_wfasnd_wfst_4(plugin, tmpdir):
 
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachedir(plugin, tmpdir):
-    """ wf with provided cache_dir using pytest tmpdir"""
+    """wf with provided cache_dir using pytest tmpdir"""
     cache_dir = tmpdir.mkdir("test_wf_cache_1")
 
     wf = Workflow(name="wf_2", input_spec=["x", "y"], cache_dir=cache_dir)
@@ -2246,7 +2246,7 @@ def test_wf_nostate_cachedir(plugin, tmpdir):
 
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachedir_relativepath(tmpdir, plugin):
-    """ wf with provided cache_dir as relative path"""
+    """wf with provided cache_dir as relative path"""
     tmpdir.chdir()
     cache_dir = "test_wf_cache_2"
     tmpdir.mkdir(cache_dir)
@@ -3702,9 +3702,9 @@ def test_workflow_combine2(tmpdir):
 
 
 def test_wf_lzoutall_1(plugin, tmpdir):
-    """ workflow with 2 tasks, no splitter
-        passing entire result object to add2_sub2_res function
-        by using lzout.all syntax
+    """workflow with 2 tasks, no splitter
+    passing entire result object to add2_sub2_res function
+    by using lzout.all syntax
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
@@ -3723,9 +3723,9 @@ def test_wf_lzoutall_1(plugin, tmpdir):
 
 
 def test_wf_lzoutall_1a(plugin, tmpdir):
-    """ workflow with 2 tasks, no splitter
-        passing entire result object to add2_res function
-        by using lzout.all syntax in the node connections and for wf output
+    """workflow with 2 tasks, no splitter
+    passing entire result object to add2_res function
+    by using lzout.all syntax in the node connections and for wf output
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
@@ -3744,9 +3744,9 @@ def test_wf_lzoutall_1a(plugin, tmpdir):
 
 
 def test_wf_lzoutall_st_1(plugin, tmpdir):
-    """ workflow with 2 tasks, no splitter
-        passing entire result object to add2_res function
-        by using lzout.all syntax
+    """workflow with 2 tasks, no splitter
+    passing entire result object to add2_res function
+    by using lzout.all syntax
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]))
@@ -3766,9 +3766,9 @@ def test_wf_lzoutall_st_1(plugin, tmpdir):
 
 
 def test_wf_lzoutall_st_1a(plugin, tmpdir):
-    """ workflow with 2 tasks, no splitter
-        passing entire result object to add2_res function
-        by using lzout.all syntax
+    """workflow with 2 tasks, no splitter
+    passing entire result object to add2_res function
+    by using lzout.all syntax
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]))
@@ -3793,9 +3793,9 @@ def test_wf_lzoutall_st_1a(plugin, tmpdir):
 
 
 def test_wf_lzoutall_st_2(plugin, tmpdir):
-    """ workflow with 2 tasks, no splitter
-        passing entire result object to add2_res function
-        by using lzout.all syntax
+    """workflow with 2 tasks, no splitter
+    passing entire result object to add2_res function
+    by using lzout.all syntax
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(
@@ -3818,9 +3818,9 @@ def test_wf_lzoutall_st_2(plugin, tmpdir):
 
 
 def test_wf_lzoutall_st_2a(plugin, tmpdir):
-    """ workflow with 2 tasks, no splitter
-        passing entire result object to add2_res function
-        by using lzout.all syntax
+    """workflow with 2 tasks, no splitter
+    passing entire result object to add2_res function
+    by using lzout.all syntax
     """
     wf = Workflow(name="wf_2", input_spec=["x", "y"])
     wf.add(
@@ -3848,7 +3848,7 @@ def test_wf_lzoutall_st_2a(plugin, tmpdir):
 
 
 def test_wf_resultfile_1(plugin, tmpdir):
-    """ workflow with a file in the result, file should be copied to the wf dir"""
+    """workflow with a file in the result, file should be copied to the wf dir"""
     wf = Workflow(name="wf_file_1", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_write_file(name="writefile", filename=wf.lzin.x))
     wf.inputs.x = "file_1.txt"
@@ -3865,8 +3865,8 @@ def test_wf_resultfile_1(plugin, tmpdir):
 
 
 def test_wf_resultfile_2(plugin, tmpdir):
-    """ workflow with a list of files in the wf result,
-        all files should be copied to the wf dir
+    """workflow with a list of files in the wf result,
+    all files should be copied to the wf dir
     """
     wf = Workflow(name="wf_file_1", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_write_file_list(name="writefile", filename_list=wf.lzin.x))
@@ -3886,8 +3886,8 @@ def test_wf_resultfile_2(plugin, tmpdir):
 
 
 def test_wf_resultfile_3(plugin, tmpdir):
-    """ workflow with a dictionaries of files in the wf result,
-        all files should be copied to the wf dir
+    """workflow with a dictionaries of files in the wf result,
+    all files should be copied to the wf dir
     """
     wf = Workflow(name="wf_file_1", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_write_file_list2dict(name="writefile", filename_list=wf.lzin.x))
@@ -3911,7 +3911,7 @@ def test_wf_resultfile_3(plugin, tmpdir):
 
 
 def test_wf_upstream_error1(plugin, tmpdir):
-    """ workflow with two tasks, task2 dependent on an task1 which raised an error"""
+    """workflow with two tasks, task2 dependent on an task1 which raised an error"""
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
@@ -3927,8 +3927,8 @@ def test_wf_upstream_error1(plugin, tmpdir):
 
 
 def test_wf_upstream_error2(plugin, tmpdir):
-    """ task2 dependent on task1, task1 errors, workflow-level split on task 1
-        goal - workflow finish running, one output errors but the other doesn't
+    """task2 dependent on task1, task1 errors, workflow-level split on task 1
+    goal - workflow finish running, one output errors but the other doesn't
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
@@ -3946,8 +3946,8 @@ def test_wf_upstream_error2(plugin, tmpdir):
 
 
 def test_wf_upstream_error3(plugin, tmpdir):
-    """ task2 dependent on task1, task1 errors, task-level split on task 1
-        goal - workflow finish running, one output errors but the other doesn't
+    """task2 dependent on task1, task1 errors, task-level split on task 1
+    goal - workflow finish running, one output errors but the other doesn't
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
@@ -3965,7 +3965,7 @@ def test_wf_upstream_error3(plugin, tmpdir):
 
 
 def test_wf_upstream_error4(plugin, tmpdir):
-    """ workflow with one task, which raises an error"""
+    """workflow with one task, which raises an error"""
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
@@ -3980,7 +3980,7 @@ def test_wf_upstream_error4(plugin, tmpdir):
 
 
 def test_wf_upstream_error5(plugin, tmpdir):
-    """ nested workflow with one task, which raises an error"""
+    """nested workflow with one task, which raises an error"""
     wf_main = Workflow(name="wf_main", input_spec=["x"], cache_dir=tmpdir)
     wf = Workflow(name="wf", input_spec=["x"], x=wf_main.lzin.x)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
@@ -4000,7 +4000,7 @@ def test_wf_upstream_error5(plugin, tmpdir):
 
 
 def test_wf_upstream_error6(plugin, tmpdir):
-    """ nested workflow with two tasks, the first one raises an error"""
+    """nested workflow with two tasks, the first one raises an error"""
     wf_main = Workflow(name="wf_main", input_spec=["x"], cache_dir=tmpdir)
     wf = Workflow(name="wf", input_spec=["x"], x=wf_main.lzin.x)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
@@ -4087,7 +4087,7 @@ def test_wf_upstream_error7b(plugin, tmpdir):
 
 
 def test_wf_upstream_error8(plugin, tmpdir):
-    """ workflow with three tasks, the first one raises an error, so 2 others are removed"""
+    """workflow with three tasks, the first one raises an error, so 2 others are removed"""
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
@@ -4183,7 +4183,7 @@ def test_wf_upstream_error9b(plugin, tmpdir):
 
 
 def exporting_graphs(wf, name):
-    """ helper function to run dot to create png/pdf files from dotfiles"""
+    """helper function to run dot to create png/pdf files from dotfiles"""
     # exporting the simple graph
     dotfile_pr, formatted_dot = wf.create_dotfile(export=True, name=name)
     assert len(formatted_dot) == 1
@@ -4438,8 +4438,8 @@ def test_graph_3(tmpdir):
 
 def test_graph_3st(tmpdir):
     """creating a set of graphs, wf with two nodes (one node is a workflow)
-       the first node has a state and it should be passed to the second node
-       (blue node and a wfasnd, and blue arrow from the node to the wfasnd)
+    the first node has a state and it should be passed to the second node
+    (blue node and a wfasnd, and blue arrow from the node to the wfasnd)
     """
     wf = Workflow(name="wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split("x"))
@@ -4566,8 +4566,8 @@ def test_graph_5(tmpdir):
 
 @pytest.mark.timeout(20)
 def test_duplicate_input_on_split_wf(tmpdir):
-    """ checking if the workflow gets stuck if it has to run two tasks with equal checksum;
-        This can occur when splitting on a list containing duplicate values.
+    """checking if the workflow gets stuck if it has to run two tasks with equal checksum;
+    This can occur when splitting on a list containing duplicate values.
     """
     text = ["test"] * 2
 
@@ -4592,8 +4592,8 @@ def test_duplicate_input_on_split_wf(tmpdir):
 
 @pytest.mark.timeout(40)
 def test_inner_outer_wf_duplicate(tmpdir):
-    """ checking if the execution gets stuck if there is an inner and outer workflows
-        thar run two nodes with the exact same inputs.
+    """checking if the execution gets stuck if there is an inner and outer workflows
+    thar run two nodes with the exact same inputs.
     """
     task_list = ["First", "Second"]
     start_list = [3]

@@ -307,7 +307,7 @@ def rpn2splitter(splitter_rpn):
 
 
 def add_name_combiner(combiner, name):
-    """ adding a node's name to each field from the combiner"""
+    """adding a node's name to each field from the combiner"""
     combiner_changed = []
     for comb in combiner:
         if "." not in comb:
@@ -318,7 +318,7 @@ def add_name_combiner(combiner, name):
 
 
 def add_name_splitter(splitter, name):
-    """ adding a node's name to each field from the splitter"""
+    """adding a node's name to each field from the splitter"""
     if isinstance(splitter, str):
         return _add_name([splitter], name)[0]
     elif isinstance(splitter, list):
@@ -329,7 +329,7 @@ def add_name_splitter(splitter, name):
 
 
 def _add_name(mlist, name):
-    """ adding anem to each element from the list"""
+    """adding anem to each element from the list"""
     for i, elem in enumerate(mlist):
         if isinstance(elem, str):
             if "." in elem or elem.startswith("_"):
@@ -371,7 +371,7 @@ def iter_splits(iterable, keys):
 
 
 def input_shape(inp, cont_dim=1):
-    """Get input shape, depends on the container dimension, if not specify it is assumed to be 1 """
+    """Get input shape, depends on the container dimension, if not specify it is assumed to be 1"""
     # TODO: have to be changed for inner splitter (sometimes different length)
     cont_dim -= 1
     shape = [len(inp)]
@@ -536,7 +536,7 @@ def splits(splitter_rpn, inputs, inner_inputs=None, cont_dim=None):
 def _single_op_splits(
     op_single, inputs, inner_inputs, previous_states_ind, cont_dim=None
 ):
-    """ splits function if splitter is a singleton"""
+    """splits function if splitter is a singleton"""
     if op_single.startswith("_"):
         return (previous_states_ind[op_single][0], previous_states_ind[op_single][1])
     if cont_dim is None:
@@ -562,8 +562,8 @@ def _single_op_splits(
 
 
 def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
-    """ splits inputs to groups (axes) and creates stacks for these groups
-        This is used to specify which input can be combined.
+    """splits inputs to groups (axes) and creates stacks for these groups
+    This is used to specify which input can be combined.
     """
     if not splitter_rpn:
         return [], {}, [], []
@@ -696,7 +696,7 @@ def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):
 
 
 def _single_op_splits_groups(op_single, combiner, inner_inputs, groups):
-    """ splits_groups function if splitter is a singleton"""
+    """splits_groups function if splitter is a singleton"""
     if op_single in inner_inputs:
         # TODO: have to be changed if differ length
         # TODO: i think I don't want to add here from left part

@@ -28,7 +28,7 @@ def create_wf(size):
 
 def test_wf_memory():
     """creating two workflow with relatively big splitter: 1000, 2000 and 4000 elements
-        testings if the size of workflow grows linearly
+    testings if the size of workflow grows linearly
     """
 
     wf_1000 = create_wf(size=1000)
@@ -47,7 +47,7 @@ def test_wf_memory():
 
 def test_load_task_memory():
     """creating two workflow with relatively big splitter: 1000 and 4000 elements
-        testings if load_task for a single element returns tasks of a similar size
+    testings if load_task for a single element returns tasks of a similar size
     """
 
     wf_1000 = create_wf(size=1000)

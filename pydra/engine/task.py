@@ -459,8 +459,8 @@ class ShellCommandTask(TaskBase):
 
     @property
     def cmdline(self):
-        """ Get the actual command line that will be submitted
-            Returns a list if the task has a state.
+        """Get the actual command line that will be submitted
+        Returns a list if the task has a state.
         """
         if is_lazy(self.inputs):
             raise Exception("can't return cmdline, self.inputs has LazyFields")

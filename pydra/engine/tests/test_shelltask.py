@@ -26,7 +26,7 @@ if sys.platform.startswith("win"):
 @pytest.mark.flaky(reruns=2)  # when dask
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_1(plugin_dask_opt, results_function, tmpdir):
-    """ simple command, no arguments """
+    """simple command, no arguments"""
     cmd = ["pwd"]
     shelly = ShellCommandTask(name="shelly", executable=cmd, cache_dir=tmpdir)
     assert shelly.cmdline == " ".join(cmd)
@@ -39,8 +39,8 @@ def test_shell_cmd_1(plugin_dask_opt, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_1_strip(plugin, results_function, tmpdir):
-    """ simple command, no arguments
-        strip option to remove \n at the end os stdout
+    """simple command, no arguments
+    strip option to remove \n at the end os stdout
     """
     cmd = ["pwd"]
     shelly = ShellCommandTask(name="shelly", executable=cmd, strip=True)
@@ -55,7 +55,7 @@ def test_shell_cmd_1_strip(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_2(plugin, results_function, tmpdir):
-    """ a command with arguments, cmd and args given as executable """
+    """a command with arguments, cmd and args given as executable"""
     cmd = ["echo", "hail", "pydra"]
     shelly = ShellCommandTask(name="shelly", executable=cmd)
     shelly.cache_dir = tmpdir
@@ -69,7 +69,7 @@ def test_shell_cmd_2(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_2a(plugin, results_function, tmpdir):
-    """ a command with arguments, using executable and args """
+    """a command with arguments, using executable and args"""
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
@@ -86,7 +86,7 @@ def test_shell_cmd_2a(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_2b(plugin, results_function, tmpdir):
-    """ a command with arguments, using  strings executable and args """
+    """a command with arguments, using  strings executable and args"""
     cmd_exec = "echo"
     cmd_args = "pydra"
     # separate command into exec + args
@@ -106,8 +106,8 @@ def test_shell_cmd_2b(plugin, results_function, tmpdir):
 
 @pytest.mark.flaky(reruns=2)
 def test_shell_cmd_3(plugin_dask_opt, tmpdir):
-    """ commands without arguments
-        splitter = executable
+    """commands without arguments
+    splitter = executable
     """
     cmd = ["pwd", "whoami"]
 
@@ -128,8 +128,8 @@ def test_shell_cmd_3(plugin_dask_opt, tmpdir):
 
 
 def test_shell_cmd_4(plugin, tmpdir):
-    """ a command with arguments, using executable and args
-        splitter=args
+    """a command with arguments, using executable and args
+    splitter=args
     """
     cmd_exec = "echo"
     cmd_args = ["nipype", "pydra"]
@@ -152,8 +152,8 @@ def test_shell_cmd_4(plugin, tmpdir):
 
 
 def test_shell_cmd_5(plugin, tmpdir):
-    """ a command with arguments
-        using splitter and combiner for args
+    """a command with arguments
+    using splitter and combiner for args
     """
     cmd_exec = "echo"
     cmd_args = ["nipype", "pydra"]
@@ -175,8 +175,8 @@ def test_shell_cmd_5(plugin, tmpdir):
 
 
 def test_shell_cmd_6(plugin, tmpdir):
-    """ a command with arguments,
-        outer splitter for executable and args
+    """a command with arguments,
+    outer splitter for executable and args
     """
     cmd_exec = ["echo", ["echo", "-n"]]
     cmd_args = ["nipype", "pydra"]
@@ -218,8 +218,8 @@ def test_shell_cmd_6(plugin, tmpdir):
 
 
 def test_shell_cmd_7(plugin, tmpdir):
-    """ a command with arguments,
-        outer splitter for executable and args, and combiner=args
+    """a command with arguments,
+    outer splitter for executable and args, and combiner=args
     """
     cmd_exec = ["echo", ["echo", "-n"]]
     cmd_args = ["nipype", "pydra"]
@@ -247,7 +247,7 @@ def test_shell_cmd_7(plugin, tmpdir):
 
 
 def test_wf_shell_cmd_1(plugin, tmpdir):
-    """ a workflow with two connected commands"""
+    """a workflow with two connected commands"""
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
     wf.inputs.cmd1 = "pwd"
     wf.inputs.cmd2 = "ls"
@@ -274,9 +274,9 @@ def test_wf_shell_cmd_1(plugin, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_1(plugin, results_function, use_validator, tmpdir):
-    """ a command with executable, args and one command opt,
-        using a customized input_spec to add the opt to the command
-        in the right place that is specified in metadata["cmd_pos"]
+    """a command with executable, args and one command opt,
+    using a customized input_spec to add the opt to the command
+    in the right place that is specified in metadata["cmd_pos"]
     """
     cmd_exec = "echo"
     cmd_opt = True
@@ -314,9 +314,9 @@ def test_shell_cmd_inputspec_1(plugin, results_function, use_validator, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_2(plugin, results_function, use_validator, tmpdir):
-    """ a command with executable, args and two command options,
-        using a customized input_spec to add the opt to the command
-        in the right place that is specified in metadata["cmd_pos"]
+    """a command with executable, args and two command options,
+    using a customized input_spec to add the opt to the command
+    in the right place that is specified in metadata["cmd_pos"]
     """
     cmd_exec = "echo"
     cmd_opt = True
@@ -362,7 +362,7 @@ def test_shell_cmd_inputspec_2(plugin, results_function, use_validator, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_3(plugin, results_function, tmpdir):
-    """  mandatory field added to fields, value provided """
+    """mandatory field added to fields, value provided"""
     cmd_exec = "echo"
     hello = "HELLO"
     my_input_spec = SpecInfo(
@@ -400,8 +400,8 @@ def test_shell_cmd_inputspec_3(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_3a(plugin, results_function, tmpdir):
-    """  mandatory field added to fields, value provided
-        using shorter syntax for input spec (no attr.ib)
+    """mandatory field added to fields, value provided
+    using shorter syntax for input spec (no attr.ib)
     """
     cmd_exec = "echo"
     hello = "HELLO"
@@ -433,7 +433,7 @@ def test_shell_cmd_inputspec_3a(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_3b(plugin, results_function, tmpdir):
-    """  mandatory field added to fields, value provided after init"""
+    """mandatory field added to fields, value provided after init"""
     cmd_exec = "echo"
     hello = "HELLO"
     my_input_spec = SpecInfo(
@@ -468,7 +468,7 @@ def test_shell_cmd_inputspec_3b(plugin, results_function, tmpdir):
 
 
 def test_shell_cmd_inputspec_3c_exception(plugin, tmpdir):
-    """  mandatory field added to fields, value is not provided, so exception is raised """
+    """mandatory field added to fields, value is not provided, so exception is raised"""
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
         name="Input",
@@ -500,7 +500,7 @@ def test_shell_cmd_inputspec_3c_exception(plugin, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_3c(plugin, results_function, tmpdir):
-    """  mandatory=False, so tasks runs fine even without the value """
+    """mandatory=False, so tasks runs fine even without the value"""
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
         name="Input",
@@ -535,7 +535,7 @@ def test_shell_cmd_inputspec_3c(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_4(plugin, results_function, tmpdir):
-    """  mandatory field added to fields, value provided """
+    """mandatory field added to fields, value provided"""
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
         name="Input",
@@ -566,8 +566,8 @@ def test_shell_cmd_inputspec_4(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_4a(plugin, results_function, tmpdir):
-    """  mandatory field added to fields, value provided
-        using shorter syntax for input spec (no attr.ib)
+    """mandatory field added to fields, value provided
+    using shorter syntax for input spec (no attr.ib)
     """
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
@@ -592,7 +592,7 @@ def test_shell_cmd_inputspec_4a(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_4b(plugin, results_function, tmpdir):
-    """  mandatory field added to fields, value provided """
+    """mandatory field added to fields, value provided"""
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
         name="Input",
@@ -622,7 +622,7 @@ def test_shell_cmd_inputspec_4b(plugin, results_function, tmpdir):
 
 
 def test_shell_cmd_inputspec_4c_exception(plugin):
-    """  mandatory field added to fields, value provided """
+    """mandatory field added to fields, value provided"""
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
         name="Input",
@@ -656,7 +656,7 @@ def test_shell_cmd_inputspec_4c_exception(plugin):
 
 
 def test_shell_cmd_inputspec_4d_exception(plugin):
-    """  mandatory field added to fields, value provided """
+    """mandatory field added to fields, value provided"""
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
         name="Input",
@@ -691,7 +691,7 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmpdir):
-    """ checking xor in metadata: task should work fine, since only one option is True"""
+    """checking xor in metadata: task should work fine, since only one option is True"""
     cmd_exec = "ls"
     cmd_t = True
     my_input_spec = SpecInfo(
@@ -739,7 +739,7 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmpdir):
 
 
 def test_shell_cmd_inputspec_5a_exception(plugin, tmpdir):
-    """ checking xor in metadata: both options are True, so the task raises exception"""
+    """checking xor in metadata: both options are True, so the task raises exception"""
     cmd_exec = "ls"
     cmd_t = True
     cmd_S = True
@@ -789,8 +789,8 @@ def test_shell_cmd_inputspec_5a_exception(plugin, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_6(plugin, results_function, tmpdir):
-    """ checking requires in metadata:
-        the required field is set in the init, so the task works fine
+    """checking requires in metadata:
+    the required field is set in the init, so the task works fine
     """
     cmd_exec = "ls"
     cmd_l = True
@@ -836,8 +836,8 @@ def test_shell_cmd_inputspec_6(plugin, results_function, tmpdir):
 
 
 def test_shell_cmd_inputspec_6a_exception(plugin):
-    """ checking requires in metadata:
-        the required field is None, so the task works raises exception
+    """checking requires in metadata:
+    the required field is None, so the task works raises exception
     """
     cmd_exec = "ls"
     cmd_t = True
@@ -877,8 +877,8 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_6b(plugin, results_function, tmpdir):
-    """ checking requires in metadata:
-        the required field set after the init
+    """checking requires in metadata:
+    the required field set after the init
     """
     cmd_exec = "ls"
     cmd_l = True
@@ -927,8 +927,8 @@ def test_shell_cmd_inputspec_6b(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_7(plugin, results_function, tmpdir):
     """
-        providing output name using input_spec,
-        using name_tamplate in metadata
+    providing output name using input_spec,
+    using name_tamplate in metadata
     """
     cmd = "touch"
     args = "newfile_tmp.txt"
@@ -969,9 +969,9 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_7a(plugin, results_function, tmpdir):
     """
-        providing output name using input_spec,
-        using name_tamplate in metadata
-        and changing the output name for output_spec using output_field_name
+    providing output name using input_spec,
+    using name_tamplate in metadata
+    and changing the output name for output_spec using output_field_name
     """
     cmd = "touch"
     args = "newfile_tmp.txt"
@@ -1013,8 +1013,8 @@ def test_shell_cmd_inputspec_7a(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_7b(plugin, results_function, tmpdir):
     """
-        providing new file and output name using input_spec,
-        using name_template in metadata
+    providing new file and output name using input_spec,
+    using name_template in metadata
     """
     cmd = "touch"
 
@@ -1058,8 +1058,8 @@ def test_shell_cmd_inputspec_7b(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_7c(plugin, results_function, tmpdir):
     """
-        providing output name using input_spec,
-        using name_tamplate with txt extension (extension from args should be removed
+    providing output name using input_spec,
+    using name_tamplate with txt extension (extension from args should be removed
     """
     cmd = "touch"
     args = "newfile_tmp.txt"
@@ -1100,8 +1100,8 @@ def test_shell_cmd_inputspec_7c(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
     """
-        providing new file and output name using input_spec,
-        adding additional string input field with argstr
+    providing new file and output name using input_spec,
+    adding additional string input field with argstr
     """
     cmd = "touch"
 
@@ -1157,8 +1157,8 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_8a(plugin, results_function, tmpdir):
     """
-        providing new file and output name using input_spec,
-        adding additional string input field with argstr (argstr uses string formatting)
+    providing new file and output name using input_spec,
+    adding additional string input field with argstr (argstr uses string formatting)
     """
     cmd = "touch"
 
@@ -1214,8 +1214,8 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
     """
-        providing output name using input_spec (output_file_template in metadata),
-        the template has a suffix, the extension of the file will be moved to the end
+    providing output name using input_spec (output_file_template in metadata),
+    the template has a suffix, the extension of the file will be moved to the end
     """
     cmd = "cp"
     file = tmpdir.mkdir("data_inp").join("file.txt")
@@ -1265,9 +1265,9 @@ def test_shell_cmd_inputspec_9(tmpdir, plugin, results_function):
 @pytest.mark.parametrize("results_function", [result_no_submitter])
 def test_shell_cmd_inputspec_9a(tmpdir, plugin, results_function):
     """
-        providing output name using input_spec (output_file_template in metadata),
-        the template has a suffix, the extension of the file will be moved to the end
-        the change: input file has directory with a dot
+    providing output name using input_spec (output_file_template in metadata),
+    the template has a suffix, the extension of the file will be moved to the end
+    the change: input file has directory with a dot
     """
     cmd = "cp"
     file = tmpdir.mkdir("data.inp").join("file.txt")
@@ -1313,8 +1313,8 @@ def test_shell_cmd_inputspec_9a(tmpdir, plugin, results_function):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_9b(tmpdir, plugin, results_function):
     """
-        providing output name using input_spec (output_file_template in metadata)
-        and the keep_extension is set to False, so the extension is removed completely.
+    providing output name using input_spec (output_file_template in metadata)
+    and the keep_extension is set to False, so the extension is removed completely.
     """
     cmd = "cp"
     file = tmpdir.join("file.txt")
@@ -1363,9 +1363,9 @@ def test_shell_cmd_inputspec_9b(tmpdir, plugin, results_function):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_9c(tmpdir, plugin, results_function):
     """
-        providing output name using input_spec (output_file_template in metadata)
-        and the keep_extension is set to False, so the extension is removed completely,
-        no suffix in the template.
+    providing output name using input_spec (output_file_template in metadata)
+    and the keep_extension is set to False, so the extension is removed completely,
+    no suffix in the template.
     """
     cmd = "cp"
     file = tmpdir.join("file.txt")
@@ -1414,7 +1414,7 @@ def test_shell_cmd_inputspec_9c(tmpdir, plugin, results_function):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_10(plugin, results_function, tmpdir):
-    """ using input_spec, providing list of files as an input """
+    """using input_spec, providing list of files as an input"""
 
     file_1 = tmpdir.join("file_1.txt")
     file_2 = tmpdir.join("file_2.txt")
@@ -1460,7 +1460,7 @@ def test_shell_cmd_inputspec_10(plugin, results_function, tmpdir):
 
 
 def test_shell_cmd_inputspec_10_err(tmpdir):
-    """ checking if the proper error is raised when broken symlink is provided
+    """checking if the proper error is raised when broken symlink is provided
     as a input field with File as a type
     """
 
@@ -1505,9 +1505,9 @@ def test_shell_cmd_inputspec_10_err(tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
-    """ shelltask changes a file in place,
-        adding copyfile=True to the file-input from input_spec
-        hardlink or copy in the output_dir should be created
+    """shelltask changes a file in place,
+    adding copyfile=True to the file-input from input_spec
+    hardlink or copy in the output_dir should be created
     """
     file = tmpdir.join("file_pydra.txt")
     with open(file, "w") as f:
@@ -1567,9 +1567,9 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
-    """ shelltask changes a file in place,
-        adding copyfile=False to the File-input from input_spec
-        hardlink or softlink in the output_dir is created
+    """shelltask changes a file in place,
+    adding copyfile=False to the File-input from input_spec
+    hardlink or softlink in the output_dir is created
     """
     file = tmpdir.join("file_pydra.txt")
     with open(file, "w") as f:
@@ -1645,8 +1645,8 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
 )
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
-    """ shelltask changes a file in place,
-        copyfile is None for the file-input, so original filed is changed
+    """shelltask changes a file in place,
+    copyfile is None for the file-input, so original filed is changed
     """
     file = tmpdir.join("file_pydra.txt")
     with open(file, "w") as f:
@@ -1702,7 +1702,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_state_1(plugin, results_function, tmpdir):
-    """  adding state to the input from input_spec """
+    """adding state to the input from input_spec"""
     cmd_exec = "echo"
     hello = ["HELLO", "hi"]
     my_input_spec = SpecInfo(
@@ -1741,8 +1741,8 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function, tmpdir):
 
 
 def test_shell_cmd_inputspec_typeval_1(use_validator):
-    """ customized input_spec with a type that doesn't match the value
-     - raise an exception
+    """customized input_spec with a type that doesn't match the value
+    - raise an exception
     """
     cmd_exec = "echo"
 
@@ -1767,8 +1767,8 @@ def test_shell_cmd_inputspec_typeval_1(use_validator):
 
 
 def test_shell_cmd_inputspec_typeval_2(use_validator):
-    """ customized input_spec (shorter syntax) with a type that doesn't match the value
-     - raise an exception
+    """customized input_spec (shorter syntax) with a type that doesn't match the value
+    - raise an exception
     """
     cmd_exec = "echo"
 
@@ -1786,8 +1786,8 @@ def test_shell_cmd_inputspec_typeval_2(use_validator):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmpdir):
-    """  adding state to the input from input_spec
-        using shorter syntax for input_spec (without default)
+    """adding state to the input from input_spec
+    using shorter syntax for input_spec (without default)
     """
     cmd_exec = "echo"
     hello = ["HELLO", "hi"]
@@ -1821,7 +1821,7 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_state_2(plugin, results_function, tmpdir):
     """
-        adding splitter to input tha is used in the output_file_tamplate
+    adding splitter to input tha is used in the output_file_tamplate
     """
     cmd = "touch"
     args = ["newfile_1.txt", "newfile_2.txt"]
@@ -1860,7 +1860,7 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_state_3(plugin, results_function, tmpdir):
-    """  adding state to the File-input from input_spec """
+    """adding state to the File-input from input_spec"""
 
     file_1 = tmpdir.join("file_pydra.txt")
     file_2 = tmpdir.join("file_nice.txt")
@@ -1909,7 +1909,7 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmpdir):
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
-    """  adding state to the File-input from input_spec """
+    """adding state to the File-input from input_spec"""
 
     file1 = tmpdir.join("file1.txt")
     with open(file1, "w") as f:
@@ -1979,8 +1979,8 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmpdir):
 
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_shell_cmd_2(plugin_dask_opt, tmpdir):
-    """ a workflow with input with defined output_file_template (str)
-        that requires wf.lzin
+    """a workflow with input with defined output_file_template (str)
+    that requires wf.lzin
     """
     wf = Workflow(name="wf", input_spec=["cmd", "args"])
 
@@ -2026,8 +2026,8 @@ def test_wf_shell_cmd_2(plugin_dask_opt, tmpdir):
 
 
 def test_wf_shell_cmd_2a(plugin, tmpdir):
-    """ a workflow with input with defined output_file_template (tuple)
-        that requires wf.lzin
+    """a workflow with input with defined output_file_template (tuple)
+    that requires wf.lzin
     """
     wf = Workflow(name="wf", input_spec=["cmd", "args"])
 
@@ -2072,9 +2072,9 @@ def test_wf_shell_cmd_2a(plugin, tmpdir):
 
 
 def test_wf_shell_cmd_3(plugin, tmpdir):
-    """ a workflow with 2 tasks,
-        first one has input with output_file_template (str, uses wf.lzin),
-        that is passed to the second task
+    """a workflow with 2 tasks,
+    first one has input with output_file_template (str, uses wf.lzin),
+    that is passed to the second task
     """
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2", "args"])
 
@@ -2169,9 +2169,9 @@ def test_wf_shell_cmd_3(plugin, tmpdir):
 
 
 def test_wf_shell_cmd_3a(plugin, tmpdir):
-    """ a workflow with 2 tasks,
-        first one has input with output_file_template (str, uses wf.lzin),
-        that is passed to the second task
+    """a workflow with 2 tasks,
+    first one has input with output_file_template (str, uses wf.lzin),
+    that is passed to the second task
     """
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2", "args"])
 
@@ -2264,9 +2264,9 @@ def test_wf_shell_cmd_3a(plugin, tmpdir):
 
 
 def test_wf_shell_cmd_state_1(plugin):
-    """ a workflow with 2 tasks and splitter on the wf level,
-        first one has input with output_file_template (str, uses wf.lzin),
-        that is passed to the second task
+    """a workflow with 2 tasks and splitter on the wf level,
+    first one has input with output_file_template (str, uses wf.lzin),
+    that is passed to the second task
     """
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2", "args"]).split("args")
 
@@ -2361,9 +2361,9 @@ def test_wf_shell_cmd_state_1(plugin):
 
 
 def test_wf_shell_cmd_ndst_1(plugin, tmpdir):
-    """ a workflow with 2 tasks and a splitter on the node level,
-        first one has input with output_file_template (str, uses wf.lzin),
-        that is passed to the second task
+    """a workflow with 2 tasks and a splitter on the node level,
+    first one has input with output_file_template (str, uses wf.lzin),
+    that is passed to the second task
     """
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2", "args"])
 
@@ -2461,7 +2461,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_1(plugin, results_function, tmpdir):
     """
-        customised output_spec, adding files to the output, providing specific pathname
+    customised output_spec, adding files to the output, providing specific pathname
     """
     cmd = ["touch", "newfile_tmp.txt"]
     my_output_spec = SpecInfo(
@@ -2481,7 +2481,7 @@ def test_shell_cmd_outputspec_1(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_1a(plugin, results_function, tmpdir):
     """
-        customised output_spec, adding files to the output, providing specific pathname
+    customised output_spec, adding files to the output, providing specific pathname
     """
     cmd = ["touch", "newfile_tmp.txt"]
     my_output_spec = SpecInfo(
@@ -2500,7 +2500,7 @@ def test_shell_cmd_outputspec_1a(plugin, results_function, tmpdir):
 
 def test_shell_cmd_outputspec_1b_exception(plugin, tmpdir):
     """
-        customised output_spec, adding files to the output, providing specific pathname
+    customised output_spec, adding files to the output, providing specific pathname
     """
     cmd = ["touch", "newfile_tmp.txt"]
     my_output_spec = SpecInfo(
@@ -2521,8 +2521,8 @@ def test_shell_cmd_outputspec_1b_exception(plugin, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_2(plugin, results_function, tmpdir):
     """
-        customised output_spec, adding files to the output,
-        using a wildcard in default
+    customised output_spec, adding files to the output,
+    using a wildcard in default
     """
     cmd = ["touch", "newfile_tmp.txt"]
     my_output_spec = SpecInfo(
@@ -2541,8 +2541,8 @@ def test_shell_cmd_outputspec_2(plugin, results_function, tmpdir):
 
 def test_shell_cmd_outputspec_2a_exception(plugin, tmpdir):
     """
-        customised output_spec, adding files to the output,
-        using a wildcard in default
+    customised output_spec, adding files to the output,
+    using a wildcard in default
     """
     cmd = ["touch", "newfile_tmp.txt"]
     my_output_spec = SpecInfo(
@@ -2563,8 +2563,8 @@ def test_shell_cmd_outputspec_2a_exception(plugin, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_3(plugin, results_function, tmpdir):
     """
-        customised output_spec, adding files to the output,
-        using a wildcard in default, should collect two files
+    customised output_spec, adding files to the output,
+    using a wildcard in default, should collect two files
     """
     cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
     my_output_spec = SpecInfo(
@@ -2586,9 +2586,9 @@ def test_shell_cmd_outputspec_3(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_4(plugin, results_function, tmpdir):
     """
-        customised output_spec, adding files to the output,
-        using a function to collect output, the function is saved in the field metadata
-        and uses output_dir and the glob function
+    customised output_spec, adding files to the output,
+    using a function to collect output, the function is saved in the field metadata
+    and uses output_dir and the glob function
     """
     cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
 
@@ -2615,9 +2615,9 @@ def test_shell_cmd_outputspec_4(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_4a(plugin, results_function):
     """
-        customised output_spec, adding files to the output,
-        using a function to collect output, the function is saved in the field metadata
-        and uses output_dir and inputs element
+    customised output_spec, adding files to the output,
+    using a function to collect output, the function is saved in the field metadata
+    and uses output_dir and inputs element
     """
     cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
 
@@ -2641,9 +2641,9 @@ def test_shell_cmd_outputspec_4a(plugin, results_function):
 
 def test_shell_cmd_outputspec_4b_error():
     """
-        customised output_spec, adding files to the output,
-        using a function to collect output, the function is saved in the field metadata
-        with an argument that is not part of the inputs - error is raised
+    customised output_spec, adding files to the output,
+    using a function to collect output, the function is saved in the field metadata
+    with an argument that is not part of the inputs - error is raised
     """
     cmd = ["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"]
 
@@ -2664,8 +2664,8 @@ def test_shell_cmd_outputspec_4b_error():
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_5(plugin, results_function, tmpdir):
     """
-        providing output name by providing output_file_template
-        (similar to the previous example, but not touching input_spec)
+    providing output name by providing output_file_template
+    (similar to the previous example, but not touching input_spec)
     """
     cmd = "touch"
     args = "newfile_tmp.txt"
@@ -2702,8 +2702,8 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmpdir):
 
 def test_shell_cmd_outputspec_5a():
     """
-        providing output name by providing output_file_template
-        (using shorter syntax)
+    providing output name by providing output_file_template
+    (using shorter syntax)
     """
     cmd = "touch"
     args = "newfile_tmp.txt"
@@ -2732,8 +2732,8 @@ def test_shell_cmd_outputspec_5a():
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_6(tmpdir, plugin, results_function):
     """
-        providing output with output_file_name and using MultiOutputFile as a type.
-        the input field used in the template is a MultiInputObj, so it can be and is a list
+    providing output with output_file_name and using MultiOutputFile as a type.
+    the input field used in the template is a MultiInputObj, so it can be and is a list
     """
     file = tmpdir.join("script.sh")
     file.write(f'for var in "$@"; do touch file"$var".txt; done')
@@ -2808,8 +2808,8 @@ def test_shell_cmd_outputspec_6(tmpdir, plugin, results_function):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_6a(tmpdir, plugin, results_function):
     """
-        providing output with output_file_name and using MultiOutputFile as a type.
-        the input field used in the template is a MultiInputObj, but a single element is used
+    providing output with output_file_name and using MultiOutputFile as a type.
+    the input field used in the template is a MultiInputObj, but a single element is used
     """
     file = tmpdir.join("script.sh")
     file.write(f'for var in "$@"; do touch file"$var".txt; done')
@@ -2883,8 +2883,8 @@ def test_shell_cmd_outputspec_6a(tmpdir, plugin, results_function):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
     """
-        customised output_spec, adding int and str to the output,
-        requiring two callables with parameters stdout and stderr
+    customised output_spec, adding int and str to the output,
+    requiring two callables with parameters stdout and stderr
     """
     cmd = "echo"
     args = ["newfile_1.txt", "newfile_2.txt"]
@@ -2944,8 +2944,8 @@ def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
 
 def test_shell_cmd_outputspec_7b_error():
     """
-        customised output_spec, adding Int to the output,
-        requiring a function to collect output
+    customised output_spec, adding Int to the output,
+    requiring a function to collect output
     """
     cmd = "echo"
     args = ["newfile_1.txt", "newfile_2.txt"]
@@ -2973,7 +2973,7 @@ def test_shell_cmd_outputspec_7b_error():
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_7c(tmpdir, plugin, results_function):
     """
-        customised output_spec, adding Directory to the output named by args
+    customised output_spec, adding Directory to the output named by args
     """
 
     def get_lowest_directory(directory_path):
@@ -3016,7 +3016,7 @@ def test_shell_cmd_outputspec_7c(tmpdir, plugin, results_function):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_7d(tmpdir, plugin, results_function):
     """
-        customised output_spec, adding Directory to the output named by input spec
+    customised output_spec, adding Directory to the output named by input spec
     """
 
     def get_lowest_directory(directory_path):
@@ -3077,8 +3077,8 @@ def test_shell_cmd_outputspec_7d(tmpdir, plugin, results_function):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_state_outputspec_1(plugin, results_function, tmpdir):
     """
-        providing output name by providing output_file_template
-        splitter for a field that is used in the template
+    providing output name by providing output_file_template
+    splitter for a field that is used in the template
     """
     cmd = "touch"
     args = ["newfile_1.txt", "newfile_2.txt"]
@@ -3119,8 +3119,8 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function, tmpdir):
 
 def test_shell_cmd_outputspec_wf_1(plugin, tmpdir):
     """
-        customised output_spec for tasks within a Workflow,
-        adding files to the output, providing specific pathname
+    customised output_spec for tasks within a Workflow,
+    adding files to the output, providing specific pathname
     """
 
     cmd = ["touch", "newfile_tmp.txt"]
@@ -3855,7 +3855,7 @@ def no_fsl():
 
 @pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
 def test_fsl():
-    """  mandatory field added to fields, value provided """
+    """mandatory field added to fields, value provided"""
 
     _xor_inputs = [
         "functional",
