@@ -27,7 +27,7 @@ Infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
 )
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_boutiques_1(maskfile, plugin, results_function, tmpdir):
-    """ simple task to run fsl.bet using BoshTask"""
+    """simple task to run fsl.bet using BoshTask"""
     btask = BoshTask(name="NA", zenodo_id="1482743")
     btask.inputs.infile = Infile
     btask.inputs.maskfile = maskfile
@@ -48,7 +48,7 @@ def test_boutiques_1(maskfile, plugin, results_function, tmpdir):
 @need_bosh_docker
 @pytest.mark.flaky(reruns=3)
 def test_boutiques_spec_1():
-    """ testing spec: providing input/output fields names"""
+    """testing spec: providing input/output fields names"""
     btask = BoshTask(
         name="NA",
         zenodo_id="1482743",
@@ -73,7 +73,7 @@ def test_boutiques_spec_1():
 @need_bosh_docker
 @pytest.mark.flaky(reruns=3)
 def test_boutiques_spec_2():
-    """ testing spec: providing partial input/output fields names"""
+    """testing spec: providing partial input/output fields names"""
     btask = BoshTask(
         name="NA",
         zenodo_id="1482743",
@@ -99,7 +99,7 @@ def test_boutiques_spec_2():
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
 def test_boutiques_wf_1(maskfile, plugin, tmpdir):
-    """ wf with one task that runs fsl.bet using BoshTask"""
+    """wf with one task that runs fsl.bet using BoshTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
     wf.inputs.maskfile = maskfile
     wf.inputs.infile = Infile
@@ -132,7 +132,7 @@ def test_boutiques_wf_1(maskfile, plugin, tmpdir):
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
 def test_boutiques_wf_2(maskfile, plugin, tmpdir):
-    """ wf with two BoshTasks (fsl.bet and fsl.stats) and one ShellTask"""
+    """wf with two BoshTasks (fsl.bet and fsl.stats) and one ShellTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
     wf.inputs.maskfile = maskfile
     wf.inputs.infile = Infile

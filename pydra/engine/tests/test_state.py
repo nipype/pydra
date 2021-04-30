@@ -77,7 +77,7 @@ from ..helpers_state import PydraStateError
 def test_state_1(
     inputs, splitter, ndim, states_ind, states_val, group_for_inputs, groups_stack
 ):
-    """ single state: testing groups, prepare_states and prepare_inputs"""
+    """single state: testing groups, prepare_states and prepare_inputs"""
     st = State(name="NA", splitter=splitter)
     assert st.splitter == st.current_splitter
     assert st.splitter_rpn == st.current_splitter_rpn
@@ -122,8 +122,8 @@ def test_state_5_err():
 
 
 def test_state_connect_1():
-    """ two 'connected' states: testing groups, prepare_states and prepare_inputs
-        no explicit splitter for the second state
+    """two 'connected' states: testing groups, prepare_states and prepare_inputs
+    no explicit splitter for the second state
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", other_states={"NA": (st1, "b")})
@@ -145,8 +145,8 @@ def test_state_connect_1():
 
 
 def test_state_connect_1a():
-    """ two 'connected' states: testing groups, prepare_states and prepare_inputs
-        the second state has explicit splitter from the first one (the prev-state part)
+    """two 'connected' states: testing groups, prepare_states and prepare_inputs
+    the second state has explicit splitter from the first one (the prev-state part)
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="_NA", other_states={"NA": (st1, "b")})
@@ -182,9 +182,9 @@ def test_state_connect_1c_exception(splitter2, other_states2):
 
 
 def test_state_connect_2():
-    """ two 'connected' states: testing groups, prepare_states and prepare_inputs
-         the second state has explicit splitter that contains
-         splitter from the first node and a new field (the prev-state and current part)
+    """two 'connected' states: testing groups, prepare_states and prepare_inputs
+    the second state has explicit splitter that contains
+    splitter from the first node and a new field (the prev-state and current part)
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["_NA", "a"], other_states={"NA": (st1, "b")})
@@ -225,10 +225,10 @@ def test_state_connect_2():
 
 
 def test_state_connect_2a():
-    """ two 'connected' states: testing groups, prepare_states and prepare_inputs
-         the second state has explicit splitter that contains
-         splitter from the first node and a new field;
-         adding an additional scalar field that is not part of the splitter
+    """two 'connected' states: testing groups, prepare_states and prepare_inputs
+    the second state has explicit splitter that contains
+    splitter from the first node and a new field;
+    adding an additional scalar field that is not part of the splitter
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["_NA", "a"], other_states={"NA": (st1, "b")})
@@ -264,9 +264,9 @@ def test_state_connect_2a():
 
 
 def test_state_connect_2b():
-    """ two 'connected' states: testing groups, prepare_states and prepare_inputs
-        the second state has explicit splitter with a new field (the current part)
-        splitter from the first node (the prev-state part) has to be added
+    """two 'connected' states: testing groups, prepare_states and prepare_inputs
+    the second state has explicit splitter with a new field (the current part)
+    splitter from the first node (the prev-state part) has to be added
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a", other_states={"NA": (st1, "b")})
@@ -302,9 +302,9 @@ def test_state_connect_2b():
 
 
 def test_state_connect_3():
-    """ three 'connected' states: testing groups, prepare_states and prepare_inputs
-        the third state connected to two previous states;
-        splitter from the previous states (the prev-state part) has to be added
+    """three 'connected' states: testing groups, prepare_states and prepare_inputs
+    the third state connected to two previous states;
+    splitter from the previous states (the prev-state part) has to be added
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a")
@@ -344,9 +344,9 @@ def test_state_connect_3():
 
 
 def test_state_connect_3a():
-    """ three 'connected' states: testing groups, prepare_states and prepare_inputs
-        the third state connected to two previous states;
-        the third state has explicit splitter that contains splitters from previous states
+    """three 'connected' states: testing groups, prepare_states and prepare_inputs
+    the third state connected to two previous states;
+    the third state has explicit splitter that contains splitters from previous states
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a")
@@ -385,10 +385,10 @@ def test_state_connect_3a():
 
 
 def test_state_connect_3b():
-    """ three 'connected' states: testing groups, prepare_states and prepare_inputs
-        the third state connected to two previous states;
-        the third state has explicit splitter that contains splitter only from the first state.
-        splitter from the second state has to be added (partial prev-state part)
+    """three 'connected' states: testing groups, prepare_states and prepare_inputs
+    the third state connected to two previous states;
+    the third state has explicit splitter that contains splitter only from the first state.
+    splitter from the second state has to be added (partial prev-state part)
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a")
@@ -425,9 +425,9 @@ def test_state_connect_3b():
 
 
 def test_state_connect_4():
-    """ three 'connected' states: testing groups, prepare_states and prepare_inputs
-        the third state connected to two previous states;
-        the third state has explicit scalar(!) splitter that contains two previous states
+    """three 'connected' states: testing groups, prepare_states and prepare_inputs
+    the third state connected to two previous states;
+    the third state has explicit scalar(!) splitter that contains two previous states
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a")
@@ -456,9 +456,9 @@ def test_state_connect_4():
 
 
 def test_state_connect_5():
-    """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
-        the first state has outer splitter,
-        the second state has no explicit splitter
+    """two 'connected' states: testing groups, prepare_states and prepare_inputs,
+    the first state has outer splitter,
+    the second state has no explicit splitter
     """
     st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(name="NB", other_states={"NA": (st1, "a")})
@@ -486,10 +486,10 @@ def test_state_connect_5():
 
 
 def test_state_connect_6():
-    """ three 'connected' states: testing groups, prepare_states and prepare_inputs,
-        the first state has outer splitter,
-        the third state has explicit splitter with splitters from previous states
-     """
+    """three 'connected' states: testing groups, prepare_states and prepare_inputs,
+    the first state has outer splitter,
+    the third state has explicit splitter with splitters from previous states
+    """
     st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(name="NB", splitter="a")
     st3 = State(
@@ -539,9 +539,9 @@ def test_state_connect_6():
 
 
 def test_state_connect_6a():
-    """ three 'connected' states: testing groups, prepare_states and prepare_inputs,
-        the first state has outer splitter,
-        the third state has no explicit splitter
+    """three 'connected' states: testing groups, prepare_states and prepare_inputs,
+    the first state has outer splitter,
+    the third state has no explicit splitter
     """
     st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(name="NB", splitter="a")
@@ -587,8 +587,8 @@ def test_state_connect_6a():
 
 
 def test_state_connect_innerspl_1():
-    """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
-        the second state has an inner splitter, full splitter provided
+    """two 'connected' states: testing groups, prepare_states and prepare_inputs,
+    the second state has an inner splitter, full splitter provided
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["_NA", "b"], other_states={"NA": (st1, "b")})
@@ -638,9 +638,9 @@ def test_state_connect_innerspl_1():
 
 
 def test_state_connect_innerspl_1a():
-    """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
-        the second state has an inner splitter,
-        splitter from the first state (the prev-state part) has to be added
+    """two 'connected' states: testing groups, prepare_states and prepare_inputs,
+    the second state has an inner splitter,
+    splitter from the first state (the prev-state part) has to be added
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="b", other_states={"NA": (st1, "b")})
@@ -698,9 +698,9 @@ def test_state_connect_innerspl_1b():
 
 
 def test_state_connect_innerspl_2():
-    """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
-        the second state has one inner splitter and one 'normal' splitter
-        only the current part of the splitter provided (the prev-state has to be added)
+    """two 'connected' states: testing groups, prepare_states and prepare_inputs,
+    the second state has one inner splitter and one 'normal' splitter
+    only the current part of the splitter provided (the prev-state has to be added)
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["c", "b"], other_states={"NA": (st1, "b")})
@@ -768,9 +768,9 @@ def test_state_connect_innerspl_2():
 
 
 def test_state_connect_innerspl_2a():
-    """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
-        the second state has one inner splitter and one 'normal' splitter
-        only the current part of the splitter provided (different order!),
+    """two 'connected' states: testing groups, prepare_states and prepare_inputs,
+    the second state has one inner splitter and one 'normal' splitter
+    only the current part of the splitter provided (different order!),
 
     """
     st1 = State(name="NA", splitter="a")
@@ -835,9 +835,9 @@ def test_state_connect_innerspl_2a():
 
 
 def test_state_connect_innerspl_3():
-    """ three serially 'connected' states: testing groups, prepare_states and prepare_inputs,
-        the second state has one inner splitter and one 'normal' splitter
-        the prev-state parts of the splitter have to be added
+    """three serially 'connected' states: testing groups, prepare_states and prepare_inputs,
+    the second state has one inner splitter and one 'normal' splitter
+    the prev-state parts of the splitter have to be added
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["c", "b"], other_states={"NA": (st1, "b")})
@@ -975,8 +975,8 @@ def test_state_connect_innerspl_3():
 
 
 def test_state_connect_innerspl_4():
-    """ three'connected' states: testing groups, prepare_states and prepare_inputs,
-        the third one connected to two previous, only the current part of splitter provided
+    """three'connected' states: testing groups, prepare_states and prepare_inputs,
+    the third one connected to two previous, only the current part of splitter provided
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["b", "c"])
@@ -1062,7 +1062,7 @@ def test_state_connect_innerspl_4():
 
 
 def test_state_combine_1():
-    """ single state with splitter and combiner"""
+    """single state with splitter and combiner"""
     st = State(name="NA", splitter="a", combiner="a")
     assert st.splitter == "NA.a"
     assert st.splitter_rpn == ["NA.a"]
@@ -1331,11 +1331,11 @@ def test_state_connect_innerspl_combine_1():
 
 
 def test_state_connect_innerspl_combine_2():
-    """ two 'connected' state, the second has inner and normal splitter,
-        and 'normal' combiner
-        only the current part of the splitter provided,
-        the prev-state part has to be added
-        """
+    """two 'connected' state, the second has inner and normal splitter,
+    and 'normal' combiner
+    only the current part of the splitter provided,
+    the prev-state part has to be added
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(
         name="NB", splitter=["c", "b"], combiner=["c"], other_states={"NA": (st1, "b")}
@@ -1407,10 +1407,10 @@ def test_state_connect_innerspl_combine_2():
 
 
 def test_state_connect_combine_prevst_1():
-    """ two 'connected' states,
-        the first one has the simplest splitter,
-        the second has combiner from the first state
-        (i.e. from the prev-state part of the splitter),
+    """two 'connected' states,
+    the first one has the simplest splitter,
+    the second has combiner from the first state
+    (i.e. from the prev-state part of the splitter),
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", other_states={"NA": (st1, "b")}, combiner="NA.a")
@@ -1437,10 +1437,10 @@ def test_state_connect_combine_prevst_1():
 
 
 def test_state_connect_combine_prevst_2():
-    """ two 'connected' states,
-        the first one has outer splitter,
-        the second has combiner from the first state
-        (i.e. from the prev-state part of the splitter),
+    """two 'connected' states,
+    the first one has outer splitter,
+    the second has combiner from the first state
+    (i.e. from the prev-state part of the splitter),
     """
     st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(name="NB", other_states={"NA": (st1, "b")}, combiner="NA.a")
@@ -1473,10 +1473,10 @@ def test_state_connect_combine_prevst_2():
 
 
 def test_state_connect_combine_prevst_3():
-    """ three serially 'connected' states,
-        the first one has outer splitter,
-        the third one has combiner from the first state
-        (i.e. from the prev-state part of the splitter),
+    """three serially 'connected' states,
+    the first one has outer splitter,
+    the third one has combiner from the first state
+    (i.e. from the prev-state part of the splitter),
     """
     st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(name="NB", other_states={"NA": (st1, "b")})
@@ -1509,11 +1509,11 @@ def test_state_connect_combine_prevst_3():
 
 
 def test_state_connect_combine_prevst_4():
-    """ three 'connected' states: testing groups, prepare_states and prepare_inputs,
-         the first two states have the simplest splitters,
-         the third state has only the prev-state part of splitter,
-         the third state has also combiner from the prev-state part
-      """
+    """three 'connected' states: testing groups, prepare_states and prepare_inputs,
+    the first two states have the simplest splitters,
+    the third state has only the prev-state part of splitter,
+    the third state has also combiner from the prev-state part
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a")
     st3 = State(
@@ -1561,11 +1561,11 @@ def test_state_connect_combine_prevst_4():
 
 
 def test_state_connect_combine_prevst_5():
-    """ three 'connected' states: testing groups, prepare_states and prepare_inputs,
-        the first two states have the simplest splitters,
-        the third state has scalar splitter in the prev-state part,
-        the third state has also combiner from the prev-state part
-     """
+    """three 'connected' states: testing groups, prepare_states and prepare_inputs,
+    the first two states have the simplest splitters,
+    the third state has scalar splitter in the prev-state part,
+    the third state has also combiner from the prev-state part
+    """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter="a")
     st3 = State(
@@ -1595,10 +1595,10 @@ def test_state_connect_combine_prevst_5():
 
 
 def test_state_connect_combine_prevst_6():
-    """ two 'connected' states,
-        the first one has outer splitter, the second has an additional current splitter,
-        the second also has combiner from the first state
-        (i.e. from the prev-state part of the splitter),
+    """two 'connected' states,
+    the first one has outer splitter, the second has an additional current splitter,
+    the second also has combiner from the first state
+    (i.e. from the prev-state part of the splitter),
     """
     st1 = State(name="NA", splitter=["a", "b"])
     st2 = State(

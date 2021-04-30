@@ -31,7 +31,7 @@ def test_task_equivalence():
 
 
 def test_annotation_equivalence_1():
-    """ testing various ways of annotation: one output, only types provided"""
+    """testing various ways of annotation: one output, only types provided"""
 
     def direct(a: int) -> int:
         return a + 2
@@ -59,7 +59,7 @@ def test_annotation_equivalence_1():
 
 
 def test_annotation_equivalence_2():
-    """ testing various ways of annotation: multiple outputs, using a tuple for output annot."""
+    """testing various ways of annotation: multiple outputs, using a tuple for output annot."""
 
     def direct(a: int) -> (int, float):
         return a + 2, a + 2.0
@@ -87,7 +87,7 @@ def test_annotation_equivalence_2():
 
 
 def test_annotation_equivalence_3():
-    """ testing various ways of annotation: using dictionary for output annot."""
+    """testing various ways of annotation: using dictionary for output annot."""
 
     def direct(a: int) -> {"out1": int}:
         return a + 2
@@ -115,7 +115,7 @@ def test_annotation_equivalence_3():
 
 
 def test_annotation_equivalence_4():
-    """ testing various ways of annotation: using ty.NamedTuple for the output"""
+    """testing various ways of annotation: using ty.NamedTuple for the output"""
 
     def direct(a: int) -> ty.NamedTuple("Output", [("sum", int), ("sub", int)]):
         return a + 2, a - 2

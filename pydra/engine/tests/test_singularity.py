@@ -24,8 +24,8 @@ need_slurm = pytest.mark.skipif(
 
 @need_singularity
 def test_singularity_1_nosubm(tmpdir):
-    """ simple command in a container, a default bindings and working directory is added
-        no submitter
+    """simple command in a container, a default bindings and working directory is added
+    no submitter
     """
     cmd = "pwd"
     image = "library://sylabsed/linux/alpine"
@@ -44,8 +44,8 @@ def test_singularity_1_nosubm(tmpdir):
 
 @need_singularity
 def test_singularity_2_nosubm(tmpdir):
-    """ a command with arguments, cmd and args given as executable
-        no submitter
+    """a command with arguments, cmd and args given as executable
+    no submitter
     """
     cmd = ["echo", "hail", "pydra"]
     image = "library://sylabsed/linux/alpine"
@@ -62,8 +62,8 @@ def test_singularity_2_nosubm(tmpdir):
 
 @need_singularity
 def test_singularity_2(plugin, tmpdir):
-    """ a command with arguments, cmd and args given as executable
-        using submitter
+    """a command with arguments, cmd and args given as executable
+    using submitter
     """
     cmd = ["echo", "hail", "pydra"]
     image = "library://sylabsed/linux/alpine"
@@ -82,8 +82,8 @@ def test_singularity_2(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_2_singuflag(plugin, tmpdir):
-    """ a command with arguments, cmd and args given as executable
-        using ShellComandTask with container_info=("singularity", image)
+    """a command with arguments, cmd and args given as executable
+    using ShellComandTask with container_info=("singularity", image)
     """
     cmd = ["echo", "hail", "pydra"]
     image = "library://sylabsed/linux/alpine"
@@ -107,8 +107,8 @@ def test_singularity_2_singuflag(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_2a(plugin, tmpdir):
-    """ a command with arguments, using executable and args
-        using submitter
+    """a command with arguments, using executable and args
+    using submitter
     """
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
@@ -131,8 +131,8 @@ def test_singularity_2a(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_3(plugin, tmpdir):
-    """ a simple command in container with bindings,
-        creating directory in tmp dir and checking if it is in the container
+    """a simple command in container with bindings,
+    creating directory in tmp dir and checking if it is in the container
     """
     # creating a new directory
     tmpdir.mkdir("new_dir")
@@ -152,9 +152,9 @@ def test_singularity_3(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_3_singuflag(plugin, tmpdir):
-    """ a simple command in container with bindings,
-        creating directory in tmp dir and checking if it is in the container
-        using ShellComandTask with container_info=("singularity", image)
+    """a simple command in container with bindings,
+    creating directory in tmp dir and checking if it is in the container
+    using ShellComandTask with container_info=("singularity", image)
     """
     # creating a new directory
     tmpdir.mkdir("new_dir")
@@ -179,9 +179,9 @@ def test_singularity_3_singuflag(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_3_singuflagbind(plugin, tmpdir):
-    """ a simple command in container with bindings,
-        creating directory in tmp dir and checking if it is in the container
-        using ShellComandTask with container_info=("singularity", image, bindings)
+    """a simple command in container with bindings,
+    creating directory in tmp dir and checking if it is in the container
+    using ShellComandTask with container_info=("singularity", image, bindings)
     """
     # creating a new directory
     tmpdir.mkdir("new_dir")
@@ -207,8 +207,8 @@ def test_singularity_3_singuflagbind(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_st_1(plugin, tmpdir):
-    """ commands without arguments in container
-        splitter = executable
+    """commands without arguments in container
+    splitter = executable
     """
     cmd = ["pwd", "ls"]
     image = "library://sylabsed/linux/alpine"
@@ -225,8 +225,8 @@ def test_singularity_st_1(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_st_2(plugin, tmpdir):
-    """ command with arguments in docker, checking the distribution
-        splitter = image
+    """command with arguments in docker, checking the distribution
+    splitter = image
     """
     cmd = ["cat", "/etc/issue"]
     image = ["library://sylabsed/linux/alpine", "library://sylabsed/examples/lolcow"]
@@ -243,8 +243,7 @@ def test_singularity_st_2(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_st_3(plugin, tmpdir):
-    """ outer splitter image and executable
-    """
+    """outer splitter image and executable"""
     cmd = ["pwd", ["cat", "/etc/issue"]]
     image = ["library://sylabsed/linux/alpine", "library://sylabsed/examples/lolcow"]
     singu = SingularityTask(
@@ -266,7 +265,7 @@ def test_singularity_st_3(plugin, tmpdir):
 )
 @pytest.mark.parametrize("n", [10, 50, 100])
 def test_singularity_st_4(tmpdir, n):
-    """ splitter over args (checking bigger splitters if slurm available)"""
+    """splitter over args (checking bigger splitters if slurm available)"""
     args_n = list(range(n))
     image = "library://sylabsed/linux/alpine"
     singu = SingularityTask(
@@ -281,9 +280,9 @@ def test_singularity_st_4(tmpdir, n):
 
 @need_singularity
 def test_wf_singularity_1(plugin, tmpdir):
-    """ a workflow with two connected task
-        the first one read the file that is bounded to the container,
-        the second uses echo
+    """a workflow with two connected task
+    the first one read the file that is bounded to the container,
+    the second uses echo
     """
     with open(tmpdir.join("file_pydra.txt"), "w") as f:
         f.write("hello from pydra")
@@ -322,9 +321,9 @@ def test_wf_singularity_1(plugin, tmpdir):
 @need_docker
 @need_singularity
 def test_wf_singularity_1a(plugin, tmpdir):
-    """ a workflow with two connected task - using both containers: Docker and Singul.
-        the first one read the file that is bounded to the container,
-        the second uses echo
+    """a workflow with two connected task - using both containers: Docker and Singul.
+    the first one read the file that is bounded to the container,
+    the second uses echo
     """
     with open(tmpdir.join("file_pydra.txt"), "w") as f:
         f.write("hello from pydra")
@@ -367,8 +366,8 @@ def test_wf_singularity_1a(plugin, tmpdir):
 @need_singularity
 def test_singularity_outputspec_1(plugin, tmpdir):
     """
-        customised output_spec, adding files to the output, providing specific pathname
-        output_path is automatically added to the bindings
+    customised output_spec, adding files to the output, providing specific pathname
+    output_path is automatically added to the bindings
     """
     cmd = ["touch", "newfile_tmp.txt"]
     image = "library://sylabsed/linux/alpine"
@@ -399,7 +398,7 @@ def test_singularity_outputspec_1(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_inputspec_1(plugin, tmpdir):
-    """ a simple customized input spec for singularity task """
+    """a simple customized input spec for singularity task"""
     filename = str(tmpdir.join("file_pydra.txt"))
     with open(filename, "w") as f:
         f.write("hello from pydra")
@@ -442,8 +441,8 @@ def test_singularity_inputspec_1(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_inputspec_1a(plugin, tmpdir):
-    """ a simple customized input spec for singularity task
-        a default value is used
+    """a simple customized input spec for singularity task
+    a default value is used
     """
     filename = str(tmpdir.join("file_pydra.txt"))
     with open(filename, "w") as f:
@@ -482,7 +481,7 @@ def test_singularity_inputspec_1a(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_inputspec_2(plugin, tmpdir):
-    """ a customized input spec with two fields for singularity task """
+    """a customized input spec with two fields for singularity task"""
     filename_1 = tmpdir.join("file_pydra.txt")
     with open(filename_1, "w") as f:
         f.write("hello from pydra\n")
@@ -540,8 +539,8 @@ def test_singularity_inputspec_2(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_inputspec_2a_except(plugin, tmpdir):
-    """ a customized input spec with two fields
-        first one uses a default, and second doesn't - raises a dataclass exception
+    """a customized input spec with two fields
+    first one uses a default, and second doesn't - raises a dataclass exception
     """
     filename_1 = tmpdir.join("file_pydra.txt")
     with open(filename_1, "w") as f:
@@ -599,9 +598,9 @@ def test_singularity_inputspec_2a_except(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_inputspec_2a(plugin, tmpdir):
-    """ a customized input spec with two fields
-        first one uses a default value,
-        this is fine even if the second field is not using any defaults
+    """a customized input spec with two fields
+    first one uses a default value,
+    this is fine even if the second field is not using any defaults
     """
     filename_1 = tmpdir.join("file_pydra.txt")
     with open(filename_1, "w") as f:
@@ -660,9 +659,9 @@ def test_singularity_inputspec_2a(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
-    """ shelltask changes a file in place,
-        adding copyfile=True to the file-input from input_spec
-        hardlink or copy in the output_dir should be created
+    """shelltask changes a file in place,
+    adding copyfile=True to the file-input from input_spec
+    hardlink or copy in the output_dir should be created
     """
     file = tmpdir.join("file_pydra.txt")
     with open(file, "w") as f:
@@ -724,8 +723,8 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_inputspec_state_1(plugin, tmpdir):
-    """ a customised input spec for a singularity file with a splitter,
-        splitter is on files
+    """a customised input spec for a singularity file with a splitter,
+    splitter is on files
     """
     filename_1 = tmpdir.join("file_pydra.txt")
     with open(filename_1, "w") as f:
@@ -774,9 +773,9 @@ def test_singularity_inputspec_state_1(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_inputspec_state_1b(plugin, tmpdir):
-    """ a customised input spec for a singularity file with a splitter,
-        files from the input spec have the same path in the local os and the container,
-        so hash is calculated and the test works fine
+    """a customised input spec for a singularity file with a splitter,
+    files from the input spec have the same path in the local os and the container,
+    so hash is calculated and the test works fine
     """
     file_1 = tmpdir.join("file_pydra.txt")
     file_2 = tmpdir.join("file_nice.txt")
@@ -825,7 +824,7 @@ def test_singularity_inputspec_state_1b(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_wf_inputspec_1(plugin, tmpdir):
-    """ a customized input spec for workflow with singularity tasks """
+    """a customized input spec for workflow with singularity tasks"""
     filename = tmpdir.join("file_pydra.txt")
     with open(filename, "w") as f:
         f.write("hello from pydra")
@@ -877,7 +876,7 @@ def test_singularity_wf_inputspec_1(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_wf_state_inputspec_1(plugin, tmpdir):
-    """ a customized input spec for workflow with singularity tasks that has a state"""
+    """a customized input spec for workflow with singularity tasks that has a state"""
     file_1 = tmpdir.join("file_pydra.txt")
     file_2 = tmpdir.join("file_nice.txt")
     with open(file_1, "w") as f:
@@ -935,7 +934,7 @@ def test_singularity_wf_state_inputspec_1(plugin, tmpdir):
 
 @need_singularity
 def test_singularity_wf_ndst_inputspec_1(plugin, tmpdir):
-    """ a customized input spec for workflow with singularity tasks with states"""
+    """a customized input spec for workflow with singularity tasks with states"""
     file_1 = tmpdir.join("file_pydra.txt")
     file_2 = tmpdir.join("file_nice.txt")
     with open(file_1, "w") as f:

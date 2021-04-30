@@ -741,7 +741,7 @@ def is_local_file(f):
 
 
 def is_existing_file(value):
-    """ checking if an object is an existing file"""
+    """checking if an object is an existing file"""
     if isinstance(value, str) and value == "":
         return False
     try:
