@@ -142,6 +142,13 @@ def identity(x):
 
 
 @mark.task
+def identity_2flds(
+    x1, x2
+) -> ty.NamedTuple("Output", [("out1", ty.Any), ("out2", ty.Any)]):
+    return x1, x2
+
+
+@mark.task
 def ten(x):
     return 10
 

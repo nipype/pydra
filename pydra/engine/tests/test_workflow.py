@@ -11,6 +11,7 @@ from .utils import (
     power,
     ten,
     identity,
+    identity_2flds,
     list_output,
     fun_addsubvar,
     fun_addvar3,
@@ -1398,6 +1399,55 @@ def test_wf_3nd_ndst_6(plugin, tmpdir):
     assert results.output.out == [39, 56]
     # checking the output directory
     assert wf.output_dir.exists()
+
+
+# workflows with structures A -> B -> C with multiple connections
+
+
+def test_wf_3nd_7(tmpdir):
+    """ workflow with three tasks A->B->C vs two tasks A->C with multiple connections
+     """
+    wf = Workflow(name="wf", input_spec=["zip"], cache_dir=tmpdir)
+    wf.inputs.zip = [["test1", "test3", "test5"], ["test2", "test4", "test6"]]
+
+    wf.add(identity_2flds(name="iden2flds_1", x1=wf.lzin.zip, x2="Hoi").split("x1"))
+
+    wf.add(identity(name="identity", x=wf.iden2flds_1.lzout.out1))
+
+    wf.add(
+        identity_2flds(
+            name="iden2flds_2", x1=wf.identity.lzout.out, x2=wf.iden2flds_1.lzout.out2
+        )
+    )
+
+    wf.add(
+        identity_2flds(
+            name="iden2flds_2a",
+            x1=wf.iden2flds_1.lzout.out1,
+            x2=wf.iden2flds_1.lzout.out2,
+        )
+    )
+
+    wf.set_output(
+        [
+            ("out1", wf.iden2flds_2.lzout.out1),
+            ("out2", wf.iden2flds_2.lzout.out2),
+            ("out1a", wf.iden2flds_2a.lzout.out1),
+            ("out2a", wf.iden2flds_2a.lzout.out2),
+        ]
+    )
+
+    with Submitter(plugin="cf") as sub:
+        sub(wf)
+
+    res = wf.result()
+
+    assert (
+        res.output.out1
+        == res.output.out1a
+        == [["test1", "test3", "test5"], ["test2", "test4", "test6"]]
+    )
+    assert res.output.out2 == res.output.out2a == ["Hoi", "Hoi"]
 
 
 # workflows with Left and Right part in splitters A -> B (L&R parts of the splitter)

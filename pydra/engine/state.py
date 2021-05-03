@@ -381,11 +381,47 @@ class State:
             rpn_prev_state = hlpst.splitter2rpn(
                 prev_state, other_states=self.other_states, state_fields=False
             )
-            for name, (st, inp) in list(self.other_states.items())[::-1]:
+            for name, (st, _) in list(self.other_states.items())[::-1]:
                 if f"_{name}" not in rpn_prev_state and st.splitter_final:
-                    prev_state = [f"_{name}", prev_state]
+                    if st.other_states:
+                        # checking if the splitter from the task is not already covered in prev_state
+                        new_st = set([f"_{name}" for name in st.other_states]) - set(
+                            ensure_list(prev_state)
+                        )
+                        if new_st:
+                            prev_state = list(new_st) + ensure_list(prev_state)
+                        else:
+                            # if the splitter is already covered by other state, than only adding
+                            # the input field to the list for other state
+                            for nm in st.other_states:
+                                self.other_states[nm] = (
+                                    self.other_states[nm][0],
+                                    self.other_states[nm][1]
+                                    + self.other_states[name][1],
+                                )
+
+                    else:
+                        prev_state = [f"_{name}", prev_state]
         else:
-            prev_state = [f"_{name}" for name in self.other_states]
+            prev_state = [
+                f"_{name}"
+                for name, (st, _) in self.other_states.items()
+                if not st.other_states
+            ]
+            for name, (st, _) in self.other_states.items():
+                if name not in prev_state:
+                    # checking if the splitter from the task is not already covered in prev_state
+                    new_st = set([f"_{name}" for name in st.other_states]) - set(
+                        prev_state
+                    )
+                    if new_st:
+                        prev_state.append(f"_{name}")
+                    else:
+                        for nm in st.other_states:
+                            self.other_states[nm] = (
+                                self.other_states[nm][0],
+                                self.other_states[nm][1] + self.other_states[name][1],
+                            )
             if len(prev_state) == 1:
                 prev_state = prev_state[0]
         return prev_state
@@ -642,14 +678,15 @@ class State:
         # TODO: need tests in test_Workflow.py
         elements_to_remove = []
         elements_to_remove_comb = []
-        for name, (st, inp) in self.other_states.items():
-            if (
-                f"{self.name}.{inp}" in self.splitter_rpn
-                and f"_{name}" in self.splitter_rpn_compact
-            ):
-                elements_to_remove.append(f"_{name}")
-                if f"{self.name}.{inp}" not in self.combiner:
-                    elements_to_remove_comb.append(f"_{name}")
+        for name, (st, inp_l) in self.other_states.items():
+            for inp in inp_l:
+                if (
+                    f"{self.name}.{inp}" in self.splitter_rpn
+                    and f"_{name}" in self.splitter_rpn_compact
+                ):
+                    elements_to_remove.append(f"_{name}")
+                    if f"{self.name}.{inp}" not in self.combiner:
+                        elements_to_remove_comb.append(f"_{name}")
 
         partial_rpn = hlpst.remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn_compact), elements_to_remove
@@ -772,8 +809,9 @@ class State:
             for ii, el in enumerate(self.prev_state_splitter_rpn_compact):
                 if el in ["*", "."]:
                     continue
-                st, inp = self.other_states[el[1:]]
-                if f"{self.name}.{inp}" in self.splitter_rpn:  # inner splitter
+                st, inp_l = self.other_states[el[1:]]
+                inp_l = [f"{self.name}.{inp}" for inp in inp_l]
+                if set(inp_l).intersection(self.splitter_rpn):  # inner splitter
                     connected_to_inner += [
                         el for el in st.splitter_rpn_final if el not in [".", "*"]
                     ]
@@ -786,8 +824,9 @@ class State:
                         else:
                             inputs_ind_prev = hlpst.op["*"](inputs_ind_prev, st_ind)
                     else:
-                        inputs_ind_prev = hlpst.op["*"](st_ind)
-                    keys_inp_prev += [f"{self.name}.{inp}"]
+                        # TODO: more tests needed
+                        inputs_ind_prev = hlpst.op["."](*[st_ind] * len(inp_l))
+                    keys_inp_prev += inp_l
             keys_inp = keys_inp_prev + keys_inp
 
             if inputs_ind and inputs_ind_prev:
