@@ -304,9 +304,10 @@ class State:
         """
         if self.other_states:
             _inner_inputs = {}
-            for name, (st, inp) in self.other_states.items():
+            for name, (st, inp_l) in self.other_states.items():
                 if f"_{st.name}" in self.splitter_rpn_compact:
-                    _inner_inputs[f"{self.name}.{inp}"] = st
+                    for inp in inp_l:
+                        _inner_inputs[f"{self.name}.{inp}"] = st
             return _inner_inputs
         else:
             return {}
@@ -323,6 +324,10 @@ class State:
         """
         if new_other_states:
             self.other_states = new_other_states
+        # ensuring that the connected fields are set as a list
+        self.other_states = {
+            nm: (st, ensure_list(flds)) for nm, (st, flds) in self.other_states.items()
+        }
         self._connect_splitters()
         if new_combiner:
             self.combiner = new_combiner

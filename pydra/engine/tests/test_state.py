@@ -586,6 +586,59 @@ def test_state_connect_6a():
     ]
 
 
+def test_state_connect_7():
+    """ two 'connected' states with multiple fields that are connected
+        no explicit splitter for the second state
+    """
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", other_states={"NA": (st1, ["x", "y"])})
+    # should take into account that x, y come from the same task
+    assert st2.splitter == "_NA"
+    assert st2.splitter_rpn == ["NA.a"]
+    assert st2.prev_state_splitter == st2.splitter
+    assert st2.prev_state_splitter_rpn == st2.splitter_rpn
+    assert st2.current_splitter is None
+    assert st2.current_splitter_rpn == []
+
+    st2.prepare_states(inputs={"NA.a": [3, 5]})
+    assert st2.group_for_inputs_final == {"NA.a": 0}
+    assert st2.groups_stack_final == [[0]]
+    assert st2.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert st2.states_val == [{"NA.a": 3}, {"NA.a": 5}]
+
+    st2.prepare_inputs()
+    # since x,y come from the same state, they should have the same index
+    assert st2.inputs_ind == [{"NB.x": 0, "NB.y": 0}, {"NB.x": 1, "NB.y": 1}]
+
+
+def test_state_connect_8():
+    """ three 'connected' states: NA -> NB -> NC; NA -> NC (only NA has its own splitter)
+        pydra should recognize, that there is only one splitter - NA
+        and it should give the same as the previous test
+    """
+    st1 = State(name="NA", splitter="a")
+    st2 = State(name="NB", other_states={"NA": (st1, "b")})
+    st3 = State(name="NC", other_states={"NA": (st1, "x"), "NB": (st2, "y")})
+    # x comes from NA and y comes from NB, but NB has only NA's splitter,
+    # so it should be treated as both inputs are from NA state
+    assert st3.splitter == "_NA"
+    assert st3.splitter_rpn == ["NA.a"]
+    assert st3.prev_state_splitter == st3.splitter
+    assert st3.prev_state_splitter_rpn == st3.splitter_rpn
+    assert st3.current_splitter is None
+    assert st3.current_splitter_rpn == []
+
+    st3.prepare_states(inputs={"NA.a": [3, 5]})
+    assert st3.group_for_inputs_final == {"NA.a": 0}
+    assert st3.groups_stack_final == [[0]]
+    assert st3.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
+    assert st3.states_val == [{"NA.a": 3}, {"NA.a": 5}]
+
+    st3.prepare_inputs()
+    # since x,y come from the same state (although y indirectly), they should have the same index
+    assert st3.inputs_ind == [{"NC.x": 0, "NC.y": 0}, {"NC.x": 1, "NC.y": 1}]
+
+
 def test_state_connect_innerspl_1():
     """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
         the second state has an inner splitter, full splitter provided
@@ -605,7 +658,7 @@ def test_state_connect_innerspl_1():
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]},
         cont_dim={"NB.b": 2},  # will be treated as 2d container
     )
-    assert st2.other_states["NA"][1] == "b"
+    assert st2.other_states["NA"][1] == ["b"]
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.b": 1}
     assert st2.groups_stack_final == [[0], [1]]
 
@@ -653,7 +706,7 @@ def test_state_connect_innerspl_1a():
     assert st2.current_splitter == "NB.b"
     assert st2.current_splitter_rpn == ["NB.b"]
 
-    assert st2.other_states["NA"][1] == "b"
+    assert st2.other_states["NA"][1] == ["b"]
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]]},
@@ -717,7 +770,7 @@ def test_state_connect_innerspl_2():
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
         cont_dim={"NB.b": 2},  # will be treated as 2d container
     )
-    assert st2.other_states["NA"][1] == "b"
+    assert st2.other_states["NA"][1] == ["b"]
     assert st2.group_for_inputs_final == {"NA.a": 0, "NB.c": 1, "NB.b": 2}
     assert st2.groups_stack_final == [[0], [1, 2]]
 
@@ -778,7 +831,7 @@ def test_state_connect_innerspl_2a():
 
     assert st2.splitter == ["_NA", ["NB.b", "NB.c"]]
     assert st2.splitter_rpn == ["NA.a", "NB.b", "NB.c", "*", "*"]
-    assert st2.other_states["NA"][1] == "b"
+    assert st2.other_states["NA"][1] == ["b"]
 
     st2.prepare_states(
         inputs={"NA.a": [3, 5], "NB.b": [[1, 10, 100], [2, 20, 200]], "NB.c": [13, 17]},
@@ -986,8 +1039,8 @@ def test_state_connect_innerspl_4():
 
     assert st3.splitter == [["_NA", "_NB"], "NC.d"]
     assert st3.splitter_rpn == ["NA.a", "NB.b", "NB.c", "*", "*", "NC.d", "*"]
-    assert st3.other_states["NA"][1] == "e"
-    assert st3.other_states["NB"][1] == "f"
+    assert st3.other_states["NA"][1] == ["e"]
+    assert st3.other_states["NB"][1] == ["f"]
 
     st3.prepare_states(
         inputs={
