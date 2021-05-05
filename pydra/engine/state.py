@@ -386,47 +386,11 @@ class State:
             rpn_prev_state = hlpst.splitter2rpn(
                 prev_state, other_states=self.other_states, state_fields=False
             )
-            for name, (st, _) in list(self.other_states.items())[::-1]:
+            for name, (st, inp) in list(self.other_states.items())[::-1]:
                 if f"_{name}" not in rpn_prev_state and st.splitter_final:
-                    if st.other_states:
-                        # checking if the splitter from the task is not already covered in prev_state
-                        new_st = set([f"_{name}" for name in st.other_states]) - set(
-                            ensure_list(prev_state)
-                        )
-                        if new_st:
-                            prev_state = list(new_st) + ensure_list(prev_state)
-                        else:
-                            # if the splitter is already covered by other state, than only adding
-                            # the input field to the list for other state
-                            for nm in st.other_states:
-                                self.other_states[nm] = (
-                                    self.other_states[nm][0],
-                                    self.other_states[nm][1]
-                                    + self.other_states[name][1],
-                                )
-
-                    else:
-                        prev_state = [f"_{name}", prev_state]
+                    prev_state = [f"_{name}", prev_state]
         else:
-            prev_state = [
-                f"_{name}"
-                for name, (st, _) in self.other_states.items()
-                if not st.other_states
-            ]
-            for name, (st, _) in self.other_states.items():
-                if name not in prev_state:
-                    # checking if the splitter from the task is not already covered in prev_state
-                    new_st = set([f"_{name}" for name in st.other_states]) - set(
-                        prev_state
-                    )
-                    if new_st:
-                        prev_state.append(f"_{name}")
-                    else:
-                        for nm in st.other_states:
-                            self.other_states[nm] = (
-                                self.other_states[nm][0],
-                                self.other_states[nm][1] + self.other_states[name][1],
-                            )
+            prev_state = [f"_{name}" for name in self.other_states]
             if len(prev_state) == 1:
                 prev_state = prev_state[0]
         return prev_state
