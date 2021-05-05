@@ -639,6 +639,45 @@ def test_state_connect_8():
     assert st3.inputs_ind == [{"NC.x": 0, "NC.y": 0}, {"NC.x": 1, "NC.y": 1}]
 
 
+@pytest.mark.xfail(
+    reason="doesn't recognize that NC.y has 4 elements (not independend on NC.x)"
+)
+def test_state_connect_9():
+    """ four  'connected' states: NA1 -> NB; NA2 -> NB, NA1 -> NC; NB -> NC
+        pydra should recognize, that there is only one splitter - NA_1 and NA_2
+
+    """
+    st1 = State(name="NA_1", splitter="a")
+    st1a = State(name="NA_2", splitter="a")
+    st2 = State(name="NB", other_states={"NA_1": (st1, "b"), "NA_2": (st1a, "c")})
+    st3 = State(name="NC", other_states={"NA_1": (st1, "x"), "NB": (st2, "y")})
+    # x comes from NA_1 and y comes from NB, but NB has only NA_1/2's splitters,
+    assert st3.splitter == ["_NA_1", "_NA_2"]
+    assert st3.splitter_rpn == ["NA_1.a", "NA_2.a", "*"]
+    assert st3.prev_state_splitter == st3.splitter
+    assert st3.prev_state_splitter_rpn == st3.splitter_rpn
+    assert st3.current_splitter is None
+    assert st3.current_splitter_rpn == []
+
+    st3.prepare_states(inputs={"NA_1.a": [3, 5], "NA_2.a": [11, 12]})
+    assert st3.group_for_inputs_final == {"NA_1.a": 0, "NA_2.a": 1}
+    assert st3.groups_stack_final == [[0, 1]]
+    assert st3.states_ind == [
+        {"NA_1.a": 0, "NA_2.a": 0},
+        {"NA_1.a": 0, "NA_2.a": 1},
+        {"NA_1.a": 1, "NA_2.a": 0},
+        {"NA_1.a": 1, "NA_2.a": 1},
+    ]
+
+    st3.prepare_inputs()
+    assert st3.inputs_ind == [
+        {"NC.x": 0, "NC.y": 0},
+        {"NC.x": 0, "NC.y": 1},
+        {"NC.x": 1, "NC.y": 2},
+        {"NC.x": 1, "NC.y": 3},
+    ]
+
+
 def test_state_connect_innerspl_1():
     """ two 'connected' states: testing groups, prepare_states and prepare_inputs,
         the second state has an inner splitter, full splitter provided
@@ -1789,12 +1828,12 @@ def test_connect_splitters_exception_1(splitter, other_states):
 
 
 def test_connect_splitters_exception_2():
-    st = State(
-        name="CN",
-        splitter="_NB",
-        other_states={"NA": (State(name="NA", splitter="a"), "b")},
-    )
     with pytest.raises(PydraStateError) as excinfo:
+        st = State(
+            name="CN",
+            splitter="_NB",
+            other_states={"NA": (State(name="NA", splitter="a"), "b")},
+        )
         st.set_input_groups()
     assert "can't ask for splitter from NB" in str(excinfo.value)
 

@@ -393,6 +393,12 @@ class State:
             prev_state = [f"_{name}" for name in self.other_states]
             if len(prev_state) == 1:
                 prev_state = prev_state[0]
+
+        if isinstance(prev_state, list):
+            prev_state, self.other_states = hlpst.removed_previous_repeated(
+                prev_state, self.other_states
+            )
+
         return prev_state
 
     def _prevst_current_check(self, splitter_part, check_nested=True):
