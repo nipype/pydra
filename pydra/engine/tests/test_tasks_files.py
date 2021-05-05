@@ -63,7 +63,7 @@ def file_mult_annot(file: File) -> ty.NamedTuple("Output", [("out", File)]):
 
 
 def test_task_1(tmpdir):
-    """ task that takes file as an input"""
+    """task that takes file as an input"""
     os.chdir(tmpdir)
     arr = np.array([2])
     # creating abs path
@@ -81,7 +81,7 @@ def test_task_1(tmpdir):
 
 
 def test_wf_1(tmpdir):
-    """ workflow with 2 tasks that take file as an input and give file as an aoutput"""
+    """workflow with 2 tasks that take file as an input and give file as an aoutput"""
     wf = Workflow(name="wf_1", input_spec=["file_orig"])
     wf.add(file_add2(name="add2", file=wf.lzin.file_orig))
     wf.add(file_mult(name="mult", file=wf.add2.lzout.out))
@@ -106,7 +106,7 @@ def test_wf_1(tmpdir):
 
 
 def test_file_annotation_1(tmpdir):
-    """ task that takes file as an input"""
+    """task that takes file as an input"""
     os.chdir(tmpdir)
     arr = np.array([2])
     # creating abs path
@@ -124,7 +124,7 @@ def test_file_annotation_1(tmpdir):
 
 
 def test_broken_file(tmpdir):
-    """ task that takes file as an input"""
+    """task that takes file as an input"""
     os.chdir(tmpdir)
     file = os.path.join(os.getcwd(), "non_existent.npy")
 
@@ -171,7 +171,7 @@ def test_broken_file_link(tmpdir):
 
 
 def test_broken_dir():
-    """ Test how broken directories are handled during hashing"""
+    """Test how broken directories are handled during hashing"""
 
     # dirpath doesn't exist
     nn = dir_count_file(name="listdir", dirpath="/broken_dir_path/")

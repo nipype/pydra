@@ -107,8 +107,8 @@ class BoshTask(ShellCommandTask):
             return zenodo_file
 
     def _prepare_input_spec(self, names_subset=None):
-        """ creating input spec from the zenodo file
-            if name_subset provided, only names from the subset will be used in the spec
+        """creating input spec from the zenodo file
+        if name_subset provided, only names from the subset will be used in the spec
         """
         binputs = self.bosh_spec["inputs"]
         self._input_spec_keys = {}
@@ -148,8 +148,8 @@ class BoshTask(ShellCommandTask):
         return spec
 
     def _prepare_output_spec(self, names_subset=None):
-        """ creating output spec from the zenodo file
-            if name_subset provided, only names from the subset will be used in the spec
+        """creating output spec from the zenodo file
+        if name_subset provided, only names from the subset will be used in the spec
         """
         boutputs = self.bosh_spec["output-files"]
         fields = []

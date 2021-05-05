@@ -25,5 +25,5 @@ jobs:
 
     - name: Check Style
       run: |
-        pip install black==19.3b0 codecov
+        pip install black==21.4b2 codecov
         black --check pydra setup.py

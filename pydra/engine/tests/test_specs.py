@@ -180,7 +180,7 @@ def test_input_file_hash_1(tmpdir):
 
 
 def test_input_file_hash_2(tmpdir):
-    """ input spec with File types, checking when the checksum changes"""
+    """input spec with File types, checking when the checksum changes"""
     file = tmpdir.join("in_file_1.txt")
     with open(file, "w") as f:
         f.write("hello")
@@ -208,7 +208,7 @@ def test_input_file_hash_2(tmpdir):
 
 
 def test_input_file_hash_2a(tmpdir):
-    """ input spec with ty.Union[File, ...] type, checking when the checksum changes"""
+    """input spec with ty.Union[File, ...] type, checking when the checksum changes"""
     file = tmpdir.join("in_file_1.txt")
     with open(file, "w") as f:
         f.write("hello")
@@ -242,7 +242,7 @@ def test_input_file_hash_2a(tmpdir):
 
 
 def test_input_file_hash_3(tmpdir):
-    """ input spec with File types, checking when the hash and file_hash change"""
+    """input spec with File types, checking when the hash and file_hash change"""
     file = tmpdir.join("in_file_1.txt")
     with open(file, "w") as f:
         f.write("hello")
@@ -295,8 +295,8 @@ def test_input_file_hash_3(tmpdir):
 
 
 def test_input_file_hash_4(tmpdir):
-    """ input spec with nested list, that contain ints and Files,
-        checking changes in checksums
+    """input spec with nested list, that contain ints and Files,
+    checking changes in checksums
     """
     file = tmpdir.join("in_file_1.txt")
     with open(file, "w") as f:
@@ -333,7 +333,7 @@ def test_input_file_hash_4(tmpdir):
 
 
 def test_input_file_hash_5(tmpdir):
-    """ input spec with File in nested containers, checking changes in checksums"""
+    """input spec with File in nested containers, checking changes in checksums"""
     file = tmpdir.join("in_file_1.txt")
     with open(file, "w") as f:
         f.write("hello")

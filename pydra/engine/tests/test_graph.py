@@ -235,7 +235,7 @@ def test_remove_3():
 
 
 def test_remove_4():
-    """ a-> b -> c; a -> d -> e (removing A and later D)"""
+    """a-> b -> c; a -> d -> e (removing A and later D)"""
     graph = DiGraph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d", "e"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "d"), ("d", "e")]
@@ -257,7 +257,7 @@ def test_remove_4():
 
 
 def test_remove_5():
-    """ a-> b -> c; a -> d -> e (removing A, and [B, D] at the same time)"""
+    """a-> b -> c; a -> d -> e (removing A, and [B, D] at the same time)"""
     graph = DiGraph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d", "e"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "d"), ("d", "e")]
@@ -387,7 +387,7 @@ def test_remove_all_successors_3():
 
 
 def test_remove_all_successors_4():
-    """ a-> b -> c; a -> d -> e (removing A and later D)"""
+    """a-> b -> c; a -> d -> e (removing A and later D)"""
     graph = DiGraph(nodes=[B, A, C, D, E], edges=[(A, B), (B, C), (A, D), (D, E)])
     assert set(graph.nodes_names_map.keys()) == {"b", "a", "c", "d", "e"}
     assert graph.edges_names == [("a", "b"), ("b", "c"), ("a", "d"), ("d", "e")]

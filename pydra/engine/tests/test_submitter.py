@@ -126,8 +126,8 @@ def test_wf_in_wf(plugin, tmpdir):
 
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_wf2(plugin_dask_opt, tmpdir):
-    """ workflow as a node
-        workflow-node with one task and no splitter
+    """workflow as a node
+    workflow-node with one task and no splitter
     """
     wfnd = Workflow(name="wfnd", input_spec=["x"])
     wfnd.add(sleep_add_one(name="add2", x=wfnd.lzin.x))
@@ -261,7 +261,7 @@ def test_slurm_max_jobs(tmpdir):
 
 @pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_args_1(tmpdir):
-    """ testing sbatch_args provided to the submitter"""
+    """testing sbatch_args provided to the submitter"""
     task = sleep_add_one(x=1)
     task.cache_dir = tmpdir
     # submit workflow and every task as slurm job
@@ -276,8 +276,8 @@ def test_slurm_args_1(tmpdir):
 
 @pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_args_2(tmpdir):
-    """ testing sbatch_args provided to the submitter
-        exception should be raised for invalid options
+    """testing sbatch_args provided to the submitter
+    exception should be raised for invalid options
     """
     task = sleep_add_one(x=1)
     task.cache_dir = tmpdir
@@ -326,11 +326,11 @@ def cancel(job_name_part):
 @pytest.mark.flaky(reruns=1)
 @pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_cancel_rerun_1(tmpdir):
-    """ testing that tasks run with slurm is re-queue
-        Running wf with 2 tasks, one sleeps and the other trying to get
-        job_id of the first task and cancel it.
-        The first job should be re-queue and finish without problem.
-        (possibly has to be improved, in theory cancel job might finish before cancel)
+    """testing that tasks run with slurm is re-queue
+    Running wf with 2 tasks, one sleeps and the other trying to get
+    job_id of the first task and cancel it.
+    The first job should be re-queue and finish without problem.
+    (possibly has to be improved, in theory cancel job might finish before cancel)
     """
     wf = Workflow(
         name="wf",
@@ -359,10 +359,10 @@ def test_slurm_cancel_rerun_1(tmpdir):
 @pytest.mark.flaky(reruns=1)
 @pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_cancel_rerun_2(tmpdir):
-    """ testing that tasks run with slurm that has --no-requeue
-        Running wf with 2 tasks, one sleeps and the other gets
-        job_id of the first task and cancel it.
-        The first job is not able t be rescheduled and the error is returned.
+    """testing that tasks run with slurm that has --no-requeue
+    Running wf with 2 tasks, one sleeps and the other gets
+    job_id of the first task and cancel it.
+    The first job is not able t be rescheduled and the error is returned.
     """
     wf = Workflow(name="wf", input_spec=["x", "job_name"], cache_dir=tmpdir)
     wf.add(sleep(name="sleep2", x=wf.lzin.x))

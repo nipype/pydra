@@ -347,8 +347,8 @@ class SlurmWorker(DistributedWorker):
 
 
 class DaskWorker(Worker):
-    """ A worker to execute in parallel using Dask.distributed.
-        This is an experimental implementation with limited testing.
+    """A worker to execute in parallel using Dask.distributed.
+    This is an experimental implementation with limited testing.
     """
 
     def __init__(self, **kwargs):

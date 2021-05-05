@@ -3,8 +3,18 @@ import typing as ty
 import pytest
 
 from ..task import ShellCommandTask
-from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File, MultiInputObj
+from ..specs import (
+    ShellOutSpec,
+    ShellSpec,
+    SpecInfo,
+    File,
+    MultiInputObj,
+    MultiInputFile,
+    MultiOutputFile,
+)
 from .utils import use_validator
+from ..core import Workflow
+from ..submitter import Submitter
 
 
 def test_shell_cmd_execargs_1():
@@ -20,7 +30,7 @@ def test_shell_cmd_execargs_2():
 
 
 def test_shell_cmd_inputs_1():
-    """ additional input with provided position """
+    """additional input with provided position"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -42,7 +52,7 @@ def test_shell_cmd_inputs_1():
 
 
 def test_shell_cmd_inputs_1a():
-    """ additional input without provided position """
+    """additional input without provided position"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -59,7 +69,7 @@ def test_shell_cmd_inputs_1a():
 
 
 def test_shell_cmd_inputs_1b():
-    """ additional input with negative position """
+    """additional input with negative position"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -83,7 +93,7 @@ def test_shell_cmd_inputs_1b():
 
 
 def test_shell_cmd_inputs_1_st():
-    """ additional input with provided position, checking cmdline when splitter """
+    """additional input with provided position, checking cmdline when splitter"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -111,7 +121,7 @@ def test_shell_cmd_inputs_1_st():
 
 
 def test_shell_cmd_inputs_2():
-    """ additional inputs with provided positions """
+    """additional inputs with provided positions"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -141,7 +151,7 @@ def test_shell_cmd_inputs_2():
 
 
 def test_shell_cmd_inputs_2a():
-    """ additional inputs without provided positions """
+    """additional inputs without provided positions"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -163,7 +173,7 @@ def test_shell_cmd_inputs_2a():
 
 
 def test_shell_cmd_inputs_2_err():
-    """ additional inputs with provided positions (exception due to the duplication)"""
+    """additional inputs with provided positions (exception due to the duplication)"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -194,7 +204,7 @@ def test_shell_cmd_inputs_2_err():
 
 
 def test_shell_cmd_inputs_2_noerr():
-    """ additional inputs with provided positions
+    """additional inputs with provided positions
     (duplication of teh position doesn't lead to error, since only one field has value)
     """
     my_input_spec = SpecInfo(
@@ -225,7 +235,7 @@ def test_shell_cmd_inputs_2_noerr():
 
 
 def test_shell_cmd_inputs_3():
-    """ additional inputs: positive pos, negative pos and  no pos """
+    """additional inputs: positive pos, negative pos and  no pos"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -261,7 +271,7 @@ def test_shell_cmd_inputs_3():
 
 
 def test_shell_cmd_inputs_argstr_1():
-    """ additional string inputs with argstr """
+    """additional string inputs with argstr"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -284,7 +294,7 @@ def test_shell_cmd_inputs_argstr_1():
 
 
 def test_shell_cmd_inputs_argstr_2():
-    """ additional bool inputs with argstr """
+    """additional bool inputs with argstr"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -308,7 +318,7 @@ def test_shell_cmd_inputs_argstr_2():
 
 
 def test_shell_cmd_inputs_list_1():
-    """ providing list as an additional input, no sep, no argstr """
+    """providing list as an additional input, no sep, no argstr"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -331,7 +341,7 @@ def test_shell_cmd_inputs_list_1():
 
 
 def test_shell_cmd_inputs_list_2():
-    """ providing list as an additional input, no sep, but argstr """
+    """providing list as an additional input, no sep, but argstr"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -353,7 +363,7 @@ def test_shell_cmd_inputs_list_2():
 
 
 def test_shell_cmd_inputs_list_3():
-    """ providing list as an additional input, no sep, argstr with ..."""
+    """providing list as an additional input, no sep, argstr with ..."""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -376,7 +386,7 @@ def test_shell_cmd_inputs_list_3():
 
 
 def test_shell_cmd_inputs_list_sep_1():
-    """ providing list as an additional input:, sep, no argstr"""
+    """providing list as an additional input:, sep, no argstr"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -404,7 +414,7 @@ def test_shell_cmd_inputs_list_sep_1():
 
 
 def test_shell_cmd_inputs_list_sep_2():
-    """ providing list as an additional input:, sep, and argstr"""
+    """providing list as an additional input:, sep, and argstr"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -432,7 +442,7 @@ def test_shell_cmd_inputs_list_sep_2():
 
 
 def test_shell_cmd_inputs_sep_3():
-    """ providing list as an additional input:, sep, argstr with ..."""
+    """providing list as an additional input:, sep, argstr with ..."""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -460,7 +470,7 @@ def test_shell_cmd_inputs_sep_3():
 
 
 def test_shell_cmd_inputs_sep_4():
-    """ providing 1-el list as an additional input:, sep, argstr with ..., """
+    """providing 1-el list as an additional input:, sep, argstr with ...,"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -487,7 +497,7 @@ def test_shell_cmd_inputs_sep_4():
 
 
 def test_shell_cmd_inputs_sep_4a():
-    """ providing str instead of list as an additional input:, sep, argstr with ..."""
+    """providing str instead of list as an additional input:, sep, argstr with ..."""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -514,7 +524,7 @@ def test_shell_cmd_inputs_sep_4a():
 
 
 def test_shell_cmd_inputs_format_1():
-    """ additional inputs with argstr that has string formatting"""
+    """additional inputs with argstr that has string formatting"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -540,7 +550,7 @@ def test_shell_cmd_inputs_format_1():
 
 
 def test_shell_cmd_inputs_format_2():
-    """ additional inputs with argstr that has string formatting and ..."""
+    """additional inputs with argstr that has string formatting and ..."""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -566,7 +576,7 @@ def test_shell_cmd_inputs_format_2():
 
 
 def test_shell_cmd_inputs_format_3():
-    """ adding float formatting for argstr with input field"""
+    """adding float formatting for argstr with input field"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -592,7 +602,7 @@ def test_shell_cmd_inputs_format_3():
 
 
 def test_shell_cmd_inputs_mandatory_1():
-    """ additional inputs with mandatory=True"""
+    """additional inputs with mandatory=True"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -665,7 +675,7 @@ def test_shell_cmd_inputs_not_given_1():
 
 
 def test_shell_cmd_inputs_template_1():
-    """ additional inputs, one uses output_file_template (and argstr)"""
+    """additional inputs, one uses output_file_template (and argstr)"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -708,7 +718,7 @@ def test_shell_cmd_inputs_template_1():
 
 
 def test_shell_cmd_inputs_template_1a():
-    """ additional inputs, one uses output_file_template (without argstr)"""
+    """additional inputs, one uses output_file_template (without argstr)"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -747,7 +757,7 @@ def test_shell_cmd_inputs_template_1a():
 
 # TODO: after deciding how we use requires/templates
 def test_shell_cmd_inputs_template_2():
-    """ additional inputs, one uses output_file_template (and argstr, but input not provided)"""
+    """additional inputs, one uses output_file_template (and argstr, but input not provided)"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -782,7 +792,7 @@ def test_shell_cmd_inputs_template_2():
 
 
 def test_shell_cmd_inputs_template_3():
-    """ additional inputs with output_file_template and an additional
+    """additional inputs with output_file_template and an additional
     read-only fields that combine two outputs together in the command line
     """
     my_input_spec = SpecInfo(
@@ -861,7 +871,7 @@ def test_shell_cmd_inputs_template_3():
 
 
 def test_shell_cmd_inputs_template_3a():
-    """ additional inputs with output_file_template and an additional
+    """additional inputs with output_file_template and an additional
     read-only fields that combine two outputs together in the command line
     testing a different order within the input spec
     """
@@ -942,7 +952,7 @@ def test_shell_cmd_inputs_template_3a():
 
 # TODO: after deciding how we use requires/templates
 def test_shell_cmd_inputs_template_4():
-    """ additional inputs with output_file_template and an additional
+    """additional inputs with output_file_template and an additional
     read-only fields that combine two outputs together in the command line
     one output_file_template can't be resolved - no inpB is provided
     """
@@ -1013,7 +1023,7 @@ def test_shell_cmd_inputs_template_4():
 
 
 def test_shell_cmd_inputs_template_5_ex():
-    """ checking if the exception is raised for read-only fields when input is set"""
+    """checking if the exception is raised for read-only fields when input is set"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -1042,10 +1052,10 @@ def test_shell_cmd_inputs_template_5_ex():
 
 
 def test_shell_cmd_inputs_template_6():
-    """ additional inputs with output_file_template that has type ty.Union[str, bool]
-        no default is set, so if nothing is provided as an input, the output  is used
-        whenever the template can be formatted
-        (the same way as for templates that has type=str)
+    """additional inputs with output_file_template that has type ty.Union[str, bool]
+    no default is set, so if nothing is provided as an input, the output  is used
+    whenever the template can be formatted
+    (the same way as for templates that has type=str)
     """
     my_input_spec = SpecInfo(
         name="Input",
@@ -1105,9 +1115,9 @@ def test_shell_cmd_inputs_template_6():
 
 
 def test_shell_cmd_inputs_template_6a():
-    """ additional inputs with output_file_template that has type ty.Union[str, bool]
-        and default is set to False,
-        so if nothing is provided as an input, the output is not used
+    """additional inputs with output_file_template that has type ty.Union[str, bool]
+    and default is set to False,
+    so if nothing is provided as an input, the output is not used
     """
     my_input_spec = SpecInfo(
         name="Input",
@@ -1167,7 +1177,7 @@ def test_shell_cmd_inputs_template_6a():
 
 
 def test_shell_cmd_inputs_template_7(tmpdir):
-    """ additional inputs uses output_file_template with a suffix (no extension)
+    """additional inputs uses output_file_template with a suffix (no extension)
     no keep_extension is used
     """
     my_input_spec = SpecInfo(
@@ -1215,8 +1225,8 @@ def test_shell_cmd_inputs_template_7(tmpdir):
 
 
 def test_shell_cmd_inputs_template_7a(tmpdir):
-    """ additional inputs uses output_file_template with a suffix (no extension)
-        keep_extension is True (as default)
+    """additional inputs uses output_file_template with a suffix (no extension)
+    keep_extension is True (as default)
     """
     my_input_spec = SpecInfo(
         name="Input",
@@ -1264,7 +1274,7 @@ def test_shell_cmd_inputs_template_7a(tmpdir):
 
 
 def test_shell_cmd_inputs_template_7b(tmpdir):
-    """ additional inputs uses output_file_template with a suffix (no extension)
+    """additional inputs uses output_file_template with a suffix (no extension)
     keep extension is False (so the extension is removed when creating the output)
     """
     my_input_spec = SpecInfo(
@@ -1359,8 +1369,8 @@ def test_shell_cmd_inputs_template_8(tmpdir):
 
 
 def test_shell_cmd_inputs_template_9(tmpdir):
-    """ additional inputs, one uses output_file_template with two fields:
-        one File and one ints - the output should be recreated from the template
+    """additional inputs, one uses output_file_template with two fields:
+    one File and one ints - the output should be recreated from the template
     """
     my_input_spec = SpecInfo(
         name="Input",
@@ -1421,8 +1431,8 @@ def test_shell_cmd_inputs_template_9(tmpdir):
 
 
 def test_shell_cmd_inputs_template_9a(tmpdir):
-    """ additional inputs, one uses output_file_template with two fields:
-        one file and one string without extension - should be fine
+    """additional inputs, one uses output_file_template with two fields:
+    one file and one string without extension - should be fine
     """
     my_input_spec = SpecInfo(
         name="Input",
@@ -1483,8 +1493,8 @@ def test_shell_cmd_inputs_template_9a(tmpdir):
 
 
 def test_shell_cmd_inputs_template_9b_err(tmpdir):
-    """ output_file_template with two fields that are both Files,
-        an exception should be raised
+    """output_file_template with two fields that are both Files,
+    an exception should be raised
     """
     my_input_spec = SpecInfo(
         name="Input",
@@ -1547,8 +1557,8 @@ def test_shell_cmd_inputs_template_9b_err(tmpdir):
 
 
 def test_shell_cmd_inputs_template_9c_err(tmpdir):
-    """ output_file_template with two fields: a file and a string with extension,
-        that should be used as an additional file and the exception should be raised
+    """output_file_template with two fields: a file and a string with extension,
+    that should be used as an additional file and the exception should be raised
     """
     my_input_spec = SpecInfo(
         name="Input",
@@ -1609,7 +1619,7 @@ def test_shell_cmd_inputs_template_9c_err(tmpdir):
 
 
 def test_shell_cmd_inputs_template_10():
-    """ output_file_template uses a float field with formatting"""
+    """output_file_template uses a float field with formatting"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -1653,9 +1663,60 @@ def test_shell_cmd_inputs_template_10():
     assert shelly.output_names == ["return_code", "stdout", "stderr", "outA"]
 
 
+def test_shell_cmd_inputs_template_11():
+    input_fields = [
+        (
+            "inputFiles",
+            attr.ib(
+                type=MultiInputFile,
+                metadata={
+                    "argstr": "--inputFiles ...",
+                    "help_string": "The list of input image files to be segmented.",
+                },
+            ),
+        )
+    ]
+
+    output_fields = [
+        (
+            "outputFiles",
+            attr.ib(
+                type=MultiOutputFile,
+                metadata={
+                    "help_string": "Corrected Output Images: should specify the same number of images as inputVolume, if only one element is given, then it is used as a file pattern where %s is replaced by the imageVolumeType, and %d by the index list location.",
+                    "output_file_template": "{inputFiles}",
+                },
+            ),
+        )
+    ]
+
+    input_spec = SpecInfo(name="Input", fields=input_fields, bases=(ShellSpec,))
+    output_spec = SpecInfo(name="Output", fields=output_fields, bases=(ShellOutSpec,))
+
+    task = ShellCommandTask(
+        name="echoMultiple",
+        executable="echo",
+        input_spec=input_spec,
+        output_spec=output_spec,
+    )
+    wf = Workflow(name="wf", input_spec=["inputFiles"], inputFiles=["test1", "test2"])
+
+    task.inputs.inputFiles = wf.lzin.inputFiles
+
+    wf.add(task)
+    wf.set_output([("out", wf.echoMultiple.lzout.outputFiles)])
+
+    with Submitter(plugin="cf") as sub:
+        sub(wf)
+    result = wf.result()
+
+    for out_file in result.output.out:
+        assert out_file.name == "test1" or out_file.name == "test2"
+
+
 # TODO: after deciding how we use requires/templates
 def test_shell_cmd_inputs_di(tmpdir, use_validator):
-    """ example from #279 """
+    """example from #279"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[

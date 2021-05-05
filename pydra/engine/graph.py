@@ -99,9 +99,9 @@ class DiGraph:
 
     @property
     def nodes_details(self):
-        """ dictionary with details of the nodes
-            for each task, there are inputs/outputs and connections
-            (with input/output fields names)
+        """dictionary with details of the nodes
+        for each task, there are inputs/outputs and connections
+        (with input/output fields names)
         """
         # removing repeated fields from inputs and outputs
         for el in self._nodes_details.values():
@@ -156,7 +156,7 @@ class DiGraph:
             self.sorting(presorted=self.sorted_nodes + [])
 
     def add_edges_description(self, new_edge_details):
-        """ adding detailed description of the connections, filling _nodes_details"""
+        """adding detailed description of the connections, filling _nodes_details"""
         in_nd, in_fld, out_nd, out_fld = new_edge_details
         for key in [in_nd, out_nd]:
             self._nodes_details.setdefault(
@@ -309,7 +309,7 @@ class DiGraph:
             return True
 
     def remove_successors_nodes(self, node):
-        """ Removing all the nodes that follow the node"""
+        """Removing all the nodes that follow the node"""
         self._successors_all = []
         self._checking_successors_nodes(node=node, remove=False)
         self.remove_nodes_connections(nodes=node)
@@ -352,7 +352,7 @@ class DiGraph:
             self._checking_path(node_name=nm, first_name=nm)
 
     def create_dotfile_simple(self, outdir, name="graph"):
-        """ creates a simple dotfile (no nested structure)"""
+        """creates a simple dotfile (no nested structure)"""
         from .core import is_workflow
 
         dotstr = "digraph G {\n"
@@ -384,7 +384,7 @@ class DiGraph:
         return dotfile
 
     def create_dotfile_detailed(self, outdir, name="graph_det"):
-        """ creates a detailed dotfile (detailed connections - input/output fields,
+        """creates a detailed dotfile (detailed connections - input/output fields,
         but no nested structure)
         """
         dotstr = "digraph structs {\n"
@@ -492,7 +492,7 @@ class DiGraph:
         return dotstr
 
     def export_graph(self, dotfile, ext="png"):
-        """ exporting dotfile to other format, equires the dot command"""
+        """exporting dotfile to other format, equires the dot command"""
         available_ext = [
             "bmp",
             "canon",

@@ -24,13 +24,13 @@ no_win = pytest.mark.skipif(
 
 
 def result_no_submitter(shell_task, plugin=None):
-    """ helper function to return result when running without submitter """
+    """helper function to return result when running without submitter"""
     return shell_task()
 
 
 def result_submitter(shell_task, plugin):
-    """ helper function to return result when running with submitter
-        with specific plugin
+    """helper function to return result when running with submitter
+    with specific plugin
     """
     with Submitter(plugin=plugin) as sub:
         shell_task(submitter=sub)

@@ -184,7 +184,7 @@ class State:
 
     @property
     def prev_state_splitter(self):
-        """ the prev-state part of the splitter,
+        """the prev-state part of the splitter,
         i.e. the part that comes from the previous tasks' states
         """
         if hasattr(self, "_prev_state_splitter"):
@@ -205,7 +205,7 @@ class State:
 
     @property
     def prev_state_splitter_rpn_compact(self):
-        """ the prev-state part of the splitter using RPN in a compact form,
+        """the prev-state part of the splitter using RPN in a compact form,
         (without unwrapping the states from previous nodes), e.g. [_NA, _NB, \*]
         """
         if self.prev_state_splitter:
@@ -254,7 +254,7 @@ class State:
 
     @property
     def prev_state_combiner(self):
-        """ the prev-state part of the combiner,
+        """the prev-state part of the combiner,
         i.e. the part that comes from the previous tasks' states
         """
         if hasattr(self, "_prev_state_combiner"):
@@ -276,7 +276,7 @@ class State:
 
     @property
     def other_states(self):
-        """ specifies the connections with previous states, uses dictionary:
+        """specifies the connections with previous states, uses dictionary:
         {name of a previous state: (previous state, input field from current state)}
         """
         return self._other_states
@@ -313,7 +313,7 @@ class State:
             return {}
 
     def update_connections(self, new_other_states=None, new_combiner=None):
-        """ updating connections, can use a new other_states and combiner
+        """updating connections, can use a new other_states and combiner
 
         Parameters
         ----------
@@ -440,9 +440,7 @@ class State:
             and self._prevst_current_check(self.splitter[1], check_nested=False)
             == "current"
         ):
-            return (
-                "[prev-state, current]"
-            )  # the prev-state and the current parts separated in outer scalar
+            return "[prev-state, current]"  # the prev-state and the current parts separated in outer scalar
         else:
             raise hlpst.PydraStateError(
                 "prev-state and current splitters are mixed - splitter invalid"
@@ -578,7 +576,7 @@ class State:
                 self.groups_stack_final.append(stack)
 
     def splitter_validation(self):
-        """ validating if the splitter is correct (after all states are connected)"""
+        """validating if the splitter is correct (after all states are connected)"""
         for spl in self.splitter_rpn_compact:
             if not (
                 spl in [".", "*"]
@@ -592,7 +590,7 @@ class State:
                 )
 
     def combiner_validation(self):
-        """ validating if the combiner is correct (after all states are connected)"""
+        """validating if the combiner is correct (after all states are connected)"""
         if self.combiner:
             if not self.splitter:
                 raise hlpst.PydraStateError(

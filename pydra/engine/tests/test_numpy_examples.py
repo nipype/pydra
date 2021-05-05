@@ -21,7 +21,7 @@ def arrayout(val):
 
 
 def test_multiout(tmpdir):
-    """ testing a simple function that returns a numpy array"""
+    """testing a simple function that returns a numpy array"""
     wf = Workflow("wf", input_spec=["val"], val=2)
     wf.add(arrayout(name="mo", val=wf.lzin.val))
 
@@ -38,7 +38,7 @@ def test_multiout(tmpdir):
 
 
 def test_multiout_st(tmpdir):
-    """ testing a simple function that returns a numpy array, adding splitter"""
+    """testing a simple function that returns a numpy array, adding splitter"""
     wf = Workflow("wf", input_spec=["val"], val=[0, 1, 2])
     wf.add(arrayout(name="mo", val=wf.lzin.val))
     wf.mo.split("val").combine("val")
@@ -73,7 +73,7 @@ def test_numpy_hash_2():
 
 
 def test_task_numpyinput_1(tmpdir):
-    """ task with numeric numpy array as an input"""
+    """task with numeric numpy array as an input"""
     nn = identity(name="NA", x=[np.array([1, 2]), np.array([3, 4])])
     nn.cache_dir = tmpdir
     nn.split("x")
@@ -84,7 +84,7 @@ def test_task_numpyinput_1(tmpdir):
 
 
 def test_task_numpyinput_2(tmpdir):
-    """ task with numpy array of type object as an input"""
+    """task with numpy array of type object as an input"""
     nn = identity(
         name="NA",
         x=[np.array(["VAL1"], dtype=object), np.array(["VAL2"], dtype=object)],
