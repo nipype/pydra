@@ -587,8 +587,8 @@ def test_state_connect_6a():
 
 
 def test_state_connect_7():
-    """ two 'connected' states with multiple fields that are connected
-        no explicit splitter for the second state
+    """two 'connected' states with multiple fields that are connected
+    no explicit splitter for the second state
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", other_states={"NA": (st1, ["x", "y"])})
@@ -612,9 +612,9 @@ def test_state_connect_7():
 
 
 def test_state_connect_8():
-    """ three 'connected' states: NA -> NB -> NC; NA -> NC (only NA has its own splitter)
-        pydra should recognize, that there is only one splitter - NA
-        and it should give the same as the previous test
+    """three 'connected' states: NA -> NB -> NC; NA -> NC (only NA has its own splitter)
+    pydra should recognize, that there is only one splitter - NA
+    and it should give the same as the previous test
     """
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", other_states={"NA": (st1, "b")})
@@ -643,8 +643,8 @@ def test_state_connect_8():
     reason="doesn't recognize that NC.y has 4 elements (not independend on NC.x)"
 )
 def test_state_connect_9():
-    """ four  'connected' states: NA1 -> NB; NA2 -> NB, NA1 -> NC; NB -> NC
-        pydra should recognize, that there is only one splitter - NA_1 and NA_2
+    """four  'connected' states: NA1 -> NB; NA2 -> NB, NA1 -> NC; NB -> NC
+    pydra should recognize, that there is only one splitter - NA_1 and NA_2
 
     """
     st1 = State(name="NA_1", splitter="a")
@@ -931,6 +931,7 @@ def test_state_connect_innerspl_3():
     the second state has one inner splitter and one 'normal' splitter
     the prev-state parts of the splitter have to be added
     """
+
     st1 = State(name="NA", splitter="a")
     st2 = State(name="NB", splitter=["c", "b"], other_states={"NA": (st1, "b")})
     st3 = State(name="NC", splitter="d", other_states={"NB": (st2, "a")})
