@@ -256,7 +256,7 @@ def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
 
 
 def removed_previous_repeated(previous_splitters, other_states):
-    """ removing states from previous tasks that are repeated either directly or indirectly"""
+    """removing states from previous tasks that are repeated either directly or indirectly"""
     for el in previous_splitters:
         if el[1:] not in other_states:
             raise PydraStateError(

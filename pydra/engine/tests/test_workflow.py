@@ -1406,8 +1406,7 @@ def test_wf_3nd_ndst_6(plugin, tmpdir):
 
 
 def test_wf_3nd_7(tmpdir):
-    """ workflow with three tasks A->B->C vs two tasks A->C with multiple connections
-     """
+    """workflow with three tasks A->B->C vs two tasks A->C with multiple connections"""
     wf = Workflow(name="wf", input_spec=["zip"], cache_dir=tmpdir)
     wf.inputs.zip = [["test1", "test3", "test5"], ["test2", "test4", "test6"]]
 
