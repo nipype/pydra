@@ -952,16 +952,21 @@ class Workflow(TaskBase):
                             (task.name, field.name, val.name, val.field)
                         )
                     logger.debug("Connecting %s to %s", val.name, task.name)
-
+                    # adding a state from the previous task to other_states
                     if (
                         getattr(self, val.name).state
                         and getattr(self, val.name).state.splitter_rpn_final
                     ):
-                        # adding a state from the previous task to other_states
-                        other_states[val.name] = (
-                            getattr(self, val.name).state,
-                            field.name,
-                        )
+                        # adding task_name: (task.state, [a field from the connection]
+                        if val.name not in other_states:
+                            other_states[val.name] = (
+                                getattr(self, val.name).state,
+                                [field.name],
+                            )
+                        else:
+                            # if the task already exist in other_state,
+                            # additional field name should be added to the list of fields
+                            other_states[val.name][1].append(field.name)
                 else:  # LazyField with the wf input
                     # connections with wf input should be added to the detailed graph description
                     if detailed:
