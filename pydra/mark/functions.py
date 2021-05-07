@@ -43,4 +43,8 @@ def task(func):
     def decorate(**kwargs):
         return FunctionTask(func=func, **kwargs)
 
+    decorate.__module__ = func.__module__
+    decorate.__name__ = func.__name__
+    decorate.__doc__ = func.__doc__
+
     return decorate
