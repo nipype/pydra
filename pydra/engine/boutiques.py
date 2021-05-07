@@ -60,9 +60,17 @@ class BoshTask(ShellCommandTask):
         if (bosh_file and zenodo_id) or not (bosh_file or zenodo_id):
             raise Exception("either bosh or zenodo_id has to be specified")
         elif zenodo_id:
+            prefix = "zenodo."
+            if zenodo_id.startswith(prefix):
+                zenodo_id = zenodo_id[len(prefix):]
             self.bosh_file = self._download_spec(zenodo_id)
         else:  # bosh_file
-            self.bosh_file = bosh_file
+            if isinstance(bosh_file, str):
+                self.bosh_file = Path(bosh_file)
+            elif isinstance(bosh_file, Path):
+                self.bosh_file = bosh_file
+            else:
+                raise Exception("the given bosh_file is neither a string nor a path object")
 
         with self.bosh_file.open() as f:
             self.bosh_spec = json.load(f)
@@ -127,6 +135,8 @@ class BoshTask(ShellCommandTask):
                 tp = str
             elif input["type"] == "Number":
                 tp = float
+                if input.get("integer", False):
+                    tp = int
             elif input["type"] == "Flag":
                 tp = bool
             else:
@@ -140,7 +150,14 @@ class BoshTask(ShellCommandTask):
                 "mandatory": not input["optional"],
                 "argstr": input.get("command-line-flag", None),
             }
-            fields.append((name, tp, mdata))
+            if "default-value" in input:
+                # TODO: Set it to the correct type!
+                default_val = input["default-value"]
+                # Cannot have mandatory spec with a default value.
+                mdata["mandatory"] = False
+                fields.append((name, tp, default_val, mdata))
+            else:
+                fields.append((name, tp, mdata))
             self._input_spec_keys[input["value-key"]] = "{" + f"{name}" + "}"
         if names_subset:
             raise RuntimeError(f"{names_subset} are not in the zenodo input spec")

@@ -3018,7 +3018,7 @@ def test_shell_cmd_outputspec_7d(tmpdir, plugin, results_function):
     """
     customised output_spec, adding Directory to the output named by input spec
     """
-
+    # For /tmp/some_dict/test this function returns "/test"
     def get_lowest_directory(directory_path):
         return str(directory_path).replace(str(Path(directory_path).parents[0]), "")
 
