@@ -433,7 +433,7 @@ class ShellCommandTask(TaskBase):
                         argstr_f = argstr_formatting(
                             argstr, self.inputs, value_updates={field.name: val}
                         )
-                        argstr_formatted_l.append(argstr_f)
+                        argstr_formatted_l.append(f" {argstr_f}")
                     cmd_el_str = sep.join(argstr_formatted_l)
                 else:  # argstr has a simple form, e.g. "-f", or "--f"
                     cmd_el_str = sep.join([f" {argstr} {val}" for val in value])
@@ -445,7 +445,8 @@ class ShellCommandTask(TaskBase):
                     value = cmd_el_str
                 # if argstr has a more complex form, with "{input_field}"
                 if "{" in argstr and "}" in argstr:
-                    cmd_el_str = argstr_formatting(argstr, self.inputs)
+                    cmd_el_str = argstr.replace(f"{{{field.name}}}", str(value))
+                    cmd_el_str = argstr_formatting(cmd_el_str, self.inputs)
                 else:  # argstr has a simple form, e.g. "-f", or "--f"
                     if value:
                         cmd_el_str = f"{argstr} {value}"
