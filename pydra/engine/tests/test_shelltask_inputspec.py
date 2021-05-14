@@ -441,7 +441,35 @@ def test_shell_cmd_inputs_list_sep_2():
     assert shelly.cmdline == "executable -v aaa,bbb,ccc"
 
 
-def test_shell_cmd_inputs_sep_3():
+def test_shell_cmd_inputs_list_sep_2a():
+    """providing list as an additional input:, sep, and argstr with f-string"""
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "sep": ",",
+                        "argstr": "-v {inpA}",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="executable", inpA=["aaa", "bbb", "ccc"], input_spec=my_input_spec
+    )
+    # a flag is used once
+    assert shelly.cmdline == "executable -v aaa,bbb,ccc"
+
+
+def test_shell_cmd_inputs_list_sep_3():
     """providing list as an additional input:, sep, argstr with ..."""
     my_input_spec = SpecInfo(
         name="Input",
@@ -455,6 +483,34 @@ def test_shell_cmd_inputs_sep_3():
                         "help_string": "inpA",
                         "sep": ",",
                         "argstr": "-v...",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="executable", inpA=["aaa", "bbb", "ccc"], input_spec=my_input_spec
+    )
+    # a flag is repeated
+    assert shelly.cmdline == "executable -v aaa, -v bbb, -v ccc"
+
+
+def test_shell_cmd_inputs_list_sep_3a():
+    """providing list as an additional input:, sep, argstr with ... and f-string"""
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "sep": ",",
+                        "argstr": "-v {inpA}...",
                     },
                 ),
             )
