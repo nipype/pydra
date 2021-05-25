@@ -3052,6 +3052,7 @@ def test_shell_cmd_outputspec_7d(tmpdir, plugin, results_function):
                     metadata={
                         "output_file_template": "{resultsDir}",
                         "help_string": "output file",
+                        "absolute_path": True,
                     },
                 ),
             )
