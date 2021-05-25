@@ -399,6 +399,7 @@ class ShellSpec(BaseSpec):
             "keep_extension",
             "xor",
             "sep",
+            "absolute_path",
         }
         for fld in attr_fields(self, exclude_names=("_func", "_graph_checksums")):
             mdata = fld.metadata
@@ -495,7 +496,9 @@ class ShellOutSpec:
                 output_names.append(fld.name)
             elif (
                 fld.metadata
-                and self._field_metadata(fld, inputs, output_dir, outputs=None, check_existance = False)
+                and self._field_metadata(
+                    fld, inputs, output_dir, outputs=None, check_existance=False
+                )
                 != attr.NOTHING
             ):
                 output_names.append(fld.name)
@@ -529,7 +532,9 @@ class ShellOutSpec:
             else:
                 raise AttributeError(f"no file matches {default.name}")
 
-    def _field_metadata(self, fld, inputs, output_dir, outputs=None, check_existance = True):
+    def _field_metadata(
+        self, fld, inputs, output_dir, outputs=None, check_existance=True
+    ):
         """Collect output file if metadata specified."""
         if self._check_requires(fld, inputs) is False:
             return attr.NOTHING
@@ -543,17 +548,27 @@ class ShellOutSpec:
             value = template_update_single(
                 fld, inputs=inputs, output_dir=output_dir, spec_type="output"
             )
+
             if fld.type is MultiOutputFile and type(value) is list:
-                # TODO: how to handle list outputs that do not exist
-                return [Path(val) for val in value]
+                # TODO: how to deal with mandatory list outputs
+                ret = []
+                for val in value:
+                    val = Path(val)
+                    if check_existance and not val.exists():
+                        ret.append(attr.NOTHING)
+                    else:
+                        ret.append(val)
+                return ret
             else:
                 val = Path(value)
                 # checking if the file exists
                 if check_existance and not val.exists():
                     # if mandatory raise exception
-                    if 'mandatory' in fld.metadata:
-                        if fld.metadata['mandatory']:
-                            raise Exception(f"mandatory output for variable {fld.name} does not exit")
+                    if "mandatory" in fld.metadata:
+                        if fld.metadata["mandatory"]:
+                            raise Exception(
+                                f"mandatory output for variable {fld.name} does not exit"
+                            )
                     return attr.NOTHING
                 return val
         elif "callable" in fld.metadata:

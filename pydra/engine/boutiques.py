@@ -62,7 +62,7 @@ class BoshTask(ShellCommandTask):
         elif zenodo_id:
             prefix = "zenodo."
             if zenodo_id.startswith(prefix):
-                zenodo_id = zenodo_id[len(prefix):]
+                zenodo_id = zenodo_id[len(prefix) :]
             self.bosh_file = self._download_spec(zenodo_id)
         else:  # bosh_file
             if isinstance(bosh_file, str):
@@ -70,7 +70,9 @@ class BoshTask(ShellCommandTask):
             elif isinstance(bosh_file, Path):
                 self.bosh_file = bosh_file
             else:
-                raise Exception("the given bosh_file is neither a string nor a path object")
+                raise Exception(
+                    "the given bosh_file is neither a string nor a path object"
+                )
 
         with self.bosh_file.open() as f:
             self.bosh_spec = json.load(f)
@@ -141,6 +143,7 @@ class BoshTask(ShellCommandTask):
                 tp = bool
             else:
                 tp = None
+            ti = tp  # copy in case tp gets changed to a list
             # adding list
             if tp and "list" in input and input["list"]:
                 tp = ty.List[tp]
@@ -150,14 +153,33 @@ class BoshTask(ShellCommandTask):
                 "mandatory": not input["optional"],
                 "argstr": input.get("command-line-flag", None),
             }
+
             if "default-value" in input:
-                # TODO: Set it to the correct type!
                 default_val = input["default-value"]
+                # Setting the type of the default value
+                if ti is not File:
+                    if isinstance(default_val, ty.List):
+                        default_val = [ty.cast(ti, v) for v in default_val]
+                    else:
+                        default_val = ty.cast(tp, default_val)
                 # Cannot have mandatory spec with a default value.
                 mdata["mandatory"] = False
                 fields.append((name, tp, default_val, mdata))
             else:
                 fields.append((name, tp, mdata))
+
+            if "list-separator" in input:
+                mdata["sep"] = input["list-separator"]
+
+            if "command-line-flag-separator" in input and tp != bool:
+                # overwriting previously set value
+                if mdata["argstr"] is not None:
+                    mdata["argstr"] = (
+                        mdata["argstr"]
+                        + input["command-line-flag-separator"]
+                        + "{name}"
+                    )
+
             self._input_spec_keys[input["value-key"]] = "{" + f"{name}" + "}"
         if names_subset:
             raise RuntimeError(f"{names_subset} are not in the zenodo input spec")
@@ -188,6 +210,8 @@ class BoshTask(ShellCommandTask):
                 "mandatory": not output["optional"],
                 "output_file_template": path_template,
             }
+            if "uses-absolute-path" in output:
+                mdata["absolute_path"] = output["uses-absolute-path"]
             fields.append((name, attr.ib(type=File, metadata=mdata)))
 
         if names_subset:
