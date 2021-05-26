@@ -1,0 +1,23 @@
+{
+    "name": "Test-1",
+    "description": "A testing file",
+    "tool-version": "v0.1.0",
+    "schema-version": "0.5",
+    "command-line": "echo [FILE]",
+    "container-image": {
+        "image": "ubuntu:latest",
+        "type": "docker"
+    },
+    "inputs": [
+        {
+            "id": "file",
+            "name": "file",
+            "description": "A file to be created.",
+            "optional": true,
+            "type": "String",
+            "value-key": "[FILE]",
+            "command-line-flag": "-f",
+            "command-line-flag-separator": "tt"
+        }
+    ]
+}

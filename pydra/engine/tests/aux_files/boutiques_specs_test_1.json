@@ -1,0 +1,31 @@
+{
+    "name": "Test-1",
+    "description": "A testing file",
+    "tool-version": "v0.1.0",
+    "schema-version": "0.5",
+    "command-line": "touch [FILE]",
+    "container-image": {
+        "image": "ubuntu:latest",
+        "type": "docker"
+    },
+    "inputs": [
+        {
+            "id": "file",
+            "name": "file",
+            "description": "A file to be created.",
+            "optional": false,
+            "type": "String",
+            "default-value": "outy.txt",
+            "value-key": "[FILE]"
+        }
+    ],
+    "output-files": [
+        {
+            "path-template": "[FILE]",
+            "description": "Created File",
+            "optional": false,
+            "id": "created_file",
+            "name": "created-file"
+        }
+    ]
+}

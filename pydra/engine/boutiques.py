@@ -19,6 +19,7 @@ class BoshTask(ShellCommandTask):
         zenodo_id=None,
         bosh_file=None,
         audit_flags: AuditFlag = AuditFlag.NONE,
+        bindings=[],
         cache_dir=None,
         input_spec_names: ty.Optional[ty.List] = None,
         messenger_args=None,
@@ -80,6 +81,7 @@ class BoshTask(ShellCommandTask):
         self.input_spec = self._prepare_input_spec(names_subset=input_spec_names)
         self.output_spec = self._prepare_output_spec(names_subset=output_spec_names)
         self.bindings = ["-v", f"{self.bosh_file.parent}:{self.bosh_file.parent}:ro"]
+        self.add_input_bindigs(bindings)
 
         super().__init__(
             name=name,
@@ -190,7 +192,10 @@ class BoshTask(ShellCommandTask):
         """creating output spec from the zenodo file
         if name_subset provided, only names from the subset will be used in the spec
         """
-        boutputs = self.bosh_spec["output-files"]
+
+        boutputs = self.bosh_spec.get("output-files", None)
+        if not boutputs:
+            return SpecInfo(name="Outputs", fields=[], bases=(ShellOutSpec,))
         fields = []
         for output in boutputs:
             name = output["id"]
@@ -252,3 +257,15 @@ class BoshTask(ShellCommandTask):
             json.dump(input_json, jsonfile)
 
         return str(filename)
+
+    def add_input_bindigs(self, binings):
+        for binding in binings:
+            if len(binding) == 3:
+                lpath, cpath, mode = binding
+            elif len(binding) == 2:
+                lpath, cpath, mode = binding + ["rw"]
+            else:
+                raise Exception(
+                    f"binding should have length 2, 3, or 4, it has {len(binding)}"
+                )
+            self.bindings.extend(["-v", f"{lpath}:{cpath}:{mode}"])
