@@ -2587,6 +2587,58 @@ def test_shell_cmd_outputspec_3(plugin, results_function, tmpdir):
 def test_shell_cmd_outputspec_4(plugin, results_function, tmpdir):
     """
     customised output_spec, adding files to the output,
+    using a wildcard in default (in the directory name)
+    """
+    cmd = ["mkdir", "tmp1", ";", "touch", "tmp1/newfile.txt"]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "tmp*/newfile.txt")],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.newfile.exists()
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_4a(plugin, results_function, tmpdir):
+    """
+    customised output_spec, adding files to the output,
+    using a wildcard in default (in the directory name), should collect two files
+    """
+    cmd = [
+        "mkdir",
+        "tmp1",
+        "tmp2",
+        ";",
+        "touch",
+        "tmp1/newfile.txt",
+        "tmp2/newfile.txt",
+    ]
+    my_output_spec = SpecInfo(
+        name="Output",
+        fields=[("newfile", File, "tmp*/newfile.txt")],
+        bases=(ShellOutSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmpdir
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    # newfile is a list
+    assert len(res.output.newfile) == 2
+    assert all([file.exists for file in res.output.newfile])
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_5(plugin, results_function, tmpdir):
+    """
+    customised output_spec, adding files to the output,
     using a function to collect output, the function is saved in the field metadata
     and uses output_dir and the glob function
     """
@@ -2613,7 +2665,7 @@ def test_shell_cmd_outputspec_4(plugin, results_function, tmpdir):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_4a(plugin, results_function):
+def test_shell_cmd_outputspec_5a(plugin, results_function):
     """
     customised output_spec, adding files to the output,
     using a function to collect output, the function is saved in the field metadata
@@ -2639,7 +2691,7 @@ def test_shell_cmd_outputspec_4a(plugin, results_function):
     assert all([file.exists for file in res.output.newfile])
 
 
-def test_shell_cmd_outputspec_4b_error():
+def test_shell_cmd_outputspec_5b_error():
     """
     customised output_spec, adding files to the output,
     using a function to collect output, the function is saved in the field metadata
@@ -2662,7 +2714,7 @@ def test_shell_cmd_outputspec_4b_error():
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_5(plugin, results_function, tmpdir):
+def test_shell_cmd_outputspec_6(plugin, results_function, tmpdir):
     """
     providing output name by providing output_file_template
     (similar to the previous example, but not touching input_spec)
@@ -2700,7 +2752,7 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmpdir):
     assert res.output.out1.exists()
 
 
-def test_shell_cmd_outputspec_5a():
+def test_shell_cmd_outputspec_6a():
     """
     providing output name by providing output_file_template
     (using shorter syntax)
@@ -2730,7 +2782,7 @@ def test_shell_cmd_outputspec_5a():
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_6(tmpdir, plugin, results_function):
+def test_shell_cmd_outputspec_7(tmpdir, plugin, results_function):
     """
     providing output with output_file_name and using MultiOutputFile as a type.
     the input field used in the template is a MultiInputObj, so it can be and is a list
@@ -2806,7 +2858,7 @@ def test_shell_cmd_outputspec_6(tmpdir, plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_6a(tmpdir, plugin, results_function):
+def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
     """
     providing output with output_file_name and using MultiOutputFile as a type.
     the input field used in the template is a MultiInputObj, but a single element is used
@@ -2881,7 +2933,7 @@ def test_shell_cmd_outputspec_6a(tmpdir, plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
+def test_shell_cmd_outputspec_8a(tmpdir, plugin, results_function):
     """
     customised output_spec, adding int and str to the output,
     requiring two callables with parameters stdout and stderr
@@ -2942,7 +2994,7 @@ def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
         assert res.output.stderr_field == f"stderr: {res.output.stderr}"
 
 
-def test_shell_cmd_outputspec_7b_error():
+def test_shell_cmd_outputspec_8b_error():
     """
     customised output_spec, adding Int to the output,
     requiring a function to collect output
@@ -2971,7 +3023,7 @@ def test_shell_cmd_outputspec_7b_error():
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_7c(tmpdir, plugin, results_function):
+def test_shell_cmd_outputspec_8c(tmpdir, plugin, results_function):
     """
     customised output_spec, adding Directory to the output named by args
     """
@@ -3014,7 +3066,7 @@ def test_shell_cmd_outputspec_7c(tmpdir, plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_7d(tmpdir, plugin, results_function):
+def test_shell_cmd_outputspec_8d(tmpdir, plugin, results_function):
     """
     customised output_spec, adding Directory to the output named by input spec
     """
