@@ -4,6 +4,7 @@ from pathlib import Path
 import typing as ty
 import inspect
 import re
+from glob import glob
 
 from .helpers_file import template_update_single
 
@@ -514,14 +515,13 @@ class ShellOutSpec:
             default = Path(default)
 
         default = output_dir / default
-
-        if "*" not in default.name:
+        if "*" not in str(default):
             if default.exists():
                 return default
             else:
                 raise AttributeError(f"file {default} does not exist")
         else:
-            all_files = list(Path(default.parent).expanduser().glob(default.name))
+            all_files = [Path(el) for el in glob(str(default.expanduser()))]
             if len(all_files) > 1:
                 return all_files
             elif len(all_files) == 1:
