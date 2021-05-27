@@ -23,7 +23,7 @@ Infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)  # need for travis
+@pytest.mark.flaky(reruns=3)  # need for travis
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
@@ -47,7 +47,7 @@ def test_boutiques_1(maskfile, plugin, results_function, tmpdir):
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)
+@pytest.mark.flaky(reruns=3)
 def test_boutiques_prefix(plugin, tmpdir):
     """simple task to run fsl.bet using BoshTask, but using the 'zenodo' prefix for the zenodo_id"""
     btask = BoshTask(name="NA", zenodo_id="zenodo.1482743")
@@ -67,7 +67,7 @@ def test_boutiques_prefix(plugin, tmpdir):
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)
+@pytest.mark.flaky(reruns=3)
 def test_boutiques_spec_1():
     """testing spec: providing input/output fields names"""
     btask = BoshTask(
@@ -92,7 +92,7 @@ def test_boutiques_spec_1():
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)
+@pytest.mark.flaky(reruns=3)
 def test_boutiques_spec_2():
     """testing spec: providing partial input/output fields names"""
     btask = BoshTask(
@@ -115,7 +115,7 @@ def test_boutiques_spec_2():
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
@@ -147,7 +147,7 @@ def test_boutiques_wf_1(maskfile, plugin, tmpdir):
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.xfail(reason="issues with bosh for 4472771")
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
@@ -199,7 +199,7 @@ def test_boutiques_wf_2(maskfile, plugin, tmpdir):
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)
+@pytest.mark.flaky(reruns=3)
 def test_boutiques_load_bosh_file():
     cpath = Path(__file__).parent.absolute()
     test_file = cpath / "aux_files/boutiques_specs_test_1.json"
@@ -209,7 +209,7 @@ def test_boutiques_load_bosh_file():
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)
+@pytest.mark.flaky(reruns=3)
 def test_boutiques_load_bosh_file_path():
     cpath = Path(__file__).parent.absolute()
     test_file = cpath / "aux_files/boutiques_specs_test_1.json"
@@ -219,7 +219,7 @@ def test_boutiques_load_bosh_file_path():
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)
+@pytest.mark.flaky(reruns=3)
 def test_boutiques_specs_1(plugin, tmpdir):
     """Tests if mandatory metadata gets set and if default value is used"""
     cpath = Path(__file__).parent.absolute()
@@ -238,7 +238,7 @@ def test_boutiques_specs_1(plugin, tmpdir):
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)
+@pytest.mark.flaky(reruns=3)
 def test_boutiques_specs_absolute(plugin, tmpdir):
     cpath = Path(__file__).parent.absolute()
     test_file = cpath / "aux_files/boutiques_specs_test_1_absolute.json"
@@ -262,7 +262,48 @@ def test_boutiques_specs_absolute(plugin, tmpdir):
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)
+@pytest.mark.flaky(reruns=3)
+def test_boutiques_specs_extension(plugin, tmpdir):
+    """Tests if mandatory metadata gets set and if default value is used"""
+    cpath = Path(__file__).parent.absolute()
+    test_file = cpath / "aux_files/boutiques_specs_test_1_extension.json"
+    btask = BoshTask(name="touch", bosh_file=test_file)
+    assert btask.bosh_file == Path(test_file)
+
+    btask()
+    assert (
+        btask.input_spec.fields[0][3]["mandatory"] == False
+    )  # if default value exists it must be false
+    assert btask.input_spec.fields[0][1] == str
+    assert btask.output_spec.fields[0][1].metadata["mandatory"] == False
+    assert btask.result().output.created_file.name == "outy.tt"
+
+
+@no_win
+@need_bosh_docker
+@pytest.mark.flaky(reruns=3)
+def test_boutiques_specs_extension_wf(plugin, tmpdir):
+    """Tests if mandatory metadata gets set and if default value is used"""
+    cpath = Path(__file__).parent.absolute()
+    test_file = cpath / "aux_files/boutiques_specs_test_1_extension.json"
+    wf = Workflow(name="wf", input_spec=["name1", "name2"])
+    wf.inputs.name2 = "outy.tt"
+    wf.split("name1", name1=["outy.tt.txt.gz.nii.txt", "outy.txt.tt.gz"])
+    btask = BoshTask(
+        name="btask", bosh_file=test_file, file=wf.lzin.name1, file_hidden=wf.lzin.name2
+    )
+    wf.add(btask)
+    wf.set_output([("out", wf.btask.lzout.created_file)])
+    with Submitter(plugin=plugin) as sub:
+        wf(submitter=sub)
+    res = wf.result()
+    for r in res:
+        assert r.output.out.name == "outy.tt"
+
+
+@no_win
+@need_bosh_docker
+@pytest.mark.flaky(reruns=3)
 def test_boutiques_specs_2(plugin, tmpdir):
     """also tests for if no output-files are provided"""
     cpath = Path(__file__).parent.absolute()
@@ -276,7 +317,7 @@ def test_boutiques_specs_2(plugin, tmpdir):
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=0)
+@pytest.mark.flaky(reruns=3)
 def test_boutiques_specs_2(plugin, tmpdir):
     """also tests for if no output-files are provided"""
     cpath = Path(__file__).parent.absolute()

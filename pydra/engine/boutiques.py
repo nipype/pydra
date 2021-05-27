@@ -4,11 +4,14 @@ import attr
 from urllib.request import urlretrieve
 from pathlib import Path
 from functools import reduce
+from copy import deepcopy
 
 from ..utils.messenger import AuditFlag
 from ..engine import ShellCommandTask
 from ..engine.specs import SpecInfo, ShellSpec, ShellOutSpec, File, attr_fields
-from .helpers_file import is_local_file
+from .helpers_file import is_local_file, template_update_single
+from .specs import attr_fields
+from .helpers import make_klass
 
 
 class BoshTask(ShellCommandTask):
@@ -78,6 +81,7 @@ class BoshTask(ShellCommandTask):
         with self.bosh_file.open() as f:
             self.bosh_spec = json.load(f)
 
+        self._post_run_changes = {}
         self.input_spec = self._prepare_input_spec(names_subset=input_spec_names)
         self.output_spec = self._prepare_output_spec(names_subset=output_spec_names)
         self.bindings = ["-v", f"{self.bosh_file.parent}:{self.bosh_file.parent}:ro"]
@@ -98,6 +102,7 @@ class BoshTask(ShellCommandTask):
             **kwargs,
         )
         self.strip = strip
+        # self.hooks.__setattr__("post_run_task",post_run_patches)
 
     def _download_spec(self, zenodo_id):
         """
@@ -217,8 +222,45 @@ class BoshTask(ShellCommandTask):
             }
             if "uses-absolute-path" in output:
                 mdata["absolute_path"] = output["uses-absolute-path"]
-            fields.append((name, attr.ib(type=File, metadata=mdata)))
 
+            if "path-template-stripped-extensions" in output:
+                exts = output["path-template-stripped-extensions"]
+                self._post_run_changes[name] = {
+                    "path-template-stripped-extensions": exts
+                }
+
+                def find_special_out(field, output_dir, inputs):
+                    mdata["output_file_template"] = path_template
+                    fields = [(name, attr.ib(type=File, metadata=mdata))]
+                    spec = SpecInfo(
+                        name="Outputs", fields=fields, bases=(ShellOutSpec,)
+                    )
+                    spec = make_klass(spec)
+                    bspec = attr_fields(
+                        spec, exclude_names=("return_code", "stdout", "stderr")
+                    )
+                    fld = bspec[0]
+                    inputs = deepcopy(inputs)
+                    dict_ = attr.asdict(inputs)
+                    for k, v in dict_.items():
+                        if isinstance(v, str):
+                            for ext in exts:
+                                v = v.replace(ext, "")
+                            dict_[k] = v
+                    inputs = attr.evolve(inputs, **dict_)
+                    new_value = template_update_single(
+                        fld, inputs, output_dir=output_dir, spec_type="output"
+                    )
+                    ret = Path(new_value)
+                    if ret.exists():
+                        return ret
+                    else:
+                        return attr.NOTHING
+
+                mdata["callable"] = find_special_out
+                del mdata["output_file_template"]  # = None
+
+            fields.append((name, attr.ib(type=File, metadata=mdata)))
         if names_subset:
             raise RuntimeError(f"{names_subset} are not in the zenodo output spec")
         spec = SpecInfo(name="Outputs", fields=fields, bases=(ShellOutSpec,))
