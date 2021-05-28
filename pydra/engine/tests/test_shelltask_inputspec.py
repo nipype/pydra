@@ -1727,7 +1727,7 @@ def test_shell_cmd_inputs_template_11():
             attr.ib(
                 type=MultiInputFile,
                 metadata={
-                    "argstr": "--inputFiles ...",
+                    "argstr": "...",
                     "help_string": "The list of input image files to be segmented.",
                 },
             ),
@@ -1752,7 +1752,7 @@ def test_shell_cmd_inputs_template_11():
 
     task = ShellCommandTask(
         name="echoMultiple",
-        executable="echo",
+        executable="touch",
         input_spec=input_spec,
         output_spec=output_spec,
     )
