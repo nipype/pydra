@@ -430,7 +430,27 @@ class ShellCommandTask(TaskBase):
             return None
 
         cmd_add = []
-        if field.type is bool:
+        if "formatter" in field.metadata:
+            call_args = inspect.getargspec(field.metadata["callable"])
+            call_args_val = {}
+            for argnm in call_args.args:
+                if argnm == "field":
+                    call_args_val[argnm] = field
+                elif argnm == "value":
+                    call_args_val[argnm] = value
+                elif argnm == "inputs":
+                    call_args_val[argnm] = self.inputs
+                else:
+                    try:
+                        call_args_val[argnm] = getattr(self.inputs, argnm)
+                    except AttributeError:
+                        raise AttributeError(
+                            f"arguments of the callable function from {fld.name} "
+                            f"has to be in inputs or be field or output_dir, "
+                            f"but {argnm} is used"
+                        )
+            cmd_el_str = field.metadata["formatter"](**call_args_val)
+        elif field.type is bool:
             # if value is simply True the original argstr is used,
             # if False, nothing is added to the command
             if value is True:

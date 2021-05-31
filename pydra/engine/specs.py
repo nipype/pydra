@@ -401,6 +401,7 @@ class ShellSpec(BaseSpec):
             "xor",
             "sep",
             "absolute_path",
+            "formatter",
         }
         for fld in attr_fields(self, exclude_names=("_func", "_graph_checksums")):
             mdata = fld.metadata
