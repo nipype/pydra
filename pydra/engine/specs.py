@@ -595,6 +595,7 @@ class ShellOutSpec:
                             f"has to be in inputs or be field or output_dir, "
                             f"but {argnm} is used"
                         )
+            print("OUTPUT_CALLABLE")
             return fld.metadata["callable"](**call_args_val)
         else:
             raise Exception("(_field_metadata) is not a current valid metadata key.")
