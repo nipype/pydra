@@ -557,6 +557,8 @@ class ShellOutSpec:
                     val = Path(val)
                     if check_existance and not val.exists():
                         ret.append(attr.NOTHING)
+                    elif check_existance and (fld.metadata.get("absolute_path", False) and not val.is_absolute()):
+                        ret.append(attr.NOTHING)
                     else:
                         ret.append(val)
                 return ret
@@ -570,6 +572,8 @@ class ShellOutSpec:
                             raise Exception(
                                 f"mandatory output for variable {fld.name} does not exit"
                             )
+                    return attr.NOTHING
+                if check_existance and (fld.metadata.get("absolute_path", False) and not val.is_absolute()):
                     return attr.NOTHING
                 return val
         elif "callable" in fld.metadata:
@@ -595,7 +599,6 @@ class ShellOutSpec:
                             f"has to be in inputs or be field or output_dir, "
                             f"but {argnm} is used"
                         )
-            print("OUTPUT_CALLABLE")
             return fld.metadata["callable"](**call_args_val)
         else:
             raise Exception("(_field_metadata) is not a current valid metadata key.")
