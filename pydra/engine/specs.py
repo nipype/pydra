@@ -557,7 +557,10 @@ class ShellOutSpec:
                     val = Path(val)
                     if check_existance and not val.exists():
                         ret.append(attr.NOTHING)
-                    elif check_existance and (fld.metadata.get("absolute_path", False) and not val.is_absolute()):
+                    elif check_existance and (
+                        fld.metadata.get("absolute_path", False)
+                        and not val.is_absolute()
+                    ):
                         ret.append(attr.NOTHING)
                     else:
                         ret.append(val)
@@ -573,7 +576,9 @@ class ShellOutSpec:
                                 f"mandatory output for variable {fld.name} does not exit"
                             )
                     return attr.NOTHING
-                if check_existance and (fld.metadata.get("absolute_path", False) and not val.is_absolute()):
+                if check_existance and (
+                    fld.metadata.get("absolute_path", False) and not val.is_absolute()
+                ):
                     return attr.NOTHING
                 return val
         elif "callable" in fld.metadata:

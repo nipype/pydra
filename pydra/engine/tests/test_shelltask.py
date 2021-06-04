@@ -4146,9 +4146,10 @@ def test_fsl():
     assert shelly.cmdline == f"bet {in_file} {out_file}"
     # res = shelly(plugin="cf")
 
+
 def test_shell_cmd_non_existing_outputs_1(tmpdir):
     """Checking that non existing output files do not return a phantom path,
-       but return NOTHING instead"""
+    but return NOTHING instead"""
     input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -4160,7 +4161,7 @@ def test_shell_cmd_non_existing_outputs_1(tmpdir):
                         "help_string": """
                         base name of the pretend outputs.
                         """,
-                        "mandatory": True
+                        "mandatory": True,
                     },
                 ),
             )
@@ -4169,16 +4170,16 @@ def test_shell_cmd_non_existing_outputs_1(tmpdir):
     )
     out_spec = SpecInfo(
         name="Output",
-        fields = [
+        fields=[
             (
                 "out_1",
                 attr.ib(
                     type=File,
                     metadata={
-                    "help_string": "fictional output #1",
-                    "output_file_template": "{out_name}_1.nii"
+                        "help_string": "fictional output #1",
+                        "output_file_template": "{out_name}_1.nii",
                     },
-                )
+                ),
             ),
             (
                 "out_2",
@@ -4186,9 +4187,9 @@ def test_shell_cmd_non_existing_outputs_1(tmpdir):
                     type=File,
                     metadata={
                         "help_string": "fictional output #2",
-                        "output_file_template": "{out_name}_2.nii"
+                        "output_file_template": "{out_name}_2.nii",
                     },
-                )
+                ),
             ),
         ],
         bases=(ShellOutSpec,),
@@ -4199,15 +4200,16 @@ def test_shell_cmd_non_existing_outputs_1(tmpdir):
         executable="echo",
         input_spec=input_spec,
         output_spec=out_spec,
-        out_name = "test"
+        out_name="test",
     )
     shelly()
     res = shelly.result()
     assert res.output.out_1 == attr.NOTHING and res.output.out_2 == attr.NOTHING
 
+
 def test_shell_cmd_non_existing_outputs_2(tmpdir):
     """Checking that non existing output files do not return a phantom path,
-       but return NOTHING instead. This test has one existing and one non existing output file."""
+    but return NOTHING instead. This test has one existing and one non existing output file."""
     input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -4220,7 +4222,7 @@ def test_shell_cmd_non_existing_outputs_2(tmpdir):
                         base name of the pretend outputs.
                         """,
                         "mandatory": True,
-                        "argstr": "{out_name}_1.nii"
+                        "argstr": "{out_name}_1.nii",
                     },
                 ),
             )
@@ -4229,147 +4231,16 @@ def test_shell_cmd_non_existing_outputs_2(tmpdir):
     )
     out_spec = SpecInfo(
         name="Output",
-        fields = [
-            (
-                "out_1",
-                attr.ib(
-                    type=File,
-                    metadata={
-                    "help_string": "fictional output #1",
-                    "output_file_template": "{out_name}_1.nii"
-                    },
-                )
-            ),
-            (
-                "out_2",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "help_string": "fictional output #2",
-                        "output_file_template": "{out_name}_2.nii"
-                    },
-                )
-            ),
-        ],
-        bases=(ShellOutSpec,),
-    )
-
-    shelly = ShellCommandTask(
-        cache_dir=tmpdir,
-        executable="touch",
-        input_spec=input_spec,
-        output_spec=out_spec,
-        out_name = "test"
-    )
-    shelly()
-    res = shelly.result()
-    # the first output file is created
-    assert res.output.out_1 == Path(shelly.output_dir) / Path("test_1.nii")
-    assert res.output.out_1.exists()
-    # the second output file is not created
-    assert res.output.out_2 == attr.NOTHING
-
-def test_shell_cmd_non_existing_outputs_3(tmpdir):
-    """Checking that non existing output files do not return a phantom path,
-       but return NOTHING instead. This test has an existing mandatory output and another non existing output file."""
-    input_spec = SpecInfo(
-        name="Input",
         fields=[
             (
-                "out_name",
-                attr.ib(
-                    type=str,
-                    metadata={
-                        "help_string": """
-                        base name of the pretend outputs.
-                        """,
-                        "mandatory": True,
-                        "argstr": "{out_name}_1.nii"
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
-    out_spec = SpecInfo(
-        name="Output",
-        fields = [
-            (
                 "out_1",
                 attr.ib(
                     type=File,
                     metadata={
-                    "help_string": "fictional output #1",
-                    "output_file_template": "{out_name}_1.nii",
-                    "mandatory": True
-                    },
-                )
-            ),
-            (
-                "out_2",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "help_string": "fictional output #2",
-                        "output_file_template": "{out_name}_2.nii"
-                    },
-                )
-            ),
-        ],
-        bases=(ShellOutSpec,),
-    )
-
-    shelly = ShellCommandTask(
-        cache_dir=tmpdir,
-        executable="touch",
-        input_spec=input_spec,
-        output_spec=out_spec,
-        out_name = "test"
-    )
-    shelly()
-    res = shelly.result()
-    # the first output file is created
-    assert res.output.out_1 == Path(shelly.output_dir) / Path("test_1.nii")
-    assert res.output.out_1.exists()
-    # the second output file is not created
-    assert res.output.out_2 == attr.NOTHING
-
-def test_shell_cmd_non_existing_outputs_4(tmpdir):
-    """Checking that non existing output files do not return a phantom path,
-       but return NOTHING instead. This test has an existing mandatory output and another non existing
-       mandatory output file."""
-    input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "out_name",
-                attr.ib(
-                    type=str,
-                    metadata={
-                        "help_string": """
-                        base name of the pretend outputs.
-                        """,
-                        "mandatory": True,
-                        "argstr": "{out_name}_1.nii"
+                        "help_string": "fictional output #1",
+                        "output_file_template": "{out_name}_1.nii",
                     },
                 ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
-    out_spec = SpecInfo(
-        name="Output",
-        fields = [
-            (
-                "out_1",
-                attr.ib(
-                    type=File,
-                    metadata={
-                    "help_string": "fictional output #1",
-                    "output_file_template": "{out_name}_1.nii",
-                    "mandatory": True
-                    },
-                )
             ),
             (
                 "out_2",
@@ -4378,9 +4249,8 @@ def test_shell_cmd_non_existing_outputs_4(tmpdir):
                     metadata={
                         "help_string": "fictional output #2",
                         "output_file_template": "{out_name}_2.nii",
-                        "mandatory": True
                     },
-                )
+                ),
             ),
         ],
         bases=(ShellOutSpec,),
@@ -4391,7 +4261,141 @@ def test_shell_cmd_non_existing_outputs_4(tmpdir):
         executable="touch",
         input_spec=input_spec,
         output_spec=out_spec,
-        out_name = "test"
+        out_name="test",
+    )
+    shelly()
+    res = shelly.result()
+    # the first output file is created
+    assert res.output.out_1 == Path(shelly.output_dir) / Path("test_1.nii")
+    assert res.output.out_1.exists()
+    # the second output file is not created
+    assert res.output.out_2 == attr.NOTHING
+
+
+def test_shell_cmd_non_existing_outputs_3(tmpdir):
+    """Checking that non existing output files do not return a phantom path,
+    but return NOTHING instead. This test has an existing mandatory output and another non existing output file."""
+    input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out_name",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": """
+                        base name of the pretend outputs.
+                        """,
+                        "mandatory": True,
+                        "argstr": "{out_name}_1.nii",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+    out_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out_1",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "help_string": "fictional output #1",
+                        "output_file_template": "{out_name}_1.nii",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "out_2",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "help_string": "fictional output #2",
+                        "output_file_template": "{out_name}_2.nii",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        cache_dir=tmpdir,
+        executable="touch",
+        input_spec=input_spec,
+        output_spec=out_spec,
+        out_name="test",
+    )
+    shelly()
+    res = shelly.result()
+    # the first output file is created
+    assert res.output.out_1 == Path(shelly.output_dir) / Path("test_1.nii")
+    assert res.output.out_1.exists()
+    # the second output file is not created
+    assert res.output.out_2 == attr.NOTHING
+
+
+def test_shell_cmd_non_existing_outputs_4(tmpdir):
+    """Checking that non existing output files do not return a phantom path,
+    but return NOTHING instead. This test has an existing mandatory output and another non existing
+    mandatory output file."""
+    input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out_name",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": """
+                        base name of the pretend outputs.
+                        """,
+                        "mandatory": True,
+                        "argstr": "{out_name}_1.nii",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+    out_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out_1",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "help_string": "fictional output #1",
+                        "output_file_template": "{out_name}_1.nii",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "out_2",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "help_string": "fictional output #2",
+                        "output_file_template": "{out_name}_2.nii",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        cache_dir=tmpdir,
+        executable="touch",
+        input_spec=input_spec,
+        output_spec=out_spec,
+        out_name="test",
     )
     # An execption should be raised because the second mandatory output does not exist
     with pytest.raises(Exception) as excinfo:
@@ -4399,6 +4403,7 @@ def test_shell_cmd_non_existing_outputs_4(tmpdir):
     assert "mandatory output for variable out_2 does not exit" == str(excinfo.value)
     # checking if the first output was created
     assert (Path(shelly.output_dir) / Path("test_1.nii")).exists()
+
 
 def test_shell_cmd_non_existing_outputs_multi_1(tmpdir):
     """This test looks if non existing files of an multiOuputFile are also set to NOTHING"""
@@ -4414,7 +4419,7 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmpdir):
                         base name of the pretend outputs.
                         """,
                         "mandatory": True,
-                        "argstr": "..."
+                        "argstr": "...",
                     },
                 ),
             )
@@ -4423,16 +4428,16 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmpdir):
     )
     out_spec = SpecInfo(
         name="Output",
-        fields = [
+        fields=[
             (
                 "out_list",
                 attr.ib(
                     type=MultiOutputFile,
                     metadata={
-                    "help_string": "fictional output #1",
-                    "output_file_template": "{out_name}"
+                        "help_string": "fictional output #1",
+                        "output_file_template": "{out_name}",
                     },
-                )
+                ),
             ),
         ],
         bases=(ShellOutSpec,),
@@ -4443,7 +4448,7 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmpdir):
         executable="echo",
         input_spec=input_spec,
         output_spec=out_spec,
-        out_name = ["test_1.nii", "test_2.nii"]
+        out_name=["test_1.nii", "test_2.nii"],
     )
     shelly()
     res = shelly.result()
@@ -4451,9 +4456,10 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmpdir):
     assert res.output.out_list[0] == attr.NOTHING
     assert res.output.out_list[1] == attr.NOTHING
 
+
 def test_shell_cmd_non_existing_outputs_multi_1(tmpdir):
     """This test looks if non existing files of an multiOutputFile are also set to NOTHING.
-       It checks that it also works if one file of the multiOutputFile actually exists."""
+    It checks that it also works if one file of the multiOutputFile actually exists."""
     input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -4465,9 +4471,9 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmpdir):
                         "help_string": """
                         base name of the pretend outputs.
                         """,
-                        "sep": " test_1_real.nii", # hacky way of creating an extra file with that name
+                        "sep": " test_1_real.nii",  # hacky way of creating an extra file with that name
                         "mandatory": True,
-                        "argstr": "..."
+                        "argstr": "...",
                     },
                 ),
             )
@@ -4476,16 +4482,16 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmpdir):
     )
     out_spec = SpecInfo(
         name="Output",
-        fields = [
+        fields=[
             (
                 "out_list",
                 attr.ib(
                     type=MultiOutputFile,
                     metadata={
-                    "help_string": "fictional output #1",
-                    "output_file_template": "{out_name}_real.nii"
+                        "help_string": "fictional output #1",
+                        "output_file_template": "{out_name}_real.nii",
                     },
-                )
+                ),
             ),
         ],
         bases=(ShellOutSpec,),
@@ -4496,7 +4502,7 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmpdir):
         executable="touch",
         input_spec=input_spec,
         output_spec=out_spec,
-        out_name = ["test_1", "test_2"]
+        out_name=["test_1", "test_2"],
     )
     shelly()
     res = shelly.result()
@@ -4504,9 +4510,10 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmpdir):
     assert res.output.out_list[0] == Path(shelly.output_dir) / "test_1_real.nii"
     assert res.output.out_list[1] == attr.NOTHING
 
+
 def test_shell_cmd_absolute_path(tmpdir):
-    """ test the 'absolute_path' metadata option. An output path marked with this should not be appended
-        to the nodes output_dir."""
+    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
+    to the nodes output_dir."""
     input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -4519,7 +4526,7 @@ def test_shell_cmd_absolute_path(tmpdir):
                             base name of the pretend outputs.
                             """,
                         "mandatory": True,
-                        "argstr": "{out_dir}/test_1.nii"
+                        "argstr": "{out_dir}/test_1.nii",
                     },
                 ),
             )
@@ -4536,19 +4543,16 @@ def test_shell_cmd_absolute_path(tmpdir):
                     metadata={
                         "help_string": "fictional output #1",
                         "output_file_template": "{out_dir}/test_1.nii",
-                        "absolute_path": True
+                        "absolute_path": True,
                     },
-                )
+                ),
             ),
         ],
         bases=(ShellOutSpec,),
     )
 
     shelly = ShellCommandTask(
-        executable="touch",
-        input_spec=input_spec,
-        output_spec=out_spec,
-        out_dir = tmpdir
+        executable="touch", input_spec=input_spec, output_spec=out_spec, out_dir=tmpdir
     )
     shelly()
     res = shelly.result()
@@ -4557,10 +4561,11 @@ def test_shell_cmd_absolute_path(tmpdir):
     # check if path of the output is correct
     assert res.output.out_1 == Path(tmpdir) / Path("test_1.nii")
 
+
 def test_shell_cmd_absolute_path_not_absolute(tmpdir):
-    """ test the 'absolute_path' metadata option. An output path marked with this should not be appended
-        to the nodes output_dir. This test checks if an output named 'test_1.nii' that is an absolute_path
-        is set to NOTHING in case that file exists in the output_dir."""
+    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
+    to the nodes output_dir. This test checks if an output named 'test_1.nii' that is an absolute_path
+    is set to NOTHING in case that file exists in the output_dir."""
     input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -4574,7 +4579,7 @@ def test_shell_cmd_absolute_path_not_absolute(tmpdir):
                             """,
                         "mandatory": True,
                         # creating the file in out_dir and the nodes working directory
-                        "argstr": "{out_dir}/test_1.nii test_1.nii"
+                        "argstr": "{out_dir}/test_1.nii test_1.nii",
                     },
                 ),
             )
@@ -4591,19 +4596,16 @@ def test_shell_cmd_absolute_path_not_absolute(tmpdir):
                     metadata={
                         "help_string": "fictional output #1",
                         "output_file_template": "test_1.nii",
-                        "absolute_path": True
+                        "absolute_path": True,
                     },
-                )
+                ),
             ),
         ],
         bases=(ShellOutSpec,),
     )
 
     shelly = ShellCommandTask(
-        executable="touch",
-        input_spec=input_spec,
-        output_spec=out_spec,
-        out_dir = tmpdir
+        executable="touch", input_spec=input_spec, output_spec=out_spec, out_dir=tmpdir
     )
     shelly()
     res = shelly.result()
@@ -4613,9 +4615,10 @@ def test_shell_cmd_absolute_path_not_absolute(tmpdir):
     # check if path of the output is correct
     assert res.output.out_1 == attr.NOTHING
 
+
 def test_shell_cmd_absolute_path_non_existing(tmpdir):
-    """ test the 'absolute_path' metadata option. An output path marked with this should not be appended
-        to the nodes output_dir. Testing for a existing and non existing file."""
+    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
+    to the nodes output_dir. Testing for a existing and non existing file."""
     input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -4628,7 +4631,7 @@ def test_shell_cmd_absolute_path_non_existing(tmpdir):
                             base name of the pretend outputs.
                             """,
                         "mandatory": True,
-                        "argstr": "{out_dir}/test.nii"
+                        "argstr": "{out_dir}/test.nii",
                     },
                 ),
             )
@@ -4645,9 +4648,9 @@ def test_shell_cmd_absolute_path_non_existing(tmpdir):
                     metadata={
                         "help_string": "fictional output #1",
                         "output_file_template": "{out_dir}/test_1.nii",
-                        "absolute_path": True
+                        "absolute_path": True,
                     },
-                )
+                ),
             ),
             (
                 "out_2",
@@ -4656,19 +4659,16 @@ def test_shell_cmd_absolute_path_non_existing(tmpdir):
                     metadata={
                         "help_string": "fictional output #1",
                         "output_file_template": "{out_dir}/test.nii",
-                        "absolute_path": True
+                        "absolute_path": True,
                     },
-                )
+                ),
             ),
         ],
         bases=(ShellOutSpec,),
     )
 
     shelly = ShellCommandTask(
-        executable="touch",
-        input_spec=input_spec,
-        output_spec=out_spec,
-        out_dir = tmpdir
+        executable="touch", input_spec=input_spec, output_spec=out_spec, out_dir=tmpdir
     )
     shelly()
     res = shelly.result()
@@ -4681,8 +4681,8 @@ def test_shell_cmd_absolute_path_non_existing(tmpdir):
 
 
 def test_shell_cmd_absolute_path_non_existing_multi(tmpdir):
-    """ test the 'absolute_path' metadata option. An output path marked with this should not be appended
-        to the nodes output_dir. Testing for a existing and non existing file in multiOutputObj."""
+    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
+    to the nodes output_dir. Testing for a existing and non existing file in multiOutputObj."""
     input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -4695,7 +4695,7 @@ def test_shell_cmd_absolute_path_non_existing_multi(tmpdir):
                         base name of the pretend outputs.
                         """,
                         "mandatory": True,
-                        "argstr": "..."
+                        "argstr": "...",
                     },
                 ),
             )
@@ -4704,17 +4704,17 @@ def test_shell_cmd_absolute_path_non_existing_multi(tmpdir):
     )
     out_spec = SpecInfo(
         name="Output",
-        fields = [
+        fields=[
             (
                 "out_list",
                 attr.ib(
                     type=MultiOutputFile,
                     metadata={
-                    "help_string": "fictional output #1",
-                    "output_file_template": "{out_name}",
-                    "absolute_path": True
+                        "help_string": "fictional output #1",
+                        "output_file_template": "{out_name}",
+                        "absolute_path": True,
                     },
-                )
+                ),
             ),
         ],
         bases=(ShellOutSpec,),
@@ -4724,7 +4724,7 @@ def test_shell_cmd_absolute_path_non_existing_multi(tmpdir):
         executable="touch",
         input_spec=input_spec,
         output_spec=out_spec,
-        out_name = [str(Path(tmpdir) / "test_1.nii"), "test_2.nii"]
+        out_name=[str(Path(tmpdir) / "test_1.nii"), "test_2.nii"],
     )
     shelly()
     res = shelly.result()
