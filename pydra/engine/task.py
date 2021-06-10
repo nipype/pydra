@@ -325,6 +325,15 @@ class ShellCommandTask(TaskBase):
         index : int
             Index in flattened list of states
         """
+        if index is not None:
+            modified_inputs = template_update(
+                self.inputs, output_dir=self.output_dir[index]
+            )
+        else:
+            modified_inputs = template_update(self.inputs, output_dir=self.output_dir)
+        if modified_inputs is not None:
+            self.inputs = attr.evolve(self.inputs, **modified_inputs)
+
         pos_args = []  # list for (position, command arg)
         self._positions_provided = []
         for field in attr_fields(
@@ -468,9 +477,6 @@ class ShellCommandTask(TaskBase):
         # checking the inputs fields before returning the command line
         self.inputs.check_fields_input_spec()
         orig_inputs = attr.asdict(self.inputs)
-        modified_inputs = template_update(self.inputs, output_dir=self.output_dir)
-        if modified_inputs is not None:
-            self.inputs = attr.evolve(self.inputs, **modified_inputs)
         if isinstance(self, ContainerTask):
             if self.state:
                 cmdline = []

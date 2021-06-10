@@ -1770,6 +1770,51 @@ def test_shell_cmd_inputs_template_11():
         assert out_file.name == "test1" or out_file.name == "test2"
 
 
+def test_shell_cmd_inputs_template_1_st():
+    """additional inputs, one uses output_file_template (and argstr)
+    testing cmdline when splitter defined
+    """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 2,
+                        "help_string": "outA",
+                        "argstr": "-o",
+                        "output_file_template": "{inpA}_out",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="f",
+        executable="executable",
+        input_spec=my_input_spec,
+        inpA=["inpA", "inpB"],
+    ).split("inpA")
+
+    assert shelly.cmdline
+
+
 # TODO: after deciding how we use requires/templates
 def test_shell_cmd_inputs_di(tmpdir, use_validator):
     """example from #279"""
