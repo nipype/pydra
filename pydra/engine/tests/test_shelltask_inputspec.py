@@ -1805,14 +1805,21 @@ def test_shell_cmd_inputs_template_1_st():
         bases=(ShellSpec,),
     )
 
+    inpA = ["inpA_1", "inpA_2"]
     shelly = ShellCommandTask(
         name="f",
         executable="executable",
         input_spec=my_input_spec,
-        inpA=["inpA", "inpB"],
+        inpA=inpA,
     ).split("inpA")
 
-    assert shelly.cmdline
+    cmdline_list = shelly.cmdline
+    assert len(cmdline_list) == 2
+    for i in range(2):
+        assert (
+            cmdline_list[i]
+            == f"executable {inpA[i]} -o {shelly.output_dir[i]}/{inpA[i]}_out"
+        )
 
 
 # TODO: after deciding how we use requires/templates

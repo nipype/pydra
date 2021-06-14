@@ -525,46 +525,60 @@ def copyfile_input(inputs, output_dir):
 
 
 # not sure if this might be useful for Function Task
-def template_update(inputs, output_dir, map_copyfiles=None):
+def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
     """
     Update all templates that are present in the input spec.
 
     Should be run when all inputs used in the templates are already set.
 
     """
-    dict_ = attr.asdict(inputs)
+
+    inputs_dict_st = attr.asdict(inputs)
     if map_copyfiles is not None:
-        dict_.update(map_copyfiles)
+        inputs_dict_st.update(map_copyfiles)
+
+    if state_ind is not None:
+        for k, v in state_ind.items():
+            k = k.split(".")[1]
+            inputs_dict_st[k] = inputs_dict_st[k][v]
 
     from .specs import attr_fields
 
     fields_templ = [
         fld for fld in attr_fields(inputs) if fld.metadata.get("output_file_template")
     ]
+    dict_mod = {}
     for fld in fields_templ:
         if fld.type not in [str, ty.Union[str, bool]]:
             raise Exception(
                 f"fields with output_file_template"
                 " has to be a string or Union[str, bool]"
             )
-        dict_[fld.name] = template_update_single(
-            field=fld, inputs=inputs, output_dir=output_dir
+        dict_mod[fld.name] = template_update_single(
+            field=fld,
+            inputs=inputs,
+            inputs_dict_st=inputs_dict_st,
+            output_dir=output_dir,
         )
-    # using is and  == so it covers list and numpy arrays
-    updated_templ_dict = {
-        k: v
-        for k, v in dict_.items()
-        if not (getattr(inputs, k) is v or getattr(inputs, k) == v)
-    }
-    return updated_templ_dict
+    # adding elements from map_copyfiles to fields with templates
+    if map_copyfiles:
+        dict_mod.update(map_copyfiles)
+    return dict_mod
 
 
-def template_update_single(field, inputs, output_dir=None, spec_type="input"):
+def template_update_single(
+    field, inputs, inputs_dict_st=None, output_dir=None, spec_type="input"
+):
     """Update a single template from the input_spec or output_spec
     based on the value from inputs_dict
     (checking the types of the fields, that have "output_file_template)"
     """
     from .specs import File, MultiOutputFile, Directory
+
+    # if input_dict_st with state specific value is not available,
+    # the dictionary will be created from inputs object
+    if inputs_dict_st is None:
+        inputs_dict_st = attr.asdict(inputs)
 
     if spec_type == "input":
         if field.type not in [str, ty.Union[str, bool]]:
@@ -572,7 +586,7 @@ def template_update_single(field, inputs, output_dir=None, spec_type="input"):
                 f"fields with output_file_template"
                 "has to be a string or Union[str, bool]"
             )
-        inp_val_set = getattr(inputs, field.name)
+        inp_val_set = inputs_dict_st[field.name]
         if inp_val_set is not attr.NOTHING and not isinstance(inp_val_set, (str, bool)):
             raise Exception(
                 f"{field.name} has to be str or bool, but {inp_val_set} set"
@@ -589,13 +603,13 @@ def template_update_single(field, inputs, output_dir=None, spec_type="input"):
     else:
         raise Exception(f"spec_type can be input or output, but {spec_type} provided")
     # for inputs that the value is set (so the template is ignored)
-    if spec_type == "input" and isinstance(getattr(inputs, field.name), str):
-        return getattr(inputs, field.name)
-    elif spec_type == "input" and getattr(inputs, field.name) is False:
+    if spec_type == "input" and isinstance(inputs_dict_st[field.name], str):
+        return inputs_dict_st[field.name]
+    elif spec_type == "input" and inputs_dict_st[field.name] is False:
         # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
         return attr.NOTHING
     else:  # inputs_dict[field.name] is True or spec_type is output
-        value = _template_formatting(field, inputs)
+        value = _template_formatting(field, inputs, inputs_dict_st)
         # changing path so it is in the output_dir
         if output_dir and value is not attr.NOTHING:
             # should be converted to str, it is also used for input fields that should be str
@@ -607,7 +621,7 @@ def template_update_single(field, inputs, output_dir=None, spec_type="input"):
             return value
 
 
-def _template_formatting(field, inputs):
+def _template_formatting(field, inputs, inputs_dict_st):
     """Formatting the field template based on the values from inputs.
     Taking into account that the field with a template can be a MultiOutputFile
     and the field values needed in the template can be a list -
@@ -633,7 +647,7 @@ def _template_formatting(field, inputs):
 
     for fld in inp_fields:
         fld_name = fld[1:-1]  # extracting the name form {field_name}
-        fld_value = getattr(inputs, fld_name)
+        fld_value = inputs_dict_st[fld_name]
         if fld_value is attr.NOTHING:
             # if value is NOTHING, nothing should be added to the command
             return attr.NOTHING
