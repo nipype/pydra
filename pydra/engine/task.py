@@ -306,14 +306,18 @@ class ShellCommandTask(TaskBase):
         """Get command line arguments, returns a list if task has a state"""
         if is_lazy(self.inputs):
             raise Exception("can't return cmdline, self.inputs has LazyFields")
+        orig_inputs = attr.asdict(self.inputs)
         if self.state:
             command_args_list = []
             self.state.prepare_states(self.inputs)
             for ii, el in enumerate(self.state.states_ind):
                 command_args_list.append(self._command_args_single(el, index=ii))
+                self.inputs = attr.evolve(self.inputs, **orig_inputs)
             return command_args_list
         else:
-            return self._command_args_single()
+            command_args = self._command_args_single()
+            self.inputs = attr.evolve(self.inputs, **orig_inputs)
+            return command_args
 
     def _command_args_single(self, state_ind=None, index=None):
         """Get command line arguments for a single state
@@ -327,7 +331,7 @@ class ShellCommandTask(TaskBase):
         """
         if index is not None:
             modified_inputs = template_update(
-                self.inputs, output_dir=self.output_dir[index]
+                self.inputs, output_dir=self.output_dir[index], state_ind=state_ind
             )
         else:
             modified_inputs = template_update(self.inputs, output_dir=self.output_dir)
@@ -476,7 +480,6 @@ class ShellCommandTask(TaskBase):
             raise Exception("can't return cmdline, self.inputs has LazyFields")
         # checking the inputs fields before returning the command line
         self.inputs.check_fields_input_spec()
-        orig_inputs = attr.asdict(self.inputs)
         if isinstance(self, ContainerTask):
             if self.state:
                 cmdline = []
@@ -492,7 +495,6 @@ class ShellCommandTask(TaskBase):
             else:
                 cmdline = " ".join(self.command_args)
 
-        self.inputs = attr.evolve(self.inputs, **orig_inputs)
         return cmdline
 
     def _run_task(self):
@@ -616,6 +618,7 @@ class ContainerTask(ShellCommandTask):
         else:
             output_dir = self.output_dir[index]
         for binding in self.inputs.bindings:
+            binding = list(binding)
             if len(binding) == 3:
                 lpath, cpath, mode = binding
             elif len(binding) == 2:

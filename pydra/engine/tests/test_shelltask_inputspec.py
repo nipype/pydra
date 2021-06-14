@@ -1,5 +1,6 @@
 import attr
 import typing as ty
+from pathlib import Path
 import pytest
 
 from ..task import ShellCommandTask
@@ -1805,14 +1806,19 @@ def test_shell_cmd_inputs_template_1_st():
         bases=(ShellSpec,),
     )
 
+    inpA = ["inpA_1", "inpA_2"]
     shelly = ShellCommandTask(
         name="f",
         executable="executable",
         input_spec=my_input_spec,
-        inpA=["inpA", "inpB"],
+        inpA=inpA,
     ).split("inpA")
 
-    assert shelly.cmdline
+    cmdline_list = shelly.cmdline
+    assert len(cmdline_list) == 2
+    for i in range(2):
+        path_out = Path(shelly.output_dir[i]) / f"{inpA[i]}_out"
+        assert cmdline_list[i] == f"executable {inpA[i]} -o {str(path_out)}"
 
 
 # TODO: after deciding how we use requires/templates
