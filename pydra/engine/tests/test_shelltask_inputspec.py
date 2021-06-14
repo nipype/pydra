@@ -1,5 +1,6 @@
 import attr
 import typing as ty
+from pathlib import Path
 import pytest
 
 from ..task import ShellCommandTask
@@ -1816,10 +1817,8 @@ def test_shell_cmd_inputs_template_1_st():
     cmdline_list = shelly.cmdline
     assert len(cmdline_list) == 2
     for i in range(2):
-        assert (
-            cmdline_list[i]
-            == f"executable {inpA[i]} -o {shelly.output_dir[i]}/{inpA[i]}_out"
-        )
+        path_out = Path(shelly.output_dir[i]) / f"{inpA[i]}_out"
+        assert cmdline_list[i] == f"executable {inpA[i]} -o {str(path_out)}"
 
 
 # TODO: after deciding how we use requires/templates
