@@ -162,10 +162,16 @@ In the example we used multiple keys in the metadata dictionary including `help_
    A flag that specifies if the file extension should be removed from the field value.
    Used in order to create an output specification.
 
-
 `readonly` (`bool`, default: `False`):
    If `True` the input field can't be provided by the user but it aggregates other input fields
    (for example the fields with `argstr: -o {fldA} {fldB}`).
+
+`formatter` (`function`):
+   If provided the `argstr` of the field is created using the function. This function can for example
+   be used to combine several inputs into one command argument.
+   The function can take `field` (this input field will be passed to the function),
+   `inputs` (entire `inputs` will be passed) or any input field name
+   (a specific input field will be sent).
 
 
 Validators

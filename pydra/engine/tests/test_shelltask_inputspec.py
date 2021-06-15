@@ -2425,7 +2425,7 @@ def test_shellspec_formatter_1(tmpdir):
 
 
 def test_shellspec_formatter_splitter_2(tmpdir):
-    """test the input callable 'formatter'."""
+    """test the input callable 'formatter' when a splitter is used on an argument of the formatter."""
 
     def spec_info(formatter):
         return SpecInfo(
