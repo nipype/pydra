@@ -345,7 +345,11 @@ class ShellCommandTask(TaskBase):
             exclude_names=("container", "image", "container_xargs", "bindings"),
         ):
             name, meta = field.name, field.metadata
-            if getattr(self.inputs, name) is attr.NOTHING and not meta.get("readonly"):
+            if (
+                getattr(self.inputs, name) is attr.NOTHING
+                and not meta.get("readonly")
+                and not meta.get("formatter")
+            ):
                 continue
             if name == "executable":
                 pos_args.append(
@@ -404,8 +408,9 @@ class ShellCommandTask(TaskBase):
         the specific field.
         """
         argstr = field.metadata.get("argstr", None)
-        if argstr is None:
-            # assuming that input that has no arstr is not used in the command
+        formatter = field.metadata.get("formatter", None)
+        if argstr is None and formatter is None:
+            # assuming that input that has no arstr is not used in the command, or a formatter is not provided too.
             return None
         pos = field.metadata.get("position", None)
         if pos is not None:
@@ -426,33 +431,44 @@ class ShellCommandTask(TaskBase):
         value = self._field_value(field, state_ind, index, check_file=True)
         if field.metadata.get("readonly", False) and value is not None:
             raise Exception(f"{field.name} is read only, the value can't be provided")
-        elif value is None and not field.metadata.get("readonly", False):
+        elif (
+            value is None
+            and not field.metadata.get("readonly", False)
+            and formatter is None
+        ):
             return None
 
+        # getting stated inputs
+        inputs_dict_st = attr.asdict(self.inputs)
+        if state_ind is not None:
+            for k, v in state_ind.items():
+                k = k.split(".")[1]
+                inputs_dict_st[k] = inputs_dict_st[k][v]
+
         cmd_add = []
+        # formatter that creates a custom command argument
+        # it can thake the value of the filed, all inputs, or the value of other fields.
         if "formatter" in field.metadata:
-            print("got a formatter")
             call_args = inspect.getargspec(field.metadata["formatter"])
             call_args_val = {}
             for argnm in call_args.args:
                 if argnm == "field":
-                    call_args_val[argnm] = field
-                elif argnm == "value":
                     call_args_val[argnm] = value
                 elif argnm == "inputs":
-                    call_args_val[argnm] = self.inputs
+                    call_args_val[argnm] = inputs_dict_st
                 else:
-                    try:
-                        call_args_val[argnm] = getattr(self.inputs, argnm)
-                    except AttributeError:
+                    if argnm in inputs_dict_st:
+                        call_args_val[argnm] = inputs_dict_st[argnm]
+                    else:
                         raise AttributeError(
-                            f"arguments of the callable function from {field.name} "
+                            f"arguments of the formatter function from {field.name} "
                             f"has to be in inputs or be field or output_dir, "
                             f"but {argnm} is used"
                         )
             cmd_el_str = field.metadata["formatter"](**call_args_val)
             cmd_el_str = cmd_el_str.strip().replace("  ", " ")
-            cmd_add += cmd_el_str.split(" ")
+            if cmd_el_str != "":
+                cmd_add += cmd_el_str.split(" ")
         elif field.type is bool:
             # if value is simply True the original argstr is used,
             # if False, nothing is added to the command

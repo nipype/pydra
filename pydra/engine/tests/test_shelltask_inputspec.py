@@ -2073,3 +2073,373 @@ def test_shell_cmd_inputs_di(tmpdir, use_validator):
             image_dimensionality=5,
         )
     assert "value of image_dimensionality" in str(excinfo.value)
+
+
+def test_shellspec_cmd_absolute_path(tmpdir):
+    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
+    to the nodes output_dir."""
+    input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out_dir",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": """
+                            base name of the pretend outputs.
+                            """,
+                        "mandatory": True,
+                        "argstr": "{out_dir}/test_1.nii",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+    out_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out_1",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "help_string": "fictional output #1",
+                        "output_file_template": "{out_dir}/test_1.nii",
+                        "absolute_path": True,
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="touch", input_spec=input_spec, output_spec=out_spec, out_dir=tmpdir
+    )
+    shelly()
+    res = shelly.result()
+    # checking if the output was created
+    assert (Path(tmpdir) / Path("test_1.nii")).exists()
+    # check if path of the output is correct
+    assert res.output.out_1 == Path(tmpdir) / Path("test_1.nii")
+
+
+def test_shellspec_cmd_absolute_path_not_absolute(tmpdir):
+    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
+    to the nodes output_dir. This test checks if an output named 'test_1.nii' that is an absolute_path
+    is set to NOTHING in case that file exists in the output_dir."""
+    input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out_dir",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": """
+                            base name of the pretend outputs.
+                            """,
+                        "mandatory": True,
+                        # creating the file in out_dir and the nodes working directory
+                        "argstr": "{out_dir}/test_1.nii test_1.nii",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+    out_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out_1",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "help_string": "fictional output #1",
+                        "output_file_template": "test_1.nii",
+                        "absolute_path": True,
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="touch", input_spec=input_spec, output_spec=out_spec, out_dir=tmpdir
+    )
+    shelly()
+    res = shelly.result()
+    # checking if the output was created
+    assert (Path(tmpdir) / Path("test_1.nii")).exists()
+    assert (Path(shelly.output_dir) / Path("test_1.nii")).exists()
+    # check if path of the output is correct
+    assert res.output.out_1 == attr.NOTHING
+
+
+def test_shellspec_cmd_absolute_path_non_existing(tmpdir):
+    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
+    to the nodes output_dir. Testing for a existing and non existing file."""
+    input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out_dir",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": """
+                            base name of the pretend outputs.
+                            """,
+                        "mandatory": True,
+                        "argstr": "{out_dir}/test.nii",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+    out_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out_1",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "help_string": "fictional output #1",
+                        "output_file_template": "{out_dir}/test_1.nii",
+                        "absolute_path": True,
+                    },
+                ),
+            ),
+            (
+                "out_2",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "help_string": "fictional output #1",
+                        "output_file_template": "{out_dir}/test.nii",
+                        "absolute_path": True,
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="touch", input_spec=input_spec, output_spec=out_spec, out_dir=tmpdir
+    )
+    shelly()
+    res = shelly.result()
+    # checking if the output was created
+    assert (Path(tmpdir) / Path("test.nii")).exists()
+    # check if path of the out_1 is correct
+    assert res.output.out_1 == attr.NOTHING
+    # check if path of the out_1 is correct
+    assert res.output.out_2 == (Path(tmpdir) / Path("test.nii"))
+
+
+def test_shellspec_cmd_absolute_path_non_existing_multi(tmpdir):
+    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
+    to the nodes output_dir. Testing for a existing and non existing file in multiOutputObj."""
+    input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "out_name",
+                attr.ib(
+                    type=MultiInputObj,
+                    metadata={
+                        "help_string": """
+                        base name of the pretend outputs.
+                        """,
+                        "mandatory": True,
+                        "argstr": "...",
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+    out_spec = SpecInfo(
+        name="Output",
+        fields=[
+            (
+                "out_list",
+                attr.ib(
+                    type=MultiOutputFile,
+                    metadata={
+                        "help_string": "fictional output #1",
+                        "output_file_template": "{out_name}",
+                        "absolute_path": True,
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellOutSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="touch",
+        input_spec=input_spec,
+        output_spec=out_spec,
+        out_name=[str(Path(tmpdir) / "test_1.nii"), "test_2.nii"],
+    )
+    shelly()
+    res = shelly.result()
+    # checking if the outputs are Nothing
+    assert res.output.out_list[0] == Path(tmpdir) / "test_1.nii"
+    assert res.output.out_list[1] == attr.NOTHING
+
+
+def test_shellspec_formatter_1(tmpdir):
+    """test the input callable 'formatter'."""
+
+    def spec_info(formatter):
+        return SpecInfo(
+            name="Input",
+            fields=[
+                (
+                    "in1",
+                    attr.ib(
+                        type=str,
+                        metadata={
+                            "help_string": """
+                            just a dummy name
+                            """,
+                            "mandatory": True,
+                        },
+                    ),
+                ),
+                (
+                    "in2",
+                    attr.ib(
+                        type=str,
+                        metadata={
+                            "help_string": """
+                                just a dummy name
+                                """,
+                            "mandatory": True,
+                        },
+                    ),
+                ),
+                (
+                    "together",
+                    attr.ib(
+                        type=ty.List,
+                        metadata={
+                            "help_string": """
+                                combines in1 and in2 into a list
+                                """,
+                            # When providing a formatter all other metadata options are discarded.
+                            "formatter": formatter,
+                        },
+                    ),
+                ),
+            ],
+            bases=(ShellSpec,),
+        )
+
+    def formatter_1(inputs):
+        print("FORMATTER:", inputs)
+        return f"-t [{inputs['in1']}, {inputs['in2']}]"
+
+    input_spec = spec_info(formatter_1)
+    shelly = ShellCommandTask(
+        executable="exec", input_spec=input_spec, out_dir=tmpdir, in1="i1", in2="i2"
+    )
+    assert shelly.cmdline == "exec -t [i1, i2]"
+
+    # testing that the formatter can overwrite a provided value for together.
+    shelly = ShellCommandTask(
+        executable="exec",
+        input_spec=input_spec,
+        out_dir=tmpdir,
+        in1="i1",
+        in2="i2",
+        together=[1],
+    )
+    assert shelly.cmdline == "exec -t [i1, i2]"
+
+    # asking for specific inputs
+    def formatter_2(in1, in2):
+        print("FORMATTER:", in1, in2)
+        return f"-t [{in1}, {in2}]"
+
+    input_spec = spec_info(formatter_2)
+
+    shelly = ShellCommandTask(
+        executable="exec", input_spec=input_spec, out_dir=tmpdir, in1="i1", in2="i2"
+    )
+    assert shelly.cmdline == "exec -t [i1, i2]"
+
+    def formatter_3(in1, in3):
+        print("FORMATTER:", in1, in3)
+        return f"-t [{in1}, {in3}]"
+
+    input_spec = spec_info(formatter_3)
+
+    shelly = ShellCommandTask(
+        executable="exec", input_spec=input_spec, out_dir=tmpdir, in1="i1", in2="i2"
+    )
+    with pytest.raises(Exception) as excinfo:
+        shelly.cmdline
+    assert (
+        "arguments of the formatter function from together has to be in inputs or be field or output_dir, but in3 is used"
+        == str(excinfo.value)
+    )
+
+    # chcking if field value is accessible when None
+    def formatter_5(field):
+        assert field == "-t test"
+        # formatter must return a string
+        return field
+
+    input_spec = spec_info(formatter_5)
+
+    shelly = ShellCommandTask(
+        executable="exec",
+        input_spec=input_spec,
+        out_dir=tmpdir,
+        in1="i1",
+        in2="i2",
+        together="-t test",
+    )
+    assert shelly.cmdline == "exec -t test"
+
+    # chcking if field value is accessible when None
+    def formatter_4(field):
+        assert field == None
+        # formatter must return a string
+        return ""
+
+    input_spec = spec_info(formatter_4)
+
+    shelly = ShellCommandTask(
+        executable="exec", input_spec=input_spec, out_dir=tmpdir, in1="i1", in2="i2"
+    )
+    assert shelly.cmdline == "exec"
+
+    # asking for specific inputs
+    def formatter_6(in1, in2):
+        print(in1, in2)
+        return f"-t {in1} {in2}"
+
+    input_spec = spec_info(formatter_6)
+    in1_ = ["i11", "i12"]
+    shelly = ShellCommandTask(
+        executable="exec",
+        input_spec=input_spec,
+        out_dir=tmpdir,
+        in1=in1_,
+        in2="i2",
+        together=[1],
+    ).split(["in1", "in2"])
+
+    cmdline_list = shelly.cmdline
+    assert len(cmdline_list) == 2
