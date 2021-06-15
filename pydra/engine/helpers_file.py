@@ -609,7 +609,7 @@ def template_update_single(
         # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
         return attr.NOTHING
     else:  # inputs_dict[field.name] is True or spec_type is output
-        value = _template_formatting(field, inputs)
+        value = _template_formatting(field, inputs, inputs_dict_st)
         # changing path so it is in the output_dir, but only if absolute_path is not set
         if (
             output_dir

@@ -2351,7 +2351,7 @@ def test_shellspec_formatter_1(tmpdir):
 
     input_spec = spec_info(formatter_1)
     shelly = ShellCommandTask(
-        executable="exec", input_spec=input_spec, out_dir=tmpdir, in1="i1", in2="i2"
+        executable="exec", input_spec=input_spec, in1="i1", in2="i2"
     )
     assert shelly.cmdline == "exec -t [i1, i2]"
 
@@ -2359,7 +2359,6 @@ def test_shellspec_formatter_1(tmpdir):
     shelly = ShellCommandTask(
         executable="exec",
         input_spec=input_spec,
-        out_dir=tmpdir,
         in1="i1",
         in2="i2",
         together=[1],
@@ -2374,7 +2373,7 @@ def test_shellspec_formatter_1(tmpdir):
     input_spec = spec_info(formatter_2)
 
     shelly = ShellCommandTask(
-        executable="exec", input_spec=input_spec, out_dir=tmpdir, in1="i1", in2="i2"
+        executable="exec", input_spec=input_spec, in1="i1", in2="i2"
     )
     assert shelly.cmdline == "exec -t [i1, i2]"
 
@@ -2385,7 +2384,7 @@ def test_shellspec_formatter_1(tmpdir):
     input_spec = spec_info(formatter_3)
 
     shelly = ShellCommandTask(
-        executable="exec", input_spec=input_spec, out_dir=tmpdir, in1="i1", in2="i2"
+        executable="exec", input_spec=input_spec, in1="i1", in2="i2"
     )
     with pytest.raises(Exception) as excinfo:
         shelly.cmdline
@@ -2405,7 +2404,6 @@ def test_shellspec_formatter_1(tmpdir):
     shelly = ShellCommandTask(
         executable="exec",
         input_spec=input_spec,
-        out_dir=tmpdir,
         in1="i1",
         in2="i2",
         together="-t test",
@@ -2421,25 +2419,66 @@ def test_shellspec_formatter_1(tmpdir):
     input_spec = spec_info(formatter_4)
 
     shelly = ShellCommandTask(
-        executable="exec", input_spec=input_spec, out_dir=tmpdir, in1="i1", in2="i2"
+        executable="exec", input_spec=input_spec, in1="i1", in2="i2"
     )
     assert shelly.cmdline == "exec"
 
+
+def test_shellspec_formatter_splitter_2(tmpdir):
+    """test the input callable 'formatter'."""
+
+    def spec_info(formatter):
+        return SpecInfo(
+            name="Input",
+            fields=[
+                (
+                    "in1",
+                    attr.ib(
+                        type=str,
+                        metadata={
+                            "help_string": "in1",
+                        },
+                    ),
+                ),
+                (
+                    "in2",
+                    attr.ib(
+                        type=str,
+                        metadata={
+                            "help_string": "in2",
+                        },
+                    ),
+                ),
+                (
+                    "together",
+                    attr.ib(
+                        type=ty.List,
+                        metadata={
+                            "help_string": """
+                            uses in1
+                            """,
+                            # When providing a formatter all other metadata options are discarded.
+                            "formatter": formatter,
+                        },
+                    ),
+                ),
+            ],
+            bases=(ShellSpec,),
+        )
+
     # asking for specific inputs
-    def formatter_6(in1, in2):
-        print(in1, in2)
-        return f"-t {in1} {in2}"
+    def formatter_1(in1, in2):
+        return f"-t [{in1} {in2}]"
 
-    input_spec = spec_info(formatter_6)
-    in1_ = ["i11", "i12"]
+    input_spec = spec_info(formatter_1)
+    in1 = ["in11", "in12"]
     shelly = ShellCommandTask(
-        executable="exec",
-        input_spec=input_spec,
-        out_dir=tmpdir,
-        in1=in1_,
-        in2="i2",
-        together=[1],
-    ).split(["in1", "in2"])
+        name="f", executable="executable", input_spec=input_spec, in1=in1, in2="in2"
+    ).split("in1")
+    assert shelly != None
 
-    cmdline_list = shelly.cmdline
-    assert len(cmdline_list) == 2
+    results = shelly.cmdline
+    assert len(results) == 2
+    com_results = ["executable -t [in11 in2]", "executable -t [in12 in2]"]
+    for i, cr in enumerate(com_results):
+        assert results[i] == cr
