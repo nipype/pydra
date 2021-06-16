@@ -1,6 +1,7 @@
 import os, shutil
 import subprocess as sp
 from pathlib import Path
+import attr
 import pytest
 
 from ..core import Workflow
@@ -8,6 +9,7 @@ from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..boutiques import BoshTask
 from .utils import result_no_submitter, result_submitter, no_win
+from ...engine.specs import File
 
 need_bosh_docker = pytest.mark.skipif(
     shutil.which("docker") is None
@@ -36,12 +38,11 @@ def test_boutiques_1(maskfile, plugin, results_function, tmpdir):
 
     assert res.output.return_code == 0
 
-    # checking if the outfile exists and if it has proper name
+    # checking if the outfile exists and if it has a proper name
     assert res.output.outfile.name == "test_brain.nii.gz"
     assert res.output.outfile.exists()
-    # other files should also have proper names, but they do not exist
-    assert res.output.out_outskin_off.name == "test_brain_outskin_mesh.off"
-    assert not res.output.out_outskin_off.exists()
+    # files that do not exist were set to NOTHING
+    assert res.output.out_outskin_off == attr.NOTHING
 
 
 @no_win

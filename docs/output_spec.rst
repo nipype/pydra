@@ -61,6 +61,9 @@ The metadata dictionary for `output_spec` can include:
 `help_string` (`str`, mandatory):
    A short description of the input field. The same as in `input_spec`.
 
+`mandatory` (`bool`, default: `False`):
+   If `True` the output file has to exist, otherwise an error will be raised.
+
 `output_file_template` (`str`):
    If provided the output file name (or list of file names) is created using the template.
    The template can use other fields, e.g. `{file1}`. The same as in `input_spec`.
@@ -69,10 +72,13 @@ The metadata dictionary for `output_spec` can include:
    If provided the field is added to the output spec with changed name.
    The same as in `input_spec`.
 
+`absolute_path` (`bool` default: `False`):
+   A flag that specifies if the `output_file_template` is an absolute path. If the flag is not set,
+   then the `output_file_template` is searched in the nodes output directory.
+
 `keep_extension` (`bool`, default: `True`):
    A flag that specifies if the file extension should be removed from the field value.
    The same as in `input_spec`.
-
 
 `requires` (`list`):
    List of field names that are required to create a specific output.

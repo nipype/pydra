@@ -610,8 +610,15 @@ def template_update_single(
         return attr.NOTHING
     else:  # inputs_dict[field.name] is True or spec_type is output
         value = _template_formatting(field, inputs, inputs_dict_st)
-        # changing path so it is in the output_dir
-        if output_dir and value is not attr.NOTHING:
+        # changing path so it is in the output_dir, but only if absolute_path is not set
+        if (
+            output_dir
+            and value is not attr.NOTHING
+            and (
+                "absolute_path" not in field.metadata
+                or not field.metadata["absolute_path"]
+            )
+        ):
             # should be converted to str, it is also used for input fields that should be str
             if type(value) is list:
                 return [str(output_dir / Path(val).name) for val in value]
