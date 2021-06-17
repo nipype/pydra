@@ -56,81 +56,91 @@ def _ordering(
     if type(el) is tuple:
         # checking if the splitter dont contain splitter from previous nodes
         # i.e. has str "_NA", etc.
-        if type(el[0]) is str and el[0].startswith("_"):
-            node_nm = el[0][1:]
-            if node_nm not in other_states and state_fields:
-                raise PydraStateError(
-                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
-                        node_nm, other_states.keys()
+        if len(el) == 1:
+            # treats .split(("x",)) like .split("x")
+            el = el[0]
+            _ordering(el, i, output_splitter, current_sign, other_states, state_fields)
+        else:
+            if type(el[0]) is str and el[0].startswith("_"):
+                node_nm = el[0][1:]
+                if node_nm not in other_states and state_fields:
+                    raise PydraStateError(
+                        "can't ask for splitter from {}, other nodes that are connected: {}".format(
+                            node_nm, other_states.keys()
+                        )
                     )
-                )
-            elif state_fields:
-                splitter_mod = add_name_splitter(
-                    splitter=other_states[node_nm][0].splitter_final, name=node_nm
-                )
-                el = (splitter_mod, el[1])
-                if other_states[node_nm][0].other_states:
-                    other_states.update(other_states[node_nm][0].other_states)
-        if type(el[1]) is str and el[1].startswith("_"):
-            node_nm = el[1][1:]
-            if node_nm not in other_states and state_fields:
-                raise PydraStateError(
-                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
-                        node_nm, other_states.keys()
+                elif state_fields:
+                    splitter_mod = add_name_splitter(
+                        splitter=other_states[node_nm][0].splitter_final, name=node_nm
                     )
-                )
-            elif state_fields:
-                splitter_mod = add_name_splitter(
-                    splitter=other_states[node_nm][0].splitter_final, name=node_nm
-                )
-                el = (el[0], splitter_mod)
-                if other_states[node_nm][0].other_states:
-                    other_states.update(other_states[node_nm][0].other_states)
-        _iterate_list(
-            el,
-            ".",
-            other_states,
-            output_splitter=output_splitter,
-            state_fields=state_fields,
-        )
+                    el = (splitter_mod, el[1])
+                    if other_states[node_nm][0].other_states:
+                        other_states.update(other_states[node_nm][0].other_states)
+            if type(el[1]) is str and el[1].startswith("_"):
+                node_nm = el[1][1:]
+                if node_nm not in other_states and state_fields:
+                    raise PydraStateError(
+                        "can't ask for splitter from {}, other nodes that are connected: {}".format(
+                            node_nm, other_states.keys()
+                        )
+                    )
+                elif state_fields:
+                    splitter_mod = add_name_splitter(
+                        splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                    )
+                    el = (el[0], splitter_mod)
+                    if other_states[node_nm][0].other_states:
+                        other_states.update(other_states[node_nm][0].other_states)
+            _iterate_list(
+                el,
+                ".",
+                other_states,
+                output_splitter=output_splitter,
+                state_fields=state_fields,
+            )
     elif type(el) is list:
-        if type(el[0]) is str and el[0].startswith("_"):
-            node_nm = el[0][1:]
-            if node_nm not in other_states and state_fields:
-                raise PydraStateError(
-                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
-                        node_nm, other_states.keys()
+        if len(el) == 1:
+            # treats .split(["x"]) like .split("x")
+            el = el[0]
+            _ordering(el, i, output_splitter, current_sign, other_states, state_fields)
+        else:
+            if type(el[0]) is str and el[0].startswith("_"):
+                node_nm = el[0][1:]
+                if node_nm not in other_states and state_fields:
+                    raise PydraStateError(
+                        "can't ask for splitter from {}, other nodes that are connected: {}".format(
+                            node_nm, other_states.keys()
+                        )
                     )
-                )
-            elif state_fields:
-                splitter_mod = add_name_splitter(
-                    splitter=other_states[node_nm][0].splitter_final, name=node_nm
-                )
-                el[0] = splitter_mod
-                if other_states[node_nm][0].other_states:
-                    other_states.update(other_states[node_nm][0].other_states)
-        if type(el[1]) is str and el[1].startswith("_"):
-            node_nm = el[1][1:]
-            if node_nm not in other_states and state_fields:
-                raise PydraStateError(
-                    "can't ask for splitter from {}, other nodes that are connected: {}".format(
-                        node_nm, other_states.keys()
+                elif state_fields:
+                    splitter_mod = add_name_splitter(
+                        splitter=other_states[node_nm][0].splitter_final, name=node_nm
                     )
-                )
-            elif state_fields:
-                splitter_mod = add_name_splitter(
-                    splitter=other_states[node_nm][0].splitter_final, name=node_nm
-                )
-                el[1] = splitter_mod
-                if other_states[node_nm][0].other_states:
-                    other_states.update(other_states[node_nm][0].other_states)
-        _iterate_list(
-            el,
-            "*",
-            other_states,
-            output_splitter=output_splitter,
-            state_fields=state_fields,
-        )
+                    el[0] = splitter_mod
+                    if other_states[node_nm][0].other_states:
+                        other_states.update(other_states[node_nm][0].other_states)
+            if type(el[1]) is str and el[1].startswith("_"):
+                node_nm = el[1][1:]
+                if node_nm not in other_states and state_fields:
+                    raise PydraStateError(
+                        "can't ask for splitter from {}, other nodes that are connected: {}".format(
+                            node_nm, other_states.keys()
+                        )
+                    )
+                elif state_fields:
+                    splitter_mod = add_name_splitter(
+                        splitter=other_states[node_nm][0].splitter_final, name=node_nm
+                    )
+                    el[1] = splitter_mod
+                    if other_states[node_nm][0].other_states:
+                        other_states.update(other_states[node_nm][0].other_states)
+            _iterate_list(
+                el,
+                "*",
+                other_states,
+                output_splitter=output_splitter,
+                state_fields=state_fields,
+            )
     elif type(el) is str:
         if el.startswith("_"):
             node_nm = el[1:]
