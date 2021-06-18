@@ -654,6 +654,8 @@ def _template_formatting(field, inputs, inputs_dict_st):
 
     for fld in inp_fields:
         fld_name = fld[1:-1]  # extracting the name form {field_name}
+        if fld_name not in inputs_dict_st:
+            raise AttributeError(f"{fld_name} is not provided in the input")
         fld_value = inputs_dict_st[fld_name]
         if fld_value is attr.NOTHING:
             # if value is NOTHING, nothing should be added to the command
