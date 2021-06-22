@@ -438,7 +438,7 @@ class TaskBase:
         with SoftFileLock(lockfile):
             if not (rerun or self.task_rerun):
                 result = self.result()
-                if result is not None:
+                if result is not None and not result.errored:
                     return result
             # adding info file with the checksum in case the task was cancelled
             # and the lockfile has to be removed
@@ -1017,7 +1017,7 @@ class Workflow(TaskBase):
             # retrieve cached results
             if not (rerun or self.task_rerun):
                 result = self.result()
-                if result is not None:
+                if result is not None and not result.errored:
                     return result
             # adding info file with the checksum in case the task was cancelled
             # and the lockfile has to be removed

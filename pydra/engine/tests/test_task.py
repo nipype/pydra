@@ -5,6 +5,7 @@ import pytest
 import cloudpickle as cp
 from pathlib import Path
 import re
+import logging
 
 from ... import mark
 from ..core import Workflow
@@ -1361,3 +1362,43 @@ def test_traceback_wf(tmpdir):
     # the error traceback should be a list and should point to a specific line in the function
     assert isinstance(error_tb, list)
     assert "in fun_error" in error_tb[-2]
+
+
+def test_rerun_errored(tmpdir, capfd):
+    """Test rerunning a task containing errors.
+    Only the errored tasks should be rerun"""
+
+    @mark.task
+    def pass_odds(x):
+        if x % 2 == 0:
+            print(f"x%2 = {x % 2} (error)\n")
+            raise Exception("even error")
+        else:
+            print(f"x%2 = {x % 2}\n")
+            return x
+
+    task = pass_odds(name="pass_odds", x=[1, 2, 3, 4, 5], cache_dir=tmpdir).split("x")
+
+    result = None
+    with pytest.raises(Exception, match="even error") as exinfo:
+        task()
+    with pytest.raises(Exception, match="even error") as exinfo:
+        task()
+
+    out, err = capfd.readouterr()
+    stdout_lines = out.splitlines()
+
+    tasks_run = 0
+    errors_found = 0
+
+    for line in stdout_lines:
+        if "x%2" in line:
+            tasks_run += 1
+        if "(error)" in line:
+            errors_found += 1
+
+    # There should have been 5 messages of the form "x%2 = XXX" after calling task() the second time
+    # There should have been 2 messages of the form "x%2 = XXX" after calling task() the second time
+    assert tasks_run == 7
+
+    assert errors_found == 4
