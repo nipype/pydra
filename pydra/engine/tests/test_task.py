@@ -1361,3 +1361,33 @@ def test_traceback_wf(tmpdir):
     # the error traceback should be a list and should point to a specific line in the function
     assert isinstance(error_tb, list)
     assert "in fun_error" in error_tb[-2]
+
+
+def test_rerun_errored(tmpdir, capfd):
+    @mark.task
+    def pass_odds(x):
+        if x % 2 == 0:
+            print(f"x%2 = {x % 2} (error)")
+            raise Exception("even error")
+        else:
+            print(f"x%2 = {x % 2}")
+            return x
+
+    task = pass_odds(name="pass_odds", x=[1, 2, 3, 4, 5], cache_dir=tmpdir).split("x")
+
+    task()
+
+    with pytest.raises(Exception, match="even error") as exinfo:
+        task()
+    print("...")
+    with pytest.raises(Exception, match="even error") as exinfo:
+        task()
+
+    out, err = capfd.readouterr()
+    stdout_lines = out.splitlines()
+
+    # There should have been 5 messages of the form "x%2 = XXX" before the ...
+    assert stdout_lines.index("...") == 5
+
+    # There should have been 2 messages of the form "x%2 = XXX" before the ...
+    assert len(stdout_lines) == 8

@@ -4687,3 +4687,40 @@ def test_inner_outer_wf_duplicate(tmpdir):
 
     res = test_outer.result()
     assert res[0].output.res2 == 23 and res[1].output.res2 == 23
+
+
+def test_rerun_errored(tmpdir, capfd):
+    @mark.task
+    def pass_odds(x):
+        if x % 2 == 0:
+            print(f"{x}%2 = {x % 2} (error)")
+            raise Exception("even error")
+        else:
+            print(f"x%2 = {x % 2}")
+            return x
+
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
+    wf.add(pass_odds(name="pass_odds", x=[1, 2, 3, 4, 5]).split("x"))
+    wf.set_output([("out", wf.pass_odds.lzout.out)])
+
+    with pytest.raises(Exception) as exinfo:
+        wf()
+    print("...")
+    with pytest.raises(Exception) as exinfo:
+        wf()
+
+    # assert capfd == "test"
+    # print("...")
+    # with pytest.raises(Exception, match='even error') as exinfo:
+    #     wf()
+
+    out, err = capfd.readouterr()
+    # assert out.count("(error)") == 4
+    stdout_lines = out.splitlines()
+    # # assert stdout_lines[7] == "test"
+
+    # # # There should have been 5 messages of the form "x%2 = XXX" before the ...
+    assert stdout_lines.index("...") == 5
+
+    # # # There should have been 2 messages of the form "x%2 = XXX" before the ...
+    assert len(stdout_lines) == 8
