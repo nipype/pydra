@@ -439,7 +439,8 @@ class TaskBase:
             if not (rerun or self.task_rerun):
                 result = self.result()
                 if result is not None:
-                    return result
+                    if not result.errored:
+                        return result
             # adding info file with the checksum in case the task was cancelled
             # and the lockfile has to be removed
             with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
@@ -1018,7 +1019,8 @@ class Workflow(TaskBase):
             if not (rerun or self.task_rerun):
                 result = self.result()
                 if result is not None:
-                    return result
+                    if not result.errored:
+                        return result
             # adding info file with the checksum in case the task was cancelled
             # and the lockfile has to be removed
             with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
