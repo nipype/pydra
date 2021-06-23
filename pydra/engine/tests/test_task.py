@@ -1379,7 +1379,6 @@ def test_rerun_errored(tmpdir, capfd):
 
     task = pass_odds(name="pass_odds", x=[1, 2, 3, 4, 5], cache_dir=tmpdir).split("x")
 
-    result = None
     with pytest.raises(Exception, match="even error") as exinfo:
         task()
     with pytest.raises(Exception, match="even error") as exinfo:
