@@ -5,7 +5,6 @@ import pytest
 import cloudpickle as cp
 from pathlib import Path
 import re
-import logging
 
 from ... import mark
 from ..core import Workflow
