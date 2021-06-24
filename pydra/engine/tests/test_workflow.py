@@ -3,6 +3,7 @@ import shutil, os, sys
 import time
 import attr
 from pathlib import Path
+import logging
 
 from .utils import (
     add2,
@@ -4687,3 +4688,43 @@ def test_inner_outer_wf_duplicate(tmpdir):
 
     res = test_outer.result()
     assert res[0].output.res2 == 23 and res[1].output.res2 == 23
+
+
+def test_rerun_errored(tmpdir, capfd):
+    """Test rerunning a workflow containing errors.
+    Only the errored tasks and workflow should be rerun"""
+
+    @mark.task
+    def pass_odds(x):
+        if x % 2 == 0:
+            print(f"x%2 = {x % 2} (error)\n")
+            raise Exception("even error")
+        else:
+            print(f"x%2 = {x % 2}\n")
+            return x
+
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
+    wf.add(pass_odds(name="pass_odds", x=[1, 2, 3, 4, 5]).split("x"))
+    wf.set_output([("out", wf.pass_odds.lzout.out)])
+
+    with pytest.raises(Exception):
+        wf()
+    with pytest.raises(Exception):
+        wf()
+
+    out, err = capfd.readouterr()
+    stdout_lines = out.splitlines()
+
+    tasks_run = 0
+    errors_found = 0
+
+    for line in stdout_lines:
+        if "x%2" in line:
+            tasks_run += 1
+        if "(error)" in line:
+            errors_found += 1
+
+    # There should have been 5 messages of the form "x%2 = XXX" after calling task() the first time
+    # and another 2 messagers after calling the second time
+    assert tasks_run == 7
+    assert errors_found == 4
