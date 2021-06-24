@@ -1378,9 +1378,9 @@ def test_rerun_errored(tmpdir, capfd):
 
     task = pass_odds(name="pass_odds", x=[1, 2, 3, 4, 5], cache_dir=tmpdir).split("x")
 
-    with pytest.raises(Exception, match="even error") as exinfo:
+    with pytest.raises(Exception, match="even error"):
         task()
-    with pytest.raises(Exception, match="even error") as exinfo:
+    with pytest.raises(Exception, match="even error"):
         task()
 
     out, err = capfd.readouterr()
@@ -1395,8 +1395,7 @@ def test_rerun_errored(tmpdir, capfd):
         if "(error)" in line:
             errors_found += 1
 
-    # There should have been 5 messages of the form "x%2 = XXX" after calling task() the second time
-    # There should have been 2 messages of the form "x%2 = XXX" after calling task() the second time
+    # There should have been 5 messages of the form "x%2 = XXX" after calling task() the first time
+    # and another 2 messagers after calling the second time
     assert tasks_run == 7
-
     assert errors_found == 4
