@@ -268,6 +268,10 @@ class ShellCommandTask(TaskBase):
 
         """
 
+        # using default name for task if no name provided
+        if name is None:
+            name = "ShellTask_noname"
+
         # using provided spec, class attribute or setting the default SpecInfo
         self.input_spec = (
             input_spec

@@ -22,6 +22,7 @@ def test_shell_cmd_execargs_1():
     # separate command into exec + args
     shelly = ShellCommandTask(executable="executable", args="arg")
     assert shelly.cmdline == "executable arg"
+    assert shelly.name == "ShellTask_noname"
 
 
 def test_shell_cmd_execargs_2():
