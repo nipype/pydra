@@ -72,10 +72,6 @@ The metadata dictionary for `output_spec` can include:
    If provided the field is added to the output spec with changed name.
    The same as in `input_spec`.
 
-`absolute_path` (`bool` default: `False`):
-   A flag that specifies if the `output_file_template` is an absolute path. If the flag is not set,
-   then the `output_file_template` is searched in the nodes output directory.
-
 `keep_extension` (`bool`, default: `True`):
    A flag that specifies if the file extension should be removed from the field value.
    The same as in `input_spec`.
