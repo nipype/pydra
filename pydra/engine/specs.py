@@ -400,7 +400,6 @@ class ShellSpec(BaseSpec):
             "keep_extension",
             "xor",
             "sep",
-            "absolute_path",
             "formatter",
         }
         for fld in attr_fields(self, exclude_names=("_func", "_graph_checksums")):
@@ -557,11 +556,6 @@ class ShellOutSpec:
                     val = Path(val)
                     if check_existance and not val.exists():
                         ret.append(attr.NOTHING)
-                    elif check_existance and (
-                        fld.metadata.get("absolute_path", False)
-                        and not val.is_absolute()
-                    ):
-                        ret.append(attr.NOTHING)
                     else:
                         ret.append(val)
                 return ret
@@ -575,10 +569,6 @@ class ShellOutSpec:
                             raise Exception(
                                 f"mandatory output for variable {fld.name} does not exit"
                             )
-                    return attr.NOTHING
-                if check_existance and (
-                    fld.metadata.get("absolute_path", False) and not val.is_absolute()
-                ):
                     return attr.NOTHING
                 return val
         elif "callable" in fld.metadata:

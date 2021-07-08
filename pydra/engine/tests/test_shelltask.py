@@ -3156,7 +3156,6 @@ def test_shell_cmd_outputspec_8d(tmpdir, plugin, results_function):
                     metadata={
                         "output_file_template": "{resultsDir}",
                         "help_string": "output file",
-                        "absolute_path": True,
                     },
                 ),
             )
@@ -3165,17 +3164,19 @@ def test_shell_cmd_outputspec_8d(tmpdir, plugin, results_function):
     )
 
     shelly = ShellCommandTask(
-        name="shelly",
+        name=cmd,
         executable=cmd,
         input_spec=my_input_spec,
         output_spec=my_output_spec,
-        resultsDir=Path(tmpdir) / Path("test"),
+        cache_dir=tmpdir,
+        resultsDir="test",  # Path(tmpdir) / "test" TODO: Not working without absolute path support
     )
 
     res = results_function(shelly, plugin)
-    assert (Path(tmpdir) / Path("test")).exists() == True
+    print("Cache_dirr:", shelly.cache_dir)
+    assert (shelly.output_dir / Path("test")).exists() == True
     assert get_lowest_directory(res.output.resultsDir) == get_lowest_directory(
-        Path(tmpdir) / Path("test")
+        shelly.output_dir / Path("test")
     )
 
 
@@ -4560,228 +4561,6 @@ def test_shell_cmd_non_existing_outputs_multi_2(tmpdir):
     res = shelly.result()
     # checking if the outputs are Nothing
     assert res.output.out_list[0] == Path(shelly.output_dir) / "test_1_real.nii"
-    assert res.output.out_list[1] == attr.NOTHING
-
-
-def test_shellspec_cmd_absolute_path(tmpdir):
-    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
-    to the nodes output_dir."""
-    input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "out_dir",
-                attr.ib(
-                    type=str,
-                    metadata={
-                        "help_string": """
-                            base name of the pretend outputs.
-                            """,
-                        "mandatory": True,
-                        "argstr": "{out_dir}/test_1.nii",
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
-    out_spec = SpecInfo(
-        name="Output",
-        fields=[
-            (
-                "out_1",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "help_string": "fictional output #1",
-                        "output_file_template": "{out_dir}/test_1.nii",
-                        "absolute_path": True,
-                    },
-                ),
-            ),
-        ],
-        bases=(ShellOutSpec,),
-    )
-
-    shelly = ShellCommandTask(
-        executable="touch", input_spec=input_spec, output_spec=out_spec, out_dir=tmpdir
-    )
-    shelly()
-    res = shelly.result()
-    # checking if the output was created
-    assert (Path(tmpdir) / Path("test_1.nii")).exists()
-    # check if path of the output is correct
-    assert res.output.out_1 == Path(tmpdir) / Path("test_1.nii")
-
-
-def test_shellspec_cmd_absolute_path_not_absolute(tmpdir):
-    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
-    to the nodes output_dir. This test checks if an output named 'test_1.nii' that is an absolute_path
-    is set to NOTHING in case that file exists in the output_dir."""
-    input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "out_dir",
-                attr.ib(
-                    type=str,
-                    metadata={
-                        "help_string": """
-                            base name of the pretend outputs.
-                            """,
-                        "mandatory": True,
-                        # creating the file in out_dir and the nodes working directory
-                        "argstr": "{out_dir}/test_1.nii test_1.nii",
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
-    out_spec = SpecInfo(
-        name="Output",
-        fields=[
-            (
-                "out_1",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "help_string": "fictional output #1",
-                        "output_file_template": "test_1.nii",
-                        "absolute_path": True,
-                    },
-                ),
-            ),
-        ],
-        bases=(ShellOutSpec,),
-    )
-
-    shelly = ShellCommandTask(
-        executable="touch", input_spec=input_spec, output_spec=out_spec, out_dir=tmpdir
-    )
-    shelly()
-    res = shelly.result()
-    # checking if the output was created
-    assert (Path(tmpdir) / Path("test_1.nii")).exists()
-    assert (Path(shelly.output_dir) / Path("test_1.nii")).exists()
-    # check if path of the output is correct
-    assert res.output.out_1 == attr.NOTHING
-
-
-def test_shellspec_cmd_absolute_path_non_existing(tmpdir):
-    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
-    to the nodes output_dir. Testing for a existing and non existing file."""
-    input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "out_dir",
-                attr.ib(
-                    type=str,
-                    metadata={
-                        "help_string": """
-                            base name of the pretend outputs.
-                            """,
-                        "mandatory": True,
-                        "argstr": "{out_dir}/test.nii",
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
-    out_spec = SpecInfo(
-        name="Output",
-        fields=[
-            (
-                "out_1",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "help_string": "fictional output #1",
-                        "output_file_template": "{out_dir}/test_1.nii",
-                        "absolute_path": True,
-                    },
-                ),
-            ),
-            (
-                "out_2",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "help_string": "fictional output #1",
-                        "output_file_template": "{out_dir}/test.nii",
-                        "absolute_path": True,
-                    },
-                ),
-            ),
-        ],
-        bases=(ShellOutSpec,),
-    )
-
-    shelly = ShellCommandTask(
-        executable="touch", input_spec=input_spec, output_spec=out_spec, out_dir=tmpdir
-    )
-    shelly()
-    res = shelly.result()
-    # checking if the output was created
-    assert (Path(tmpdir) / Path("test.nii")).exists()
-    # check if path of the out_1 is correct
-    assert res.output.out_1 == attr.NOTHING
-    # check if path of the out_1 is correct
-    assert res.output.out_2 == (Path(tmpdir) / Path("test.nii"))
-
-
-def test_shellspec_cmd_absolute_path_non_existing_multi(tmpdir):
-    """test the 'absolute_path' metadata option. An output path marked with this should not be appended
-    to the nodes output_dir. Testing for a existing and non existing file in multiOutputObj."""
-    input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "out_name",
-                attr.ib(
-                    type=MultiInputObj,
-                    metadata={
-                        "help_string": """
-                        base name of the pretend outputs.
-                        """,
-                        "mandatory": True,
-                        "argstr": "...",
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
-    out_spec = SpecInfo(
-        name="Output",
-        fields=[
-            (
-                "out_list",
-                attr.ib(
-                    type=MultiOutputFile,
-                    metadata={
-                        "help_string": "fictional output #1",
-                        "output_file_template": "{out_name}",
-                        "absolute_path": True,
-                    },
-                ),
-            ),
-        ],
-        bases=(ShellOutSpec,),
-    )
-
-    shelly = ShellCommandTask(
-        executable="touch",
-        input_spec=input_spec,
-        output_spec=out_spec,
-        out_name=[str(Path(tmpdir) / "test_1.nii"), "test_2.nii"],
-    )
-    shelly()
-    res = shelly.result()
-    # checking if the outputs are Nothing
-    assert res.output.out_list[0] == Path(tmpdir) / "test_1.nii"
     assert res.output.out_list[1] == attr.NOTHING
 
 
