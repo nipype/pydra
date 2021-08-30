@@ -9,6 +9,6 @@ repos:
     -   id: check-yaml
     -   id: check-added-large-files
 -   repo: https://github.com/psf/black
-    rev: 21.7b0
+    rev: 21.8b0
     hooks:
     -   id: black
