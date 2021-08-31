@@ -4,19 +4,14 @@ on: [push, pull_request]
 
 jobs:
   build:
-    strategy:
-      matrix:
-        python-version: [3.7, 3.8, 3.9]
-      fail-fast: false
     runs-on: ubuntu-latest
-
 
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }} on ubuntu-latest
+    - name: Set up Python 3.x on ubuntu-latest
       uses: actions/setup-python@v2
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: '3.x'
     - name: Update build tools
       run: python -m pip install --upgrade pip setuptools
 
@@ -25,5 +20,5 @@ jobs:
 
     - name: Check Style
       run: |
-        pip install black==21.4b2 codecov
+        pip install black==21.8b0 codecov
         black --check pydra setup.py
