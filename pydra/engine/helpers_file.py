@@ -471,6 +471,7 @@ def copyfiles(filelist, dest, copy=False, create_new=False):
 def fname_presuffix(fname, prefix="", suffix="", newpath=None, use_ext=True):
     """
     Manipulate path and name of input filename.
+
     Parameters
     ----------
     fname : :obj:`str`
