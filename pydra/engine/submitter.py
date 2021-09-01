@@ -175,7 +175,8 @@ class Submitter:
                     time.sleep(1)
                     if ii > 60:
                         raise Exception(
-                            "graph is not empty, but not able to get more tasks - something is wrong (e.g. with the filesystem)"
+                            "graph is not empty, but not able to get more tasks "
+                            "- something is wrong (e.g. with the filesystem)"
                         )
             for task in tasks:
                 # grab inputs if needed

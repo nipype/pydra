@@ -395,7 +395,7 @@ def test_annotated_func_multreturn_exception(use_validator):
     def testfunc(
         a: float,
     ) -> ty.NamedTuple(
-        "Output", [("fractional", float), ("integer", int), ("whoknows", int)]
+        "Output", [("fractional", float), ("integer", int), ("who_knows", int)]
     ):
         import math
 
@@ -533,7 +533,7 @@ def test_halfannotated_func_multrun_returnlist():
 
 def test_notannotated_func_multreturn():
     """no annotation and multiple values are returned
-    all elements should be returned as a tuple ans set to "out"
+    all elements should be returned as a tuple and set to "out"
     """
 
     @mark.task
@@ -1024,7 +1024,7 @@ def test_audit_prov_messdir_2(tmpdir, use_validator):
     funky.cache_dir = tmpdir
     funky()
 
-    # user defined path (doesnt depend on checksum, can be defined before init)
+    # user defined path (doesn't depend on checksum, can be defined before init)
     message_path = tmpdir / "my_messages"
     # saving the audit message into the file
     funky = testfunc(

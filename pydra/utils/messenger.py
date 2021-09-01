@@ -160,7 +160,8 @@ def make_message(obj, context=None):
     """
     if context is None:
         context = {
-            "@context": "https://raw.githubusercontent.com/nipype/pydra/master/pydra/schema/context.jsonld"
+            "@context": "https://raw.githubusercontent.com/nipype/pydra/"
+            "master/pydra/schema/context.jsonld"
         }
     message = context.copy()
     message.update(**obj)

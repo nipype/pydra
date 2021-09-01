@@ -60,7 +60,7 @@ The combination of several key features makes Pydra a customizable and powerful 
   (via Docker or Singularity) enabling greater consistency for reproducibility.
 
 - Auditing and provenance tracking: Pydra provides a simple JSON-LD-based message passing mechanism
-  to capture the dataflow execution activties as a provenance graph. These messages track inputs
+  to capture the dataflow execution activities as a provenance graph. These messages track inputs
   and outputs of each task in a dataflow, and the resources consumed by the task.
 
 .. _Nipype: https://nipype.readthedocs.io/en/latest/

@@ -16,6 +16,7 @@ repos:
     rev: v2.0.0
     hooks:
     -   id: codespell
+        exclude: ^(pydra/_version\.py|versioneer\.py)$
 -   repo: https://gitlab.com/pycqa/flake8
     rev: 3.9.2
     hooks:

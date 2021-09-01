@@ -57,7 +57,7 @@ def test_container():
         spec = ContainerSpec()
     spec = ContainerSpec(
         executable="ls", image="busybox", container="docker"
-    )  # (execut., args, image, cont)
+    )  # (execute, args, image, cont)
     assert all([hasattr(spec, attr) for attr in container_attrs])
     assert hasattr(spec, "executable")
 

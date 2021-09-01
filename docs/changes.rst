@@ -46,7 +46,7 @@ Release Notes
 * adding ``wf._connection`` to ``checksum``
 * allowing for updates of ``wf._connections``
 * editing output, so it works with ``numpy.arrays``
-* removing ``to_job`` and pickling task instead (workers read the tasks and set the proper input, so the multile copies of the input are not kept in the memory)
+* removing ``to_job`` and pickling task instead (workers read the tasks and set the proper input, so the multiple copies of the input are not kept in the memory)
 * adding standalone function ``load_and_run`` that can load and run a task from a pickle file
 * removing ``create_pyscript`` and simplifying the slurm worker
 * improving error reports in errors flies

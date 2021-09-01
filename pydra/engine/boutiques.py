@@ -89,7 +89,7 @@ class BoshTask(ShellCommandTask):
 
     def _download_spec(self, zenodo_id):
         """
-        usind boutiques Searcher to find url of zenodo file for a specific id,
+        using boutiques Searcher to find url of zenodo file for a specific id,
         and download the file to self.cache_dir
         """
         from boutiques.searcher import Searcher

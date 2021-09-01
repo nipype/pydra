@@ -188,7 +188,7 @@ def _parse_mount_table(exit_code, output):
 
     # Keep line and match for error reporting (match == None on failure)
     # Ignore empty lines
-    matches = [(l, pattern.match(l)) for l in output.strip().splitlines() if l]
+    matches = [(ll, pattern.match(ll)) for ll in output.strip().splitlines() if ll]
 
     # (path, fstype) tuples, sorted by path length (longest first)
     mount_info = sorted(
@@ -455,7 +455,8 @@ def copyfiles(filelist, dest, copy=False, create_new=False):
             if len(outfiles) > 1:
                 destfile = outfiles[i]
             else:
-                destfile = fname_presuffix(f, newpath=outfiles[0])
+                raise NotImplementedError("TODO: bring back presufix")
+                # destfile = fname_presuffix(f, newpath=outfiles[0])
             destfile = copyfile(f, destfile, copy, create_new=create_new)
             newfiles.insert(i, destfile)
     return newfiles
@@ -626,7 +627,7 @@ def _template_formatting(field, inputs, inputs_dict_st):
     Taking into account that the field with a template can be a MultiOutputFile
     and the field values needed in the template can be a list -
     returning a list of formatted templates in that case.
-    Allowing for multiple input values used in teh template as longs as
+    Allowing for multiple input values used in the template as longs as
     there is no more than one file (i.e. File, PathLike or string with extensions)
     """
     from .specs import MultiOutputFile
@@ -635,8 +636,8 @@ def _template_formatting(field, inputs, inputs_dict_st):
     # as default, we assume that keep_extension is True
     keep_extension = field.metadata.get("keep_extension", True)
 
-    inp_fields = re.findall("{\w+}", template)
-    inp_fields_fl = re.findall("{\w+:[0-9.]+f}", template)
+    inp_fields = re.findall(r"{\w+}", template)
+    inp_fields_fl = re.findall(r"{\w+:[0-9.]+f}", template)
     inp_fields += [re.sub(":[0-9.]+f", "", el) for el in inp_fields_fl]
     if len(inp_fields) == 0:
         return template

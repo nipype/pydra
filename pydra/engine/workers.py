@@ -1,6 +1,7 @@
 """Execution workers."""
 import asyncio
-import sys, os, json
+import sys
+import json
 import re
 from tempfile import gettempdir
 from pathlib import Path
@@ -241,7 +242,8 @@ class SlurmWorker(DistributedWorker):
             raise Exception("Missing or empty task!")
 
         batchscript = script_dir / f"batchscript_{uid}.sh"
-        python_string = f"""'from pydra.engine.helpers import load_and_run; load_and_run(task_pkl="{str(task_pkl)}", ind={ind}, rerun={rerun}) '
+        python_string = f"""'from pydra.engine.helpers import load_and_run;
+        load_and_run(task_pkl="{str(task_pkl)}", ind={ind}, rerun={rerun}) '
         """
         bcmd = "\n".join(
             (
@@ -359,7 +361,7 @@ class DaskWorker(Worker):
         except ImportError:
             logger.critical("Please instiall Dask distributed.")
             raise
-        self.client = None
+        self.client = Client
         self.client_args = kwargs
         logger.debug("Initialize Dask")
 

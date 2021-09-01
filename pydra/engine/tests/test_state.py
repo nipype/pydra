@@ -640,7 +640,7 @@ def test_state_connect_8():
 
 
 @pytest.mark.xfail(
-    reason="doesn't recognize that NC.y has 4 elements (not independend on NC.x)"
+    reason="doesn't recognize that NC.y has 4 elements (not independent on NC.x)"
 )
 def test_state_connect_9():
     """four  'connected' states: NA1 -> NB; NA2 -> NB, NA1 -> NC; NB -> NC

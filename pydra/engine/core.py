@@ -3,7 +3,8 @@ import abc
 import attr
 import json
 import logging
-import os, sys
+import os
+import sys
 from pathlib import Path
 import typing as ty
 from copy import deepcopy
@@ -150,7 +151,8 @@ class TaskBase:
 
         if inputs:
             if isinstance(inputs, dict):
-                # selecting items that are in input_names (ignoring fields that are not in input_spec)
+                # selecting items that are in input_names
+                # (ignoring fields that are not in input_spec)
                 inputs = {k: v for k, v in inputs.items() if k in self.input_names}
             # TODO: this needs to finished and tested after #305
             elif Path(inputs).is_file():
@@ -240,7 +242,7 @@ class TaskBase:
     def checksum(self):
         """Calculates the unique checksum of the task.
         Used to create specific directory name for task that are run;
-        and to create nodes checksums needed for graph checkums
+        and to create nodes checksums needed for graph checksums
         (before the tasks have inputs etc.)
         """
         input_hash = self.inputs.hash
@@ -286,8 +288,6 @@ class TaskBase:
                 if val:
                     self.inputs.files_hash[key].update(val)
             if is_workflow(self):
-                con_hash = hash_function(self._connections)
-                hash_list = [input_hash, con_hash]
                 checksum_ind = create_checksum(
                     self.__class__.__name__, self._checksum_wf(input_hash)
                 )
@@ -464,7 +464,7 @@ class TaskBase:
                 self.audit.monitor()
                 self._run_task()
                 result.output = self._collect_outputs(output_dir=odir)
-            except Exception as e:
+            except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
                 record_error(self.output_dir, error=traceback)
@@ -497,7 +497,7 @@ class TaskBase:
 
     def split(self, splitter, overwrite=False, cont_dim=None, **kwargs):
         """
-        Run this task parametrically over lists of splitted inputs.
+        Run this task parametrically over lists of split inputs.
 
         Parameters
         ----------
@@ -585,7 +585,7 @@ class TaskBase:
     def get_input_el(self, ind):
         """Collect all inputs required to run the node (for specific state element)."""
         if ind is not None:
-            # TODO: doesnt work properly for more cmplicated wf (check if still an issue)
+            # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
             state_dict = self.state.states_val[ind]
             input_ind = self.state.inputs_ind[ind]
             inputs_dict = {}
@@ -864,7 +864,7 @@ class Workflow(TaskBase):
     def checksum(self):
         """Calculates the unique checksum of the task.
         Used to create specific directory name for task that are run;
-        and to create nodes checksums needed for graph checkums
+        and to create nodes checksums needed for graph checksums
         (before the tasks have inputs etc.)
         """
         # if checksum is called before run the _graph_checksums is not ready
@@ -1035,7 +1035,7 @@ class Workflow(TaskBase):
                 self.audit.monitor()
                 await self._run_task(submitter, rerun=rerun)
                 result.output = self._collect_outputs()
-            except Exception as e:
+            except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
                 record_error(self.output_dir, error=traceback)
@@ -1113,7 +1113,6 @@ class Workflow(TaskBase):
         logger.info("Added %s to %s", self.output_spec, self)
 
     def _collect_outputs(self):
-        error = False
         output_klass = make_klass(self.output_spec)
         output = output_klass(**{f.name: None for f in attr.fields(output_klass)})
         # collecting outputs from tasks
@@ -1134,7 +1133,8 @@ class Workflow(TaskBase):
                 else:
                     raise ValueError(
                         f"Task {val.name} raised an error, "
-                        f"full crash report is here: {getattr(self, val.name).output_dir / '_error.pklz'}"
+                        f"full crash report is here: "
+                        f"{getattr(self, val.name).output_dir / '_error.pklz'}"
                     )
         return attr.evolve(output, **output_wf)
 

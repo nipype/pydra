@@ -148,10 +148,10 @@ Workflows
     # to the workflow input
     wf.add(mult(name="mlt",
                    x=wf.lzin.x, y=wf.lzin.y))
-    # adding anoter task and connecting
+    # adding another task and connecting
     # task's input to the "mult" task's output
     wf.add(add2(name="add", x=wf.mlt.lzout.out))
-    # setting worflow output
+    # setting workflow output
     wf.set_output([("out", wf.add.lzout.out)])
 
 

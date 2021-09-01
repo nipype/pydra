@@ -48,7 +48,6 @@ import warnings
 from .core import TaskBase, is_lazy
 from ..utils.messenger import AuditFlag
 from .specs import (
-    File,
     BaseSpec,
     SpecInfo,
     ShellSpec,
@@ -291,7 +290,8 @@ class ShellCommandTask(TaskBase):
                     kwargs[special_inp] = getattr(self, special_inp)
                 elif kwargs[special_inp] != getattr(self, special_inp):
                     warnings.warn(
-                        f"you are changing the executable from {getattr(self, special_inp)} to {kwargs[special_inp]}"
+                        f"you are changing the executable from {getattr(self, special_inp)} "
+                        f"to {kwargs[special_inp]}"
                     )
 
         super().__init__(
@@ -414,7 +414,8 @@ class ShellCommandTask(TaskBase):
         argstr = field.metadata.get("argstr", None)
         formatter = field.metadata.get("formatter", None)
         if argstr is None and formatter is None:
-            # assuming that input that has no arstr is not used in the command, or a formatter is not provided too.
+            # assuming that input that has no arstr is not used in the command,
+            # or a formatter is not provided too.
             return None
         pos = field.metadata.get("position", None)
         if pos is not None:

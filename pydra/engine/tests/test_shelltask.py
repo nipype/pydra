@@ -1693,7 +1693,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmpdir):
 @pytest.mark.xfail(
     reason="not sure if we want to support input overwrite,"
     "if we allow for this orig_file is changing, so does checksum,"
-    " and the results cant be found"
+    " and the results can't be found"
 )
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmpdir):
@@ -1873,7 +1873,7 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmpdir):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_state_2(plugin, results_function, tmpdir):
     """
-    adding splitter to input tha is used in the output_file_tamplate
+    adding splitter to input that is used in the output_file_tamplate
     """
     cmd = "touch"
     args = ["newfile_1.txt", "newfile_2.txt"]
@@ -3419,7 +3419,7 @@ def test_shell_cmd_inputspec_outputspec_2():
     )
     shelly.inputs.file1 = "new_file_1.txt"
     shelly.inputs.file2 = "new_file_2.txt"
-    # all fileds from output_spec should be in output_names and generated_output_names
+    # all fields from output_spec should be in output_names and generated_output_names
     assert (
         shelly.output_names
         == shelly.generated_output_names
@@ -3485,7 +3485,7 @@ def test_shell_cmd_inputspec_outputspec_2a():
         output_spec=my_output_spec,
     )
     shelly.inputs.file1 = "new_file_1.txt"
-    # generated_output_names shoule know that newfile2 will not be generated
+    # generated_output_names should know that newfile2 will not be generated
     assert shelly.output_names == [
         "return_code",
         "stdout",
@@ -3619,7 +3619,7 @@ def test_shell_cmd_inputspec_outputspec_3a():
     )
     shelly.inputs.file1 = "new_file_1.txt"
     shelly.inputs.file2 = "new_file_2.txt"
-    # generated_output_names shoule know that newfile2 will not be generated
+    # generated_output_names should know that newfile2 will not be generated
     assert shelly.output_names == [
         "return_code",
         "stdout",
@@ -4450,7 +4450,7 @@ def test_shell_cmd_non_existing_outputs_4(tmpdir):
         output_spec=out_spec,
         out_name="test",
     )
-    # An execption should be raised because the second mandatory output does not exist
+    # An exception should be raised because the second mandatory output does not exist
     with pytest.raises(Exception) as excinfo:
         shelly()
     assert "mandatory output for variable out_2 does not exit" == str(excinfo.value)
