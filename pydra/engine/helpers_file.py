@@ -446,19 +446,65 @@ def copyfiles(filelist, dest, copy=False, create_new=False):
     None
 
     """
-    outfiles = ensure_list(dest)
+    # checking if dest is a single dir or filepath/filepaths
+    if not isinstance(dest, list) and Path(dest).is_dir():
+        dest_dir = True
+        out_path = str(Path(dest).resolve())
+    else:
+        dest_dir = False
+        out_path = ensure_list(dest)
     newfiles = []
     for i, f in enumerate(ensure_list(filelist)):
+        # Todo: this part is not tested
         if isinstance(f, list):
             newfiles.insert(i, copyfiles(f, dest, copy=copy, create_new=create_new))
         else:
-            if len(outfiles) > 1:
-                destfile = outfiles[i]
+            if dest_dir:
+                destfile = fname_presuffix(f, newpath=out_path)
             else:
-                destfile = fname_presuffix(f, newpath=outfiles[0])
+                destfile = out_path[i]
             destfile = copyfile(f, destfile, copy, create_new=create_new)
             newfiles.insert(i, destfile)
     return newfiles
+
+
+def fname_presuffix(fname, prefix="", suffix="", newpath=None, use_ext=True):
+    """
+    Manipulate path and name of input filename.
+    Parameters
+    ----------
+    fname : :obj:`str`
+        A filename (may or may not include path)
+    prefix : :obj:`str`
+        Characters to prepend to the filename
+    suffix : :obj:`str`
+        Characters to append to the filename
+    newpath : :obj:`str`
+        Path to replace the path of the input fname
+    use_ext : :obj:`bool`
+        If True (default), appends the extension of the original file
+        to the output name.
+    Return
+    ------
+    path : :obj:`str`
+        Absolute path of the modified filename
+    Examples
+    --------
+    >>> import pytest, sys
+    >>> if sys.platform.startswith('win'): pytest.skip()
+    >>> from pydra.engine.helpers_file import fname_presuffix
+    >>> fname = 'foo.nii.gz'
+    >>> fname_presuffix(fname,'pre','post','/tmp')
+    '/tmp/prefoopost.nii.gz'
+    """
+    pth, fname, ext = split_filename(fname)
+    if not use_ext:
+        ext = ""
+
+    # No need for isdefined: bool(Undefined) evaluates to False
+    if newpath:
+        pth = op.abspath(newpath)
+    return str(Path(pth) / (prefix + fname + suffix + ext))
 
 
 # dj: copied from misc
