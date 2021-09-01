@@ -1,11 +1,11 @@
 import os
-import time
-import warnings
+import sys
 import pytest
 from pathlib import Path
 
 from ..helpers_file import (
     split_filename,
+    fname_presuffix,
     copyfile,
     copyfiles,
     on_cifs,
@@ -35,6 +35,21 @@ def _ignore_atime(stat):
 def test_split_filename(filename, split):
     res = split_filename(filename)
     assert res == split
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="windows drive not known in advance",
+)
+def test_fname_presuffix():
+    fname = "foo.nii"
+    pth = fname_presuffix(fname, "pre_", "_post", "/tmp")
+    assert pth == str(Path("/tmp/pre_foo_post.nii"))
+    fname += ".gz"
+    pth = fname_presuffix(fname, "pre_", "_post", "/tmp")
+    assert pth == str(Path("/tmp/pre_foo_post.nii.gz"))
+    pth = fname_presuffix(fname, "pre_", "_post", "/tmp", use_ext=False)
+    assert pth == str(Path("/tmp/pre_foo_post"))
 
 
 @pytest.fixture()
@@ -87,11 +102,26 @@ def test_copyfiles(_temp_analyze_files, _temp_analyze_files_prime):
     pth, fname = os.path.split(orig_img2)
     new_img2 = os.path.join(pth, "secondfile.img")
     new_hdr2 = os.path.join(pth, "secondfile.hdr")
+    # providing specific filenames for a new destinations
     copyfiles([orig_img1, orig_img2], [new_img1, new_img2])
+    # checking if the new files exist (together with hdr files)
     assert os.path.exists(new_img1)
     assert os.path.exists(new_hdr1)
     assert os.path.exists(new_img2)
     assert os.path.exists(new_hdr2)
+
+
+def test_copyfiles_destdir(_temp_analyze_files, _temp_analyze_files_prime, tmpdir):
+    orig_img1, _ = _temp_analyze_files
+    orig_img2, _ = _temp_analyze_files_prime
+    _, fname = os.path.split(orig_img1)
+    new_img1 = tmpdir.join(fname)
+    _, fname = os.path.split(orig_img2)
+    new_img2 = tmpdir.join(fname)
+    # providing directory as a new destination
+    copyfiles([orig_img1, orig_img2], tmpdir)
+    assert os.path.exists(new_img1)
+    assert os.path.exists(new_img2)
 
 
 def test_linkchain(_temp_analyze_files):
