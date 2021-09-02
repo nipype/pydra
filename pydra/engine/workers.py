@@ -361,6 +361,7 @@ class DaskWorker(Worker):
         except ImportError:
             logger.critical("Please instiall Dask distributed.")
             raise
+        # TODO: it was self.client = None, should be checked!
         self.client = Client
         self.client_args = kwargs
         logger.debug("Initialize Dask")
