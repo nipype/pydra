@@ -356,6 +356,11 @@ class DaskWorker(Worker):
     def __init__(self, **kwargs):
         """Initialize Worker."""
         super().__init__()
+        try:
+            from dask.distributed import Client  # noqa: F401
+        except ImportError:
+            logger.critical("Please instiall Dask distributed.")
+            raise
         self.client = None
         self.client_args = kwargs
         logger.debug("Initialize Dask")
@@ -367,11 +372,8 @@ class DaskWorker(Worker):
     async def exec_dask(self, runnable, rerun=False):
         """Run a task (coroutine wrapper)."""
         if self.client is None:
-            try:
-                from dask.distributed import Client
-            except ImportError:
-                logger.critical("Please instiall Dask distributed.")
-                raise
+            from dask.distributed import Client
+
             self.client = await Client(**self.client_args, asynchronous=True)
         future = self.client.submit(runnable._run, rerun)
         result = await future
