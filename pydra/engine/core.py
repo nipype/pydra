@@ -151,8 +151,7 @@ class TaskBase:
 
         if inputs:
             if isinstance(inputs, dict):
-                # selecting items that are in input_names
-                # (ignoring fields that are not in input_spec)
+                # selecting items that are in input_names (ignoring fields that are not in input_spec)
                 inputs = {k: v for k, v in inputs.items() if k in self.input_names}
             # TODO: this needs to finished and tested after #305
             elif Path(inputs).is_file():
@@ -288,6 +287,9 @@ class TaskBase:
                 if val:
                     self.inputs.files_hash[key].update(val)
             if is_workflow(self):
+                con_hash = hash_function(self._connections)
+                # TODO: hash list is not used
+                hash_list = [input_hash, con_hash]  # noqa: F841
                 checksum_ind = create_checksum(
                     self.__class__.__name__, self._checksum_wf(input_hash)
                 )
@@ -1132,8 +1134,7 @@ class Workflow(TaskBase):
                     )
                 else:
                     raise ValueError(
-                        f"Task {val.name} raised an error, "
-                        f"full crash report is here: "
+                        f"Task {val.name} raised an error, full crash report is here: "
                         f"{getattr(self, val.name).output_dir / '_error.pklz'}"
                     )
         return attr.evolve(output, **output_wf)

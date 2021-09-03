@@ -657,8 +657,7 @@ class ShellOutSpec:
                         f"each element of the requires element should be a string or a tuple, "
                         f"but {inp} is found in {field_required}"
                     )
-            # if the specific list from field_required_OR has all elements set,
-            # no need to check more
+            # if the specific list from field_required_OR has all elements set, no need to check more
             if required_found:
                 break
 

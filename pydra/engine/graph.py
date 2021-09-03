@@ -398,10 +398,7 @@ class DiGraph:
                 for el in nd_det["outputs"][1:]:
                     wf_inputs_str += f" | <{el}> {el}"
                 wf_inputs_str += "}"
-                dotstr += (
-                    f"struct_{nd_nm} "
-                    f'[color=red, label="{{WORKFLOW INPUT: | {wf_inputs_str}}}"];\n'
-                )
+                dotstr += f'struct_{nd_nm} [color=red, label="{{WORKFLOW INPUT: | {wf_inputs_str}}}"];\n'
                 # wf outputs
                 wf_outputs_str = f'{{<{nd_det["inputs"][0]}> {nd_det["inputs"][0]}'
                 for el in nd_det["inputs"][1:]:

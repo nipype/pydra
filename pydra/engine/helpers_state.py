@@ -722,8 +722,8 @@ def _single_op_splits_groups(op_single, combiner, inner_inputs, groups):
         else:
             # TODO: probably not needed, should be already check by st.combiner_validation
             raise PydraStateError(
-                "all fields from the combiner have to be in splitter_rpn: {}, "
-                "but combiner: {} is set".format([op_single], combiner)
+                f"all fields from the combiner have to be in splitter_rpn: {[op_single]}, "
+                f"but combiner: {combiner} is set"
             )
     else:
         return keys, groups, groups_stack, []

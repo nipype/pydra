@@ -781,6 +781,7 @@ def load_and_run(
         if task_pkl.parent.exists():
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
+            errorfile = record_error(task_pkl.parent, error=traceback)
             result = Result(output=None, runtime=None, errored=True)
             save(task_pkl.parent, result=result)
         raise
