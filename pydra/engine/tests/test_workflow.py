@@ -3298,7 +3298,7 @@ def test_wf_nostate_cachelocations_recompute(plugin, tmpdir):
         cache_dir=cache_dir2,
         cache_locations=cache_dir1,
     )
-    # different argument assigment
+    # different argument assignment
     wf2.add(multiply(name="mult", x=wf2.lzin.y, y=wf2.lzin.x))
     wf2.add(add2(name="add2", x=wf2.mult.lzout.out))
     wf2.set_output([("out", wf2.add2.lzout.out)])
@@ -3580,7 +3580,7 @@ def test_wf_ndstate_cachelocations_recompute(plugin, tmpdir):
 @pytest.mark.flaky(reruns=3)
 def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
     """
-    running worflow (without state) twice,
+    running workflow (without state) twice,
     the second run should use the results from the first one
     """
     cache_dir1 = tmpdir.mkdir("test_wf_cache3")
@@ -3626,7 +3626,7 @@ def test_wf_nostate_runtwice_usecache(plugin, tmpdir):
 
 def test_wf_state_runtwice_usecache(plugin, tmpdir):
     """
-    running worflow with a state twice,
+    running workflow with a state twice,
     the second run should use the results from the first one
     """
     cache_dir1 = tmpdir.mkdir("test_wf_cache3")
@@ -3894,7 +3894,7 @@ def test_wf_lzoutall_st_2a(plugin, tmpdir):
     ]
 
 
-# worfklows that have files in the result, the files should be copied to the wf dir
+# workflows that have files in the result, the files should be copied to the wf dir
 
 
 def test_wf_resultfile_1(plugin, tmpdir):
@@ -4380,7 +4380,7 @@ def test_graph_1st_cmb(tmpdir):
 
 
 def test_graph_2(tmpdir):
-    """creating a graph, wf with one worfklow as a node"""
+    """creating a graph, wf with one workflow as a node"""
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wfnd = Workflow(name="wfnd", input_spec=["x"], x=wf.lzin.x)
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
@@ -4412,7 +4412,7 @@ def test_graph_2(tmpdir):
 
 
 def test_graph_2st(tmpdir):
-    """creating a set of graphs, wf with one worfklow as a node
+    """creating a set of graphs, wf with one workflow as a node
     the inner workflow has a state, so should be blue
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)

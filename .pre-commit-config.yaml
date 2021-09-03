@@ -12,3 +12,12 @@ repos:
     rev: 21.8b0
     hooks:
     -   id: black
+-   repo: https://github.com/codespell-project/codespell
+    rev: v2.0.0
+    hooks:
+    -   id: codespell
+        exclude: ^(pydra/_version\.py|versioneer\.py)$
+-   repo: https://gitlab.com/pycqa/flake8
+    rev: 3.9.2
+    hooks:
+      - id: flake8

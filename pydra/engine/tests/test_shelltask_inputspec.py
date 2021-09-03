@@ -66,7 +66,7 @@ def test_shell_cmd_inputs_1a():
     shelly = ShellCommandTask(
         executable="executable", args="arg", inpA="inpNone1", input_spec=my_input_spec
     )
-    # inp1 should be firt one after executable
+    # inp1 should be the first one after executable
     assert shelly.cmdline == "executable inpNone1 arg"
 
 
@@ -207,7 +207,7 @@ def test_shell_cmd_inputs_2_err():
 
 def test_shell_cmd_inputs_2_noerr():
     """additional inputs with provided positions
-    (duplication of teh position doesn't lead to error, since only one field has value)
+    (duplication of the position doesn't lead to error, since only one field has value)
     """
     my_input_spec = SpecInfo(
         name="Input",
@@ -268,7 +268,7 @@ def test_shell_cmd_inputs_3():
         inpC="inpNone",
         input_spec=my_input_spec,
     )
-    # input without position shoild be between positive an negative positions
+    # input without position should be between positive an negative positions
     assert shelly.cmdline == "executable inp1 inpNone inp-1"
 
 
@@ -1671,7 +1671,7 @@ def test_shell_cmd_inputs_template_9c_err(tmpdir):
         inpStr="hola.txt",
     )
     # inptStr has an extension so should be treated as a second file in the template formatting
-    # and teh exception should be raised
+    # and the exception should be raised
     with pytest.raises(Exception, match="can't have multiple paths"):
         shelly.cmdline
 
@@ -1970,7 +1970,7 @@ def test_shell_cmd_inputs_di(tmpdir, use_validator):
         == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{str(shelly.output_dir / 'a_file_out.ext')}]"
     )
 
-    # input file name, noiseImage is set to True, so template is used in the utput
+    # input file name, noiseImage is set to True, so template is used in the output
     shelly = ShellCommandTask(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,

@@ -18,7 +18,8 @@ class Audit:
         ----------
         audit_flags : :class:`AuditFlag`
             Base configuration of auditing.
-        messengers : :obj:`pydra.util.messenger.Messenger` or list of :class:`pydra.util.messenger.Messenger`, optional
+        messengers : :obj:`pydra.util.messenger.Messenger`
+            or list of :class:`pydra.util.messenger.Messenger`, optional
             Specify types of messenger used by Audit to send a message.
             Could be `PrintMessenger`, `FileMessenger`, or `RemoteRESTMessenger`.
         messenger_args : :obj:`dict`, optional

@@ -6,7 +6,7 @@ import inspect
 import re
 from glob import glob
 
-from .helpers_file import template_update_single, is_existing_file
+from .helpers_file import template_update_single
 
 
 def attr_fields(spec, exclude_names=()):
@@ -621,9 +621,10 @@ class ShellOutSpec:
             field_required_OR = [[]]
 
         for field_required in field_required_OR:
-            # if the output has output_file_template field, adding all input fields from the template to requires
+            # if the output has output_file_template field,
+            # adding all input fields from the template to requires
             if "output_file_template" in fld.metadata:
-                inp_fields = re.findall("{\w+}", fld.metadata["output_file_template"])
+                inp_fields = re.findall(r"{\w+}", fld.metadata["output_file_template"])
                 field_required += [
                     el[1:-1] for el in inp_fields if el[1:-1] not in field_required
                 ]

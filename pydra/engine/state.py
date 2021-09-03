@@ -129,7 +129,7 @@ class State:
 
     @property
     def splitter_rpn_compact(self):
-        """splitter in :abbr:`RPN (Reverse Polish Notation)`
+        r"""splitter in :abbr:`RPN (Reverse Polish Notation)`
         with a compact representation of the prev-state part (i.e. without unwrapping
         the part that comes from the previous states), e.g., [_NA, _NB, \*]
         """
@@ -205,7 +205,7 @@ class State:
 
     @property
     def prev_state_splitter_rpn_compact(self):
-        """the prev-state part of the splitter using RPN in a compact form,
+        r"""the prev-state part of the splitter using RPN in a compact form,
         (without unwrapping the states from previous nodes), e.g. [_NA, _NB, \*]
         """
         if self.prev_state_splitter:
@@ -341,7 +341,8 @@ class State:
         """
         # TODO: should this be in the prev-state_Splitter property?
         if self.splitter:
-            # if splitter is string, have to check if this is prev-state or current part (prev-state is required)
+            # if splitter is string, have to check if this is prev-state
+            # or current part (prev-state is required)
             if isinstance(self.splitter, str):
                 # so this is the prev-state part
                 if self.splitter.startswith("_"):
@@ -403,7 +404,8 @@ class State:
         for el in previous_splitters:
             if el[1:] not in self.other_states:
                 raise hlpst.PydraStateError(
-                    f"can't ask for splitter from {el[1:]}, other nodes that are connected: {self.other_states}"
+                    f"can't ask for splitter from {el[1:]}, other nodes that are connected: "
+                    f"{self.other_states}"
                 )
 
         repeated = set(
@@ -414,7 +416,7 @@ class State:
             ]
         )
         if repeated:
-            # assuming that I want to remove fro right
+            # assuming that I want to remove from right
             previous_splitters.reverse()
             for el, cnt in repeated:
                 for ii in range(cnt):
@@ -519,7 +521,8 @@ class State:
             and self._prevst_current_check(self.splitter[1], check_nested=False)
             == "current"
         ):
-            return "[prev-state, current]"  # the prev-state and the current parts separated in outer scalar
+            # the prev-state and the current parts separated in outer scalar
+            return "[prev-state, current]"
         else:
             raise hlpst.PydraStateError(
                 "prev-state and current splitters are mixed - splitter invalid"
@@ -583,7 +586,8 @@ class State:
                 last_gr = last_gr - 1
             if prev_nm[1:] not in self.other_states:
                 raise hlpst.PydraStateError(
-                    f"can't ask for splitter from {prev_nm[1:]}, other nodes that are connected: {self.other_states}"
+                    f"can't ask for splitter from {prev_nm[1:]}, "
+                    f"other nodes that are connected: {self.other_states}"
                 )
             st = self.other_states[prev_nm[1:]][0]
             # checking if prev-state combiner contains any element from the st splitter

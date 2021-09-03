@@ -242,7 +242,7 @@ class DiGraph:
             if nd not in self.nodes:
                 raise Exception(f"{nd} is not present in the graph")
             if self.predecessors[nd.name] and check_ready:
-                raise Exception("this node shoudn't be run, has to wait")
+                raise Exception("this node shouldn't be run, has to wait")
             self.nodes.remove(nd)
             # adding the node to self._node_wip as for
             self._node_wip.append(nd)
@@ -404,7 +404,10 @@ class DiGraph:
                 for el in nd_det["inputs"][1:]:
                     wf_outputs_str += f" | <{el}> {el}"
                 wf_outputs_str += "}"
-                dotstr += f'struct_{nd_nm}_out [color=red, label="{{WORKFLOW OUTPUT: | {wf_outputs_str}}}"];\n'
+                dotstr += (
+                    f"struct_{nd_nm}_out "
+                    f'[color=red, label="{{WORKFLOW OUTPUT: | {wf_outputs_str}}}"];\n'
+                )
                 # connections to the wf outputs
                 for con in nd_det["connections"]:
                     dotstr += (
@@ -419,7 +422,10 @@ class DiGraph:
                 for out in nd_det["outputs"]:
                     outputs_str += f" | <{out}> {out}"
                 outputs_str += "}"
-                dotstr += f'struct_{nd_nm} [shape=record, label="{inputs_str} | {nd_nm} | {outputs_str}"];\n'
+                dotstr += (
+                    f"struct_{nd_nm} "
+                    f'[shape=record, label="{inputs_str} | {nd_nm} | {outputs_str}"];\n'
+                )
                 # connections between elements
                 for con in nd_det["connections"]:
                     dotstr += f"struct_{con[1]}:{con[2]} -> struct_{nd_nm}:{con[0]};\n"
@@ -545,7 +551,7 @@ class DiGraph:
             "xdot_json",
         ]
         if ext not in available_ext:
-            raise Exception(f"unvalid extension - {ext}, chose from {available_ext}")
+            raise Exception(f"invalid extension - {ext}, chose from {available_ext}")
 
         dot_check = sp.run(["which", "dot"], stdout=sp.PIPE, stderr=sp.PIPE)
         if not dot_check.stdout:

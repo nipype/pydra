@@ -415,7 +415,7 @@ def splits(splitter_rpn, inputs, inner_inputs=None, cont_dim=None):
     inner_inputs: dict, optional
         inner input specification
     cont_dim: dict, optional
-        container dimension for input variable, specifies how nested is the intput,
+        container dimension for input variable, specifies how nested is the input,
         if not specified 1 will be used for all inputs (so will not be flatten)
 
 
@@ -722,9 +722,8 @@ def _single_op_splits_groups(op_single, combiner, inner_inputs, groups):
         else:
             # TODO: probably not needed, should be already check by st.combiner_validation
             raise PydraStateError(
-                "all fields from the combiner have to be in splitter_rpn: {}, but combiner: {} is set".format(
-                    [op_single], combiner
-                )
+                f"all fields from the combiner have to be in splitter_rpn: {[op_single]}, "
+                f"but combiner: {combiner} is set"
             )
     else:
         return keys, groups, groups_stack, []

@@ -354,7 +354,8 @@ def custom_validator(instance, attribute, value):
                 tp = {"key": tp_k, "val": tp_v}
         else:
             warnings.warn(
-                f"no type check for {attribute.name} field, no type check implemented for value {value} and type {tp_attr}"
+                f"no type check for {attribute.name} field, "
+                f"no type check implemented for value {value} and type {tp_attr}"
             )
             check_type = False
 
@@ -401,7 +402,8 @@ def _type_validator(instance, attribute, value, tp, cont_type):
         )(instance, attribute, value)
     else:
         raise Exception(
-            f"container type of {attribute.name} should be None, list, dict or ty.Union, and not {cont_type}"
+            f"container type of {attribute.name} should be None, list, dict or ty.Union, "
+            f"and not {cont_type}"
         )
 
 
@@ -450,7 +452,8 @@ def _single_type_update(tp, name, simplify=False):
             return None
     else:
         warnings.warn(
-            f"no type check for {name} field, type check not implemented for type - {tp}, consider using simplify=True"
+            f"no type check for {name} field, type check not implemented for type - {tp}, "
+            f"consider using simplify=True"
         )
         return None
 
@@ -727,7 +730,7 @@ def output_from_inputfields(output_spec, input_spec):
                 field_name = fld.metadata["output_field_name"]
             else:
                 field_name = fld.name
-            # not adding if the field already in teh output_spec
+            # not adding if the field already in the output_spec
             if field_name not in current_output_spec_names:
                 # TODO: should probably remove some of the keys
                 new_fields.append(
@@ -774,7 +777,7 @@ def load_and_run(
     """
     try:
         task = load_task(task_pkl=task_pkl, ind=ind)
-    except Exception as excinfo:
+    except Exception:
         if task_pkl.parent.exists():
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
@@ -830,7 +833,7 @@ def position_sort(args):
     """
     Sort objects by position, following Python indexing conventions.
 
-    Ordering is postive positions, lowest to highest, followed by unspecified
+    Ordering is positive positions, lowest to highest, followed by unspecified
     positions (``None``) and negative positions, lowest to highest.
 
     >>> position_sort([(None, "d"), (-3, "e"), (2, "b"), (-2, "f"), (5, "c"), (1, "a")])
@@ -871,8 +874,8 @@ def argstr_formatting(argstr, inputs, value_updates=None):
     if value_updates:
         inputs_dict.update(value_updates)
     # getting all fields that should be formatted, i.e. {field_name}, ...
-    inp_fields = re.findall("{\w+}", argstr)
-    inp_fields_float = re.findall("{\w+:[0-9.]+f}", argstr)
+    inp_fields = re.findall(r"{\w+}", argstr)
+    inp_fields_float = re.findall(r"{\w+:[0-9.]+f}", argstr)
     inp_fields += [re.sub(":[0-9.]+f", "", el) for el in inp_fields_float]
     val_dict = {}
     for fld in inp_fields:

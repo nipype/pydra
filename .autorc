@@ -1,0 +1,7 @@
+{
+    "onlyPublishWithReleaseLabel": true,
+    "baseBranch": "master",
+    "author": "Nipype Bot <nipype@mit.edu>",
+    "noVersionPrefix": true,
+    "plugins": ["git-tag"]
+}

@@ -85,6 +85,6 @@ The metadata dictionary for `output_spec` can include:
 `callable` (`function`):
    If provided the output file name (or list of file names) is created using the function.
    The function can take `field` (the specific output field will be passed to the function),
-   `output_dir` (task `output_dir` wil be used), `stdout`, `stderr` (`stdout` and `stderr` of
+   `output_dir` (task `output_dir` will be used), `stdout`, `stderr` (`stdout` and `stderr` of
    the task will be sent) `inputs` (entire `inputs` will be passed) or any input field name
    (a specific input field will be sent).
