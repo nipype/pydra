@@ -1,8 +1,14 @@
 """Keeping track of mapping and reduce operations over tasks."""
 from copy import deepcopy
+import itertools
+from functools import reduce
+
 from . import helpers_state as hlpst
 from .helpers import ensure_list
 from .specs import BaseSpec
+
+# TODO: move to State
+op = {".": zip, "*": itertools.product}
 
 
 class State:
@@ -119,6 +125,7 @@ class State:
         else:
             self._splitter = None
 
+    # TODO: not repeating
     @property
     def splitter_rpn(self):
         """splitter in :abbr:`RPN (Reverse Polish Notation)`"""
@@ -704,10 +711,10 @@ class State:
         self.combiner_validation()
         self.set_input_groups()
         # container dimension for each input, specifies how nested the input is
-        if cont_dim is None:
-            self.cont_dim = {}
-        else:
+        if cont_dim:
             self.cont_dim = cont_dim
+        else:
+            self.cont_dim = {}
         if isinstance(inputs, BaseSpec):
             self.inputs = hlpst.inputs_types_to_dict(self.name, inputs)
         else:
@@ -718,6 +725,8 @@ class State:
                 if not hasattr(st, "states_ind"):
                     st.prepare_states(self.inputs, cont_dim=cont_dim)
                 self.inputs.update(st.inputs)
+                self.cont_dim.update(st.cont_dim)
+
         self.prepare_states_ind()
         self.prepare_states_val()
 
@@ -747,11 +756,8 @@ class State:
         partial_rpn = hlpst.remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn_compact), elements_to_remove
         )
-        values_out_pr, keys_out_pr = hlpst.splits(
+        values_out_pr, keys_out_pr = self.splits(
             partial_rpn,
-            self.inputs,
-            inner_inputs=self.inner_inputs,
-            cont_dim=self.cont_dim,
         )
         values_pr = list(values_out_pr)
 
@@ -790,11 +796,8 @@ class State:
             self.current_combiner_all + self.prev_state_combiner_all,
         )
         if combined_rpn:
-            val_r, key_r = hlpst.splits(
+            val_r, key_r = self.splits(
                 combined_rpn,
-                self.inputs,
-                inner_inputs=self.inner_inputs,
-                cont_dim=self.cont_dim,
             )
             values = list(val_r)
         else:
@@ -845,11 +848,8 @@ class State:
         else:
             # elements from the current node (the current part of the splitter)
             if self.current_splitter_rpn:
-                values_inp, keys_inp = hlpst.splits(
+                values_inp, keys_inp = self.splits(
                     self.current_splitter_rpn,
-                    self.inputs,
-                    inner_inputs=self.inner_inputs,
-                    cont_dim=self.cont_dim,
                 )
                 inputs_ind = values_inp
             else:
@@ -876,21 +876,21 @@ class State:
                     if inputs_ind_prev:
                         # in case the prev-state part has scalar parts (not very well tested)
                         if self.prev_state_splitter_rpn_compact[ii + 1] == ".":
-                            inputs_ind_prev = hlpst.op["."](inputs_ind_prev, st_ind)
+                            inputs_ind_prev = op["."](inputs_ind_prev, st_ind)
                         else:
-                            inputs_ind_prev = hlpst.op["*"](inputs_ind_prev, st_ind)
+                            inputs_ind_prev = op["*"](inputs_ind_prev, st_ind)
                     else:
                         # TODO: more tests needed
-                        inputs_ind_prev = hlpst.op["."](*[st_ind] * len(inp_l))
+                        inputs_ind_prev = op["."](*[st_ind] * len(inp_l))
                     keys_inp_prev += inp_l
             keys_inp = keys_inp_prev + keys_inp
 
             if inputs_ind and inputs_ind_prev:
-                inputs_ind = hlpst.op["*"](inputs_ind_prev, inputs_ind)
+                inputs_ind = op["*"](inputs_ind_prev, inputs_ind)
             elif inputs_ind:
-                inputs_ind = hlpst.op["*"](inputs_ind)
+                inputs_ind = op["*"](inputs_ind)
             elif inputs_ind_prev:
-                inputs_ind = hlpst.op["*"](inputs_ind_prev)
+                inputs_ind = op["*"](inputs_ind_prev)
             else:
                 inputs_ind = []
 
@@ -900,3 +900,146 @@ class State:
             # TODO - add tests to test_workflow.py (not sure if we want to remove it)
             for el in connected_to_inner:
                 [dict.pop(el) for dict in self.inputs_ind]
+
+    def splits(self, splitter_rpn):
+        """
+        Splits input variable as specified by splitter
+
+        Parameters
+        ----------
+        splitter_rpn : list
+            splitter in RPN notation
+        Returns
+        -------
+        splitter : list
+            each element contains indices for input variables
+        keys: list
+            names of input variables
+
+        """
+        # analysing states from connected tasks if inner_inputs
+        previous_states_ind = {
+            f"_{v.name}": (v.ind_l_final, v.keys_final)
+            for v in self.inner_inputs.values()
+        }
+
+        # when splitter is a single element (no operators)
+        if len(splitter_rpn) == 1:
+            op_single = splitter_rpn[0]
+            # splitter comes from the previous state
+            if op_single.startswith("_"):
+                return previous_states_ind[op_single]
+            return self._single_op_splits(op_single)
+
+        stack = []
+        keys = []
+
+        # iterating splitter_rpn
+        for token in splitter_rpn:
+            if token not in [".", "*"]:  # token is one of the input var
+                # adding variable to the stack
+                stack.append(token)
+            else:
+                # removing Right and Left var from the stack
+                term_R = stack.pop()
+                term_L = stack.pop()
+
+                # analysing and processing Left and Right terms
+                # both terms (Left and Right) are strings, so they were not processed yet by the function
+                if isinstance(term_L, str) and isinstance(term_R, str):
+                    shape_L, var_ind_L, new_keys_L = self._processing_terms(
+                        term_L, previous_states_ind
+                    )
+                    shape_R, var_ind_R, new_keys_R = self._processing_terms(
+                        term_R, previous_states_ind
+                    )
+                    keys = keys + new_keys_L + new_keys_R
+                elif isinstance(term_L, str):
+                    shape_L, var_ind_L, new_keys_L = self._processing_terms(
+                        term_L, previous_states_ind
+                    )
+                    var_ind_R, shape_R = term_R
+                    keys = new_keys_L + keys
+                elif isinstance(term_R, str):
+                    shape_R, var_ind_R, new_keys_R = self._processing_terms(
+                        term_R, previous_states_ind
+                    )
+                    var_ind_L, shape_L = term_L
+                    keys = keys + new_keys_R
+                else:
+                    var_ind_L, shape_L = term_L
+                    var_ind_R, shape_R = term_R
+
+                # checking shapes and creating newshape
+                if token == ".":
+                    if shape_L != shape_R:
+                        raise ValueError(
+                            f"Operands {term_R} and {term_L} do not have same shape"
+                        )
+                    newshape = shape_R
+                elif token == "*":
+                    newshape = tuple(list(shape_L) + list(shape_R))
+
+                # creating a new iterator with all indices for the current operation
+                # and pushing it to the stack
+                pushval = (op[token](var_ind_L, var_ind_R), newshape)
+                stack.append(pushval)
+
+        # when everything is processed it should be one element in the stack
+        # that contains iterator with variable indices after splitting for all keys
+        var_ind = stack.pop()
+        if isinstance(var_ind, tuple):
+            var_ind = var_ind[0]
+
+        return var_ind, keys
+
+    def _processing_terms(self, term, previous_states_ind):
+        """processing a specific term to get new keys from the term,
+        an iterator with variable indices and matching keys
+        """
+        if term.startswith("_"):
+            var_ind, new_keys = previous_states_ind[term]
+            shape = (len(var_ind),)
+        else:
+            cont_dim = self.cont_dim.get(term, 1)
+            shape = hlpst.input_shape(self.inputs[term], cont_dim=cont_dim)
+            var_ind = range(reduce(lambda x, y: x * y, shape))
+            new_keys = [term]
+            # checking if the term is in inner_inputs
+            if term in self.inner_inputs:
+                # TODO: have to be changed if differ length
+                inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
+                # this come from the previous node
+                outer_ind = self.inner_inputs[term].ind_l
+                var_ind_out = itertools.chain.from_iterable(
+                    itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
+                )
+                var_ind = op["."](var_ind_out, var_ind)
+                new_keys = self.inner_inputs[term].keys_final + new_keys
+
+        return shape, var_ind, new_keys
+
+    def _single_op_splits(self, op_single):
+        """splits function if splitter is a singleton"""
+        shape = hlpst.input_shape(
+            self.inputs[op_single], cont_dim=self.cont_dim.get(op_single, 1)
+        )
+        val_ind = range(reduce(lambda x, y: x * y, shape))
+        if op_single in self.inner_inputs:
+            if len(shape) == 1:
+                breakpoint()
+            # TODO: have to be changed if differ length
+            inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
+            # this come from the previous node
+            outer_ind = self.inner_inputs[op_single].ind_l
+            op_out = itertools.chain.from_iterable(
+                itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
+            )
+            res = op["."](op_out, val_ind)
+            val = res
+            keys = self.inner_inputs[op_single].keys_final + [op_single]
+            return val, keys
+        else:
+            val = op["*"](val_ind)
+            keys = [op_single]
+            return val, keys

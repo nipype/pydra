@@ -77,6 +77,7 @@ class FunctionTask(TaskBase):
         cache_dir=None,
         cache_locations=None,
         input_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
+        cont_dim=None,
         messenger_args=None,
         messengers=None,
         name=None,
@@ -99,6 +100,9 @@ class FunctionTask(TaskBase):
             List of alternative cache locations.
         input_spec : :obj:`pydra.engine.specs.SpecInfo`
             Specification of inputs.
+        cont_dim : :obj:`dict`, or `None`
+            Container dimensions for input fields,
+            if any of the container should be treated as a container
         messenger_args :
             TODO
         messengers :
@@ -140,6 +144,7 @@ class FunctionTask(TaskBase):
         super().__init__(
             name,
             inputs=kwargs,
+            cont_dim=cont_dim,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,
@@ -235,6 +240,7 @@ class ShellCommandTask(TaskBase):
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         input_spec: ty.Optional[SpecInfo] = None,
+        cont_dim=None,
         messenger_args=None,
         messengers=None,
         name=None,
@@ -254,6 +260,9 @@ class ShellCommandTask(TaskBase):
             Cache directory
         input_spec : :obj:`pydra.engine.specs.SpecInfo`
             Specification of inputs.
+        cont_dim : :obj:`dict`, or `None`
+            Container dimensions for input fields,
+            if any of the container should be treated as a container
         messenger_args :
             TODO
         messengers :
@@ -297,6 +306,7 @@ class ShellCommandTask(TaskBase):
         super().__init__(
             name=name,
             inputs=kwargs,
+            cont_dim=cont_dim,
             audit_flags=audit_flags,
             messengers=messengers,
             messenger_args=messenger_args,

@@ -1,7 +1,7 @@
 import pytest
 
 from ..state import State
-from ..helpers_state import PydraStateError
+from ..helpers_state import PydraStateError, add_name_splitter
 
 
 @pytest.mark.parametrize(
@@ -119,6 +119,357 @@ def test_state_5_err():
     with pytest.raises(PydraStateError) as exinfo:
         st.combiner_validation()
     assert "splitter has to be set before" in str(exinfo.value)
+
+
+## tests moved from test_helper_state after moving split to the State class
+## some tests might be very similar to existing ones, but they are pretty fast
+
+
+@pytest.mark.parametrize(
+    "splitter, cont_dim, values, keys, splits",
+    [
+        ("a", None, [(0,), (1,)], ["a"], [{"a": 1}, {"a": 2}]),
+        (["a"], None, [(0,), (1,)], ["a"], [{"a": 1}, {"a": 2}]),
+        (("a",), None, [(0,), (1,)], ["a"], [{"a": 1}, {"a": 2}]),
+        (
+            ("a", "v"),
+            None,
+            [(0, 0), (1, 1)],
+            ["a", "v"],
+            [{"a": 1, "v": "a"}, {"a": 2, "v": "b"}],
+        ),
+        (
+            ["a", "v"],
+            None,
+            [(0, 0), (0, 1), (1, 0), (1, 1)],
+            ["a", "v"],
+            [
+                {"a": 1, "v": "a"},
+                {"a": 1, "v": "b"},
+                {"a": 2, "v": "a"},
+                {"a": 2, "v": "b"},
+            ],
+        ),
+        (
+            ("a", "v", "c"),
+            None,
+            [((0, 0), 0), ((1, 1), 1)],
+            ["a", "v", "c"],
+            [{"a": 1, "c": 3, "v": "a"}, {"a": 2, "c": 4, "v": "b"}],
+        ),
+        (
+            (("a", "v"), "c"),
+            None,
+            [((0, 0), 0), ((1, 1), 1)],
+            ["a", "v", "c"],
+            [{"a": 1, "c": 3, "v": "a"}, {"a": 2, "c": 4, "v": "b"}],
+        ),
+        (
+            ("a", ("v", "c")),
+            None,
+            [(0, (0, 0)), (1, (1, 1))],
+            ["a", "v", "c"],
+            [{"a": 1, "c": 3, "v": "a"}, {"a": 2, "c": 4, "v": "b"}],
+        ),
+        (
+            ["a", "v", "c"],
+            None,
+            [
+                ((0, 0), 0),
+                ((0, 0), 1),
+                ((0, 1), 0),
+                ((0, 1), 1),
+                ((1, 0), 0),
+                ((1, 0), 1),
+                ((1, 1), 0),
+                ((1, 1), 1),
+            ],
+            ["a", "v", "c"],
+            [
+                {"a": 1, "v": "a", "c": 3},
+                {"a": 1, "v": "a", "c": 4},
+                {"a": 1, "v": "b", "c": 3},
+                {"a": 1, "v": "b", "c": 4},
+                {"a": 2, "v": "a", "c": 3},
+                {"a": 2, "v": "a", "c": 4},
+                {"a": 2, "v": "b", "c": 3},
+                {"a": 2, "v": "b", "c": 4},
+            ],
+        ),
+        (
+            [["a", "v"], "c"],
+            None,
+            [
+                ((0, 0), 0),
+                ((0, 0), 1),
+                ((0, 1), 0),
+                ((0, 1), 1),
+                ((1, 0), 0),
+                ((1, 0), 1),
+                ((1, 1), 0),
+                ((1, 1), 1),
+            ],
+            ["a", "v", "c"],
+            [
+                {"a": 1, "v": "a", "c": 3},
+                {"a": 1, "v": "a", "c": 4},
+                {"a": 1, "v": "b", "c": 3},
+                {"a": 1, "v": "b", "c": 4},
+                {"a": 2, "v": "a", "c": 3},
+                {"a": 2, "v": "a", "c": 4},
+                {"a": 2, "v": "b", "c": 3},
+                {"a": 2, "v": "b", "c": 4},
+            ],
+        ),
+        (
+            ["a", ["v", "c"]],
+            None,
+            [
+                (0, (0, 0)),
+                (0, (0, 1)),
+                (0, (1, 0)),
+                (0, (1, 1)),
+                (1, (0, 0)),
+                (1, (0, 1)),
+                (1, (1, 0)),
+                (1, (1, 1)),
+            ],
+            ["a", "v", "c"],
+            [
+                {"a": 1, "v": "a", "c": 3},
+                {"a": 1, "v": "a", "c": 4},
+                {"a": 1, "v": "b", "c": 3},
+                {"a": 1, "v": "b", "c": 4},
+                {"a": 2, "v": "a", "c": 3},
+                {"a": 2, "v": "a", "c": 4},
+                {"a": 2, "v": "b", "c": 3},
+                {"a": 2, "v": "b", "c": 4},
+            ],
+        ),
+        (
+            [("a", "v"), "c"],
+            None,
+            [((0, 0), 0), ((0, 0), 1), ((1, 1), 0), ((1, 1), 1)],
+            ["a", "v", "c"],
+            [
+                {"a": 1, "v": "a", "c": 3},
+                {"a": 1, "v": "a", "c": 4},
+                {"a": 2, "v": "b", "c": 3},
+                {"a": 2, "v": "b", "c": 4},
+            ],
+        ),
+        (
+            ["a", ("v", "c")],
+            None,
+            [(0, (0, 0)), (0, (1, 1)), (1, (0, 0)), (1, (1, 1))],
+            ["a", "v", "c"],
+            [
+                {"a": 1, "v": "a", "c": 3},
+                {"a": 1, "v": "b", "c": 4},
+                {"a": 2, "v": "a", "c": 3},
+                {"a": 2, "v": "b", "c": 4},
+            ],
+        ),
+        # TODO: check if it's ok
+        (
+            (("a", "v"), ("c", "z")),
+            None,
+            [((0, 0), (0, 0)), ((1, 1), (1, 1))],
+            ["a", "v", "c", "z"],
+            [{"a": 1, "v": "a", "c": 3, "z": 7}, {"a": 2, "v": "b", "c": 4, "z": 8}],
+        ),
+        (
+            (["a", "v"], ["c", "z"]),
+            None,
+            [((0, 0), (0, 0)), ((0, 1), (0, 1)), ((1, 0), (1, 0)), ((1, 1), (1, 1))],
+            ["a", "v", "c", "z"],
+            [
+                {"a": 1, "v": "a", "c": 3, "z": 7},
+                {"a": 1, "v": "b", "c": 3, "z": 8},
+                {"a": 2, "v": "a", "c": 4, "z": 7},
+                {"a": 2, "v": "b", "c": 4, "z": 8},
+            ],
+        ),
+        (
+            [("a", "v"), ("c", "z")],
+            None,
+            [((0, 0), (0, 0)), ((0, 0), (1, 1)), ((1, 1), (0, 0)), ((1, 1), (1, 1))],
+            ["a", "v", "c", "z"],
+            [
+                {"a": 1, "v": "a", "c": 3, "z": 7},
+                {"a": 1, "v": "a", "c": 4, "z": 8},
+                {"a": 2, "v": "b", "c": 3, "z": 7},
+                {"a": 2, "v": "b", "c": 4, "z": 8},
+            ],
+        ),
+        (
+            (["a", "v"], "x"),
+            {"x": 2},  # input x is treated as 2d container, so x will be flatten
+            [((0, 0), 0), ((0, 1), 1), ((1, 0), 2), ((1, 1), 3)],
+            ["a", "v", "x"],
+            [
+                {"a": 1, "v": "a", "x": 10},
+                {"a": 1, "v": "b", "x": 100},
+                {"a": 2, "v": "a", "x": 20},
+                {"a": 2, "v": "b", "x": 200},
+            ],
+        ),
+    ],
+)
+def test_state_6(splitter, cont_dim, values, keys, splits):
+    """checking split method and prepare_state"""
+    inputs = {
+        "S.a": [1, 2],
+        "S.v": ["a", "b"],
+        "S.c": [3, 4],
+        "S.z": [7, 8],
+        "S.x": [[10, 100], [20, 200]],
+    }
+
+    # adding st.name to the inputs variables
+    splitter = add_name_splitter(splitter, name="S")
+    if cont_dim:
+        cont_dim = {f"S.{k}": v for k, v in cont_dim.items()}
+    keys = [f"S.{k}" for k in keys]
+    splits = [{f"S.{k}": v for k, v in el.items()} for el in splits]
+
+    st = State(splitter=splitter, name="S")
+    st.prepare_states(inputs=inputs, cont_dim=cont_dim)
+
+    # checking keys and splits
+    assert st.keys_final == keys
+    assert st.ind_l_final == values
+    assert st.states_val == splits
+
+
+@pytest.mark.parametrize(
+    "splitter, cont_dim, inputs, mismatch",
+    [
+        ((["a", "v"], "c"), None, {"a": [1, 2], "v": ["a", "b"], "c": [3, 4]}, True),
+        (
+            (["a", "v"], "c"),
+            {"c": 2},  # c is treated as 2d container
+            {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], [5, 6]]},
+            False,
+        ),
+        (
+            (["a", "v"], "c"),
+            None,
+            {"a": [1, 2], "v": ["a", "b"], "c": [[3, 4], [5]]},
+            True,
+        ),
+    ],
+)
+def test_state_7(splitter, cont_dim, inputs, mismatch):
+    """checking if the split methods returns errors if shapes doesn't match"""
+
+    # adding st.name to the inputs variables
+    splitter = add_name_splitter(splitter, name="S")
+    if cont_dim:
+        cont_dim = {f"S.{k}": v for k, v in cont_dim.items()}
+    inputs = {f"S.{k}": v for k, v in inputs.items()}
+
+    st = State(splitter=splitter, name="S")
+
+    if mismatch:
+        with pytest.raises(ValueError):
+            st.prepare_states(inputs=inputs, cont_dim=cont_dim)
+    else:
+        st.prepare_states(inputs=inputs, cont_dim=cont_dim)
+
+
+@pytest.mark.parametrize(
+    "splitter, cont_dim, values, keys, shapes, splits",
+    [
+        (
+            (["a", "v"], "c"),
+            {"c": 2},
+            [((0, 0), 0), ((0, 1), 1), ((1, 0), 2), ((1, 1), 3)],
+            ["a", "v", "c"],
+            {"a": (2,), "v": (2,), "c": (2, 2)},
+            [
+                {"a": 1, "v": "a", "c": 3},
+                {"a": 1, "v": "b", "c": 4},
+                {"a": 2, "v": "a", "c": 5},
+                {"a": 2, "v": "b", "c": 6},
+            ],
+        ),
+        (
+            ("c", ["a", "v"]),
+            {"c": 2},
+            [(0, (0, 0)), (1, (0, 1)), (2, (1, 0)), (3, (1, 1))],
+            ["c", "a", "v"],
+            {"a": (2,), "v": (2,), "c": (2, 2)},
+            [
+                {"a": 1, "v": "a", "c": 3},
+                {"a": 1, "v": "b", "c": 4},
+                {"a": 2, "v": "a", "c": 5},
+                {"a": 2, "v": "b", "c": 6},
+            ],
+        ),
+    ],
+)
+def test_state_8(splitter, cont_dim, values, keys, shapes, splits):
+    inputs = {"S.a": [1, 2], "S.v": ["a", "b"], "S.c": [[3, 4], [5, 6]]}
+
+    # adding st.name to the inputs variables
+    splitter = add_name_splitter(splitter, name="S")
+    if cont_dim:
+        cont_dim = {f"S.{k}": v for k, v in cont_dim.items()}
+    keys = [f"S.{k}" for k in keys]
+    splits = [{f"S.{k}": v for k, v in el.items()} for el in splits]
+
+    st = State(splitter=splitter, name="S")
+    st.prepare_states(inputs=inputs, cont_dim=cont_dim)
+
+    # checking keys and splits
+    assert st.keys_final == keys
+    assert st.ind_l_final == values
+    assert st.states_val == splits
+
+
+@pytest.mark.parametrize(
+    "splitter, values, keys, splits",
+    [
+        (
+            (("a", "v"), "c"),
+            [((0, 0), 0), ((1, 1), 1)],
+            ["a", "v", "c"],
+            [{"a": 1, "v": "a", "c": [3, 4]}, {"a": 2, "v": "b", "c": 5}],
+        ),
+        (
+            [("a", "v"), "c"],
+            [((0, 0), 0), ((0, 0), 1), ((1, 1), 0), ((1, 1), 1)],
+            ["a", "v", "c"],
+            [
+                {"a": 1, "v": "a", "c": [3, 4]},
+                {"a": 1, "v": "a", "c": 5},
+                {"a": 2, "v": "b", "c": [3, 4]},
+                {"a": 2, "v": "b", "c": 5},
+            ],
+        ),
+    ],
+)
+def test_state_9(splitter, values, keys, splits):
+    # dj?: not sure if I like that this example works
+    # c - is like an inner splitter
+    inputs = {"S.a": [1, 2], "S.v": ["a", "b"], "S.c": [[3, 4], 5]}
+
+    # adding st.name to the inputs variables
+    splitter = add_name_splitter(splitter, name="S")
+    keys = [f"S.{k}" for k in keys]
+    splits = [{f"S.{k}": v for k, v in el.items()} for el in splits]
+
+    st = State(splitter=splitter, name="S")
+    st.prepare_states(inputs=inputs)
+
+    # checking keys and splits
+    assert st.keys_final == keys
+    assert st.ind_l_final == values
+    assert st.states_val == splits
+
+
+## END: tests moved from test_helper_state after moving split to the State class
 
 
 def test_state_connect_1():

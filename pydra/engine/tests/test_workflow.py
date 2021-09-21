@@ -1064,11 +1064,61 @@ def test_wf_3sernd_ndst_1(plugin, tmpdir):
     with Submitter(plugin=plugin) as sub:
         sub(wf)
 
+    # splitter from the first task should propagate to all tasks,
+    # splitter_rpn should be the same in all tasks
+    assert wf.mult.state.splitter == ["mult.x", "mult.y"]
+    assert wf.add2_1st.state.splitter == "_mult"
+    assert wf.add2_2nd.state.splitter == "_add2_1st"
+    assert (
+        ["mult.x", "mult.y", "*"]
+        == wf.mult.state.splitter_rpn
+        == wf.add2_1st.state.splitter_rpn
+        == wf.add2_2nd.state.splitter_rpn
+    )
+
     results = wf.result()
     assert results.output.out[0] == 15
     assert results.output.out[1] == 16
     assert results.output.out[2] == 26
     assert results.output.out[3] == 28
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
+def test_wf_3sernd_ndst_1a(plugin, tmpdir):
+    """
+    workflow with three "serial" tasks, checking if the splitter is propagating
+    first task has a splitter that propagates to the 2nd task,
+    and the 2nd task is adding one more input to the splitter
+    """
+    wf = Workflow(name="wf_3sernd_ndst_1", input_spec=["x", "y"])
+    wf.add(add2(name="add2_1st", x=wf.lzin.x).split("x"))
+    wf.add(multiply(name="mult", x=wf.add2_1st.lzout.out, y=wf.lzin.y).split("y"))
+    wf.add(add2(name="add2_2nd", x=wf.mult.lzout.out))
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [11, 12]
+    wf.set_output([("out", wf.add2_2nd.lzout.out)])
+    wf.cache_dir = tmpdir
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    # splitter from the 1st task should propagate and the 2nd task should add one more
+    # splitter_rpn for the 2nd and the 3rd task should be the same
+    assert wf.add2_1st.state.splitter == "add2_1st.x"
+    assert wf.mult.state.splitter == ["_add2_1st", "mult.y"]
+    assert wf.add2_2nd.state.splitter == "_mult"
+    assert (
+        ["add2_1st.x", "mult.y", "*"]
+        == wf.mult.state.splitter_rpn
+        == wf.add2_2nd.state.splitter_rpn
+    )
+
+    results = wf.result()
+    assert results.output.out[0] == 35
+    assert results.output.out[1] == 38
+    assert results.output.out[2] == 46
+    assert results.output.out[3] == 50
     # checking the output directory
     assert wf.output_dir.exists()
 
@@ -1712,6 +1762,92 @@ def test_wf_ndstinner_4(plugin, tmpdir):
     results = wf.result()
     assert results.output.out_list == [1, 2, 3]
     assert results.output.out == [12, 22, 32]
+
+    assert wf.output_dir.exists()
+
+
+def test_wf_ndstinner_5(plugin, tmpdir):
+    """workflow with 3 tasks,
+    the second task has two inputs and inner splitter from one of the input,
+    (inner input come from the first task that has its own splitter,
+    there is a inner_cont_dim)
+    the third task has no new splitter
+    """
+    wf = Workflow(name="wf_5", input_spec=["x", "y", "b"])
+    wf.add(list_output(name="list", x=wf.lzin.x).split("x"))
+    wf.add(multiply(name="mult", x=wf.list.lzout.out, y=wf.lzin.y).split(["y", "x"]))
+    wf.add(fun_addvar(name="addvar", a=wf.mult.lzout.out, b=wf.lzin.b).split("b"))
+    wf.inputs.x = [1, 2]
+    wf.inputs.y = [10, 100]
+    wf.inputs.b = [3, 5]
+
+    wf.set_output(
+        [
+            ("out_list", wf.list.lzout.out),
+            ("out_mult", wf.mult.lzout.out),
+            ("out_add", wf.addvar.lzout.out),
+        ]
+    )
+    wf.cache_dir = tmpdir
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    assert wf.mult.state.splitter == ["_list", ["mult.y", "mult.x"]]
+    assert wf.mult.state.splitter_rpn == ["list.x", "mult.y", "mult.x", "*", "*"]
+    assert wf.addvar.state.splitter == ["_mult", "addvar.b"]
+    assert wf.addvar.state.splitter_rpn == [
+        "list.x",
+        "mult.y",
+        "mult.x",
+        "*",
+        "*",
+        "addvar.b",
+        "*",
+    ]
+
+    results = wf.result()
+    assert results.output.out_list == [[1, 2, 3], [2, 4, 6]]
+    assert results.output.out_mult == [
+        10,
+        20,
+        30,
+        20,
+        40,
+        60,
+        100,
+        200,
+        300,
+        200,
+        400,
+        600,
+    ]
+    assert results.output.out_add == [
+        13,
+        15,
+        23,
+        25,
+        33,
+        35,
+        23,
+        25,
+        43,
+        45,
+        63,
+        65,
+        103,
+        105,
+        203,
+        205,
+        303,
+        305,
+        203,
+        205,
+        403,
+        405,
+        603,
+        605,
+    ]
 
     assert wf.output_dir.exists()
 
