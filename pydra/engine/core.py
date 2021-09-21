@@ -795,29 +795,29 @@ class Workflow(TaskBase):
             TODO
 
         """
-        if not input_spec:
-            raise Exception("No input_spec provided to Workflow")
-
-        if isinstance(input_spec, BaseSpec):
-            self.input_spec = input_spec
+        if input_spec:
+            if isinstance(input_spec, BaseSpec):
+                self.input_spec = input_spec
+            else:
+                self.input_spec = SpecInfo(
+                    name="Inputs",
+                    fields=[("_graph_checksums", ty.Any)]
+                    + [
+                        (
+                            nm,
+                            attr.ib(
+                                type=ty.Any,
+                                metadata={
+                                    "help_string": f"{nm} input from {name} workflow"
+                                },
+                            ),
+                        )
+                        for nm in input_spec
+                    ],
+                    bases=(BaseSpec,),
+                )
         else:
-            self.input_spec = SpecInfo(
-                name="Inputs",
-                fields=[("_graph_checksums", ty.Any)]
-                + [
-                    (
-                        nm,
-                        attr.ib(
-                            type=ty.Any,
-                            metadata={
-                                "help_string": f"{nm} input from {name} workflow"
-                            },
-                        ),
-                    )
-                    for nm in input_spec
-                ],
-                bases=(BaseSpec,),
-            )
+            raise ValueError("Empty input_spec provided to Workflow")
 
         self.output_spec = output_spec
 

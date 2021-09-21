@@ -32,6 +32,11 @@ from ..core import Workflow
 from ... import mark
 
 
+def test_wf_no_input_spec():
+    with pytest.raises(ValueError):
+        Workflow(name="workflow")
+
+
 def test_wf_name_conflict1():
     """raise error when workflow name conflicts with a class attribute or method"""
     with pytest.raises(ValueError) as excinfo1:
