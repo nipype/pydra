@@ -446,14 +446,15 @@ class State:
                     prev_state = [f"_{name}", prev_state]
         else:
             prev_state = [f"_{name}" for name in self.other_states]
-            if len(prev_state) == 1:
-                prev_state = prev_state[0]
-
+        # TODO: what if prev state is a tuple
         if isinstance(prev_state, list):
-            prev_state = self._removed_repeated(prev_state)
+            prev_state = self._remove_repeated(prev_state)
+            prev_state = self._add_state_history(ensure_list(prev_state))
+        if len(prev_state) == 1:
+            prev_state = prev_state[0]
         return prev_state
 
-    def _removed_repeated(self, previous_splitters):
+    def _remove_repeated(self, previous_splitters):
         """removing states from previous tasks that are repeated either directly or indirectly"""
         for el in previous_splitters:
             if el[1:] not in self.other_states:
@@ -476,35 +477,41 @@ class State:
                 for ii in range(cnt):
                     previous_splitters.remove(el)
             previous_splitters.reverse()
+        return previous_splitters
 
-        el_state = []
-        el_connect = []
-        el_state_connect = []
+    def _add_state_history(self, previous_splitters):
+        """analysing history of each state from previous states
+        expanding previous_splitters list and oter_states
+        """
+        el_w_currst = []  # elements that have only current states
+        el_w_prevst = []  # elements that had only previous states (el, st.prev_st_spl)
+        el_w_currst_prevst = []  # elements that have both (el, st.prev_st_spl)
         for el in previous_splitters:
             nm = el[1:]
             st = self.other_states[nm][0]
             if not st.other_states:
                 # states that has no other connections
-                el_state.append(el)
+                el_w_currst.append(el)
             else:  # element has previous_connection
                 if st.current_splitter:  # final?
                     # states that has previous connections and it's own splitter
-                    el_state_connect.append((el, st.prev_state_splitter))
+                    el_w_currst_prevst.append((el, st.prev_state_splitter))
                 else:
                     # states with previous connections but no additional splitter
-                    el_connect.append((el, st.prev_state_splitter))
+                    el_w_prevst.append((el, st.prev_state_splitter))
 
-        for el in el_connect:
+        for el in el_w_prevst:
             nm = el[0][1:]
-            repeated_prev = set(ensure_list(el[1])).intersection(el_state)
+            repeated_prev = set(ensure_list(el[1])).intersection(el_w_currst)
             if repeated_prev:
                 for r_el in repeated_prev:
                     r_nm = r_el[1:]
+                    # TODO: proper other_states updates
                     self.other_states[r_nm] = (
                         self.other_states[r_nm][0],
                         self.other_states[r_nm][1] + self.other_states[nm][1],
                     )
-                new_st = set(ensure_list(el[1])) - set(el_state)
+                new_st = set(ensure_list(el[1])) - set(el_w_currst)
                 if not new_st:
                     previous_splitters.remove(el[0])
                 else:
@@ -525,16 +532,13 @@ class State:
                             + previous_splitters[ind + 1 :]
                         )
         # TODO: this part is not tested, needs more work
-        for el in el_state_connect:
-            repeated_prev = set(ensure_list(el[1])).intersection(el_state)
+        for el in el_w_currst_prevst:
+            repeated_prev = set(ensure_list(el[1])).intersection(el_w_currst)
             if repeated_prev:
                 for r_el in repeated_prev:
                     previous_splitters.remove(r_el)
 
-        if len(previous_splitters) == 1:
-            return previous_splitters[0]
-        else:
-            return previous_splitters
+        return previous_splitters
 
     def _prevst_current_check(self, splitter_part, check_nested=True):
         """
