@@ -124,15 +124,35 @@ class State:
             self._splitter = hlpst.add_name_splitter(splitter, self.name)
         else:
             self._splitter = None
+        # updating splitter_rpn
+        self._splitter_rpn_updates()
 
-    # TODO: not repeating
+    def _splitter_rpn_updates(self):
+        """updating splitter_rpn and splitter_rpn_compact"""
+        try:
+            self._splitter_rpn = hlpst.splitter2rpn(
+                self.splitter, other_states=self.other_states
+            )
+        # other_state might not be ready yet
+        except hlpst.PydraStateError:
+            self._splitter_rpn = None
+
+        if self.other_states or self._splitter_rpn is None:
+            self._splitter_rpn_compact = hlpst.splitter2rpn(
+                self.splitter, other_states=self.other_states, state_fields=False
+            )
+        else:
+            self._splitter_rpn_compact = self._splitter_rpn
+
     @property
     def splitter_rpn(self):
         """splitter in :abbr:`RPN (Reverse Polish Notation)`"""
-        _splitter_rpn = hlpst.splitter2rpn(
-            self.splitter, other_states=self.other_states
-        )
-        return _splitter_rpn
+        # if splitter_rpn was not calculated within splitter.setter
+        if self._splitter_rpn is None:
+            self._splitter_rpn = hlpst.splitter2rpn(
+                self.splitter, other_states=self.other_states
+            )
+        return self._splitter_rpn
 
     @property
     def splitter_rpn_compact(self):
@@ -140,13 +160,7 @@ class State:
         with a compact representation of the prev-state part (i.e. without unwrapping
         the part that comes from the previous states), e.g., [_NA, _NB, \*]
         """
-        if self.other_states:
-            _splitter_rpn_compact = hlpst.splitter2rpn(
-                self.splitter, other_states=self.other_states, state_fields=False
-            )
-            return _splitter_rpn_compact
-        else:
-            return self.splitter_rpn
+        return self._splitter_rpn_compact
 
     @property
     def splitter_final(self):
@@ -170,24 +184,33 @@ class State:
         i.e. the part that is related to the current task's state only
         (doesn't include fields propagated from the previous tasks)
         """
-        lr_flag = self._prevst_current_check(self.splitter)
-        if lr_flag == "prev-state":
-            return None
-        elif lr_flag == "current":
+        if hasattr(self, "_current_splitter"):
+            return self._current_splitter
+        else:
             return self.splitter
-        elif lr_flag == "[prev-state, current]":
-            return self.splitter[1]
+
+    @current_splitter.setter
+    def current_splitter(self, current_splitter):
+        self._current_splitter = current_splitter
+        # updating rpn
+        self._current_splitter_rpn_updates()
+
+    def _current_splitter_rpn_updates(self):
+        """updating current_splitter_rpn"""
+        if self._current_splitter:
+            self._current_splitter_rpn = hlpst.splitter2rpn(
+                self.current_splitter, other_states=self.other_states
+            )
+        else:
+            self._current_splitter_rpn = []
 
     @property
     def current_splitter_rpn(self):
         """the current part of the splitter using RPN"""
-        if self.current_splitter:
-            current_splitter_rpn = hlpst.splitter2rpn(
-                self.current_splitter, other_states=self.other_states
-            )
-            return current_splitter_rpn
+        if hasattr(self, "_current_splitter_rpn"):
+            return self._current_splitter_rpn
         else:
-            return []
+            return self.splitter_rpn
 
     @property
     def prev_state_splitter(self):
@@ -199,31 +222,41 @@ class State:
         else:
             return None
 
+    @prev_state_splitter.setter
+    def prev_state_splitter(self, prev_state_splitter):
+        self._prev_state_splitter = prev_state_splitter
+        # updating rpn splitters
+        self._prev_state_splitter_rpn_updates()
+
+    def _prev_state_splitter_rpn_updates(self):
+        """updating prev_state_splitter_rpn/_rpn_compact"""
+        if self._prev_state_splitter:
+            self._prev_state_splitter_rpn = hlpst.splitter2rpn(
+                self.prev_state_splitter, other_states=self.other_states
+            )
+        else:
+            self._prev_state_splitter_rpn = []
+
+        if self.other_states:
+            self._prev_state_splitter_rpn_compact = hlpst.splitter2rpn(
+                self.prev_state_splitter,
+                other_states=self.other_states,
+                state_fields=False,
+            )
+        else:
+            self._prev_state_splitter_rpn_compact = self._prev_state_splitter_rpn
+
     @property
     def prev_state_splitter_rpn(self):
         """the prev-state art of the splitter using RPN"""
-        if self.prev_state_splitter:
-            prev_state_splitter_rpn = hlpst.splitter2rpn(
-                self.prev_state_splitter, other_states=self.other_states
-            )
-            return prev_state_splitter_rpn
-        else:
-            return []
+        return self._prev_state_splitter_rpn
 
     @property
     def prev_state_splitter_rpn_compact(self):
         r"""the prev-state part of the splitter using RPN in a compact form,
         (without unwrapping the states from previous nodes), e.g. [_NA, _NB, \*]
         """
-        if self.prev_state_splitter:
-            prev_state_splitter_rpn_compact = hlpst.splitter2rpn(
-                self.prev_state_splitter,
-                other_states=self.other_states,
-                state_fields=False,
-            )
-            return prev_state_splitter_rpn_compact
-        else:
-            return []
+        return self._prev_state_splitter_rpn_compact
 
     @property
     def combiner(self):
@@ -299,7 +332,11 @@ class State:
                         raise hlpst.PydraStateError(
                             f"connection from node {key} is empty"
                         )
-            self._other_states = other_states
+            # ensuring that the connected fields are set as a list
+            self._other_states = {
+                nm: (st, ensure_list(flds)) for nm, (st, flds) in other_states.items()
+            }
+            self._inner_inputs_updates()
         else:
             self._other_states = {}
 
@@ -310,14 +347,22 @@ class State:
         ``{input name for current state: the previous state}``
         """
         if self.other_states:
-            _inner_inputs = {}
-            for name, (st, inp_l) in self.other_states.items():
-                if f"_{st.name}" in self.splitter_rpn_compact:
-                    for inp in inp_l:
-                        _inner_inputs[f"{self.name}.{inp}"] = st
-            return _inner_inputs
+            if self._inner_inputs is None:
+                self._inner_inputs_updates()
+            return self._inner_inputs
         else:
             return {}
+
+    def _inner_inputs_updates(self):
+        """updating inner_inputs when other_states changes"""
+        if hasattr(self, "_splitter_rpn_compact"):
+            self._inner_inputs = {}
+            for name, (st, inp_l) in self._other_states.items():
+                if f"_{st.name}" in self.splitter_rpn_compact:
+                    for inp in inp_l:
+                        self._inner_inputs[f"{self.name}.{inp}"] = st
+        else:
+            self._inner_inputs = None
 
     def update_connections(self, new_other_states=None, new_combiner=None):
         """updating connections, can use a new other_states and combiner
@@ -331,10 +376,6 @@ class State:
         """
         if new_other_states:
             self.other_states = new_other_states
-        # ensuring that the connected fields are set as a list
-        self.other_states = {
-            nm: (st, ensure_list(flds)) for nm, (st, flds) in self.other_states.items()
-        }
         self._connect_splitters()
         if new_combiner:
             self.combiner = new_combiner
@@ -353,34 +394,40 @@ class State:
             if isinstance(self.splitter, str):
                 # so this is the prev-state part
                 if self.splitter.startswith("_"):
-                    self._prev_state_splitter = self._complete_prev_state(
+                    self.prev_state_splitter = self._complete_prev_state(
                         prev_state=self.splitter
                     )
+                    self.current_splitter = None
                 else:  # this is the current part
-                    self._prev_state_splitter = self._complete_prev_state()
+                    self.prev_state_splitter = self._complete_prev_state()
+                    self.current_splitter = self.splitter
             elif isinstance(self.splitter, (tuple, list)):
                 lr_flag = self._prevst_current_check(self.splitter)
                 if lr_flag == "prev-state":
-                    self._prev_state_splitter = self._complete_prev_state(
+                    self.prev_state_splitter = self._complete_prev_state(
                         prev_state=self.splitter
                     )
+                    self.current_splitter = None
                 elif lr_flag == "current":
-                    self._prev_state_splitter = self._complete_prev_state()
+                    self.prev_state_splitter = self._complete_prev_state()
+                    self.current_splitter = self.splitter
                 elif lr_flag == "[prev-state, current]":
-                    self._prev_state_splitter = self._complete_prev_state(
+                    self.prev_state_splitter = self._complete_prev_state(
                         prev_state=self.splitter[0]
                     )
+                    self.current_splitter = self.splitter[1]
         else:
             # if there is no splitter, I create the prev-state part
-            self._prev_state_splitter = self._complete_prev_state()
+            self.prev_state_splitter = self._complete_prev_state()
+            self.current_splitter = None
 
         if self.current_splitter:
             self.splitter = [
-                deepcopy(self._prev_state_splitter),
+                deepcopy(self.prev_state_splitter),
                 deepcopy(self.current_splitter),
             ]
         else:
-            self.splitter = deepcopy(self._prev_state_splitter)
+            self.splitter = deepcopy(self.prev_state_splitter)
 
     def _complete_prev_state(self, prev_state=None):
         """Add all splitters from the previous nodes (completing the prev-state part).
@@ -670,7 +717,7 @@ class State:
         for spl in self.splitter_rpn_compact:
             if not (
                 spl in [".", "*"]
-                or spl.startswith("_")
+                or (spl.startswith("_") and spl[1:] in self.other_states)
                 or spl.split(".")[0] == self.name
             ):
                 raise hlpst.PydraStateError(

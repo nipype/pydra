@@ -526,7 +526,6 @@ def test_state_connect_1b_exception():
 @pytest.mark.parametrize("splitter2, other_states2", [("_NA", {}), ("_N", {"NA": ()})])
 def test_state_connect_1c_exception(splitter2, other_states2):
     """can't ask for splitter from node that is not connected"""
-    st1 = State(name="NA", splitter="a")
     with pytest.raises(PydraStateError) as excinfo:
         st2 = State(name="NB", splitter=splitter2, other_states=other_states2)
         st2.splitter_validation()
