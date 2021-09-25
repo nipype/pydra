@@ -33,7 +33,7 @@ from ... import mark
 
 
 def test_wf_no_input_spec():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Empty input_spec"):
         Workflow(name="workflow")
 
 
