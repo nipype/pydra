@@ -1453,10 +1453,35 @@ def test_wf_3nd_ndst_6(plugin, tmpdir):
     assert wf.output_dir.exists()
 
 
+def test_wf_3nd_ndst_7(plugin, tmpdir):
+    """workflow with three tasks, third one connected to two previous tasks,
+    the third one uses scalar splitter from the previous ones
+    """
+    wf = Workflow(name="wf_ndst_9", input_spec=["x"])
+    wf.add(add2(name="add2x", x=wf.lzin.x).split("x"))
+    wf.add(add2(name="add2y", x=wf.lzin.x).split("x"))
+    wf.add(
+        multiply(name="mult", x=wf.add2x.lzout.out, y=wf.add2y.lzout.out).split(
+            ("_add2x", "_add2y")
+        )
+    )
+    wf.inputs.x = [1, 2]
+    wf.set_output([("out", wf.mult.lzout.out)])
+    wf.cache_dir = tmpdir
+
+    with Submitter(plugin=plugin) as sub:
+        sub(wf)
+
+    results = wf.result()
+    assert results.output.out == [9, 16]
+    # checking the output directory
+    assert wf.output_dir.exists()
+
+
 # workflows with structures A -> B -> C with multiple connections
 
 
-def test_wf_3nd_7(tmpdir):
+def test_wf_3nd_8(tmpdir):
     """workflow with three tasks A->B->C vs two tasks A->C with multiple connections"""
     wf = Workflow(name="wf", input_spec=["zip"], cache_dir=tmpdir)
     wf.inputs.zip = [["test1", "test3", "test5"], ["test2", "test4", "test6"]]
