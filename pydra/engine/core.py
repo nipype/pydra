@@ -816,6 +816,9 @@ class Workflow(TaskBase):
                     ],
                     bases=(BaseSpec,),
                 )
+        else:
+            raise ValueError("Empty input_spec provided to Workflow")
+
         self.output_spec = output_spec
 
         if name in dir(self):
