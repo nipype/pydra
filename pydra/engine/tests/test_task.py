@@ -1399,3 +1399,19 @@ def test_rerun_errored(tmpdir, capfd):
     # and another 2 messagers after calling the second time
     assert tasks_run == 7
     assert errors_found == 4
+
+
+@attr.s(auto_attribs=True)
+class A:
+    x: int
+
+
+def test_object_input():
+    """Test function tasks with object inputs"""
+
+    @mark.task
+    def testfunc(a: A):
+        return a.x
+
+    result = testfunc(a=A(x=7))()
+    assert result.output.out == 7
