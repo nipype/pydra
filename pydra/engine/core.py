@@ -203,7 +203,7 @@ class TaskBase:
         state["input_spec"] = cp.dumps(state["input_spec"])
         state["output_spec"] = cp.dumps(state["output_spec"])
         inputs = {}
-        for k, v in attr.asdict(state["inputs"]).items():
+        for k, v in attr.asdict(state["inputs"], recurse=False).items():
             if k.startswith("_"):
                 k = k[1:]
             inputs[k] = v
