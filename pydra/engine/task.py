@@ -176,7 +176,7 @@ class FunctionTask(TaskBase):
         self.output_spec = output_spec
 
     def _run_task(self):
-        inputs = attr.asdict(self.inputs)
+        inputs = attr.asdict(self.inputs, recurse=False)
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
