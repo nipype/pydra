@@ -791,7 +791,9 @@ def map_splits(split_iter, inputs, cont_dim=None):
 def inputs_types_to_dict(name, inputs):
     """Convert type.Inputs to dictionary."""
     # dj: any better option?
-    input_names = [field for field in attr.asdict(inputs) if field != "_func"]
+    input_names = [
+        field for field in attr.asdict(inputs, recurse=False) if field != "_func"
+    ]
     inputs_dict = {}
     for field in input_names:
         inputs_dict[f"{name}.{field}"] = getattr(inputs, field)

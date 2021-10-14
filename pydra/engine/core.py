@@ -452,7 +452,7 @@ class TaskBase:
                 shutil.rmtree(odir)
             cwd = os.getcwd()
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-            orig_inputs = attr.asdict(self.inputs)
+            orig_inputs = attr.asdict(self.inputs, recurse=False)
             map_copyfiles = copyfile_input(self.inputs, self.output_dir)
             modified_inputs = template_update(
                 self.inputs, self.output_dir, map_copyfiles=map_copyfiles
