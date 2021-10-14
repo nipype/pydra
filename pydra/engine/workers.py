@@ -116,37 +116,29 @@ class DistributedWorker(Worker):
         return pending.union(unqueued)
 
 
-class SerialPool:
-    """A simple class to imitate a pool executor of concurrent futures."""
-
-    def submit(self, interface, **kwargs):
-        """Send new task."""
-        self.res = interface(**kwargs)
-
-    def result(self):
-        """Get the result of a task."""
-        return self.res
-
-    def done(self):
-        """Return whether the task is finished."""
-        return True
-
-
 class SerialWorker(Worker):
     """A worker to execute linearly."""
 
     def __init__(self):
         """Initialize worker."""
         logger.debug("Initialize SerialWorker")
-        self.pool = SerialPool()
 
     def run_el(self, interface, rerun=False, **kwargs):
         """Run a task."""
-        self.pool.submit(interface=interface, rerun=rerun, **kwargs)
-        return self.pool
+        return self.exec_serial(interface, rerun=rerun)
 
     def close(self):
         """Return whether the task is finished."""
+
+    async def exec_serial(self, runnable, rerun=False):
+        return runnable()
+
+    async def fetch_finished(self, futures):
+        await asyncio.gather(*futures)
+        return set([])
+
+    # async def fetch_finished(self, futures):
+    #     return await asyncio.wait(futures)
 
 
 class ConcurrentFuturesWorker(Worker):
