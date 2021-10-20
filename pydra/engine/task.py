@@ -176,7 +176,7 @@ class FunctionTask(TaskBase):
         self.output_spec = output_spec
 
     def _run_task(self):
-        inputs = attr.asdict(self.inputs)
+        inputs = attr.asdict(self.inputs, recurse=False)
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
@@ -310,7 +310,7 @@ class ShellCommandTask(TaskBase):
         """Get command line arguments, returns a list if task has a state"""
         if is_lazy(self.inputs):
             raise Exception("can't return cmdline, self.inputs has LazyFields")
-        orig_inputs = attr.asdict(self.inputs)
+        orig_inputs = attr.asdict(self.inputs, recurse=False)
         if self.state:
             command_args_list = []
             self.state.prepare_states(self.inputs)
@@ -444,7 +444,7 @@ class ShellCommandTask(TaskBase):
             return None
 
         # getting stated inputs
-        inputs_dict_st = attr.asdict(self.inputs)
+        inputs_dict_st = attr.asdict(self.inputs, recurse=False)
         if state_ind is not None:
             for k, v in state_ind.items():
                 k = k.split(".")[1]

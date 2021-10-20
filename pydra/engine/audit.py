@@ -86,7 +86,7 @@ class Audit:
                 )
                 # audit resources/runtime information
                 self.eid = f"uid:{gen_uuid()}"
-                entity = attr.asdict(result.runtime)
+                entity = attr.asdict(result.runtime, recurse=False)
                 entity.update(
                     **{
                         "@id": self.eid,

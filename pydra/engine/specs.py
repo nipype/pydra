@@ -248,7 +248,7 @@ class Result:
         if state["output"] is not None:
             fields = tuple((el.name, el.type) for el in attr_fields(state["output"]))
             state["output_spec"] = (state["output"].__class__.__name__, fields)
-            state["output"] = attr.asdict(state["output"])
+            state["output"] = attr.asdict(state["output"], recurse=False)
         return state
 
     def __setstate__(self, state):
@@ -270,7 +270,7 @@ class Result:
             Name of field in LazyField object
         """
         if field_name == "all_":
-            return attr.asdict(self.output)
+            return attr.asdict(self.output, recurse=False)
         else:
             return getattr(self.output, field_name)
 

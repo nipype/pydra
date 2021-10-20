@@ -869,7 +869,7 @@ def argstr_formatting(argstr, inputs, value_updates=None):
     """formatting argstr that have form {field_name},
     using values from inputs and updating with value_update if provided
     """
-    inputs_dict = attr.asdict(inputs)
+    inputs_dict = attr.asdict(inputs, recurse=False)
     # if there is a value that has to be updated (e.g. single value from a list)
     if value_updates:
         inputs_dict.update(value_updates)

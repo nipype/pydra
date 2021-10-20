@@ -203,7 +203,7 @@ class TaskBase:
         state["input_spec"] = cp.dumps(state["input_spec"])
         state["output_spec"] = cp.dumps(state["output_spec"])
         inputs = {}
-        for k, v in attr.asdict(state["inputs"]).items():
+        for k, v in attr.asdict(state["inputs"], recurse=False).items():
             if k.startswith("_"):
                 k = k[1:]
             inputs[k] = v
@@ -452,7 +452,7 @@ class TaskBase:
                 shutil.rmtree(odir)
             cwd = os.getcwd()
             odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-            orig_inputs = attr.asdict(self.inputs)
+            orig_inputs = attr.asdict(self.inputs, recurse=False)
             map_copyfiles = copyfile_input(self.inputs, self.output_dir)
             modified_inputs = template_update(
                 self.inputs, self.output_dir, map_copyfiles=map_copyfiles
