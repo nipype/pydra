@@ -12,7 +12,6 @@ from ... import mark
 from ..specs import File
 from ... import set_input_validator
 
-
 need_docker = pytest.mark.skipif(
     shutil.which("docker") is None or sp.call(["docker", "info"]),
     reason="no docker within the container",
@@ -51,6 +50,16 @@ def op_4var(a, b, c, d):
 
 @mark.task
 def fun_addtwo(a):
+    import time
+
+    time.sleep(1)
+    if a == 3:
+        time.sleep(2)
+    return a + 2
+
+
+@mark.task
+def fun_addtwo_with_threadcount(a, sgeThreads=1):
     import time
 
     time.sleep(1)
@@ -238,6 +247,47 @@ def gen_basic_wf(name="basic-wf"):
     wf.add(fun_addtwo(name="task1", a=wf.lzin.x, b=0))
     wf.add(fun_addvar(name="task2", a=wf.task1.lzout.out, b=2))
     wf.set_output([("out", wf.task2.lzout.out)])
+    return wf
+
+
+def gen_basic_wf_with_threadcount(name="basic-wf-with-threadcount"):
+    """
+    Generates `Workflow` of two tasks
+
+    Task Input
+    ----------
+    x : int (5)
+
+    Task Output
+    -----------
+    out : int (9)
+    """
+    wf = Workflow(name=name, input_spec=["x"])
+    wf.inputs.x = 5
+    wf.add(fun_addtwo_with_threadcount(name="task1", a=wf.lzin.x, sgeThreads=4))
+    wf.add(fun_addvar(name="task2", a=wf.task1.lzout.out, b=2))
+    wf.set_output([("out", wf.task2.lzout.out)])
+    return wf
+
+
+def gen_basic_wf_with_threadcount_concurrent(name="basic-wf-with-threadcount"):
+    """
+    Generates `Workflow` of two tasks
+
+    Task Input
+    ----------
+    x : int (5)
+
+    Task Output
+    -----------
+    out : int (9)
+    """
+    wf = Workflow(name=name, input_spec=["x"])
+    wf.inputs.x = 5
+    wf.add(fun_addtwo_with_threadcount(name="task1_1", a=wf.lzin.x, sgeThreads=4))
+    wf.add(fun_addtwo_with_threadcount(name="task1_2", a=wf.lzin.x, sgeThreads=2))
+    wf.add(fun_addvar(name="task2", a=wf.task1_1.lzout.out, b=2))
+    wf.set_output([("out1", wf.task2.lzout.out), ("out2", wf.task1_2.lzout.out)])
     return wf
 
 
