@@ -203,14 +203,14 @@ class BaseSpec:
                     file = Path(el)
                     if not file.exists() and field.type in [File, Directory]:
                         raise FileNotFoundError(
-                            f"the file from the {field.name} input does not exist"
+                            f"the file {file} from the {field.name} input does not exist"
                         )
         else:
             file = Path(getattr(self, field.name))
             # error should be raised only if the type is strictly File or Directory
             if not file.exists() and field.type in [File, Directory]:
                 raise FileNotFoundError(
-                    f"the file from the {field.name} input does not exist"
+                    f"the file {file} from the {field.name} input does not exist"
                 )
 
     def check_metadata(self):
@@ -711,7 +711,7 @@ class ContainerSpec(ShellSpec):
         # error should be raised only if the type is strictly File or Directory
         elif field.type in [File, Directory]:
             raise FileNotFoundError(
-                f"the file from {field.name} input does not exist, "
+                f"the file {file} from {field.name} input does not exist, "
                 f"if the file comes from the container, "
                 f"use field.metadata['container_path']=True"
             )
