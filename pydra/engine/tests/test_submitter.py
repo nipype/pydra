@@ -175,6 +175,14 @@ def test_wf_with_state(plugin_dask_opt, tmpdir):
     assert res[2].output.out == 5
 
 
+def test_serial_wf():
+    # using serial plugin
+    wf = gen_basic_wf()
+    res = wf(plugin="serial")
+    assert res.output.out == 9
+    del wf, res
+
+
 @pytest.mark.skipif(not slurm_available, reason="slurm not installed")
 def test_slurm_wf(tmpdir):
     wf = gen_basic_wf()
