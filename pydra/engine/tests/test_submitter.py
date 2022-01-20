@@ -180,7 +180,6 @@ def test_serial_wf():
     wf = gen_basic_wf()
     res = wf(plugin="serial")
     assert res.output.out == 9
-    del wf, res
 
 
 @pytest.mark.skipif(not slurm_available, reason="slurm not installed")
