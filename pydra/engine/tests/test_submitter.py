@@ -176,7 +176,7 @@ def test_wf_with_state(plugin_dask_opt, tmpdir):
 
 
 def test_serial_wf():
-    # using serial plugin
+    # Use serial plugin to execute workflow instead of CF
     wf = gen_basic_wf()
     res = wf(plugin="serial")
     assert res.output.out == 9
