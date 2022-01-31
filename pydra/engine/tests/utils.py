@@ -104,7 +104,7 @@ def fun_addvar4(a, b, c, d):
 
 @mark.task
 def moment(lst, n):
-    return sum([i ** n for i in lst]) / len(lst)
+    return sum([i**n for i in lst]) / len(lst)
 
 
 @mark.task
@@ -142,7 +142,7 @@ def add2_sub2_res(res):
 
 @mark.task
 def power(a, b):
-    return a ** b
+    return a**b
 
 
 @mark.task
