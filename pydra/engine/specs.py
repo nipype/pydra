@@ -567,7 +567,7 @@ class ShellOutSpec:
                     if "mandatory" in fld.metadata:
                         if fld.metadata["mandatory"]:
                             raise Exception(
-                                f"mandatory output for variable {fld.name} does not exit"
+                                f"mandatory output for variable {fld.name} does not exist"
                             )
                     return attr.NOTHING
                 return val
