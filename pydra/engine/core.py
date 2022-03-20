@@ -84,6 +84,7 @@ class TaskBase:
         cache_dir=None,
         cache_locations=None,
         inputs: ty.Optional[ty.Union[ty.Text, File, ty.Dict]] = None,
+        cont_dim=None,
         messenger_args=None,
         messengers=None,
         rerun=False,
@@ -117,6 +118,9 @@ class TaskBase:
             TODO
         inputs : :obj:`typing.Text`, or :class:`File`, or :obj:`dict`, or `None`.
             Set particular inputs to this node.
+        cont_dim : :obj:`dict`, or `None`
+            Container dimensions for input fields,
+            if any of the container should be treated as a container
         messenger_args :
             TODO
         messengers :
@@ -169,7 +173,10 @@ class TaskBase:
         # dictionary to save the connections with lazy fields
         self.inp_lf = {}
         self.state = None
-        self.cont_dim = {}
+        # container dimensions provided by the user
+        self.cont_dim = cont_dim
+        # container dimension for inner input if needed (e.g. for inner splitter)
+        self._inner_cont_dim = {}
         self._output = {}
         self._result = {}
         # flag that says if node finished all jobs
@@ -404,6 +411,21 @@ class TaskBase:
             return [self._cache_dir / checksum for checksum in self.checksum_states()]
         return self._cache_dir / self.checksum
 
+    @property
+    def cont_dim(self):
+        # adding inner_cont_dim to the general container_dimension provided by the users
+        cont_dim_all = deepcopy(self._cont_dim)
+        for k, v in self._inner_cont_dim.items():
+            cont_dim_all[k] = cont_dim_all.get(k, 1) + v
+        return cont_dim_all
+
+    @cont_dim.setter
+    def cont_dim(self, cont_dim):
+        if cont_dim is None:
+            self._cont_dim = {}
+        else:
+            self._cont_dim = cont_dim
+
     def __call__(
         self, submitter=None, plugin=None, plugin_kwargs=None, rerun=False, **kwargs
     ):
@@ -522,7 +544,7 @@ class TaskBase:
             )
         if cont_dim:
             for key, vel in cont_dim.items():
-                self.cont_dim[f"{self.name}.{key}"] = vel
+                self._cont_dim[f"{self.name}.{key}"] = vel
         if kwargs:
             self.inputs = attr.evolve(self.inputs, **kwargs)
         if not self.state or splitter != self.state.splitter:
@@ -764,6 +786,7 @@ class Workflow(TaskBase):
         cache_dir=None,
         cache_locations=None,
         input_spec: ty.Optional[ty.Union[ty.List[ty.Text], SpecInfo, BaseSpec]] = None,
+        cont_dim=None,
         messenger_args=None,
         messengers=None,
         output_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
@@ -787,6 +810,9 @@ class Workflow(TaskBase):
             TODO
         inputs : :obj:`typing.Text`, or :class:`File`, or :obj:`dict`, or `None`.
             Set particular inputs to this node.
+        cont_dim : :obj:`dict`, or `None`
+            Container dimensions for input fields,
+            if any of the container should be treated as a container
         messenger_args :
             TODO
         messengers :
@@ -830,6 +856,7 @@ class Workflow(TaskBase):
         super().__init__(
             name=name,
             inputs=kwargs,
+            cont_dim=cont_dim,
             cache_dir=cache_dir,
             cache_locations=cache_locations,
             audit_flags=audit_flags,
@@ -941,6 +968,7 @@ class Workflow(TaskBase):
             If True, `add_edges_description` is run for self.graph to add
             a detailed descriptions of the connections (input/output fields names)
         """
+        # TODO: create connection is run twice
         other_states = {}
         for field in attr_fields(task.inputs):
             val = getattr(task.inputs, field.name)
@@ -962,6 +990,12 @@ class Workflow(TaskBase):
                         getattr(self, val.name).state
                         and getattr(self, val.name).state.splitter_rpn_final
                     ):
+                        # variables that are part of inner splitters should be treated as a containers
+                        if (
+                            task.state
+                            and f"{task.name}.{field.name}" in task.state.splitter
+                        ):
+                            task._inner_cont_dim[f"{task.name}.{field.name}"] = 1
                         # adding task_name: (task.state, [a field from the connection]
                         if val.name not in other_states:
                             other_states[val.name] = (
@@ -1136,9 +1170,16 @@ class Workflow(TaskBase):
                         f"Tasks {getattr(self, val.name)._errored} raised an error"
                     )
                 else:
+                    if isinstance(getattr(self, val.name).output_dir, list):
+                        err_file = [
+                            el / "_error.pklz"
+                            for el in getattr(self, val.name).output_dir
+                        ]
+                    else:
+                        err_file = getattr(self, val.name).output_dir / "_error.pklz"
                     raise ValueError(
                         f"Task {val.name} raised an error, full crash report is here: "
-                        f"{getattr(self, val.name).output_dir / '_error.pklz'}"
+                        f"{err_file}"
                     )
         return attr.evolve(output, **output_wf)
 

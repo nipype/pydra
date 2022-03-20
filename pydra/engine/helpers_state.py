@@ -2,7 +2,6 @@
 
 import attr
 import itertools
-from functools import reduce
 from copy import deepcopy
 import logging
 from .helpers import ensure_list
@@ -355,9 +354,6 @@ def _add_name(mlist, name):
     return mlist
 
 
-op = {".": zip, "*": itertools.product}
-
-
 def flatten(vals, cur_depth=0, max_depth=None):
     """Flatten a list of values."""
     if max_depth is None:
@@ -400,175 +396,6 @@ def input_shape(inp, cont_dim=1):
     if last_shape is not None:
         shape.extend(last_shape)
     return tuple(shape)
-
-
-def splits(splitter_rpn, inputs, inner_inputs=None, cont_dim=None):
-    """
-    Splits input variable as specified by splitter
-
-    Parameters
-    ----------
-    splitter_rpn : list
-        splitter in RPN notation
-    inputs: dict
-        input variables
-    inner_inputs: dict, optional
-        inner input specification
-    cont_dim: dict, optional
-        container dimension for input variable, specifies how nested is the input,
-        if not specified 1 will be used for all inputs (so will not be flatten)
-
-
-    Returns
-    -------
-    splitter : list
-        each element contains indices for inputs
-    keys: list
-        names of input variables
-
-    """
-
-    stack = []
-    keys = []
-    if cont_dim is None:
-        cont_dim = {}
-    # analysing states from connected tasks if inner_inputs
-    if inner_inputs:
-        previous_states_ind = {
-            f"_{v.name}": (v.ind_l_final, v.keys_final) for v in inner_inputs.values()
-        }
-        inner_inputs = {k: v for k, v in inner_inputs.items() if k in splitter_rpn}
-    else:
-        previous_states_ind = {}
-        inner_inputs = {}
-
-    # when splitter is a single element (no operators)
-    if len(splitter_rpn) == 1:
-        op_single = splitter_rpn[0]
-        return _single_op_splits(
-            op_single, inputs, inner_inputs, previous_states_ind, cont_dim=cont_dim
-        )
-
-    terms = {}
-    trm_val = {}
-    trm_str = {}
-    shape = {}
-    # iterating splitter_rpn
-    for token in splitter_rpn:
-        if token not in [".", "*"]:  # token is one of the input var
-            # adding variable to the stack
-            stack.append(token)
-        else:
-            # removing Right and Left var from the stack
-            terms["R"] = stack.pop()
-            terms["L"] = stack.pop()
-            # checking if terms are strings, shapes, etc.
-            for lr in ["L", "R"]:
-                term = terms[lr]
-                if isinstance(term, str):
-                    if term.startswith("_"):
-                        trm_val[lr] = previous_states_ind[term][0]
-                        shape[lr] = (len(trm_val[lr]),)
-                    else:
-                        if term in cont_dim:
-                            shape[lr] = input_shape(
-                                inputs[term], cont_dim=cont_dim[term]
-                            )
-                        else:
-                            shape[lr] = input_shape(inputs[term])
-                        trm_val[lr] = range(reduce(lambda x, y: x * y, shape[lr]))
-                    trm_str[lr] = True
-                else:
-                    trm_val[lr], shape[lr] = term
-                    trm_str[lr] = False
-
-            # checking shapes and creating newshape
-            if token == ".":
-                if shape["L"] != shape["R"]:
-                    raise ValueError(
-                        "Operands {} and {} do not have same shape.".format(
-                            terms["R"], terms["L"]
-                        )
-                    )
-                newshape = shape["R"]
-            if token == "*":
-                # TODO: pomyslec
-                newshape = tuple(list(shape["L"]) + list(shape["R"]))
-
-            # creating list with keys
-            new_keys = {}
-            for lr in ["R", "L"]:
-                if trm_str[lr]:
-                    if terms[lr].startswith("_"):
-                        new_keys[lr] = previous_states_ind[terms[lr]][1]
-                    else:
-                        new_keys[lr] = [terms[lr]]
-
-            if trm_str["L"] and trm_str["R"]:
-                # TODO: check why i'm using this order
-                keys = keys + new_keys["L"] + new_keys["R"]
-            elif trm_str["L"]:
-                keys = new_keys["L"] + keys
-            elif trm_str["R"]:
-                keys = keys + new_keys["R"]
-
-            newtrm_val = {}
-            for lr in ["R", "L"]:
-                # TODO: rewrite once I have more tests
-                if isinstance(terms[lr], str) and terms[lr] in inner_inputs:
-                    # TODO: have to be changed if differ length
-                    inner_len = [shape[lr][-1]] * reduce(
-                        lambda x, y: x * y, shape[lr][:-1]
-                    )
-                    # this come from the previous node
-                    outer_ind = inner_inputs[terms[lr]].ind_l
-                    trmval_out = itertools.chain.from_iterable(
-                        itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
-                    )
-                    newtrm_val[lr] = op["."](trmval_out, trm_val[lr])
-                    keys = (
-                        keys[: keys.index(terms[lr])]
-                        + inner_inputs[terms[lr]].keys_final
-                        + keys[keys.index(terms[lr]) :]
-                    )
-                else:
-                    newtrm_val[lr] = trm_val[lr]
-
-            pushval = (op[token](newtrm_val["L"], newtrm_val["R"]), newshape)
-            stack.append(pushval)
-
-    val = stack.pop()
-    if isinstance(val, tuple):
-        val = val[0]
-    return val, keys
-
-
-def _single_op_splits(
-    op_single, inputs, inner_inputs, previous_states_ind, cont_dim=None
-):
-    """splits function if splitter is a singleton"""
-    if op_single.startswith("_"):
-        return (previous_states_ind[op_single][0], previous_states_ind[op_single][1])
-    if cont_dim is None:
-        cont_dim = {}
-    shape = input_shape(inputs[op_single], cont_dim=cont_dim.get(op_single, 1))
-    trmval = range(reduce(lambda x, y: x * y, shape))
-    if op_single in inner_inputs:
-        # TODO: have to be changed if differ length
-        inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
-        # this come from the previous node
-        outer_ind = inner_inputs[op_single].ind_l
-        op_out = itertools.chain.from_iterable(
-            itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
-        )
-        res = op["."](op_out, trmval)
-        val = res
-        keys = inner_inputs[op_single].keys_final + [op_single]
-        return val, keys
-    else:
-        val = op["*"](trmval)
-        keys = [op_single]
-        return val, keys
 
 
 def splits_groups(splitter_rpn, combiner=None, inner_inputs=None):

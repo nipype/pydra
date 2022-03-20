@@ -1,8 +1,14 @@
 """Keeping track of mapping and reduce operations over tasks."""
 from copy import deepcopy
+import itertools
+from functools import reduce
+
 from . import helpers_state as hlpst
 from .helpers import ensure_list
 from .specs import BaseSpec
+
+# TODO: move to State
+op = {".": zip, "*": itertools.product}
 
 
 class State:
@@ -118,14 +124,35 @@ class State:
             self._splitter = hlpst.add_name_splitter(splitter, self.name)
         else:
             self._splitter = None
+        # updating splitter_rpn
+        self._splitter_rpn_updates()
+
+    def _splitter_rpn_updates(self):
+        """updating splitter_rpn and splitter_rpn_compact"""
+        try:
+            self._splitter_rpn = hlpst.splitter2rpn(
+                self.splitter, other_states=self.other_states
+            )
+        # other_state might not be ready yet
+        except hlpst.PydraStateError:
+            self._splitter_rpn = None
+
+        if self.other_states or self._splitter_rpn is None:
+            self._splitter_rpn_compact = hlpst.splitter2rpn(
+                self.splitter, other_states=self.other_states, state_fields=False
+            )
+        else:
+            self._splitter_rpn_compact = self._splitter_rpn
 
     @property
     def splitter_rpn(self):
         """splitter in :abbr:`RPN (Reverse Polish Notation)`"""
-        _splitter_rpn = hlpst.splitter2rpn(
-            self.splitter, other_states=self.other_states
-        )
-        return _splitter_rpn
+        # if splitter_rpn was not calculated within splitter.setter
+        if self._splitter_rpn is None:
+            self._splitter_rpn = hlpst.splitter2rpn(
+                self.splitter, other_states=self.other_states
+            )
+        return self._splitter_rpn
 
     @property
     def splitter_rpn_compact(self):
@@ -133,13 +160,7 @@ class State:
         with a compact representation of the prev-state part (i.e. without unwrapping
         the part that comes from the previous states), e.g., [_NA, _NB, \*]
         """
-        if self.other_states:
-            _splitter_rpn_compact = hlpst.splitter2rpn(
-                self.splitter, other_states=self.other_states, state_fields=False
-            )
-            return _splitter_rpn_compact
-        else:
-            return self.splitter_rpn
+        return self._splitter_rpn_compact
 
     @property
     def splitter_final(self):
@@ -163,24 +184,33 @@ class State:
         i.e. the part that is related to the current task's state only
         (doesn't include fields propagated from the previous tasks)
         """
-        lr_flag = self._prevst_current_check(self.splitter)
-        if lr_flag == "prev-state":
-            return None
-        elif lr_flag == "current":
+        if hasattr(self, "_current_splitter"):
+            return self._current_splitter
+        else:
             return self.splitter
-        elif lr_flag == "[prev-state, current]":
-            return self.splitter[1]
+
+    @current_splitter.setter
+    def current_splitter(self, current_splitter):
+        self._current_splitter = current_splitter
+        # updating rpn
+        self._current_splitter_rpn_updates()
+
+    def _current_splitter_rpn_updates(self):
+        """updating current_splitter_rpn"""
+        if self._current_splitter:
+            self._current_splitter_rpn = hlpst.splitter2rpn(
+                self.current_splitter, other_states=self.other_states
+            )
+        else:
+            self._current_splitter_rpn = []
 
     @property
     def current_splitter_rpn(self):
         """the current part of the splitter using RPN"""
-        if self.current_splitter:
-            current_splitter_rpn = hlpst.splitter2rpn(
-                self.current_splitter, other_states=self.other_states
-            )
-            return current_splitter_rpn
+        if hasattr(self, "_current_splitter_rpn"):
+            return self._current_splitter_rpn
         else:
-            return []
+            return self.splitter_rpn
 
     @property
     def prev_state_splitter(self):
@@ -192,31 +222,41 @@ class State:
         else:
             return None
 
+    @prev_state_splitter.setter
+    def prev_state_splitter(self, prev_state_splitter):
+        self._prev_state_splitter = prev_state_splitter
+        # updating rpn splitters
+        self._prev_state_splitter_rpn_updates()
+
+    def _prev_state_splitter_rpn_updates(self):
+        """updating prev_state_splitter_rpn/_rpn_compact"""
+        if self._prev_state_splitter:
+            self._prev_state_splitter_rpn = hlpst.splitter2rpn(
+                self.prev_state_splitter, other_states=self.other_states
+            )
+        else:
+            self._prev_state_splitter_rpn = []
+
+        if self.other_states:
+            self._prev_state_splitter_rpn_compact = hlpst.splitter2rpn(
+                self.prev_state_splitter,
+                other_states=self.other_states,
+                state_fields=False,
+            )
+        else:
+            self._prev_state_splitter_rpn_compact = self._prev_state_splitter_rpn
+
     @property
     def prev_state_splitter_rpn(self):
         """the prev-state art of the splitter using RPN"""
-        if self.prev_state_splitter:
-            prev_state_splitter_rpn = hlpst.splitter2rpn(
-                self.prev_state_splitter, other_states=self.other_states
-            )
-            return prev_state_splitter_rpn
-        else:
-            return []
+        return self._prev_state_splitter_rpn
 
     @property
     def prev_state_splitter_rpn_compact(self):
         r"""the prev-state part of the splitter using RPN in a compact form,
         (without unwrapping the states from previous nodes), e.g. [_NA, _NB, \*]
         """
-        if self.prev_state_splitter:
-            prev_state_splitter_rpn_compact = hlpst.splitter2rpn(
-                self.prev_state_splitter,
-                other_states=self.other_states,
-                state_fields=False,
-            )
-            return prev_state_splitter_rpn_compact
-        else:
-            return []
+        return self._prev_state_splitter_rpn_compact
 
     @property
     def combiner(self):
@@ -292,7 +332,10 @@ class State:
                         raise hlpst.PydraStateError(
                             f"connection from node {key} is empty"
                         )
-            self._other_states = other_states
+            # ensuring that the connected fields are set as a list
+            self._other_states = {
+                nm: (st, ensure_list(flds)) for nm, (st, flds) in other_states.items()
+            }
         else:
             self._other_states = {}
 
@@ -324,10 +367,6 @@ class State:
         """
         if new_other_states:
             self.other_states = new_other_states
-        # ensuring that the connected fields are set as a list
-        self.other_states = {
-            nm: (st, ensure_list(flds)) for nm, (st, flds) in self.other_states.items()
-        }
         self._connect_splitters()
         if new_combiner:
             self.combiner = new_combiner
@@ -346,34 +385,40 @@ class State:
             if isinstance(self.splitter, str):
                 # so this is the prev-state part
                 if self.splitter.startswith("_"):
-                    self._prev_state_splitter = self._complete_prev_state(
+                    self.prev_state_splitter = self._complete_prev_state(
                         prev_state=self.splitter
                     )
+                    self.current_splitter = None
                 else:  # this is the current part
-                    self._prev_state_splitter = self._complete_prev_state()
+                    self.prev_state_splitter = self._complete_prev_state()
+                    self.current_splitter = self.splitter
             elif isinstance(self.splitter, (tuple, list)):
                 lr_flag = self._prevst_current_check(self.splitter)
                 if lr_flag == "prev-state":
-                    self._prev_state_splitter = self._complete_prev_state(
+                    self.prev_state_splitter = self._complete_prev_state(
                         prev_state=self.splitter
                     )
+                    self.current_splitter = None
                 elif lr_flag == "current":
-                    self._prev_state_splitter = self._complete_prev_state()
+                    self.prev_state_splitter = self._complete_prev_state()
+                    self.current_splitter = self.splitter
                 elif lr_flag == "[prev-state, current]":
-                    self._prev_state_splitter = self._complete_prev_state(
+                    self.prev_state_splitter = self._complete_prev_state(
                         prev_state=self.splitter[0]
                     )
+                    self.current_splitter = self.splitter[1]
         else:
             # if there is no splitter, I create the prev-state part
-            self._prev_state_splitter = self._complete_prev_state()
+            self.prev_state_splitter = self._complete_prev_state()
+            self.current_splitter = None
 
         if self.current_splitter:
             self.splitter = [
-                deepcopy(self._prev_state_splitter),
+                deepcopy(self.prev_state_splitter),
                 deepcopy(self.current_splitter),
             ]
         else:
-            self.splitter = deepcopy(self._prev_state_splitter)
+            self.splitter = deepcopy(self.prev_state_splitter)
 
     def _complete_prev_state(self, prev_state=None):
         """Add all splitters from the previous nodes (completing the prev-state part).
@@ -392,15 +437,16 @@ class State:
                     prev_state = [f"_{name}", prev_state]
         else:
             prev_state = [f"_{name}" for name in self.other_states]
-            if len(prev_state) == 1:
-                prev_state = prev_state[0]
-
+        # TODO: what if prev state is a tuple
         if isinstance(prev_state, list):
-            prev_state = self._removed_repeated(prev_state)
+            prev_state = self._remove_repeated(prev_state)
+            prev_state = self._add_state_history(ensure_list(prev_state))
+        if len(prev_state) == 1:
+            prev_state = prev_state[0]
         return prev_state
 
-    def _removed_repeated(self, previous_splitters):
-        """removing states from previous tasks that are repeated either directly or indirectly"""
+    def _remove_repeated(self, previous_splitters):
+        """removing states from previous tasks that are repeated"""
         for el in previous_splitters:
             if el[1:] not in self.other_states:
                 raise hlpst.PydraStateError(
@@ -422,43 +468,56 @@ class State:
                 for ii in range(cnt):
                     previous_splitters.remove(el)
             previous_splitters.reverse()
+        return previous_splitters
 
-        el_state = []
-        el_connect = []
-        el_state_connect = []
+    def _add_state_history(self, previous_splitters):
+        """analysing history of each state from previous states
+        expanding previous_splitters list and oter_states
+        """
+        othst_w_currst = []  # el from other_states that have only current states
+        othst_w_prevst = (
+            []
+        )  # el from other_states that have only prev st (nm, st.prev_st_spl)
+        othst_w_currst_prevst = (
+            []
+        )  # el from other_states that have both (nm, st.prev_st_spl)
         for el in previous_splitters:
             nm = el[1:]
             st = self.other_states[nm][0]
             if not st.other_states:
                 # states that has no other connections
-                el_state.append(el)
+                othst_w_currst.append(el)
             else:  # element has previous_connection
                 if st.current_splitter:  # final?
                     # states that has previous connections and it's own splitter
-                    el_state_connect.append((el, st.prev_state_splitter))
+                    othst_w_currst_prevst.append((el, st.prev_state_splitter))
                 else:
                     # states with previous connections but no additional splitter
-                    el_connect.append((el, st.prev_state_splitter))
+                    othst_w_prevst.append((el, st.prev_state_splitter))
 
-        for el in el_connect:
-            nm = el[0][1:]
-            repeated_prev = set(ensure_list(el[1])).intersection(el_state)
+        for el in othst_w_prevst:
+            el_nm, el_prevst = el[0][1:], el[1]
+            # checking if the element's previous state is not already included
+            repeated_prev = set(ensure_list(el_prevst)).intersection(othst_w_currst)
             if repeated_prev:
                 for r_el in repeated_prev:
                     r_nm = r_el[1:]
-                    self.other_states[r_nm] = (
+                    # updating self.other_states
+                    self._other_states[r_nm] = (
                         self.other_states[r_nm][0],
-                        self.other_states[r_nm][1] + self.other_states[nm][1],
+                        self.other_states[r_nm][1] + self.other_states[el_nm][1],
                     )
-                new_st = set(ensure_list(el[1])) - set(el_state)
+                new_st = set(ensure_list(el_prevst)) - set(othst_w_currst)
                 if not new_st:
+                    # removing element from the previous_splitter if no new_st
                     previous_splitters.remove(el[0])
                 else:
-                    for n_el in new_st:
-                        n_nm = n_el[1:]
-                        self.other_states[n_nm] = (
-                            self.other_states[nm][0].other_states[n_nm][0],
-                            self.other_states[nm][1],
+                    # adding elements to self.other_states
+                    for new_el in new_st:
+                        new_nm = new_el[1:]
+                        self._other_states[new_nm] = (
+                            self.other_states[el_nm][0].other_states[new_nm][0],
+                            self.other_states[el_nm][1],
                         )
                     # removing el of the splitter and adding new_st instead
                     ind = previous_splitters.index(el[0])
@@ -471,16 +530,13 @@ class State:
                             + previous_splitters[ind + 1 :]
                         )
         # TODO: this part is not tested, needs more work
-        for el in el_state_connect:
-            repeated_prev = set(ensure_list(el[1])).intersection(el_state)
+        for el in othst_w_currst_prevst:
+            repeated_prev = set(ensure_list(el[1])).intersection(othst_w_currst)
+            # removing el if it's repeated: in el.other_states and othst_w_currst
             if repeated_prev:
                 for r_el in repeated_prev:
                     previous_splitters.remove(r_el)
-
-        if len(previous_splitters) == 1:
-            return previous_splitters[0]
-        else:
-            return previous_splitters
+        return previous_splitters
 
     def _prevst_current_check(self, splitter_part, check_nested=True):
         """
@@ -542,7 +598,7 @@ class State:
             state_fields=state_fields,
         )
         # merging groups from previous nodes if any input come from previous states
-        if self.inner_inputs:
+        if self.other_states:
             self._merge_previous_groups()
         keys_f, group_for_inputs_f, groups_stack_f, combiner_all = hlpst.splits_groups(
             current_splitter_rpn,
@@ -663,7 +719,7 @@ class State:
         for spl in self.splitter_rpn_compact:
             if not (
                 spl in [".", "*"]
-                or spl.startswith("_")
+                or (spl.startswith("_") and spl[1:] in self.other_states)
                 or spl.split(".")[0] == self.name
             ):
                 raise hlpst.PydraStateError(
@@ -704,10 +760,10 @@ class State:
         self.combiner_validation()
         self.set_input_groups()
         # container dimension for each input, specifies how nested the input is
-        if cont_dim is None:
-            self.cont_dim = {}
-        else:
+        if cont_dim:
             self.cont_dim = cont_dim
+        else:
+            self.cont_dim = {}
         if isinstance(inputs, BaseSpec):
             self.inputs = hlpst.inputs_types_to_dict(self.name, inputs)
         else:
@@ -718,6 +774,8 @@ class State:
                 if not hasattr(st, "states_ind"):
                     st.prepare_states(self.inputs, cont_dim=cont_dim)
                 self.inputs.update(st.inputs)
+                self.cont_dim.update(st.cont_dim)
+
         self.prepare_states_ind()
         self.prepare_states_val()
 
@@ -747,11 +805,8 @@ class State:
         partial_rpn = hlpst.remove_inp_from_splitter_rpn(
             deepcopy(self.splitter_rpn_compact), elements_to_remove
         )
-        values_out_pr, keys_out_pr = hlpst.splits(
+        values_out_pr, keys_out_pr = self.splits(
             partial_rpn,
-            self.inputs,
-            inner_inputs=self.inner_inputs,
-            cont_dim=self.cont_dim,
         )
         values_pr = list(values_out_pr)
 
@@ -790,11 +845,8 @@ class State:
             self.current_combiner_all + self.prev_state_combiner_all,
         )
         if combined_rpn:
-            val_r, key_r = hlpst.splits(
+            val_r, key_r = self.splits(
                 combined_rpn,
-                self.inputs,
-                inner_inputs=self.inner_inputs,
-                cont_dim=self.cont_dim,
             )
             values = list(val_r)
         else:
@@ -845,11 +897,8 @@ class State:
         else:
             # elements from the current node (the current part of the splitter)
             if self.current_splitter_rpn:
-                values_inp, keys_inp = hlpst.splits(
+                values_inp, keys_inp = self.splits(
                     self.current_splitter_rpn,
-                    self.inputs,
-                    inner_inputs=self.inner_inputs,
-                    cont_dim=self.cont_dim,
                 )
                 inputs_ind = values_inp
             else:
@@ -876,21 +925,21 @@ class State:
                     if inputs_ind_prev:
                         # in case the prev-state part has scalar parts (not very well tested)
                         if self.prev_state_splitter_rpn_compact[ii + 1] == ".":
-                            inputs_ind_prev = hlpst.op["."](inputs_ind_prev, st_ind)
+                            inputs_ind_prev = op["."](inputs_ind_prev, st_ind)
                         else:
-                            inputs_ind_prev = hlpst.op["*"](inputs_ind_prev, st_ind)
+                            inputs_ind_prev = op["*"](inputs_ind_prev, st_ind)
                     else:
                         # TODO: more tests needed
-                        inputs_ind_prev = hlpst.op["."](*[st_ind] * len(inp_l))
+                        inputs_ind_prev = op["."](*[st_ind] * len(inp_l))
                     keys_inp_prev += inp_l
             keys_inp = keys_inp_prev + keys_inp
 
             if inputs_ind and inputs_ind_prev:
-                inputs_ind = hlpst.op["*"](inputs_ind_prev, inputs_ind)
+                inputs_ind = op["*"](inputs_ind_prev, inputs_ind)
             elif inputs_ind:
-                inputs_ind = hlpst.op["*"](inputs_ind)
+                inputs_ind = op["*"](inputs_ind)
             elif inputs_ind_prev:
-                inputs_ind = hlpst.op["*"](inputs_ind_prev)
+                inputs_ind = op["*"](inputs_ind_prev)
             else:
                 inputs_ind = []
 
@@ -900,3 +949,146 @@ class State:
             # TODO - add tests to test_workflow.py (not sure if we want to remove it)
             for el in connected_to_inner:
                 [dict.pop(el) for dict in self.inputs_ind]
+
+    def splits(self, splitter_rpn):
+        """
+        Splits input variable as specified by splitter
+
+        Parameters
+        ----------
+        splitter_rpn : list
+            splitter in RPN notation
+        Returns
+        -------
+        splitter : list
+            each element contains indices for input variables
+        keys: list
+            names of input variables
+
+        """
+        # analysing states from connected tasks if inner_inputs
+        previous_states_ind = {
+            f"_{v.name}": (v.ind_l_final, v.keys_final)
+            for v in self.inner_inputs.values()
+        }
+
+        # when splitter is a single element (no operators)
+        if len(splitter_rpn) == 1:
+            op_single = splitter_rpn[0]
+            # splitter comes from the previous state
+            if op_single.startswith("_"):
+                return previous_states_ind[op_single]
+            return self._single_op_splits(op_single)
+
+        stack = []
+        keys = []
+
+        # iterating splitter_rpn
+        for token in splitter_rpn:
+            if token not in [".", "*"]:  # token is one of the input var
+                # adding variable to the stack
+                stack.append(token)
+            else:
+                # removing Right and Left var from the stack
+                term_R = stack.pop()
+                term_L = stack.pop()
+
+                # analysing and processing Left and Right terms
+                # both terms (Left and Right) are strings, so they were not processed yet by the function
+                if isinstance(term_L, str) and isinstance(term_R, str):
+                    shape_L, var_ind_L, new_keys_L = self._processing_terms(
+                        term_L, previous_states_ind
+                    )
+                    shape_R, var_ind_R, new_keys_R = self._processing_terms(
+                        term_R, previous_states_ind
+                    )
+                    keys = keys + new_keys_L + new_keys_R
+                elif isinstance(term_L, str):
+                    shape_L, var_ind_L, new_keys_L = self._processing_terms(
+                        term_L, previous_states_ind
+                    )
+                    var_ind_R, shape_R = term_R
+                    keys = new_keys_L + keys
+                elif isinstance(term_R, str):
+                    shape_R, var_ind_R, new_keys_R = self._processing_terms(
+                        term_R, previous_states_ind
+                    )
+                    var_ind_L, shape_L = term_L
+                    keys = keys + new_keys_R
+                else:
+                    var_ind_L, shape_L = term_L
+                    var_ind_R, shape_R = term_R
+
+                # checking shapes and creating newshape
+                if token == ".":
+                    if shape_L != shape_R:
+                        raise ValueError(
+                            f"Operands {term_R} and {term_L} do not have same shape"
+                        )
+                    newshape = shape_R
+                elif token == "*":
+                    newshape = tuple(list(shape_L) + list(shape_R))
+
+                # creating a new iterator with all indices for the current operation
+                # and pushing it to the stack
+                pushval = (op[token](var_ind_L, var_ind_R), newshape)
+                stack.append(pushval)
+
+        # when everything is processed it should be one element in the stack
+        # that contains iterator with variable indices after splitting for all keys
+        var_ind = stack.pop()
+        if isinstance(var_ind, tuple):
+            var_ind = var_ind[0]
+
+        return var_ind, keys
+
+    def _processing_terms(self, term, previous_states_ind):
+        """processing a specific term to get new keys from the term,
+        an iterator with variable indices and matching keys
+        """
+        if term.startswith("_"):
+            var_ind, new_keys = previous_states_ind[term]
+            shape = (len(var_ind),)
+        else:
+            cont_dim = self.cont_dim.get(term, 1)
+            shape = hlpst.input_shape(self.inputs[term], cont_dim=cont_dim)
+            var_ind = range(reduce(lambda x, y: x * y, shape))
+            new_keys = [term]
+            # checking if the term is in inner_inputs
+            if term in self.inner_inputs:
+                # TODO: have to be changed if differ length
+                inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
+                # this come from the previous node
+                outer_ind = self.inner_inputs[term].ind_l
+                var_ind_out = itertools.chain.from_iterable(
+                    itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
+                )
+                var_ind = op["."](var_ind_out, var_ind)
+                new_keys = self.inner_inputs[term].keys_final + new_keys
+
+        return shape, var_ind, new_keys
+
+    def _single_op_splits(self, op_single):
+        """splits function if splitter is a singleton"""
+        shape = hlpst.input_shape(
+            self.inputs[op_single], cont_dim=self.cont_dim.get(op_single, 1)
+        )
+        val_ind = range(reduce(lambda x, y: x * y, shape))
+        if op_single in self.inner_inputs:
+            if len(shape) == 1:
+                breakpoint()
+            # TODO: have to be changed if differ length
+            inner_len = [shape[-1]] * reduce(lambda x, y: x * y, shape[:-1])
+            # this come from the previous node
+            outer_ind = self.inner_inputs[op_single].ind_l
+            op_out = itertools.chain.from_iterable(
+                itertools.repeat(x, n) for x, n in zip(outer_ind, inner_len)
+            )
+            res = op["."](op_out, val_ind)
+            val = res
+            keys = self.inner_inputs[op_single].keys_final + [op_single]
+            return val, keys
+        else:
+            val = op["*"](val_ind)
+            keys = [op_single]
+            return val, keys
