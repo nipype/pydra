@@ -4453,7 +4453,7 @@ def test_shell_cmd_non_existing_outputs_4(tmpdir):
     # An exception should be raised because the second mandatory output does not exist
     with pytest.raises(Exception) as excinfo:
         shelly()
-    assert "mandatory output for variable out_2 does not exit" == str(excinfo.value)
+    assert "mandatory output for variable out_2 does not exist" == str(excinfo.value)
     # checking if the first output was created
     assert (Path(shelly.output_dir) / Path("test_1.nii")).exists()
 

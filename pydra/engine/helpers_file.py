@@ -580,7 +580,7 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
 
     """
 
-    inputs_dict_st = attr.asdict(inputs)
+    inputs_dict_st = attr.asdict(inputs, recurse=False)
     if map_copyfiles is not None:
         inputs_dict_st.update(map_copyfiles)
 
@@ -625,7 +625,7 @@ def template_update_single(
     # if input_dict_st with state specific value is not available,
     # the dictionary will be created from inputs object
     if inputs_dict_st is None:
-        inputs_dict_st = attr.asdict(inputs)
+        inputs_dict_st = attr.asdict(inputs, recurse=False)
 
     if spec_type == "input":
         if field.type not in [str, ty.Union[str, bool]]:

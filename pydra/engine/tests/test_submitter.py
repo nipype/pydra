@@ -6,13 +6,21 @@ import time
 
 import pytest
 
-from .utils import gen_basic_wf
+from .utils import (
+    gen_basic_wf,
+    gen_basic_wf_with_threadcount,
+    gen_basic_wf_with_threadcount_concurrent,
+)
 from ..core import Workflow
 from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ... import mark
+from pathlib import Path
+import uuid
+from datetime import datetime
 
 slurm_available = bool(shutil.which("sbatch"))
+sge_available = bool(shutil.which("qsub"))
 
 
 @mark.task
@@ -165,6 +173,13 @@ def test_wf_with_state(plugin_dask_opt, tmpdir):
     assert res[0].output.out == 3
     assert res[1].output.out == 4
     assert res[2].output.out == 5
+
+
+def test_serial_wf():
+    # Use serial plugin to execute workflow instead of CF
+    wf = gen_basic_wf()
+    res = wf(plugin="serial")
+    assert res.output.out == 9
 
 
 @pytest.mark.skipif(not slurm_available, reason="slurm not installed")
@@ -375,3 +390,191 @@ def test_slurm_cancel_rerun_2(tmpdir):
     with pytest.raises(Exception):
         with Submitter("slurm", sbatch_args="--no-requeue") as sub:
             sub(wf)
+
+
+@pytest.mark.skipif(not sge_available, reason="sge not installed")
+def test_sge_wf(tmpdir):
+    """testing that a basic workflow can be run with the SGEWorker"""
+    wf = gen_basic_wf()
+    wf.cache_dir = tmpdir
+    # submit workflow and every task as sge job
+    with Submitter(
+        "sge",
+    ) as sub:
+        sub(wf)
+
+    res = wf.result()
+    assert res.output.out == 9
+    script_dir = tmpdir / "SGEWorker_scripts"
+    assert script_dir.exists()
+    sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
+    # ensure each task was executed with sge
+    assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 2
+
+
+@pytest.mark.skipif(not sge_available, reason="sge not installed")
+def test_sge_wf_cf(tmpdir):
+    """testing the SGEWorker can submit SGE tasks while the workflow
+    uses the concurrent futures plugin"""
+    # submit entire workflow as single job executing with cf worker
+    wf = gen_basic_wf()
+    wf.cache_dir = tmpdir
+    wf.plugin = "cf"
+    with Submitter("sge") as sub:
+        sub(wf)
+    res = wf.result()
+    assert res.output.out == 9
+    script_dir = tmpdir / "SGEWorker_scripts"
+    assert script_dir.exists()
+    # ensure only workflow was executed with slurm
+    sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
+    assert len(sdirs) == 1
+    # sge scripts should be in the dirs that are using uid in the name
+    assert Path(sdirs[0]).name == wf.uid
+
+
+@pytest.mark.skipif(not sge_available, reason="sge not installed")
+def test_sge_wf_state(tmpdir):
+    """testing the SGEWorker can be used with a workflow with state"""
+    wf = gen_basic_wf()
+    wf.split("x")
+    wf.inputs.x = [5, 6]
+    wf.cache_dir = tmpdir
+    with Submitter("sge") as sub:
+        sub(wf)
+    res = wf.result()
+    assert res[0].output.out == 9
+    assert res[1].output.out == 10
+    script_dir = tmpdir / "SGEWorker_scripts"
+    assert script_dir.exists()
+    sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
+    assert len(sdirs) == 2 * len(wf.inputs.x)
+
+
+def qacct_output_to_dict(qacct_output):
+    stdout_dict = {}
+    for line in qacct_output.splitlines():
+        key_value = line.split(None, 1)
+        if key_value[0] not in stdout_dict:
+            stdout_dict[key_value[0]] = []
+        if len(key_value) > 1:
+            stdout_dict[key_value[0]].append(key_value[1])
+        else:
+            stdout_dict[key_value[0]].append(None)
+
+    print(stdout_dict)
+    return stdout_dict
+
+
+@pytest.mark.skipif(not sge_available, reason="sge not installed")
+def test_sge_set_threadcount(tmpdir):
+    """testing the number of threads for an SGEWorker task can be set
+    using the input_spec variable sgeThreads"""
+    wf = gen_basic_wf_with_threadcount()
+    wf.inputs.x = 5
+    wf.cache_dir = tmpdir
+
+    jobids = []
+    with Submitter("sge") as sub:
+        sub(wf)
+        jobids = list(sub.worker.jobid_by_task_uid.values())
+        jobids.sort()
+
+    print(f"jobids: {jobids}")
+
+    out_job0 = (
+        sp.run(["qacct", "-j", jobids[0]], capture_output=True).stdout.decode().strip()
+    )
+    out_job1 = (
+        sp.run(["qacct", "-j", jobids[1]], capture_output=True).stdout.decode().strip()
+    )
+
+    out_job0_dict = qacct_output_to_dict(out_job0)
+    out_job1_dict = qacct_output_to_dict(out_job1)
+
+    assert int(out_job0_dict["slots"][0]) == 4
+    assert int(out_job1_dict["slots"][0]) == 1
+
+
+@pytest.mark.skipif(not sge_available, reason="sge not installed")
+def test_sge_limit_maxthreads(tmpdir):
+    """testing the ability to limit the number of threads used by the SGE
+    at one time with the max_threads argument to SGEWorker"""
+    wf = gen_basic_wf_with_threadcount_concurrent()
+    wf.inputs.x = [5, 6]
+    wf.split("x")
+    wf.cache_dir = tmpdir
+
+    jobids = []
+    with Submitter("sge", max_threads=8) as sub:
+        sub(wf)
+        jobids = list(sub.worker.jobid_by_task_uid.values())
+        jobids.sort()
+
+    out_job0 = (
+        sp.run(["qacct", "-j", jobids[0]], capture_output=True).stdout.decode().strip()
+    )
+    out_job1 = (
+        sp.run(["qacct", "-j", jobids[1]], capture_output=True).stdout.decode().strip()
+    )
+    out_job2 = (
+        sp.run(["qacct", "-j", jobids[2]], capture_output=True).stdout.decode().strip()
+    )
+    out_job3 = (
+        sp.run(["qacct", "-j", jobids[3]], capture_output=True).stdout.decode().strip()
+    )
+
+    out_job0_dict = qacct_output_to_dict(out_job0)
+    out_job1_dict = qacct_output_to_dict(out_job1)
+    out_job2_dict = qacct_output_to_dict(out_job2)
+    out_job3_dict = qacct_output_to_dict(out_job3)
+
+    job_1_endtime = datetime.strptime(
+        out_job1_dict["end_time"][0], f"%a %b %d %H:%M:%S %Y"
+    )
+    # Running both task_1_1 and task_1_2 at once would exceed max_threads,
+    # so task_1_2 waits for task_1_1 to complete
+    job_2_starttime = datetime.strptime(
+        out_job2_dict["start_time"][0], f"%a %b %d %H:%M:%S %Y"
+    )
+    assert job_1_endtime < job_2_starttime
+
+
+@pytest.mark.skipif(not sge_available, reason="sge not installed")
+def test_sge_no_limit_maxthreads(tmpdir):
+    """testing unlimited threads can be used at once by SGE
+    when max_threads is not set"""
+    wf = gen_basic_wf_with_threadcount_concurrent()
+    wf.inputs.x = [5, 6]
+    wf.split("x")
+    wf.cache_dir = tmpdir
+
+    jobids = []
+    with Submitter("sge", max_threads=None) as sub:
+        sub(wf)
+        jobids = list(sub.worker.jobid_by_task_uid.values())
+        jobids.sort()
+
+    out_job0 = (
+        sp.run(["qacct", "-j", jobids[0]], capture_output=True).stdout.decode().strip()
+    )
+    out_job1 = (
+        sp.run(["qacct", "-j", jobids[1]], capture_output=True).stdout.decode().strip()
+    )
+    out_job2 = (
+        sp.run(["qacct", "-j", jobids[2]], capture_output=True).stdout.decode().strip()
+    )
+
+    out_job0_dict = qacct_output_to_dict(out_job0)
+    out_job1_dict = qacct_output_to_dict(out_job1)
+    out_job2_dict = qacct_output_to_dict(out_job2)
+
+    job_1_endtime = datetime.strptime(
+        out_job1_dict["end_time"][0], f"%a %b %d %H:%M:%S %Y"
+    )
+    # Running both task_1_1 and task_1_2 at once would not exceed max_threads,
+    # so task_1_2 does not wait for task_1_1 to complete
+    job_2_starttime = datetime.strptime(
+        out_job2_dict["start_time"][0], f"%a %b %d %H:%M:%S %Y"
+    )
+    assert job_1_endtime > job_2_starttime
