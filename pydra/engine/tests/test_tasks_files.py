@@ -134,9 +134,7 @@ def test_broken_file(tmpdir):
             sub(nn)
 
     nn2 = file_add2_annot(name="add2_annot", file=file)
-    with pytest.raises(
-        FileNotFoundError, match="file from the file input does not exist"
-    ):
+    with pytest.raises(FileNotFoundError, match="does not exist"):
         with Submitter(plugin="cf") as sub:
             sub(nn2)
 
@@ -163,9 +161,7 @@ def test_broken_file_link(tmpdir):
 
     # raises error before task is run
     nn2 = file_add2_annot(name="add2_annot", file=file_link)
-    with pytest.raises(
-        FileNotFoundError, match="file from the file input does not exist"
-    ):
+    with pytest.raises(FileNotFoundError, match="does not exist"):
         with Submitter(plugin="cf") as sub:
             sub(nn2)
 
