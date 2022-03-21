@@ -171,7 +171,7 @@ def test_invalid_annotation():
 def test_annotated_task():
     @task
     def square(in_val: float):
-        return in_val ** 2
+        return in_val**2
 
     res = square(in_val=2.0)()
     assert res.output.out == 4.0
@@ -181,7 +181,7 @@ def test_return_annotated_task():
     @task
     @annotate({"in_val": float, "return": {"squared": float}})
     def square(in_val):
-        return in_val ** 2
+        return in_val**2
 
     res = square(in_val=2.0)()
     assert res.output.squared == 4.0
@@ -191,7 +191,7 @@ def test_return_halfannotated_annotated_task():
     @task
     @annotate({"in_val": float, "return": float})
     def square(in_val):
-        return in_val ** 2
+        return in_val**2
 
     res = square(in_val=2.0)()
     assert res.output.out == 4.0
@@ -201,7 +201,7 @@ def test_return_annotated_task_multiple_output():
     @task
     @annotate({"in_val": float, "return": {"squared": float, "cubed": float}})
     def square(in_val):
-        return in_val ** 2, in_val ** 3
+        return in_val**2, in_val**3
 
     res = square(in_val=2.0)()
     assert res.output.squared == 4.0
@@ -212,7 +212,7 @@ def test_return_halfannotated_task_multiple_output():
     @task
     @annotate({"in_val": float, "return": (float, float)})
     def square(in_val):
-        return in_val ** 2, in_val ** 3
+        return in_val**2, in_val**3
 
     res = square(in_val=2.0)()
     assert res.output.out1 == 4.0
