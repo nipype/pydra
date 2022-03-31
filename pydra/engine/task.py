@@ -70,6 +70,7 @@ from .helpers import (
 )
 from .helpers_file import template_update, is_local_file
 from ..utils.typing import TypeParser
+from .environments import Native
 
 
 class FunctionTask(TaskBase):
@@ -262,6 +263,7 @@ class ShellCommandTask(TaskBase):
         output_spec: ty.Optional[SpecInfo] = None,
         rerun=False,
         strip=False,
+        environment=Native,
         **kwargs,
     ):
         """
@@ -329,6 +331,30 @@ class ShellCommandTask(TaskBase):
             rerun=rerun,
         )
         self.strip = strip
+        self.environment = environment
+
+    def render_arguments_in_root(self, root=None):
+        if root is None:
+            args = self.command_args
+            return [str(arg) for arg in args if arg not in ["", " "]]
+        raise NotImplementedError
+
+    def get_inputs_in_root(self, root=None):
+        """Take input files and return their location, re-rooted.
+
+        This is primarily intended for contexts when a task is going
+        to be run in a container with mounted volumes.
+
+        Arguments
+        ---------
+        root: str
+
+        Returns
+        -------
+        inputs: list of str
+          File paths, adjusted to the root directory
+        """
+        orig_inputs = attr.asdict(self.inputs, recurse=False)
 
     @property
     def command_args(self):
@@ -535,8 +561,12 @@ class ShellCommandTask(TaskBase):
                 cmdline += " " + arg
         return cmdline
 
-    def _run_task(self):
-        self.output_ = None
+    def _run_task(self, environment=None):
+        # if environment is None:
+        #     environment = self.environment
+        # self.output_ = environment.execute(self)
+        #
+        # TEST: task.run(); task.output_ == environment.execute(task)
         if isinstance(self, ContainerTask):
             args = self.container_args + self.command_args
         else:
