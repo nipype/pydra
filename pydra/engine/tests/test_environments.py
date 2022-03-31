@@ -1,4 +1,5 @@
 from ..environments import *
+from ..task import ShellCommandTask
 
 
 def test_native_pwd(tmpdir):

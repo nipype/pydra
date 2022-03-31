@@ -14,7 +14,7 @@ class Environment:
 
 class Native(Environment):
     def execute(self, task):
-        args = task.render_arguments_in_root("/")
+        args = task.render_arguments_in_root()
         keys = ["return_code", "stdout", "stderr"]
         values = execute(args, strip=task.strip)
         output = dict(zip(keys, values))
