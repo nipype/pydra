@@ -210,25 +210,23 @@ class ShellCommandTask(TaskBase):
         if not container_info:
             return super().__new__(cls)
 
-        if len(container_info) == 3:
-            type_cont, image, bind = container_info
-        elif len(container_info) == 2:
-            type_cont, image, bind = container_info + (None,)
+        if len(container_info) == 2:
+            type_cont, image = container_info
         else:
             raise Exception(
-                f"container_info has to have 2 or 3 elements, but {container_info} provided"
+                f"container_info has to have 2 elements, but {container_info} provided"
             )
 
         if type_cont == "docker":
             # changing base class of spec if user defined
             if "input_spec" in kwargs:
                 kwargs["input_spec"].bases = (DockerSpec,)
-            return DockerTask(image=image, bindings=bind, *args, **kwargs)
+            return DockerTask(image=image, *args, **kwargs)
         elif type_cont == "singularity":
             # changing base class of spec if user defined
             if "input_spec" in kwargs:
                 kwargs["input_spec"].bases = (SingularitySpec,)
-            return SingularityTask(image=image, bindings=bind, *args, **kwargs)
+            return SingularityTask(image=image, *args, **kwargs)
         else:
             raise Exception(
                 f"first element of container_info has to be "
@@ -331,7 +329,7 @@ class ShellCommandTask(TaskBase):
         self._positions_provided = []
         for field in attr_fields(
             self.inputs,
-            exclude_names=("container", "image", "container_xargs", "bindings"),
+            exclude_names=("container", "image", "container_xargs"),
         ):
             name, meta = field.name, field.metadata
             if (
@@ -622,6 +620,9 @@ class ContainerTask(ShellCommandTask):
         if self.inputs.bindings is None:
             self.inputs.bindings = []
         output_dir = self.output_dir
+        # This part has to stay for now!!!
+        # I'm creating self.inputs.bindings based on the input in TaskBase._run
+        # in self.inputs.check_fields_input_spec() (see specs.py)
         for binding in self.inputs.bindings:
             binding = list(binding)
             if len(binding) == 3:
@@ -702,7 +703,6 @@ class DockerTask(ContainerTask):
         if not self.init:
             if input_spec is None:
                 input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
-
             super().__init__(
                 name=name,
                 input_spec=input_spec,
