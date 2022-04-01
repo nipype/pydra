@@ -56,6 +56,8 @@ from .specs import (
     DockerSpec,
     SingularitySpec,
     attr_fields,
+    File,
+    Directory,
 )
 from .helpers import (
     ensure_list,
@@ -568,6 +570,7 @@ class ContainerTask(ShellCommandTask):
         if input_spec is None:
             input_spec = SpecInfo(name="Inputs", fields=[], bases=(ContainerSpec,))
         self.output_cpath = Path(output_cpath)
+        self.bindings = {}
         super().__init__(
             name=name,
             input_spec=input_spec,
@@ -615,33 +618,12 @@ class ContainerTask(ShellCommandTask):
         mount points: dict
             mapping from local path to tuple of container path + mode
         """
-        bind_paths = {}
-        output_dir_cpath = None
-        if self.inputs.bindings is None:
-            self.inputs.bindings = []
+        self._check_inputs()
         output_dir = self.output_dir
-        # This part has to stay for now!!!
-        # I'm creating self.inputs.bindings based on the input in TaskBase._run
-        # in self.inputs.check_fields_input_spec() (see specs.py)
-        for binding in self.inputs.bindings:
-            binding = list(binding)
-            if len(binding) == 3:
-                lpath, cpath, mode = binding
-            elif len(binding) == 2:
-                lpath, cpath, mode = binding + ["rw"]
-            else:
-                raise Exception(
-                    f"binding should have length 2, 3, or 4, it has {len(binding)}"
-                )
-            if Path(lpath) == output_dir:
-                output_dir_cpath = cpath
-            if mode is None:
-                mode = "rw"  # default
-            bind_paths[Path(lpath)] = (Path(cpath), mode)
-        # output_dir is added to the bindings if not part of self.inputs.bindings
-        if not output_dir_cpath:
-            bind_paths[output_dir] = (self.output_cpath, "rw")
-        return bind_paths
+        # TODO: output dir should be always "rw"
+        if output_dir not in self.bindings:
+            self.bindings[output_dir] = (self.output_cpath, "rw")
+        return self.bindings
 
     def binds(self, opt):
         """
@@ -654,6 +636,38 @@ class ContainerTask(ShellCommandTask):
         for lpath, (cpath, mode) in self.bind_paths().items():
             bargs.extend([opt, f"{lpath}:{cpath}:{mode}"])
         return bargs
+
+    def _check_inputs(self):
+        fields = attr_fields(self.inputs)
+        for fld in fields:
+            if (
+                fld.type in [File, Directory]
+                or "pydra.engine.specs.File" in str(fld.type)
+                or "pydra.engine.specs.Directory" in str(fld.type)
+            ):
+
+                if fld.name == "image":
+                    continue
+                file = Path(getattr(self.inputs, fld.name))
+                if fld.metadata.get("container_path"):
+                    # if the path is in a container the input should be treated as a str (hash as a str)
+                    # field.type = "str"
+                    # setattr(self, field.name, str(file))
+                    pass
+                # if this is a local path, checking if the path exists
+                # TODO: if copyfile, ro -> rw
+                elif file.exists():  # is it ok if two inputs have the same parent?
+                    self.bindings[Path(file.parent)] = (
+                        Path(f"/pydra_inp_{fld.name}"),
+                        "ro",
+                    )
+                # error should be raised only if the type is strictly File or Directory
+                elif fld.type in [File, Directory]:
+                    raise FileNotFoundError(
+                        f"the file {file} from {fld.name} input does not exist, "
+                        f"if the file comes from the container, "
+                        f"use field.metadata['container_path']=True"
+                    )
 
 
 class DockerTask(ContainerTask):

@@ -1061,6 +1061,7 @@ def test_docker_inputspec_3(plugin, tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support container_path")
 def test_docker_inputspec_3a(plugin, tmpdir):
     """input file does not exist in the local file system,
     but metadata["container_path"] is not used,

@@ -187,15 +187,15 @@ class BaseSpec:
                 or "pydra.engine.specs.File" in str(fld.type)
                 or "pydra.engine.specs.Directory" in str(fld.type)
             ):
-                self._file_check_n_bindings(fld)
+                self._file_check(fld)
 
         for nm, required in require_to_check.items():
             required_notfound = [el for el in required if el not in names]
             if required_notfound:
                 raise AttributeError(f"{nm} requires {required_notfound}")
 
-    def _file_check_n_bindings(self, field):
-        """for tasks without container, this is simple check if the file exists"""
+    def _file_check(self, field):
+        """checking if the file exists"""
         if isinstance(getattr(self, field.name), list):
             # if value is a list and type is a list of Files/Directory, checking all elements
             if field.type in [ty.List[File], ty.List[Directory]]:
@@ -682,39 +682,6 @@ class ContainerSpec(ShellSpec):
     container_xargs: ty.Optional[ty.List[str]] = attr.ib(
         default=None, metadata={"help_string": "todo"}
     )
-    """Execution arguments to run the image."""
-    bindings: ty.Optional[
-        ty.List[
-            ty.Tuple[
-                Path,  # local path
-                Path,  # container path
-                ty.Optional[str],  # mount mode
-            ]
-        ]
-    ] = attr.ib(default=None, metadata={"help_string": "bindings"})
-    """Mount points to be bound into the container."""
-
-    def _file_check_n_bindings(self, field):
-        if field.name == "image":
-            return
-        file = Path(getattr(self, field.name))
-        if field.metadata.get("container_path"):
-            # if the path is in a container the input should be treated as a str (hash as a str)
-            # field.type = "str"
-            # setattr(self, field.name, str(file))
-            pass
-        # if this is a local path, checking if the path exists
-        elif file.exists():
-            if self.bindings is None:
-                self.bindings = []
-            self.bindings.append((file.parent, f"/pydra_inp_{field.name}", "ro"))
-        # error should be raised only if the type is strictly File or Directory
-        elif field.type in [File, Directory]:
-            raise FileNotFoundError(
-                f"the file {file} from {field.name} input does not exist, "
-                f"if the file comes from the container, "
-                f"use field.metadata['container_path']=True"
-            )
 
 
 @attr.s(auto_attribs=True, kw_only=True)
