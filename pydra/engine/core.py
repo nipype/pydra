@@ -452,10 +452,40 @@ class TaskBase:
             res = self._run(rerun=rerun, **kwargs)
         return res
 
+    def _modify_inputs(self):
+        """Update and preserve a Task's original inputs"""
+        orig_inputs = attr.asdict(self.inputs, recurse=False)
+        map_copyfiles = copyfile_input(self.inputs, self.output_dir)
+        modified_inputs = template_update(
+            self.inputs, self.output_dir, map_copyfiles=map_copyfiles
+        )
+        if modified_inputs:
+            self.inputs = attr.evolve(self.inputs, **modified_inputs)
+        return orig_inputs
+
+    def _populate_filesystem(self, checksum, output_dir):
+        """
+        Invoked immediately after the lockfile is generated, this function:
+        - Creates the cache file
+        - Clears existing outputs if `can_resume` is False
+        - Generates a fresh output directory
+
+        Created as an attempt to simplify overlapping `Task`|`Workflow` behaviors.
+        """
+        # adding info file with the checksum in case the task was cancelled
+        # and the lockfile has to be removed
+        with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
+            json.dump({"checksum": checksum}, jsonfile)
+        if not self.can_resume and output_dir.exists():
+            shutil.rmtree(output_dir)
+        output_dir.mkdir(parents=False, exist_ok=self.can_resume)
+
     def _run(self, rerun=False, **kwargs):
         self.inputs = attr.evolve(self.inputs, **kwargs)
         self.inputs.check_fields_input_spec()
+
         checksum = self.checksum
+        output_dir = self.output_dir
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached - see scenarios in __init__()
         self.hooks.pre_run(self)
@@ -464,47 +494,33 @@ class TaskBase:
                 result = self.result()
                 if result is not None and not result.errored:
                     return result
-            # adding info file with the checksum in case the task was cancelled
-            # and the lockfile has to be removed
-            with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
-                json.dump({"checksum": self.checksum}, jsonfile)
-            # Let only one equivalent process run
-            odir = self.output_dir
-            if not self.can_resume and odir.exists():
-                shutil.rmtree(odir)
             cwd = os.getcwd()
-            odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-            orig_inputs = attr.asdict(self.inputs, recurse=False)
-            map_copyfiles = copyfile_input(self.inputs, self.output_dir)
-            modified_inputs = template_update(
-                self.inputs, self.output_dir, map_copyfiles=map_copyfiles
-            )
-            if modified_inputs:
-                self.inputs = attr.evolve(self.inputs, **modified_inputs)
-            self.audit.start_audit(odir)
+            self._populate_filesystem(checksum, output_dir)
+            orig_inputs = self._modify_inputs()
             result = Result(output=None, runtime=None, errored=False)
             self.hooks.pre_run_task(self)
+            self.audit.start_audit(odir=output_dir)
             try:
                 self.audit.monitor()
                 self._run_task()
-                result.output = self._collect_outputs(output_dir=odir)
+                result.output = self._collect_outputs(output_dir=output_dir)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
-                record_error(self.output_dir, error=traceback)
+                record_error(output_dir, error=traceback)
                 result.errored = True
                 raise
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
-                save(odir, result=result, task=self)
+                save(output_dir, result=result, task=self)
                 self.output_ = None
                 # removing the additional file with the chcksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 # # function etc. shouldn't change anyway, so removing
-                orig_inputs = dict(
-                    (k, v) for (k, v) in orig_inputs.items() if not k.startswith("_")
-                )
+                orig_inputs = {
+                    k: v for k, v in orig_inputs.items() if not k.startswith("_")
+                }
                 self.inputs = attr.evolve(self.inputs, **orig_inputs)
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
@@ -1038,38 +1054,23 @@ class Workflow(TaskBase):
             raise ValueError(
                 "Workflow output cannot be None, use set_output to define output(s)"
             )
-        checksum = self.checksum
         # creating connections that were defined after adding tasks to the wf
-        for task in self.graph.nodes:
-            # if workflow has task_rerun=True and propagate_rerun=True,
-            # it should be passed to the tasks
-            if self.task_rerun and self.propagate_rerun:
-                task.task_rerun = self.task_rerun
-                # if the task is a wf, than the propagate_rerun should be also set
-                if is_workflow(task):
-                    task.propagate_rerun = self.propagate_rerun
-            task.cache_locations = task._cache_locations + self.cache_locations
-            self.create_connections(task)
+        self._connect_and_propagate_to_tasks()
+
+        checksum = self.checksum
+        output_dir = self.output_dir
         lockfile = self.cache_dir / (checksum + ".lock")
         self.hooks.pre_run(self)
         async with PydraFileLock(lockfile):
-            # retrieve cached results
             if not (rerun or self.task_rerun):
                 result = self.result()
                 if result is not None and not result.errored:
                     return result
-            # adding info file with the checksum in case the task was cancelled
-            # and the lockfile has to be removed
-            with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
-                json.dump({"checksum": checksum}, jsonfile)
-            odir = self.output_dir
-            if not self.can_resume and odir.exists():
-                shutil.rmtree(odir)
             cwd = os.getcwd()
-            odir.mkdir(parents=False, exist_ok=True if self.can_resume else False)
-            self.audit.start_audit(odir=odir)
+            self._populate_filesystem(checksum, output_dir)
             result = Result(output=None, runtime=None, errored=False)
             self.hooks.pre_run_task(self)
+            self.audit.start_audit(odir=output_dir)
             try:
                 self.audit.monitor()
                 await self._run_task(submitter, rerun=rerun)
@@ -1077,14 +1078,14 @@ class Workflow(TaskBase):
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
-                record_error(self.output_dir, error=traceback)
+                record_error(output_dir, error=traceback)
                 result.errored = True
                 self._errored = True
                 raise
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
-                save(odir, result=result, task=self)
+                save(output_dir, result=result, task=self)
                 # removing the additional file with the chcksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
@@ -1225,6 +1226,22 @@ class Workflow(TaskBase):
             for ext in export:
                 formatted_dot.append(self.graph.export_graph(dotfile=dotfile, ext=ext))
             return dotfile, formatted_dot
+
+    def _connect_and_propagate_to_tasks(self):
+        """
+        Visit each node in the graph and create the connections.
+        Additionally checks if all tasks should be rerun.
+        """
+        for task in self.graph.nodes:
+            # if workflow has task_rerun=True and propagate_rerun=True,
+            # it should be passed to the tasks
+            if self.task_rerun and self.propagate_rerun:
+                task.task_rerun = self.task_rerun
+                # if the task is a wf, than the propagate_rerun should be also set
+                if is_workflow(task):
+                    task.propagate_rerun = self.propagate_rerun
+            task.cache_locations = task._cache_locations + self.cache_locations
+            self.create_connections(task)
 
 
 def is_task(obj):
