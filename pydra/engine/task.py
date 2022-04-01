@@ -159,8 +159,8 @@ class FunctionTask(TaskBase):
                 return_info = func.__annotations__["return"]
                 # e.g. python annotation: fun() -> ty.NamedTuple("Output", [("out", float)])
                 # or pydra decorator: @pydra.mark.annotate({"return": ty.NamedTuple(...)})
-                if hasattr(return_info, "__name__") and hasattr(
-                    return_info, "__annotations__"
+                if hasattr(return_info, "__name__") and getattr(
+                    return_info, "__annotations__", None
                 ):
                     name = return_info.__name__
                     fields = list(return_info.__annotations__.items())
