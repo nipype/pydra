@@ -463,8 +463,6 @@ class TaskBase:
         # retrieve cached results
         if not (rerun or self.task_rerun):
             result = self.result()
-            if result is not None and not result.errored:
-                return result
         # adding info file with the checksum in case the task was cancelled
         # and the lockfile has to be removed
         with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
@@ -493,12 +491,17 @@ class TaskBase:
         # Eagerly retrieve cached - see scenarios in __init__()
         self.hooks.pre_run(self)
         with SoftFileLock(lockfile):
+            if not (rerun or self.task_rerun):
+                result = self.result()
+                if result is not None and not result.errored:
+                    return result
             cwd = os.getcwd()
             result = self.prepare_run_task(rerun)
+            orig_outdir = self.output_dir
             try:
                 self.audit.monitor()
                 self._run_task()
-                result.output = self._collect_outputs(output_dir=self.output_dir)
+                result.output = self._collect_outputs(output_dir=orig_outdir)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
@@ -508,14 +511,14 @@ class TaskBase:
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
-                save(self.output_dir, result=result, task=self)
+                save(orig_outdir, result=result, task=self)
                 self.output_ = None
                 # removing the additional file with the chcksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 # # function etc. shouldn't change anyway, so removing
-                self._orig_inputs = dict(
-                    (k, v) for (k, v) in self._orig_inputs.items() if not k.startswith("_")
-                )
+                self._orig_inputs = {
+                    k: v for k, v in self._orig_inputs.items() if not k.startswith("_")
+                }
                 self.inputs = attr.evolve(self.inputs, **self._orig_inputs)
                 # no need to propagate this
                 del self._orig_inputs
@@ -1056,8 +1059,13 @@ class Workflow(TaskBase):
         lockfile = self.cache_dir / (self.checksum + ".lock")
         self.hooks.pre_run(self)
         async with PydraFileLock(lockfile):
+            if not (rerun or self.task_rerun):
+                result = self.result()
+                if result is not None and not result.errored:
+                    return result
             cwd = os.getcwd()
             result = self.prepare_run_task(rerun)
+            orig_outdir = self.output_dir
             try:
                 self.audit.monitor()
                 await self._run_task(submitter, rerun=rerun)
@@ -1072,7 +1080,7 @@ class Workflow(TaskBase):
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
-                save(self.output_dir, result=result, task=self)
+                save(orig_outdir, result=result, task=self)
                 # removing the additional file with the chcksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
