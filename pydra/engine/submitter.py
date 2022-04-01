@@ -76,7 +76,6 @@ class Submitter:
                 await self.expand_runnable(runnable, wait=True)
         return True
 
-
     async def expand_runnable(self, runnable, wait=False, rerun=False):
         """
         This coroutine handles state expansion.
@@ -117,10 +116,7 @@ class Submitter:
                     asyncio.create_task(load_and_run_async(task_pkl, sidx, self, rerun))
                 )
             else:
-                futures.add(
-                    self.worker.run_el((task_pkl, sidx, runnable), rerun=rerun)
-                )
-
+                futures.add(self.worker.run_el((task_pkl, sidx, runnable), rerun=rerun))
 
         if wait and futures:
             # if wait is True, we are at the end of the graph / state expansion.
@@ -129,7 +125,6 @@ class Submitter:
             return
         # pass along futures to be awaited independently
         return futures
-
 
     async def expand_workflow(self, wf, rerun=False):
         """
@@ -278,11 +273,8 @@ def is_runnable(graph, obj):
     return True
 
 
-
 async def prepare_runnable_with_state(runnable):
     runnable.state.prepare_states(runnable.inputs, cont_dim=runnable.cont_dim)
     runnable.state.prepare_inputs()
-    logger.debug(
-        f"Expanding {runnable} into {len(runnable.state.states_val)} states"
-    )
+    logger.debug(f"Expanding {runnable} into {len(runnable.state.states_val)} states")
     return runnable.pickle_task()

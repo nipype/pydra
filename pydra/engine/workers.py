@@ -883,5 +883,5 @@ WORKERS = {
     "cf": ConcurrentFuturesWorker,
     "slurm": SlurmWorker,
     "dask": DaskWorker,
-    "sge": SGEWorker
+    "sge": SGEWorker,
 }
