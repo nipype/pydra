@@ -452,17 +452,26 @@ class TaskBase:
             res = self._run(rerun=rerun, **kwargs)
         return res
 
-    def prepare_run_task(self, rerun):
+    def _modify_inputs(self):
+        """Update and preserve a Task's original inputs"""
+        orig_inputs = attr.asdict(self.inputs, recurse=False)
+        map_copyfiles = copyfile_input(self.inputs, self.output_dir)
+        modified_inputs = template_update(
+            self.inputs, self.output_dir, map_copyfiles=map_copyfiles
+        )
+        if modified_inputs:
+            self.inputs = attr.evolve(self.inputs, **modified_inputs)
+        return orig_inputs
+
+    def _populate_filesystem(self):
         """
         Invoked immediately after the lockfile is generated, this function:
-        - does a lot of things... (TODO)
-        - Creates an empty Result and passes it along to be populated.
+        - Creates the cache file
+        - Clears existing outputs if `can_resume` is False
+        - Generates a fresh output directory
 
         Created as an attempt to simplify overlapping `Task`|`Workflow` behaviors.
         """
-        # retrieve cached results
-        if not (rerun or self.task_rerun):
-            result = self.result()
         # adding info file with the checksum in case the task was cancelled
         # and the lockfile has to be removed
         with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
@@ -470,18 +479,6 @@ class TaskBase:
         if not self.can_resume and self.output_dir.exists():
             shutil.rmtree(self.output_dir)
         self.output_dir.mkdir(parents=False, exist_ok=self.can_resume)
-        if not is_workflow(self):
-            self._orig_inputs = attr.asdict(self.inputs, recurse=False)
-            map_copyfiles = copyfile_input(self.inputs, self.output_dir)
-            modified_inputs = template_update(
-                self.inputs, self.output_dir, map_copyfiles=map_copyfiles
-            )
-            if modified_inputs:
-                self.inputs = attr.evolve(self.inputs, **modified_inputs)
-        self.audit.start_audit(odir=self.output_dir)
-        result = Result(output=None, runtime=None, errored=False)
-        self.hooks.pre_run_task(self)
-        return result
 
     def _run(self, rerun=False, **kwargs):
         self.inputs = attr.evolve(self.inputs, **kwargs)
@@ -496,8 +493,13 @@ class TaskBase:
                 if result is not None and not result.errored:
                     return result
             cwd = os.getcwd()
-            result = self.prepare_run_task(rerun)
+            self._populate_filesystem()
+            orig_inputs = self._modify_inputs()
+            # the output dir can be changed by _run_task (but should it??)
             orig_outdir = self.output_dir
+            result = Result(output=None, runtime=None, errored=False)
+            self.hooks.pre_run_task(self)
+            self.audit.start_audit(odir=self.output_dir)
             try:
                 self.audit.monitor()
                 self._run_task()
@@ -516,12 +518,10 @@ class TaskBase:
                 # removing the additional file with the chcksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 # # function etc. shouldn't change anyway, so removing
-                self._orig_inputs = {
-                    k: v for k, v in self._orig_inputs.items() if not k.startswith("_")
+                orig_inputs = {
+                    k: v for k, v in orig_inputs.items() if not k.startswith("_")
                 }
-                self.inputs = attr.evolve(self.inputs, **self._orig_inputs)
-                # no need to propagate this
-                del self._orig_inputs
+                self.inputs = attr.evolve(self.inputs, **orig_inputs)
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         return result
@@ -1055,7 +1055,7 @@ class Workflow(TaskBase):
                 "Workflow output cannot be None, use set_output to define output(s)"
             )
         # creating connections that were defined after adding tasks to the wf
-        self.connect_and_propagate_to_tasks()
+        self._connect_and_propagate_to_tasks()
         lockfile = self.cache_dir / (self.checksum + ".lock")
         self.hooks.pre_run(self)
         async with PydraFileLock(lockfile):
@@ -1064,8 +1064,12 @@ class Workflow(TaskBase):
                 if result is not None and not result.errored:
                     return result
             cwd = os.getcwd()
-            result = self.prepare_run_task(rerun)
+            self._populate_filesystem()
+            # the output dir can be changed by _run_task (but should it??)
             orig_outdir = self.output_dir
+            result = Result(output=None, runtime=None, errored=False)
+            self.hooks.pre_run_task(self)
+            self.audit.start_audit(odir=self.output_dir)
             try:
                 self.audit.monitor()
                 await self._run_task(submitter, rerun=rerun)
@@ -1222,7 +1226,7 @@ class Workflow(TaskBase):
                 formatted_dot.append(self.graph.export_graph(dotfile=dotfile, ext=ext))
             return dotfile, formatted_dot
 
-    def connect_and_propagate_to_tasks(self):
+    def _connect_and_propagate_to_tasks(self):
         """
         Visit each node in the graph and create the connections.
         Additionally checks if all tasks should be rerun.
