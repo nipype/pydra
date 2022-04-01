@@ -317,38 +317,13 @@ class ShellCommandTask(TaskBase):
 
     @property
     def command_args(self):
-        """Get command line arguments, returns a list if task has a state"""
+        """Get command line arguments"""
         if is_lazy(self.inputs):
             raise Exception("can't return cmdline, self.inputs has LazyFields")
-        orig_inputs = attr.asdict(self.inputs, recurse=False)
         if self.state:
-            command_args_list = []
-            self.state.prepare_states(self.inputs)
-            for ii, el in enumerate(self.state.states_ind):
-                command_args_list.append(self._command_args_single(el, index=ii))
-                self.inputs = attr.evolve(self.inputs, **orig_inputs)
-            return command_args_list
-        else:
-            command_args = self._command_args_single()
-            self.inputs = attr.evolve(self.inputs, **orig_inputs)
-            return command_args
+            raise NotImplementedError
 
-    def _command_args_single(self, state_ind=None, index=None):
-        """Get command line arguments for a single state
-
-        Parameters
-        ----------
-        state_ind : dict[str, int]
-            Keys are inputs being mapped over, values are indices within that input
-        index : int
-            Index in flattened list of states
-        """
-        if index is not None:
-            modified_inputs = template_update(
-                self.inputs, output_dir=self.output_dir[index], state_ind=state_ind
-            )
-        else:
-            modified_inputs = template_update(self.inputs, output_dir=self.output_dir)
+        modified_inputs = template_update(self.inputs, output_dir=self.output_dir)
         if modified_inputs is not None:
             self.inputs = attr.evolve(self.inputs, **modified_inputs)
 
@@ -366,15 +341,13 @@ class ShellCommandTask(TaskBase):
             ):
                 continue
             if name == "executable":
-                pos_args.append(
-                    self._command_shelltask_executable(field, state_ind, index)
-                )
+                pos_args.append(self._command_shelltask_executable(field))
             elif name == "args":
-                pos_val = self._command_shelltask_args(field, state_ind, index)
+                pos_val = self._command_shelltask_args(field)
                 if pos_val:
                     pos_args.append(pos_val)
             else:
-                pos_val = self._command_pos_args(field, state_ind, index)
+                pos_val = self._command_pos_args(field)
                 if pos_val:
                     pos_args.append(pos_val)
 
@@ -383,39 +356,35 @@ class ShellCommandTask(TaskBase):
         # pos_args values are each a list of arguments, so concatenate lists after sorting
         return sum(cmd_args, [])
 
-    def _field_value(self, field, state_ind, index, check_file=False):
+    def _field_value(self, field, check_file=False):
         """
         Checking value of the specific field, if value is not set, None is returned.
-        If state_ind and ind, taking a specific element of the field.
         check_file has no effect, but subclasses can use it to validate or modify
         filenames.
         """
-        name = f"{self.name}.{field.name}"
         value = getattr(self.inputs, field.name)
-        if self.state and name in state_ind:
-            value = value[state_ind[name]]
         if value == attr.NOTHING:
             value = None
         return value
 
-    def _command_shelltask_executable(self, field, state_ind, index):
+    def _command_shelltask_executable(self, field):
         """Returining position and value for executable ShellTask input"""
         pos = 0  # executable should be the first el. of the command
-        value = self._field_value(field, state_ind, index)
+        value = self._field_value(field)
         if value is None:
             raise ValueError("executable has to be set")
         return pos, ensure_list(value, tuple2list=True)
 
-    def _command_shelltask_args(self, field, state_ind, index):
+    def _command_shelltask_args(self, field):
         """Returining position and value for args ShellTask input"""
         pos = -1  # assuming that args is the last el. of the command
-        value = self._field_value(field, state_ind, index, check_file=True)
+        value = self._field_value(field, check_file=True)
         if value is None:
             return None
         else:
             return pos, ensure_list(value, tuple2list=True)
 
-    def _command_pos_args(self, field, state_ind, index):
+    def _command_pos_args(self, field):
         """
         Checking all additional input fields, setting pos to None, if position not set.
         Creating a list with additional parts of the command that comes from
@@ -443,7 +412,7 @@ class ShellCommandTask(TaskBase):
             # Shift negatives down to allow args to be -1
             pos += 1 if pos >= 0 else -1
 
-        value = self._field_value(field, state_ind, index, check_file=True)
+        value = self._field_value(field, check_file=True)
         if field.metadata.get("readonly", False) and value is not None:
             raise Exception(f"{field.name} is read only, the value can't be provided")
         elif (
@@ -453,12 +422,7 @@ class ShellCommandTask(TaskBase):
         ):
             return None
 
-        # getting stated inputs
-        inputs_dict_st = attr.asdict(self.inputs, recurse=False)
-        if state_ind is not None:
-            for k, v in state_ind.items():
-                k = k.split(".")[1]
-                inputs_dict_st[k] = inputs_dict_st[k][v]
+        inputs_dict = attr.asdict(self.inputs, recurse=False)
 
         cmd_add = []
         # formatter that creates a custom command argument
@@ -470,10 +434,10 @@ class ShellCommandTask(TaskBase):
                 if argnm == "field":
                     call_args_val[argnm] = value
                 elif argnm == "inputs":
-                    call_args_val[argnm] = inputs_dict_st
+                    call_args_val[argnm] = inputs_dict
                 else:
-                    if argnm in inputs_dict_st:
-                        call_args_val[argnm] = inputs_dict_st[argnm]
+                    if argnm in inputs_dict:
+                        call_args_val[argnm] = inputs_dict[argnm]
                     else:
                         raise AttributeError(
                             f"arguments of the formatter function from {field.name} "
@@ -534,21 +498,12 @@ class ShellCommandTask(TaskBase):
             raise Exception("can't return cmdline, self.inputs has LazyFields")
         # checking the inputs fields before returning the command line
         self.inputs.check_fields_input_spec()
+        if self.state:
+            raise NotImplementedError
         if isinstance(self, ContainerTask):
-            if self.state:
-                cmdline = []
-                for con, com in zip(self.container_args, self.command_args):
-                    cmdline.append(" ".join(con + com))
-            else:
-                cmdline = " ".join(self.container_args + self.command_args)
+            cmdline = " ".join(self.container_args + self.command_args)
         else:
-            if self.state:
-                cmdline = []
-                for el in self.command_args:
-                    cmdline.append(" ".join(el))
-            else:
-                cmdline = " ".join(self.command_args)
-
+            cmdline = " ".join(self.command_args)
         return cmdline
 
     def _run_task(self):
@@ -628,18 +583,17 @@ class ContainerTask(ShellCommandTask):
             **kwargs,
         )
 
-    def _field_value(self, field, state_ind, index, check_file=False):
+    def _field_value(self, field, check_file=False):
         """
         Checking value of the specific field, if value is not set, None is returned.
-        If state_ind and ind, taking a specific element of the field.
         If check_file is True, checking if field is a a local file
         and settings bindings if needed.
         """
-        value = super()._field_value(field, state_ind, index)
+        value = super()._field_value(field)
         if value and check_file and is_local_file(field):
             # changing path to the cpath (the directory should be mounted)
             lpath = Path(str(value))
-            cdir = self.bind_paths(index)[lpath.parent][0]
+            cdir = self.bind_paths()[lpath.parent][0]
             cpath = cdir.joinpath(lpath.name)
             value = str(cpath)
         return value
@@ -655,7 +609,7 @@ class ContainerTask(ShellCommandTask):
         if self.inputs.image is attr.NOTHING:
             raise AttributeError("Container image is not specified")
 
-    def bind_paths(self, index=None):
+    def bind_paths(self):
         """Get bound mount points
 
         Returns
@@ -667,10 +621,7 @@ class ContainerTask(ShellCommandTask):
         output_dir_cpath = None
         if self.inputs.bindings is None:
             self.inputs.bindings = []
-        if index is None:
-            output_dir = self.output_dir
-        else:
-            output_dir = self.output_dir[index]
+        output_dir = self.output_dir
         for binding in self.inputs.bindings:
             binding = list(binding)
             if len(binding) == 3:
@@ -691,7 +642,7 @@ class ContainerTask(ShellCommandTask):
             bind_paths[output_dir] = (self.output_cpath, "rw")
         return bind_paths
 
-    def binds(self, opt, index=None):
+    def binds(self, opt):
         """
         Specify mounts to bind from local filesystems to container and working directory.
 
@@ -699,7 +650,7 @@ class ContainerTask(ShellCommandTask):
 
         """
         bargs = []
-        for lpath, (cpath, mode) in self.bind_paths(index).items():
+        for lpath, (cpath, mode) in self.bind_paths().items():
             bargs.extend([opt, f"{lpath}:{cpath}:{mode}"])
         return bargs
 
@@ -775,31 +726,15 @@ class DockerTask(ContainerTask):
             raise Exception("can't return container_args, self.inputs has LazyFields")
         self.container_check("docker")
         if self.state:
-            self.state.prepare_states(self.inputs)
-            cargs_list = []
-            for ii, el in enumerate(self.state.states_ind):
-                if f"{self.name}.image" in el:
-                    cargs_list.append(
-                        self._container_args_single(
-                            self.inputs.image[el[f"{self.name}.image"]], index=ii
-                        )
-                    )
-                else:
-                    cargs_list.append(
-                        self._container_args_single(self.inputs.image, index=ii)
-                    )
-            return cargs_list
-        else:
-            return self._container_args_single(self.inputs.image)
+            raise NotImplementedError
 
-    def _container_args_single(self, image, index=None):
         cargs = ["docker", "run"]
         if self.inputs.container_xargs is not None:
             cargs.extend(self.inputs.container_xargs)
 
-        cargs.extend(self.binds("-v", index))
+        cargs.extend(self.binds("-v"))
         cargs.extend(["-w", str(self.output_cpath)])
-        cargs.append(image)
+        cargs.append(self.inputs.image)
 
         return cargs
 
@@ -869,30 +804,14 @@ class SingularityTask(ContainerTask):
             raise Exception("can't return container_args, self.inputs has LazyFields")
         self.container_check("singularity")
         if self.state:
-            self.state.prepare_states(self.inputs)
-            cargs_list = []
-            for ii, el in enumerate(self.state.states_ind):
-                if f"{self.name}.image" in el:
-                    cargs_list.append(
-                        self._container_args_single(
-                            self.inputs.image[el[f"{self.name}.image"]], index=ii
-                        )
-                    )
-                else:
-                    cargs_list.append(
-                        self._container_args_single(self.inputs.image, index=ii)
-                    )
-            return cargs_list
-        else:
-            return self._container_args_single(self.inputs.image)
+            raise NotImplementedError
 
-    def _container_args_single(self, image, index=None):
         cargs = ["singularity", "exec"]
 
         if self.inputs.container_xargs is not None:
             cargs.extend(self.inputs.container_xargs)
 
-        cargs.extend(self.binds("-B", index))
+        cargs.extend(self.binds("-B"))
         cargs.extend(["--pwd", str(self.output_cpath)])
-        cargs.append(image)
+        cargs.append(self.inputs.image)
         return cargs
