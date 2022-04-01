@@ -1055,7 +1055,9 @@ class Workflow(TaskBase):
                 "Workflow output cannot be None, use set_output to define output(s)"
             )
         # creating connections that were defined after adding tasks to the wf
-        self._connect_and_propagate_to_tasks()
+        self._connect_and_propagate_to_tasks(
+            propagate_rerun=self.task_rerun and self.propagate_rerun
+        )
 
         checksum = self.checksum
         output_dir = self.output_dir
@@ -1234,7 +1236,7 @@ class Workflow(TaskBase):
         self,
         *,
         propagate_rerun=False,
-        override_task_caches=False
+        override_task_caches=False,
     ):
         """
         Visit each node in the graph and create the connections.
@@ -1244,11 +1246,11 @@ class Workflow(TaskBase):
             self.create_connections(task)
             # if workflow has task_rerun=True and propagate_rerun=True,
             # it should be passed to the tasks
-            if self.task_rerun and self.propagate_rerun:
-                task.task_rerun = self.task_rerun
+            if propagate_rerun:
+                task.task_rerun = True
                 # if the task is a wf, than the propagate_rerun should be also set
                 if is_workflow(task):
-                    task.propagate_rerun = self.propagate_rerun
+                    task.propagate_rerun = True
 
             # ported from Submitter.__call__
             # TODO: no prepare state ?
