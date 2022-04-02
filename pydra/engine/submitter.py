@@ -116,7 +116,10 @@ class Submitter:
                     asyncio.create_task(load_and_run_async(task_pkl, sidx, self, rerun))
                 )
             else:
-                futures.add(self.worker.run_el((task_pkl, sidx, runnable), rerun=rerun))
+                futures.add(
+                    self.worker.run_el((sidx, task_pkl, runnable), rerun=rerun)
+                )
+
 
         if wait and futures:
             # if wait is True, we are at the end of the graph / state expansion.
