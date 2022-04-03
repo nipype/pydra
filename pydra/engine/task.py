@@ -619,11 +619,7 @@ class ContainerTask(ShellCommandTask):
             mapping from local path to tuple of container path + mode
         """
         self._check_inputs()
-        output_dir = self.output_dir
-        # TODO: output dir should be always "rw"
-        if output_dir not in self.bindings:
-            self.bindings[output_dir] = (self.output_cpath, "rw")
-        return self.bindings
+        return {**self.bindings, **{self.output_dir: (self.output_cpath, "rw")}}
 
     def binds(self, opt):
         """

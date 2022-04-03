@@ -49,7 +49,7 @@ def test_shellspec():
     assert hasattr(spec, "args")
 
 
-container_attrs = ["image", "container", "container_xargs", "bindings"]
+container_attrs = ["image", "container", "container_xargs"]
 
 
 def test_container():

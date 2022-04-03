@@ -1129,14 +1129,15 @@ def test_docker_cmd(tmpdir):
         docky.cmdline
         == f"docker run --rm -it -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
     )
-    docky.inputs.bindings = [
-        ("/local/path", "/container/path", "ro"),
-        ("/local2", "/container2", None),
-    ]
-    assert docky.cmdline == (
-        "docker run --rm -it -v /local/path:/container/path:ro"
-        f" -v /local2:/container2:rw -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
-    )
+    # TODO: we probably don't want to support container_path
+    # docky.inputs.bindings = [
+    #     ("/local/path", "/container/path", "ro"),
+    #     ("/local2", "/container2", None),
+    # ]
+    # assert docky.cmdline == (
+    #     "docker run --rm -it -v /local/path:/container/path:ro"
+    #     f" -v /local2:/container2:rw -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
+    # )
 
 
 @no_win
@@ -1148,14 +1149,15 @@ def test_singularity_cmd(tmpdir):
         singu.cmdline
         == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} pwd"
     )
-    singu.inputs.bindings = [
-        ("/local/path", "/container/path", "ro"),
-        ("/local2", "/container2", None),
-    ]
-    assert singu.cmdline == (
-        "singularity exec -B /local/path:/container/path:ro"
-        f" -B /local2:/container2:rw -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} pwd"
-    )
+    # TODO: we probably don't want to support container_path
+    # singu.inputs.bindings = [
+    #     ("/local/path", "/container/path", "ro"),
+    #     ("/local2", "/container2", None),
+    # ]
+    # assert singu.cmdline == (
+    #     "singularity exec -B /local/path:/container/path:ro"
+    #     f" -B /local2:/container2:rw -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} pwd"
+    # )
 
 
 def test_functask_callable(tmpdir):
