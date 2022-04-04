@@ -20,6 +20,8 @@ need_bosh_docker = pytest.mark.skipif(
 
 Infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
 
+pytestmark = pytest.mark.skip()
+
 
 @no_win
 @need_bosh_docker

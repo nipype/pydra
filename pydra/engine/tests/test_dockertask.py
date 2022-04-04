@@ -80,7 +80,7 @@ def test_docker_1_dockerflag_exception(plugin):
         shocky = ShellCommandTask(
             name="shocky", executable=cmd, container_info=("docker")
         )
-    assert "container_info has to have 2 or 3 elements" in str(excinfo.value)
+    assert "container_info has to have 2 elements" in str(excinfo.value)
 
 
 @no_win
@@ -203,6 +203,7 @@ def test_docker_2a(plugin):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_docker_3(plugin, tmpdir):
     """a simple command in container with bindings,
     creating directory in tmp dir and checking if it is in the container
@@ -226,6 +227,7 @@ def test_docker_3(plugin, tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_docker_3_dockerflag(plugin, tmpdir):
     """a simple command in container with bindings,
     creating directory in tmp dir and checking if it is in the container
@@ -252,6 +254,7 @@ def test_docker_3_dockerflag(plugin, tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_docker_3_dockerflagbind(plugin, tmpdir):
     """a simple command in container with bindings,
     creating directory in tmp dir and checking if it is in the container
@@ -278,6 +281,7 @@ def test_docker_3_dockerflagbind(plugin, tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_docker_4(plugin, tmpdir):
     """task reads the file that is bounded to the container
     specifying bindings,
@@ -304,6 +308,7 @@ def test_docker_4(plugin, tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_docker_4_dockerflag(plugin, tmpdir):
     """task reads the file that is bounded to the container
     specifying bindings,
@@ -343,11 +348,11 @@ def test_docker_st_1(plugin):
     )
     assert docky.state.splitter == "docky.executable"
 
-    for ii, el in enumerate(docky.cmdline):
-        assert (
-            el
-            == f"docker run --rm -v {docky.output_dir[ii]}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd[ii]}"
-        )
+    # for ii, el in enumerate(docky.cmdline):
+    #     assert (
+    #         el
+    #         == f"docker run --rm -v {docky.output_dir[ii]}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd[ii]}"
+    #     )
 
     res = docky(plugin=plugin)
     assert res[0].output.stdout == "/output_pydra\n"
@@ -367,11 +372,11 @@ def test_docker_st_2(plugin):
     )
     assert docky.state.splitter == "docky.image"
 
-    for ii, el in enumerate(docky.cmdline):
-        assert (
-            el
-            == f"docker run --rm -v {docky.output_dir[ii]}:/output_pydra:rw -w /output_pydra {docky.inputs.image[ii]} {' '.join(cmd)}"
-        )
+    # for ii, el in enumerate(docky.cmdline):
+    #     assert (
+    #         el
+    #         == f"docker run --rm -v {docky.output_dir[ii]}:/output_pydra:rw -w /output_pydra {docky.inputs.image[ii]} {' '.join(cmd)}"
+    #     )
 
     res = docky(plugin=plugin)
     assert "Debian" in res[0].output.stdout
@@ -410,16 +415,16 @@ def test_docker_st_4(plugin):
     assert docky.state.combiner == ["docky.image"]
     assert docky.state.splitter_final == "docky.executable"
 
-    for ii, el in enumerate(docky.cmdline):
-        i, j = ii // 2, ii % 2
-        if j == 0:
-            cmd_str = "whoami"
-        else:
-            cmd_str = " ".join(["cat", "/etc/issue"])
-        assert (
-            el
-            == f"docker run --rm -v {docky.output_dir[ii]}:/output_pydra:rw -w /output_pydra {docky.inputs.image[i]} {cmd_str}"
-        )
+    # for ii, el in enumerate(docky.cmdline):
+    #     i, j = ii // 2, ii % 2
+    #     if j == 0:
+    #         cmd_str = "whoami"
+    #     else:
+    #         cmd_str = " ".join(["cat", "/etc/issue"])
+    #     assert (
+    #         el
+    #         == f"docker run --rm -v {docky.output_dir[ii]}:/output_pydra:rw -w /output_pydra {docky.inputs.image[i]} {cmd_str}"
+    #     )
 
     res = docky(plugin=plugin)
 
@@ -439,6 +444,7 @@ def test_docker_st_4(plugin):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_wf_docker_1(plugin, tmpdir):
     """a workflow with two connected task
     the first one read the file that is bounded to the container,
@@ -483,6 +489,7 @@ def test_wf_docker_1(plugin, tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_wf_docker_1_dockerflag(plugin, tmpdir):
     """a workflow with two connected task
     the first one read the file that is bounded to the container,
@@ -523,6 +530,7 @@ def test_wf_docker_1_dockerflag(plugin, tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_wf_docker_2pre(plugin, tmpdir):
     """a workflow with two connected task that run python scripts
     the first one creates a text file and the second one reads the file
@@ -544,6 +552,7 @@ def test_wf_docker_2pre(plugin, tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_wf_docker_2(plugin, tmpdir):
     """a workflow with two connected task that run python scripts
     the first one creates a text file and the second one reads the file
@@ -584,6 +593,7 @@ def test_wf_docker_2(plugin, tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_wf_docker_3(plugin, tmpdir):
     """a workflow with two connected task
     the first one read the file that contains the name of the image,
@@ -736,6 +746,7 @@ def test_docker_inputspec_1a(tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_docker_inputspec_1b(tmpdir):
     """a simple customized input spec for docker task
     instead of using automatic binding I provide the bindings
@@ -1050,6 +1061,7 @@ def test_docker_inputspec_3(plugin, tmpdir):
 
 @no_win
 @need_docker
+@pytest.mark.skip(reason="we probably don't want to support container_path")
 def test_docker_inputspec_3a(plugin, tmpdir):
     """input file does not exist in the local file system,
     but metadata["container_path"] is not used,

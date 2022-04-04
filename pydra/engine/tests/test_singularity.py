@@ -130,6 +130,7 @@ def test_singularity_2a(plugin, tmpdir):
 
 
 @need_singularity
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_singularity_3(plugin, tmpdir):
     """a simple command in container with bindings,
     creating directory in tmp dir and checking if it is in the container
@@ -151,6 +152,7 @@ def test_singularity_3(plugin, tmpdir):
 
 
 @need_singularity
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_singularity_3_singuflag(plugin, tmpdir):
     """a simple command in container with bindings,
     creating directory in tmp dir and checking if it is in the container
@@ -178,6 +180,7 @@ def test_singularity_3_singuflag(plugin, tmpdir):
 
 
 @need_singularity
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_singularity_3_singuflagbind(plugin, tmpdir):
     """a simple command in container with bindings,
     creating directory in tmp dir and checking if it is in the container
@@ -279,6 +282,7 @@ def test_singularity_st_4(tmpdir, n):
 
 
 @need_singularity
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_wf_singularity_1(plugin, tmpdir):
     """a workflow with two connected task
     the first one read the file that is bounded to the container,
@@ -320,6 +324,7 @@ def test_wf_singularity_1(plugin, tmpdir):
 
 @need_docker
 @need_singularity
+@pytest.mark.skip(reason="we probably don't want to support bindings as an input")
 def test_wf_singularity_1a(plugin, tmpdir):
     """a workflow with two connected task - using both containers: Docker and Singul.
     the first one read the file that is bounded to the container,
