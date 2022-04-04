@@ -1,6 +1,5 @@
 """Handle execution backends."""
 import asyncio
-import time
 from uuid import uuid4
 from .workers import WORKERS
 from .core import is_workflow
@@ -64,7 +63,7 @@ class Submitter:
                 await runnable._run(self, rerun=rerun)
             # 3
             else:
-                await self.expand_runnable(runnable, wait=True)
+                await self.expand_runnable(runnable, wait=True, rerun=rerun)
             runnable._reset()
         else:
             # 2
@@ -73,7 +72,7 @@ class Submitter:
                 await self.worker.run_el(runnable, rerun=rerun)
             # 3
             else:
-                await self.expand_runnable(runnable, wait=True)
+                await self.expand_runnable(runnable, wait=True, rerun=rerun)
         return True
 
     async def expand_runnable(self, runnable, wait=False, rerun=False):
