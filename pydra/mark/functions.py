@@ -1,4 +1,5 @@
 """ Decorators to apply to functions used in Pydra workflows """
+from functools import wraps
 
 
 def annotate(annotation):
@@ -40,6 +41,7 @@ def task(func):
     """
     from ..engine.task import FunctionTask
 
+    @wraps(func)
     def decorate(**kwargs):
         return FunctionTask(func=func, **kwargs)
 
