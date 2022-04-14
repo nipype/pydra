@@ -7,20 +7,17 @@ import time
 import pytest
 
 from .utils import (
+    need_sge,
+    need_slurm,
     gen_basic_wf,
     gen_basic_wf_with_threadcount,
     gen_basic_wf_with_threadcount_concurrent,
 )
 from ..core import Workflow
-from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ... import mark
 from pathlib import Path
-import uuid
 from datetime import datetime
-
-slurm_available = bool(shutil.which("sbatch"))
-sge_available = bool(shutil.which("qsub"))
 
 
 @mark.task
@@ -182,7 +179,7 @@ def test_serial_wf():
     assert res.output.out == 9
 
 
-@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+@need_slurm
 def test_slurm_wf(tmpdir):
     wf = gen_basic_wf()
     wf.cache_dir = tmpdir
@@ -198,7 +195,7 @@ def test_slurm_wf(tmpdir):
     assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 2
 
 
-@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+@need_slurm
 def test_slurm_wf_cf(tmpdir):
     # submit entire workflow as single job executing with cf worker
     wf = gen_basic_wf()
@@ -217,7 +214,7 @@ def test_slurm_wf_cf(tmpdir):
     assert sdirs[0].basename == wf.uid
 
 
-@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+@need_slurm
 def test_slurm_wf_state(tmpdir):
     wf = gen_basic_wf()
     wf.split("x")
@@ -234,7 +231,7 @@ def test_slurm_wf_state(tmpdir):
     assert len(sdirs) == 2 * len(wf.inputs.x)
 
 
-@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+@need_slurm
 @pytest.mark.flaky(reruns=3)
 def test_slurm_max_jobs(tmpdir):
     wf = Workflow("new_wf", input_spec=["x", "y"], cache_dir=tmpdir)
@@ -274,7 +271,7 @@ def test_slurm_max_jobs(tmpdir):
         assert (prev - et).seconds >= 2
 
 
-@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+@need_slurm
 def test_slurm_args_1(tmpdir):
     """testing sbatch_args provided to the submitter"""
     task = sleep_add_one(x=1)
@@ -289,7 +286,7 @@ def test_slurm_args_1(tmpdir):
     assert script_dir.exists()
 
 
-@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+@need_slurm
 def test_slurm_args_2(tmpdir):
     """testing sbatch_args provided to the submitter
     exception should be raised for invalid options
@@ -339,7 +336,7 @@ def cancel(job_name_part):
 
 
 @pytest.mark.flaky(reruns=1)
-@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+@need_slurm
 def test_slurm_cancel_rerun_1(tmpdir):
     """testing that tasks run with slurm is re-queue
     Running wf with 2 tasks, one sleeps and the other trying to get
@@ -372,7 +369,7 @@ def test_slurm_cancel_rerun_1(tmpdir):
 
 
 @pytest.mark.flaky(reruns=1)
-@pytest.mark.skipif(not slurm_available, reason="slurm not installed")
+@need_slurm
 def test_slurm_cancel_rerun_2(tmpdir):
     """testing that tasks run with slurm that has --no-requeue
     Running wf with 2 tasks, one sleeps and the other gets
@@ -392,7 +389,7 @@ def test_slurm_cancel_rerun_2(tmpdir):
             sub(wf)
 
 
-@pytest.mark.skipif(not sge_available, reason="sge not installed")
+@need_sge
 def test_sge_wf(tmpdir):
     """testing that a basic workflow can be run with the SGEWorker"""
     wf = gen_basic_wf()
@@ -412,7 +409,7 @@ def test_sge_wf(tmpdir):
     assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 2
 
 
-@pytest.mark.skipif(not sge_available, reason="sge not installed")
+@need_sge
 def test_sge_wf_cf(tmpdir):
     """testing the SGEWorker can submit SGE tasks while the workflow
     uses the concurrent futures plugin"""
@@ -433,7 +430,7 @@ def test_sge_wf_cf(tmpdir):
     assert Path(sdirs[0]).name == wf.uid
 
 
-@pytest.mark.skipif(not sge_available, reason="sge not installed")
+@need_sge
 def test_sge_wf_state(tmpdir):
     """testing the SGEWorker can be used with a workflow with state"""
     wf = gen_basic_wf()
@@ -466,7 +463,7 @@ def qacct_output_to_dict(qacct_output):
     return stdout_dict
 
 
-@pytest.mark.skipif(not sge_available, reason="sge not installed")
+@need_sge
 def test_sge_set_threadcount(tmpdir):
     """testing the number of threads for an SGEWorker task can be set
     using the input_spec variable sgeThreads"""
@@ -496,7 +493,7 @@ def test_sge_set_threadcount(tmpdir):
     assert int(out_job1_dict["slots"][0]) == 1
 
 
-@pytest.mark.skipif(not sge_available, reason="sge not installed")
+@need_sge
 def test_sge_limit_maxthreads(tmpdir):
     """testing the ability to limit the number of threads used by the SGE
     at one time with the max_threads argument to SGEWorker"""
@@ -540,7 +537,7 @@ def test_sge_limit_maxthreads(tmpdir):
     assert job_1_endtime < job_2_starttime
 
 
-@pytest.mark.skipif(not sge_available, reason="sge not installed")
+@need_sge
 def test_sge_no_limit_maxthreads(tmpdir):
     """testing unlimited threads can be used at once by SGE
     when max_threads is not set"""
