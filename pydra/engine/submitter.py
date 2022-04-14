@@ -46,8 +46,8 @@ class Submitter:
         This coroutine should only be called once per Submitter call,
         and serves as the bridge between sync/async lands.
 
-        There are 3 potential paths based on the type of runnable:
-
+        There are 4 potential paths based on the type of runnable:
+        0) Workflow has a different plugin than a submitter
         1) Workflow without State
         2) Task without State
         3) (Workflow or Task) with State
@@ -58,6 +58,10 @@ class Submitter:
         if is_workflow(runnable):
             # connect and calculate the checksum of the graph before running
             runnable._connect_and_propagate_to_tasks(override_task_caches=True)
+            # 0
+            if runnable.plugin and runnable.plugin != self.plugin:
+                # if workflow has a different plugin it's treated as a single element
+                await self.worker.run_el(runnable, rerun=rerun)
             # 1
             if runnable.state is None:
                 await runnable._run(self, rerun=rerun)
