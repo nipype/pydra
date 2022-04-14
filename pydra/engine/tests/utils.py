@@ -20,6 +20,14 @@ no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
     reason="docker command not adjusted for windows docker",
 )
+need_slurm = pytest.mark.skipif(
+    not (bool(shutil.which("sbatch")) and bool(shutil.which("sacct"))),
+    reason="slurm not available",
+)
+need_sge = pytest.mark.skipif(
+    not (bool(shutil.which("qsub")) and bool(shutil.which("qacct"))),
+    reason="sge not available",
+)
 
 
 def result_no_submitter(shell_task, plugin=None):
