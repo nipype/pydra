@@ -1,14 +1,7 @@
 """Handle execution backends."""
 import asyncio
-import time
 from uuid import uuid4
-from .workers import (
-    SerialWorker,
-    ConcurrentFuturesWorker,
-    SlurmWorker,
-    DaskWorker,
-    SGEWorker,
-)
+from .workers import WORKERS
 from .core import is_workflow
 from .helpers import get_open_loop, load_and_run_async
 
@@ -35,61 +28,60 @@ class Submitter:
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
         self.plugin = plugin
-        if self.plugin == "serial":
-            self.worker = SerialWorker()
-        elif self.plugin == "cf":
-            self.worker = ConcurrentFuturesWorker(**kwargs)
-        elif self.plugin == "slurm":
-            self.worker = SlurmWorker(**kwargs)
-        elif self.plugin == "dask":
-            self.worker = DaskWorker(**kwargs)
-        elif self.plugin == "sge":
-            self.worker = SGEWorker(**kwargs)
-        else:
-            raise Exception(f"plugin {self.plugin} not available")
+        try:
+            self.worker = WORKERS[self.plugin](**kwargs)
+        except KeyError:
+            raise NotImplementedError(f"No worker for {self.plugin}")
         self.worker.loop = self.loop
 
     def __call__(self, runnable, cache_locations=None, rerun=False):
-        """Submit."""
+        """Submitter run function."""
         if cache_locations is not None:
             runnable.cache_locations = cache_locations
-        # creating all connections and calculating the checksum of the graph before running
-        if is_workflow(runnable):
-            # TODO: no prepare state ?
-            for nd in runnable.graph.nodes:
-                runnable.create_connections(nd)
-                if nd.allow_cache_override:
-                    nd.cache_dir = runnable.cache_dir
-        if is_workflow(runnable) and runnable.state is None:
-            self.loop.run_until_complete(self.submit_workflow(runnable, rerun=rerun))
-        else:
-            self.loop.run_until_complete(self.submit(runnable, wait=True, rerun=rerun))
-        if is_workflow(runnable):
-            # resetting all connections with LazyFields
-            runnable._reset()
+        self.loop.run_until_complete(self.submit_from_call(runnable, rerun))
         return runnable.result()
 
-    async def submit_workflow(self, workflow, rerun=False):
-        """Distribute or initiate workflow execution."""
-        if is_workflow(workflow):
-            if workflow.plugin and workflow.plugin != self.plugin:
-                # dj: this is not tested!!! TODO
-                await self.worker.run_el(workflow, rerun=rerun)
-            else:
-                await workflow._run(self, rerun=rerun)
-        else:  # could be a tuple with paths to pickle files wiith tasks and inputs
-            ind, wf_main_pkl, wf_orig = workflow
-            if wf_orig.plugin and wf_orig.plugin != self.plugin:
-                # dj: this is not tested!!! TODO
-                await self.worker.run_el(workflow, rerun=rerun)
-            else:
-                await load_and_run_async(
-                    task_pkl=wf_main_pkl, ind=ind, submitter=self, rerun=rerun
-                )
-
-    async def submit(self, runnable, wait=False, rerun=False):
+    async def submit_from_call(self, runnable, rerun):
         """
-        Coroutine entrypoint for task submission.
+        This coroutine should only be called once per Submitter call,
+        and serves as the bridge between sync/async lands.
+
+        There are 4 potential paths based on the type of runnable:
+        0) Workflow has a different plugin than a submitter
+        1) Workflow without State
+        2) Task without State
+        3) (Workflow or Task) with State
+
+        Once Python 3.10 is the minimum, this should probably be refactored into using
+        structural pattern matching.
+        """
+        if is_workflow(runnable):
+            # connect and calculate the checksum of the graph before running
+            runnable._connect_and_propagate_to_tasks(override_task_caches=True)
+            # 0
+            if runnable.plugin and runnable.plugin != self.plugin:
+                # if workflow has a different plugin it's treated as a single element
+                await self.worker.run_el(runnable, rerun=rerun)
+            # 1
+            if runnable.state is None:
+                await runnable._run(self, rerun=rerun)
+            # 3
+            else:
+                await self.expand_runnable(runnable, wait=True, rerun=rerun)
+            runnable._reset()
+        else:
+            # 2
+            if runnable.state is None:
+                # run_el should always return a coroutine
+                await self.worker.run_el(runnable, rerun=rerun)
+            # 3
+            else:
+                await self.expand_runnable(runnable, wait=True, rerun=rerun)
+        return True
+
+    async def expand_runnable(self, runnable, wait=False, rerun=False):
+        """
+        This coroutine handles state expansion.
 
         Removes any states from `runnable`. If `wait` is
         set to False (default), aggregates all worker
@@ -110,41 +102,37 @@ class Submitter:
             Coroutines for :class:`~pydra.engine.core.TaskBase` execution.
 
         """
-        futures = set()
-        if runnable.state:
-            runnable.state.prepare_states(runnable.inputs, cont_dim=runnable.cont_dim)
-            runnable.state.prepare_inputs()
-            logger.debug(
-                f"Expanding {runnable} into {len(runnable.state.states_val)} states"
-            )
-            task_pkl = runnable.pickle_task()
+        if runnable.plugin and runnable.plugin != self.plugin:
+            raise NotImplementedError()
 
-            for sidx in range(len(runnable.state.states_val)):
-                job_tuple = (sidx, task_pkl, runnable)
-                if is_workflow(runnable):
-                    # job has no state anymore
-                    futures.add(self.submit_workflow(job_tuple, rerun=rerun))
-                else:
-                    # tasks are submitted to worker for execution
-                    futures.add(self.worker.run_el(job_tuple, rerun=rerun))
-        else:
+        futures = set()
+        if runnable.state is None:
+            raise Exception("Only runnables with state should reach here")
+
+        task_pkl = await prepare_runnable_with_state(runnable)
+
+        for sidx in range(len(runnable.state.states_val)):
             if is_workflow(runnable):
-                await self._run_workflow(runnable, rerun=rerun)
+                # job has no state anymore
+                futures.add(
+                    # This unpickles and runs workflow - why are we pickling?
+                    asyncio.create_task(load_and_run_async(task_pkl, sidx, self, rerun))
+                )
             else:
-                # submit task to worker
-                futures.add(self.worker.run_el(runnable, rerun=rerun))
+                futures.add(self.worker.run_el((sidx, task_pkl, runnable), rerun=rerun))
 
         if wait and futures:
-            # run coroutines concurrently and wait for execution
-            # wait until all states complete or error
+            # if wait is True, we are at the end of the graph / state expansion.
+            # Once the remaining jobs end, we will exit `submit_from_call`
             await asyncio.gather(*futures)
             return
         # pass along futures to be awaited independently
         return futures
 
-    async def _run_workflow(self, wf, rerun=False):
+    async def expand_workflow(self, wf, rerun=False):
         """
         Expand and execute a stateless :class:`~pydra.engine.core.Workflow`.
+        This method is only reached by `Workflow._run_task`.
 
         Parameters
         ----------
@@ -157,10 +145,6 @@ class Submitter:
             The computed workflow
 
         """
-        for nd in wf.graph.nodes:
-            if nd.allow_cache_override:
-                nd.cache_dir = wf.cache_dir
-
         # creating a copy of the graph that will be modified
         # the copy contains new lists with original runnable objects
         graph_copy = wf.graph.copy()
@@ -180,7 +164,8 @@ class Submitter:
                 while not tasks and graph_copy.nodes:
                     tasks, follow_err = get_runnable_tasks(graph_copy)
                     ii += 1
-                    time.sleep(1)
+                    # don't block the event loop!
+                    await asyncio.sleep(1)
                     if ii > 60:
                         raise Exception(
                             "graph is not empty, but not able to get more tasks "
@@ -191,11 +176,15 @@ class Submitter:
                 logger.debug(f"Retrieving inputs for {task}")
                 # TODO: add state idx to retrieve values to reduce waiting
                 task.inputs.retrieve_values(wf)
-                if is_workflow(task) and not task.state:
-                    await self.submit_workflow(task, rerun=rerun)
-                else:
-                    for fut in await self.submit(task, rerun=rerun):
+                if task.state:
+                    for fut in await self.expand_runnable(task, rerun=rerun):
                         task_futures.add(fut)
+                # expand that workflow
+                elif is_workflow(task):
+                    await task._run(self, rerun=rerun)
+                # single task
+                else:
+                    task_futures.add(self.worker.run_el(task, rerun=rerun))
             task_futures = await self.worker.fetch_finished(task_futures)
             tasks, follow_err = get_runnable_tasks(graph_copy)
             # updating tasks_errored
@@ -285,3 +274,10 @@ def is_runnable(graph, obj):
         graph.remove_nodes_connections(nd)
 
     return True
+
+
+async def prepare_runnable_with_state(runnable):
+    runnable.state.prepare_states(runnable.inputs, cont_dim=runnable.cont_dim)
+    runnable.state.prepare_inputs()
+    logger.debug(f"Expanding {runnable} into {len(runnable.state.states_val)} states")
+    return runnable.pickle_task()

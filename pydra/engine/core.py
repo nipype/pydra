@@ -1055,7 +1055,9 @@ class Workflow(TaskBase):
                 "Workflow output cannot be None, use set_output to define output(s)"
             )
         # creating connections that were defined after adding tasks to the wf
-        self._connect_and_propagate_to_tasks()
+        self._connect_and_propagate_to_tasks(
+            propagate_rerun=self.task_rerun and self.propagate_rerun
+        )
 
         checksum = self.checksum
         output_dir = self.output_dir
@@ -1097,8 +1099,11 @@ class Workflow(TaskBase):
     async def _run_task(self, submitter, rerun=False):
         if not submitter:
             raise Exception("Submitter should already be set.")
+        for nd in self.graph.nodes:
+            if nd.allow_cache_override:
+                nd.cache_dir = self.cache_dir
         # at this point Workflow is stateless so this should be fine
-        await submitter._run_workflow(self, rerun=rerun)
+        await submitter.expand_workflow(self, rerun=rerun)
 
     def set_output(self, connections):
         """
@@ -1227,21 +1232,31 @@ class Workflow(TaskBase):
                 formatted_dot.append(self.graph.export_graph(dotfile=dotfile, ext=ext))
             return dotfile, formatted_dot
 
-    def _connect_and_propagate_to_tasks(self):
+    def _connect_and_propagate_to_tasks(
+        self,
+        *,
+        propagate_rerun=False,
+        override_task_caches=False,
+    ):
         """
         Visit each node in the graph and create the connections.
         Additionally checks if all tasks should be rerun.
         """
         for task in self.graph.nodes:
+            self.create_connections(task)
             # if workflow has task_rerun=True and propagate_rerun=True,
             # it should be passed to the tasks
-            if self.task_rerun and self.propagate_rerun:
-                task.task_rerun = self.task_rerun
+            if propagate_rerun:
+                task.task_rerun = True
                 # if the task is a wf, than the propagate_rerun should be also set
                 if is_workflow(task):
-                    task.propagate_rerun = self.propagate_rerun
+                    task.propagate_rerun = True
+
+            # ported from Submitter.__call__
+            # TODO: no prepare state ?
+            if override_task_caches and task.allow_cache_override:
+                task.cache_dir = self.cache_dir
             task.cache_locations = task._cache_locations + self.cache_locations
-            self.create_connections(task)
 
 
 def is_task(obj):

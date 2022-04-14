@@ -119,7 +119,7 @@ class DistributedWorker(Worker):
 class SerialWorker(Worker):
     """A worker to execute linearly."""
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         """Initialize worker."""
         logger.debug("Initialize SerialWorker")
 
@@ -876,3 +876,12 @@ class DaskWorker(Worker):
     def close(self):
         """Finalize the internal pool of tasks."""
         pass
+
+
+WORKERS = {
+    "serial": SerialWorker,
+    "cf": ConcurrentFuturesWorker,
+    "slurm": SlurmWorker,
+    "dask": DaskWorker,
+    "sge": SGEWorker,
+}
