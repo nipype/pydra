@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 
 slurm_available = bool(shutil.which("sbatch"))
-sge_available = bool(shutil.which("qsub"))
+sge_available = bool(shutil.which("qacct"))
 
 
 @mark.task
