@@ -825,3 +825,8 @@ class SingularityTask(ContainerTask):
         cargs.extend(["--pwd", str(self.output_cpath)])
         cargs.append(self.inputs.image)
         return cargs
+
+
+class ServerlessTask(ShellCommandTask):
+    """Placeholder for a type of Tasks running using a FaaS (aka Serverless) platform."""
+    pass

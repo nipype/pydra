@@ -811,3 +811,9 @@ def is_existing_file(value):
         return Path(value).exists()
     except TypeError:
         return False
+
+
+def is_s3_file(f):
+    from .specs import S3File
+
+    return isinstance(f, S3File)
