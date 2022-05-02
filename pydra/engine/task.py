@@ -829,4 +829,5 @@ class SingularityTask(ContainerTask):
 
 class ServerlessTask(ShellCommandTask):
     """Placeholder for a type of Tasks running using a FaaS (aka Serverless) platform."""
+
     pass

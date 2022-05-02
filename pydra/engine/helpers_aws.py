@@ -15,11 +15,11 @@ s3_client: boto3.client = None
 
 
 def get_s3_client():
-    """Lazy getter for S3 client. """
+    """Lazy getter for S3 client."""
 
     global s3_client
 
     if not s3_client:
-        s3_client = boto3.client('s3')
+        s3_client = boto3.client("s3")
 
     return s3_client
