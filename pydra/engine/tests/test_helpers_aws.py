@@ -1,6 +1,4 @@
-import boto3
 import botocore
-import pytest
 
 from ..helpers_aws import (
     s3_client,
