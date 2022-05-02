@@ -25,6 +25,23 @@ class File:
     """An :obj:`os.pathlike` object, designating a file."""
 
 
+class S3File(File):
+    """Remote file in AWS S3 block storage."""
+
+    bucket_name: str = None
+    obj_key: str = None
+
+    @classmethod
+    def converter(cls, value):
+
+        # from helpers_aws import get_s3_client
+        # s3_client = get_s3_client()
+
+        # Upload file
+
+        raise NotImplementedError("S3File Converter")
+
+
 class Directory:
     """An :obj:`os.pathlike` object, designating a folder."""
 
@@ -183,7 +200,7 @@ class BaseSpec:
                     require_to_check[fld.name] = mdata["requires"]
 
             if (
-                fld.type in [File, Directory]
+                fld.type in [File, Directory, S3File]
                 or "pydra.engine.specs.File" in str(fld.type)
                 or "pydra.engine.specs.Directory" in str(fld.type)
             ):
@@ -196,6 +213,10 @@ class BaseSpec:
 
     def _file_check(self, field):
         """checking if the file exists"""
+
+        if field.type is S3File:
+            return self._s3_file_exists(field)
+
         if isinstance(getattr(self, field.name), list):
             # if value is a list and type is a list of Files/Directory, checking all elements
             if field.type in [ty.List[File], ty.List[Directory]]:
@@ -212,6 +233,26 @@ class BaseSpec:
                 raise FileNotFoundError(
                     f"the file {file} from the {field.name} input does not exist"
                 )
+
+    def _s3_file_exists(self, field):
+        """Checks if the file exists in the bucket and is accessible."""
+
+        assert isinstance(field.type, S3File), f"Field {field} is not of type S3File."
+
+        try:
+            from botocore.exceptions import ClientError
+            from helpers_aws import get_s3_client
+        except ImportError:
+            pass
+
+        s3_client = get_s3_client()
+
+        bucket, key = field.bucket, field.obj_key
+        try:
+            s3_client.head_object(Bucket=bucket, Key=key)
+            return True
+        except ClientError:
+            return False
 
     def check_metadata(self):
         """Check contained metadata."""
