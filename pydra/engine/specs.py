@@ -238,7 +238,12 @@ class BaseSpec:
         """Checks if the file exists in the bucket and is accessible."""
 
         assert isinstance(field.type, S3File), f"Field {field} is not of type S3File."
-        from helpers_aws import get_s3_client, ClientError
+
+        try:
+            from botocore.exceptions import ClientError
+            from helpers_aws import get_s3_client
+        except ImportError:
+            pass
 
         s3_client = get_s3_client()
 

@@ -3,7 +3,6 @@
 
 try:
     import boto3
-    from botocore.exceptions import ClientError
 except ImportError:
     pass
 
