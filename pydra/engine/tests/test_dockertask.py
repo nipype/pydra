@@ -27,8 +27,6 @@ def test_docker_1_nosubm():
     res = docky()
     assert res.output.stdout == "root\n"
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 @no_win
@@ -46,8 +44,6 @@ def test_docker_1(plugin):
     res = docky.result()
     assert res.output.stdout == "root\n"
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 @no_win
@@ -67,8 +63,6 @@ def test_docker_1_dockerflag(plugin):
     res = shocky.result()
     assert res.output.stdout == "root\n"
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 @no_win
@@ -99,8 +93,6 @@ def test_docker_2_nosubm():
     res = docky()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 @no_win
@@ -121,8 +113,6 @@ def test_docker_2(plugin):
     res = docky.result()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 @no_win
@@ -145,8 +135,6 @@ def test_docker_2_dockerflag(plugin):
     res = shocky.result()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 @no_win
@@ -170,8 +158,6 @@ def test_docker_2a_nosubm():
     res = docky()
     assert res.output.stdout.strip() == " ".join(cmd_args)
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 @no_win
@@ -197,8 +183,6 @@ def test_docker_2a(plugin):
     res = docky.result()
     assert res.output.stdout.strip() == " ".join(cmd_args)
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 @no_win
@@ -221,8 +205,6 @@ def test_docker_3(plugin, tmpdir):
     res = docky.result()
     assert res.output.stdout == "new_dir\n"
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 @no_win
@@ -248,8 +230,6 @@ def test_docker_3_dockerflag(plugin, tmpdir):
     res = shocky.result()
     assert res.output.stdout == "new_dir\n"
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 @no_win
@@ -275,8 +255,6 @@ def test_docker_3_dockerflagbind(plugin, tmpdir):
     res = shocky.result()
     assert res.output.stdout == "new_dir\n"
     assert res.output.return_code == 0
-    if res.output.stderr:
-        assert "Unable to find image" in res.output.stderr
 
 
 @no_win
