@@ -1,4 +1,7 @@
 import shutil
+import os
+
+os.environ["NO_ET"] = "true"
 
 
 def pytest_addoption(parser):
