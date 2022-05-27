@@ -1,5 +1,6 @@
 import shutil
 import os
+import pytest
 
 os.environ["NO_ET"] = "true"
 
@@ -26,3 +27,30 @@ def pytest_generate_tests(metafunc):
         else:
             Plugins = ["cf"]
         metafunc.parametrize("plugin", Plugins)
+
+
+# For debugging in IDE's don't catch raised exceptions and let the IDE
+# break at it
+if os.getenv("_PYTEST_RAISE", "0") != "0":
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_exception_interact(call):
+        raise call.excinfo.value
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_internalerror(excinfo):
+        raise excinfo.value
+
+
+# Example VSCode launch configuration for debugging unittests
+# {
+#     "name": "Test Config",
+#     "type": "python",
+#     "request": "launch",
+#     "purpose": ["debug-test"],
+#     "justMyCode": false,
+#     "console": "internalConsole",
+#     "env": {
+#         "_PYTEST_RAISE": "1"
+#     },
+# }

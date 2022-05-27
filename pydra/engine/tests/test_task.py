@@ -1124,7 +1124,7 @@ def test_docker_cmd(tmpdir):
         docky.cmdline
         == f"docker run --rm -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
     )
-    docky.inputs.container_xargs = ["--rm -it"]
+    docky.inputs.container_xargs = ["--rm", "-it"]
     assert (
         docky.cmdline
         == f"docker run --rm -it -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
