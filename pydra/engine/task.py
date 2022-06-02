@@ -527,7 +527,7 @@ class ShellCommandTask(TaskBase):
 
     def _join_cmd_args(self, args):
         """Safely joins command args quoting any containing spaces"""
-        # Skip the first position as this can be a multi-part command, e.g. 'docker run'
+        # Skip the executable, which can be a multi-part command, e.g. 'docker run'
         return " ".join([args[0]] + [f"'{p}'" if " " in p else p for p in args[1:]])
 
 
