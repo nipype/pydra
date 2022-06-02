@@ -4,6 +4,7 @@ import os, sys
 import pytest
 from pathlib import Path
 import re
+import stat
 
 from ..task import ShellCommandTask
 from ..submitter import Submitter
@@ -18,7 +19,7 @@ from ..specs import (
     MultiOutputFile,
     MultiInputObj,
 )
-from .utils import result_no_submitter, result_submitter, use_validator
+from .utils import result_no_submitter, result_submitter, use_validator, no_win
 
 if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
@@ -4749,3 +4750,62 @@ def test_shellspec_formatter_splitter_2(tmpdir):
     # com_results = ["executable -t [in11 in2]", "executable -t [in12 in2]"]
     # for i, cr in enumerate(com_results):
     #     assert results[i] == cr
+
+
+@no_win
+def test_shellcommand_error_msg(tmpdir):
+
+    script_path = Path(tmpdir) / "script.sh"
+
+    with open(script_path, "w") as f:
+        f.write(
+            """#!/bin/bash
+                echo "first line is ok, it prints '$1'"
+                /command-that-doesnt-exist"""
+        )
+
+    os.chmod(
+        script_path,
+        mode=(
+            stat.S_IRUSR
+            | stat.S_IWUSR
+            | stat.S_IXUSR
+            | stat.S_IRGRP
+            | stat.S_IWGRP
+            | stat.S_IROTH
+        ),
+    )
+
+    input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "in1",
+                str,
+                {"help_string": "a dummy string", "argstr": "", "mandatory": True},
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="err_msg", executable=str(script_path), input_spec=input_spec, in1="hello"
+    )
+
+    with pytest.raises(RuntimeError) as excinfo:
+        shelly()
+
+    path_str = str(script_path)
+
+    assert (
+        str(excinfo.value)
+        == f"""Error running 'err_msg' task with ['{path_str}', 'hello']:
+
+stderr:
+{path_str}: line 3: /command-that-doesnt-exist: No such file or directory
+
+
+stderr:
+first line is ok, it prints 'hello'
+"""
+    )
