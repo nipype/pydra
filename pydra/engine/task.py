@@ -484,10 +484,8 @@ class ShellCommandTask(TaskBase):
                         cmd_el_str = f"{argstr} {value}"
                     else:
                         cmd_el_str = ""
-            # removing double spacing
-            cmd_el_str = cmd_el_str.strip()
             if cmd_el_str:
-                cmd_add += cmd_el_str
+                cmd_add += shlex.split(cmd_el_str)
         return pos, cmd_add
 
     @property

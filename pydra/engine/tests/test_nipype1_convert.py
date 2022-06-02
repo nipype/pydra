@@ -43,7 +43,7 @@ class Interf_3(ShellCommandTask):
             (
                 "in_file",
                 str,
-                {"help_string": "in_file", "argstr": ""},
+                {"help_string": "in_file", "argstr": "'{in_file}'"},
             )
         ],
         bases=(ShellSpec,),
