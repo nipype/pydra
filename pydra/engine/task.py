@@ -522,7 +522,7 @@ class ShellCommandTask(TaskBase):
                 if self.output_["stderr"]:
                     msg += "\n\nstderr:\n" + self.output_["stderr"]
                 if self.output_["stdout"]:
-                    msg += "\n\nstderr:\n" + self.output_["stdout"]
+                    msg += "\n\nstdout:\n" + self.output_["stdout"]
                 raise RuntimeError(msg)
 
     def _join_cmd_args(self, args):

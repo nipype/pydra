@@ -4805,7 +4805,7 @@ stderr:
 {path_str}: line 3: /command-that-doesnt-exist: No such file or directory
 
 
-stderr:
+stdout:
 first line is ok, it prints 'hello'
 """
     )
