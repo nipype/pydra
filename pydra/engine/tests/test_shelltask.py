@@ -307,7 +307,7 @@ def test_shell_cmd_inputspec_1(plugin, results_function, use_validator, tmpdir):
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.inputs.args == cmd_args
-    assert shelly.cmdline == "echo -n hello from pydra"
+    assert shelly.cmdline == "echo -n 'hello from pydra'"
 
     res = results_function(shelly, plugin)
     assert res.output.stdout == "hello from pydra"
@@ -356,7 +356,7 @@ def test_shell_cmd_inputspec_2(plugin, results_function, use_validator, tmpdir):
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.inputs.args == cmd_args
-    assert shelly.cmdline == "echo -n HELLO from pydra"
+    assert shelly.cmdline == "echo -n HELLO 'from pydra'"
     res = results_function(shelly, plugin)
     assert res.output.stdout == "HELLO from pydra"
 
