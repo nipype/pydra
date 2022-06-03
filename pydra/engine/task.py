@@ -39,6 +39,7 @@ Implement processing nodes.
 
 """
 import platform
+import re
 import attr
 import cloudpickle as cp
 import inspect
@@ -506,7 +507,17 @@ class ShellCommandTask(TaskBase):
             command_args = self.container_args + self.command_args
         else:
             command_args = self.command_args
-        return self._join_cmd_args(command_args)
+        # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
+        cmdline = command_args[0]
+        for arg in command_args[1:]:
+            # If there are spaces in the arg and it is not enclosed by matching
+            # quotes, add quotes to escape the space. Not sure if this should
+            # be expanded to include other special characters apart from spaces
+            if " " in arg and not re.match("('|\").*\\1", arg):
+                cmdline += " '" + arg + "'"
+            else:
+                cmdline += " " + arg
+        return cmdline
 
     def _run_task(self):
         self.output_ = None
@@ -527,13 +538,6 @@ class ShellCommandTask(TaskBase):
                 if self.output_["stdout"]:
                     msg += "\n\nstdout:\n" + self.output_["stdout"]
                 raise RuntimeError(msg)
-
-    def _join_cmd_args(self, args):
-        """Safely joins command args quoting any containing spaces"""
-        # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
-        # Not sure if this should be expanded to include special chars as well as
-        # spaces or not.
-        return " ".join([args[0]] + [f"'{p}'" if " " in p else p for p in args[1:]])
 
 
 class ContainerTask(ShellCommandTask):
