@@ -853,7 +853,9 @@ def split_cmd(cmd: str):
     str
         the command line string split into process args
     """
-    args = shlex.split(cmd, posix=(platform.system() != "Windows"))
+    # Check whether running on posix or windows system
+    on_posix = platform.system() != "Windows"
+    args = shlex.split(cmd, posix=on_posix)
     cmd_args = []
     for arg in args:
         match = re.match("('|\")(.*)\\1$", arg)
