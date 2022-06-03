@@ -38,10 +38,13 @@ Implement processing nodes.
       <https://colab.research.google.com/drive/1RRV1gHbGJs49qQB1q1d5tQEycVRtuhw6>`__
 
 """
+import platform
+import re
 import attr
 import cloudpickle as cp
 import inspect
 import typing as ty
+import shlex
 from pathlib import Path
 import warnings
 
@@ -447,7 +450,7 @@ class ShellCommandTask(TaskBase):
             cmd_el_str = field.metadata["formatter"](**call_args_val)
             cmd_el_str = cmd_el_str.strip().replace("  ", " ")
             if cmd_el_str != "":
-                cmd_add += cmd_el_str.split(" ")
+                cmd_add += split_cmd(cmd_el_str)
         elif field.type is bool:
             # if value is simply True the original argstr is used,
             # if False, nothing is added to the command
@@ -483,10 +486,8 @@ class ShellCommandTask(TaskBase):
                         cmd_el_str = f"{argstr} {value}"
                     else:
                         cmd_el_str = ""
-            # removing double spacing
-            cmd_el_str = cmd_el_str.strip().replace("  ", " ")
             if cmd_el_str:
-                cmd_add += cmd_el_str.split(" ")
+                cmd_add += split_cmd(cmd_el_str)
         return pos, cmd_add
 
     @property
@@ -501,9 +502,19 @@ class ShellCommandTask(TaskBase):
         if self.state:
             raise NotImplementedError
         if isinstance(self, ContainerTask):
-            cmdline = " ".join(self.container_args + self.command_args)
+            command_args = self.container_args + self.command_args
         else:
-            cmdline = " ".join(self.command_args)
+            command_args = self.command_args
+        # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
+        cmdline = command_args[0]
+        for arg in command_args[1:]:
+            # If there are spaces in the arg and it is not enclosed by matching
+            # quotes, add quotes to escape the space. Not sure if this should
+            # be expanded to include other special characters apart from spaces
+            if " " in arg:
+                cmdline += " '" + arg + "'"
+            else:
+                cmdline += " " + arg
         return cmdline
 
     def _run_task(self):
@@ -519,10 +530,12 @@ class ShellCommandTask(TaskBase):
             values = execute(args, strip=self.strip)
             self.output_ = dict(zip(keys, values))
             if self.output_["return_code"]:
+                msg = f"Error running '{self.name}' task with {args}:"
                 if self.output_["stderr"]:
-                    raise RuntimeError(self.output_["stderr"])
-                else:
-                    raise RuntimeError(self.output_["stdout"])
+                    msg += "\n\nstderr:\n" + self.output_["stderr"]
+                if self.output_["stdout"]:
+                    msg += "\n\nstdout:\n" + self.output_["stdout"]
+                raise RuntimeError(msg)
 
 
 class ContainerTask(ShellCommandTask):
@@ -825,3 +838,29 @@ class SingularityTask(ContainerTask):
         cargs.extend(["--pwd", str(self.output_cpath)])
         cargs.append(self.inputs.image)
         return cargs
+
+
+def split_cmd(cmd: str):
+    """Splits a shell command line into separate arguments respecting quotes
+
+    Parameters
+    ----------
+    cmd : str
+        Command line string or part thereof
+
+    Returns
+    -------
+    str
+        the command line string split into process args
+    """
+    # Check whether running on posix or windows system
+    on_posix = platform.system() != "Windows"
+    args = shlex.split(cmd, posix=on_posix)
+    cmd_args = []
+    for arg in args:
+        match = re.match("('|\")(.*)\\1$", arg)
+        if match:
+            cmd_args.append(match.group(2))
+        else:
+            cmd_args.append(arg)
+    return cmd_args

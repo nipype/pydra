@@ -34,6 +34,23 @@ class Interf_2(ShellCommandTask):
     executable = "testing command"
 
 
+class Interf_3(ShellCommandTask):
+    """class with customized input and executables"""
+
+    input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "in_file",
+                str,
+                {"help_string": "in_file", "argstr": "'{in_file}'"},
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+    executable = "testing command"
+
+
 class TouchInterf(ShellCommandTask):
     """class with customized input and executables"""
 
@@ -94,6 +111,13 @@ def test_interface_executable_2():
         # task.executable stays the same, but input.executable is changed, so the cmd is changed
         assert task.inputs.executable == "i want a different command"
         assert task.cmdline == "i want a different command"
+
+
+def test_interface_cmdline_with_spaces():
+    task = Interf_3(in_file="/path/to/file/with spaces")
+    assert task.executable == "testing command"
+    assert task.inputs.executable == "testing command"
+    assert task.cmdline == "testing command '/path/to/file/with spaces'"
 
 
 def test_interface_run_1():
