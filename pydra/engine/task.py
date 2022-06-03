@@ -38,6 +38,7 @@ Implement processing nodes.
       <https://colab.research.google.com/drive/1RRV1gHbGJs49qQB1q1d5tQEycVRtuhw6>`__
 
 """
+import platform
 import attr
 import cloudpickle as cp
 import inspect
@@ -68,6 +69,8 @@ from .helpers import (
     output_from_inputfields,
 )
 from .helpers_file import template_update, is_local_file
+
+running_on_posix = platform.system() != "Windows"
 
 
 class FunctionTask(TaskBase):
@@ -448,7 +451,7 @@ class ShellCommandTask(TaskBase):
             cmd_el_str = field.metadata["formatter"](**call_args_val)
             cmd_el_str = cmd_el_str.strip().replace("  ", " ")
             if cmd_el_str != "":
-                cmd_add += shlex.split(cmd_el_str)
+                cmd_add += shlex.split(cmd_el_str, posix=running_on_posix)
         elif field.type is bool:
             # if value is simply True the original argstr is used,
             # if False, nothing is added to the command
@@ -485,7 +488,7 @@ class ShellCommandTask(TaskBase):
                     else:
                         cmd_el_str = ""
             if cmd_el_str:
-                cmd_add += shlex.split(cmd_el_str)
+                cmd_add += shlex.split(cmd_el_str, posix=running_on_posix)
         return pos, cmd_add
 
     @property
