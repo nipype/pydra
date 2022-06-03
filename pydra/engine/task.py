@@ -71,8 +71,6 @@ from .helpers import (
 )
 from .helpers_file import template_update, is_local_file
 
-running_on_posix = platform.system() != "Windows"
-
 
 class FunctionTask(TaskBase):
     """Wrap a Python callable as a task element."""
@@ -452,7 +450,7 @@ class ShellCommandTask(TaskBase):
             cmd_el_str = field.metadata["formatter"](**call_args_val)
             cmd_el_str = cmd_el_str.strip().replace("  ", " ")
             if cmd_el_str != "":
-                cmd_add += shlex.split(cmd_el_str, posix=running_on_posix)
+                cmd_add += split_cmd(cmd_el_str)
         elif field.type is bool:
             # if value is simply True the original argstr is used,
             # if False, nothing is added to the command
@@ -489,7 +487,7 @@ class ShellCommandTask(TaskBase):
                     else:
                         cmd_el_str = ""
             if cmd_el_str:
-                cmd_add += shlex.split(cmd_el_str, posix=running_on_posix)
+                cmd_add += split_cmd(cmd_el_str)
         return pos, cmd_add
 
     @property
@@ -513,7 +511,7 @@ class ShellCommandTask(TaskBase):
             # If there are spaces in the arg and it is not enclosed by matching
             # quotes, add quotes to escape the space. Not sure if this should
             # be expanded to include other special characters apart from spaces
-            if " " in arg and not re.match("('|\").*\\1", arg):
+            if " " in arg:
                 cmdline += " '" + arg + "'"
             else:
                 cmdline += " " + arg
@@ -840,3 +838,27 @@ class SingularityTask(ContainerTask):
         cargs.extend(["--pwd", str(self.output_cpath)])
         cargs.append(self.inputs.image)
         return cargs
+
+
+def split_cmd(cmd: str):
+    """Splits a shell command line into separate arguments respecting quotes
+
+    Parameters
+    ----------
+    cmd : str
+        Command line string or part thereof
+
+    Returns
+    -------
+    str
+        the command line string split into process args
+    """
+    args = shlex.split(cmd, posix=(platform.system() != "Windows"))
+    cmd_args = []
+    for arg in args:
+        match = re.match("('|\")(.*)\\1$", arg)
+        if match:
+            cmd_args.append(match.group(2))
+        else:
+            cmd_args.append(arg)
+    return cmd_args
