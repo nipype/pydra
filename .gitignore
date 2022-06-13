@@ -17,3 +17,5 @@ cov.xml
 .idea
 
 .DS_Store
+
+requirement.txt
