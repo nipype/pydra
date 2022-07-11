@@ -1721,6 +1721,116 @@ def test_shell_cmd_inputs_template_10():
     assert shelly.output_names == ["return_code", "stdout", "stderr", "outA"]
 
 
+def test_shell_cmd_inputs_template_function_1():
+    """one input field uses output_file_template that is a simple function
+    this can be easily done by simple template as in test_shell_cmd_inputs_template_1
+    """
+
+    # a function that return an output template
+    def template_fun(inputs):
+        return "{inpA}_out"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 2,
+                        "help_string": "outA",
+                        "argstr": "-o",
+                        "output_file_template": template_fun,
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, inpA="inpA"
+    )
+
+    assert shelly.cmdline == f"executable inpA -o {str(shelly.output_dir / 'inpA_out')}"
+
+
+def test_shell_cmd_inputs_template_function_2():
+    """one input field uses output_file_template that is a function,
+    depending on a value of an input it returns different template
+    """
+
+    # a function that return an output template that depends on value of the input
+    def template_fun(inputs):
+        if inputs.inpB % 2 == 0:
+            return "{inpA}_even"
+        else:
+            return "{inpA}_odd"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "inpB",
+                attr.ib(
+                    type=int,
+                    metadata={
+                        "help_string": "inpB",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 2,
+                        "help_string": "outA",
+                        "argstr": "-o",
+                        "output_file_template": template_fun,
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        executable="executable",
+        input_spec=my_input_spec,
+        inpA="inpA",
+        inpB=1,
+    )
+
+    assert shelly.cmdline == f"executable inpA -o {str(shelly.output_dir / 'inpA_odd')}"
+
+
 def test_shell_cmd_inputs_template_1_st():
     """additional inputs, one uses output_file_template (and argstr)
     testing cmdline when splitter defined

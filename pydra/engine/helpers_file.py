@@ -678,7 +678,11 @@ def _template_formatting(field, inputs, inputs_dict_st):
     """
     from .specs import MultiOutputFile
 
+    # if a template is a function it has to be run first with the inputs as the only arg
     template = field.metadata["output_file_template"]
+    if callable(template):
+        template = template(inputs)
+
     # as default, we assume that keep_extension is True
     keep_extension = field.metadata.get("keep_extension", True)
 
