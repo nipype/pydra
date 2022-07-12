@@ -1557,6 +1557,72 @@ def test_shell_cmd_inputsspec_11():
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_12(tmpdir, plugin, results_function):
+    """
+    providing output name using input_spec
+    output_file_template is provided as a function that returns
+    various templates depending on the values of inputs fields
+    """
+    cmd = "cp"
+    file = tmpdir.mkdir("data_inp").join("file.txt")
+    file.write("content\n")
+
+    def template_function(inputs):
+        if inputs.number % 2 == 0:
+            return "{file_orig}_even"
+        else:
+            return "{file_orig}_odd"
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file_orig",
+                attr.ib(
+                    type=File,
+                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                ),
+            ),
+            (
+                "number",
+                attr.ib(
+                    type=int,
+                    metadata={"help_string": "a number", "mandatory": True},
+                ),
+            ),
+            (
+                "file_copy",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": template_function,
+                        "help_string": "output file",
+                        "argstr": "",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        file_orig=file,
+        number=2,
+        cache_dir=tmpdir,
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.file_copy.exists()
+    assert res.output.file_copy.name == "file_even.txt"
+    # checking if it's created in a good place
+    assert shelly.output_dir == res.output.file_copy.parent
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
     """shelltask changes a file in place,
     adding copyfile=True to the file-input from input_spec

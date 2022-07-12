@@ -624,7 +624,11 @@ class ShellOutSpec:
             # if the output has output_file_template field,
             # adding all input fields from the template to requires
             if "output_file_template" in fld.metadata:
-                inp_fields = re.findall(r"{\w+}", fld.metadata["output_file_template"])
+                template = fld.metadata["output_file_template"]
+                # if a template is a function it has to be run first with the inputs as the only arg
+                if callable(template):
+                    template = template(inputs)
+                inp_fields = re.findall(r"{\w+}", template)
                 field_required += [
                     el[1:-1] for el in inp_fields if el[1:-1] not in field_required
                 ]
