@@ -49,7 +49,7 @@ class Audit:
         self.odir = odir
         if self.audit_check(AuditFlag.PROV):
             self.aid = f"uid:{gen_uuid()}"
-            # new code will be added to include user information 
+            # new code will be added to include user information
             start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now()}
         os.chdir(self.odir)
         if self.audit_check(AuditFlag.PROV):
