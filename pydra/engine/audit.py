@@ -51,7 +51,7 @@ class Audit:
         if self.audit_check(AuditFlag.PROV):
             self.aid = f"uid:{gen_uuid()}"
 <<<<<<< HEAD
-            # new code will be added to include user information 
+            # new code will be added to include user information
             user_id = pwd.getpwuid(os.getuid())[0]
             start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now(), "executedBy": user_id}
 =======
