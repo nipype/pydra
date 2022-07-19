@@ -5,6 +5,7 @@ import json
 import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from .helpers import ensure_list, gather_runtime_info
+import pwd
 
 
 class Audit:
@@ -50,7 +51,8 @@ class Audit:
         if self.audit_check(AuditFlag.PROV):
             self.aid = f"uid:{gen_uuid()}"
             # new code will be added to include user information 
-            start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now()}
+            user_id = pwd.getpwuid(os.getuid())[0]
+            start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now(), "executedBy": user_id}
         os.chdir(self.odir)
         if self.audit_check(AuditFlag.PROV):
             self.audit_message(start_message, AuditFlag.PROV)
