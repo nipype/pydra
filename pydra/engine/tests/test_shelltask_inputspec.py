@@ -1152,6 +1152,8 @@ def test_shell_cmd_inputs_template_6():
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
     assert shelly.cmdline == f"executable inpA -o {str(shelly.output_dir / 'inpA_out')}"
+    # checking if the command is the same
+    assert shelly.cmdline == f"executable inpA -o {str(shelly.output_dir / 'inpA_out')}"
 
     # a string is provided for outA, so this should be used as the outA value
     shelly = ShellCommandTask(
@@ -1169,6 +1171,8 @@ def test_shell_cmd_inputs_template_6():
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA=False
     )
+    assert shelly.cmdline == "executable inpA"
+    # checking of the command is the same
     assert shelly.cmdline == "executable inpA"
 
 
@@ -1214,6 +1218,8 @@ def test_shell_cmd_inputs_template_6a():
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
     assert shelly.cmdline == "executable inpA"
+    # checking if the command is the same
+    assert shelly.cmdline == "executable inpA"
 
     # a string is provided for outA, so this should be used as the outA value
     shelly = ShellCommandTask(
@@ -1231,6 +1237,8 @@ def test_shell_cmd_inputs_template_6a():
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA=False
     )
+    assert shelly.cmdline == "executable inpA"
+    # checking if the command is the same
     assert shelly.cmdline == "executable inpA"
 
 
@@ -2080,7 +2088,7 @@ def test_shell_cmd_inputs_di(tmpdir, use_validator):
         == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{str(shelly.output_dir / 'a_file_out.ext')}]"
     )
 
-    # input file name, noiseImage is set to True, so template is used in the output
+    # # input file name, noiseImage is set to True, so template is used in the output
     shelly = ShellCommandTask(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,

@@ -579,7 +579,6 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
     Should be run when all inputs used in the templates are already set.
 
     """
-
     inputs_dict_st = attr.asdict(inputs, recurse=False)
     if map_copyfiles is not None:
         inputs_dict_st.update(map_copyfiles)
@@ -654,7 +653,7 @@ def template_update_single(
         return inputs_dict_st[field.name]
     elif spec_type == "input" and inputs_dict_st[field.name] is False:
         # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
-        return attr.NOTHING
+        return False
     else:  # inputs_dict[field.name] is True or spec_type is output
         value = _template_formatting(field, inputs, inputs_dict_st)
         # changing path so it is in the output_dir

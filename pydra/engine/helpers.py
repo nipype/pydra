@@ -884,6 +884,14 @@ def argstr_formatting(argstr, inputs, value_updates=None):
         if fld_value is attr.NOTHING:
             # if value is NOTHING, nothing should be added to the command
             val_dict[fld_name] = ""
+            print("argst, ", fld_name, "NOT")
+        # if value is False, but the field has a template the output field should not be created
+        elif (
+            fld_value is False
+            and "output_file_template"
+            in [el for el in attr_fields(inputs) if el.name == fld_name][0].metadata
+        ):
+            val_dict[fld_name] = ""
         else:
             val_dict[fld_name] = fld_value
 
