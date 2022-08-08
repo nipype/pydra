@@ -13,6 +13,10 @@ def attr_fields(spec, exclude_names=()):
     return [field for field in spec.__attrs_attrs__ if field.name not in exclude_names]
 
 
+def attr_field(spec, name):
+    return [field for field in spec.__attrs_attrs__ if field.name == name][0]
+
+
 def attr_fields_dict(spec, exclude_names=()):
     return {
         field.name: field
