@@ -1191,7 +1191,7 @@ class Workflow(TaskBase):
                         err_file = getattr(self, val.name).output_dir / "_error.pklz"
                     raise ValueError(
                         f"Task {val.name} raised an error, full crash report is here: "
-                        f"{err_file}"
+                        f"{str(err_file)}"
                     )
         return attr.evolve(output, **output_wf)
 
