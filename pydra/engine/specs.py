@@ -572,7 +572,7 @@ class ShellOutSpec:
                     return attr.NOTHING
                 return val
         elif "callable" in fld.metadata:
-            call_args = inspect.getargspec(fld.metadata["callable"])
+            call_args = inspect.getfullargspec(fld.metadata["callable"])
             call_args_val = {}
             for argnm in call_args.args:
                 if argnm == "field":
