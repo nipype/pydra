@@ -53,11 +53,21 @@ class Audit:
 
             # new code will be added to include user information
             user_id = pwd.getpwuid(os.getuid())[0]
-            start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now(), "executedBy": user_id}
+            start_message = {
+                "@id": self.aid,
+                "@type": "task",
+                "startedAtTime": now(),
+                "executedBy": user_id,
+            }
 
             executable = inputs.executable
             # new code will be added to include user information
-            start_message = {"@id": self.aid, "@type": "task", "executable": executable, "startedAtTime": now()}
+            start_message = {
+                "@id": self.aid,
+                "@type": "task",
+                "executable": executable,
+                "startedAtTime": now(),
+            }
 
         os.chdir(self.odir)
         if self.audit_check(AuditFlag.PROV):
