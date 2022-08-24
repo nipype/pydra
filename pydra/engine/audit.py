@@ -34,7 +34,7 @@ class Audit:
         self.messenger_args = messenger_args
         self.develop = develop
 
-    def start_audit(self, odir):
+    def start_audit(self, odir, inputs):
         """
         Start recording provenance.
 
@@ -50,14 +50,15 @@ class Audit:
         self.odir = odir
         if self.audit_check(AuditFlag.PROV):
             self.aid = f"uid:{gen_uuid()}"
-<<<<<<< HEAD
+
             # new code will be added to include user information
             user_id = pwd.getpwuid(os.getuid())[0]
             start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now(), "executedBy": user_id}
-=======
+
+            executable = inputs.executable
             # new code will be added to include user information
-            start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now()}
->>>>>>> b147443a2df2f014505c64bc7bc8181b959e73d5
+            start_message = {"@id": self.aid, "@type": "task", "executable": executable, "startedAtTime": now()}
+
         os.chdir(self.odir)
         if self.audit_check(AuditFlag.PROV):
             self.audit_message(start_message, AuditFlag.PROV)

@@ -500,7 +500,8 @@ class TaskBase:
             orig_inputs = self._modify_inputs()
             result = Result(output=None, runtime=None, errored=False)
             self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=output_dir)
+            self.audit.start_audit(odir=output_dir, inputs=self.inputs)
+            self.audit.audit_task()
             try:
                 self.audit.monitor()
                 self._run_task()
