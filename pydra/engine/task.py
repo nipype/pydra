@@ -431,7 +431,7 @@ class ShellCommandTask(TaskBase):
         # formatter that creates a custom command argument
         # it can thake the value of the filed, all inputs, or the value of other fields.
         if "formatter" in field.metadata:
-            call_args = inspect.getargspec(field.metadata["formatter"])
+            call_args = inspect.getfullargspec(field.metadata["formatter"])
             call_args_val = {}
             for argnm in call_args.args:
                 if argnm == "field":

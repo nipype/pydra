@@ -486,7 +486,7 @@ class ShellOutSpec:
         inputs.check_fields_input_spec()
         output_names = ["return_code", "stdout", "stderr"]
         for fld in attr_fields(self, exclude_names=("return_code", "stdout", "stderr")):
-            if fld.type is not File:
+            if fld.type not in [File, MultiOutputFile, Directory]:
                 raise Exception("not implemented (collect_additional_output)")
             # assuming that field should have either default or metadata, but not both
             if (
@@ -572,7 +572,7 @@ class ShellOutSpec:
                     return attr.NOTHING
                 return val
         elif "callable" in fld.metadata:
-            call_args = inspect.getargspec(fld.metadata["callable"])
+            call_args = inspect.getfullargspec(fld.metadata["callable"])
             call_args_val = {}
             for argnm in call_args.args:
                 if argnm == "field":
