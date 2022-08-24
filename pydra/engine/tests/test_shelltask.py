@@ -2769,7 +2769,12 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmpdir):
 
     my_output_spec = SpecInfo(
         name="Output",
-        fields=[("newfile", attr.ib(type=File, metadata={"callable": gather_output}))],
+        fields=[
+            (
+                "newfile",
+                attr.ib(type=MultiOutputFile, metadata={"callable": gather_output}),
+            )
+        ],
         bases=(ShellOutSpec,),
     )
     shelly = ShellCommandTask(
@@ -2781,6 +2786,11 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmpdir):
     # newfile is a list
     assert len(res.output.newfile) == 2
     assert all([file.exists for file in res.output.newfile])
+    assert (
+        shelly.output_names
+        == shelly.generated_output_names
+        == ["return_code", "stdout", "stderr", "newfile"]
+    )
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -3238,7 +3248,11 @@ def test_shell_cmd_outputspec_8d(tmpdir, plugin, results_function):
         cache_dir=tmpdir,
         resultsDir="test",  # Path(tmpdir) / "test" TODO: Not working without absolute path support
     )
-
+    assert (
+        shelly.output_names
+        == shelly.generated_output_names
+        == ["return_code", "stdout", "stderr", "resultsDir"]
+    )
     res = results_function(shelly, plugin)
     print("Cache_dirr:", shelly.cache_dir)
     assert (shelly.output_dir / Path("test")).exists() == True
