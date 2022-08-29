@@ -986,11 +986,14 @@ def test_audit_prov(tmpdir, use_validator):
     collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
 
+
 def test_audit_task(tmpdir):
     @mark.task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
+
     from glob import glob
+
     funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     funky.cache_dir = tmpdir
     funky()
@@ -1003,9 +1006,7 @@ def test_audit_task(tmpdir):
                 print(data)
                 assert True
 
-            
-    # Write new test for shell command task 
-
+    # Write new test for shell command task
 
 
 def test_audit_prov_messdir_1(tmpdir, use_validator):

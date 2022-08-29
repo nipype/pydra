@@ -187,8 +187,8 @@ class Audit:
             Boolean AND for self.oudit_flags and flag
         """
         return self.audit_flags & flag
-    
-    
+
+
     def audit_task(self, inputs):
 
         if hasattr(inputs, 'executable'):
@@ -198,7 +198,7 @@ class Audit:
         else:
             label = 'Python Function'
 
-        start_message = {"@id": self.aid, "@type": "task", "label": 
+        start_message = {"@id": self.aid, "@type": "task", "label":
         label, "startedAtTime": now()}
         self.audit_message(start_message, AuditFlag.PROV)
 
