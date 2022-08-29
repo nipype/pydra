@@ -996,16 +996,33 @@ def test_audit_task(tmpdir):
     funky()
     message_path = tmpdir / funky.checksum / "messages"
     # go through each jsonld file in message_path and check if the label field exists
+    json_content = []
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
             if "label" in data:
-                print(data)
-                assert True
-
+                json_content.append(True)
+                assert "Python Function" == data["label"]
+    assert any(json_content)
             
     # Write new test for shell command task 
-
+def test_audit_shellcommandtask(tmpdir):
+    shelly = ShellCommandTask(
+    name='shelly', executable='ls', audit_flags=AuditFlag.PROV, messengers=FileMessenger()
+)
+    from glob import glob
+    shelly.cache_dir = tmpdir
+    shelly()
+    message_path = tmpdir / shelly.checksum / "messages"
+    # go through each jsonld file in message_path and check if the label field exists
+    json_content = []
+    for file in glob(str(message_path) + "/*.jsonld"):
+        with open(file, "r") as f:
+            data = json.load(f)
+            if "label" in data:
+                json_content.append(True)
+                assert "ls" == data["label"]
+    assert any(json_content)
 
 
 def test_audit_task(tmpdir):
