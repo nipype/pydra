@@ -986,6 +986,27 @@ def test_audit_prov(tmpdir, use_validator):
     collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
 
+def test_audit_task(tmpdir):
+    @mark.task
+    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+        return a + b
+    from glob import glob
+    funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    funky.cache_dir = tmpdir
+    funky()
+    message_path = tmpdir / funky.checksum / "messages"
+    # go through each jsonld file in message_path and check if the label field exists
+    for file in glob(str(message_path) + "/*.jsonld"):
+        with open(file, "r") as f:
+            data = json.load(f)
+            if "label" in data:
+                print(data)
+                assert True
+
+            
+    # Write new test for shell command task 
+
+
 
 def test_audit_task(tmpdir):
     @mark.task
@@ -1105,7 +1126,7 @@ def test_audit_all(tmpdir, use_validator):
     from glob import glob
 
     assert len(glob(str(tmpdir / funky.checksum / "proc*.log"))) == 1
-    assert len(glob(str(message_path / "*.jsonld"))) == 6
+    assert len(glob(str(message_path / "*.jsonld"))) == 7
 
     # commented out to speed up testing
     collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")

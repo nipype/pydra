@@ -51,31 +51,13 @@ class Audit:
         if self.audit_check(AuditFlag.PROV):
             self.aid = f"uid:{gen_uuid()}"
 
-            # new code will be added to include user information
-<<<<<<< HEAD
-            user_id = pwd.getpwuid(os.getuid())[0]
-            start_message = {
-                "@id": self.aid,
-                "@type": "task",
-                "startedAtTime": now(),
-                "executedBy": user_id,
-            }
-=======
             user_id = f"uid:{gen_uuid()}"
             start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now(), "executedBy": user_id}
->>>>>>> d1309df (Added tests for audit_function_task, label field now updated in audit.PROV)
+
 
             # new code will be added to include user information
-<<<<<<< HEAD
-            start_message = {
-                "@id": self.aid,
-                "@type": "task",
-                "executable": executable,
-                "startedAtTime": now(),
-            }
-=======
 
->>>>>>> d1309df (Added tests for audit_function_task, label field now updated in audit.PROV)
+
 
         os.chdir(self.odir)
         if self.audit_check(AuditFlag.PROV):
@@ -188,7 +170,6 @@ class Audit:
         """
         return self.audit_flags & flag
 
-
     def audit_task(self, inputs):
 
         if hasattr(inputs, 'executable'):
@@ -198,16 +179,9 @@ class Audit:
         else:
             label = 'Python Function'
 
+
         start_message = {"@id": self.aid, "@type": "task", "label":
+
+
         label, "startedAtTime": now()}
         self.audit_message(start_message, AuditFlag.PROV)
-
-    def audit_shell_command(self, inputs):
-        if hasattr(inputs, 'command'):
-            label = inputs.command
-        elif:
-            label = inputs.command
-        elif hasattr(inputs, 'Command'):
-            label = inputs.command
-        else:
-            label = 'Unknown Operation'
