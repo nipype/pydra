@@ -51,11 +51,13 @@ class Audit:
         if self.audit_check(AuditFlag.PROV):
             self.aid = f"uid:{gen_uuid()}"
 
-
             user_id = f"uid:{gen_uuid()}"
-            start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now(), "executedBy": user_id}
-
-
+            start_message = {
+                "@id": self.aid,
+                "@type": "task",
+                "startedAtTime": now(),
+                "executedBy": user_id,
+            }
 
         os.chdir(self.odir)
         if self.audit_check(AuditFlag.PROV):
@@ -170,17 +172,17 @@ class Audit:
 
     def audit_task(self, inputs):
 
-        if hasattr(inputs, 'executable'):
+        if hasattr(inputs, "executable"):
 
             label = inputs.executable
         # assume function task
         else:
-            label = 'Python Function'
+            label = "Python Function"
 
-
-        start_message = {"@id": self.aid, "@type": "task", "label":
-
-
-        label, "startedAtTime": now()}
+        start_message = {
+            "@id": self.aid,
+            "@type": "task",
+            "label": label,
+            "startedAtTime": now(),
+        }
         self.audit_message(start_message, AuditFlag.PROV)
-
