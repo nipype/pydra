@@ -51,11 +51,9 @@ class Audit:
         if self.audit_check(AuditFlag.PROV):
             self.aid = f"uid:{gen_uuid()}"
 
+
             user_id = f"uid:{gen_uuid()}"
             start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now(), "executedBy": user_id}
-
-
-            # new code will be added to include user information
 
 
 
@@ -185,3 +183,4 @@ class Audit:
 
         label, "startedAtTime": now()}
         self.audit_message(start_message, AuditFlag.PROV)
+
