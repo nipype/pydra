@@ -454,7 +454,9 @@ class TaskBase:
 
     def _modify_inputs(self):
         """Update and preserve a Task's original inputs"""
-        orig_inputs = attr.asdict(self.inputs, recurse=False)
+        orig_inputs = {
+            k: deepcopy(v) for k, v in attr.asdict(self.inputs, recurse=False).items()
+        }
         map_copyfiles = copyfile_input(self.inputs, self.output_dir)
         modified_inputs = template_update(
             self.inputs, self.output_dir, map_copyfiles=map_copyfiles
