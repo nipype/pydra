@@ -30,11 +30,43 @@ from .utils import (
 from ..submitter import Submitter
 from ..core import Workflow
 from ... import mark
+from ..specs import SpecInfo, BaseSpec, ShellSpec
 
 
 def test_wf_no_input_spec():
     with pytest.raises(ValueError, match="Empty input_spec"):
         Workflow(name="workflow")
+
+
+def test_wf_specinfo_input_spec():
+    input_spec = SpecInfo(
+        name='Input',
+        fields=[
+            ('a', str, '',{'mandatory': True}),
+            ('b', dict, {"foo": 1, "bar": False}, {'mandatory': False}),
+        ],
+        bases=(BaseSpec,),
+    )
+    wf = Workflow(
+        name="workflow",
+        input_spec=input_spec,
+    )
+    for x in ['a', 'b']:
+        assert hasattr(wf.inputs, x)
+    assert wf.inputs.a == ''
+    assert wf.inputs.b == {"foo": 1, "bar": False}
+    bad_input_spec = SpecInfo(
+        name='Input',
+        fields=[
+            ('a', str, {'mandatory': True}),
+        ],
+        bases=(ShellSpec,)
+    )
+    with pytest.raises(
+        ValueError,
+        match="Provided SpecInfo must have BaseSpec as it's base."
+    ):
+        Workflow(name="workflow", input_spec=bad_input_spec)
 
 
 def test_wf_name_conflict1():
