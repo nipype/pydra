@@ -40,10 +40,10 @@ def test_wf_no_input_spec():
 
 def test_wf_specinfo_input_spec():
     input_spec = SpecInfo(
-        name='Input',
+        name="Input",
         fields=[
-            ('a', str, '',{'mandatory': True}),
-            ('b', dict, {"foo": 1, "bar": False}, {'mandatory': False}),
+            ("a", str, "", {"mandatory": True}),
+            ("b", dict, {"foo": 1, "bar": False}, {"mandatory": False}),
         ],
         bases=(BaseSpec,),
     )
@@ -51,20 +51,19 @@ def test_wf_specinfo_input_spec():
         name="workflow",
         input_spec=input_spec,
     )
-    for x in ['a', 'b']:
+    for x in ["a", "b"]:
         assert hasattr(wf.inputs, x)
-    assert wf.inputs.a == ''
+    assert wf.inputs.a == ""
     assert wf.inputs.b == {"foo": 1, "bar": False}
     bad_input_spec = SpecInfo(
-        name='Input',
+        name="Input",
         fields=[
-            ('a', str, {'mandatory': True}),
+            ("a", str, {"mandatory": True}),
         ],
-        bases=(ShellSpec,)
+        bases=(ShellSpec,),
     )
     with pytest.raises(
-        ValueError,
-        match="Provided SpecInfo must have BaseSpec as it's base."
+        ValueError, match="Provided SpecInfo must have BaseSpec as it's base."
     ):
         Workflow(name="workflow", input_spec=bad_input_spec)
 
