@@ -843,6 +843,12 @@ class Workflow(TaskBase):
         if input_spec:
             if isinstance(input_spec, BaseSpec):
                 self.input_spec = input_spec
+            elif isinstance(input_spec, SpecInfo):
+                if not any([x == BaseSpec for x in input_spec.bases]):
+                    raise ValueError(
+                        "Provided SpecInfo must have BaseSpec as it's base."
+                    )
+                self.input_spec = input_spec
             else:
                 self.input_spec = SpecInfo(
                     name="Inputs",
