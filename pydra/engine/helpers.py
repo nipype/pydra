@@ -704,6 +704,11 @@ def hash_value(value, tp=None, metadata=None, precalculated=None):
                 hash_value(el, tp, metadata, precalculated)
                 for el in ensure_list(value.tolist())
             ]
+        elif type(value).__module__ == "pandas.core.frame":
+            return [
+                hash_value(el, tp, metadata, precalculated)
+                for el in ensure_list(value.to_dict())
+            ]
         else:
             return value
 
