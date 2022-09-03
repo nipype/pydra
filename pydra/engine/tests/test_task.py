@@ -1013,8 +1013,8 @@ def test_audit_task(tmpdir):
 
 
 =======
-            
-    # Write new test for shell command task 
+
+    # Write new test for shell command task
 >>>>>>> a27cbe1 (Audit changes & get cmdline)
 def test_audit_shellcommandtask(tmpdir):
     args = '-l'

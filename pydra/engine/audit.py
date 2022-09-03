@@ -172,23 +172,27 @@ class Audit:
 
     def audit_task(self, task):
 
-        if hasattr(task.inputs, 'executable'):
+        if hasattr(task.inputs, "executable"):
             label = task.name
         # assume function task
         else:
             # work on changing this to function name
-            label = 'Unknown'
+            label = "Unknown"
             # use task name or the name of the function for python function tasks. If no name, figure out how to get the name of the function from task.
 
-        if hasattr(task.inputs, 'args'):
+        if hasattr(task.inputs, "args"):
             command = task.cmdline
         else:
-            command = 'Unknown'
+            command = "Unknown"
 
-        start_message = {"@id": self.aid, "@type": "task", "label":
-        label, "command": command, "startedAtTime": now()}
+        start_message = {
+            "@id": self.aid,
+            "@type": "task",
+            "label": label,
+            "command": command,
+            "startedAtTime": now(),
+        }
         self.audit_message(start_message, AuditFlag.PROV)
-
 
         # add more fields according to BEP208 doc
         # with every field, check in tests
