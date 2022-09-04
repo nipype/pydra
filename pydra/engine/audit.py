@@ -5,7 +5,6 @@ import json
 import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from .helpers import ensure_list, gather_runtime_info
-import pwd
 
 
 class Audit:
@@ -193,3 +192,6 @@ class Audit:
             "startedAtTime": now(),
         }
         self.audit_message(start_message, AuditFlag.PROV)
+
+        # add more fields according to BEP208 doc
+        # with every field, check in tests

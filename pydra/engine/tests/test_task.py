@@ -1008,30 +1008,50 @@ def test_audit_task(tmpdir):
                 assert "Python Function" == data["label"]
     assert any(json_content)
 
+<<<<<<< HEAD
     # Write new test for shell command task
 
 
+=======
+
+    # Write new test for shell command task
+>>>>>>> a27cbe1 (Audit changes & get cmdline)
 def test_audit_shellcommandtask(tmpdir):
+    args = '-l'
     shelly = ShellCommandTask(
+<<<<<<< HEAD
         name="shelly",
         executable="ls",
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
+=======
+    name='shelly', executable='ls', args=args, audit_flags=AuditFlag.PROV, messengers=FileMessenger()
+)
+>>>>>>> a27cbe1 (Audit changes & get cmdline)
     from glob import glob
 
     shelly.cache_dir = tmpdir
     shelly()
     message_path = tmpdir / shelly.checksum / "messages"
     # go through each jsonld file in message_path and check if the label field exists
-    json_content = []
+    label_content = []
+    command_content = []
+
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
             if "label" in data:
-                json_content.append(True)
-                assert "ls" == data["label"]
-    assert any(json_content)
+                label_content.append(True)
+            if "command" in data:
+                command_content.append(True)
+                assert "ls -l" == data["command"]
+
+    print(command_content)
+    assert any(label_content)
+
+
+
 
 
 def test_audit_task(tmpdir):
