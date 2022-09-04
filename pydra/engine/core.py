@@ -502,7 +502,7 @@ class TaskBase:
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=output_dir)
             if self.audit.audit_check(AuditFlag.PROV):
-                self.audit.audit_task(inputs=self.inputs)
+                self.audit.audit_task(task=self)
             try:
                 self.audit.monitor()
                 self._run_task()
