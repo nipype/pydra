@@ -1013,6 +1013,7 @@ def test_audit_shellcommandtask(tmpdir):
     shelly = ShellCommandTask(
         name="shelly",
         executable="ls",
+        args=args,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
