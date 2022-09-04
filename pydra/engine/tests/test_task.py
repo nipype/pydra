@@ -1008,8 +1008,9 @@ def test_audit_task(tmpdir):
                 assert "Python Function" == data["label"]
     assert any(json_content)
 
+
 def test_audit_shellcommandtask(tmpdir):
-    args = '-l'
+    args = "-l"
     shelly = ShellCommandTask(
         name="shelly",
         executable="ls",
@@ -1038,9 +1039,6 @@ def test_audit_shellcommandtask(tmpdir):
 
     print(command_content)
     assert any(label_content)
-
-
-
 
 
 def test_audit_task(tmpdir):
