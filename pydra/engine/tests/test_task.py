@@ -1008,27 +1008,15 @@ def test_audit_task(tmpdir):
                 assert "Python Function" == data["label"]
     assert any(json_content)
 
-<<<<<<< HEAD
-    # Write new test for shell command task
-
-
-=======
-
-    # Write new test for shell command task
->>>>>>> a27cbe1 (Audit changes & get cmdline)
 def test_audit_shellcommandtask(tmpdir):
     args = '-l'
     shelly = ShellCommandTask(
-<<<<<<< HEAD
         name="shelly",
         executable="ls",
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
-=======
-    name='shelly', executable='ls', args=args, audit_flags=AuditFlag.PROV, messengers=FileMessenger()
-)
->>>>>>> a27cbe1 (Audit changes & get cmdline)
+
     from glob import glob
 
     shelly.cache_dir = tmpdir
