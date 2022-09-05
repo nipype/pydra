@@ -177,7 +177,6 @@ class Audit:
         else:
             # work on changing this to function name
             label = "Unknown"
-            # use task name or the name of the function for python function tasks. If no name, figure out how to get the name of the function from task.
 
         if hasattr(task.inputs, "args"):
             command = task.cmdline
