@@ -1041,28 +1041,6 @@ def test_audit_shellcommandtask(tmpdir):
     assert any(label_content)
 
 
-def test_audit_task(tmpdir):
-    @mark.task
-    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
-        return a + b
-
-    from glob import glob
-
-    funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
-    funky.cache_dir = tmpdir
-    funky()
-    message_path = tmpdir / funky.checksum / "messages"
-    # go through each jsonld file in message_path and check if the label field exists
-    for file in glob(str(message_path) + "/*.jsonld"):
-        with open(file, "r") as f:
-            data = json.load(f)
-            if "label" in data:
-                print(data)
-                assert True
-
-    # Write new test for shell command task
-
-
 def test_audit_prov_messdir_1(tmpdir, use_validator):
     """customized messenger dir"""
 
