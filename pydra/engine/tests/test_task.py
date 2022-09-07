@@ -1005,7 +1005,7 @@ def test_audit_task(tmpdir):
             data = json.load(f)
             if "label" in data:
                 json_content.append(True)
-                assert "Python Function" == data["label"]
+                assert "testfunc" == data["label"]
     assert any(json_content)
 
 

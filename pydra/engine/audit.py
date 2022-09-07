@@ -170,18 +170,13 @@ class Audit:
         return self.audit_flags & flag
 
     def audit_task(self, task):
-
+        label = task.name
         if hasattr(task.inputs, "executable"):
-            label = task.name
+            command = task.cmdline
         # assume function task
         else:
             # work on changing this to function name
-            label = "Unknown"
-
-        if hasattr(task.inputs, "args"):
-            command = task.cmdline
-        else:
-            command = "Unknown"
+            command = None
 
         start_message = {
             "@id": self.aid,
