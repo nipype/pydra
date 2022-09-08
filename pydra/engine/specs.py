@@ -269,6 +269,8 @@ class Result:
         field_name : `str`
             Name of field in LazyField object
         """
+        if self.output is None:
+            return None
         if field_name == "all_":
             return attr.asdict(self.output, recurse=False)
         else:
