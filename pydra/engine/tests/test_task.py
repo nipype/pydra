@@ -5,7 +5,8 @@ import pytest
 import cloudpickle as cp
 from pathlib import Path
 import re
-
+import json
+import glob as glob
 from ... import mark
 from ..core import Workflow
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
@@ -986,6 +987,60 @@ def test_audit_prov(tmpdir, use_validator):
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
 
 
+def test_audit_task(tmpdir):
+    @mark.task
+    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+        return a + b
+
+    from glob import glob
+
+    funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    funky.cache_dir = tmpdir
+    funky()
+    message_path = tmpdir / funky.checksum / "messages"
+    # go through each jsonld file in message_path and check if the label field exists
+    json_content = []
+    for file in glob(str(message_path) + "/*.jsonld"):
+        with open(file, "r") as f:
+            data = json.load(f)
+            if "label" in data:
+                json_content.append(True)
+                assert "testfunc" == data["label"]
+    assert any(json_content)
+
+
+def test_audit_shellcommandtask(tmpdir):
+    args = "-l"
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable="ls",
+        args=args,
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+    )
+
+    from glob import glob
+
+    shelly.cache_dir = tmpdir
+    shelly()
+    message_path = tmpdir / shelly.checksum / "messages"
+    # go through each jsonld file in message_path and check if the label field exists
+    label_content = []
+    command_content = []
+
+    for file in glob(str(message_path) + "/*.jsonld"):
+        with open(file, "r") as f:
+            data = json.load(f)
+            if "label" in data:
+                label_content.append(True)
+            if "command" in data:
+                command_content.append(True)
+                assert "ls -l" == data["command"]
+
+    print(command_content)
+    assert any(label_content)
+
+
 def test_audit_prov_messdir_1(tmpdir, use_validator):
     """customized messenger dir"""
 
@@ -1082,7 +1137,7 @@ def test_audit_all(tmpdir, use_validator):
     from glob import glob
 
     assert len(glob(str(tmpdir / funky.checksum / "proc*.log"))) == 1
-    assert len(glob(str(message_path / "*.jsonld"))) == 6
+    assert len(glob(str(message_path / "*.jsonld"))) == 7
 
     # commented out to speed up testing
     collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")

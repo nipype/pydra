@@ -49,7 +49,15 @@ class Audit:
         self.odir = odir
         if self.audit_check(AuditFlag.PROV):
             self.aid = f"uid:{gen_uuid()}"
-            start_message = {"@id": self.aid, "@type": "task", "startedAtTime": now()}
+
+            user_id = f"uid:{gen_uuid()}"
+            start_message = {
+                "@id": self.aid,
+                "@type": "task",
+                "startedAtTime": now(),
+                "executedBy": user_id,
+            }
+
         os.chdir(self.odir)
         if self.audit_check(AuditFlag.PROV):
             self.audit_message(start_message, AuditFlag.PROV)
@@ -160,3 +168,24 @@ class Audit:
             Boolean AND for self.oudit_flags and flag
         """
         return self.audit_flags & flag
+
+    def audit_task(self, task):
+        label = task.name
+        if hasattr(task.inputs, "executable"):
+            command = task.cmdline
+        # assume function task
+        else:
+            # work on changing this to function name
+            command = None
+
+        start_message = {
+            "@id": self.aid,
+            "@type": "task",
+            "label": label,
+            "command": command,
+            "startedAtTime": now(),
+        }
+        self.audit_message(start_message, AuditFlag.PROV)
+
+        # add more fields according to BEP208 doc
+        # with every field, check in tests
