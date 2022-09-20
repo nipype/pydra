@@ -482,7 +482,7 @@ def _check_special_type(tp, name):
 def _allowed_values_validator(instance, attribute, value):
     """checking if the values is in allowed_values"""
     allowed = attribute.metadata["allowed_values"]
-    if value is attr.NOTHING:
+    if value is attr.NOTHING or isinstance(value, LazyField):
         pass
     elif value not in allowed:
         raise ValueError(
