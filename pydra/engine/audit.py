@@ -177,7 +177,7 @@ class Audit:
         else:
             command = None
 
-        # initial attempt to gather files 
+        # initial attempt to gather files
         in_file = task.input_spec.fields
 
         start_message = {
@@ -186,7 +186,7 @@ class Audit:
             "Label": label,
             "Command": command,
             "StartedAtTime": now(),
-            "Used": in_file
+            "Used": in_file,
         }
 
         # new code to be added here for i/o tracking - WIP
