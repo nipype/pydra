@@ -191,7 +191,6 @@ class Audit:
 
         # new code to be added here for i/o tracking - WIP
 
-
         self.audit_message(start_message, AuditFlag.PROV)
 
         # add more fields according to BEP208 doc
