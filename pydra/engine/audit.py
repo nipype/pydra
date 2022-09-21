@@ -175,15 +175,18 @@ class Audit:
             command = task.cmdline
         # assume function task
         else:
-            # work on changing this to function name
             command = None
+
+        # initial attempt to gather files 
+        in_file = task.input_spec.fields
 
         start_message = {
             "@id": self.aid,
             "@type": "task",
-            "label": label,
-            "command": command,
-            "startedAtTime": now(),
+            "Label": label,
+            "Command": command,
+            "StartedAtTime": now(),
+            "Used": in_file
         }
 
         # new code to be added here for i/o tracking - WIP
