@@ -454,7 +454,9 @@ class TaskBase:
 
     def _modify_inputs(self):
         """Update and preserve a Task's original inputs"""
-        orig_inputs = attr.asdict(self.inputs, recurse=False)
+        orig_inputs = {
+            k: deepcopy(v) for k, v in attr.asdict(self.inputs, recurse=False).items()
+        }
         map_copyfiles = copyfile_input(self.inputs, self.output_dir)
         modified_inputs = template_update(
             self.inputs, self.output_dir, map_copyfiles=map_copyfiles
@@ -842,6 +844,12 @@ class Workflow(TaskBase):
         """
         if input_spec:
             if isinstance(input_spec, BaseSpec):
+                self.input_spec = input_spec
+            elif isinstance(input_spec, SpecInfo):
+                if not any([x == BaseSpec for x in input_spec.bases]):
+                    raise ValueError(
+                        "Provided SpecInfo must have BaseSpec as it's base."
+                    )
                 self.input_spec = input_spec
             else:
                 self.input_spec = SpecInfo(
