@@ -456,7 +456,10 @@ class ShellOutSpec:
                 str,
                 list,
             ]:
-                raise Exception("not implemented (collect_additional_output)")
+                raise Exception(
+                    f"Support for {fld.type} type, required for {fld.name} in {self}, "
+                    "has not been implemented in collect_additional_output"
+                )
             # assuming that field should have either default or metadata, but not both
             if (
                 fld.default is None or fld.default == attr.NOTHING
