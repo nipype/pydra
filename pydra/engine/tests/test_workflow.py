@@ -51,7 +51,7 @@ def test_wf_specinfo_input_spec():
         name="workflow",
         input_spec=input_spec,
     )
-    for x in ["a", "b"]:
+    for x in ["a", "b", "_graph_checksums"]:
         assert hasattr(wf.inputs, x)
     assert wf.inputs.a == ""
     assert wf.inputs.b == {"foo": 1, "bar": False}
