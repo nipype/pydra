@@ -797,6 +797,68 @@ class TaskBase:
                 task._reset()
 
 
+def _sanitize_input_spec(
+        input_spec: ty.Union[BaseSpec, ty.List[str]],
+        wf_name: str,
+) -> BaseSpec:
+    """Makes sure the provided input specifications are valid.
+
+    If the input specification is a list of strings, this will
+    build a proper SpecInfo object out of it.
+
+    Parameters
+    ----------
+    input_spec : BaseSpec or List[str]
+        Input specification to be sanitized.
+
+    wf_name : str
+        The name of the workflow for which the input specifications
+        are sanitized.
+
+    Returns
+    -------
+    input_spec : BaseSpec
+        Sanitized input specifications.
+
+    Raises
+    ------
+    ValueError
+        If provided `input_spec` is None.
+    """
+    graph_checksum_input = ("_graph_checksums", ty.Any)
+    if input_spec:
+        if isinstance(input_spec, BaseSpec):
+            return input_spec
+        elif isinstance(input_spec, SpecInfo):
+            if not any([x == BaseSpec for x in input_spec.bases]):
+                raise ValueError(
+                    "Provided SpecInfo must have BaseSpec as it's base."
+                )
+            if "_graph_checksums" not in {f[0] for f in input_spec.fields}:
+                input_spec.fields.insert(0, graph_checksum_input)
+            return input_spec
+        else:
+            return SpecInfo(
+                name="Inputs",
+                fields=[graph_checksum_input]
+                + [
+                    (
+                        nm,
+                        attr.ib(
+                            type=ty.Any,
+                            metadata={
+                                "help_string": f"{nm} input from {wf_name} workflow"
+                            },
+                        ),
+                    )
+                    for nm in input_spec
+                ],
+                bases=(BaseSpec,),
+            )
+    else:
+        raise ValueError(f"Empty input_spec provided to Workflow {wf_name}.")
+
+
 class Workflow(TaskBase):
     """A composite task with structure of computational graph."""
 
@@ -842,35 +904,7 @@ class Workflow(TaskBase):
             TODO
 
         """
-        if input_spec:
-            if isinstance(input_spec, BaseSpec):
-                self.input_spec = input_spec
-            elif isinstance(input_spec, SpecInfo):
-                if not any([x == BaseSpec for x in input_spec.bases]):
-                    raise ValueError(
-                        "Provided SpecInfo must have BaseSpec as it's base."
-                    )
-                self.input_spec = input_spec
-            else:
-                self.input_spec = SpecInfo(
-                    name="Inputs",
-                    fields=[("_graph_checksums", ty.Any)]
-                    + [
-                        (
-                            nm,
-                            attr.ib(
-                                type=ty.Any,
-                                metadata={
-                                    "help_string": f"{nm} input from {name} workflow"
-                                },
-                            ),
-                        )
-                        for nm in input_spec
-                    ],
-                    bases=(BaseSpec,),
-                )
-        else:
-            raise ValueError("Empty input_spec provided to Workflow")
+        self.input_spec = _sanitize_input_spec(input_spec, name)
 
         self.output_spec = output_spec
 
