@@ -798,8 +798,8 @@ class TaskBase:
 
 
 def _sanitize_input_spec(
-        input_spec: ty.Union[BaseSpec, ty.List[str]],
-        wf_name: str,
+    input_spec: ty.Union[BaseSpec, ty.List[str]],
+    wf_name: str,
 ) -> BaseSpec:
     """Makes sure the provided input specifications are valid.
 
@@ -831,9 +831,7 @@ def _sanitize_input_spec(
             return input_spec
         elif isinstance(input_spec, SpecInfo):
             if not any([x == BaseSpec for x in input_spec.bases]):
-                raise ValueError(
-                    "Provided SpecInfo must have BaseSpec as it's base."
-                )
+                raise ValueError("Provided SpecInfo must have BaseSpec as it's base.")
             if "_graph_checksums" not in {f[0] for f in input_spec.fields}:
                 input_spec.fields.insert(0, graph_checksum_input)
             return input_spec
