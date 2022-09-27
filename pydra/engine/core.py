@@ -798,9 +798,9 @@ class TaskBase:
 
 
 def _sanitize_input_spec(
-    input_spec: ty.Union[BaseSpec, ty.List[str]],
+    input_spec: ty.Union[SpecInfo, ty.List[str]],
     wf_name: str,
-) -> BaseSpec:
+) -> SpecInfo:
     """Makes sure the provided input specifications are valid.
 
     If the input specification is a list of strings, this will
@@ -808,7 +808,7 @@ def _sanitize_input_spec(
 
     Parameters
     ----------
-    input_spec : BaseSpec or List[str]
+    input_spec : SpecInfo or List[str]
         Input specification to be sanitized.
 
     wf_name : str
@@ -817,7 +817,7 @@ def _sanitize_input_spec(
 
     Returns
     -------
-    input_spec : BaseSpec
+    input_spec : SpecInfo
         Sanitized input specifications.
 
     Raises
@@ -827,9 +827,7 @@ def _sanitize_input_spec(
     """
     graph_checksum_input = ("_graph_checksums", ty.Any)
     if input_spec:
-        if isinstance(input_spec, BaseSpec):
-            return input_spec
-        elif isinstance(input_spec, SpecInfo):
+        if isinstance(input_spec, SpecInfo):
             if not any([x == BaseSpec for x in input_spec.bases]):
                 raise ValueError("Provided SpecInfo must have BaseSpec as it's base.")
             if "_graph_checksums" not in {f[0] for f in input_spec.fields}:
@@ -866,7 +864,7 @@ class Workflow(TaskBase):
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
-        input_spec: ty.Optional[ty.Union[ty.List[ty.Text], SpecInfo, BaseSpec]] = None,
+        input_spec: ty.Optional[ty.Union[ty.List[ty.Text], SpecInfo]] = None,
         cont_dim=None,
         messenger_args=None,
         messengers=None,
