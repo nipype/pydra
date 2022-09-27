@@ -450,6 +450,7 @@ class ShellOutSpec:
                 File,
                 MultiOutputFile,
                 Directory,
+                Path,
                 int,
                 float,
                 bool,
@@ -458,23 +459,29 @@ class ShellOutSpec:
             ]:
                 raise Exception("not implemented (collect_additional_output)")
             # assuming that field should have either default or metadata, but not both
-            if (
-                fld.default is None or fld.default == attr.NOTHING
-            ) and not fld.metadata:  # TODO: is it right?
-                raise AttributeError("File has to have default value or metadata")
-            elif fld.default != attr.NOTHING:
-                additional_out[fld.name] = self._field_defaultvalue(fld, output_dir)
-            elif fld.metadata:
+            try:
+                additional_out[fld.name] = getattr(inputs, fld.name)
+            except AttributeError:
                 if (
-                    fld.type in [int, float, bool, str, list]
-                    and "callable" not in fld.metadata
-                ):
-                    raise AttributeError(
-                        f"{fld.type} has to have a callable in metadata"
+                    fld.default is None or fld.default == attr.NOTHING
+                ) and not fld.metadata:  # TODO: is it right?
+                    raise AttributeError("File has to have default value or metadata")
+                elif fld.default != attr.NOTHING:
+                    additional_out[fld.name] = self._field_defaultvalue(fld, output_dir)
+                elif fld.metadata:
+                    if (
+                        fld.type in [int, float, bool, str, list]
+                        and "callable" not in fld.metadata
+                    ):
+                        raise AttributeError(
+                            f"{fld.type} has to have a callable in metadata"
+                        )
+                    additional_out[fld.name] = self._field_metadata(
+                        fld, inputs, output_dir, outputs
                     )
-                additional_out[fld.name] = self._field_metadata(
-                    fld, inputs, output_dir, outputs
-                )
+            else:
+                if fld.type in (File, MultiOutputFile, Directory, Path):
+                    additional_out[fld.name] = Path(additional_out[fld.name]).absolute()
         return additional_out
 
     def generated_output_names(self, inputs, output_dir):
