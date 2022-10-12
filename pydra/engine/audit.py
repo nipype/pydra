@@ -172,8 +172,6 @@ class Audit:
     def audit_task(self, task):
         import subprocess as sp
         label = task.name
-        
-
         if hasattr(task.inputs, "executable"):
             command = task.cmdline
         # assume function task
@@ -186,12 +184,15 @@ class Audit:
 
         if command is not None:
             software = command.split()[0]
-            software = software + ' ' + '--version'
+            software = software + " " + "--version"
             # take the first word of command as the name of the executable (this may not always be the case)
-            version_cmd = sp.run(software, shell=True, check=True, stdout=sp.PIPE).stdout.decode('utf-8').splitlines()[0]
+            version_cmd = (
+                sp.run(software, shell=True, check=True, stdout=sp.PIPE)
+                .stdout.decode("utf-8")
+                .splitlines()[0]
+            )
         else:
             software = None
-
 
         start_message = {
             "@id": self.aid,
@@ -200,7 +201,7 @@ class Audit:
             "Command": command,
             "StartedAtTime": now(),
             # "Used": input_file,
-            "AssociatedWith": version_cmd
+            "AssociatedWith": version_cmd,
         }
 
         # new code to be added here for i/o tracking - WIP
