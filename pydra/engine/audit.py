@@ -171,6 +171,7 @@ class Audit:
 
     def audit_task(self, task):
         import subprocess as sp
+
         label = task.name
         if hasattr(task.inputs, "executable"):
             command = task.cmdline
