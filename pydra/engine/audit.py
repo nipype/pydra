@@ -173,7 +173,7 @@ class Audit:
         import subprocess as sp
         label = task.name
         
-        print('task input:', task.inputs)
+
         if hasattr(task.inputs, "executable"):
             command = task.cmdline
         # assume function task
