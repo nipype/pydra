@@ -177,6 +177,10 @@ class Audit:
         else:
             # work on changing this to function name
             command = None
+        if hasattr(task.inputs, "in_file"):
+            inputs = task.inputs.in_file
+        else:
+            inputs = None
 
         start_message = {
             "@id": self.aid,
@@ -184,6 +188,7 @@ class Audit:
             "label": label,
             "command": command,
             "startedAtTime": now(),
+            "Used": inputs
         }
         self.audit_message(start_message, AuditFlag.PROV)
 
