@@ -186,10 +186,11 @@ class Audit:
         if command is not None:
             cmd_name = command.split()[0]
             software = f"{cmd_name} --version"
-            # take the first word of command as the name of the executable (this may not always be the case)
-            version_cmd = sp.run(software, shell=True, stdout=sp.PIPE).stdout.decode(
-                "utf-8"
-            )
+            # take the first word of command as the 
+            # name of the executable 
+            # (this may not always be the case)
+            version_cmd = sp.run(software, shell=True, 
+            stdout=sp.PIPE).stdout.decode("utf-8")
             try:
                 version_cmd = version_cmd.splitlines()[0]
 
