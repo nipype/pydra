@@ -1043,8 +1043,6 @@ def test_audit_shellcommandtask(tmpdir):
     assert any(label_content)
 
 
-
-
 def test_audit_shellcommandtask_version(tmpdir):
     cmd = "mrcat"
     shelly = ShellCommandTask(
@@ -1056,6 +1054,7 @@ def test_audit_shellcommandtask_version(tmpdir):
 
     import subprocess as sp
     import glob
+
     shelly.cache_dir = tmpdir
     shelly()
     message_path = tmpdir / shelly.checksum / "messages"
@@ -1068,7 +1067,6 @@ def test_audit_shellcommandtask_version(tmpdir):
                 if "== mrcat 3.0.3 ==" in data["AssociatedWith"]:
                     version_content.append(True)
 
-    
     assert any(version_content)
 
 
