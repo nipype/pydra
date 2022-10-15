@@ -1044,15 +1044,20 @@ def test_audit_shellcommandtask(tmpdir):
 
 
 def test_audit_shellcommandtask_version(tmpdir):
-    cmd = "mrcat"
+    import subprocess as sp
+    version_cmd = (sp.run("less --version", shell=True, 
+     stdout=sp.PIPE).stdout.decode("utf-8"))
+    version_cmd = version_cmd.splitlines()[0]
+    cmd = "less"
     shelly = ShellCommandTask(
         name="shelly",
         executable=cmd,
+        args="test.txt",
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
 
-    import subprocess as sp
+    
     import glob
 
     shelly.cache_dir = tmpdir
@@ -1064,7 +1069,7 @@ def test_audit_shellcommandtask_version(tmpdir):
         with open(file, "r") as f:
             data = json.load(f)
             if "AssociatedWith" in data:
-                if "== mrcat 3.0.3 ==" in data["AssociatedWith"]:
+                if version_cmd in data["AssociatedWith"]:
                     version_content.append(True)
 
     assert any(version_content)
