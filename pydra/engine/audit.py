@@ -184,17 +184,16 @@ class Audit:
         #     input_file = None
 
         if command is not None:
-            software = command.split()[0]
-            software = software + " " + "--version"
+            cmd_name = command.split()[0]
+            software = f"{cmd_name} --version"
             # take the first word of command as the name of the executable (this may not always be the case)
-            version_cmd = sp.run(software, shell=True, stdout=sp.PIPE).stdout.decode(
-                "utf-8"
-            )
+            version_cmd = sp.run(software, shell=True, 
+            stdout=sp.PIPE).stdout.decode("utf-8")
             try:
                 version_cmd = version_cmd.splitlines()[0]
 
             except IndexError:
-                version_cmd = None
+                version_cmd = f"{cmd_name} -- Version unknown"
 
         else:
             version_cmd = None
