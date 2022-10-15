@@ -1052,7 +1052,7 @@ def test_audit_shellcommandtask_version(tmpdir):
     shelly = ShellCommandTask(
         name="shelly",
         executable=cmd,
-        args="test.txt",
+        args="test_task.py",
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
