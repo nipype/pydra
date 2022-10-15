@@ -188,7 +188,7 @@ class Audit:
             "label": label,
             "command": command,
             "startedAtTime": now(),
-            "Used": inputs
+            "Used": inputs,
         }
         self.audit_message(start_message, AuditFlag.PROV)
 
