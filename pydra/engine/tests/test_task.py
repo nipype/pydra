@@ -1045,8 +1045,10 @@ def test_audit_shellcommandtask(tmpdir):
 
 def test_audit_shellcommandtask_version(tmpdir):
     import subprocess as sp
-    version_cmd = (sp.run("less --version", shell=True, 
-     stdout=sp.PIPE).stdout.decode("utf-8"))
+
+    version_cmd = sp.run("less --version", shell=True, stdout=sp.PIPE).stdout.decode(
+        "utf-8"
+    )
     version_cmd = version_cmd.splitlines()[0]
     cmd = "less"
     shelly = ShellCommandTask(
@@ -1057,7 +1059,6 @@ def test_audit_shellcommandtask_version(tmpdir):
         messengers=FileMessenger(),
     )
 
-    
     import glob
 
     shelly.cache_dir = tmpdir
