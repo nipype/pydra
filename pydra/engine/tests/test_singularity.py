@@ -28,9 +28,9 @@ def test_singularity_1_nosubm(tmpdir):
     no submitter
     """
     cmd = "pwd"
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
     singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
-    assert singu.inputs.image == "library://sylabsed/linux/alpine"
+    assert singu.inputs.image == "docker://alpine"
     assert singu.inputs.container == "singularity"
     assert (
         singu.cmdline
@@ -48,7 +48,7 @@ def test_singularity_2_nosubm(tmpdir):
     no submitter
     """
     cmd = ["echo", "hail", "pydra"]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
     singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
     assert (
         singu.cmdline
@@ -66,7 +66,7 @@ def test_singularity_2(plugin, tmpdir):
     using submitter
     """
     cmd = ["echo", "hail", "pydra"]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
     singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
     assert (
         singu.cmdline
@@ -86,7 +86,7 @@ def test_singularity_2_singuflag(plugin, tmpdir):
     using ShellComandTask with container_info=("singularity", image)
     """
     cmd = ["echo", "hail", "pydra"]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
     shingu = ShellCommandTask(
         name="shingu",
         executable=cmd,
@@ -113,7 +113,7 @@ def test_singularity_2a(plugin, tmpdir):
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
     singu = SingularityTask(
         name="singu", executable=cmd_exec, args=cmd_args, image=image, cache_dir=tmpdir
     )
@@ -138,7 +138,7 @@ def test_singularity_3(plugin, tmpdir):
     # creating a new directory
     tmpdir.mkdir("new_dir")
     cmd = ["ls", "/tmp_dir"]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
     singu = SingularityTask(name="singu", executable=cmd, image=image, cache_dir=tmpdir)
     # binding tmp directory to the container
     singu.inputs.bindings = [(str(tmpdir), "/tmp_dir", "ro")]
@@ -161,7 +161,7 @@ def test_singularity_3_singuflag(plugin, tmpdir):
     # creating a new directory
     tmpdir.mkdir("new_dir")
     cmd = ["ls", "/tmp_dir"]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
     shingu = SingularityTask(
         name="singu",
         executable=cmd,
@@ -189,7 +189,7 @@ def test_singularity_3_singuflagbind(plugin, tmpdir):
     # creating a new directory
     tmpdir.mkdir("new_dir")
     cmd = ["ls", "/tmp_dir"]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
     shingu = SingularityTask(
         name="singu",
         executable=cmd,
@@ -214,7 +214,7 @@ def test_singularity_st_1(plugin, tmpdir):
     splitter = executable
     """
     cmd = ["pwd", "ls"]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
     singu = SingularityTask(
         name="singu", executable=cmd, image=image, cache_dir=tmpdir
     ).split("executable")
@@ -232,7 +232,7 @@ def test_singularity_st_2(plugin, tmpdir):
     splitter = image
     """
     cmd = ["cat", "/etc/issue"]
-    image = ["library://sylabsed/linux/alpine", "library://sylabsed/examples/lolcow"]
+    image = ["docker://alpine", "docker://ubuntu"]
     singu = SingularityTask(
         name="singu", executable=cmd, image=image, cache_dir=tmpdir
     ).split("image")
@@ -248,7 +248,7 @@ def test_singularity_st_2(plugin, tmpdir):
 def test_singularity_st_3(plugin, tmpdir):
     """outer splitter image and executable"""
     cmd = ["pwd", ["cat", "/etc/issue"]]
-    image = ["library://sylabsed/linux/alpine", "library://sylabsed/examples/lolcow"]
+    image = ["docker://alpine", "docker://ubuntu"]
     singu = SingularityTask(
         name="singu", executable=cmd, image=image, cache_dir=tmpdir
     ).split(["image", "executable"])
@@ -270,7 +270,7 @@ def test_singularity_st_3(plugin, tmpdir):
 def test_singularity_st_4(tmpdir, n):
     """splitter over args (checking bigger splitters if slurm available)"""
     args_n = list(range(n))
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
     singu = SingularityTask(
         name="singu", executable="echo", image=image, cache_dir=tmpdir, args=args_n
     ).split("args")
@@ -291,7 +291,7 @@ def test_wf_singularity_1(plugin, tmpdir):
     with open(tmpdir.join("file_pydra.txt"), "w") as f:
         f.write("hello from pydra")
 
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"], cache_dir=tmpdir)
     wf.inputs.cmd1 = ["cat", "/tmp_dir/file_pydra.txt"]
     wf.inputs.cmd2 = ["echo", "message from the previous task:"]
@@ -333,7 +333,7 @@ def test_wf_singularity_1a(plugin, tmpdir):
     with open(tmpdir.join("file_pydra.txt"), "w") as f:
         f.write("hello from pydra")
 
-    image_sing = "library://sylabsed/linux/alpine"
+    image_sing = "docker://alpine"
     image_doc = "ubuntu"
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"], cache_dir=tmpdir)
     wf.inputs.cmd1 = ["cat", "/tmp_dir/file_pydra.txt"]
@@ -375,7 +375,7 @@ def test_singularity_outputspec_1(plugin, tmpdir):
     output_path is automatically added to the bindings
     """
     cmd = ["touch", "newfile_tmp.txt"]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     my_output_spec = SpecInfo(
         name="Output",
@@ -409,7 +409,7 @@ def test_singularity_inputspec_1(plugin, tmpdir):
         f.write("hello from pydra")
 
     cmd = "cat"
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -454,7 +454,7 @@ def test_singularity_inputspec_1a(plugin, tmpdir):
         f.write("hello from pydra")
 
     cmd = "cat"
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -496,7 +496,7 @@ def test_singularity_inputspec_2(plugin, tmpdir):
         f.write("have a nice one")
 
     cmd = "cat"
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -555,7 +555,7 @@ def test_singularity_inputspec_2a_except(plugin, tmpdir):
         f.write("have a nice one")
 
     cmd = "cat"
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     # the field with default value can't be before value without default
     my_input_spec = SpecInfo(
@@ -615,7 +615,7 @@ def test_singularity_inputspec_2a(plugin, tmpdir):
         f.write("have a nice one")
 
     cmd = "cat"
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     # if you want set default in the first field you can use default_value in metadata
     my_input_spec = SpecInfo(
@@ -673,7 +673,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmpdir):
         f.write("hello from pydra\n")
 
     cmd = ["sed", "-is", "s/hello/hi/"]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -740,7 +740,7 @@ def test_singularity_inputspec_state_1(plugin, tmpdir):
 
     cmd = "cat"
     filename = [str(filename_1), str(filename_2)]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -791,7 +791,7 @@ def test_singularity_inputspec_state_1b(plugin, tmpdir):
 
     cmd = "cat"
     filename = [str(file_1), str(file_2)]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -835,7 +835,7 @@ def test_singularity_wf_inputspec_1(plugin, tmpdir):
         f.write("hello from pydra")
 
     cmd = "cat"
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -891,7 +891,7 @@ def test_singularity_wf_state_inputspec_1(plugin, tmpdir):
 
     cmd = "cat"
     filename = [str(file_1), str(file_2)]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -949,7 +949,7 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmpdir):
 
     cmd = "cat"
     filename = [str(file_1), str(file_2)]
-    image = "library://sylabsed/linux/alpine"
+    image = "docker://alpine"
 
     my_input_spec = SpecInfo(
         name="Input",
