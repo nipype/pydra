@@ -1415,6 +1415,58 @@ def test_shell_cmd_inputspec_9c(tmpdir, plugin, results_function):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_inputspec_9d(tmpdir, plugin, results_function):
+    """
+    providing output name explicitly by manually setting value in input_spec
+    (instead of using default provided byoutput_file_template in metadata)
+    """
+    cmd = "cp"
+    file = tmpdir.mkdir("data_inp").join("file.txt")
+    file.write("content\n")
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "file_orig",
+                attr.ib(
+                    type=File,
+                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                ),
+            ),
+            (
+                "file_copy",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "output_file_template": "{file_orig}_copy",
+                        "help_string": "output file",
+                        "argstr": "",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        input_spec=my_input_spec,
+        file_orig=file,
+        file_copy="my_file_copy.txt",
+        cache_dir=tmpdir,
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    assert res.output.file_copy.exists()
+    assert res.output.file_copy.name == "my_file_copy.txt"
+    # checking if it's created in a good place
+    assert shelly.output_dir == res.output.file_copy.parent
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_10(plugin, results_function, tmpdir):
     """using input_spec, providing list of files as an input"""
 
