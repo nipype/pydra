@@ -112,7 +112,7 @@ def load_result(checksum, cache_locations):
     if not cache_locations:
         return None
     # TODO: if there are issues with loading, we might need to
-    # TODO: sleep and repeat loads (after checkin that there are no lock files!)
+    # TODO: sleep and repeat loads (after checking that there are no lock files!)
     for location in cache_locations:
         if (location / checksum).exists():
             result_file = location / checksum / "_result.pklz"
@@ -482,7 +482,7 @@ def _check_special_type(tp, name):
 def _allowed_values_validator(instance, attribute, value):
     """checking if the values is in allowed_values"""
     allowed = attribute.metadata["allowed_values"]
-    if value is attr.NOTHING:
+    if value is attr.NOTHING or isinstance(value, LazyField):
         pass
     elif value not in allowed:
         raise ValueError(
