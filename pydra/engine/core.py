@@ -1214,7 +1214,7 @@ class Workflow(TaskBase):
             try:
                 val_out = val.get_value(self)
                 output_wf[name] = val_out
-            except ValueError:
+            except (ValueError, AttributeError):
                 output_wf[name] = None
                 # checking if the tasks has predecessors that raises error
                 if isinstance(getattr(self, val.name)._errored, list):
