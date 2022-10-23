@@ -1596,7 +1596,7 @@ def test_wf_ndstLR_1(plugin, tmpdir):
 def test_wf_ndstLR_1a(plugin, tmpdir):
     """Test workflow with 2 tasks, splitters on tasks levels
     The second task has splitter that has Left part (from previous state)
-    and the Right part (it's onw splitter)
+    and the Right part (it's own splitter)
     """
     wf = Workflow(name="wf_ndst_3", input_spec=["x", "y"])
     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
@@ -1675,7 +1675,7 @@ def test_wf_ndstLR_2(plugin, tmpdir):
 def test_wf_ndstLR_2a(plugin, tmpdir):
     """Test workflow with 2 tasks, splitters on tasks levels
     The second task has splitter that has Left part (from previous state)
-    and the Right part (it's onw outer splitter)
+    and the Right part (it's own outer splitter)
     """
     wf = Workflow(name="wf_ndst_3", input_spec=["x", "y", "z"])
     wf.add(add2(name="add2", x=wf.lzin.x).split("x"))
