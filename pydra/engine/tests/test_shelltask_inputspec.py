@@ -1152,6 +1152,8 @@ def test_shell_cmd_inputs_template_6():
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
     assert shelly.cmdline == f"executable inpA -o {str(shelly.output_dir / 'inpA_out')}"
+    # checking if the command is the same
+    assert shelly.cmdline == f"executable inpA -o {str(shelly.output_dir / 'inpA_out')}"
 
     # a string is provided for outA, so this should be used as the outA value
     shelly = ShellCommandTask(
@@ -1169,6 +1171,8 @@ def test_shell_cmd_inputs_template_6():
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA=False
     )
+    assert shelly.cmdline == "executable inpA"
+    # checking of the command is the same
     assert shelly.cmdline == "executable inpA"
 
 
@@ -1214,6 +1218,8 @@ def test_shell_cmd_inputs_template_6a():
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
     assert shelly.cmdline == "executable inpA"
+    # checking if the command is the same
+    assert shelly.cmdline == "executable inpA"
 
     # a string is provided for outA, so this should be used as the outA value
     shelly = ShellCommandTask(
@@ -1232,6 +1238,58 @@ def test_shell_cmd_inputs_template_6a():
         executable="executable", input_spec=my_input_spec, inpA="inpA", outA=False
     )
     assert shelly.cmdline == "executable inpA"
+    # checking if the command is the same
+    assert shelly.cmdline == "executable inpA"
+
+
+def test_shell_cmd_inputs_template_6b():
+    """additional inputs with output_file_template that has type ty.Union[str, bool]
+    and default is set to False,
+    (using argstr in a format --argstr={})
+    """
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "inpA",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "position": 1,
+                        "help_string": "inpA",
+                        "argstr": "",
+                        "mandatory": True,
+                    },
+                ),
+            ),
+            (
+                "outA",
+                attr.ib(
+                    type=ty.Union[str, bool],
+                    default=False,
+                    metadata={
+                        "position": 2,
+                        "help_string": "outA",
+                        "argstr": "--o={outA}",
+                        "output_file_template": "{inpA}_out",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    # no input for outA, but default is False, so the outA shouldn't be used
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, inpA="inpA"
+    )
+    assert shelly.cmdline == "executable inpA"
+
+    # a string is provided for outA, so this should be used as the outA value
+    shelly = ShellCommandTask(
+        executable="executable", input_spec=my_input_spec, inpA="inpA", outA="outA"
+    )
+    assert shelly.cmdline == "executable inpA --o=outA"
 
 
 def test_shell_cmd_inputs_template_7(tmpdir):
@@ -2080,7 +2138,7 @@ def test_shell_cmd_inputs_di(tmpdir, use_validator):
         == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{str(shelly.output_dir / 'a_file_out.ext')}]"
     )
 
-    # input file name, noiseImage is set to True, so template is used in the output
+    # # input file name, noiseImage is set to True, so template is used in the output
     shelly = ShellCommandTask(
         executable="DenoiseImage",
         inputImageFilename=my_input_file,

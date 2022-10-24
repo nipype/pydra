@@ -24,6 +24,7 @@ from .specs import (
     File,
     Directory,
     attr_fields,
+    attr_field,
     Result,
     LazyField,
     MultiOutputObj,
@@ -883,6 +884,12 @@ def argstr_formatting(argstr, inputs, value_updates=None):
         fld_value = inputs_dict[fld_name]
         if fld_value is attr.NOTHING:
             # if value is NOTHING, nothing should be added to the command
+            val_dict[fld_name] = ""
+        # if value is False, but the field has a template the output field should not be created
+        elif (
+            fld_value is False
+            and "output_file_template" in attr_field(inputs, fld_name).metadata
+        ):
             val_dict[fld_name] = ""
         else:
             val_dict[fld_name] = fld_value

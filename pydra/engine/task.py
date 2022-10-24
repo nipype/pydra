@@ -479,8 +479,12 @@ class ShellCommandTask(TaskBase):
                     value = cmd_el_str
                 # if argstr has a more complex form, with "{input_field}"
                 if "{" in argstr and "}" in argstr:
-                    cmd_el_str = argstr.replace(f"{{{field.name}}}", str(value))
-                    cmd_el_str = argstr_formatting(cmd_el_str, self.inputs)
+                    # output_file_template and argstr should not be created when the value is False
+                    if not value and "output_file_template" in field.metadata:
+                        cmd_el_str = ""
+                    else:
+                        cmd_el_str = argstr.replace(f"{{{field.name}}}", str(value))
+                        cmd_el_str = argstr_formatting(cmd_el_str, self.inputs)
                 else:  # argstr has a simple form, e.g. "-f", or "--f"
                     if value:
                         cmd_el_str = f"{argstr} {value}"
