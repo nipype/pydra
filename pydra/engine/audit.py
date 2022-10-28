@@ -6,6 +6,7 @@ import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from .helpers import ensure_list, gather_runtime_info
 
+
 class Audit:
     """Handle provenance tracking and resource utilization."""
 
