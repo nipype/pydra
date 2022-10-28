@@ -1007,6 +1007,8 @@ def test_audit_task(tmpdir):
             if "Label" in data:
                 json_content.append(True)
                 assert "testfunc" == data["Label"]
+                if "AssociatedWith" in data:
+                    assert None == data["AssociatedWith"]
     assert any(json_content)
 
 
