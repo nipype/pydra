@@ -1003,9 +1003,12 @@ def test_audit_task(tmpdir):
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
-            if "label" in data:
+            print(data)
+            if "Label" in data:
                 json_content.append(True)
-                assert "testfunc" == data["label"]
+                assert "testfunc" == data["Label"]
+                if "AssociatedWith" in data:
+                    assert None == data["AssociatedWith"]
     assert any(json_content)
 
 
@@ -1031,14 +1034,48 @@ def test_audit_shellcommandtask(tmpdir):
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
-            if "label" in data:
+            print(data)
+            if "Label" in data:
                 label_content.append(True)
-            if "command" in data:
+            if "Command" in data:
                 command_content.append(True)
-                assert "ls -l" == data["command"]
+                assert "ls -l" == data["Command"]
 
     print(command_content)
     assert any(label_content)
+
+
+def test_audit_shellcommandtask_version(tmpdir):
+    import subprocess as sp
+
+    version_cmd = sp.run("less --version", shell=True, stdout=sp.PIPE).stdout.decode(
+        "utf-8"
+    )
+    version_cmd = version_cmd.splitlines()[0]
+    cmd = "less"
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        args="test_task.py",
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+    )
+
+    import glob
+
+    shelly.cache_dir = tmpdir
+    shelly()
+    message_path = tmpdir / shelly.checksum / "messages"
+    # go through each jsonld file in message_path and check if the label field exists
+    version_content = []
+    for file in glob.glob(str(message_path) + "/*.jsonld"):
+        with open(file, "r") as f:
+            data = json.load(f)
+            if "AssociatedWith" in data:
+                if version_cmd in data["AssociatedWith"]:
+                    version_content.append(True)
+
+    assert any(version_content)
 
 
 def test_audit_prov_messdir_1(tmpdir, use_validator):
