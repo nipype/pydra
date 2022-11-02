@@ -173,15 +173,21 @@ class Audit:
         import subprocess as sp
 
         label = task.name
+        entity_label = type(label)
+        
         if hasattr(task.inputs, "executable"):
+            print(task.inputs)
             command = task.cmdline
         # assume function task
         else:
             command = None
-        # if hasattr(task.inputs, "in_file"):
-        #     input_file = task.inputs.in_file
-        # else:
-        #     input_file = None
+        if hasattr(task.inputs, "in_file"):
+            input_file = task.inputs.in_file
+            print(task.inputs)
+            at_location = os.path.abspath(input_file)
+        else:
+            at_location = None
+            input_file = None
 
         if command is not None:
             cmd_name = command.split()[0]
@@ -201,6 +207,8 @@ class Audit:
         else:
             version_cmd = None
 
+
+
         start_message = {
             "@id": self.aid,
             "@type": "task",
@@ -210,9 +218,18 @@ class Audit:
             "AssociatedWith": version_cmd,
         }
 
+        entity_message = {
+            "@id": self.aid,
+            "Label": print(entity_label),
+            "AtLocation": at_location,
+            "GeneratedBy": 'test',
+            "Type": "Task",
+            "digest": "checksum"
+        }
+
         # new code to be added here for i/o tracking - WIP
 
         self.audit_message(start_message, AuditFlag.PROV)
-
+        self.audit_message(entity_message, AuditFlag.PROV)
         # add more fields according to BEP208 doc
         # with every field, check in tests
