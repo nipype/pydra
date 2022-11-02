@@ -172,7 +172,7 @@ class Audit:
     def audit_task(self, task):
         import subprocess as sp
 
-        args_list = [ item for item in task.inputs.args if os.path.isfile(item) ]
+        args_list = [item for item in task.inputs.args if os.path.isfile(item)]
         at_location = args_list[0]
 
         label = task.name
