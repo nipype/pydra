@@ -174,7 +174,7 @@ class Audit:
 
         label = task.name
         entity_label = type(label)
-        
+
         if hasattr(task.inputs, "executable"):
             print(task.inputs)
             command = task.cmdline
@@ -207,8 +207,6 @@ class Audit:
         else:
             version_cmd = None
 
-
-
         start_message = {
             "@id": self.aid,
             "@type": "task",
@@ -222,9 +220,9 @@ class Audit:
             "@id": self.aid,
             "Label": print(entity_label),
             "AtLocation": at_location,
-            "GeneratedBy": 'test',
+            "GeneratedBy": "test",
             "Type": "Task",
-            "digest": "checksum"
+            "digest": "checksum",
         }
 
         # new code to be added here for i/o tracking - WIP
