@@ -224,9 +224,9 @@ class Audit:
             "@id": self.aid,
             "Label": print(entity_label),
             "AtLocation": at_location,
-            "GeneratedBy": "test", # if not part of workflow, this will be none
+            "GeneratedBy": "test",  # if not part of workflow, this will be none
             "Type": "Task",
-            "digest": "checksum" # hash value under helpers.py
+            "digest": "checksum",  # hash value under helpers.py
         }
 
         # new code to be added here for i/o tracking - WIP
