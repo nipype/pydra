@@ -993,7 +993,6 @@ def test_audit_task(tmpdir):
         return a + b
 
     from glob import glob
-    import json
 
     funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     funky.cache_dir = tmpdir
