@@ -1001,7 +1001,7 @@ def test_audit_task(tmpdir):
     message_path = tmpdir / funky.checksum / "messages"
     # go through each jsonld file in message_path and check if the label field exists
     json_content = []
-    
+
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
