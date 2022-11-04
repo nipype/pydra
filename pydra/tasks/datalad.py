@@ -7,10 +7,8 @@ from pydra.engine.specs import (
     Directory,
     SpecInfo, 
     BaseSpec,
-    FunctionTask,
     )
 from pydra.engine.task import FunctionTask
-from pydra.engine.helpers_file import fname_presuffix, split_filename
 
 import os
 import logging
@@ -92,6 +90,7 @@ class DataladIdentityInterface(FunctionTask):
                 raise e
 
         dataset_path = Path(dataset_path)
+        # check the in_file is in the dataset
         for field, value in inputs.items():
             if value in [None, attr.NOTHING]: 
                 continue
