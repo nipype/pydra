@@ -993,6 +993,7 @@ def test_audit_task(tmpdir):
         return a + b
 
     from glob import glob
+    import json
 
     funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     funky.cache_dir = tmpdir
@@ -1000,15 +1001,19 @@ def test_audit_task(tmpdir):
     message_path = tmpdir / funky.checksum / "messages"
     # go through each jsonld file in message_path and check if the label field exists
     json_content = []
+    
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
             print(data)
-            if "Label" in data:
+            if "Activity_Label" in data:
                 json_content.append(True)
-                assert "testfunc" == data["Label"]
-                if "AssociatedWith" in data:
-                    assert None == data["AssociatedWith"]
+                assert data["Activity_Label"] == "testfunc"
+            if "Entity_Label" in data:
+                assert data["Entity_Label"] == None
+            if "AssociatedWith" in data:
+                assert None == data["AssociatedWith"]
+
     assert any(json_content)
 
 
@@ -1035,7 +1040,7 @@ def test_audit_shellcommandtask(tmpdir):
         with open(file, "r") as f:
             data = json.load(f)
             print(data)
-            if "Label" in data:
+            if "Activity_Label" in data:
                 label_content.append(True)
             if "Command" in data:
                 command_content.append(True)
@@ -1174,7 +1179,7 @@ def test_audit_all(tmpdir, use_validator):
     from glob import glob
 
     assert len(glob(str(tmpdir / funky.checksum / "proc*.log"))) == 1
-    assert len(glob(str(message_path / "*.jsonld"))) == 7
+    assert len(glob(str(message_path / "*.jsonld"))) == 8
 
     # commented out to speed up testing
     collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")

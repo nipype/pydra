@@ -214,7 +214,7 @@ class Audit:
         start_message = {
             "@id": self.aid,
             "@type": "task",
-            "Label": label,
+            "Activity_Label": label,
             "Command": command,
             "StartedAtTime": now(),
             "AssociatedWith": version_cmd,
@@ -222,7 +222,7 @@ class Audit:
 
         entity_message = {
             "@id": self.aid,
-            "Label": print(entity_label),
+            "Entity_Label": print(entity_label),
             "AtLocation": at_location,
             "GeneratedBy": "test",  # if not part of workflow, this will be none
             "Type": "Task",
