@@ -998,22 +998,29 @@ def test_audit_task(tmpdir):
     funky.cache_dir = tmpdir
     funky()
     message_path = tmpdir / funky.checksum / "messages"
+    print(message_path)
     # go through each jsonld file in message_path and check if the label field exists
     json_content = []
 
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
-            print(data)
-            if "Activity_Label" in data:
-                json_content.append(True)
-                assert data["Activity_Label"] == "testfunc"
-            if "Entity_Label" in data:
-                assert data["Entity_Label"] == None
+            if "@type" in data:
+                if "AssociatedWith" in data:
+                    assert "testfunc" in data["Label"]
+
+                    
+
+            if "@type" in data:
+                if data["@type"] == "input":
+                    assert None == data["Label"]
+                    
+                #assert data["Type"] == "input"
+
             if "AssociatedWith" in data:
                 assert None == data["AssociatedWith"]
 
-    assert any(json_content)
+    # assert any(json_content)
 
 
 def test_audit_shellcommandtask(tmpdir):
@@ -1032,21 +1039,29 @@ def test_audit_shellcommandtask(tmpdir):
     shelly()
     message_path = tmpdir / shelly.checksum / "messages"
     # go through each jsonld file in message_path and check if the label field exists
-    label_content = []
+  
     command_content = []
 
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
-            print(data)
-            if "Activity_Label" in data:
-                label_content.append(True)
+            if "@type" in data:
+                if "AssociatedWith" in data:
+                    assert "shelly" in data["Label"]
+
+                    
+
+            if "@type" in data:
+                if data["@type"] == "input":
+                    assert None == data["Label"]
+                    
+
             if "Command" in data:
                 command_content.append(True)
                 assert "ls -l" == data["Command"]
 
-    print(command_content)
-    assert any(label_content)
+
+    assert any(command_content)
 
 
 def test_audit_shellcommandtask_version(tmpdir):
