@@ -1043,8 +1043,8 @@ def test_audit_shellcommandtask(tmpdir):
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
-            if "@type" in data:
-                if "AssociatedWith" in data:
+            if "AssociatedWith" in data:
+                if "@type" in data:
                     assert "shelly" in data["Label"]
 
             if "@type" in data:
