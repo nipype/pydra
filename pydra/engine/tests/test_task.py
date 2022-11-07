@@ -1009,13 +1009,11 @@ def test_audit_task(tmpdir):
                 if "AssociatedWith" in data:
                     assert "testfunc" in data["Label"]
 
-                    
-
             if "@type" in data:
                 if data["@type"] == "input":
                     assert None == data["Label"]
-                    
-                #assert data["Type"] == "input"
+
+                # assert data["Type"] == "input"
 
             if "AssociatedWith" in data:
                 assert None == data["AssociatedWith"]
@@ -1039,7 +1037,7 @@ def test_audit_shellcommandtask(tmpdir):
     shelly()
     message_path = tmpdir / shelly.checksum / "messages"
     # go through each jsonld file in message_path and check if the label field exists
-  
+
     command_content = []
 
     for file in glob(str(message_path) + "/*.jsonld"):
@@ -1049,17 +1047,13 @@ def test_audit_shellcommandtask(tmpdir):
                 if "AssociatedWith" in data:
                     assert "shelly" in data["Label"]
 
-                    
-
             if "@type" in data:
                 if data["@type"] == "input":
                     assert None == data["Label"]
-                    
 
             if "Command" in data:
                 command_content.append(True)
                 assert "ls -l" == data["Command"]
-
 
     assert any(command_content)
 
