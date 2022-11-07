@@ -1012,6 +1012,9 @@ def test_audit_task(tmpdir):
             if "@type" in data:
                 if data["@type"] == "input":
                     assert None == data["Label"]
+                    # placeholder for atlocation until
+                    # new test is added
+                    assert None == data["AtLocation"]
 
                 # assert data["Type"] == "input"
 
