@@ -1,6 +1,5 @@
 """A :obj:`~nipype.interfaces.utility.base.IdentityInterface` with a grafted Datalad getter."""
 
-from msilib.schema import Directory
 from pathlib import Path
 from pydra.engine.specs import (
     File,
@@ -12,7 +11,6 @@ from pydra.engine.task import FunctionTask
 
 import os
 import logging
-import datalad.api as dl
 
 logger = logging.getLogger("pydra.tasks.datalad")
 
@@ -43,8 +41,8 @@ input_fields = [
     )
 ]
 
-DataladIdentity_input_spec = SpecInfo(
-    name="DataladIdentityInputSpec",
+Datalad_input_spec = SpecInfo(
+    name="DataladInputSpec",
     fields=input_fields,
     bases=(BaseSpec,),
 )
@@ -61,23 +59,29 @@ output_fields = [
     )
 ]
 
-DataladIdentity_output_spec = SpecInfo(
-    name="DataladIdentityOutputSpec",
+Datalad_output_spec = SpecInfo(
+    name="DataladOutputSpec",
     fields=output_fields,
     bases=(BaseSpec,),
 )
 
-class DataladIdentityInterface(FunctionTask):
-    """Sneaks a ``datalad get`` in paths, if datalad is available."""
+class DataladInterface(FunctionTask):
 
-    input_spec = DataladIdentity_input_spec
-    output_spec = DataladIdentity_output_spec
+    input_spec = Datalad_input_spec
+    output_spec = Datalad_output_spec
 
     def _run_interface(self, runtime):
         import attr
 
         inputs = self.inputs.get()
         dataset_path = inputs.pop("dataset_path")
+
+        _dl_found = False
+        try:
+            import datalad.api as dl
+            _dl_found = True
+        except:
+            raise ImportError("Datalad is not installed.")
 
         if not (Path(dataset_path) / ".datalad").exists():
             logger.info("Datalad interface without dataset path defined.")
@@ -87,7 +91,6 @@ class DataladIdentityInterface(FunctionTask):
                 dl.install(source=dataset_url, path=dataset_path)
             except Exception as e:
                 logger.error(e)
-                raise e
 
         dataset_path = Path(dataset_path)
         # check the in_file is in the dataset
@@ -112,7 +115,7 @@ class DataladIdentityInterface(FunctionTask):
                     )
                 except Exception as exc:
                     logger.warning(f"datalad get on {_pth} failed.")
-                    ## need to discuss with Dorota, this env was specified in mriqc
+                    ## discussed with @djarecka, we keep it commented here for now
                     ## do we still need it for pydra?
                     # if (
                     #     config.environment.exec_env == "docker"
@@ -126,8 +129,8 @@ class DataladIdentityInterface(FunctionTask):
                     #     )
                     # else:
                     #     logger.warning(str(exc))
-                else:
-                    if result[0]["status"] == "error":
-                        logger.warning(f"datalad get failed: {result}")
+            else:
+                if result[0]["status"] == "error":
+                    logger.warning(f"datalad get failed: {result}")
 
         return runtime
