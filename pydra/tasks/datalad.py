@@ -4,9 +4,9 @@ from pathlib import Path
 from pydra.engine.specs import (
     File,
     Directory,
-    SpecInfo, 
+    SpecInfo,
     BaseSpec,
-    )
+)
 from pydra.engine.task import FunctionTask
 
 import os
@@ -21,8 +21,7 @@ input_fields = [
         {
             "help_string": "Path to the data to be downloaded through datalad",
             "mandatory": True,
-        }
-
+        },
     ),
     (
         "dataset_path",
@@ -30,15 +29,15 @@ input_fields = [
         {
             "help_string": "Path to the dataset that will be used to get data",
             "mandatory": True,
-        }
+        },
     ),
     (
         "dataset_url",
         str,
         {
             "help_string": "URL to the dataset that will be used to get data",
-        }
-    )
+        },
+    ),
 ]
 
 Datalad_input_spec = SpecInfo(
@@ -65,6 +64,7 @@ Datalad_output_spec = SpecInfo(
     bases=(BaseSpec,),
 )
 
+
 class DataladInterface(FunctionTask):
 
     input_spec = Datalad_input_spec
@@ -79,6 +79,7 @@ class DataladInterface(FunctionTask):
         _dl_found = False
         try:
             import datalad.api as dl
+
             _dl_found = True
         except:
             raise ImportError("Datalad is not installed.")
@@ -95,7 +96,7 @@ class DataladInterface(FunctionTask):
         dataset_path = Path(dataset_path)
         # check the in_file is in the dataset
         for field, value in inputs.items():
-            if value in [None, attr.NOTHING]: 
+            if value in [None, attr.NOTHING]:
                 continue
 
             _pth = Path(value)
@@ -109,10 +110,7 @@ class DataladInterface(FunctionTask):
 
             if _datalad_candidate:
                 try:
-                    result = dl.get(
-                        _pth,
-                        dataset=dataset_path
-                    )
+                    result = dl.get(_pth, dataset=dataset_path)
                 except Exception as exc:
                     logger.warning(f"datalad get on {_pth} failed.")
                     ## discussed with @djarecka, we keep it commented here for now
