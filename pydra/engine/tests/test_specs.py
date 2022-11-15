@@ -14,10 +14,15 @@ from ..specs import (
     DockerSpec,
     SingularitySpec,
     LazyField,
+    ShellOutSpec,
+)
+from ..task import (
+    TaskBase,
+    ShellCommandTask
 )
 from ..helpers import make_klass
 import pytest
-
+import attr
 
 def test_basespec():
     spec = BaseSpec()
@@ -366,3 +371,43 @@ def test_input_file_hash_5(tmpdir):
         f.write("hi")
     hash3 = inputs(in_file=[{"file": file_diffcontent, "int": 3}]).hash
     assert hash1 != hash3
+
+
+
+def test_task_inputs_mandatory_with_xOR():
+    """input spec with mandatory inputs"""
+    input_fields=[
+            (
+                "input_1",
+                bool,
+                {
+                    "help_string": "help",
+                    "argstr": "--i1",
+                    "xor": ("input_1", "input_2"),
+                }
+            ),
+            (
+                "input_2",
+                bool,
+                {
+                    "help_string": "help",
+                    "mandatory": True,
+                    "argstr": "--i2",
+                    "xor": ("input_1", "input_2"),
+                }
+    )
+    ]
+    task_input_spec = SpecInfo(name="Input", fields=input_fields, bases=(ShellSpec,))
+    task_output_fields = []
+    task_output_spec = SpecInfo(name="Output", fields=task_output_fields, bases=(ShellOutSpec,))
+
+    class MyTask(ShellCommandTask):
+        input_spec = task_input_spec
+        output_spec = task_output_spec
+        executable = "task"
+
+    task = MyTask()
+    task.inputs.input_1 = True
+    task.inputs.input_2 = True
+    task.inputs.check_fields_input_spec()
+    #task.cmdline
