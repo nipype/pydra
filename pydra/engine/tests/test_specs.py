@@ -374,7 +374,7 @@ def test_input_file_hash_5(tmpdir):
 
 
 
-def test_task_inputs_mandatory_with_xOR():
+def test_task_inputs_mandatory_with_xOR_TF():
     """input spec with mandatory inputs"""
     input_fields=[
             (
@@ -382,7 +382,7 @@ def test_task_inputs_mandatory_with_xOR():
                 bool,
                 {
                     "help_string": "help",
-                    "argstr": "--i1",
+                    "mandatory": True,
                     "xor": ("input_1", "input_2"),
                 }
             ),
@@ -404,10 +404,46 @@ def test_task_inputs_mandatory_with_xOR():
     class MyTask(ShellCommandTask):
         input_spec = task_input_spec
         output_spec = task_output_spec
-        executable = "task"
+        executable = "cmd"
+
+    task = MyTask()
+    task.inputs.input_1 = True
+    task.inputs.input_2 = attr.NOTHING
+    task.inputs.check_fields_input_spec()
+
+def test_task_inputs_mandatory_with_xOR_TT():
+    """input spec with mandatory inputs"""
+    input_fields=[
+            (
+                "input_1",
+                bool,
+                {
+                    "help_string": "help",
+                    "mandatory": True,
+                    "xor": ("input_1", "input_2"),
+                }
+            ),
+            (
+                "input_2",
+                bool,
+                {
+                    "help_string": "help",
+                    "mandatory": True,
+                    "argstr": "--i2",
+                    "xor": ("input_1", "input_2"),
+                }
+    )
+    ]
+    task_input_spec = SpecInfo(name="Input", fields=input_fields, bases=(ShellSpec,))
+    task_output_fields = []
+    task_output_spec = SpecInfo(name="Output", fields=task_output_fields, bases=(ShellOutSpec,))
+
+    class MyTask(ShellCommandTask):
+        input_spec = task_input_spec
+        output_spec = task_output_spec
+        executable = "cmd"
 
     task = MyTask()
     task.inputs.input_1 = True
     task.inputs.input_2 = True
     task.inputs.check_fields_input_spec()
-    #task.cmdline
