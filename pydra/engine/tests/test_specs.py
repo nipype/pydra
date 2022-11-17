@@ -380,7 +380,7 @@ class SimpleTask(ShellCommandTask):
                 {
                     "help_string": "help",
                     "mandatory": True,
-                    "xor": ("input_1", "input_2"),
+                    "xor": ("input_1", "input_2", "input_3"),
                 }
             ),
             (
@@ -390,9 +390,18 @@ class SimpleTask(ShellCommandTask):
                     "help_string": "help",
                     "mandatory": True,
                     "argstr": "--i2",
-                    "xor": ("input_1", "input_2"),
+                    "xor": ("input_1", "input_2", "input_3"),
                 }
-    )
+            ),
+            (
+                "input_3",
+                bool,
+                {
+                    "help_string": "help",
+                    "mandatory": True,
+                    "xor": ("input_1", "input_2", "input_3"),
+                }
+            )
     ]
     task_input_spec = SpecInfo(name="Input", fields=input_fields, bases=(ShellSpec,))
     task_output_fields = []
@@ -410,12 +419,23 @@ def test_task_inputs_mandatory_with_xOR_one_mandatory_is_OK():
     task.inputs.input_2 = attr.NOTHING
     task.inputs.check_fields_input_spec()
 
+def test_task_inputs_mandatory_with_xOR_one_mandatory_out_3_is_OK():
+    """input spec with mandatory inputs"""
+    task = SimpleTask()
+    task.inputs.input_1 = attr.NOTHING
+    task.inputs.input_2 = attr.NOTHING
+    task.inputs.input_3 = True
+    task.inputs.check_fields_input_spec()
+
 def test_task_inputs_mandatory_with_xOR_zero_mandatory_raises_error():
     """input spec with mandatory inputs"""
     task = SimpleTask()
     task.inputs.input_1 = attr.NOTHING
     task.inputs.input_2 = attr.NOTHING
-    task.inputs.check_fields_input_spec()
+    with pytest.raises(Exception) as excinfo:
+        task.inputs.check_fields_input_spec()
+    assert "input_1 is mandatory, but no value provided" in str(excinfo.value)
+    assert excinfo.type is AttributeError
 
 
 def test_task_inputs_mandatory_with_xOR_two_mandatories_raises_error():
@@ -426,5 +446,17 @@ def test_task_inputs_mandatory_with_xOR_two_mandatories_raises_error():
     
     with pytest.raises(Exception) as excinfo:
         task.inputs.check_fields_input_spec()
-    assert "input_2 is mutually exclusive with ('input_1', 'input_2')" in str(excinfo.value)
+    assert "input_2 is mutually exclusive with ('input_1', 'input_2'" in str(excinfo.value)
+    assert excinfo.type is AttributeError
+
+def test_task_inputs_mandatory_with_xOR_3_mandatories_raises_error():
+    """input spec with mandatory inputs"""
+    task = SimpleTask()
+    task.inputs.input_1 = 'Input1'
+    task.inputs.input_2 = True
+    task.inputs.input_3 = False
+    
+    with pytest.raises(Exception) as excinfo:
+        task.inputs.check_fields_input_spec()
+    assert "input_2 is mutually exclusive with ('input_1', 'input_2', 'input_3'" in str(excinfo.value)
     assert excinfo.type is AttributeError
