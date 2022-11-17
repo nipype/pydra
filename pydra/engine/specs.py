@@ -162,11 +162,17 @@ class BaseSpec:
             mdata = fld.metadata
             # checking if the mandatory field is provided
             if getattr(self, fld.name) is attr.NOTHING:
-                if mdata.get("mandatory"):    
+                if mdata.get("mandatory"):
                     # checking if the mandatory field is provided elsewhere in the xor list
                     in_exclusion_list = mdata.get("xor") is not None
-                    alreday_populated = in_exclusion_list and [getattr(self, el) for el in mdata["xor"] if (getattr(self, el) is not attr.NOTHING)]
-                    if alreday_populated: #another input satisfies mandatory attribute via xor condition
+                    alreday_populated = in_exclusion_list and [
+                        getattr(self, el)
+                        for el in mdata["xor"]
+                        if (getattr(self, el) is not attr.NOTHING)
+                    ]
+                    if (
+                        alreday_populated
+                    ):  # another input satisfies mandatory attribute via xor condition
                         continue
                     else:
                         raise AttributeError(
