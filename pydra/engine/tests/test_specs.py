@@ -376,7 +376,7 @@ class SimpleTask(ShellCommandTask):
     input_fields=[
             (
                 "input_1",
-                bool,
+                str,
                 {
                     "help_string": "help",
                     "mandatory": True,
@@ -403,10 +403,10 @@ class SimpleTask(ShellCommandTask):
     executable = "cmd"
 
 
-def test_task_inputs_mandatory_with_xOR_one_mandatory_is_enough():
+def test_task_inputs_mandatory_with_xOR_one_mandatory_is_OK():
     """input spec with mandatory inputs"""
     task = SimpleTask()
-    task.inputs.input_1 = True
+    task.inputs.input_1 = 'Input1'
     task.inputs.input_2 = attr.NOTHING
     task.inputs.check_fields_input_spec()
 
@@ -421,7 +421,7 @@ def test_task_inputs_mandatory_with_xOR_zero_mandatory_raises_error():
 def test_task_inputs_mandatory_with_xOR_two_mandatories_raises_error():
     """input spec with mandatory inputs"""
     task = SimpleTask()
-    task.inputs.input_1 = True
+    task.inputs.input_1 = 'Input1'
     task.inputs.input_2 = True
     
     with pytest.raises(Exception) as excinfo:
