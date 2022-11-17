@@ -419,6 +419,7 @@ def test_task_inputs_mandatory_with_xOR_one_mandatory_is_OK():
     task.inputs.input_2 = attr.NOTHING
     task.inputs.check_fields_input_spec()
 
+
 def test_task_inputs_mandatory_with_xOR_one_mandatory_out_3_is_OK():
     """input spec with mandatory inputs"""
     task = SimpleTask()
@@ -426,6 +427,7 @@ def test_task_inputs_mandatory_with_xOR_one_mandatory_out_3_is_OK():
     task.inputs.input_2 = attr.NOTHING
     task.inputs.input_3 = True
     task.inputs.check_fields_input_spec()
+
 
 def test_task_inputs_mandatory_with_xOR_zero_mandatory_raises_error():
     """input spec with mandatory inputs"""
@@ -448,6 +450,7 @@ def test_task_inputs_mandatory_with_xOR_two_mandatories_raises_error():
         task.inputs.check_fields_input_spec()
     assert "input_2 is mutually exclusive with ('input_1', 'input_2'" in str(excinfo.value)
     assert excinfo.type is AttributeError
+
 
 def test_task_inputs_mandatory_with_xOR_3_mandatories_raises_error():
     """input spec with mandatory inputs"""
