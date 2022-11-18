@@ -6,7 +6,7 @@ from pathlib import Path
 from ..engine.specs import (
     File,
     Directory,
-    SpecInfo, 
+    SpecInfo,
     BaseSpec,
     )
 from ..engine.core import TaskBase
@@ -22,8 +22,7 @@ input_fields = [
         {
             "help_string": "Path to the data to be downloaded through datalad",
             "mandatory": True,
-        }
-
+        },
     ),
     (
         "dataset_path",
@@ -31,15 +30,15 @@ input_fields = [
         {
             "help_string": "Path to the dataset that will be used to get data",
             "mandatory": True,
-        }
+        },
     ),
     (
         "dataset_url",
         str,
         {
             "help_string": "URL to the dataset that will be used to get data",
-        }
-    )
+        },
+    ),
 ]
 
 
@@ -100,6 +99,7 @@ class DataladInterface(TaskBase):
         _dl_found = False
         try:
             import datalad.api as dl
+
             _dl_found = True
         except:
             raise ImportError("Datalad is not installed.")
