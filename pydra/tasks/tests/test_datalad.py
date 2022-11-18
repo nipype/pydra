@@ -5,7 +5,7 @@ import pytest
 
 
 from pydra.tasks.datalad import DataladInterface
-from pydra.engine.core import Workflow 
+from pydra.engine.core import Workflow
 from pydra.engine.submitter import Submitter
 from pydra.engine.helpers import hash_value
 
@@ -37,10 +37,12 @@ def test_datalad_interface(tmpdir):
     # adding datalad task
     wf.add(
         DataladInterface(
-            name="dl", in_file=wf.lzin.in_file, 
-            dataset_path=wf.lzin.dataset_path, 
-            dataset_url=wf.lzin.dataset_url)
+            name="dl",
+            in_file=wf.lzin.in_file,
+            dataset_path=wf.lzin.dataset_path,
+            dataset_url=wf.lzin.dataset_url,
         )
+    )
 
     # setup output
     wf.set_output([("out_file", wf.dl.lzout.out_file)])

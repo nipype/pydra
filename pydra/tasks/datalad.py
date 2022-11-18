@@ -8,7 +8,7 @@ from ..engine.specs import (
     Directory,
     SpecInfo,
     BaseSpec,
-    )
+)
 from ..engine.core import TaskBase
 from ..engine.helpers import output_from_inputfields
 from ..utils.messenger import AuditFlag
@@ -59,38 +59,39 @@ class DataladInterface(TaskBase):
     """A :obj:`~nipype.interfaces.utility.base.IdentityInterface` with a grafted Datalad getter."""
 
     def __init__(
-        self, name: str, 
+        self,
+        name: str,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
         input_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
         output_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
-        cont_dim=None, 
-        messenger_args=None, 
-        messengers=None, 
+        cont_dim=None,
+        messenger_args=None,
+        messengers=None,
         rerun=False,
         **kwargs,
-        ):
+    ):
         """Initialize a DataladInterface instance."""
 
-        self.input_spec = (
-            input_spec
-            or SpecInfo(name="Inputs", fields=input_fields, bases=(BaseSpec,))
+        self.input_spec = input_spec or SpecInfo(
+            name="Inputs", fields=input_fields, bases=(BaseSpec,)
         )
-        self.output_spec = (
-            output_spec
-            or SpecInfo(name="Output", fields=output_fields, bases=(BaseSpec,))
+        self.output_spec = output_spec or SpecInfo(
+            name="Output", fields=output_fields, bases=(BaseSpec,)
         )
         self.output_spec = output_from_inputfields(self.output_spec, self.input_spec)
         super().__init__(
-            name=name, 
+            name=name,
             inputs=kwargs,
-            audit_flags=audit_flags, 
-            cache_dir=cache_dir, 
-            cache_locations=cache_locations, 
-            cont_dim=cont_dim, 
-            messenger_args=messenger_args, 
-            messengers=messengers, rerun=rerun)
+            audit_flags=audit_flags,
+            cache_dir=cache_dir,
+            cache_locations=cache_locations,
+            cont_dim=cont_dim,
+            messenger_args=messenger_args,
+            messengers=messengers,
+            rerun=rerun,
+        )
 
     def _run_task(self):
         in_file = self.inputs.in_file
@@ -105,7 +106,7 @@ class DataladInterface(TaskBase):
             raise ImportError("Datalad is not installed.")
 
         # checking if the dataset is already downloaded
-        
+
         if not (Path(dataset_path) / ".datalad").exists():
             logger.info("Datalad interface without dataset path defined.")
             try:
@@ -134,10 +135,7 @@ class DataladInterface(TaskBase):
 
         if _datalad_candidate:
             try:
-                result = dl.get(
-                    _pth,
-                    dataset=dataset_path
-                )
+                result = dl.get(_pth, dataset=dataset_path)
             except Exception as exc:
                 logger.warning(f"datalad get on {_pth} failed.")
                 ## discussed with @djarecka, we keep it commented here for now
@@ -157,9 +155,11 @@ class DataladInterface(TaskBase):
             else:
                 if result[0]["status"] == "error":
                     logger.warning(f"datalad get failed: {result}")
-        
+
         self.output_ = None
-        output = os.path.abspath(os.path.join(self.inputs.dataset_path, self.inputs.in_file))
+        output = os.path.abspath(
+            os.path.join(self.inputs.dataset_path, self.inputs.in_file)
+        )
         output_names = [el[0] for el in self.output_spec.fields]
         if output is None:
             self.output_ = {nm: None for nm in output_names}
@@ -175,7 +175,10 @@ class DataladInterface(TaskBase):
             )
         # outputs = self.output_spec().get()
         # outputs["out_file"] = os.path.abspath(os.path.join(self.inputs.dataset_path, self.inputs.in_file))
+
     def _list_outputs(self):
         outputs = self.output_spec().get()
-        outputs["out_file"] = os.path.abspath(os.path.join(self.inputs.dataset_path, self.inputs.in_file))
+        outputs["out_file"] = os.path.abspath(
+            os.path.join(self.inputs.dataset_path, self.inputs.in_file)
+        )
         return outputs
