@@ -11,8 +11,9 @@ from ... import mark
 from ..core import Workflow
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
-from .utils import gen_basic_wf, use_validator
-from ..specs import MultiInputObj, MultiOutputObj, SpecInfo, FunctionSpec, BaseSpec
+from .utils import gen_basic_wf, use_validator, Submitter
+from ..specs import MultiInputObj, MultiOutputObj, SpecInfo, FunctionSpec, BaseSpec, ShellSpec, File
+from ..helpers import hash_file
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -1021,6 +1022,7 @@ def test_audit_task(tmpdir):
             if "AssociatedWith" in data:
                 assert None == data["AssociatedWith"]
 
+
     # assert any(json_content)
 
 
@@ -1060,6 +1062,50 @@ def test_audit_shellcommandtask(tmpdir):
                 assert "ls -l" == data["Command"]
 
     assert any(command_content)
+
+
+def test_audit_shellcommandtask_file(tmpdir):
+    # create test.txt file with "This is a test" in it in the tmpdir
+    with open(tmpdir / "test.txt", "w") as f:
+        f.write("This is a test.")
+
+    cmd = "cat"
+    file_in = tmpdir / "test.txt"
+    test_file_hash = hash_file(file_in)
+    my_input_spec = SpecInfo(
+    name='Input',
+    fields=[
+        (
+            'in_file',
+            attr.ib(
+                type=File,
+                metadata={
+                    'position': 1,
+                    'argstr': '',
+                    'help_string': 'text',
+                    'mandatory': True,
+                },
+            ),
+        )
+    ],
+    bases=(ShellSpec,),
+)
+    shelly = ShellCommandTask(
+    name='shelly', in_file=file_in, input_spec=my_input_spec, executable=cmd, audit_flags=AuditFlag.PROV, messengers=PrintMessenger()
+) 
+    shelly.cache_dir = tmpdir
+    shelly()
+    message_path = tmpdir / shelly.checksum / "messages"
+    for file in glob.glob(str(message_path) + "/*.jsonld"):
+        with open(file, "r") as f:
+            data = json.load(f)
+            print(file_in)
+            if "AtLocation" in data:
+                assert data["AtLocation"] == str(file_in)
+            if "digest" in data:
+                assert test_file_hash == data["digest"]
+
+
 
 
 def test_audit_shellcommandtask_version(tmpdir):

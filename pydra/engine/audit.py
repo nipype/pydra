@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
-from .helpers import ensure_list, gather_runtime_info
+from .helpers import ensure_list, gather_runtime_info, hash_file
 
 
 class Audit:
@@ -183,8 +183,10 @@ class Audit:
 
         if hasattr(task.inputs, "in_file"):
             input_file = task.inputs.in_file
+            file_hash = hash_file(input_file)
             at_location = os.path.abspath(input_file)
         else:
+            file_hash = None
             at_location = None
             input_file = None
 
@@ -221,7 +223,7 @@ class Audit:
             "AtLocation": at_location,
             "GeneratedBy": "test",  # if not part of workflow, this will be none
             "@type": "input",
-            "digest": "checksum",  # hash value under helpers.py
+            "digest": file_hash,  # hash value under helpers.py
         }
 
         # new code to be added here for i/o tracking - WIP
