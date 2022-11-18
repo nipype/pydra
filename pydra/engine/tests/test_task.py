@@ -11,8 +11,17 @@ from ... import mark
 from ..core import Workflow
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
-from .utils import gen_basic_wf, use_validator
-from ..specs import MultiInputObj, MultiOutputObj, SpecInfo, FunctionSpec, BaseSpec
+from .utils import gen_basic_wf, use_validator, Submitter
+from ..specs import (
+    MultiInputObj,
+    MultiOutputObj,
+    SpecInfo,
+    FunctionSpec,
+    BaseSpec,
+    ShellSpec,
+    File,
+)
+from ..helpers import hash_file
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -998,15 +1007,30 @@ def test_audit_task(tmpdir):
     funky.cache_dir = tmpdir
     funky()
     message_path = tmpdir / funky.checksum / "messages"
+    print(message_path)
     # go through each jsonld file in message_path and check if the label field exists
     json_content = []
+
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
-            if "label" in data:
-                json_content.append(True)
-                assert "testfunc" == data["label"]
-    assert any(json_content)
+            if "@type" in data:
+                if "AssociatedWith" in data:
+                    assert "testfunc" in data["Label"]
+
+            if "@type" in data:
+                if data["@type"] == "input":
+                    assert None == data["Label"]
+                    # placeholder for atlocation until
+                    # new test is added
+                    assert None == data["AtLocation"]
+
+                # assert data["Type"] == "input"
+
+            if "AssociatedWith" in data:
+                assert None == data["AssociatedWith"]
+
+    # assert any(json_content)
 
 
 def test_audit_shellcommandtask(tmpdir):
@@ -1025,20 +1049,106 @@ def test_audit_shellcommandtask(tmpdir):
     shelly()
     message_path = tmpdir / shelly.checksum / "messages"
     # go through each jsonld file in message_path and check if the label field exists
-    label_content = []
+
     command_content = []
 
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
-            if "label" in data:
-                label_content.append(True)
-            if "command" in data:
-                command_content.append(True)
-                assert "ls -l" == data["command"]
 
-    print(command_content)
-    assert any(label_content)
+            if "@type" in data:
+                if "AssociatedWith" in data:
+                    assert "shelly" in data["Label"]
+
+            if "@type" in data:
+                if data["@type"] == "input":
+                    assert data["Label"] == None
+
+            if "Command" in data:
+                command_content.append(True)
+                assert "ls -l" == data["Command"]
+
+    assert any(command_content)
+
+
+def test_audit_shellcommandtask_file(tmpdir):
+    # create test.txt file with "This is a test" in it in the tmpdir
+    with open(tmpdir / "test.txt", "w") as f:
+        f.write("This is a test.")
+
+    cmd = "cat"
+    file_in = tmpdir / "test.txt"
+    test_file_hash = hash_file(file_in)
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "in_file",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "text",
+                        "mandatory": True,
+                    },
+                ),
+            )
+        ],
+        bases=(ShellSpec,),
+    )
+    shelly = ShellCommandTask(
+        name="shelly",
+        in_file=file_in,
+        input_spec=my_input_spec,
+        executable=cmd,
+        audit_flags=AuditFlag.PROV,
+        messengers=PrintMessenger(),
+    )
+    shelly.cache_dir = tmpdir
+    shelly()
+    message_path = tmpdir / shelly.checksum / "messages"
+    for file in glob.glob(str(message_path) + "/*.jsonld"):
+        with open(file, "r") as f:
+            data = json.load(f)
+            print(file_in)
+            if "AtLocation" in data:
+                assert data["AtLocation"] == str(file_in)
+            if "digest" in data:
+                assert test_file_hash == data["digest"]
+
+
+def test_audit_shellcommandtask_version(tmpdir):
+    import subprocess as sp
+
+    version_cmd = sp.run("less --version", shell=True, stdout=sp.PIPE).stdout.decode(
+        "utf-8"
+    )
+    version_cmd = version_cmd.splitlines()[0]
+    cmd = "less"
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        args="test_task.py",
+        audit_flags=AuditFlag.PROV,
+        messengers=FileMessenger(),
+    )
+
+    import glob
+
+    shelly.cache_dir = tmpdir
+    shelly()
+    message_path = tmpdir / shelly.checksum / "messages"
+    # go through each jsonld file in message_path and check if the label field exists
+    version_content = []
+    for file in glob.glob(str(message_path) + "/*.jsonld"):
+        with open(file, "r") as f:
+            data = json.load(f)
+            if "AssociatedWith" in data:
+                if version_cmd in data["AssociatedWith"]:
+                    version_content.append(True)
+
+    assert any(version_content)
 
 
 def test_audit_prov_messdir_1(tmpdir, use_validator):
@@ -1137,7 +1247,7 @@ def test_audit_all(tmpdir, use_validator):
     from glob import glob
 
     assert len(glob(str(tmpdir / funky.checksum / "proc*.log"))) == 1
-    assert len(glob(str(message_path / "*.jsonld"))) == 7
+    assert len(glob(str(message_path / "*.jsonld"))) == 8
 
     # commented out to speed up testing
     collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")

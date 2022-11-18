@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
-from .helpers import ensure_list, gather_runtime_info
+from .helpers import ensure_list, gather_runtime_info, hash_file
 
 
 class Audit:
@@ -170,22 +170,65 @@ class Audit:
         return self.audit_flags & flag
 
     def audit_task(self, task):
+        import subprocess as sp
+
         label = task.name
+        entity_label = type(label)
+
         if hasattr(task.inputs, "executable"):
             command = task.cmdline
         # assume function task
         else:
-            # work on changing this to function name
             command = None
+
+        if hasattr(task.inputs, "in_file"):
+            input_file = task.inputs.in_file
+            file_hash = hash_file(input_file)
+            at_location = os.path.abspath(input_file)
+        else:
+            file_hash = None
+            at_location = None
+            input_file = None
+
+        if command is not None:
+            cmd_name = command.split()[0]
+            software = f"{cmd_name} --version"
+            # take the first word of command as the
+            # name of the executable
+            # (this may not always be the case)
+            version_cmd = sp.run(software, shell=True, stdout=sp.PIPE).stdout.decode(
+                "utf-8"
+            )
+            try:
+                version_cmd = version_cmd.splitlines()[0]
+
+            except IndexError:
+                version_cmd = f"{cmd_name} -- Version unknown"
+
+        else:
+            version_cmd = None
 
         start_message = {
             "@id": self.aid,
             "@type": "task",
-            "label": label,
-            "command": command,
-            "startedAtTime": now(),
+            "Label": label,
+            "Command": command,
+            "StartedAtTime": now(),
+            "AssociatedWith": version_cmd,
         }
-        self.audit_message(start_message, AuditFlag.PROV)
 
+        entity_message = {
+            "@id": self.aid,
+            "Label": print(entity_label),
+            "AtLocation": at_location,
+            "GeneratedBy": "test",  # if not part of workflow, this will be none
+            "@type": "input",
+            "digest": file_hash,  # hash value under helpers.py
+        }
+
+        # new code to be added here for i/o tracking - WIP
+
+        self.audit_message(start_message, AuditFlag.PROV)
+        self.audit_message(entity_message, AuditFlag.PROV)
         # add more fields according to BEP208 doc
         # with every field, check in tests
