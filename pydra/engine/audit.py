@@ -5,6 +5,7 @@ import json
 import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from .helpers import ensure_list, gather_runtime_info, hash_file
+from .specs import attr_fields, File, Directory
 
 
 class Audit:
@@ -180,15 +181,29 @@ class Audit:
         # assume function task
         else:
             command = None
+        # only implementing for file or directories. Check "type" and return "File" or "Directory"
+        attr_list = attr_fields(task.inputs)
+        for attrs in attr_list:
+            if attrs.type in [File, Directory]:
+                input_name = attrs.name
+                input_path = os.path.abspath(getattr(task.inputs, input_name))
+                file_hash = hash_file(input_path)
 
-        if hasattr(task.inputs, "in_file"):
-            input_file = task.inputs.in_file
-            file_hash = hash_file(input_file)
-            at_location = os.path.abspath(input_file)
-        else:
-            file_hash = None
-            at_location = None
-            input_file = None
+            else:
+                input_name = attrs.name
+                input_path = None
+                file_hash = None
+                # at_location = os.path.abspath(input_name)
+                
+        
+        # if hasattr(task.inputs, "in_file"):
+        #     input_file = task.inputs.in_file
+        #     file_hash = hash_file(input_file)
+        #     at_location = os.path.abspath(input_file)
+        # else:
+        #     file_hash = None
+        #     at_location = None
+        #     input_file = None
 
         if command is not None:
             cmd_name = command.split()[0]
@@ -216,14 +231,14 @@ class Audit:
             "StartedAtTime": now(),
             "AssociatedWith": version_cmd,
         }
-
+        entity_id = f"uid:{gen_uuid()}"
         entity_message = {
-            "@id": self.aid,
+            "@id": entity_id, # add ID here
             "Label": print(entity_label),
-            "AtLocation": at_location,
+            "AtLocation": input_path, #at_location,
             "GeneratedBy": "test",  # if not part of workflow, this will be none
             "@type": "input",
-            "digest": file_hash,  # hash value under helpers.py
+            "digest": file_hash  # hash value under helpers.py
         }
 
         # new code to be added here for i/o tracking - WIP
