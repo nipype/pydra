@@ -176,12 +176,8 @@ class Audit:
         label = task.name
         entity_label = type(label)
 
-        if hasattr(task.inputs, "executable"):
-            command = task.cmdline
-        # assume function task
-        else:
-            command = None
-        # only implementing for file or directories. Check "type" and return "File" or "Directory"
+        command = task.cmdline if hasattr(task.inputs, "executable") else None
+
         attr_list = attr_fields(task.inputs)
         for attrs in attr_list:
             if attrs.type in [File, Directory]:
@@ -194,7 +190,8 @@ class Audit:
                 input_path = None
                 file_hash = None
                 # at_location = os.path.abspath(input_name)
-
+                
+        
         # if hasattr(task.inputs, "in_file"):
         #     input_file = task.inputs.in_file
         #     file_hash = hash_file(input_file)
@@ -232,17 +229,15 @@ class Audit:
         }
         entity_id = f"uid:{gen_uuid()}"
         entity_message = {
-            "@id": entity_id,  # add ID here
+            "@id": entity_id, # add ID here
             "Label": print(entity_label),
-            "AtLocation": input_path,  # at_location,
+            "AtLocation": input_path, #at_location,
             "GeneratedBy": "test",  # if not part of workflow, this will be none
             "@type": "input",
-            "digest": file_hash,  # hash value under helpers.py
+            "digest": file_hash  # hash value under helpers.py
         }
 
-        # new code to be added here for i/o tracking - WIP
 
         self.audit_message(start_message, AuditFlag.PROV)
         self.audit_message(entity_message, AuditFlag.PROV)
-        # add more fields according to BEP208 doc
-        # with every field, check in tests
+
