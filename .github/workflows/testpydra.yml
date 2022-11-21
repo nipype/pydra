@@ -34,15 +34,17 @@ jobs:
     - name: Set-up Git-annex
       run: |
         if [ "${{ runner.os }}" == "Linux" ]; then
+          wget -O- http://neuro.debian.net/lists/jammy.us-ca.libre | sudo tee /etc/apt/sources.list.d/neurodebian.sources.list
+          sudo apt-key adv --recv-keys --keyserver hkps://keyserver.ubuntu.com 0xA5D32F012649A5A9
           sudo apt-get update
-          sudo apt-get install git-annex >= 8.20200309
+          sudo apt-get install git-annex-standalone
         elif [ "${{ runner.os }}" == "macOS" ]; then
           brew install git-annex
         elif [ "${{ runner.os }}" == "Windows" ]; then
           pip install datalad-installer
           datalad-installer git-annex -m datalad/packages
         fi
-    - name: Set git credentials
+    - name: Set-up git credentials
       run: |
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git config --global user.name "github-actions[bot]"
