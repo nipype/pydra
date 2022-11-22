@@ -1071,12 +1071,12 @@ def test_audit_shellcommandtask(tmpdir):
 
 def test_audit_shellcommandtask_file(tmpdir):
     import shutil
+
     # create test.txt file with "This is a test" in it in the tmpdir
     with open(tmpdir / "test.txt", "w") as f:
         f.write("This is a test.")
     # make a copy of the test.txt file in the tmpdir and name it test2.txt
     shutil.copy(tmpdir / "test.txt", tmpdir / "test2.txt")
-
 
     cmd = "cat"
     file_in = tmpdir / "test.txt"
@@ -1098,7 +1098,7 @@ def test_audit_shellcommandtask_file(tmpdir):
                     },
                 ),
             ),
-                        (
+            (
                 "in_file_2",
                 attr.ib(
                     type=File,
@@ -1109,7 +1109,7 @@ def test_audit_shellcommandtask_file(tmpdir):
                         "mandatory": True,
                     },
                 ),
-            )
+            ),
         ],
         bases=(ShellSpec,),
     )

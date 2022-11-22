@@ -224,16 +224,13 @@ class Audit:
         }
         entity_id = f"uid:{gen_uuid()}"
         entity_message = {
-            "@id": entity_id, 
+            "@id": entity_id,
             "Label": print(entity_label),
-            "AtLocation": input_paths, #
-            "GeneratedBy": "test",  
+            "AtLocation": input_paths,  #
+            "GeneratedBy": "test",
             "@type": "input",
-            "digest": input_paths_hash  
+            "digest": input_paths_hash,
         }
-
-      
 
         self.audit_message(start_message, AuditFlag.PROV)
         self.audit_message(entity_message, AuditFlag.PROV)
-
