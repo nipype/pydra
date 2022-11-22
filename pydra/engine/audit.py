@@ -176,7 +176,13 @@ class Audit:
         label = task.name
         entity_label = type(label)
 
-        command = task.cmdline if hasattr(task.inputs, "executable") else None
+        if hasattr(task.inputs, "executable"):
+            command = task.cmdline
+        # assume function task
+        else:
+            command = None
+
+        path_hash_dict = {}
 
         attr_list = attr_fields(task.inputs)
         for attrs in attr_list:
@@ -184,11 +190,11 @@ class Audit:
                 input_name = attrs.name
                 input_path = os.path.abspath(getattr(task.inputs, input_name))
                 file_hash = hash_file(input_path)
+                path_hash_dict[input_path] = file_hash
 
-            else:
-                input_name = attrs.name
-                input_path = None
-                file_hash = None
+        # get the hash for the output
+        input_paths = list(path_hash_dict.keys())
+        input_paths_hash = list(path_hash_dict.values())
 
         if command is not None:
             cmd_name = command.split()[0]
@@ -218,13 +224,16 @@ class Audit:
         }
         entity_id = f"uid:{gen_uuid()}"
         entity_message = {
-            "@id": entity_id,
+            "@id": entity_id, 
             "Label": print(entity_label),
-            "AtLocation": input_path,
-            "GeneratedBy": "test",
+            "AtLocation": input_paths, #
+            "GeneratedBy": "test",  
             "@type": "input",
-            "digest": file_hash,
+            "digest": input_paths_hash  
         }
+
+      
 
         self.audit_message(start_message, AuditFlag.PROV)
         self.audit_message(entity_message, AuditFlag.PROV)
+
