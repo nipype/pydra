@@ -1,6 +1,97 @@
 [build-system]
-requires = ["setuptools==62", "wheel"]
+requires = ["flit_scm"]
+build-backend = "flit_scm:buildapi"
+
+[project]
+name = "pydra"
+description = "Pydra dataflow engine"
+readme = "README.rst"
+requires-python = ">=3.7"
+dependencies = [
+    "attrs >=19.1.0",
+    "cloudpickle >=2.0.0",
+    "etelemetry >=0.2.2",
+    "filelock >=3.0.0",
+]
+license = {file = "LICENSE"}
+authors = [
+    {name = "Nipype developers", email = "neuroimaging@python.org"},
+]
+maintainers = [
+    {name = "Nipype developers", email = "neuroimaging@python.org"},
+]
+keywords = [
+    "brainweb",
+    "dataflow",
+    "neuroimaging",
+    "pydra",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dask = [
+    "dask",
+    "distributed",
+]
+dev = [
+    "black",
+    "pre-commit",
+]
+doc = [
+    "attrs >=19.1.0",
+    "cloudpickle",
+    "filelock",
+    "packaging",
+    "sphinx >=2.1.2",
+    "sphinx_rtd_theme",
+    "sphinxcontrib-apidoc ~=0.3.0",
+    "sphinxcontrib-napoleon",
+    "sphinxcontrib-versioning",
+]
+test = [
+    "pytest >=6.2.5",
+    "pytest-cov",
+    "pytest-env",
+    "pytest-xdist <2.0",
+    "pytest-rerunfailures",
+    "pytest-timeout",
+    "codecov",
+    "numpy",
+    "pyld",
+    "psutil",
+    "python-dateutil",
+    "tornado",
+    "boutiques",
+    "pympler",
+]
+
+[project.urls]
+documentation = "https://nipype.github.io/pydra/"
+homepage = "https://nipype.github.io/pydra/"
+repository = "https://github.com/nipype/pydra.git"
+
+[tool.flit.module]
+name = "pydra"
+
+[tool.flit.sdist]
+exclude = [".gitignore"]
+
+[tool.setuptools_scm]
+write_to = "pydra/_version.py"
 
 [tool.black]
 target-version = ['py37', 'py38']
 exclude = "pydra/_version.py"
+
+[tool.codespell]
+ignore-words = ".codespell-ignorewords"

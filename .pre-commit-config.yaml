@@ -16,7 +16,8 @@ repos:
     rev: v2.2.2
     hooks:
     -   id: codespell
-        exclude: ^(pydra/_version\.py|versioneer\.py)$
+        additional_dependencies:
+        - tomli
 -   repo: https://github.com/PyCQA/flake8
     rev: 5.0.4
     hooks:
