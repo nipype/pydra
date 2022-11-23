@@ -190,16 +190,14 @@ class Audit:
                 file_hash = hash_file(input_path)
                 entity_id = f"uid:{gen_uuid()}"
                 entity_message = {
-                    "@id": entity_id, 
+                    "@id": entity_id,
                     "Label": print(entity_label),
                     "AtLocation": input_path,
-                    "GeneratedBy": "test",  
+                    "GeneratedBy": "test",
                     "@type": "input",
-                    "digest": file_hash 
+                    "digest": file_hash,
                 }
                 self.audit_message(entity_message, AuditFlag.PROV)
-
-
 
         if command is not None:
             cmd_name = command.split()[0]
@@ -227,9 +225,5 @@ class Audit:
             "StartedAtTime": now(),
             "AssociatedWith": version_cmd,
         }
-        
-
 
         self.audit_message(start_message, AuditFlag.PROV)
-    
-
