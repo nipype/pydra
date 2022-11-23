@@ -38,7 +38,7 @@ jobs:
         docker exec slurm bash -c "echo $NO_ET"
         docker exec slurm bash -c "ls -la && echo list top level dir"
         docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
-        docker exec slurm bash -c "pip install -e /pydra[test] && python -c 'import pydra; print(pydra.__version__)'"
+        docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test] && python -c 'import pydra; print(pydra.__version__)'"
     - name: Run pytest
       run: docker exec slurm bash -c "pytest --color=yes -vs -n auto --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra"
     - name: Upload to codecov
