@@ -1264,7 +1264,7 @@ def test_audit_all(tmpdir, use_validator):
     from glob import glob
 
     assert len(glob(str(tmpdir / funky.checksum / "proc*.log"))) == 1
-    assert len(glob(str(message_path / "*.jsonld"))) == 8
+    assert len(glob(str(message_path / "*.jsonld"))) == 7
 
     # commented out to speed up testing
     collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
