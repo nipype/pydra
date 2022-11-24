@@ -180,13 +180,12 @@ class Audit:
         for attrs in attr_list:
             if attrs.type in [File, Directory]:
                 input_name = attrs.name
-                entity_label = attrs.name
                 input_path = os.path.abspath(getattr(task.inputs, input_name))
                 file_hash = hash_file(input_path)
                 entity_id = f"uid:{gen_uuid()}"
                 entity_message = {
-                    "@id": entity_id,
-                    "Label": entity_label,
+                    "@id": entity_id, 
+                    "Label": input_name,
                     "AtLocation": input_path,
                     "GeneratedBy": None,
                     "@type": "input",
