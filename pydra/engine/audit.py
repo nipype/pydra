@@ -174,30 +174,29 @@ class Audit:
         import subprocess as sp
 
         label = task.name
-        entity_label = type(label)
+        
 
-        if hasattr(task.inputs, "executable"):
-            command = task.cmdline
-        # assume function task
-        else:
-            command = None
-
+        command = task.cmdline if hasattr(task.inputs, "executable") else None
         attr_list = attr_fields(task.inputs)
         for attrs in attr_list:
             if attrs.type in [File, Directory]:
                 input_name = attrs.name
+                entity_label = attrs.name
                 input_path = os.path.abspath(getattr(task.inputs, input_name))
                 file_hash = hash_file(input_path)
                 entity_id = f"uid:{gen_uuid()}"
                 entity_message = {
-                    "@id": entity_id,
-                    "Label": print(entity_label),
+                    "@id": entity_id, 
+                    "Label": entity_label,
                     "AtLocation": input_path,
-                    "GeneratedBy": "test",
+                    "GeneratedBy": None,  
                     "@type": "input",
                     "digest": file_hash,
                 }
                 self.audit_message(entity_message, AuditFlag.PROV)
+
+        
+
 
         if command is not None:
             cmd_name = command.split()[0]
@@ -225,5 +224,7 @@ class Audit:
             "StartedAtTime": now(),
             "AssociatedWith": version_cmd,
         }
+
+
 
         self.audit_message(start_message, AuditFlag.PROV)
