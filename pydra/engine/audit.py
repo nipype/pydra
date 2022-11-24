@@ -184,7 +184,7 @@ class Audit:
                 file_hash = hash_file(input_path)
                 entity_id = f"uid:{gen_uuid()}"
                 entity_message = {
-                    "@id": entity_id, 
+                    "@id": entity_id,
                     "Label": input_name,
                     "AtLocation": input_path,
                     "GeneratedBy": None,
