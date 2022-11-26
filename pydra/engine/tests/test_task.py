@@ -1007,7 +1007,7 @@ def test_audit_task(tmpdir):
     funky.cache_dir = tmpdir
     funky()
     message_path = tmpdir / funky.checksum / "messages"
-    print(message_path)
+    
 
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
@@ -1019,12 +1019,6 @@ def test_audit_task(tmpdir):
             if "@type" in data:
                 if data["@type"] == "input":
                     assert None == data["Label"]
-                    # placeholder for atlocation until
-                    # new test is added
-                    assert [] == data["AtLocation"]
-
-                # assert data["Type"] == "input"
-
             if "AssociatedWith" in data:
                 assert None == data["AssociatedWith"]
 
@@ -1070,19 +1064,21 @@ def test_audit_shellcommandtask(tmpdir):
 
 
 def test_audit_shellcommandtask_file(tmpdir):
+    # sourcery skip: use-fstring-for-concatenation
+    import glob
     import shutil
-
     # create test.txt file with "This is a test" in it in the tmpdir
-    with open(tmpdir / "test.txt", "w") as f:
-        f.write("This is a test.")
-    # make a copy of the test.txt file in the tmpdir and name it test2.txt
-    shutil.copy(tmpdir / "test.txt", tmpdir / "test2.txt")
+    # create txt file in cwd
+    with open("test.txt", "w") as f:
+        f.write("This is a test")
+
+    # copy the test.txt file to the tmpdir
+    shutil.copy("test.txt", tmpdir)
+
 
     cmd = "cat"
     file_in = tmpdir / "test.txt"
-    file_in_2 = tmpdir / "test2.txt"
     test_file_hash = hash_file(file_in)
-    test_file_hash_2 = hash_file(file_in_2)
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -1098,43 +1094,30 @@ def test_audit_shellcommandtask_file(tmpdir):
                     },
                 ),
             ),
-            (
-                "in_file_2",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 2,
-                        "argstr": "",
-                        "help_string": "text",
-                        "mandatory": True,
-                    },
-                ),
-            ),
         ],
         bases=(ShellSpec,),
     )
     shelly = ShellCommandTask(
         name="shelly",
         in_file=file_in,
-        in_file_2=file_in_2,
         input_spec=my_input_spec,
         executable=cmd,
         audit_flags=AuditFlag.PROV,
-        messengers=PrintMessenger(),
+        messengers=FileMessenger(),
     )
     shelly.cache_dir = tmpdir
     shelly()
     message_path = tmpdir / shelly.checksum / "messages"
     for file in glob.glob(str(message_path) + "/*.jsonld"):
-        with open(file, "r") as f:
-            data = json.load(f)
-            print(file_in)
-            if "AtLocation" in data:
-                assert data["AtLocation"] == [file_in, file_in_2]
-            if "digest" in data:
-                assert data["digest"] == [test_file_hash, test_file_hash_2]
-
-
+        with open(file, "r") as x:
+            data = json.load(x)
+            if "@type" in data:
+                if data["@type"] == "input":
+                    if "AtLocation" in data:
+                        assert data["AtLocation"] == str(file_in)
+                        if "digest" in data:
+                            assert data["digest"] == test_file_hash
+ 
 def test_audit_shellcommandtask_version(tmpdir):
     import subprocess as sp
 
