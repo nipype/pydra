@@ -1007,7 +1007,6 @@ def test_audit_task(tmpdir):
     funky.cache_dir = tmpdir
     funky()
     message_path = tmpdir / funky.checksum / "messages"
-    
 
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
@@ -1067,6 +1066,7 @@ def test_audit_shellcommandtask_file(tmpdir):
     # sourcery skip: use-fstring-for-concatenation
     import glob
     import shutil
+
     # create test.txt file with "This is a test" in it in the tmpdir
     # create txt file in cwd
     with open("test.txt", "w") as f:
@@ -1074,7 +1074,6 @@ def test_audit_shellcommandtask_file(tmpdir):
 
     # copy the test.txt file to the tmpdir
     shutil.copy("test.txt", tmpdir)
-
 
     cmd = "cat"
     file_in = tmpdir / "test.txt"
@@ -1117,7 +1116,8 @@ def test_audit_shellcommandtask_file(tmpdir):
                         assert data["AtLocation"] == str(file_in)
                         if "digest" in data:
                             assert data["digest"] == test_file_hash
- 
+
+
 def test_audit_shellcommandtask_version(tmpdir):
     import subprocess as sp
 
