@@ -1007,9 +1007,6 @@ def test_audit_task(tmpdir):
     funky.cache_dir = tmpdir
     funky()
     message_path = tmpdir / funky.checksum / "messages"
-    print(message_path)
-    # go through each jsonld file in message_path and check if the label field exists
-    json_content = []
 
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
@@ -1021,12 +1018,6 @@ def test_audit_task(tmpdir):
             if "@type" in data:
                 if data["@type"] == "input":
                     assert None == data["Label"]
-                    # placeholder for atlocation until
-                    # new test is added
-                    assert None == data["AtLocation"]
-
-                # assert data["Type"] == "input"
-
             if "AssociatedWith" in data:
                 assert None == data["AssociatedWith"]
 
@@ -1072,13 +1063,27 @@ def test_audit_shellcommandtask(tmpdir):
 
 
 def test_audit_shellcommandtask_file(tmpdir):
+    # sourcery skip: use-fstring-for-concatenation
+    import glob
+    import shutil
+
     # create test.txt file with "This is a test" in it in the tmpdir
-    with open(tmpdir / "test.txt", "w") as f:
-        f.write("This is a test.")
+    # create txt file in cwd
+    with open("test.txt", "w") as f:
+        f.write("This is a test")
+
+    with open("test2.txt", "w") as f:
+        f.write("This is a test")
+
+    # copy the test.txt file to the tmpdir
+    shutil.copy("test.txt", tmpdir)
+    shutil.copy("test2.txt", tmpdir)
 
     cmd = "cat"
     file_in = tmpdir / "test.txt"
+    file_in_2 = tmpdir / "test2.txt"
     test_file_hash = hash_file(file_in)
+    test_file_hash_2 = hash_file(file_in_2)
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -1093,29 +1098,45 @@ def test_audit_shellcommandtask_file(tmpdir):
                         "mandatory": True,
                     },
                 ),
-            )
+            ),
+            (
+                "in_file_2",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 2,
+                        "argstr": "",
+                        "help_string": "text",
+                        "mandatory": True,
+                    },
+                ),
+            ),
         ],
         bases=(ShellSpec,),
     )
     shelly = ShellCommandTask(
         name="shelly",
         in_file=file_in,
+        in_file_2=file_in_2,
         input_spec=my_input_spec,
         executable=cmd,
         audit_flags=AuditFlag.PROV,
-        messengers=PrintMessenger(),
+        messengers=FileMessenger(),
     )
     shelly.cache_dir = tmpdir
     shelly()
     message_path = tmpdir / shelly.checksum / "messages"
     for file in glob.glob(str(message_path) + "/*.jsonld"):
-        with open(file, "r") as f:
-            data = json.load(f)
-            print(file_in)
-            if "AtLocation" in data:
-                assert data["AtLocation"] == str(file_in)
-            if "digest" in data:
-                assert test_file_hash == data["digest"]
+        with open(file, "r") as x:
+            data = json.load(x)
+            if "@type" in data:
+                if data["@type"] == "input":
+                    if data["Label"] == "in_file":
+                        assert data["AtLocation"] == str(file_in)
+                        assert data["digest"] == test_file_hash
+                    if data["Label"] == "in_file_2":
+                        assert data["AtLocation"] == str(file_in_2)
+                        assert data["digest"] == test_file_hash_2
 
 
 def test_audit_shellcommandtask_version(tmpdir):
@@ -1247,7 +1268,7 @@ def test_audit_all(tmpdir, use_validator):
     from glob import glob
 
     assert len(glob(str(tmpdir / funky.checksum / "proc*.log"))) == 1
-    assert len(glob(str(message_path / "*.jsonld"))) == 8
+    assert len(glob(str(message_path / "*.jsonld"))) == 7
 
     # commented out to speed up testing
     collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
