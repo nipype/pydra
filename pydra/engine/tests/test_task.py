@@ -1072,12 +1072,19 @@ def test_audit_shellcommandtask_file(tmpdir):
     with open("test.txt", "w") as f:
         f.write("This is a test")
 
+    with open("test2.txt", "w") as f:
+        f.write("This is a test")
+
     # copy the test.txt file to the tmpdir
     shutil.copy("test.txt", tmpdir)
+    shutil.copy("test2.txt", tmpdir)
+
 
     cmd = "cat"
     file_in = tmpdir / "test.txt"
+    file_in_2 = tmpdir / "test2.txt"
     test_file_hash = hash_file(file_in)
+    test_file_hash_2 = hash_file(file_in_2)
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -1093,12 +1100,25 @@ def test_audit_shellcommandtask_file(tmpdir):
                     },
                 ),
             ),
+                    (
+                "in_file_2",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "position": 2,
+                        "argstr": "",
+                        "help_string": "text",
+                        "mandatory": True,
+                    },
+                ),
+            ),
         ],
         bases=(ShellSpec,),
     )
     shelly = ShellCommandTask(
         name="shelly",
         in_file=file_in,
+        in_file_2=file_in_2,
         input_spec=my_input_spec,
         executable=cmd,
         audit_flags=AuditFlag.PROV,
@@ -1112,11 +1132,12 @@ def test_audit_shellcommandtask_file(tmpdir):
             data = json.load(x)
             if "@type" in data:
                 if data["@type"] == "input":
-                    if "AtLocation" in data:
+                    if data["Label"] == "in_file":
                         assert data["AtLocation"] == str(file_in)
-                        if "digest" in data:
-                            assert data["digest"] == test_file_hash
-
+                        assert data["digest"] == test_file_hash
+                    if data["Label"] == "in_file_2":
+                        assert data["AtLocation"] == str(file_in_2)
+                        assert data["digest"] == test_file_hash_2
 
 def test_audit_shellcommandtask_version(tmpdir):
     import subprocess as sp
