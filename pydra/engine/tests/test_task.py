@@ -1079,7 +1079,6 @@ def test_audit_shellcommandtask_file(tmpdir):
     shutil.copy("test.txt", tmpdir)
     shutil.copy("test2.txt", tmpdir)
 
-
     cmd = "cat"
     file_in = tmpdir / "test.txt"
     file_in_2 = tmpdir / "test2.txt"
@@ -1100,7 +1099,7 @@ def test_audit_shellcommandtask_file(tmpdir):
                     },
                 ),
             ),
-                    (
+            (
                 "in_file_2",
                 attr.ib(
                     type=File,
@@ -1138,6 +1137,7 @@ def test_audit_shellcommandtask_file(tmpdir):
                     if data["Label"] == "in_file_2":
                         assert data["AtLocation"] == str(file_in_2)
                         assert data["digest"] == test_file_hash_2
+
 
 def test_audit_shellcommandtask_version(tmpdir):
     import subprocess as sp
