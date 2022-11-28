@@ -1,15 +1,17 @@
 import typing as ty
+from pathlib import Path 
 import os, sys
 import attr
 import pytest
 
 
-from pydra.tasks.datalad import DataladInterface
-from pydra.engine.core import Workflow
-from pydra.engine.submitter import Submitter
-from pydra.engine.helpers import hash_value
+from ...tasks.datalad import DataladInterface
+from ...engine.core import Workflow
+from ...engine.submitter import Submitter
+from ...engine.helpers import hash_value
+from ...engine.tests.utils import need_gitannex
 
-
+@need_gitannex
 def test_datalad_interface(tmpdir):
     """
     Testing datalad interface
@@ -28,31 +30,20 @@ def test_datalad_interface(tmpdir):
     file_path.write_text("test")
     ds.save()
 
-    # creating a workflow
-    wf = Workflow(name="wf", input_spec=["dataset_path", "dataset_url", "in_file"])
-    wf.inputs.dataset_path = ds_path
-    wf.inputs.dataset_url = ""
-    wf.inputs.in_file = "file.txt"
+    tmpdir = Path(tmpdir)
 
-    # adding datalad task
-    wf.add(
-        DataladInterface(
-            name="dl",
-            in_file=wf.lzin.in_file,
-            dataset_path=wf.lzin.dataset_path,
-            dataset_url=wf.lzin.dataset_url,
-        )
-    )
+    # install the dataset to a new location
+    ds2 = dl.install(source=tmpdir, path=tmpdir / "ds2")
+    ds2_path = ds2.pathobj
 
-    # setup output
-    wf.set_output([("out_file", wf.dl.lzout.out_file)])
+    # use datalad interface to download the file
+    dl_interface = DataladInterface(name="dl_interface", in_file="file.txt", dataset_path=ds2_path)
+    # running the task
+    res = dl_interface()
 
-    # running the workflow
-    with Submitter(plugin="cf") as sub:
-        sub(wf)
+    assert os.path.exists(res.output.out_file)
+    assert os.path.basename(res.output.out_file) == "file.txt"
 
-    # checking if the file was downloaded
-    assert wf.result().output.out_file.exists()
 
 
 # Path: pydra/tasks/tests/test_datalad.py
