@@ -46,6 +46,7 @@ dask = [
 dev = [
     "black",
     "pre-commit",
+    "pydra[test]",
 ]
 doc = [
     "attrs >=19.1.0",
