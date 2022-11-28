@@ -1003,6 +1003,7 @@ def test_audit_task(tmpdir):
 
     from glob import glob
     import platform
+
     funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     funky.cache_dir = tmpdir
     funky()
@@ -1033,10 +1034,7 @@ def test_audit_task(tmpdir):
                 assert env_vars in data["EnvVars"]
                 if "Label" in data:
                     assert conda_env_name in data["Label"]
-                    
 
- 
-            
 
 def test_audit_shellcommandtask(tmpdir):
     args = "-l"
