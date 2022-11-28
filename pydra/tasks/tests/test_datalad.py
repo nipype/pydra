@@ -1,5 +1,5 @@
 import typing as ty
-from pathlib import Path 
+from pathlib import Path
 import os, sys
 import attr
 import pytest
@@ -10,6 +10,7 @@ from ...engine.core import Workflow
 from ...engine.submitter import Submitter
 from ...engine.helpers import hash_value
 from ...engine.tests.utils import need_gitannex
+
 
 @need_gitannex
 def test_datalad_interface(tmpdir):
@@ -37,13 +38,14 @@ def test_datalad_interface(tmpdir):
     ds2_path = ds2.pathobj
 
     # use datalad interface to download the file
-    dl_interface = DataladInterface(name="dl_interface", in_file="file.txt", dataset_path=ds2_path)
+    dl_interface = DataladInterface(
+        name="dl_interface", in_file="file.txt", dataset_path=ds2_path
+    )
     # running the task
     res = dl_interface()
 
     assert os.path.exists(res.output.out_file)
     assert os.path.basename(res.output.out_file) == "file.txt"
-
 
 
 # Path: pydra/tasks/tests/test_datalad.py

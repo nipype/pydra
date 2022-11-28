@@ -30,9 +30,11 @@ need_sge = pytest.mark.skipif(
 )
 
 need_gitannex = pytest.mark.skipif(
-    not (shutil.which("git-annex")) or bool(float(sp.check_output(["git-annex", "version", "--raw"])) < 8.20200309),
+    not (shutil.which("git-annex"))
+    or bool(float(sp.check_output(["git-annex", "version", "--raw"])) < 8.20200309),
     reason="git-annex is not installed or version is less than 8.20200309",
 )
+
 
 def result_no_submitter(shell_task, plugin=None):
     """helper function to return result when running without submitter"""
