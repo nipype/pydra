@@ -1002,12 +1002,19 @@ def test_audit_task(tmpdir):
         return a + b
 
     from glob import glob
-
+    import platform
     funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     funky.cache_dir = tmpdir
     funky()
     message_path = tmpdir / funky.checksum / "messages"
+    op_sys = platform.platform()
+    env_vars = str(os.environ)
+    if "CONDA_PREFIX" in os.environ:
+        conda_env_path = str(os.environ["CONDA_PREFIX"])
+        conda_env_name = conda_env_path.split("/")[-1]
 
+    else:
+        conda_env_name = None
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
@@ -1020,9 +1027,16 @@ def test_audit_task(tmpdir):
                     assert None == data["Label"]
             if "AssociatedWith" in data:
                 assert None == data["AssociatedWith"]
+            if "OperatingSystem" in data:
+                assert op_sys == data["OperatingSystem"]
+            if "EnvVars" in data:
+                assert env_vars in data["EnvVars"]
+                if "Label" in data:
+                    assert conda_env_name in data["Label"]
+                    
 
-    # assert any(json_content)
-
+ 
+            
 
 def test_audit_shellcommandtask(tmpdir):
     args = "-l"
@@ -1268,7 +1282,7 @@ def test_audit_all(tmpdir, use_validator):
     from glob import glob
 
     assert len(glob(str(tmpdir / funky.checksum / "proc*.log"))) == 1
-    assert len(glob(str(message_path / "*.jsonld"))) == 7
+    assert len(glob(str(message_path / "*.jsonld"))) == 8
 
     # commented out to speed up testing
     collect_messages(tmpdir / funky.checksum, message_path, ld_op="compact")
