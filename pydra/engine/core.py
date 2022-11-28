@@ -137,7 +137,9 @@ class TaskBase:
         self.name = name
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
-        klass = make_klass(self.input_spec)
+        klass = self.input_spec
+        if isinstance(klass, SpecInfo):
+            klass = make_klass(klass)
 
         self.inputs = klass(
             **{
@@ -166,7 +168,7 @@ class TaskBase:
                     raise ValueError(f"Unknown input set {inputs!r}")
                 inputs = self._input_sets[inputs]
 
-        self.inputs = attr.evolve(self.inputs, **inputs)
+            self.inputs = attr.evolve(self.inputs, **inputs)
 
         # checking if metadata is set properly
         self.inputs.check_metadata()
@@ -207,8 +209,10 @@ class TaskBase:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state["input_spec"] = cp.dumps(state["input_spec"])
-        state["output_spec"] = cp.dumps(state["output_spec"])
+        if "input_spec" in state:
+            state["input_spec"] = cp.dumps(state["input_spec"])
+        if "output_spec" in state:
+            state["output_spec"] = cp.dumps(state["output_spec"])
         inputs = {}
         for k, v in attr.asdict(state["inputs"], recurse=False).items():
             if k.startswith("_"):
@@ -218,9 +222,14 @@ class TaskBase:
         return state
 
     def __setstate__(self, state):
-        state["input_spec"] = cp.loads(state["input_spec"])
-        state["output_spec"] = cp.loads(state["output_spec"])
-        state["inputs"] = make_klass(state["input_spec"])(**state["inputs"])
+        if "input_spec" in state:
+            state["input_spec"] = cp.loads(state["input_spec"])
+        if "output_spec" in state:
+            state["output_spec"] = cp.loads(state["output_spec"])
+        input_spec = state.get("input_spec")
+        if input_spec is None:  # If it is not saved, it should be a class attribute
+            input_spec = self.input_spec
+        state["inputs"] = make_klass(input_spec)(**state["inputs"])
         self.__dict__.update(state)
 
     def __getattr__(self, name):
