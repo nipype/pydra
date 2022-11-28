@@ -9,6 +9,7 @@ from .specs import attr_fields, File, Directory
 import subprocess as sp
 import platform
 
+
 class Audit:
     """Handle provenance tracking and resource utilization."""
 
@@ -173,7 +174,6 @@ class Audit:
 
     def audit_task(self, task):
 
-
         label = task.name
 
         command = task.cmdline if hasattr(task.inputs, "executable") else None
@@ -234,8 +234,13 @@ class Audit:
         else:
             conda_env_name = str(None)
 
-        env_message = {"@id": env_id, "Label": f"Conda environment: {conda_env_name}", "EnvVars": env_vars, "OperatingSystem": os_plat, "Dependencies": "test"}
-
+        env_message = {
+            "@id": env_id,
+            "Label": f"Conda environment: {conda_env_name}",
+            "EnvVars": env_vars,
+            "OperatingSystem": os_plat,
+            "Dependencies": "test",
+        }
 
         # Fetch env info
         self.audit_message(env_message, AuditFlag.PROV)
