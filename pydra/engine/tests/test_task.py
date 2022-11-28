@@ -1015,7 +1015,7 @@ def test_audit_task(tmpdir):
         conda_env_name = conda_env_path.split("/")[-1]
 
     else:
-        conda_env_name = None
+        conda_env_name = str(None)
     for file in glob(str(message_path) + "/*.jsonld"):
         with open(file, "r") as f:
             data = json.load(f)
