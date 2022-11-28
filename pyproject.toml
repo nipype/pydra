@@ -74,6 +74,10 @@ test = [
     "boutiques",
     "pympler",
 ]
+# Aliases
+tests = ["pydra[test]"]
+docs = ["pydra[doc]"]
+all = ["pydra[doc,dev]"]
 
 [project.urls]
 documentation = "https://nipype.github.io/pydra/"
