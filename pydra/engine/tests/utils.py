@@ -31,7 +31,7 @@ need_sge = pytest.mark.skipif(
 
 need_gitannex = pytest.mark.skipif(
     not (shutil.which("git-annex"))
-    or bool(float(sp.check_output(["git-annex", "version", "--raw"])) < 8.20200309),
+    or bool(float(sp.check_output(["git-annex", "version", "--raw"], universal_newlines=True)) < 8.20200309),
     reason="git-annex is not installed or version is less than 8.20200309",
 )
 
