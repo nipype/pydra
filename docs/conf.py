@@ -89,7 +89,7 @@ napoleon_use_param = False
 napoleon_custom_sections = [("Inputs", "Parameters"), ("Outputs", "Parameters")]
 
 # Intersphinx
-intersphinx_mapping = {"https://docs.python.org/": None}
+intersphinx_mapping = {"https://docs.python.org/3/": None}
 
 # Linkcode
 # The following is used by sphinx.ext.linkcode to provide links to github
