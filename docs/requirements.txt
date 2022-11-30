@@ -1,0 +1,4 @@
+# This requirements file includes unreleased dependencies above and beyond those
+# specified in the project.optional-dependencies.doc table of pyproject.toml
+git+https://github.com/AleksandarPetrov/napoleon.git@0dc3f28a309ad602be5f44a9049785a1026451b3#egg=sphinxcontrib-napoleon
+git+https://github.com/effigies/sphinxcontrib-versioning.git@master#egg=sphinxcontrib-versioning
