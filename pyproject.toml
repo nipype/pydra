@@ -54,9 +54,6 @@ dev = [
     "pydra[test]",
 ]
 doc = [
-    "attrs >=19.1.0",
-    "cloudpickle",
-    "filelock",
     "packaging",
     "sphinx >=2.1.2",
     "sphinx_rtd_theme",
