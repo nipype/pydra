@@ -48,6 +48,7 @@ jobs:
           name: Install deps
           command: |
             pip install --upgrade pip
+            pip install --no-cache-dir -r docs/requirements.txt
             pip install --no-cache-dir .[doc]
       - run:
           name: Build only this commit

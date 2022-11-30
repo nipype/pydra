@@ -1,0 +1,3 @@
+# This requirements file includes unreleased dependencies above and beyond those
+# specified in the project.optional-dependencies.doc table of pyproject.toml
+git+https://github.com/effigies/sphinxcontrib-versioning.git@master#egg=sphinxcontrib-versioning
