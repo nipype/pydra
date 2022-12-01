@@ -686,7 +686,7 @@ class DockerTask(ContainerTask):
 
     def __init__(
         self,
-        name,
+        name=None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         input_spec: ty.Optional[SpecInfo] = None,
@@ -769,6 +769,7 @@ class SingularityTask(ContainerTask):
 
     def __init__(
         self,
+        name=None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         input_spec: ty.Optional[SpecInfo] = None,
