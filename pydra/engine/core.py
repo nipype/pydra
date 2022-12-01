@@ -1235,22 +1235,19 @@ class Workflow(TaskBase):
                     )
         return attr.evolve(output, **output_wf)
 
-    def create_dotfile(self, type="simple", export=None, name=None):
+    def create_dotfile(self, type="simple", export=None, name=None, output_dir=None):
         """creating a graph - dotfile and optionally exporting to other formats"""
+        outdir = output_dir if output_dir is not None else self.cache_dir
         if not name:
             name = f"graph_{self.name}"
         if type == "simple":
             for task in self.graph.nodes:
                 self.create_connections(task)
-            dotfile = self.graph.create_dotfile_simple(
-                outdir=self.output_dir, name=name
-            )
+            dotfile = self.graph.create_dotfile_simple(outdir=outdir, name=name)
         elif type == "nested":
             for task in self.graph.nodes:
                 self.create_connections(task)
-            dotfile = self.graph.create_dotfile_nested(
-                outdir=self.output_dir, name=name
-            )
+            dotfile = self.graph.create_dotfile_nested(outdir=outdir, name=name)
         elif type == "detailed":
             # create connections with detailed=True
             for task in self.graph.nodes:
@@ -1258,9 +1255,7 @@ class Workflow(TaskBase):
             # adding wf outputs
             for (wf_out, lf) in self._connections:
                 self.graph.add_edges_description((self.name, wf_out, lf.name, lf.field))
-            dotfile = self.graph.create_dotfile_detailed(
-                outdir=self.output_dir, name=name
-            )
+            dotfile = self.graph.create_dotfile_detailed(outdir=outdir, name=name)
         else:
             raise Exception(
                 f"type of the graph can be simple, detailed or nested, "
