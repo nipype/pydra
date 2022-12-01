@@ -17,3 +17,6 @@ cov.xml
 .idea
 
 .DS_Store
+
+# This can be generated in-tree. We never want to commit it.
+pydra/_version.py

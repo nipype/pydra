@@ -53,7 +53,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Update build tools
-        run: python -m pip install --upgrade pip setuptools
+        run: python -m pip install --upgrade pip
 
 
       - name: Checkout Pydra repo
