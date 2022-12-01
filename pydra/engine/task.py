@@ -809,6 +809,7 @@ class SingularityTask(ContainerTask):
                     name="Inputs", fields=[], bases=(SingularitySpec,)
                 )
             super().__init__(
+                name=name,
                 input_spec=input_spec,
                 output_spec=output_spec,
                 audit_flags=audit_flags,
