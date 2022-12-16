@@ -58,7 +58,11 @@ class Worker:
         done = set()
         try:
             done, pending = await asyncio.wait(
-                futures, return_when=asyncio.FIRST_COMPLETED
+                [
+                    asyncio.create_task(f) if not isinstance(f, asyncio.Task) else f
+                    for f in futures
+                ],
+                return_when=asyncio.FIRST_COMPLETED,
             )
         except ValueError:
             # nothing pending!
@@ -105,7 +109,11 @@ class DistributedWorker(Worker):
         try:
             self._jobs += len(futures)
             done, pending = await asyncio.wait(
-                futures, return_when=asyncio.FIRST_COMPLETED
+                [
+                    asyncio.create_task(f) if not isinstance(f, asyncio.Task) else f
+                    for f in futures
+                ],
+                return_when=asyncio.FIRST_COMPLETED,
             )
         except ValueError:
             # nothing pending!

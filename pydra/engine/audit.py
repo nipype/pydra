@@ -4,7 +4,8 @@ from pathlib import Path
 import json
 import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
-from .helpers import ensure_list, gather_runtime_info
+from .helpers import ensure_list, gather_runtime_info, hash_file
+from .specs import attr_fields, File, Directory
 
 
 class Audit:
@@ -173,15 +174,24 @@ class Audit:
         import subprocess as sp
 
         label = task.name
-        if hasattr(task.inputs, "executable"):
-            command = task.cmdline
-        # assume function task
-        else:
-            command = None
-        # if hasattr(task.inputs, "in_file"):
-        #     input_file = task.inputs.in_file
-        # else:
-        #     input_file = None
+
+        command = task.cmdline if hasattr(task.inputs, "executable") else None
+        attr_list = attr_fields(task.inputs)
+        for attrs in attr_list:
+            if attrs.type in [File, Directory]:
+                input_name = attrs.name
+                input_path = os.path.abspath(getattr(task.inputs, input_name))
+                file_hash = hash_file(input_path)
+                entity_id = f"uid:{gen_uuid()}"
+                entity_message = {
+                    "@id": entity_id,
+                    "Label": input_name,
+                    "AtLocation": input_path,
+                    "GeneratedBy": None,
+                    "@type": "input",
+                    "digest": file_hash,
+                }
+                self.audit_message(entity_message, AuditFlag.PROV)
 
         if command is not None:
             cmd_name = command.split()[0]
@@ -210,9 +220,4 @@ class Audit:
             "AssociatedWith": version_cmd,
         }
 
-        # new code to be added here for i/o tracking - WIP
-
         self.audit_message(start_message, AuditFlag.PROV)
-
-        # add more fields according to BEP208 doc
-        # with every field, check in tests
