@@ -1,0 +1,12 @@
+[flake8]
+doctests = True
+exclude =
+    **/__init__.py
+    **/tests/*
+    *build/
+    docs/sphinxext/
+    docs/tools/
+    docs/conf.py
+    pydra/_version.py
+max-line-length=105
+ignore = E203,W503,F541

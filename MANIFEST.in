@@ -1,3 +1,0 @@
-include versioneer.py
-include pydra/_version.py
-include pydra/schema/context.jsonld

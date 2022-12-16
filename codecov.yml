@@ -3,8 +3,6 @@ coverage:
   ignore:          # files and folders that will be removed during processing
     - "**/tests"
     - "pydra/_version.py"
-    - "setup.py"
-    - "versioneer.py"
   status:
     project:
       default:
