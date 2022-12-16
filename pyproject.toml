@@ -75,6 +75,7 @@ test = [
     "tornado",
     "boutiques",
     "pympler",
+    "datalad",
 ]
 # Aliases
 tests = ["pydra[test]"]
