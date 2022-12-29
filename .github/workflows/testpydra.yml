@@ -62,9 +62,6 @@ jobs:
           - os: 'ubuntu-latest'
             python-version: '3.11'
             install: 'archive'
-        exclude:
-          - os: 'windows-latest'
-            python-version: '3.11'
       fail-fast: false
     runs-on: ${{ matrix.os }}
 
