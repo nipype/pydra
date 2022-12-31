@@ -1702,7 +1702,7 @@ def test_shell_cmd_inputspec_with_iterable():
 
     task = ShellCommandTask(name="test", input_spec=input_spec, executable="test")
 
-    for iterable_type in (list, tuple, set):
+    for iterable_type in (list, tuple):
         task.inputs.iterable_1 = iterable_type(range(3))
         task.inputs.iterable_2 = iterable_type(["bar", "foo"])
         assert task.cmdline == "test --in1 0 1 2 --in2 bar --in2 foo"
