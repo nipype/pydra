@@ -1674,6 +1674,40 @@ def test_shell_cmd_inputspec_12(tmpdir, plugin, results_function):
     assert shelly.output_dir == res.output.file_copy.parent
 
 
+def test_shell_cmd_inputspec_with_iterable():
+    """Test formatting of argstr with different iterable types."""
+
+    input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "iterable_1",
+                ty.Iterable[int],
+                {
+                    "help_string": "iterable input 1",
+                    "argstr": "--in1",
+                },
+            ),
+            (
+                "iterable_2",
+                ty.Iterable[str],
+                {
+                    "help_string": "iterable input 2",
+                    "argstr": "--in2...",
+                },
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    task = ShellCommandTask(name="test", input_spec=input_spec, executable="test")
+
+    for iterable_type in (list, tuple, set):
+        task.inputs.iterable_1 = iterable_type(range(3))
+        task.inputs.iterable_2 = iterable_type(["bar", "foo"])
+        assert task.cmdline == "test --in1 0 1 2 --in2 bar --in2 foo"
+
+
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmpdir):
     """shelltask changes a file in place,

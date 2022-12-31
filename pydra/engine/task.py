@@ -458,7 +458,11 @@ class ShellCommandTask(TaskBase):
                 cmd_add.append(argstr)
         else:
             sep = field.metadata.get("sep", " ")
-            if argstr.endswith("...") and isinstance(value, list):
+            if (
+                argstr.endswith("...")
+                and isinstance(value, ty.Iterable)
+                and not isinstance(value, (str, bytes))
+            ):
                 argstr = argstr.replace("...", "")
                 # if argstr has a more complex form, with "{input_field}"
                 if "{" in argstr and "}" in argstr:
@@ -474,7 +478,9 @@ class ShellCommandTask(TaskBase):
             else:
                 # in case there are ... when input is not a list
                 argstr = argstr.replace("...", "")
-                if isinstance(value, list):
+                if isinstance(value, ty.Iterable) and not isinstance(
+                    value, (str, bytes)
+                ):
                     cmd_el_str = sep.join([str(val) for val in value])
                     value = cmd_el_str
                 # if argstr has a more complex form, with "{input_field}"
