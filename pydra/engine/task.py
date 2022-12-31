@@ -860,7 +860,7 @@ def split_cmd(cmd: str):
     args = shlex.split(cmd, posix=on_posix)
     cmd_args = []
     for arg in args:
-        match = re.match("('|\")(.*)\\1$", arg)
+        match = re.match("(['\"])(.*)\\1$", arg)
         if match:
             cmd_args.append(match.group(2))
         else:
