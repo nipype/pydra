@@ -371,7 +371,7 @@ class ShellCommandTask(TaskBase):
         return value
 
     def _command_shelltask_executable(self, field):
-        """Returining position and value for executable ShellTask input"""
+        """Returning position and value for executable ShellTask input"""
         pos = 0  # executable should be the first el. of the command
         value = self._field_value(field)
         if value is None:
@@ -379,7 +379,7 @@ class ShellCommandTask(TaskBase):
         return pos, ensure_list(value, tuple2list=True)
 
     def _command_shelltask_args(self, field):
-        """Returining position and value for args ShellTask input"""
+        """Returning position and value for args ShellTask input"""
         pos = -1  # assuming that args is the last el. of the command
         value = self._field_value(field, check_file=True)
         if value is None:
@@ -396,7 +396,7 @@ class ShellCommandTask(TaskBase):
         argstr = field.metadata.get("argstr", None)
         formatter = field.metadata.get("formatter", None)
         if argstr is None and formatter is None:
-            # assuming that input that has no arstr is not used in the command,
+            # assuming that input that has no argstr is not used in the command,
             # or a formatter is not provided too.
             return None
         pos = field.metadata.get("position", None)
@@ -429,7 +429,7 @@ class ShellCommandTask(TaskBase):
 
         cmd_add = []
         # formatter that creates a custom command argument
-        # it can thake the value of the filed, all inputs, or the value of other fields.
+        # it can take the value of the field, all inputs, or the value of other fields.
         if "formatter" in field.metadata:
             call_args = inspect.getfullargspec(field.metadata["formatter"])
             call_args_val = {}
@@ -453,7 +453,7 @@ class ShellCommandTask(TaskBase):
                 cmd_add += split_cmd(cmd_el_str)
         elif field.type is bool:
             # if value is simply True the original argstr is used,
-            # if False, nothing is added to the command
+            # if False, nothing is added to the command.
             if value is True:
                 cmd_add.append(argstr)
         else:
@@ -505,10 +505,10 @@ class ShellCommandTask(TaskBase):
             command_args = self.container_args + self.command_args
         else:
             command_args = self.command_args
-        # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
+        # Skip the executable, which can be a multipart command, e.g. 'docker run'.
         cmdline = command_args[0]
         for arg in command_args[1:]:
-            # If there are spaces in the arg and it is not enclosed by matching
+            # If there are spaces in the arg, and it is not enclosed by matching
             # quotes, add quotes to escape the space. Not sure if this should
             # be expanded to include other special characters apart from spaces
             if " " in arg:
@@ -600,7 +600,7 @@ class ContainerTask(ShellCommandTask):
     def _field_value(self, field, check_file=False):
         """
         Checking value of the specific field, if value is not set, None is returned.
-        If check_file is True, checking if field is a a local file
+        If check_file is True, checking if field is a local file
         and settings bindings if needed.
         """
         value = super()._field_value(field)
@@ -855,7 +855,7 @@ def split_cmd(cmd: str):
     str
         the command line string split into process args
     """
-    # Check whether running on posix or windows system
+    # Check whether running on posix or Windows system
     on_posix = platform.system() != "Windows"
     args = shlex.split(cmd, posix=on_posix)
     cmd_args = []
