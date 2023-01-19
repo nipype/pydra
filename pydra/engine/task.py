@@ -196,7 +196,7 @@ class FunctionTask(TaskBase):
 
         self.output_spec = output_spec
 
-    def _run_task(self):
+    def _run_task(self, environment=None):
         inputs = attr.asdict(self.inputs, recurse=False)
         del inputs["_func"]
         self.output_ = None
@@ -263,7 +263,7 @@ class ShellCommandTask(TaskBase):
         output_spec: ty.Optional[SpecInfo] = None,
         rerun=False,
         strip=False,
-        environment=Native,
+        environment=Native(),
         **kwargs,
     ):
         """
@@ -332,12 +332,8 @@ class ShellCommandTask(TaskBase):
         )
         self.strip = strip
         self.environment = environment
-
-    def render_arguments_in_root(self, root=None):
-        if root is None:
-            args = self.command_args
-            return [str(arg) for arg in args if arg not in ["", " "]]
-        raise NotImplementedError
+        self.bindings = {}
+        self.inputs_mod_root = {}
 
     def get_inputs_in_root(self, root=None):
         """Take input files and return their location, re-rooted.
@@ -352,12 +348,16 @@ class ShellCommandTask(TaskBase):
         Returns
         -------
         inputs: list of str
-          File paths, adjusted to the root directory
+          File paths, needed to be exposed to the container
         """
-        orig_inputs = attr.asdict(self.inputs, recurse=False)
 
-    @property
-    def command_args(self):
+        if root is None:
+            return []
+        else:
+            self._check_inputs(root=root)
+            return self.bindings.keys()
+
+    def command_args(self, root=None):
         """Get command line arguments"""
         if is_lazy(self.inputs):
             raise Exception("can't return cmdline, self.inputs has LazyFields")
@@ -388,7 +388,10 @@ class ShellCommandTask(TaskBase):
                 if pos_val:
                     pos_args.append(pos_val)
             else:
-                pos_val = self._command_pos_args(field)
+                if name in modified_inputs:
+                    pos_val = self._command_pos_args(field, root=root)
+                else:
+                    pos_val = self._command_pos_args(field)
                 if pos_val:
                     pos_args.append(pos_val)
 
@@ -425,7 +428,7 @@ class ShellCommandTask(TaskBase):
         else:
             return pos, ensure_list(value, tuple2list=True)
 
-    def _command_pos_args(self, field):
+    def _command_pos_args(self, field, root=None):
         """
         Checking all additional input fields, setting pos to None, if position not set.
         Creating a list with additional parts of the command that comes from
@@ -454,6 +457,13 @@ class ShellCommandTask(TaskBase):
             pos += 1 if pos >= 0 else -1
 
         value = self._field_value(field, check_file=True)
+
+        if value:
+            if field.name in self.inputs_mod_root:
+                value = self.inputs_mod_root[field.name]
+            elif root:  # values from templates
+                value = value.replace(str(self.output_dir), f"{root}{self.output_dir}")
+
         if field.metadata.get("readonly", False) and value is not None:
             raise Exception(f"{field.name} is read only, the value can't be provided")
         elif (
@@ -546,10 +556,10 @@ class ShellCommandTask(TaskBase):
         if self.state:
             raise NotImplementedError
         if isinstance(self, ContainerTask):
-            command_args = self.container_args + self.command_args
+            command_args = self.container_args + self.command_args()
         else:
-            command_args = self.command_args
-        # Skip the executable, which can be a multipart command, e.g. 'docker run'.
+            command_args = self.command_args()
+        # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
         cmdline = command_args[0]
         for arg in command_args[1:]:
             # If there are spaces in the arg, and it is not enclosed by matching
@@ -562,28 +572,65 @@ class ShellCommandTask(TaskBase):
         return cmdline
 
     def _run_task(self, environment=None):
-        # if environment is None:
-        #     environment = self.environment
-        # self.output_ = environment.execute(self)
-        #
-        # TEST: task.run(); task.output_ == environment.execute(task)
-        if isinstance(self, ContainerTask):
-            args = self.container_args + self.command_args
+        if environment is None:
+            environment = self.environment
+
+        if (
+            environment == "old"
+        ):  # TODO this is just temporarily for testing, remove this part
+            if isinstance(self, ContainerTask):
+                args = self.container_args + self.command_args()
+            else:
+                args = self.command_args()
+            if args:
+                # removing empty strings
+                args = [str(el) for el in args if el not in ["", " "]]
+                keys = ["return_code", "stdout", "stderr"]
+                values = execute(args, strip=self.strip)
+                self.output_ = dict(zip(keys, values))
+                if self.output_["return_code"]:
+                    msg = f"Error running '{self.name}' task with {args}:"
+                    if self.output_["stderr"]:
+                        msg += "\n\nstderr:\n" + self.output_["stderr"]
+                    if self.output_["stdout"]:
+                        msg += "\n\nstdout:\n" + self.output_["stdout"]
+                    raise RuntimeError(msg)
         else:
-            args = self.command_args
-        if args:
-            # removing empty strings
-            args = [str(el) for el in args if el not in ["", " "]]
-            keys = ["return_code", "stdout", "stderr"]
-            values = execute(args, strip=self.strip)
-            self.output_ = dict(zip(keys, values))
-            if self.output_["return_code"]:
-                msg = f"Error running '{self.name}' task with {args}:"
-                if self.output_["stderr"]:
-                    msg += "\n\nstderr:\n" + self.output_["stderr"]
-                if self.output_["stdout"]:
-                    msg += "\n\nstdout:\n" + self.output_["stdout"]
-                raise RuntimeError(msg)
+            self.output_ = environment.execute(self)
+
+    def _check_inputs(self, root):
+        fields = attr_fields(self.inputs)
+        for fld in fields:
+            if (
+                fld.type in [File, Directory]
+                or "pydra.engine.specs.File" in str(fld.type)
+                or "pydra.engine.specs.Directory" in str(fld.type)
+            ):
+                if fld.name == "image":
+                    continue
+                file = Path(getattr(self.inputs, fld.name))
+                if fld.metadata.get("container_path"):  # TODO: this should go..
+                    # if the path is in a container the input should be treated as a str (hash as a str)
+                    # field.type = "str"
+                    # setattr(self, field.name, str(file))
+                    pass
+                # if this is a local path, checking if the path exists
+                # TODO: if copyfile, ro -> rw
+                # TODO: what if it's a directory? add tests
+                elif file.exists():  # is it ok if two inputs have the same parent?
+                    # todo: probably need only keys
+                    self.bindings[Path(file.parent)] = (
+                        Path(f"{root}{file.parent}"),
+                        "ro",
+                    )
+                    self.inputs_mod_root[fld.name] = f"{root}{Path(file).absolute()}"
+                # error should be raised only if the type is strictly File or Directory
+                elif fld.type in [File, Directory]:
+                    raise FileNotFoundError(
+                        f"the file {file} from {fld.name} input does not exist, "
+                        f"if the file comes from the container, "
+                        f"use field.metadata['container_path']=True"
+                    )
 
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
 

@@ -16,7 +16,7 @@ def test_docker_1_nosubm():
     no submitter
     """
     cmd = "whoami"
-    docky = DockerTask(name="docky", executable=cmd, image="busybox")
+    docky = DockerTask(name="docky", executable=cmd, image="busybox", environment="old")
     assert docky.inputs.image == "busybox"
     assert docky.inputs.container == "docker"
     assert (
