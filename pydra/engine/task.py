@@ -355,7 +355,7 @@ class ShellCommandTask(TaskBase):
             return []
         else:
             self._check_inputs(root=root)
-            return self.bindings.keys()
+            return self.bindings
 
     def command_args(self, root=None):
         """Get command line arguments"""
@@ -619,9 +619,13 @@ class ShellCommandTask(TaskBase):
                 # TODO: what if it's a directory? add tests
                 elif file.exists():  # is it ok if two inputs have the same parent?
                     # todo: probably need only keys
+                    if fld.metadata.get("mandatory"):
+                        mod = "rw"
+                    else:
+                        mod = "ro"
                     self.bindings[Path(file.parent)] = (
                         Path(f"{root}{file.parent}"),
-                        "ro",
+                        mod,
                     )
                     self.inputs_mod_root[fld.name] = f"{root}{Path(file).absolute()}"
                 # error should be raised only if the type is strictly File or Directory

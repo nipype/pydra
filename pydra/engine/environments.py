@@ -60,8 +60,11 @@ class Docker(Environment):
         # todo adding xargsy etc
         docker_args = ["docker", "run", "-v", self.bind(task.cache_dir, "rw")]
         docker_args.extend(
-            " ".join([f"-v {self.bind(mount)}" for mount in mounts]).split()
+            " ".join(
+                [f"-v {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
+            ).split()
         )
+        docker_args.extend(["-w", f"{root}{task.output_dir}"])
         keys = ["return_code", "stdout", "stderr"]
         # print("\n Docker args", docker_args)
 
