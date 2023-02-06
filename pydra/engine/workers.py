@@ -758,7 +758,6 @@ class SGEWorker(DistributedWorker):
         self.output_by_jobid[jobid] = (rc, stdout, stderr)
 
         for task_pkl, ind, rerun in tasks_to_run:
-
             self.jobid_by_task_uid[Path(task_pkl).parent.name] = jobid
 
         if error_file:
@@ -813,7 +812,6 @@ class SGEWorker(DistributedWorker):
                     await asyncio.sleep(self.poll_delay)
 
     async def _poll_job(self, jobid, cache_dir):
-
         cmd = (f"qstat", "-j", jobid)
         logger.debug(f"Polling job {jobid}")
         rc, stdout, stderr = await read_and_display_async(*cmd, hide_display=True)

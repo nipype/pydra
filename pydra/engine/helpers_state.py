@@ -237,7 +237,7 @@ def remove_inp_from_splitter_rpn(splitter_rpn, inputs_to_remove):
     stack_inp = []
     stack_sgn = []
     from_last_sign = []
-    for (ii, el) in enumerate(splitter_rpn_copy):
+    for ii, el in enumerate(splitter_rpn_copy):
         # element is a sign
         if el == "." or el == "*":
             stack_sgn.append((ii, el))
@@ -589,7 +589,7 @@ def combine_final_groups(combiner, groups, groups_stack, keys):
     gr_final = list(gr_final)
     map_gr_nr = {nr: i for (i, nr) in enumerate(sorted(gr_final))}
     groups_final_map = {}
-    for (inp, gr) in groups_final.items():
+    for inp, gr in groups_final.items():
         if isinstance(gr, int):
             groups_final_map[inp] = map_gr_nr[gr]
         elif isinstance(gr, list):

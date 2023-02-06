@@ -696,7 +696,7 @@ class TaskBase:
 
     def _combined_output(self, return_inputs=False):
         combined_results = []
-        for (gr, ind_l) in self.state.final_combined_ind_mapping.items():
+        for gr, ind_l in self.state.final_combined_ind_mapping.items():
             combined_results_gr = []
             for ind in ind_l:
                 result = load_result(self.checksum_states(ind), self.cache_locations)
@@ -1253,7 +1253,7 @@ class Workflow(TaskBase):
             for task in self.graph.nodes:
                 self.create_connections(task, detailed=True)
             # adding wf outputs
-            for (wf_out, lf) in self._connections:
+            for wf_out, lf in self._connections:
                 self.graph.add_edges_description((self.name, wf_out, lf.name, lf.field))
             dotfile = self.graph.create_dotfile_detailed(outdir=outdir, name=name)
         else:
