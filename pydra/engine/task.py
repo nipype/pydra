@@ -654,7 +654,6 @@ class ContainerTask(ShellCommandTask):
                 or "pydra.engine.specs.File" in str(fld.type)
                 or "pydra.engine.specs.Directory" in str(fld.type)
             ):
-
                 if fld.name == "image":
                     continue
                 file = Path(getattr(self.inputs, fld.name))

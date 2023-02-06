@@ -85,7 +85,7 @@ class DiGraph:
         """Add edges to the graph (nodes should be already set)."""
         if edges:
             edges = ensure_list(edges)
-            for (nd_out, nd_in) in edges:
+            for nd_out, nd_in in edges:
                 if nd_out not in self.nodes or nd_in not in self.nodes:
                     raise Exception(
                         f"edge {(nd_out, nd_in)} can't be added to the graph"
@@ -131,7 +131,7 @@ class DiGraph:
             self.predecessors[nd.name] = []
             self.successors[nd.name] = []
 
-        for (nd_out, nd_in) in self.edges:
+        for nd_out, nd_in in self.edges:
             self.predecessors[nd_in.name].append(nd_out)
             self.successors[nd_out.name].append(nd_in)
 
@@ -148,7 +148,7 @@ class DiGraph:
     def add_edges(self, new_edges):
         """Add new edges and sort the new graph."""
         self.edges = self._edges + ensure_list(new_edges)
-        for (nd_out, nd_in) in ensure_list(new_edges):
+        for nd_out, nd_in in ensure_list(new_edges):
             self.predecessors[nd_in.name].append(nd_out)
             self.successors[nd_out.name].append(nd_in)
         if self._sorted_nodes is not None:

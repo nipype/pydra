@@ -3251,6 +3251,7 @@ def test_shell_cmd_outputspec_8d(tmpdir, plugin, results_function):
     """
     customised output_spec, adding Directory to the output named by input spec
     """
+
     # For /tmp/some_dict/test this function returns "/test"
     def get_lowest_directory(directory_path):
         return str(directory_path).replace(str(Path(directory_path).parents[0]), "")
@@ -4395,7 +4396,8 @@ def test_shell_cmd_non_existing_outputs_1(tmpdir):
 
 def test_shell_cmd_non_existing_outputs_2(tmpdir):
     """Checking that non existing output files do not return a phantom path,
-    but return NOTHING instead. This test has one existing and one non existing output file."""
+    but return NOTHING instead. This test has one existing and one non existing output file.
+    """
     input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -4460,7 +4462,8 @@ def test_shell_cmd_non_existing_outputs_2(tmpdir):
 
 def test_shell_cmd_non_existing_outputs_3(tmpdir):
     """Checking that non existing output files do not return a phantom path,
-    but return NOTHING instead. This test has an existing mandatory output and another non existing output file."""
+    but return NOTHING instead. This test has an existing mandatory output and another non existing output file.
+    """
     input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -4886,7 +4889,6 @@ def test_shellspec_formatter_splitter_2(tmpdir):
 
 @no_win
 def test_shellcommand_error_msg(tmpdir):
-
     script_path = Path(tmpdir) / "script.sh"
 
     with open(script_path, "w") as f:

@@ -23,7 +23,6 @@ from . import mark
 
 
 def check_latest_version():
-
     import etelemetry
 
     return etelemetry.check_available_version("nipype/pydra", __version__, lgr=logger)
