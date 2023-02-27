@@ -69,7 +69,7 @@ class SpecInfo:
     """A name for the specification."""
     fields: ty.List[ty.Tuple] = attr.ib(factory=list)
     """List of names of fields (can be inputs or outputs)."""
-    bases: ty.Tuple[ty.Type] = attr.ib(factory=tuple)
+    bases: ty.Sequence[ty.Type["BaseSpec"]] = attr.ib(factory=tuple)
     """Keeps track of specification inheritance.
        Should be a tuple containing at least one BaseSpec """
 
