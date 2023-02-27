@@ -114,6 +114,27 @@ def test_annotated_func(use_validator):
     ]
 
 
+def test_annotated_func_dictreturn(use_validator):
+    """Test mapping from returned dictionary to output spec."""
+
+    @mark.task
+    @mark.annotate({"return": {"sum": int, "mul": int}})
+    def testfunc(a: int, b: int):
+        return dict(sum=a + b, diff=a - b)
+
+    task = testfunc(a=2, b=3)
+    result = task()
+
+    # Part of the annotation and returned, should be exposed to output.
+    assert result.output.sum == 5
+
+    # Part of the annotation but not returned, should be coalesced to None.
+    assert result.output.mul is None
+
+    # Not part of the annotation, should be discarded.
+    assert not hasattr(result.output, "diff")
+
+
 def test_annotated_func_multreturn(use_validator):
     """the function has two elements in the return statement"""
 
