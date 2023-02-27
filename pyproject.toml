@@ -102,3 +102,9 @@ exclude = "pydra/_version.py"
 
 [tool.codespell]
 ignore-words = ".codespell-ignorewords"
+
+[tool.mypy]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
