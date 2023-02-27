@@ -6,6 +6,8 @@ import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from .helpers import ensure_list, gather_runtime_info, hash_file
 from .specs import attr_fields, File, Directory
+import subprocess as sp
+import platform
 
 
 class Audit:
@@ -171,7 +173,6 @@ class Audit:
         return self.audit_flags & flag
 
     def audit_task(self, task):
-        import subprocess as sp
 
         label = task.name
 
@@ -221,3 +222,25 @@ class Audit:
         }
 
         self.audit_message(start_message, AuditFlag.PROV)
+
+        env_id = f"uid:{gen_uuid()}"
+        os_plat = str(platform.platform())
+        env_vars = str(os.environ)
+        # check if using conda environment
+        if "CONDA_PREFIX" in os.environ:
+            conda_env_path = str(os.environ["CONDA_PREFIX"])
+            conda_env_name = conda_env_path.split("/")[-1]
+
+        else:
+            conda_env_name = str(None)
+
+        env_message = {
+            "@id": env_id,
+            "Label": f"Conda environment: {conda_env_name}",
+            "EnvVars": env_vars,
+            "OperatingSystem": os_plat,
+            "Dependencies": "test",
+        }
+
+        # Fetch env info
+        self.audit_message(env_message, AuditFlag.PROV)
