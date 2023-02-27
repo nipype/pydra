@@ -50,6 +50,7 @@ dask = [
 ]
 dev = [
     "black",
+    "mypy",
     "pre-commit",
     "pydra[test]",
 ]
