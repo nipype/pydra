@@ -6,6 +6,7 @@ from ..specs import (
     SpecInfo,
     File,
 )
+from .utils import no_win, need_docker
 
 import attr
 
@@ -43,6 +44,8 @@ def test_native_1(tmpdir):
     assert env_res == shelly_old.result().output.__dict__
 
 
+@no_win
+@need_docker
 def test_docker_1(tmpdir):
     """docker env: simple command, no arguments"""
     cmd = ["whoami"]
@@ -69,6 +72,8 @@ def test_docker_1(tmpdir):
     assert env_res == shelly_call.output_ == shelly_call.result().output.__dict__
 
 
+@no_win
+@need_docker
 def test_docker_1_subm(tmpdir, plugin):
     """docker env with submitter: simple command, no arguments"""
     cmd = ["whoami"]
@@ -185,6 +190,8 @@ def test_shell_fileinp_st(tmpdir):
     assert shelly_call.result()[1].output.stdout.strip() == "hi"
 
 
+@no_win
+@need_docker
 def test_docker_fileinp(tmpdir):
     """docker env: task with a file in the command/input"""
     docker = Docker(image="busybox")
@@ -214,6 +221,8 @@ def test_docker_fileinp(tmpdir):
     assert env_res == shelly_call.output_ == shelly_call.result().output.__dict__
 
 
+@no_win
+@need_docker
 def test_docker_fileinp_subm(tmpdir, plugin):
     """docker env with a submitter: task with a file in the command/input"""
     docker = Docker(image="busybox")
@@ -244,6 +253,8 @@ def test_docker_fileinp_subm(tmpdir, plugin):
     assert env_res == shelly_call.result().output.__dict__
 
 
+@no_win
+@need_docker
 def test_docker_fileinp_st(tmpdir):
     """docker env: task (with a splitter) with a file in the command/input"""
     docker = Docker(image="busybox")
@@ -388,6 +399,8 @@ def test_shell_fileout_st(tmpdir):
     )
 
 
+@no_win
+@need_docker
 def test_docker_fileout(tmpdir):
     """docker env: task with a file in the output"""
     docker_env = Docker(image="busybox")
@@ -407,6 +420,8 @@ def test_docker_fileout(tmpdir):
     )
 
 
+@no_win
+@need_docker
 def test_docker_fileout_st(tmpdir):
     """docker env: task (with a splitter) with a file in the output"""
     docker_env = Docker(image="busybox")
