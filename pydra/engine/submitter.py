@@ -169,7 +169,7 @@ class Submitter:
                     await asyncio.sleep(1)
                     if ii > 60:
                         blocked = _list_blocked_tasks(graph_copy)
-                        get_runnable_tasks(graph_copy)
+                        # get_runnable_tasks(graph_copy)  # Uncomment to debug `get_runnable_tasks`
                         raise Exception(
                             "graph is not empty, but not able to get more tasks "
                             "- something may have gone wrong when retrieving the results "
