@@ -307,7 +307,7 @@ def _list_blocked_tasks(graph):
                                 matching_name.append(
                                     f"{saved_tsk.name} ({tsk_work_dir.name})"
                                 )
-                blocking.append(pred, ", ".join(matching_name))
+                blocking.append((pred, ", ".join(matching_name)))
         if blocking:
             blocked.append(
                 f"\n{tsk.name} ({tsk.checksum}) is blocked by "
