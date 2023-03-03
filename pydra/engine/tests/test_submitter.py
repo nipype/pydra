@@ -1,6 +1,7 @@
 from dateutil import parser
 import re
 import shutil
+import attrs
 import subprocess as sp
 import time
 
@@ -14,10 +15,11 @@ from .utils import (
     gen_basic_wf_with_threadcount_concurrent,
 )
 from ..core import Workflow
-from ..submitter import Submitter
+from ..submitter import Submitter, get_runnable_tasks, _list_blocked_tasks
 from ... import mark
 from pathlib import Path
 from datetime import datetime
+from pydra.engine.specs import LazyField
 
 
 @mark.task
@@ -575,3 +577,35 @@ def test_sge_no_limit_maxthreads(tmpdir):
         out_job2_dict["start_time"][0], f"%a %b %d %H:%M:%S %Y"
     )
     assert job_1_endtime > job_2_starttime
+
+
+@mark.task
+def add_together(x, y):
+    return x + y
+
+
+def test_wf_with_blocked_tasks(tmpdir):
+    dummy_task = add_together(name="dummy", x=1, y=2)
+    lf = LazyField(node=dummy_task, attr_type="output")
+    lf.field = "out"
+    wf = Workflow(name="wf_with_blocked_tasks", input_spec=["x"])
+    wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
+    wf.add(sleep_add_one(name="taskb", x=lf))  # wf.taska.lzout.out))
+    # wf.add(sleep_add_one(name="taskc", x=wf.taska.lzout.out))
+    # wf.add(add_together(name="taskd", x=wf.taskb.lzout.out, y=wf.taskc.lzout.out))
+    wf.set_output([("out", wf.taskb.lzout.out)])
+
+    wf.inputs.x = 1
+
+    wf.cache_dir = tmpdir
+
+    with Submitter("serial") as sub:
+        sub(wf)
+
+    # with pytest.raises(Exception) as exc:
+    # wf_graph = wf.graph.copy()
+    # runnable_tasks, _ =  get_runnable_tasks(wf_graph)
+    # assert runnable_tasks == []
+    # blocked = _list_blocked_tasks(wf_graph)
+
+    # assert "graph is not empty" in str(exc)
