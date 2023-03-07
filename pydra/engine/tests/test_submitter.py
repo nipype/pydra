@@ -1,6 +1,5 @@
 from dateutil import parser
 import re
-import shutil
 import subprocess as sp
 import time
 
@@ -14,10 +13,11 @@ from .utils import (
     gen_basic_wf_with_threadcount_concurrent,
 )
 from ..core import Workflow
-from ..submitter import Submitter
+from ..submitter import Submitter, get_runnable_tasks, _list_blocked_tasks
 from ... import mark
 from pathlib import Path
 from datetime import datetime
+from pydra.engine.specs import LazyField
 
 
 @mark.task
@@ -575,3 +575,43 @@ def test_sge_no_limit_maxthreads(tmpdir):
         out_job2_dict["start_time"][0], f"%a %b %d %H:%M:%S %Y"
     )
     assert job_1_endtime > job_2_starttime
+
+
+def test_wf_with_blocked_tasks(tmpdir):
+    wf = Workflow(name="wf_with_blocked_tasks", input_spec=["x"])
+    wf.add(identity(name="taska", x=wf.lzin.x))
+    wf.add(alter_input(name="taskb", x=wf.taska.lzout.out))
+    wf.add(to_tuple(name="taskc", x=wf.taska.lzout.out, y=wf.taskb.lzout.out))
+    wf.set_output([("out", wf.taskb.lzout.out)])
+
+    wf.inputs.x = A(1)
+
+    wf.cache_dir = tmpdir
+
+    with pytest.raises(Exception, match="graph is not empty,"):
+        with Submitter("serial") as sub:
+            sub(wf)
+
+
+class A:
+    def __init__(self, a):
+        self.a = a
+
+    def __hash__(self):
+        return hash(self.a)
+
+
+@mark.task
+def identity(x):
+    return x
+
+
+@mark.task
+def alter_input(x):
+    x.a = 2
+    return x
+
+
+@mark.task
+def to_tuple(x, y):
+    return (x, y)

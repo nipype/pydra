@@ -169,13 +169,22 @@ class Submitter:
                     await asyncio.sleep(1)
                     if ii > 60:
                         blocked = _list_blocked_tasks(graph_copy)
-                        get_runnable_tasks(graph_copy)
+                        # get_runnable_tasks(graph_copy)  # Uncomment to debug `get_runnable_tasks`
                         raise Exception(
                             "graph is not empty, but not able to get more tasks "
                             "- something may have gone wrong when retrieving the results "
-                            "of predecessor tasks caused by a file-system error or a bug "
-                            "in the internal workflow logic.\n\nBlocked tasks\n-------------\n"
-                            + "\n".join(blocked)
+                            "of predecessor tasks. This could be caused by a file-system "
+                            "error or a bug in the internal workflow logic, but is likely "
+                            "to be caused by the hash of an upstream node being unstable."
+                            " \n\nHash instability can be caused by an input of the node being "
+                            "modified in place, or by psuedo-random ordering of `set` or "
+                            "`frozenset` inputs (or nested attributes of inputs) in the hash "
+                            "calculation. To ensure that sets are hashed consistently you can "
+                            "you can try set the environment variable PYTHONHASHSEED=0 for "
+                            "all processes, but it is best to try to identify where the set "
+                            "objects are occurring and manually hash their sorted elements. "
+                            "(or use list objects instead)"
+                            "\n\nBlocked tasks\n-------------\n" + "\n".join(blocked)
                         )
             for task in tasks:
                 # grab inputs if needed
@@ -307,7 +316,7 @@ def _list_blocked_tasks(graph):
                                 matching_name.append(
                                     f"{saved_tsk.name} ({tsk_work_dir.name})"
                                 )
-                blocking.append(pred, ", ".join(matching_name))
+                blocking.append((pred, ", ".join(matching_name)))
         if blocking:
             blocked.append(
                 f"\n{tsk.name} ({tsk.checksum}) is blocked by "
