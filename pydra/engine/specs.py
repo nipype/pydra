@@ -211,9 +211,7 @@ class BaseSpec:
                 unset_required_fields = [
                     name for name, is_set in required_fields.items() if not is_set
                 ]
-                raise AttributeError(
-                    f"{field.name} requires {unset_required_fields}"
-                )
+                raise AttributeError(f"{field.name} requires {unset_required_fields}")
 
             if (
                 field.type in [File, Directory]
@@ -381,14 +379,14 @@ class ShellSpec(BaseSpec):
     executable: ty.Union[str, ty.List[str]] = attr.ib(
         metadata={
             "help_string": "the first part of the command, can be a string, "
-                           "e.g. 'ls', or a list, e.g. ['ls', '-l', 'dirname']"
+            "e.g. 'ls', or a list, e.g. ['ls', '-l', 'dirname']"
         }
     )
     args: ty.Union[str, ty.List[str], None] = attr.ib(
         None,
         metadata={
             "help_string": "the last part of the command, can be a string, "
-                           "e.g. <file_name>, or a list"
+            "e.g. <file_name>, or a list"
         },
     )
 
@@ -535,8 +533,8 @@ class ShellOutSpec:
             elif (
                 fld.metadata
                 and self._field_metadata(
-                fld, inputs, output_dir, outputs=None, check_existance=False
-            )
+                    fld, inputs, output_dir, outputs=None, check_existance=False
+                )
                 != attr.NOTHING
             ):
                 output_names.append(fld.name)
