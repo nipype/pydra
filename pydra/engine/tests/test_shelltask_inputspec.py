@@ -2204,7 +2204,8 @@ def test_task_inputs_mandatory_with_xOR_zero_mandatory_raises_error():
     task.inputs.input_2 = attr.NOTHING
     with pytest.raises(Exception) as excinfo:
         task.inputs.check_fields_input_spec()
-    assert "input_1 is mandatory, but no value provided" in str(excinfo.value)
+    assert "input_1 is mandatory" in str(excinfo.value)
+    assert "no alternative provided by ['input_2', 'input_3']" in str(excinfo.value)
     assert excinfo.type is AttributeError
 
 
@@ -2216,9 +2217,7 @@ def test_task_inputs_mandatory_with_xOR_two_mandatories_raises_error():
 
     with pytest.raises(Exception) as excinfo:
         task.inputs.check_fields_input_spec()
-    assert "input_2 is mutually exclusive with ('input_1', 'input_2'" in str(
-        excinfo.value
-    )
+    assert "input_1 is mutually exclusive with ['input_2']" in str(excinfo.value)
     assert excinfo.type is AttributeError
 
 
@@ -2231,7 +2230,7 @@ def test_task_inputs_mandatory_with_xOR_3_mandatories_raises_error():
 
     with pytest.raises(Exception) as excinfo:
         task.inputs.check_fields_input_spec()
-    assert "input_2 is mutually exclusive with ('input_1', 'input_2', 'input_3'" in str(
+    assert "input_1 is mutually exclusive with ['input_2', 'input_3']" in str(
         excinfo.value
     )
     assert excinfo.type is AttributeError
