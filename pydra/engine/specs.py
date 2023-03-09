@@ -156,55 +156,69 @@ class BaseSpec:
 
         """
         fields = attr_fields(self)
-        names = []
-        require_to_check = {}
-        for fld in fields:
-            mdata = fld.metadata
-            # checking if the mandatory field is provided
-            if getattr(self, fld.name) is attr.NOTHING:
-                if mdata.get("mandatory"):
-                    # checking if the mandatory field is provided elsewhere in the xor list
-                    in_exclusion_list = mdata.get("xor") is not None
-                    alreday_populated = in_exclusion_list and [
-                        getattr(self, el)
-                        for el in mdata["xor"]
-                        if (getattr(self, el) is not attr.NOTHING)
-                    ]
-                    if (
-                        alreday_populated
-                    ):  # another input satisfies mandatory attribute via xor condition
-                        continue
+
+        for field in fields:
+            field_is_mandatory = bool(field.metadata.get("mandatory"))
+            field_is_unset = getattr(self, field.name) is attr.NOTHING
+
+            # Collect alternative fields associated with this field.
+            alternative_fields = {
+                name: getattr(self, name) is not attr.NOTHING
+                for name in field.metadata.get("xor", [])
+                if name != field.name
+            }
+
+            # Collect required fields associated with this field.
+            required_fields = {
+                name: getattr(self, name) is not attr.NOTHING
+                for name in field.metadata.get("requires", [])
+                if name != field.name
+            }
+
+            # Raise error if field is mandatory and unset
+            # or no suitable alternative is provided.
+            if field_is_unset:
+                if field_is_mandatory:
+                    if alternative_fields:
+                        if any(alternative_fields.values()):
+                            # Alternative fields found, skip other checks.
+                            continue
+                        else:
+                            raise AttributeError(
+                                f"{field.name} is mandatory and unset, "
+                                "but no value provided by "
+                                f"{list(alternative_fields.keys())}."
+                            )
                     else:
                         raise AttributeError(
-                            f"{fld.name} is mandatory, but no value provided"
+                            f"{field.name} is mandatory, but no value provided."
                         )
                 else:
+                    # Field is not set, check the next one.
                     continue
-            names.append(fld.name)
 
-            # checking if fields meet the xor and requires are
-            if "xor" in mdata:
-                if [el for el in mdata["xor"] if (el in names and el != fld.name)]:
-                    raise AttributeError(
-                        f"{fld.name} is mutually exclusive with {mdata['xor']}"
-                    )
+            # Raise error if multiple alternatives are set.
+            if alternative_fields and any(alternative_fields.values()):
+                set_alternative_fields = [
+                    name for name, is_set in alternative_fields.items() if is_set
+                ]
+                raise AttributeError(
+                    f"{field.name} is mutually exclusive with {set_alternative_fields}"
+                )
 
-            if "requires" in mdata:
-                if [el for el in mdata["requires"] if el not in names]:
-                    # will check after adding all fields to names
-                    require_to_check[fld.name] = mdata["requires"]
+            # Raise error if any required field is unset.
+            if required_fields and not all(required_fields.values()):
+                unset_required_fields = [
+                    name for name, is_set in required_fields.items() if not is_set
+                ]
+                raise AttributeError(f"{field.name} requires {unset_required_fields}")
 
             if (
-                fld.type in [File, Directory]
-                or "pydra.engine.specs.File" in str(fld.type)
-                or "pydra.engine.specs.Directory" in str(fld.type)
+                field.type in [File, Directory]
+                or "pydra.engine.specs.File" in str(field.type)
+                or "pydra.engine.specs.Directory" in str(field.type)
             ):
-                self._file_check(fld)
-
-        for nm, required in require_to_check.items():
-            required_notfound = [el for el in required if el not in names]
-            if required_notfound:
-                raise AttributeError(f"{nm} requires {required_notfound}")
+                self._file_check(field)
 
     def _file_check(self, field):
         """checking if the file exists"""
