@@ -161,12 +161,37 @@ class BaseSpec:
             field_is_mandatory = bool(field.metadata.get("mandatory"))
             field_is_unset = getattr(self, field.name) is attr.NOTHING
 
+            if field_is_unset and not field_is_mandatory:
+                continue
+
             # Collect alternative fields associated with this field.
             alternative_fields = {
                 name: getattr(self, name) is not attr.NOTHING
                 for name in field.metadata.get("xor", [])
                 if name != field.name
             }
+            alternatives_are_set = any(alternative_fields.values())
+
+            # Raise error if no field in mandatory alternative group is set.
+            if field_is_unset:
+                if alternatives_are_set:
+                    continue
+                message = f"{field.name} is mandatory and unset."
+                if alternative_fields:
+                    raise AttributeError(
+                        message[:-1] +
+                        f" but no alternative provided by {list(alternative_fields)}."
+                    )
+                raise AttributeError(message)
+
+            # Raise error if multiple alternatives are set.
+            elif alternatives_are_set:
+                set_alternative_fields = [
+                    name for name, is_set in alternative_fields.items() if is_set
+                ]
+                raise AttributeError(
+                    f"{field.name} is mutually exclusive with {set_alternative_fields}"
+                )
 
             # Collect required fields associated with this field.
             required_fields = {
@@ -175,39 +200,8 @@ class BaseSpec:
                 if name != field.name
             }
 
-            # Raise error if field is mandatory and unset
-            # or no suitable alternative is provided.
-            if field_is_unset:
-                if field_is_mandatory:
-                    if alternative_fields:
-                        if any(alternative_fields.values()):
-                            # Alternative fields found, skip other checks.
-                            continue
-                        else:
-                            raise AttributeError(
-                                f"{field.name} is mandatory and unset, "
-                                "but no value provided by "
-                                f"{list(alternative_fields.keys())}."
-                            )
-                    else:
-                        raise AttributeError(
-                            f"{field.name} is mandatory, but no value provided."
-                        )
-                else:
-                    # Field is not set, check the next one.
-                    continue
-
-            # Raise error if multiple alternatives are set.
-            if alternative_fields and any(alternative_fields.values()):
-                set_alternative_fields = [
-                    name for name, is_set in alternative_fields.items() if is_set
-                ]
-                raise AttributeError(
-                    f"{field.name} is mutually exclusive with {set_alternative_fields}"
-                )
-
             # Raise error if any required field is unset.
-            if required_fields and not all(required_fields.values()):
+            if not all(required_fields.values()):
                 unset_required_fields = [
                     name for name, is_set in required_fields.items() if not is_set
                 ]
