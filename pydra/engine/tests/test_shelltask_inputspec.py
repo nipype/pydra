@@ -2205,7 +2205,7 @@ def test_task_inputs_mandatory_with_xOR_zero_mandatory_raises_error():
     with pytest.raises(Exception) as excinfo:
         task.inputs.check_fields_input_spec()
     assert "input_1 is mandatory" in str(excinfo.value)
-    assert "no value provided by ['input_2', 'input_3']" in str(excinfo.value)
+    assert "no alternative provided by ['input_2', 'input_3']" in str(excinfo.value)
     assert excinfo.type is AttributeError
 
 
