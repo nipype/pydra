@@ -1721,6 +1721,58 @@ def test_shell_cmd_inputs_template_10():
     assert shelly.output_names == ["return_code", "stdout", "stderr", "outA"]
 
 
+def test_shell_cmd_inputs_template_requires_1():
+    """Given an input specification with a templated output file subject to required fields,
+    ensure the field is set only when all requirements are met."""
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "in_file",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": "input file",
+                        "mandatory": True,
+                        "argstr": "",
+                    },
+                ),
+            ),
+            (
+                "with_tpl",
+                attr.ib(
+                    type=bool,
+                    metadata={"help_string": "enable template"},
+                ),
+            ),
+            (
+                "out_file",
+                attr.ib(
+                    type=str,
+                    metadata={
+                        "help_string": "output file",
+                        "argstr": "--tpl",
+                        "output_file_template": "tpl.{in_file}",
+                        "requires": {"with_tpl"},
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    # When requirements are not met.
+    shelly = ShellCommandTask(
+        executable="cmd", input_spec=my_input_spec, in_file="in.file"
+    )
+    assert "--tpl" not in shelly.cmdline
+
+    # When requirements are met.
+    shelly.inputs.with_tpl = True
+    assert "tpl.in.file" in shelly.cmdline
+
+
 def test_shell_cmd_inputs_template_function_1():
     """one input field uses output_file_template that is a simple function
     this can be easily done by simple template as in test_shell_cmd_inputs_template_1

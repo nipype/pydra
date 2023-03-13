@@ -591,9 +591,19 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
 
     from .specs import attr_fields
 
+    # Collect templated inputs for which all requirements are satisfied.
     fields_templ = [
-        fld for fld in attr_fields(inputs) if fld.metadata.get("output_file_template")
+        field
+        for field in attr_fields(inputs)
+        if field.metadata.get("output_file_template")
+        and all(
+            [
+                getattr(inputs, required_field) is not attr.NOTHING
+                for required_field in field.metadata.get("requires", [])
+            ]
+        )
     ]
+
     dict_mod = {}
     for fld in fields_templ:
         if fld.type not in [str, ty.Union[str, bool]]:
