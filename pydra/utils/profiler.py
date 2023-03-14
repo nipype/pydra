@@ -9,7 +9,7 @@ _MB = 1024.0**2
 
 
 class ResourceMonitor(threading.Thread):
-    """A thread to monitor a specific PID with a certain frequence to a file."""
+    """A thread to monitor a specific PID with a certain frequency to a file."""
 
     def __init__(self, pid, interval=5, logdir=None, fname=None):
         """

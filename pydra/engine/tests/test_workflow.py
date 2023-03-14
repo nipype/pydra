@@ -4843,7 +4843,7 @@ def test_duplicate_input_on_split_wf(tmpdir):
 @pytest.mark.timeout(40)
 def test_inner_outer_wf_duplicate(tmpdir):
     """checking if the execution gets stuck if there is an inner and outer workflows
-    thar run two nodes with the exact same inputs.
+    that run two nodes with the exact same inputs.
     """
     task_list = ["First", "Second"]
     start_list = [3]
