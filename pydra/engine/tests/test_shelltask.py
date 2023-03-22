@@ -2929,6 +2929,35 @@ def test_shell_cmd_outputspec_5b_error():
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
+def test_shell_cmd_outputspec_5c(plugin, results_function):
+    """
+    Customised output spec defined as a class,
+    using a static function to collect output files.
+    """
+
+    @attr.s(kw_only=True)
+    class MyOutputSpec(ShellOutSpec):
+        @staticmethod
+        def gather_output(executable, output_dir):
+            files = executable[1:]
+            return [Path(output_dir) / file for file in files]
+
+        newfile: MultiOutputFile = attr.ib(metadata={"callable": gather_output})
+
+    shelly = ShellCommandTask(
+        name="shelly",
+        executable=["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"],
+        output_spec=SpecInfo(name="Output", bases=(MyOutputSpec,)),
+    )
+
+    res = results_function(shelly, plugin)
+    assert res.output.stdout == ""
+    # newfile is a list
+    assert len(res.output.newfile) == 2
+    assert all([file.exists for file in res.output.newfile])
+
+
+@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_6(plugin, results_function, tmpdir):
     """
     providing output name by providing output_file_template
