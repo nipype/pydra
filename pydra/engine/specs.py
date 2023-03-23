@@ -636,7 +636,7 @@ class ShellOutSpec:
 
         if "requires" in fld.metadata:
             # if requires is a list of list it is treated as el[0] OR el[1] OR...
-            required_fields = list(fld.metadata["requires"])
+            required_fields = ensure_list(fld.metadata["requires"])
             if all([isinstance(el, list) for el in required_fields]):
                 field_required_OR = required_fields
             # if requires is a list of tuples/strings - I'm creating a 1-el nested list
