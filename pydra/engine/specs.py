@@ -602,7 +602,12 @@ class ShellOutSpec:
                     return attr.NOTHING
                 return val
         elif "callable" in fld.metadata:
-            call_args = inspect.getfullargspec(fld.metadata["callable"])
+            callable_ = fld.metadata["callable"]
+            if isinstance(callable_, staticmethod):
+                # In case callable is defined as a static method,
+                # retrieve the function wrapped in the descriptor.
+                callable_ = callable_.__func__
+            call_args = inspect.getfullargspec(callable_)
             call_args_val = {}
             for argnm in call_args.args:
                 if argnm == "field":
@@ -624,7 +629,7 @@ class ShellOutSpec:
                             f"has to be in inputs or be field or output_dir, "
                             f"but {argnm} is used"
                         )
-            return fld.metadata["callable"](**call_args_val)
+            return callable_(**call_args_val)
         else:
             raise Exception("(_field_metadata) is not a current valid metadata key.")
 
