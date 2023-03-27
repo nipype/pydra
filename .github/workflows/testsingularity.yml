@@ -21,7 +21,7 @@ jobs:
           echo "RELEASE_VERSION=v3.7.1" >> $GITHUB_ENV
           echo "NO_ET=TRUE" >> $GITHUB_ENV
       - name: Setup Singularity
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: hpcng/singularity
           ref: 'v3.7.1'
@@ -57,7 +57,7 @@ jobs:
 
 
       - name: Checkout Pydra repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ github.repository }}
       - name: Install pydra (test)
