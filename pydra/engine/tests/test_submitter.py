@@ -319,7 +319,7 @@ def test_slurm_args_3(tmpdir):
 @need_slurm
 def test_slurm_args_4(tmpdir):
     """testing sbatch_args provided to the submitter
-    test should pass when valid output sbatch_args is provided 
+    test should pass when valid output sbatch_args is provided
     """
     task = sleep_add_one(x=1)
     task.cache_dir = tmpdir
