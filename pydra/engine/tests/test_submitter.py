@@ -299,6 +299,40 @@ def test_slurm_args_2(tmpdir):
             sub(task)
 
 
+@need_slurm
+def test_slurm_args_3(tmpdir):
+    """testing sbatch_args provided to the submitter
+    test should pass when valid error sbatch_args is provided
+    """
+    task = sleep_add_one(x=1)
+    task.cache_dir = tmpdir
+    # submit workflow and every task as slurm job
+    with Submitter("slurm", sbatch_args="--error=error.log") as sub:
+        sub(task)
+
+    res = task.result()
+    assert res.output.out == 2
+    error_log_file = tmpdir / "SlurmWorker_scripts"
+    assert error_log_file.exists()
+
+
+@need_slurm
+def test_slurm_args_4(tmpdir):
+    """testing sbatch_args provided to the submitter
+    test should pass when valid output sbatch_args is provided 
+    """
+    task = sleep_add_one(x=1)
+    task.cache_dir = tmpdir
+    # submit workflow and every task as slurm job
+    with Submitter("slurm", sbatch_args="--output=output.log") as sub:
+        sub(task)
+
+    res = task.result()
+    assert res.output.out == 2
+    output_log_file = tmpdir / "SlurmWorker_scripts"
+    assert output_log_file.exists()
+
+
 @mark.task
 def sleep(x, job_name_part):
     time.sleep(x)
