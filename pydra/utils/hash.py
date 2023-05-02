@@ -3,7 +3,7 @@ import struct
 from collections.abc import Iterator, Mapping
 from functools import singledispatch
 from hashlib import blake2b
-from typing import NewType, Sequence
+from typing import Dict, NewType, Sequence
 
 __all__ = (
     "hash_object",
@@ -16,7 +16,7 @@ __all__ = (
 )
 
 Hash = NewType("Hash", bytes)
-Cache = NewType("Cache", dict[int, Hash])
+Cache = NewType("Cache", Dict[int, Hash])
 
 
 def hash_object(obj: object) -> Hash:
