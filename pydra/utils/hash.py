@@ -9,15 +9,14 @@ Hash = NewType("Hash", bytes)
 
 
 def hash_object(obj: object) -> Hash:
-    h = blake2b(digest_size=16, person=b'pydra-hash')
+    h = blake2b(digest_size=16, person=b"pydra-hash")
     for chunk in bytes_repr(obj):
         h.update(chunk)
     return Hash(h.digest())
 
 
-
 @singledispatch
-def bytes_repr(obj: object, seen: Union[set, None]=None) -> Iterator[bytes]:
+def bytes_repr(obj: object, seen: Union[set, None] = None) -> Iterator[bytes]:
     if seen is None:
         seen = set()
     cls = obj.__class__
@@ -27,23 +26,23 @@ def bytes_repr(obj: object, seen: Union[set, None]=None) -> Iterator[bytes]:
 
 
 @bytes_repr.register
-def bytes_repr_bytes(obj: bytes, seen: Union[set, None]=None) -> Iterator[bytes]:
+def bytes_repr_bytes(obj: bytes, seen: Union[set, None] = None) -> Iterator[bytes]:
     yield f"bytes:{len(obj)}:".encode()
     yield obj
 
 
 @bytes_repr.register
-def bytes_repr_str(obj: str, seen: Union[set, None]=None) -> Iterator[bytes]:
+def bytes_repr_str(obj: str, seen: Union[set, None] = None) -> Iterator[bytes]:
     val = obj.encode()
     yield f"str:{len(val)}:".encode()
     yield val
 
 
 @bytes_repr.register
-def bytes_repr_int(obj: int, seen: Union[set, None]=None) -> Iterator[bytes]:
+def bytes_repr_int(obj: int, seen: Union[set, None] = None) -> Iterator[bytes]:
     try:
         # Up to 64-bit ints
-        val = struct.pack('<q', obj)
+        val = struct.pack("<q", obj)
         yield b"int:"
     except struct.error:
         # Big ints (old python "long")
@@ -53,13 +52,13 @@ def bytes_repr_int(obj: int, seen: Union[set, None]=None) -> Iterator[bytes]:
 
 
 @bytes_repr.register
-def bytes_repr_float(obj: float, seen: Union[set, None]=None) -> Iterator[bytes]:
+def bytes_repr_float(obj: float, seen: Union[set, None] = None) -> Iterator[bytes]:
     yield b"float:"
-    yield struct.pack('<d', obj)
+    yield struct.pack("<d", obj)
 
 
 @bytes_repr.register
-def bytes_repr_dict(obj: dict, seen: Union[set, None]=None) -> Iterator[bytes]:
+def bytes_repr_dict(obj: dict, seen: Union[set, None] = None) -> Iterator[bytes]:
     if seen is None:
         seen = set()
     yield b"dict:{"
@@ -69,7 +68,7 @@ def bytes_repr_dict(obj: dict, seen: Union[set, None]=None) -> Iterator[bytes]:
 
 @bytes_repr.register(list)
 @bytes_repr.register(tuple)
-def bytes_repr_seq(obj, seen: Union[set, None]=None) -> Iterator[bytes]:
+def bytes_repr_seq(obj, seen: Union[set, None] = None) -> Iterator[bytes]:
     if seen is None:
         seen = set()
     yield f"{obj.__class__.__name__}:(".encode()
@@ -78,7 +77,7 @@ def bytes_repr_seq(obj, seen: Union[set, None]=None) -> Iterator[bytes]:
 
 
 @bytes_repr.register
-def bytes_repr_set(obj: set, seen: Union[set, None]=None) -> Iterator[bytes]:
+def bytes_repr_set(obj: set, seen: Union[set, None] = None) -> Iterator[bytes]:
     objid = id(obj)
     if objid in (seen := set() if seen is None else seen):
         # Unlikely to get a seen set, but sorting breaks contents
