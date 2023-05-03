@@ -1,6 +1,5 @@
-import os, shutil
+import shutil
 import subprocess as sp
-from pathlib import Path
 import attr
 import pytest
 
@@ -9,7 +8,6 @@ from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..boutiques import BoshTask
 from .utils import result_no_submitter, result_submitter, no_win
-from ...engine.specs import File
 
 need_bosh_docker = pytest.mark.skipif(
     shutil.which("docker") is None

@@ -812,7 +812,7 @@ class SGEWorker(DistributedWorker):
                     await asyncio.sleep(self.poll_delay)
 
     async def _poll_job(self, jobid, cache_dir):
-        cmd = (f"qstat", "-j", jobid)
+        cmd = ("qstat", "-j", jobid)
         logger.debug(f"Polling job {jobid}")
         rc, stdout, stderr = await read_and_display_async(*cmd, hide_display=True)
 
@@ -823,7 +823,7 @@ class SGEWorker(DistributedWorker):
         return False
 
     async def _verify_exit_code(self, jobid):
-        cmd = (f"qacct", "-j", jobid)
+        cmd = ("qacct", "-j", jobid)
         rc, stdout, stderr = await read_and_display_async(*cmd, hide_display=True)
         if not stdout:
             await asyncio.sleep(10)

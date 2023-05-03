@@ -1,4 +1,4 @@
-import os, shutil
+import shutil
 import subprocess as sp
 import pytest
 import attr

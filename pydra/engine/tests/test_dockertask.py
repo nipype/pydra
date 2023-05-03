@@ -1,4 +1,3 @@
-import os
 import pytest
 import attr
 
@@ -71,9 +70,7 @@ def test_docker_1_dockerflag_exception(plugin):
     """using ShellComandTask with container_info=("docker"), no image provided"""
     cmd = "whoami"
     with pytest.raises(Exception) as excinfo:
-        shocky = ShellCommandTask(
-            name="shocky", executable=cmd, container_info=("docker")
-        )
+        ShellCommandTask(name="shocky", executable=cmd, container_info=("docker"))
     assert "container_info has to have 2 elements" in str(excinfo.value)
 
 
@@ -1080,7 +1077,7 @@ def test_docker_inputspec_3a(plugin, tmpdir):
     )
 
     with pytest.raises(Exception) as excinfo:
-        res = docky()
+        docky()
     assert "use field.metadata['container_path']=True" in str(excinfo.value)
 
 

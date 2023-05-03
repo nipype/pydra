@@ -1,15 +1,9 @@
-import attr
 import typing as ty
-import os, sys
 import pytest
-from pathlib import Path
 
 
 from ..task import ShellCommandTask
-from ..submitter import Submitter
-from ..core import Workflow
 from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
-from .utils import result_no_submitter, result_submitter, use_validator
 
 interf_input_spec = SpecInfo(
     name="Input", fields=[("test", ty.Any, {"help_string": "test"})], bases=(ShellSpec,)

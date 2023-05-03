@@ -228,9 +228,9 @@ def test_load_and_run(tmpdir):
 def test_load_and_run_exception_load(tmpdir):
     """testing raising exception and saving info in crashfile when when load_and_run"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
-    task = raise_xeq1(name="raise", x=[1, 2]).split("x")
-    with pytest.raises(FileNotFoundError) as excinfo:
-        task_0 = load_and_run(task_pkl=task_pkl, ind=0)
+    raise_xeq1(name="raise", x=[1, 2]).split("x")
+    with pytest.raises(FileNotFoundError):
+        load_and_run(task_pkl=task_pkl, ind=0)
 
 
 def test_load_and_run_exception_run(tmpdir):
@@ -245,7 +245,7 @@ def test_load_and_run_exception_run(tmpdir):
         cp.dump(task, fp)
 
     with pytest.raises(Exception) as excinfo:
-        task_0 = load_and_run(task_pkl=task_pkl, ind=0)
+        load_and_run(task_pkl=task_pkl, ind=0)
     assert "i'm raising an exception!" in str(excinfo.value)
     # checking if the crashfile has been created
     assert "crash" in str(excinfo.value)

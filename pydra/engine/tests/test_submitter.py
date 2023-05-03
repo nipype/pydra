@@ -13,11 +13,10 @@ from .utils import (
     gen_basic_wf_with_threadcount_concurrent,
 )
 from ..core import Workflow
-from ..submitter import Submitter, get_runnable_tasks, _list_blocked_tasks
+from ..submitter import Submitter
 from ... import mark
 from pathlib import Path
 from datetime import datetime
-from pydra.engine.specs import LazyField
 
 
 @mark.task
@@ -404,7 +403,6 @@ def test_sge_wf(tmpdir):
     assert res.output.out == 9
     script_dir = tmpdir / "SGEWorker_scripts"
     assert script_dir.exists()
-    sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
     # ensure each task was executed with sge
     assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 2
 
@@ -521,18 +519,18 @@ def test_sge_limit_maxthreads(tmpdir):
         sp.run(["qacct", "-j", jobids[3]], capture_output=True).stdout.decode().strip()
     )
 
-    out_job0_dict = qacct_output_to_dict(out_job0)
+    qacct_output_to_dict(out_job0)
     out_job1_dict = qacct_output_to_dict(out_job1)
     out_job2_dict = qacct_output_to_dict(out_job2)
-    out_job3_dict = qacct_output_to_dict(out_job3)
+    qacct_output_to_dict(out_job3)
 
     job_1_endtime = datetime.strptime(
-        out_job1_dict["end_time"][0], f"%a %b %d %H:%M:%S %Y"
+        out_job1_dict["end_time"][0], "%a %b %d %H:%M:%S %Y"
     )
     # Running both task_1_1 and task_1_2 at once would exceed max_threads,
     # so task_1_2 waits for task_1_1 to complete
     job_2_starttime = datetime.strptime(
-        out_job2_dict["start_time"][0], f"%a %b %d %H:%M:%S %Y"
+        out_job2_dict["start_time"][0], "%a %b %d %H:%M:%S %Y"
     )
     assert job_1_endtime < job_2_starttime
 
@@ -562,17 +560,17 @@ def test_sge_no_limit_maxthreads(tmpdir):
         sp.run(["qacct", "-j", jobids[2]], capture_output=True).stdout.decode().strip()
     )
 
-    out_job0_dict = qacct_output_to_dict(out_job0)
+    qacct_output_to_dict(out_job0)
     out_job1_dict = qacct_output_to_dict(out_job1)
     out_job2_dict = qacct_output_to_dict(out_job2)
 
     job_1_endtime = datetime.strptime(
-        out_job1_dict["end_time"][0], f"%a %b %d %H:%M:%S %Y"
+        out_job1_dict["end_time"][0], "%a %b %d %H:%M:%S %Y"
     )
     # Running both task_1_1 and task_1_2 at once would not exceed max_threads,
     # so task_1_2 does not wait for task_1_1 to complete
     job_2_starttime = datetime.strptime(
-        out_job2_dict["start_time"][0], f"%a %b %d %H:%M:%S %Y"
+        out_job2_dict["start_time"][0], "%a %b %d %H:%M:%S %Y"
     )
     assert job_1_endtime > job_2_starttime
 

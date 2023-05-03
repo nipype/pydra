@@ -575,7 +575,7 @@ def test_task_nostate_cachedir(plugin_dask_opt, tmpdir):
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_cachedir_relativepath(tmpdir, plugin_dask_opt):
     """task with provided cache_dir as relative path"""
-    cwd = tmpdir.chdir()
+    tmpdir.chdir()
     cache_dir = "test_task_nostate"
     tmpdir.mkdir(cache_dir)
 
@@ -1266,7 +1266,7 @@ def test_task_state_comb_singl_1(plugin, tmpdir):
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
     assert nn.state.combiner == ["NA.a"]
-    assert nn.state.splitter_final == None
+    assert nn.state.splitter_final is None
     assert nn.state.splitter_rpn_final == []
 
     with Submitter(plugin=plugin) as sub:

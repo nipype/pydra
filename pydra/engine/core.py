@@ -491,7 +491,7 @@ class TaskBase:
         lockfile = self.cache_dir / (checksum + ".lock")
         # Eagerly retrieve cached - see scenarios in __init__()
         self.hooks.pre_run(self)
-        logger.debug(f"'%s' is attempting to acquire lock on %s", self.name, lockfile)
+        logger.debug("'%s' is attempting to acquire lock on %s", self.name, lockfile)
         with SoftFileLock(lockfile):
             if not (rerun or self.task_rerun):
                 result = self.result()
@@ -1105,7 +1105,7 @@ class Workflow(TaskBase):
         lockfile = self.cache_dir / (checksum + ".lock")
         self.hooks.pre_run(self)
         logger.debug(
-            f"'%s' is attempting to acquire lock on %s with Pydra lock",
+            "'%s' is attempting to acquire lock on %s with Pydra lock",
             self.name,
             lockfile,
         )

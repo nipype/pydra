@@ -1,6 +1,5 @@
 import attr
 import typing as ty
-from pathlib import Path
 import pytest
 
 from ..task import ShellCommandTask
@@ -10,12 +9,7 @@ from ..specs import (
     SpecInfo,
     File,
     MultiInputObj,
-    MultiInputFile,
-    MultiOutputFile,
 )
-from .utils import use_validator
-from ..core import Workflow
-from ..submitter import Submitter
 
 
 def test_shell_cmd_execargs_1():
@@ -110,7 +104,7 @@ def test_shell_cmd_inputs_1_st():
         bases=(ShellSpec,),
     )
 
-    shelly = ShellCommandTask(
+    ShellCommandTask(
         name="shelly",
         executable="executable",
         args="arg",
@@ -729,7 +723,7 @@ def test_shell_cmd_inputs_not_given_1():
 
     shelly.inputs.arg2 = "argument2"
 
-    assert shelly.cmdline == f"executable --arg2 argument2"
+    assert shelly.cmdline == "executable --arg2 argument2"
 
 
 def test_shell_cmd_inputs_template_1():
@@ -810,7 +804,7 @@ def test_shell_cmd_inputs_template_1a():
         executable="executable", input_spec=my_input_spec, inpA="inpA"
     )
     # outA has no argstr in metadata, so it's not a part of the command line
-    assert shelly.cmdline == f"executable inpA"
+    assert shelly.cmdline == "executable inpA"
 
 
 # TODO: after deciding how we use requires/templates
@@ -1917,7 +1911,7 @@ def test_shell_cmd_inputs_template_1_st():
     )
 
     inpA = ["inpA_1", "inpA_2"]
-    shelly = ShellCommandTask(
+    ShellCommandTask(
         name="f",
         executable="executable",
         input_spec=my_input_spec,
