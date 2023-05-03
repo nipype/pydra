@@ -1,6 +1,3 @@
-import os
-
-
 def loading(filename):
     with open(filename) as f:
         txt = f.read()

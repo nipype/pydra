@@ -6,7 +6,6 @@ from ..specs import (
     BaseSpec,
     SpecInfo,
     File,
-    RuntimeSpec,
     Runtime,
     Result,
     ShellSpec,
@@ -38,7 +37,7 @@ def test_result():
     assert hasattr(result, "runtime")
     assert hasattr(result, "output")
     assert hasattr(result, "errored")
-    assert getattr(result, "errored") == False
+    assert getattr(result, "errored") is False
 
 
 def test_shellspec():
@@ -146,7 +145,7 @@ def test_lazy_out():
 def test_laxy_errorattr():
     with pytest.raises(Exception) as excinfo:
         tn = NodeTesting()
-        lf = LazyField(node=tn, attr_type="out")
+        LazyField(node=tn, attr_type="out")
     assert "LazyField: Unknown attr_type:" in str(excinfo.value)
 
 
@@ -168,7 +167,7 @@ def test_input_file_hash_1(tmpdir):
         inputs(in_file=outfile).hash
         == "1384a1eb11cd94a5b826a82b948313b9237a0956d406ccff59e79ec92b3c935f"
     )
-    with open(outfile, "wt") as fp:
+    with open(outfile, "w") as fp:
         fp.write("test")
     fields = [("in_file", File)]
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))

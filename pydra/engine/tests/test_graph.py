@@ -65,13 +65,13 @@ def test_edges_3():
 
 def test_edges_ecxeption_1():
     with pytest.raises(Exception) as excinfo:
-        graph = DiGraph(nodes=[A, B, A], edges=[(A, B)])
+        DiGraph(nodes=[A, B, A], edges=[(A, B)])
     assert "repeated elements" in str(excinfo.value)
 
 
 def test_edges_ecxeption_2():
     with pytest.raises(Exception) as excinfo:
-        graph = DiGraph(nodes=[A, B], edges=[(A, C)])
+        DiGraph(nodes=[A, B], edges=[(A, C)])
     assert "can't be added" in str(excinfo.value)
 
 

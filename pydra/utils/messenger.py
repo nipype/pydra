@@ -196,5 +196,5 @@ def collect_messages(collected_path, message_path, ld_op="compact"):
             pld.jsonld.from_rdf(pld.jsonld.to_rdf(data, {})), data[0]
         )
         records["@id"] = f"uid:{gen_uuid()}"
-        with open(collected_path / "messages.jsonld", "wt") as fp:
+        with open(collected_path / "messages.jsonld", "w") as fp:
             json.dump(records, fp, ensure_ascii=False, indent=2, sort_keys=False)

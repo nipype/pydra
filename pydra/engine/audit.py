@@ -1,11 +1,15 @@
 """Module to keep track of provenance information."""
 import os
-from pathlib import Path
 import json
 import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from .helpers import ensure_list, gather_runtime_info, hash_file
 from .specs import attr_fields, File, Directory
+
+try:
+    import importlib_resources
+except ImportError:
+    import importlib.resources as importlib_resources  # type: ignore
 
 
 class Audit:
@@ -133,9 +137,8 @@ class Audit:
 
         """
         if self.develop:
-            with open(
-                Path(os.path.dirname(__file__)) / ".." / "schema/context.jsonld"
-            ) as fp:
+            context_file = importlib_resources.files("pydra") / "schema/context.jsonld"
+            with context_file.open() as fp:
                 context = json.load(fp)
         else:
             context = {

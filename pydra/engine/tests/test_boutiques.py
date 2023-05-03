@@ -1,6 +1,5 @@
-import os, shutil
+import shutil
 import subprocess as sp
-from pathlib import Path
 import attr
 import pytest
 
@@ -9,7 +8,6 @@ from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..boutiques import BoshTask
 from .utils import result_no_submitter, result_submitter, no_win
-from ...engine.specs import File
 
 need_bosh_docker = pytest.mark.skipif(
     shutil.which("docker") is None
@@ -17,8 +15,6 @@ need_bosh_docker = pytest.mark.skipif(
     or sp.call(["which", "bosh"]),
     reason="requires docker and bosh",
 )
-
-Infile = Path(__file__).resolve().parent / "data_tests" / "test.nii.gz"
 
 pytestmark = pytest.mark.skip()
 
@@ -30,10 +26,10 @@ pytestmark = pytest.mark.skip()
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_boutiques_1(maskfile, plugin, results_function, tmpdir):
+def test_boutiques_1(maskfile, plugin, results_function, tmpdir, data_tests_dir):
     """simple task to run fsl.bet using BoshTask"""
     btask = BoshTask(name="NA", zenodo_id="1482743")
-    btask.inputs.infile = Infile
+    btask.inputs.infile = data_tests_dir / "test.nii.gz"
     btask.inputs.maskfile = maskfile
     btask.cache_dir = tmpdir
     res = results_function(btask, plugin)
@@ -50,12 +46,12 @@ def test_boutiques_1(maskfile, plugin, results_function, tmpdir):
 @no_win
 @need_bosh_docker
 @pytest.mark.flaky(reruns=3)
-def test_boutiques_spec_1():
+def test_boutiques_spec_1(data_tests_dir):
     """testing spec: providing input/output fields names"""
     btask = BoshTask(
         name="NA",
         zenodo_id="1482743",
-        infile=Infile,
+        infile=data_tests_dir / "test.nii.gz",
         maskfile="test_brain.nii.gz",
         input_spec_names=["infile", "maskfile"],
         output_spec_names=["outfile", "out_outskin_off"],
@@ -75,12 +71,12 @@ def test_boutiques_spec_1():
 @no_win
 @need_bosh_docker
 @pytest.mark.flaky(reruns=3)
-def test_boutiques_spec_2():
+def test_boutiques_spec_2(data_tests_dir):
     """testing spec: providing partial input/output fields names"""
     btask = BoshTask(
         name="NA",
         zenodo_id="1482743",
-        infile=Infile,
+        infile=data_tests_dir / "test.nii.gz",
         maskfile="test_brain.nii.gz",
         input_spec_names=["infile"],
         output_spec_names=[],
@@ -101,11 +97,11 @@ def test_boutiques_spec_2():
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-def test_boutiques_wf_1(maskfile, plugin, tmpdir):
+def test_boutiques_wf_1(maskfile, plugin, tmpdir, infile):
     """wf with one task that runs fsl.bet using BoshTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
     wf.inputs.maskfile = maskfile
-    wf.inputs.infile = Infile
+    wf.inputs.infile = infile
     wf.cache_dir = tmpdir
 
     wf.add(
@@ -134,11 +130,11 @@ def test_boutiques_wf_1(maskfile, plugin, tmpdir):
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
-def test_boutiques_wf_2(maskfile, plugin, tmpdir):
+def test_boutiques_wf_2(maskfile, plugin, tmpdir, infile):
     """wf with two BoshTasks (fsl.bet and fsl.stats) and one ShellTask"""
     wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
     wf.inputs.maskfile = maskfile
-    wf.inputs.infile = Infile
+    wf.inputs.infile = infile
     wf.cache_dir = tmpdir
 
     wf.add(

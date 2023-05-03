@@ -606,7 +606,7 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
     for fld in fields_templ:
         if fld.type not in [str, ty.Union[str, bool]]:
             raise Exception(
-                f"fields with output_file_template"
+                "fields with output_file_template"
                 " has to be a string or Union[str, bool]"
             )
         dict_mod[fld.name] = template_update_single(
@@ -638,7 +638,7 @@ def template_update_single(
     if spec_type == "input":
         if field.type not in [str, ty.Union[str, bool]]:
             raise Exception(
-                f"fields with output_file_template"
+                "fields with output_file_template"
                 "has to be a string or Union[str, bool]"
             )
         inp_val_set = inputs_dict_st[field.name]

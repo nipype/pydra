@@ -1,4 +1,3 @@
-import os
 import pytest
 import attr
 
@@ -71,9 +70,7 @@ def test_docker_1_dockerflag_exception(plugin):
     """using ShellComandTask with container_info=("docker"), no image provided"""
     cmd = "whoami"
     with pytest.raises(Exception) as excinfo:
-        shocky = ShellCommandTask(
-            name="shocky", executable=cmd, container_info=("docker")
-        )
+        ShellCommandTask(name="shocky", executable=cmd, container_info=("docker"))
     assert "container_info has to have 2 elements" in str(excinfo.value)
 
 
@@ -509,19 +506,17 @@ def test_wf_docker_1_dockerflag(plugin, tmpdir):
 @no_win
 @need_docker
 @pytest.mark.skip(reason="we probably don't want to support bindings as an input")
-def test_wf_docker_2pre(plugin, tmpdir):
+def test_wf_docker_2pre(plugin, tmpdir, data_tests_dir):
     """a workflow with two connected task that run python scripts
     the first one creates a text file and the second one reads the file
     """
-
-    scripts_dir = os.path.join(os.path.dirname(__file__), "data_tests")
 
     cmd1 = ["python", "/scripts/saving.py", "-f", "/outputs/tmp.txt"]
     dt = DockerTask(
         name="save",
         image="python:3.7-alpine",
         executable=cmd1,
-        bindings=[(str(tmpdir), "/outputs"), (scripts_dir, "/scripts", "ro")],
+        bindings=[(str(tmpdir), "/outputs"), (str(data_tests_dir), "/scripts", "ro")],
         strip=True,
     )
     res = dt(plugin=plugin)
@@ -531,12 +526,10 @@ def test_wf_docker_2pre(plugin, tmpdir):
 @no_win
 @need_docker
 @pytest.mark.skip(reason="we probably don't want to support bindings as an input")
-def test_wf_docker_2(plugin, tmpdir):
+def test_wf_docker_2(plugin, tmpdir, data_tests_dir):
     """a workflow with two connected task that run python scripts
     the first one creates a text file and the second one reads the file
     """
-
-    scripts_dir = os.path.join(os.path.dirname(__file__), "data_tests")
 
     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
     wf.inputs.cmd1 = ["python", "/scripts/saving.py", "-f", "/outputs/tmp.txt"]
@@ -546,7 +539,10 @@ def test_wf_docker_2(plugin, tmpdir):
             name="save",
             image="python:3.7-alpine",
             executable=wf.lzin.cmd1,
-            bindings=[(str(tmpdir), "/outputs"), (scripts_dir, "/scripts", "ro")],
+            bindings=[
+                (str(tmpdir), "/outputs"),
+                (str(data_tests_dir), "/scripts", "ro"),
+            ],
             strip=True,
         )
     )
@@ -556,7 +552,10 @@ def test_wf_docker_2(plugin, tmpdir):
             image="python:3.7-alpine",
             executable=wf.lzin.cmd2,
             args=wf.save.lzout.stdout,
-            bindings=[(str(tmpdir), "/outputs"), (scripts_dir, "/scripts", "ro")],
+            bindings=[
+                (str(tmpdir), "/outputs"),
+                (str(data_tests_dir), "/scripts", "ro"),
+            ],
             strip=True,
         )
     )
@@ -1078,7 +1077,7 @@ def test_docker_inputspec_3a(plugin, tmpdir):
     )
 
     with pytest.raises(Exception) as excinfo:
-        res = docky()
+        docky()
     assert "use field.metadata['container_path']=True" in str(excinfo.value)
 
 

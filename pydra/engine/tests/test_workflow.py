@@ -3,7 +3,6 @@ import shutil, os, sys
 import time
 import attr
 from pathlib import Path
-import logging
 
 from .utils import (
     add2,
@@ -71,10 +70,10 @@ def test_wf_specinfo_input_spec():
 def test_wf_name_conflict1():
     """raise error when workflow name conflicts with a class attribute or method"""
     with pytest.raises(ValueError) as excinfo1:
-        wf = Workflow(name="result", input_spec=["x"])
+        Workflow(name="result", input_spec=["x"])
     assert "Cannot use names of attributes or methods" in str(excinfo1.value)
     with pytest.raises(ValueError) as excinfo2:
-        wf = Workflow(name="done", input_spec=["x"])
+        Workflow(name="done", input_spec=["x"])
     assert "Cannot use names of attributes or methods" in str(excinfo2.value)
 
 

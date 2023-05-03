@@ -344,7 +344,7 @@ def _add_name(mlist, name):
             if "." in elem or elem.startswith("_"):
                 pass
             else:
-                mlist[i] = "{}.{}".format(name, mlist[i])
+                mlist[i] = f"{name}.{mlist[i]}"
         elif isinstance(elem, list):
             mlist[i] = _add_name(elem, name)
         elif isinstance(elem, tuple):

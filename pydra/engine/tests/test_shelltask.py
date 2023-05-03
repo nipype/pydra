@@ -19,7 +19,7 @@ from ..specs import (
     MultiOutputFile,
     MultiInputObj,
 )
-from .utils import result_no_submitter, result_submitter, use_validator, no_win
+from .utils import result_no_submitter, result_submitter, no_win
 
 if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
@@ -648,9 +648,7 @@ def test_shell_cmd_inputspec_4c_exception(plugin):
 
     # separate command into exec + args
     with pytest.raises(Exception) as excinfo:
-        shelly = ShellCommandTask(
-            name="shelly", executable=cmd_exec, input_spec=my_input_spec
-        )
+        ShellCommandTask(name="shelly", executable=cmd_exec, input_spec=my_input_spec)
     assert (
         str(excinfo.value)
         == "default value should not be set when the field is mandatory"
@@ -682,9 +680,7 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
 
     # separate command into exec + args
     with pytest.raises(Exception) as excinfo:
-        shelly = ShellCommandTask(
-            name="shelly", executable=cmd_exec, input_spec=my_input_spec
-        )
+        ShellCommandTask(name="shelly", executable=cmd_exec, input_spec=my_input_spec)
     assert (
         str(excinfo.value)
         == "default value should not be set together with output_file_template"
@@ -737,7 +733,7 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmpdir):
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -t"
-    res = results_function(shelly, plugin)
+    results_function(shelly, plugin)
 
 
 def test_shell_cmd_inputspec_5a_exception(plugin, tmpdir):
@@ -834,7 +830,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function, tmpdir):
     )
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
-    res = results_function(shelly, plugin)
+    results_function(shelly, plugin)
 
 
 def test_shell_cmd_inputspec_6a_exception(plugin):
@@ -923,7 +919,7 @@ def test_shell_cmd_inputspec_6b(plugin, results_function, tmpdir):
     shelly.inputs.opt_l = cmd_l
     assert shelly.inputs.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
-    res = results_function(shelly, plugin)
+    results_function(shelly, plugin)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -1554,7 +1550,7 @@ def test_shell_cmd_inputspec_10_err(tmpdir):
     shelly.cache_dir = tmpdir
 
     with pytest.raises(FileNotFoundError):
-        res = shelly()
+        shelly()
 
 
 def test_shell_cmd_inputsspec_11():
@@ -1966,9 +1962,7 @@ def test_shell_cmd_inputspec_typeval_1(use_validator):
     )
 
     with pytest.raises(TypeError):
-        shelly = ShellCommandTask(
-            executable=cmd_exec, text="hello", input_spec=my_input_spec
-        )
+        ShellCommandTask(executable=cmd_exec, text="hello", input_spec=my_input_spec)
 
 
 def test_shell_cmd_inputspec_typeval_2(use_validator):
@@ -1984,9 +1978,7 @@ def test_shell_cmd_inputspec_typeval_2(use_validator):
     )
 
     with pytest.raises(TypeError):
-        shelly = ShellCommandTask(
-            executable=cmd_exec, text="hello", input_spec=my_input_spec
-        )
+        ShellCommandTask(executable=cmd_exec, text="hello", input_spec=my_input_spec)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -3032,7 +3024,7 @@ def test_shell_cmd_outputspec_7(tmpdir, plugin, results_function):
     the input field used in the template is a MultiInputObj, so it can be and is a list
     """
     file = tmpdir.join("script.sh")
-    file.write(f'for var in "$@"; do touch file"$var".txt; done')
+    file.write('for var in "$@"; do touch file"$var".txt; done')
 
     cmd = "bash"
     new_files_id = ["1", "2", "3"]
@@ -3108,7 +3100,7 @@ def test_shell_cmd_outputspec_7a(tmpdir, plugin, results_function):
     the input field used in the template is a MultiInputObj, but a single element is used
     """
     file = tmpdir.join("script.sh")
-    file.write(f'for var in "$@"; do touch file"$var".txt; done')
+    file.write('for var in "$@"; do touch file"$var".txt; done')
 
     cmd = "bash"
     new_files_id = "1"
@@ -3303,9 +3295,9 @@ def test_shell_cmd_outputspec_8c(tmpdir, plugin, results_function):
         resultsDir="outdir",
     ).split("args")
 
-    res = results_function(shelly, plugin)
+    results_function(shelly, plugin)
     for index, arg_dir in enumerate(args):
-        assert Path(Path(tmpdir) / Path(arg_dir)).exists() == True
+        assert Path(Path(tmpdir) / Path(arg_dir)).exists()
         assert get_lowest_directory(arg_dir) == f"/dir{index+1}"
 
 
@@ -3371,7 +3363,7 @@ def test_shell_cmd_outputspec_8d(tmpdir, plugin, results_function):
     )
     res = results_function(shelly, plugin)
     print("Cache_dirr:", shelly.cache_dir)
-    assert (shelly.output_dir / Path("test")).exists() == True
+    assert (shelly.output_dir / Path("test")).exists()
     assert get_lowest_directory(res.output.resultsDir) == get_lowest_directory(
         shelly.output_dir / Path("test")
     )
@@ -4148,7 +4140,7 @@ def test_shell_cmd_inputspec_outputspec_6_except():
     shelly.inputs.file1 = "new_file_1.txt"
 
     with pytest.raises(Exception, match="requires field can be"):
-        res = shelly()
+        shelly()
 
 
 def no_fsl():
@@ -4157,7 +4149,7 @@ def no_fsl():
 
 
 @pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
-def test_fsl():
+def test_fsl(data_tests_dir):
     """mandatory field added to fields, value provided"""
 
     _xor_inputs = [
@@ -4385,7 +4377,7 @@ def test_fsl():
     )
 
     # TODO: not sure why this has to be string
-    in_file = Path(__file__).parent / "data_tests" / "test.nii.gz"
+    in_file = data_tests_dir / "test.nii.gz"
 
     # separate command into exec + args
     shelly = ShellCommandTask(
@@ -4878,7 +4870,7 @@ def test_shellspec_formatter_1(tmpdir):
 
     # chcking if field value is accessible when None
     def formatter_4(field):
-        assert field == None
+        assert field is None
         # formatter must return a string
         return ""
 
@@ -4941,7 +4933,7 @@ def test_shellspec_formatter_splitter_2(tmpdir):
     shelly = ShellCommandTask(
         name="f", executable="executable", input_spec=input_spec, in1=in1, in2="in2"
     ).split("in1")
-    assert shelly != None
+    assert shelly is not None
 
     # results = shelly.cmdline
     # assert len(results) == 2

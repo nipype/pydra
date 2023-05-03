@@ -143,7 +143,7 @@ class SerialWorker(Worker):
 
     async def fetch_finished(self, futures):
         await asyncio.gather(*futures)
-        return set([])
+        return set()
 
     # async def fetch_finished(self, futures):
     #     return await asyncio.wait(futures)
@@ -252,12 +252,12 @@ class SlurmWorker(DistributedWorker):
         batchscript = script_dir / f"batchscript_{uid}.sh"
         python_string = (
             f"""'from pydra.engine.helpers import load_and_run; """
-            f"""load_and_run(task_pkl="{str(task_pkl)}", ind={ind}, rerun={rerun}) '"""
+            f"""load_and_run(task_pkl="{task_pkl}", ind={ind}, rerun={rerun}) '"""
         )
         bcmd = "\n".join(
             (
                 f"#!{interpreter}",
-                f"#SBATCH --output={str(script_dir / 'slurm-%j.out')}",
+                f"#SBATCH --output={script_dir / 'slurm-%j.out'}",
                 f"{sys.executable} -c " + python_string,
             )
         )
@@ -812,7 +812,7 @@ class SGEWorker(DistributedWorker):
                     await asyncio.sleep(self.poll_delay)
 
     async def _poll_job(self, jobid, cache_dir):
-        cmd = (f"qstat", "-j", jobid)
+        cmd = ("qstat", "-j", jobid)
         logger.debug(f"Polling job {jobid}")
         rc, stdout, stderr = await read_and_display_async(*cmd, hide_display=True)
 
@@ -823,7 +823,7 @@ class SGEWorker(DistributedWorker):
         return False
 
     async def _verify_exit_code(self, jobid):
-        cmd = (f"qacct", "-j", jobid)
+        cmd = ("qacct", "-j", jobid)
         rc, stdout, stderr = await read_and_display_async(*cmd, hide_display=True)
         if not stdout:
             await asyncio.sleep(10)

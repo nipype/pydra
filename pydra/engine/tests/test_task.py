@@ -4,14 +4,13 @@ import attr
 import pytest
 import cloudpickle as cp
 from pathlib import Path
-import re
 import json
 import glob as glob
 from ... import mark
 from ..core import Workflow
 from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
-from .utils import gen_basic_wf, use_validator, Submitter
+from .utils import gen_basic_wf
 from ..specs import (
     MultiInputObj,
     MultiOutputObj,
@@ -43,10 +42,10 @@ def test_output():
 def test_name_conflict():
     """raise error if task name conflicts with a class attribute or method"""
     with pytest.raises(ValueError) as excinfo1:
-        nn = funaddtwo(name="split", a=3)
+        funaddtwo(name="split", a=3)
     assert "Cannot use names of attributes or methods" in str(excinfo1.value)
     with pytest.raises(ValueError) as excinfo2:
-        nn = funaddtwo(name="checksum", a=3)
+        funaddtwo(name="checksum", a=3)
     assert "Cannot use names of attributes or methods" in str(excinfo2.value)
 
 
@@ -193,7 +192,7 @@ def test_annotated_input_func_2(use_validator):
         return a
 
     with pytest.raises(TypeError):
-        funky = testfunc(a=3.5)
+        testfunc(a=3.5)
 
 
 def test_annotated_input_func_2a(use_validator):
@@ -253,7 +252,7 @@ def test_annotated_input_func_3c_excep(use_validator):
         return sum(a)
 
     with pytest.raises(TypeError):
-        funky = testfunc(a=[1, 3.5])
+        testfunc(a=[1, 3.5])
 
 
 def test_annotated_input_func_4(use_validator):
@@ -286,7 +285,7 @@ def test_annotated_input_func_4b_excep(use_validator):
         return sum(a.values())
 
     with pytest.raises(TypeError):
-        funky = testfunc(a={"el1": 1, "el2": 3.5})
+        testfunc(a={"el1": 1, "el2": 3.5})
 
 
 def test_annotated_input_func_5(use_validator):
@@ -313,7 +312,7 @@ def test_annotated_input_func_5a_except(use_validator):
         return sum(a["el1"])
 
     with pytest.raises(TypeError):
-        funky = testfunc(a={"el1": [1, 3.5]})
+        testfunc(a={"el1": [1, 3.5]})
 
 
 def test_annotated_input_func_6(use_validator):
@@ -339,7 +338,7 @@ def test_annotated_input_func_6a_excep(use_validator):
         return sum(a["el1"])
 
     with pytest.raises(TypeError):
-        funky = testfunc(a={"el1": 1, "el2": 3.5})
+        testfunc(a={"el1": 1, "el2": 3.5})
 
 
 def test_annotated_input_func_7(use_validator):
@@ -366,7 +365,7 @@ def test_annotated_input_func_7a_excep(use_validator):
         return a
 
     with pytest.raises(TypeError):
-        funky = testfunc(a=[3.5, 2.1]).split("a")
+        testfunc(a=[3.5, 2.1]).split("a")
 
 
 def test_annotated_input_func_8():
@@ -614,7 +613,7 @@ def test_input_spec_func_1a_except(use_validator):
         bases=(FunctionSpec,),
     )
     with pytest.raises(TypeError):
-        funky = testfunc(a=3.5, input_spec=my_input_spec)
+        testfunc(a=3.5, input_spec=my_input_spec)
 
 
 def test_input_spec_func_1b_except(use_validator):
@@ -637,7 +636,7 @@ def test_input_spec_func_1b_except(use_validator):
         bases=(FunctionSpec,),
     )
     with pytest.raises(AttributeError, match="only these keys are supported"):
-        funky = testfunc(a=3.5, input_spec=my_input_spec)
+        testfunc(a=3.5, input_spec=my_input_spec)
 
 
 def test_input_spec_func_1d_except(use_validator):
@@ -745,7 +744,7 @@ def test_input_spec_func_3a_except(use_validator):
     )
 
     with pytest.raises(ValueError, match="value of a has to be"):
-        funky = testfunc(a=3, input_spec=my_input_spec)
+        testfunc(a=3, input_spec=my_input_spec)
 
 
 def test_input_spec_func_4(use_validator):
@@ -867,7 +866,7 @@ def test_output_spec_func_1a_except(use_validator):
 
     funky = testfunc(a=3.5, output_spec=my_output_spec)
     with pytest.raises(TypeError):
-        res = funky()
+        funky()
 
 
 def test_output_spec_func_2(use_validator):
@@ -1030,7 +1029,7 @@ def test_audit_task(tmpdir):
     message_path = tmpdir / funky.checksum / "messages"
 
     for file in glob(str(message_path) + "/*.jsonld"):
-        with open(file, "r") as f:
+        with open(file) as f:
             data = json.load(f)
             if "@type" in data:
                 if "AssociatedWith" in data:
@@ -1038,9 +1037,9 @@ def test_audit_task(tmpdir):
 
             if "@type" in data:
                 if data["@type"] == "input":
-                    assert None == data["Label"]
+                    assert None is data["Label"]
             if "AssociatedWith" in data:
-                assert None == data["AssociatedWith"]
+                assert None is data["AssociatedWith"]
 
     # assert any(json_content)
 
@@ -1065,7 +1064,7 @@ def test_audit_shellcommandtask(tmpdir):
     command_content = []
 
     for file in glob(str(message_path) + "/*.jsonld"):
-        with open(file, "r") as f:
+        with open(file) as f:
             data = json.load(f)
 
             if "@type" in data:
@@ -1074,7 +1073,7 @@ def test_audit_shellcommandtask(tmpdir):
 
             if "@type" in data:
                 if data["@type"] == "input":
-                    assert data["Label"] == None
+                    assert data["Label"] is None
 
             if "Command" in data:
                 command_content.append(True)
@@ -1148,7 +1147,7 @@ def test_audit_shellcommandtask_file(tmpdir):
     shelly()
     message_path = tmpdir / shelly.checksum / "messages"
     for file in glob.glob(str(message_path) + "/*.jsonld"):
-        with open(file, "r") as x:
+        with open(file) as x:
             data = json.load(x)
             if "@type" in data:
                 if data["@type"] == "input":
@@ -1184,7 +1183,7 @@ def test_audit_shellcommandtask_version(tmpdir):
     # go through each jsonld file in message_path and check if the label field exists
     version_content = []
     for file in glob.glob(str(message_path) + "/*.jsonld"):
-        with open(file, "r") as f:
+        with open(file) as f:
             data = json.load(f)
             if "AssociatedWith" in data:
                 if version_cmd in data["AssociatedWith"]:
@@ -1501,7 +1500,7 @@ def test_taskhooks_4(tmpdir, capsys):
         print(f"postrun task hook was called, result object is {result}")
 
     def myhook_postrun(task, result, *args):
-        print(f"postrun hook should not be called")
+        print("postrun hook should not be called")
 
     foo.hooks.post_run = myhook_postrun
     foo.hooks.post_run_task = myhook_postrun_task
@@ -1529,7 +1528,7 @@ def test_traceback(tmpdir):
     task = fun_error(name="error", x=[3, 4], cache_dir=tmpdir).split("x")
 
     with pytest.raises(Exception, match="from the function") as exinfo:
-        res = task()
+        task()
 
     # getting error file from the error message
     error_file_match = str(exinfo.value).split("here: ")[-1].split("_error.pklz")[0]
@@ -1558,7 +1557,7 @@ def test_traceback_wf(tmpdir):
     wf.set_output([("out", wf.error.lzout.out)])
 
     with pytest.raises(Exception, match="Task error raised an error") as exinfo:
-        res = wf()
+        wf()
 
     # getting error file from the error message
     error_file_match = str(exinfo.value).split("here: ")[-1].split("_error.pklz")[0]

@@ -97,13 +97,13 @@ def test_state_1(
 
 def test_state_2_err():
     with pytest.raises(PydraStateError) as exinfo:
-        st = State("NA", splitter={"a"})
+        State("NA", splitter={"a"})
     assert "splitter has to be a string, a tuple or a list" == str(exinfo.value)
 
 
 def test_state_3_err():
     with pytest.raises(PydraStateError) as exinfo:
-        st = State("NA", splitter=["a", "b"], combiner=("a", "b"))
+        State("NA", splitter=["a", "b"], combiner=("a", "b"))
     assert "combiner has to be a string or a list" == str(exinfo.value)
 
 
@@ -516,7 +516,7 @@ def test_state_connect_1a():
 
 def test_state_connect_1b_exception():
     """can't provide explicitly NA.a (should be _NA)"""
-    st1 = State(name="NA", splitter="a", other_states={})
+    State(name="NA", splitter="a", other_states={})
     st2 = State(name="NB", splitter="NA.a")
     with pytest.raises(PydraStateError) as excinfo:
         st2.splitter_validation()
@@ -526,7 +526,7 @@ def test_state_connect_1b_exception():
 @pytest.mark.parametrize("splitter2, other_states2", [("_NA", {}), ("_N", {"NA": ()})])
 def test_state_connect_1c_exception(splitter2, other_states2):
     """can't ask for splitter from node that is not connected"""
-    with pytest.raises(PydraStateError) as excinfo:
+    with pytest.raises(PydraStateError):
         st2 = State(name="NB", splitter=splitter2, other_states=other_states2)
         st2.splitter_validation()
 
@@ -1136,7 +1136,7 @@ def test_state_connect_innerspl_1b():
     """incorrect splitter - the current & prev-state parts in scalar splitter"""
     with pytest.raises(PydraStateError):
         st1 = State(name="NA", splitter="a")
-        st2 = State(name="NB", splitter=("_NA", "b"), other_states={"NA": (st1, "b")})
+        State(name="NB", splitter=("_NA", "b"), other_states={"NA": (st1, "b")})
 
 
 def test_state_connect_innerspl_2():
@@ -1511,7 +1511,7 @@ def test_state_combine_1():
     assert st.splitter_rpn == ["NA.a"]
     assert st.current_combiner == st.current_combiner_all == st.combiner == ["NA.a"]
     assert st.prev_state_combiner == st.prev_state_combiner_all == []
-    assert st.splitter_final == None
+    assert st.splitter_final is None
     assert st.splitter_rpn_final == []
 
     st.prepare_states(inputs={"NA.a": [3, 5]})
@@ -2174,7 +2174,7 @@ def test_connect_splitters(
 )
 def test_connect_splitters_exception_1(splitter, other_states):
     with pytest.raises(PydraStateError) as excinfo:
-        st = State(name="CN", splitter=splitter, other_states=other_states)
+        State(name="CN", splitter=splitter, other_states=other_states)
     assert "prev-state and current splitters are mixed" in str(excinfo.value)
 
 
@@ -2191,7 +2191,7 @@ def test_connect_splitters_exception_2():
 
 def test_connect_splitters_exception_3():
     with pytest.raises(PydraStateError) as excinfo:
-        st = State(
+        State(
             name="CN",
             splitter="_NB",
             other_states=["NA", (State(name="NA", splitter="a"), "b")],
