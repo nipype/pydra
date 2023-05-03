@@ -32,12 +32,12 @@ docs_deploy: &docs
         name: Deploy docs to gh-pages branch
         command: gh-pages --no-history --dotfiles --message "doc(update) [skip ci]" --dist docs/_build/html
 
-version: 2
+version: 2.1
 jobs:
 
   build_docs:
     docker:
-      - image: python:3.7.4
+      - image: cimg/python:3.11
     working_directory: /tmp/gh-pages
     environment:
       - FSLOUTPUTTYPE: NIFTI
