@@ -11,15 +11,28 @@ __path__ = __import__("pkgutil").extend_path(__path__, __name__)
 
 import logging
 
-logger = logging.getLogger("pydra")
+import __main__
+import attr
+
+from . import mark
+from .engine import AuditFlag, DockerTask, ShellCommandTask, Submitter, Workflow, specs
+
+__all__ = (
+    "Submitter",
+    "Workflow",
+    "AuditFlag",
+    "ShellCommandTask",
+    "DockerTask",
+    "specs",
+    "mark",
+)
 
 try:
     from ._version import __version__
 except ImportError:
     pass
 
-from .engine import Submitter, Workflow, AuditFlag, ShellCommandTask, DockerTask, specs
-from . import mark
+logger = logging.getLogger("pydra")
 
 
 def check_latest_version():
@@ -29,8 +42,6 @@ def check_latest_version():
 
 
 # Run telemetry on import for interactive sessions, such as IPython, Jupyter notebooks, Python REPL
-import __main__
-
 if not hasattr(__main__, "__file__"):
     from .engine.core import TaskBase
 
@@ -39,8 +50,6 @@ if not hasattr(__main__, "__file__"):
 
 
 # attr run_validators is set to False, but could be changed using use_validator
-import attr
-
 attr.set_run_validators(False)
 
 
