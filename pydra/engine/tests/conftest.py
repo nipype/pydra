@@ -1,4 +1,5 @@
 import pytest
+from pydra import set_input_validator
 
 try:
     import importlib_resources
@@ -13,3 +14,10 @@ def data_tests_dir():
     )
     with importlib_resources.as_file(test_nii) as path:
         yield path
+
+
+@pytest.fixture()
+def use_validator():
+    set_input_validator(flag=True)
+    yield None
+    set_input_validator(flag=False)
