@@ -4157,7 +4157,7 @@ def no_fsl():
 
 
 @pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
-def test_fsl():
+def test_fsl(data_tests_dir):
     """mandatory field added to fields, value provided"""
 
     _xor_inputs = [
@@ -4385,7 +4385,7 @@ def test_fsl():
     )
 
     # TODO: not sure why this has to be string
-    in_file = Path(__file__).parent / "data_tests" / "test.nii.gz"
+    in_file = data_tests_dir / "test.nii.gz"
 
     # separate command into exec + args
     shelly = ShellCommandTask(

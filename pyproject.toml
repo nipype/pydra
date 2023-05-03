@@ -12,6 +12,7 @@ dependencies = [
     "cloudpickle >=2.0.0",
     "etelemetry >=0.2.2",
     "filelock >=3.0.0",
+    "importlib_resources >=5.7; python_version < '3.11'",
 ]
 license = {file = "LICENSE"}
 authors = [
