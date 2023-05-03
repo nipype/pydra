@@ -252,12 +252,12 @@ class SlurmWorker(DistributedWorker):
         batchscript = script_dir / f"batchscript_{uid}.sh"
         python_string = (
             f"""'from pydra.engine.helpers import load_and_run; """
-            f"""load_and_run(task_pkl="{str(task_pkl)}", ind={ind}, rerun={rerun}) '"""
+            f"""load_and_run(task_pkl="{task_pkl}", ind={ind}, rerun={rerun}) '"""
         )
         bcmd = "\n".join(
             (
                 f"#!{interpreter}",
-                f"#SBATCH --output={str(script_dir / 'slurm-%j.out')}",
+                f"#SBATCH --output={script_dir / 'slurm-%j.out'}",
                 f"{sys.executable} -c " + python_string,
             )
         )
