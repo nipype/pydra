@@ -182,7 +182,7 @@ def collect_messages(collected_path, message_path, ld_op="compact"):
         Option used by pld.jsonld
     """
 
-    import pyld as pld
+    import pyld as pld  # type: ignore[import]
     import json
     from glob import glob
 

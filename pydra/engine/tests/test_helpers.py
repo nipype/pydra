@@ -5,7 +5,7 @@ import random
 import platform
 
 import pytest
-import cloudpickle as cp
+import cloudpickle as cp  # type: ignore[import]
 
 from .utils import multiply, raise_xeq1
 from ..helpers import (

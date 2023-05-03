@@ -2,7 +2,7 @@ import typing as ty
 import os, sys
 import attr
 import pytest
-import cloudpickle as cp
+import cloudpickle as cp  # type: ignore[import]
 from pathlib import Path
 import re
 import json

@@ -41,7 +41,7 @@ Implement processing nodes.
 import platform
 import re
 import attr
-import cloudpickle as cp
+import cloudpickle as cp  # type: ignore[import]
 import inspect
 import typing as ty
 import shlex

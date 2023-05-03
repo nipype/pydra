@@ -2,7 +2,7 @@
 import asyncio
 import asyncio.subprocess as asp
 import attr
-import cloudpickle as cp
+import cloudpickle as cp  # type: ignore[import]
 from pathlib import Path
 from filelock import SoftFileLock, Timeout
 import os

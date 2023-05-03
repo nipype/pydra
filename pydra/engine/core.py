@@ -10,7 +10,7 @@ import typing as ty
 from copy import deepcopy
 from uuid import uuid4
 
-import cloudpickle as cp
+import cloudpickle as cp  # type: ignore[import]
 from filelock import SoftFileLock
 import shutil
 from tempfile import mkdtemp
