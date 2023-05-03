@@ -1030,7 +1030,7 @@ def test_audit_task(tmpdir):
     message_path = tmpdir / funky.checksum / "messages"
 
     for file in glob(str(message_path) + "/*.jsonld"):
-        with open(file, "r") as f:
+        with open(file) as f:
             data = json.load(f)
             if "@type" in data:
                 if "AssociatedWith" in data:
@@ -1065,7 +1065,7 @@ def test_audit_shellcommandtask(tmpdir):
     command_content = []
 
     for file in glob(str(message_path) + "/*.jsonld"):
-        with open(file, "r") as f:
+        with open(file) as f:
             data = json.load(f)
 
             if "@type" in data:
@@ -1148,7 +1148,7 @@ def test_audit_shellcommandtask_file(tmpdir):
     shelly()
     message_path = tmpdir / shelly.checksum / "messages"
     for file in glob.glob(str(message_path) + "/*.jsonld"):
-        with open(file, "r") as x:
+        with open(file) as x:
             data = json.load(x)
             if "@type" in data:
                 if data["@type"] == "input":
@@ -1184,7 +1184,7 @@ def test_audit_shellcommandtask_version(tmpdir):
     # go through each jsonld file in message_path and check if the label field exists
     version_content = []
     for file in glob.glob(str(message_path) + "/*.jsonld"):
-        with open(file, "r") as f:
+        with open(file) as f:
             data = json.load(f)
             if "AssociatedWith" in data:
                 if version_cmd in data["AssociatedWith"]:

@@ -454,13 +454,11 @@ class State:
                     f"{self.other_states}"
                 )
 
-        repeated = set(
-            [
-                (el, previous_splitters.count(el))
-                for el in previous_splitters
-                if previous_splitters.count(el) > 1
-            ]
-        )
+        repeated = {
+            (el, previous_splitters.count(el))
+            for el in previous_splitters
+            if previous_splitters.count(el) > 1
+        }
         if repeated:
             # assuming that I want to remove from right
             previous_splitters.reverse()

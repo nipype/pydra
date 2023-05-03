@@ -47,7 +47,7 @@ def test_save(tmpdir):
 
 def test_hash_file(tmpdir):
     outdir = Path(tmpdir)
-    with open(outdir / "test.file", "wt") as fp:
+    with open(outdir / "test.file", "w") as fp:
         fp.write("test")
     assert (
         helpers_file.hash_file(outdir / "test.file")

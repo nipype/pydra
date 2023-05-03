@@ -143,7 +143,7 @@ class SerialWorker(Worker):
 
     async def fetch_finished(self, futures):
         await asyncio.gather(*futures)
-        return set([])
+        return set()
 
     # async def fetch_finished(self, futures):
     #     return await asyncio.wait(futures)

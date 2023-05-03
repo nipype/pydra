@@ -168,7 +168,7 @@ def test_input_file_hash_1(tmpdir):
         inputs(in_file=outfile).hash
         == "1384a1eb11cd94a5b826a82b948313b9237a0956d406ccff59e79ec92b3c935f"
     )
-    with open(outfile, "wt") as fp:
+    with open(outfile, "w") as fp:
         fp.write("test")
     fields = [("in_file", File)]
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
