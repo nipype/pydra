@@ -8,6 +8,8 @@ from glob import glob
 
 from .helpers_file import template_update_single
 
+T = ty.TypeVar("T")
+
 
 def attr_fields(spec, exclude_names=()):
     return [field for field in spec.__attrs_attrs__ if field.name not in exclude_names]
@@ -21,15 +23,15 @@ def attr_fields_dict(spec, exclude_names=()):
     }
 
 
-class File:
-    """An :obj:`os.pathlike` object, designating a file."""
+File = ty.NewType("File", Path)
+"""An :obj:`os.pathlike` object, designating a file."""
 
 
-class Directory:
-    """An :obj:`os.pathlike` object, designating a folder."""
+Directory = ty.NewType("Directory", Path)
+"""An :obj:`os.pathlike` object, designating a folder."""
 
 
-class MultiInputObj:
+class MultiInputObj(ty.Generic[T]):
     """A ty.List[ty.Any] object, converter changes a single values to a list"""
 
     @classmethod
@@ -42,7 +44,7 @@ class MultiInputObj:
             return ensure_list(value)
 
 
-class MultiOutputObj:
+class MultiOutputObj(ty.Generic[T]):
     """A ty.List[ty.Any] object, converter changes an 1-el list to the single value"""
 
     @classmethod
@@ -53,11 +55,11 @@ class MultiOutputObj:
             return value
 
 
-class MultiInputFile(MultiInputObj):
+class MultiInputFile(MultiInputObj[File]):
     """A ty.List[File] object, converter changes a single file path to a list"""
 
 
-class MultiOutputFile(MultiOutputObj):
+class MultiOutputFile(MultiOutputObj[File]):
     """A ty.List[File] object, converter changes an 1-el list to the single value"""
 
 
