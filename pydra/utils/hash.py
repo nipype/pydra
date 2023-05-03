@@ -50,10 +50,13 @@ def hash_single(obj: object, cache: Cache) -> Hash:
 
 @singledispatch
 def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
-    cls = obj.__class__
-    yield f"{cls.__module__}.{cls.__name__}:{{".encode()
-    yield from bytes_repr_mapping_contents(obj.__dict__, cache)
-    yield b"}"
+    if hasattr(obj, "__bytes_repr__"):
+        yield from obj.__bytes_repr__(cache)
+    else:
+        cls = obj.__class__
+        yield f"{cls.__module__}.{cls.__name__}:{{".encode()
+        yield from bytes_repr_mapping_contents(obj.__dict__, cache)
+        yield b"}"
 
 
 register_serializer = bytes_repr.register

@@ -90,3 +90,14 @@ def test_multi_object():
     reprB = join_bytes_repr(listB)
     assert re.match(rb"list:\((.{16})(.{16})\1\)$", reprA)
     assert re.match(rb"list:\((.{16})(.{16})\2\)$", reprB)
+
+
+def test_magic_method():
+    class MyClass:
+        def __init__(self, x):
+            self.x = x
+
+        def __bytes_repr__(self, cache):
+            yield b"x"
+
+    assert join_bytes_repr(MyClass(1)) == b"x"
