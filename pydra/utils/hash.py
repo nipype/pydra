@@ -1,9 +1,9 @@
 """Generic object hashing dispatch"""
 import struct
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
-from typing import Dict, NewType, Sequence
+from typing import Dict, NewType, Sequence, Iterator
 
 __all__ = (
     "hash_object",
