@@ -19,7 +19,6 @@ from traceback import format_exception
 from . import state
 from . import helpers_state as hlpst
 from .specs import (
-    File,
     BaseSpec,
     RuntimeSpec,
     Result,
@@ -83,7 +82,7 @@ class TaskBase:
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
-        inputs: ty.Optional[ty.Union[ty.Text, File, ty.Dict]] = None,
+        inputs: ty.Optional[ty.Union[ty.Text, Path, ty.Dict]] = None,
         cont_dim=None,
         messenger_args=None,
         messengers=None,

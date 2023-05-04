@@ -21,8 +21,6 @@ import warnings
 
 from .specs import (
     Runtime,
-    File,
-    Directory,
     attr_fields,
     Result,
     LazyField,
@@ -164,7 +162,7 @@ def copyfile_workflow(wf_path, result):
         value = getattr(result.output, field.name)
         # if the field is a path or it can contain a path _copyfile_single_value is run
         # to move all files and directories to the workflow directory
-        if field.type in [File, Directory, MultiOutputObj] or type(value) in [
+        if field.type in [Path, MultiOutputObj] or type(value) in [
             list,
             tuple,
             dict,
@@ -329,7 +327,7 @@ def custom_validator(instance, attribute, value):
         ]
     ):
         check_type = False  # no checking of the type
-    elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:
+    elif isinstance(tp_attr, type) or tp_attr is Path:
         tp = _single_type_update(tp_attr, name=attribute.name)
         cont_type = None
     else:  # more complex types
@@ -427,10 +425,10 @@ def _single_type_update(tp, name, simplify=False):
     if simplify is True, than changing typing.List to list etc.
     (assuming that I validate only one depth, so have to simplify at some point)
     """
-    if isinstance(tp, type) or tp in [File, Directory]:
+    if isinstance(tp, type) or tp is Path:
         if tp is str:
             return (str, bytes)
-        elif tp in [File, Directory, os.PathLike]:
+        elif issubclass(tp, os.PathLike):
             return (os.PathLike, str)
         elif tp is float:
             return (float, int)
@@ -688,14 +686,14 @@ def hash_value(value, tp=None, metadata=None, precalculated=None):
         return [list(el) for el in sorted(dict_hash.items(), key=lambda x: x[0])]
     else:  # not a container
         if (
-            (tp is File or "pydra.engine.specs.File" in str(tp))
-            and is_existing_file(value)
+            isinstance(value, Path)
+            and value.is_file()
             and "container_path" not in metadata
         ):
             return hash_file(value, precalculated=precalculated)
         elif (
-            (tp is File or "pydra.engine.specs.Directory" in str(tp))
-            and is_existing_file(value)
+            isinstance(value, Path)
+            and value.is_dir()
             and "container_path" not in metadata
         ):
             return hash_dir(value, precalculated=precalculated)
@@ -734,7 +732,7 @@ def output_from_inputfields(output_spec, input_spec):
             if field_name not in current_output_spec_names:
                 # TODO: should probably remove some of the keys
                 new_fields.append(
-                    (field_name, attr.ib(type=File, metadata=fld.metadata))
+                    (field_name, attr.ib(type=Path, metadata=fld.metadata))
                 )
     output_spec.fields += new_fields
     return output_spec

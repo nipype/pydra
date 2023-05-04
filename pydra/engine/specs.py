@@ -1,4 +1,5 @@
 """Task I/O specifications."""
+import os
 import attr
 from pathlib import Path
 import typing as ty
@@ -7,6 +8,8 @@ import re
 from glob import glob
 
 from .helpers_file import template_update_single
+
+from typing_extensions import TypeAlias
 
 
 def attr_fields(spec, exclude_names=()):
@@ -21,12 +24,8 @@ def attr_fields_dict(spec, exclude_names=()):
     }
 
 
-class File:
-    """An :obj:`os.pathlike` object, designating a file."""
-
-
-class Directory:
-    """An :obj:`os.pathlike` object, designating a folder."""
+File: TypeAlias = Path
+Directory: TypeAlias = Path
 
 
 class MultiInputObj:
@@ -158,8 +157,9 @@ class BaseSpec:
         fields = attr_fields(self)
 
         for field in fields:
+            value = getattr(self, field.name)
             field_is_mandatory = bool(field.metadata.get("mandatory"))
-            field_is_unset = getattr(self, field.name) is attr.NOTHING
+            field_is_unset = value is attr.NOTHING
 
             if field_is_unset and not field_is_mandatory:
                 continue
@@ -208,31 +208,19 @@ class BaseSpec:
                 ]
                 raise AttributeError(f"{field.name} requires {unset_required_fields}")
 
-            if (
-                field.type in [File, Directory]
-                or "pydra.engine.specs.File" in str(field.type)
-                or "pydra.engine.specs.Directory" in str(field.type)
-            ):
-                self._file_check(field)
+            if isinstance(value, os.PathLike):
+                self._file_check(field, Path(value))
+            elif isinstance(value, list):
+                for el in value:
+                    if isinstance(el, os.PathLike):
+                        self._file_check(field, Path(el))
 
-    def _file_check(self, field):
-        """checking if the file exists"""
-        if isinstance(getattr(self, field.name), list):
-            # if value is a list and type is a list of Files/Directory, checking all elements
-            if field.type in [ty.List[File], ty.List[Directory]]:
-                for el in getattr(self, field.name):
-                    file = Path(el)
-                    if not file.exists() and field.type in [File, Directory]:
-                        raise FileNotFoundError(
-                            f"the file {file} from the {field.name} input does not exist"
-                        )
-        else:
-            file = Path(getattr(self, field.name))
-            # error should be raised only if the type is strictly File or Directory
-            if not file.exists() and field.type in [File, Directory]:
-                raise FileNotFoundError(
-                    f"the file {file} from the {field.name} input does not exist"
-                )
+    @staticmethod
+    def _file_check(field, value):
+        if not value.exists():
+            raise FileNotFoundError(
+                f"the file {value} from the {field.name} input does not exist"
+            )
 
     def check_metadata(self):
         """Check contained metadata."""
@@ -458,9 +446,9 @@ class ShellOutSpec:
 
     return_code: int
     """The process' exit code."""
-    stdout: ty.Union[File, str]
+    stdout: ty.Union[Path, str]
     """The process' standard output."""
-    stderr: ty.Union[File, str]
+    stderr: ty.Union[Path, str]
     """The process' standard input."""
 
     def collect_additional_outputs(self, inputs, output_dir, outputs):
@@ -468,9 +456,7 @@ class ShellOutSpec:
         additional_out = {}
         for fld in attr_fields(self, exclude_names=("return_code", "stdout", "stderr")):
             if fld.type not in [
-                File,
                 MultiOutputFile,
-                Directory,
                 Path,
                 int,
                 float,
@@ -485,7 +471,7 @@ class ShellOutSpec:
             # assuming that field should have either default or metadata, but not both
             input_value = getattr(inputs, fld.name, attr.NOTHING)
             if input_value is not attr.NOTHING:
-                if fld.type in (File, MultiOutputFile, Directory, Path):
+                if fld.type in (MultiOutputFile, Path):
                     input_value = Path(input_value).absolute()
                 additional_out[fld.name] = input_value
             elif (
@@ -516,7 +502,7 @@ class ShellOutSpec:
         inputs.check_fields_input_spec()
         output_names = ["return_code", "stdout", "stderr"]
         for fld in attr_fields(self, exclude_names=("return_code", "stdout", "stderr")):
-            if fld.type not in [File, MultiOutputFile, Directory]:
+            if fld.type not in [Path, MultiOutputFile]:
                 raise Exception("not implemented (collect_additional_output)")
             # assuming that field should have either default or metadata, but not both
             if (
@@ -711,11 +697,11 @@ class ShellOutSpec:
 class ContainerSpec(ShellSpec):
     """Refine the generic command-line specification to container execution."""
 
-    image: ty.Union[File, str] = attr.ib(
+    image: ty.Union[Path, str] = attr.ib(
         metadata={"help_string": "image", "mandatory": True}
     )
     """The image to be containerized."""
-    container: ty.Union[File, str, None] = attr.ib(
+    container: ty.Union[Path, str, None] = attr.ib(
         metadata={"help_string": "container"}
     )
     """The container."""

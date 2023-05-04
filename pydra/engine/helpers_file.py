@@ -547,14 +547,14 @@ def ensure_list(filename):
 # not sure if this might be useful for Function Task
 def copyfile_input(inputs, output_dir):
     """Implement the base class method."""
-    from .specs import attr_fields, File, MultiInputFile
+    from .specs import attr_fields, MultiInputFile
 
     map_copyfiles = {}
     for fld in attr_fields(inputs):
         copy = fld.metadata.get("copyfile")
-        if copy is not None and fld.type not in [File, MultiInputFile]:
+        if copy is not None and fld.type not in [Path, MultiInputFile]:
             raise Exception(
-                f"if copyfile set, field has to be a File " f"but {fld.type} provided"
+                f"if copyfile set, field has to be a File but {fld.type} provided"
             )
         file = getattr(inputs, fld.name)
         if copy in [True, False] and file != attr.NOTHING:
@@ -628,7 +628,7 @@ def template_update_single(
     based on the value from inputs_dict
     (checking the types of the fields, that have "output_file_template)"
     """
-    from .specs import File, MultiOutputFile, Directory
+    from .specs import MultiOutputFile
 
     # if input_dict_st with state specific value is not available,
     # the dictionary will be created from inputs object
@@ -651,7 +651,7 @@ def template_update_single(
                 f"type of {field.name} is str, consider using Union[str, bool]"
             )
     elif spec_type == "output":
-        if field.type not in [File, MultiOutputFile, Directory]:
+        if field.type not in [Path, MultiOutputFile]:
             raise Exception(
                 f"output {field.name} should be a File, but {field.type} set as the type"
             )
@@ -702,7 +702,6 @@ def _template_formatting(field, inputs, inputs_dict_st):
 
     val_dict = {}
     file_template = None
-    from .specs import attr_fields_dict, File
 
     for fld in inp_fields:
         fld_name = fld[1:-1]  # extracting the name form {field_name}
@@ -715,10 +714,8 @@ def _template_formatting(field, inputs, inputs_dict_st):
         else:
             # checking for fields that can be treated as a file:
             # have type File, or value that is path like (including str with extensions)
-            if (
-                attr_fields_dict(inputs)[fld_name].type is File
-                or isinstance(fld_value, os.PathLike)
-                or (isinstance(fld_value, str) and "." in fld_value)
+            if isinstance(fld_value, os.PathLike) or (
+                isinstance(fld_value, str) and "." in fld_value
             ):
                 if file_template:
                     raise Exception(
@@ -803,12 +800,10 @@ def _element_formatting(template, values_template_dict, file_template, keep_exte
 
 
 def is_local_file(f):
-    from .specs import File, Directory, MultiInputFile
+    from .specs import MultiInputFile
 
     if "container_path" not in f.metadata and (
-        f.type in [File, Directory, MultiInputFile]
-        or "pydra.engine.specs.File" in str(f.type)
-        or "pydra.engine.specs.Directory" in str(f.type)
+        f.type in [Path, MultiInputFile] or "pathlib.Path" in str(f.type)
     ):
         return True
     else:
