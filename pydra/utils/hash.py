@@ -3,7 +3,7 @@ import struct
 from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
-from typing import Dict, NewType, Sequence, Iterator
+from typing import Dict, Iterator, NewType, Sequence, Set
 
 __all__ = (
     "hash_object",
@@ -135,15 +135,16 @@ def bytes_repr_dict(obj: dict, cache: Cache) -> Iterator[bytes]:
 
 @register_serializer(list)
 @register_serializer(tuple)
-def bytes_repr_seq(obj, cache: Cache) -> Iterator[bytes]:
+def bytes_repr_seq(obj: Sequence, cache: Cache) -> Iterator[bytes]:
     yield f"{obj.__class__.__name__}:(".encode()
     yield from bytes_repr_sequence_contents(obj, cache)
     yield b")"
 
 
-@register_serializer
-def bytes_repr_set(obj: set, cache: Cache) -> Iterator[bytes]:
-    yield b"set:{"
+@register_serializer(set)
+@register_serializer(frozenset)
+def bytes_repr_set(obj: Set, cache: Cache) -> Iterator[bytes]:
+    yield f"{obj.__class__.__name__}:{{".encode()
     yield from bytes_repr_sequence_contents(sorted(obj), cache)
     yield b"}"
 
