@@ -38,6 +38,7 @@ Implement processing nodes.
       <https://colab.research.google.com/drive/1RRV1gHbGJs49qQB1q1d5tQEycVRtuhw6>`__
 
 """
+import os
 import platform
 import re
 import attr
@@ -59,8 +60,6 @@ from .specs import (
     DockerSpec,
     SingularitySpec,
     attr_fields,
-    File,
-    Directory,
 )
 from .helpers import (
     ensure_list,
@@ -657,14 +656,11 @@ class ContainerTask(ShellCommandTask):
     def _check_inputs(self):
         fields = attr_fields(self.inputs)
         for fld in fields:
-            if (
-                fld.type in [File, Directory]
-                or "pydra.engine.specs.File" in str(fld.type)
-                or "pydra.engine.specs.Directory" in str(fld.type)
-            ):
+            value = getattr(self.inputs, fld.name)
+            if isinstance(value, os.PathLike) or "pathlib.Path" in str(fld.type):
                 if fld.name == "image":
                     continue
-                file = Path(getattr(self.inputs, fld.name))
+                file = Path(value)
                 if fld.metadata.get("container_path"):
                     # if the path is in a container the input should be treated as a str (hash as a str)
                     # field.type = "str"
@@ -678,7 +674,7 @@ class ContainerTask(ShellCommandTask):
                         "ro",
                     )
                 # error should be raised only if the type is strictly File or Directory
-                elif fld.type in [File, Directory]:
+                elif fld.type is Path:
                     raise FileNotFoundError(
                         f"the file {file} from {fld.name} input does not exist, "
                         f"if the file comes from the container, "

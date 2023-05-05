@@ -7,7 +7,7 @@ from functools import reduce
 
 from ..utils.messenger import AuditFlag
 from ..engine import ShellCommandTask
-from ..engine.specs import SpecInfo, ShellSpec, ShellOutSpec, File, attr_fields
+from ..engine.specs import SpecInfo, ShellSpec, ShellOutSpec, attr_fields
 from .helpers_file import is_local_file
 
 
@@ -122,7 +122,7 @@ class BoshTask(ShellCommandTask):
             else:
                 names_subset.remove(name)
             if input["type"] == "File":
-                tp = File
+                tp = Path
             elif input["type"] == "String":
                 tp = str
             elif input["type"] == "Number":
@@ -171,7 +171,7 @@ class BoshTask(ShellCommandTask):
                 "mandatory": not output["optional"],
                 "output_file_template": path_template,
             }
-            fields.append((name, attr.ib(type=File, metadata=mdata)))
+            fields.append((name, attr.ib(type=Path, metadata=mdata)))
 
         if names_subset:
             raise RuntimeError(f"{names_subset} are not in the zenodo output spec")

@@ -1,10 +1,11 @@
 """Module to keep track of provenance information."""
 import os
 import json
+from pathlib import Path
 import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
 from .helpers import ensure_list, gather_runtime_info, hash_file
-from .specs import attr_fields, File, Directory
+from .specs import attr_fields
 
 try:
     import importlib_resources
@@ -181,7 +182,7 @@ class Audit:
         command = task.cmdline if hasattr(task.inputs, "executable") else None
         attr_list = attr_fields(task.inputs)
         for attrs in attr_list:
-            if attrs.type in [File, Directory]:
+            if attrs.type is Path:
                 input_name = attrs.name
                 input_path = os.path.abspath(getattr(task.inputs, input_name))
                 file_hash = hash_file(input_path)
