@@ -168,7 +168,7 @@ def test_input_file_hash_1(tmpdir):
     fields = [("in_file", File)]
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
     inputs = make_klass(input_spec)
-    assert inputs(in_file=outfile).hash == "e90e83651efb7e355c637879040d7fde"
+    assert inputs(in_file=outfile).hash == "48a76c08d33bc0260b7118f83631f1af"
 
 
 def test_input_file_hash_2(tmpdir):
@@ -182,7 +182,7 @@ def test_input_file_hash_2(tmpdir):
 
     # checking specific hash value
     hash1 = inputs(in_file=file).hash
-    assert hash1 == "5c62952ff13ae70fb8729c3938759de6"
+    assert hash1 == "1165e3d220aff3ee99d2b19d9078d60e"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmpdir.join("in_file_2.txt")
@@ -212,7 +212,7 @@ def test_input_file_hash_2a(tmpdir):
 
     # checking specific hash value
     hash1 = inputs(in_file=file).hash
-    assert hash1 == "5c62952ff13ae70fb8729c3938759de6"
+    assert hash1 == "1165e3d220aff3ee99d2b19d9078d60e"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmpdir.join("in_file_2.txt")
@@ -303,7 +303,7 @@ def test_input_file_hash_4(tmpdir):
 
     # checking specific hash value
     hash1 = inputs(in_file=[[file, 3]]).hash
-    assert hash1 == "b291bfb09206fe9348626be30ad51704"
+    assert hash1 == "b50decbb416e9cb36d106dd02bb18e84"
 
     # the same file, but int field changes
     hash1a = inputs(in_file=[[file, 5]]).hash
@@ -339,7 +339,7 @@ def test_input_file_hash_5(tmpdir):
 
     # checking specific hash value
     hash1 = inputs(in_file=[{"file": file, "int": 3}]).hash
-    assert hash1 == "ac22ebbe40787895aa125feebf0cb740"
+    assert hash1 == "e7f4be60b1498852c2ed12b7a37642b8"
 
     # the same file, but int field changes
     hash1a = inputs(in_file=[{"file": file, "int": 5}]).hash

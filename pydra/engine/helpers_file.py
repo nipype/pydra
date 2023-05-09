@@ -6,11 +6,14 @@ import os
 import os.path as op
 import re
 import shutil
+import stat
 import posixpath
 import logging
 from pathlib import Path
 import typing as ty
 from copy import copy
+
+from ..utils.hash import hash_object
 
 related_filetype_sets = [(".hdr", ".img", ".mat"), (".nii", ".mat"), (".BRIK", ".HEAD")]
 """List of neuroimaging file types that are to be interpreted together."""
@@ -75,7 +78,9 @@ def hash_file(
 
     if afile is None or isinstance(afile, LazyField) or isinstance(afile, list):
         return None
-    if not Path(afile).is_file():
+    path = Path(afile)
+    stat_res = path.stat()  # We potentially stat several times; let's avoid it
+    if not stat.S_ISREG(stat_res.st_mode):
         if raise_notfound:
             raise RuntimeError('File "%s" not found.' % afile)
         return None
@@ -83,22 +88,15 @@ def hash_file(
     # if the path exists already in precalculated
     # the time of the last modification will be compared
     # and the precalculated hash value will be used if the file has not change
-    if precalculated and str(Path(afile)) in precalculated:
-        pre_mtime, pre_cont_hash = precalculated[str(Path(afile))]
-        if Path(afile).stat().st_mtime == pre_mtime:
+    if precalculated:
+        pre_mtime, pre_cont_hash = precalculated.get(str(path), (0, ""))
+        if stat_res.st_mtime == pre_mtime:
             return pre_cont_hash
 
-    crypto_obj = crypto()
-    with open(afile, "rb") as fp:
-        while True:
-            data = fp.read(chunk_len)
-            if not data:
-                break
-            crypto_obj.update(data)
+    cont_hash = hash_object(path).hex()
 
-    cont_hash = crypto_obj.hexdigest()
     if precalculated is not None:
-        precalculated[str(Path(afile))] = (Path(afile).stat().st_mtime, cont_hash)
+        precalculated[str(path)] = (stat_res.st_mtime, cont_hash)
     return cont_hash
 
 
