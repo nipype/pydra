@@ -20,9 +20,7 @@ import pytest
 
 def test_basespec():
     spec = BaseSpec()
-    assert (
-        spec.hash == "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
-    )
+    assert spec.hash == "06fe829a5dca34cc5f0710b454c24808"
 
 
 def test_runtime():
@@ -163,19 +161,14 @@ def test_input_file_hash_1(tmpdir):
     fields = [("in_file", ty.Any)]
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
     inputs = make_klass(input_spec)
-    assert (
-        inputs(in_file=outfile).hash
-        == "1384a1eb11cd94a5b826a82b948313b9237a0956d406ccff59e79ec92b3c935f"
-    )
+    assert inputs(in_file=outfile).hash == "02e248cb7ca3628af6b97aa27723b623"
+
     with open(outfile, "w") as fp:
         fp.write("test")
     fields = [("in_file", File)]
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
     inputs = make_klass(input_spec)
-    assert (
-        inputs(in_file=outfile).hash
-        == "088625131e6718a00170ad445a9c295244dffd4e5d847c8ee4b1606d623dacb1"
-    )
+    assert inputs(in_file=outfile).hash == "e90e83651efb7e355c637879040d7fde"
 
 
 def test_input_file_hash_2(tmpdir):
@@ -189,7 +182,7 @@ def test_input_file_hash_2(tmpdir):
 
     # checking specific hash value
     hash1 = inputs(in_file=file).hash
-    assert hash1 == "5d2870a7376150274eac72115fbf211792a8e5f250f220b3cc11bfc1851e4b53"
+    assert hash1 == "5c62952ff13ae70fb8729c3938759de6"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmpdir.join("in_file_2.txt")
@@ -219,7 +212,7 @@ def test_input_file_hash_2a(tmpdir):
 
     # checking specific hash value
     hash1 = inputs(in_file=file).hash
-    assert hash1 == "5d2870a7376150274eac72115fbf211792a8e5f250f220b3cc11bfc1851e4b53"
+    assert hash1 == "5c62952ff13ae70fb8729c3938759de6"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmpdir.join("in_file_2.txt")
@@ -237,7 +230,7 @@ def test_input_file_hash_2a(tmpdir):
 
     # checking if string is also accepted
     hash4 = inputs(in_file="ala").hash
-    assert hash4 == "004060c4475e8874c5fa55c6fffbe67f9ec8a81d578ea1b407dd77186f4d61c2"
+    assert hash4 == "a9b1e2f386992922e65191e6f447dcf6"
 
 
 def test_input_file_hash_3(tmpdir):
@@ -310,7 +303,7 @@ def test_input_file_hash_4(tmpdir):
 
     # checking specific hash value
     hash1 = inputs(in_file=[[file, 3]]).hash
-    assert hash1 == "507d81adc3f2f468e82c27ac800d16f6beae4f24f69daaab1d04f52b32b4514d"
+    assert hash1 == "b291bfb09206fe9348626be30ad51704"
 
     # the same file, but int field changes
     hash1a = inputs(in_file=[[file, 5]]).hash
@@ -346,7 +339,7 @@ def test_input_file_hash_5(tmpdir):
 
     # checking specific hash value
     hash1 = inputs(in_file=[{"file": file, "int": 3}]).hash
-    assert hash1 == "e0555e78a40a02611674b0f48da97cdd28eee7e9885ecc17392b560c14826f06"
+    assert hash1 == "ac22ebbe40787895aa125feebf0cb740"
 
     # the same file, but int field changes
     hash1a = inputs(in_file=[{"file": file, "int": 5}]).hash
