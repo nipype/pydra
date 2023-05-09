@@ -95,6 +95,11 @@ should be called with the same cache object.
 
 
 @register_serializer
+def bytes_repr_none(obj: None, cache: Cache) -> Iterator[bytes]:
+    yield b"None"
+
+
+@register_serializer
 def bytes_repr_bytes(obj: bytes, cache: Cache) -> Iterator[bytes]:
     yield f"bytes:{len(obj)}:".encode()
     yield obj
