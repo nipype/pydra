@@ -1,8 +1,11 @@
 """Generic object hashing dispatch"""
+import os
+import stat
 import struct
 from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
+from pathlib import Path
 from typing import Dict, Iterator, NewType, Sequence, Set
 
 __all__ = (
@@ -97,6 +100,18 @@ should be called with the same cache object.
 @register_serializer
 def bytes_repr_none(obj: None, cache: Cache) -> Iterator[bytes]:
     yield b"None"
+
+
+@register_serializer
+def bytes_repr_pathlike(obj: os.PathLike, cache: Cache) -> Iterator[bytes]:
+    path = Path(obj)
+    stat_res = path.stat()
+    if stat.S_ISDIR(stat_res.st_mode):
+        pass
+    else:
+        with open(path, "rb") as fobj:
+            while chunk := fobj.read(8192):
+                yield chunk
 
 
 @register_serializer
