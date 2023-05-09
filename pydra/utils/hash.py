@@ -110,7 +110,10 @@ def bytes_repr_pathlike(obj: os.PathLike, cache: Cache) -> Iterator[bytes]:
         pass
     else:
         with open(path, "rb") as fobj:
-            while chunk := fobj.read(8192):
+            while True:
+                chunk = fobj.read(8192)
+                if not chunk:
+                    break
                 yield chunk
 
 
