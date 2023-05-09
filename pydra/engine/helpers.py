@@ -7,7 +7,6 @@ from pathlib import Path
 from filelock import SoftFileLock, Timeout
 import os
 import sys
-from hashlib import sha256
 from uuid import uuid4
 import subprocess as sp
 import getpass
@@ -32,6 +31,7 @@ from .specs import (
     MultiOutputFile,
 )
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
+from ..utils.hash import hash_object
 
 
 def ensure_list(obj, tuple2list=False):
@@ -671,7 +671,7 @@ def get_open_loop():
 
 def hash_function(obj):
     """Generate hash of object."""
-    return sha256(str(obj).encode()).hexdigest()
+    return hash_object(obj).hex()
 
 
 def hash_value(value, tp=None, metadata=None, precalculated=None):
