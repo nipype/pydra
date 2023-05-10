@@ -69,7 +69,7 @@ def hash_single(obj: object, cache: Cache) -> Hash:
 @runtime_checkable
 class HasBytesRepr(Protocol):
     def __bytes_repr__(self, cache: Cache) -> Iterator[bytes]:
-        ...
+        ...  # pragma: no cover
 
 
 @singledispatch

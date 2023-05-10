@@ -17,10 +17,14 @@ def join_bytes_repr(obj):
 
 
 def test_bytes_repr_builtins():
-    # Python builtin types
+    # Can't beat repr for some
     assert join_bytes_repr(None) == b"None"
+    assert join_bytes_repr(Ellipsis) == b"Ellipsis"
     assert join_bytes_repr(True) == b"True"
     assert join_bytes_repr(False) == b"False"
+    assert join_bytes_repr(range(1)) == b"range(0, 1)"
+    assert join_bytes_repr(range(-1, 10, 2)) == b"range(-1, 10, 2)"
+    # String types
     assert join_bytes_repr(b"abc") == b"bytes:3:abc"
     assert join_bytes_repr("abc") == b"str:3:abc"
     # Little-endian, 64-bit signed integer
@@ -46,6 +50,9 @@ def test_bytes_repr_builtins():
     # Sets sort, hash and concatenate their contents
     fset_repr = join_bytes_repr(frozenset((1, 2, 3)))
     assert re.match(rb"frozenset:{.{48}}$", fset_repr)
+    # Slice fields can be anything, so hash contents
+    slice_repr = join_bytes_repr(slice(1, 2, 3))
+    assert re.match(rb"slice\(.{48}\)$", slice_repr)
 
 
 @pytest.mark.parametrize(
@@ -71,8 +78,12 @@ def test_hash_object_known_values(obj: object, expected: str):
 def test_pathlike_reprs(tmp_path):
     empty_file = tmp_path / "empty"
     empty_file.touch()
+    one_byte = tmp_path / "zero"
+    one_byte.write_bytes(b"\x00")
     # Files are raw contents, not tagged
     assert join_bytes_repr(empty_file) == b""
+    assert join_bytes_repr(one_byte) == b"\x00"
+
     # Directories are tagged
     # Use __class__.__name__ to use PosixPath/WindowsPath based on OS
     assert (
@@ -87,7 +98,10 @@ def test_pathlike_reprs(tmp_path):
 def test_hash_pathlikes(tmp_path, hasher):
     empty_file = tmp_path / "empty"
     empty_file.touch()
+    one_byte = tmp_path / "zero"
+    one_byte.write_bytes(b"\x00")
     assert hash_object(empty_file).hex() == "b63a06566ea1caa15da1ec060066177a"
+    assert hash_object(one_byte).hex() == "ebd393c59b8d3ca33426875af4bd0f22"
 
     # Actually hashing contents, not filename
     empty_file2 = tmp_path / "empty2"
