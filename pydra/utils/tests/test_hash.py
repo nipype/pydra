@@ -1,13 +1,15 @@
 import re
+from hashlib import blake2b
+from pathlib import Path
 
 import pytest
 
-from ..hash import (
-    hash_object,
-    bytes_repr,
-    register_serializer,
-    Cache,
-)
+from ..hash import Cache, UnhashableError, bytes_repr, hash_object, register_serializer
+
+
+@pytest.fixture
+def hasher():
+    yield blake2b(digest_size=16, person=b"pydra-hash")
 
 
 def join_bytes_repr(obj):
@@ -64,6 +66,40 @@ def test_hash_object_known_values(obj: object, expected: str):
     # We may update this, but it will indicate that users should
     # expect cache directories to be invalidated
     assert hash_object(obj).hex() == expected
+
+
+def test_pathlike_reprs(tmp_path):
+    empty_file = tmp_path / "empty"
+    empty_file.touch()
+    # Files are raw contents, not tagged
+    assert join_bytes_repr(empty_file) == b""
+    # Directories are tagged
+    # Use __class__.__name__ to use PosixPath/WindowsPath based on OS
+    assert (
+        join_bytes_repr(tmp_path)
+        == f"{tmp_path.__class__.__name__}:{tmp_path}".encode()
+    )
+
+    with pytest.raises(FileNotFoundError):
+        join_bytes_repr(Path("/does/not/exist"))
+
+
+def test_hash_pathlikes(tmp_path, hasher):
+    empty_file = tmp_path / "empty"
+    empty_file.touch()
+    assert hash_object(empty_file).hex() == "b63a06566ea1caa15da1ec060066177a"
+
+    # Actually hashing contents, not filename
+    empty_file2 = tmp_path / "empty2"
+    empty_file2.touch()
+    assert hash_object(empty_file2).hex() == "b63a06566ea1caa15da1ec060066177a"
+
+    # Hashing directories is just a path
+    hasher.update(f"{tmp_path.__class__.__name__}:{tmp_path}".encode())
+    assert hash_object(tmp_path) == hasher.digest()
+
+    with pytest.raises(UnhashableError):
+        hash_object(Path("/does/not/exist"))
 
 
 def test_bytes_repr_custom_obj():

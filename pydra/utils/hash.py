@@ -143,7 +143,8 @@ def bytes_repr_pathlike(obj: os.PathLike, cache: Cache) -> Iterator[bytes]:
     path = Path(obj)
     stat_res = path.stat()
     if stat.S_ISDIR(stat_res.st_mode):
-        pass
+        yield f"{obj.__class__.__name__}:".encode()
+        yield str(path).encode()
     else:
         with open(path, "rb") as fobj:
             while True:
