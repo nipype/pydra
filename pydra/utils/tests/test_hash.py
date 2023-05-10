@@ -14,8 +14,11 @@ def join_bytes_repr(obj):
     return b"".join(bytes_repr(obj, Cache({})))
 
 
-def test_bytes_repr():
+def test_bytes_repr_builtins():
     # Python builtin types
+    assert join_bytes_repr(None) == b"None"
+    assert join_bytes_repr(True) == b"True"
+    assert join_bytes_repr(False) == b"False"
     assert join_bytes_repr(b"abc") == b"bytes:3:abc"
     assert join_bytes_repr("abc") == b"str:3:abc"
     # Little-endian, 64-bit signed integer
@@ -24,6 +27,9 @@ def test_bytes_repr():
     assert join_bytes_repr(12345678901234567890) == b"long:20:12345678901234567890"
     # Float uses little-endian double-precision format
     assert join_bytes_repr(1.0) == b"float:\x00\x00\x00\x00\x00\x00\xf0?"
+    # Complex concatenates two floats
+    complex_repr = join_bytes_repr(0.0 + 0j)
+    assert complex_repr == b"complex:" + bytes(16)
     # Dicts are sorted by key, and values are hashed
     dict_repr = join_bytes_repr({"b": "c", "a": 0})
     assert re.match(rb"dict:{str:1:a=.{16}str:1:b=.{16}}$", dict_repr)
@@ -35,6 +41,9 @@ def test_bytes_repr():
     # Sets sort, hash and concatenate their contents
     set_repr = join_bytes_repr({1, 2, 3})
     assert re.match(rb"set:{.{48}}$", set_repr)
+    # Sets sort, hash and concatenate their contents
+    fset_repr = join_bytes_repr(frozenset((1, 2, 3)))
+    assert re.match(rb"frozenset:{.{48}}$", fset_repr)
 
 
 @pytest.mark.parametrize(

@@ -6,7 +6,15 @@ from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
 from pathlib import Path
-from typing import Dict, Iterator, NewType, Sequence, Set
+from typing import (
+    Dict,
+    Iterator,
+    NewType,
+    Protocol,
+    Sequence,
+    Set,
+    runtime_checkable,
+)
 
 __all__ = (
     "hash_object",
@@ -22,6 +30,10 @@ Hash = NewType("Hash", bytes)
 Cache = NewType("Cache", Dict[int, Hash])
 
 
+class UnhashableError(ValueError):
+    """Error for objects that cannot be hashed"""
+
+
 def hash_object(obj: object) -> Hash:
     """Hash an object
 
@@ -31,7 +43,10 @@ def hash_object(obj: object) -> Hash:
     Base Python types are implemented, including recursive lists and
     dicts. Custom types can be registered with :func:`register_serializer`.
     """
-    return hash_single(obj, Cache({}))
+    try:
+        return hash_single(obj, Cache({}))
+    except Exception as e:
+        raise UnhashableError(r"Cannot hash object {obj!r}") from e
 
 
 def hash_single(obj: object, cache: Cache) -> Hash:
@@ -51,15 +66,18 @@ def hash_single(obj: object, cache: Cache) -> Hash:
     return cache[objid]
 
 
+@runtime_checkable
+class HasBytesRepr(Protocol):
+    def __bytes_repr__(self, cache: Cache) -> Iterator[bytes]:
+        ...
+
+
 @singledispatch
 def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
-    if hasattr(obj, "__bytes_repr__"):
-        yield from obj.__bytes_repr__(cache)
-    else:
-        cls = obj.__class__
-        yield f"{cls.__module__}.{cls.__name__}:{{".encode()
-        yield from bytes_repr_mapping_contents(obj.__dict__, cache)
-        yield b"}"
+    cls = obj.__class__
+    yield f"{cls.__module__}.{cls.__name__}:{{".encode()
+    yield from bytes_repr_mapping_contents(obj.__dict__, cache)
+    yield b"}"
 
 
 register_serializer = bytes_repr.register
@@ -98,8 +116,26 @@ should be called with the same cache object.
 
 
 @register_serializer
-def bytes_repr_none(obj: None, cache: Cache) -> Iterator[bytes]:
-    yield b"None"
+def bytes_repr_dunder(obj: HasBytesRepr, cache: Cache) -> Iterator[bytes]:
+    yield from obj.__bytes_repr__(cache)
+
+
+@register_serializer(type(None))
+@register_serializer(type(Ellipsis))
+@register_serializer(bool)
+@register_serializer(range)
+def bytes_repr_builtin_repr(
+    obj: object,
+    cache: Cache,
+) -> Iterator[bytes]:
+    yield repr(obj).encode()
+
+
+@register_serializer
+def bytes_repr_slice(obj: slice, cache: Cache) -> Iterator[bytes]:
+    yield b"slice("
+    yield from bytes_repr_sequence_contents((obj.start, obj.stop, obj.step), cache)
+    yield b")"
 
 
 @register_serializer
@@ -147,6 +183,12 @@ def bytes_repr_int(obj: int, cache: Cache) -> Iterator[bytes]:
 def bytes_repr_float(obj: float, cache: Cache) -> Iterator[bytes]:
     yield b"float:"
     yield struct.pack("<d", obj)
+
+
+@register_serializer
+def bytes_repr_complex(obj: complex, cache: Cache) -> Iterator[bytes]:
+    yield b"complex:"
+    yield struct.pack("<dd", obj.real, obj.imag)
 
 
 @register_serializer
