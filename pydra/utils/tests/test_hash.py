@@ -76,44 +76,52 @@ def test_hash_object_known_values(obj: object, expected: str):
 
 
 def test_pathlike_reprs(tmp_path):
+    cls = tmp_path.__class__
+    prefix = f"{cls.__module__}.{cls.__name__}"
+    # Directory
+    assert join_bytes_repr(tmp_path) == f"{prefix}:{tmp_path}".encode()
+    # Non-existent file
     empty_file = tmp_path / "empty"
+    assert join_bytes_repr(empty_file) == f"{prefix}:{empty_file}".encode()
+    # Existent file
     empty_file.touch()
-    one_byte = tmp_path / "zero"
-    one_byte.write_bytes(b"\x00")
-    # Files are raw contents, not tagged
-    assert join_bytes_repr(empty_file) == b""
-    assert join_bytes_repr(one_byte) == b"\x00"
+    assert join_bytes_repr(empty_file) == f"{prefix}:{empty_file}".encode()
 
-    # Directories are tagged
-    # Use __class__.__name__ to use PosixPath/WindowsPath based on OS
-    assert (
-        join_bytes_repr(tmp_path)
-        == f"{tmp_path.__class__.__name__}:{tmp_path}".encode()
-    )
+    class MyPathLike:
+        def __fspath__(self):
+            return "/tmp"
 
-    with pytest.raises(FileNotFoundError):
-        join_bytes_repr(Path("/does/not/exist"))
+    prefix = f"{__name__}.MyPathLike"
+    assert join_bytes_repr(MyPathLike()) == f"{prefix}:/tmp".encode()
 
 
 def test_hash_pathlikes(tmp_path, hasher):
+    cls = tmp_path.__class__
+    prefix = f"{cls.__module__}.{cls.__name__}"
+
+    # Directory
+    h = hasher.copy()
+    h.update(f"{prefix}:{tmp_path}".encode())
+    assert hash_object(tmp_path) == h.digest()
+
+    # Non-existent file
     empty_file = tmp_path / "empty"
+    h = hasher.copy()
+    h.update(f"{prefix}:{empty_file}".encode())
+    assert hash_object(empty_file) == h.digest()
+
+    # Existent file
     empty_file.touch()
-    one_byte = tmp_path / "zero"
-    one_byte.write_bytes(b"\x00")
-    assert hash_object(empty_file).hex() == "b63a06566ea1caa15da1ec060066177a"
-    assert hash_object(one_byte).hex() == "ebd393c59b8d3ca33426875af4bd0f22"
+    assert hash_object(empty_file) == h.digest()
 
-    # Actually hashing contents, not filename
-    empty_file2 = tmp_path / "empty2"
-    empty_file2.touch()
-    assert hash_object(empty_file2).hex() == "b63a06566ea1caa15da1ec060066177a"
+    class MyPathLike:
+        def __fspath__(self):
+            return "/tmp"
 
-    # Hashing directories is just a path
-    hasher.update(f"{tmp_path.__class__.__name__}:{tmp_path}".encode())
-    assert hash_object(tmp_path) == hasher.digest()
-
-    with pytest.raises(UnhashableError):
-        hash_object(Path("/does/not/exist"))
+    prefix = f"{__name__}.MyPathLike"
+    h = hasher.copy()
+    h.update(f"{prefix}:/tmp".encode())
+    assert hash_object(MyPathLike()) == h.digest()
 
 
 def test_bytes_repr_custom_obj():
@@ -160,3 +168,48 @@ def test_magic_method():
             yield b"x"
 
     assert join_bytes_repr(MyClass(1)) == b"x"
+
+
+def test_registration():
+    # WARNING: This test appends to a registry that cannot be restored
+    # to previous state.
+    class MyClass:
+        def __init__(self, x):
+            self.x = x
+
+    @register_serializer
+    def _(obj: MyClass, cache: Cache):
+        yield b"x"
+
+    assert join_bytes_repr(MyClass(1)) == b"x"
+
+
+def test_registration_conflict():
+    # Verify the order of
+    #
+    # WARNING: This test appends to a registry that cannot be restored
+    # to previous state.
+    class MyClass:
+        def __init__(self, x):
+            self.x = x
+
+        def __fspath__(self):
+            return "pathlike"
+
+    assert join_bytes_repr(MyClass(1)) == f"{__name__}.MyClass:pathlike".encode()
+
+    class MyNewClass(MyClass):
+        def __bytes_repr__(self, cache: Cache):
+            yield b"bytes_repr"
+
+    assert join_bytes_repr(MyNewClass(1)) == b"bytes_repr"
+
+    @register_serializer
+    def _(obj: MyClass, cache: Cache):
+        yield b"serializer"
+
+    assert join_bytes_repr(MyClass(1)) == b"serializer"
+
+    register_serializer(MyNewClass, _)
+
+    assert join_bytes_repr(MyNewClass(1)) == b"serializer"

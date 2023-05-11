@@ -1,11 +1,9 @@
 """Generic object hashing dispatch"""
 import os
-import stat
 import struct
 from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
-from pathlib import Path
 from typing import (
     Dict,
     Iterator,
@@ -140,18 +138,8 @@ def bytes_repr_slice(obj: slice, cache: Cache) -> Iterator[bytes]:
 
 @register_serializer
 def bytes_repr_pathlike(obj: os.PathLike, cache: Cache) -> Iterator[bytes]:
-    path = Path(obj)
-    stat_res = path.stat()
-    if stat.S_ISDIR(stat_res.st_mode):
-        yield f"{obj.__class__.__name__}:".encode()
-        yield str(path).encode()
-    else:
-        with open(path, "rb") as fobj:
-            while True:
-                chunk = fobj.read(8192)
-                if not chunk:
-                    break
-                yield chunk
+    cls = obj.__class__
+    yield f"{cls.__module__}.{cls.__name__}:{os.fspath(obj)}".encode()
 
 
 @register_serializer
