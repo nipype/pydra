@@ -49,7 +49,7 @@ def test_shell_cmd():
         )
 
     class Ls(pydra.engine.ShellCommandTask):
-        """Task definition for mri_aparc2aseg."""
+        """Task definition for the `ls` command line tool"""
 
         executable = "ls"
 
