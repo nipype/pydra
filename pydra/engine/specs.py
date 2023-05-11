@@ -1,4 +1,5 @@
 """Task I/O specifications."""
+import os
 import attr
 from pathlib import Path
 import typing as ty
@@ -23,6 +24,21 @@ def attr_fields_dict(spec, exclude_names=()):
 
 class File:
     """An :obj:`os.pathlike` object, designating a file."""
+
+    def __init__(self, path, chunk_size=8192):
+        self._path = os.fspath(path)
+        self.chunk_size = chunk_size
+
+    def __fspath__(self) -> str:
+        return self._path
+
+    def __bytes_repr__(self, cache):
+        with open(self._path, "rb") as fobj:
+            while True:
+                chunk = fobj.read(self.chunk_size)
+                if not chunk:
+                    break
+                yield chunk
 
 
 class Directory:

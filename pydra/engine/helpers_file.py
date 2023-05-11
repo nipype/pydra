@@ -74,7 +74,7 @@ def hash_file(
     afile, chunk_len=8192, crypto=sha256, raise_notfound=True, precalculated=None
 ):
     """Compute hash of a file using 'crypto' module."""
-    from .specs import LazyField
+    from .specs import LazyField, File
 
     if afile is None or isinstance(afile, LazyField) or isinstance(afile, list):
         return None
@@ -93,7 +93,7 @@ def hash_file(
         if stat_res.st_mtime == pre_mtime:
             return pre_cont_hash
 
-    cont_hash = hash_object(path).hex()
+    cont_hash = hash_object(File(afile)).hex()
 
     if precalculated is not None:
         precalculated[str(path)] = (stat_res.st_mtime, cont_hash)
