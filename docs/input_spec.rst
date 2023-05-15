@@ -174,9 +174,9 @@ In the example we used multiple keys in the metadata dictionary including `help_
    (a specific input field will be sent).
 
 
-`cmd_arg` Function
+`shell_arg` Function
 ------------------
 
-For convenience, there is a function in `pydra.mark` called `cmd_arg()`, which will
+For convenience, there is a function in `pydra.mark` called `shell_arg()`, which will
 takes the above metadata values as arguments and inserts them into the metadata passed
 to `attrs.field`. This can be especially useful when using an IDE with code-completion.

@@ -4,7 +4,7 @@ import typing as ty
 import attrs
 
 
-def cmd_arg(
+def shell_arg(
     help_string: str,
     default: ty.Any = attrs.NOTHING,
     argstr: str = None,
@@ -103,7 +103,7 @@ def cmd_arg(
     )
 
 
-def cmd_out(
+def shell_out(
     help_string: str,
     mandatory: bool = False,
     output_file_template: str = None,
