@@ -2,6 +2,133 @@
 from __future__ import annotations
 import typing as ty
 import attrs
+import pydra.engine.specs
+
+
+def shell_task(
+    klass_or_name: ty.Union[type, str],
+    executable: ty.Optional[str] = None,
+    input_fields: ty.Optional[dict[str, dict]] = None,
+    output_fields: ty.Optional[dict[str, dict]] = None,
+    bases: ty.Optional[list[type]] = None,
+    input_bases: ty.Optional[list[type]] = None,
+    output_bases: ty.Optional[list[type]] = None,
+) -> type:
+    """
+    Construct an analysis class and validate all the components fit together
+
+    Parameters
+    ----------
+    klass_or_name : type or str
+        Either the class decorated by the @shell_task decorator or the name for a
+        dynamically generated class
+    executable : str, optional
+        If dynamically constructing a class (instead of decorating an existing one) the
+        name of the executable to run is provided
+    input_fields : dict[str, dict], optional
+        If dynamically constructing a class (instead of decorating an existing one) the
+        input fields can be provided as a dictionary of dictionaries, where the keys
+        are the name of the fields and the dictionary contents are passed as keyword
+        args to cmd_arg, with the exception of "type", which is used as the type annotation
+        of the field.
+    output_fields : dict[str, dict], optional
+        If dynamically constructing a class (instead of decorating an existing one) the
+        output fields can be provided as a dictionary of dictionaries, where the keys
+        are the name of the fields and the dictionary contents are passed as keyword
+        args to cmd_out, with the exception of "type", which is used as the type annotation
+        of the field.
+    bases : list[type]
+        Base classes for dynamically constructed shell command classes
+    input_bases : list[type]
+        Base classes for the input spec of dynamically constructed shell command classes
+    output_bases : list[type]
+        Base classes for the input spec of dynamically constructed shell command classes
+
+    Returns
+    -------
+    type
+        the shell command task class
+    """
+
+    if isinstance(klass_or_name, str):
+        if None in (executable, input_fields):
+            raise RuntimeError(
+                "Dynamically constructed shell tasks require an executable and "
+                "input_field arguments"
+            )
+        name = klass_or_name
+        if output_fields is None:
+            output_fields = {}
+        if bases is None:
+            bases = [pydra.engine.task.ShellCommandTask]
+        if input_bases is None:
+            input_bases = [pydra.engine.specs.ShellSpec]
+        if output_bases is None:
+            output_bases = [pydra.engine.specs.ShellOutSpec]
+        Inputs = type("Inputs", tuple(input_bases), input_fields)
+        Outputs = type("Outputs", tuple(output_bases), output_fields)
+    else:
+        if (
+            executable,
+            input_fields,
+            output_fields,
+            bases,
+            input_bases,
+            output_bases,
+        ) != (None, None, None, None, None, None):
+            raise RuntimeError(
+                "When used as a decorator on a class `shell_task` should not be provided "
+                "executable, input_field or output_field arguments"
+            )
+        klass = klass_or_name
+        name = klass.__name__
+        try:
+            executable = klass.executable
+        except KeyError:
+            raise RuntimeError(
+                "Classes decorated by `shell_task` should contain an `executable` attribute "
+                "specifying the shell tool to run"
+            )
+        try:
+            Inputs = klass.Inputs
+        except KeyError:
+            raise RuntimeError(
+                "Classes decorated by `shell_task` should contain an `Inputs` class attribute "
+                "specifying the inputs to the shell tool"
+            )
+        if not issubclass(Inputs, pydra.engine.specs.ShellSpec):
+            Inputs = type("Inputs", (Inputs, pydra.engine.specs.ShellSpec), {})
+        try:
+            Outputs = klass.Outputs
+        except KeyError:
+            Outputs = type("Outputs", (pydra.engine.specs.ShellOutSpec,))
+        bases = [klass]
+        if not issubclass(klass, pydra.engine.task.ShellCommandTask):
+            bases.append(pydra.engine.task.ShellCommandTask)
+
+    Inputs = attrs.define(kw_only=True, slots=False)(Inputs)
+    Outputs = attrs.define(kw_only=True, slots=False)(Outputs)
+
+    dct = {
+        "executable": executable,
+        "Inputs": Outputs,
+        "Outputs": Inputs,
+        "inputs": attrs.field(factory=Inputs),
+        "outputs": attrs.field(factory=Outputs),
+        "__annotations__": {
+            "executable": str,
+            "inputs": Inputs,
+            "outputs": Outputs,
+        },
+    }
+
+    return attrs.define(kw_only=True, slots=False)(
+        type(
+            name,
+            tuple(bases),
+            dct,
+        )
+    )
 
 
 def shell_arg(
