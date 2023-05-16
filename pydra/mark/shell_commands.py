@@ -2,6 +2,8 @@
 from __future__ import annotations
 import typing as ty
 import attrs
+
+# import os
 import pydra.engine.specs
 
 
@@ -11,8 +13,8 @@ def shell_task(
     input_fields: ty.Optional[dict[str, dict]] = None,
     output_fields: ty.Optional[dict[str, dict]] = None,
     bases: ty.Optional[list[type]] = None,
-    input_bases: ty.Optional[list[type]] = None,
-    output_bases: ty.Optional[list[type]] = None,
+    inputs_bases: ty.Optional[list[type]] = None,
+    outputs_bases: ty.Optional[list[type]] = None,
 ) -> type:
     """
     Construct an analysis class and validate all the components fit together
@@ -39,9 +41,9 @@ def shell_task(
         of the field.
     bases : list[type]
         Base classes for dynamically constructed shell command classes
-    input_bases : list[type]
+    inputs_bases : list[type]
         Base classes for the input spec of dynamically constructed shell command classes
-    output_bases : list[type]
+    outputs_bases : list[type]
         Base classes for the input spec of dynamically constructed shell command classes
 
     Returns
@@ -50,30 +52,35 @@ def shell_task(
         the shell command task class
     """
 
+    annotations = {
+        "executable": str,
+        "Inputs": type,
+        "Outputs": type,
+    }
+    dct = {"__annotations__": annotations}
+
     if isinstance(klass_or_name, str):
-        if None in (executable, input_fields):
-            raise RuntimeError(
-                "Dynamically constructed shell tasks require an executable and "
-                "input_field arguments"
-            )
         name = klass_or_name
 
+        if executable is not None:
+            dct["executable"] = executable
+        if input_fields is None:
+            input_fields = {}
         if output_fields is None:
             output_fields = {}
-
-        # Ensure bases are lists and can be modified
         bases = list(bases) if bases is not None else []
-        input_bases = list(input_bases) if input_bases is not None else []
-        output_bases = list(output_bases) if output_bases is not None else []
+        inputs_bases = list(inputs_bases) if inputs_bases is not None else []
+        outputs_bases = list(outputs_bases) if outputs_bases is not None else []
 
         # Ensure base classes included somewhere in MRO
-        def ensure_base_of(base_class: type, bases_list: list[type]):
+        def ensure_base_included(base_class: type, bases_list: list[type]):
             if not any(issubclass(b, base_class) for b in bases_list):
                 bases_list.append(base_class)
 
-        ensure_base_of(pydra.engine.task.ShellCommandTask, bases)
-        ensure_base_of(pydra.engine.specs.ShellSpec, input_bases)
-        ensure_base_of(pydra.engine.specs.ShellOutSpec, output_bases)
+        # Ensure bases are lists and can be modified
+        ensure_base_included(pydra.engine.task.ShellCommandTask, bases)
+        ensure_base_included(pydra.engine.specs.ShellSpec, inputs_bases)
+        ensure_base_included(pydra.engine.specs.ShellOutSpec, outputs_bases)
 
         def convert_to_attrs(fields: dict[str, dict[str, ty.Any]], attrs_func):
             annotations = {}
@@ -86,82 +93,108 @@ def shell_task(
 
         Inputs = attrs.define(kw_only=True, slots=False)(
             type(
-                "Inputs", tuple(input_bases), convert_to_attrs(input_fields, shell_arg)
+                "Inputs",
+                tuple(inputs_bases),
+                convert_to_attrs(input_fields, shell_arg),
             )
         )
+
         Outputs = attrs.define(kw_only=True, slots=False)(
             type(
                 "Outputs",
-                tuple(output_bases),
+                tuple(outputs_bases),
                 convert_to_attrs(output_fields, shell_out),
             )
         )
+
     else:
         if (
             executable,
             input_fields,
             output_fields,
             bases,
-            input_bases,
-            output_bases,
+            inputs_bases,
+            outputs_bases,
         ) != (None, None, None, None, None, None):
             raise RuntimeError(
-                "When used as a decorator on a class `shell_task` should not be provided "
-                "executable, input_field or output_field arguments"
+                "When used as a decorator on a class, `shell_task` should not be "
+                "provided any other arguments"
             )
         klass = klass_or_name
         name = klass.__name__
-        try:
-            executable = klass.executable
-        except KeyError:
-            raise RuntimeError(
-                "Classes decorated by `shell_task` should contain an `executable` attribute "
-                "specifying the shell tool to run"
-            )
-        try:
-            Inputs = klass.Inputs
-        except KeyError:
-            raise RuntimeError(
-                "Classes decorated by `shell_task` should contain an `Inputs` class attribute "
-                "specifying the inputs to the shell tool"
-            )
-
-        try:
-            Outputs = klass.Outputs
-        except KeyError:
-            Outputs = type("Outputs", (pydra.engine.specs.ShellOutSpec,))
-
-        Inputs = attrs.define(kw_only=True, slots=False)(Inputs)
-        Outputs = attrs.define(kw_only=True, slots=False)(Outputs)
-
-        if not issubclass(Inputs, pydra.engine.specs.ShellSpec):
-            Inputs = attrs.define(kw_only=True, slots=False)(
-                type("Inputs", (Inputs, pydra.engine.specs.ShellSpec), {})
-            )
-
-        if not issubclass(Outputs, pydra.engine.specs.ShellOutSpec):
-            Outputs = attrs.define(kw_only=True, slots=False)(
-                type("Outputs", (Outputs, pydra.engine.specs.ShellOutSpec), {})
-            )
 
         bases = [klass]
         if not issubclass(klass, pydra.engine.task.ShellCommandTask):
             bases.append(pydra.engine.task.ShellCommandTask)
 
-    dct = {
-        "executable": executable,
-        "Inputs": Inputs,
-        "Outputs": Outputs,
-        "__annotations__": {
-            "executable": str,
-            "inputs": Inputs,
-            "outputs": Outputs,
-            "Inputs": type,
-            "Outputs": type,
-        },
-    }
+        try:
+            executable = klass.executable
+        except AttributeError:
+            raise RuntimeError(
+                "Classes decorated by `shell_task` should contain an `executable` "
+                "attribute specifying the shell tool to run"
+            )
+        try:
+            Inputs = klass.Inputs
+        except KeyError:
+            raise AttributeError(
+                "Classes decorated by `shell_task` should contain an `Inputs` class "
+                "attribute specifying the inputs to the shell tool"
+            )
 
-    return type(name, tuple(bases), dct)
+        try:
+            Outputs = klass.Outputs
+        except AttributeError:
+            Outputs = type("Outputs", (pydra.engine.specs.ShellOutSpec,), {})
+
+        Inputs = attrs.define(kw_only=True, slots=False)(Inputs)
+        Outputs = attrs.define(kw_only=True, slots=False)(Outputs)
+
+    if not issubclass(Inputs, pydra.engine.specs.ShellSpec):
+        Inputs = attrs.define(kw_only=True, slots=False)(
+            type("Inputs", (Inputs, pydra.engine.specs.ShellSpec), {})
+        )
+
+    template_fields = _gen_output_template_fields(Inputs, Outputs)
+
+    if not issubclass(Outputs, pydra.engine.specs.ShellOutSpec):
+        outputs_bases = (Outputs, pydra.engine.specs.ShellOutSpec)
+        wrap_output = True
+    else:
+        outputs_bases = (Outputs,)
+        wrap_output = False
+
+    if wrap_output or template_fields:
+        Outputs = attrs.define(kw_only=True, slots=False)(
+            type("Outputs", outputs_bases, template_fields)
+        )
+
+    dct["Inputs"] = Inputs
+    dct["Outputs"] = Outputs
+
+    task_klass = type(name, tuple(bases), dct)
+    task_klass.input_spec = pydra.engine.specs.SpecInfo(
+        name=f"{name}Inputs", fields=[], bases=(task_klass.Inputs,)
+    )
+    task_klass.output_spec = pydra.engine.specs.SpecInfo(
+        name=f"{name}Outputs", fields=[], bases=(task_klass.Outputs,)
+    )
+    if not hasattr(task_klass, "executable"):
+        raise RuntimeError(
+            "Classes generated by `shell_task` should contain an `executable` "
+            "attribute specifying the shell tool to run"
+        )
+    if not hasattr(task_klass, "Inputs"):
+        raise RuntimeError(
+            "Classes generated by `shell_task` should contain an `Inputs` class "
+            "attribute specifying the inputs to the shell tool"
+        )
+    if not hasattr(task_klass, "Outputs"):
+        raise RuntimeError(
+            "Classes generated by `shell_task` should contain an `Outputs` class "
+            "attribute specifying the outputs to the shell tool"
+        )
+    return task_klass
 
 
 def shell_arg(
@@ -324,3 +357,45 @@ def shell_out(
     return attrs.field(
         metadata={k: v for k, v in metadata.items() if v is not None}, **kwargs
     )
+
+
+def _gen_output_template_fields(Inputs: type, Outputs: type) -> tuple[dict, dict]:
+    """Auto-generates output fields for inputs that specify an 'output_file_template'
+
+    Parameters
+    ----------
+    Inputs : type
+        Input specification class
+    Outputs : type
+        Output specification class
+
+    Returns
+    -------
+    template_fields: dict[str, attrs._CountingAttribute]
+        the template fields to add to the output spec
+
+    Raises
+    ------
+    RuntimeError
+        _description_
+    """
+    annotations = {}
+    template_fields = {"__annotations__": annotations}
+    output_field_names = [f.name for f in attrs.fields(Outputs)]
+    for fld in attrs.fields(Inputs):
+        if "output_file_template" in fld.metadata:
+            if "output_field_name" in fld.metadata:
+                field_name = fld.metadata["output_field_name"]
+            else:
+                field_name = fld.name
+            # skip adding if the field already in the output_spec
+            exists_already = field_name in output_field_names
+            if not exists_already:
+                metadata = {
+                    "help_string": fld.metadata["help_string"],
+                    "mandatory": fld.metadata["mandatory"],
+                    "keep_extension": fld.metadata["keep_extension"],
+                }
+                template_fields[field_name] = attrs.field(metadata=metadata)
+                annotations[field_name] = str
+    return template_fields

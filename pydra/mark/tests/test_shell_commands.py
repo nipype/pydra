@@ -29,6 +29,7 @@ def Ls(request):
                     help_string="the directory to list the contents of",
                     argstr="",
                     mandatory=True,
+                    position=-1,
                 )
                 hidden: bool = shell_arg(
                     help_string=("display hidden FS objects"),
@@ -59,7 +60,7 @@ def Ls(request):
                 date_format_str: str = shell_arg(
                     help_string="format string for ",
                     argstr="-D",
-                    default=None,
+                    default=attrs.NOTHING,
                     requires=["long_format"],
                     xor=["complete_date"],
                 )
@@ -80,6 +81,7 @@ def Ls(request):
                     "help_string": "the directory to list the contents of",
                     "argstr": "",
                     "mandatory": True,
+                    "position": -1,
                 },
                 "hidden": {
                     "type": bool,
@@ -161,33 +163,121 @@ def test_shell_task_pickle_roundtrip(Ls, tmpdir):
     assert RereadLs is Ls
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Need to change relationship between Inputs/Outputs and input_spec/output_spec "
-        "for the task to run"
-    )
-)
-def test_shell_task_init(Ls, tmpdir):
-    inputs = Ls.Inputs(directory=tmpdir)
-    assert inputs.directory == tmpdir
-    assert not inputs.hidden
-    outputs = Ls.Outputs(entries=[])
-    assert outputs.entries == []
-
-
-@pytest.mark.xfail(
-    reason=(
-        "Need to change relationship between Inputs/Outputs and input_spec/output_spec "
-        "for the task to run"
-    )
-)
 def test_shell_task_run(Ls, tmpdir):
     Path.touch(tmpdir / "a")
     Path.touch(tmpdir / "b")
     Path.touch(tmpdir / "c")
 
-    ls = Ls(directory=tmpdir)
+    ls = Ls(directory=tmpdir, long_format=True)
 
+    # Test cmdline
+    assert ls.inputs.directory == tmpdir
+    assert not ls.inputs.hidden
+    assert ls.inputs.long_format
+    assert ls.cmdline == f"ls -l {tmpdir}"
+
+    # Drop Long format flag to make output simpler
+    ls = Ls(directory=tmpdir)
     result = ls()
 
     assert result.output.entries == ["a", "b", "c"]
+
+
+@pytest.fixture(params=["static", "dynamic"])
+def A(request):
+    if request.param == "static":
+
+        @shell_task
+        class A:
+            executable = "cp"
+
+            class Inputs:
+                x: os.PathLike = shell_arg(
+                    help_string="an input file", argstr="", position=0
+                )
+                y: str = shell_arg(
+                    help_string="an input file",
+                    output_file_template="{x}_out",
+                    argstr="",
+                )
+
+    elif request.param == "dynamic":
+        A = shell_task(
+            "A",
+            executable="cp",
+            input_fields={
+                "x": {
+                    "type": os.PathLike,
+                    "help_string": "an input file",
+                    "argstr": "",
+                    "position": 0,
+                },
+                "y": {
+                    "type": str,
+                    "help_string": "an output file",
+                    "argstr": "",
+                    "output_file_template": "{x}_out",
+                },
+            },
+        )
+    else:
+        assert False
+
+    return A
+
+
+def get_file_size(y: Path):
+    result = os.stat(y)
+    return result.st_size
+
+
+def test_shell_task_bases_dynamic(A, tmpdir):
+    B = shell_task(
+        "B",
+        output_fields={
+            "out_file_size": {
+                "type": int,
+                "help_string": "size of the output directory",
+                "callable": get_file_size,
+            }
+        },
+        bases=[A],
+        inputs_bases=[A.Inputs],
+    )
+
+    xpath = tmpdir / "x.txt"
+    ypath = tmpdir / "y.txt"
+    Path.touch(xpath)
+
+    b = B(x=xpath, y=str(ypath))
+
+    result = b()
+
+    assert b.inputs.x == xpath
+    assert result.output.y == str(ypath)
+
+
+def test_shell_task_dynamic_inputs_bases(tmpdir):
+    A = shell_task(
+        "A",
+        "ls",
+        input_fields={
+            "directory": {"type": os.PathLike, "help_string": "input directory"}
+        },
+    )
+    B = shell_task(
+        "B",
+        "ls",
+        input_fields={
+            "hidden": {
+                "type": bool,
+                "help_string": "show hidden files",
+                "default": False,
+            }
+        },
+        inputs_bases=[A.Inputs],
+    )
+
+    b = B(directory=tmpdir)
+
+    assert b.inputs.directory == tmpdir
