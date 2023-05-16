@@ -242,8 +242,27 @@ def test_shell_task_bases_dynamic(A, tmpdir):
             }
         },
         bases=[A],
-        inputs_bases=[A.Inputs],
     )
+
+    xpath = tmpdir / "x.txt"
+    ypath = tmpdir / "y.txt"
+    Path.touch(xpath)
+
+    b = B(x=xpath, y=str(ypath))
+
+    result = b()
+
+    assert b.inputs.x == xpath
+    assert result.output.y == str(ypath)
+
+
+def test_shell_task_bases_static(A, tmpdir):
+    @shell_task
+    class B(A):
+        class Outputs:
+            out_file_size: int = shell_out(
+                help_string="size of the output directory", callable=get_file_size
+            )
 
     xpath = tmpdir / "x.txt"
     ypath = tmpdir / "y.txt"
