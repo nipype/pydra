@@ -132,7 +132,7 @@ def Ls(request):
     return Ls
 
 
-def test_shell_task_fields(Ls):
+def test_shell_fields(Ls):
     assert [a.name for a in attrs.fields(Ls.Inputs)] == [
         "executable",
         "args",
@@ -152,7 +152,7 @@ def test_shell_task_fields(Ls):
     ]
 
 
-def test_shell_task_pickle_roundtrip(Ls, tmpdir):
+def test_shell_pickle_roundtrip(Ls, tmpdir):
     pkl_file = tmpdir / "ls.pkl"
     with open(pkl_file, "wb") as f:
         cp.dump(Ls, f)
@@ -163,7 +163,7 @@ def test_shell_task_pickle_roundtrip(Ls, tmpdir):
     assert RereadLs is Ls
 
 
-def test_shell_task_run(Ls, tmpdir):
+def test_shell_run(Ls, tmpdir):
     Path.touch(tmpdir / "a")
     Path.touch(tmpdir / "b")
     Path.touch(tmpdir / "c")
@@ -196,7 +196,7 @@ def A(request):
                     help_string="an input file", argstr="", position=0
                 )
                 y: str = shell_arg(
-                    help_string="an input file",
+                    help_string="path of output file",
                     output_file_template="{x}_out",
                     argstr="",
                 )
@@ -214,7 +214,7 @@ def A(request):
                 },
                 "y": {
                     "type": str,
-                    "help_string": "an output file",
+                    "help_string": "path of output file",
                     "argstr": "",
                     "output_file_template": "{x}_out",
                 },
@@ -231,7 +231,7 @@ def get_file_size(y: Path):
     return result.st_size
 
 
-def test_shell_task_bases_dynamic(A, tmpdir):
+def test_shell_bases_dynamic(A, tmpdir):
     B = shell_task(
         "B",
         output_fields={
@@ -256,7 +256,7 @@ def test_shell_task_bases_dynamic(A, tmpdir):
     assert result.output.y == str(ypath)
 
 
-def test_shell_task_bases_static(A, tmpdir):
+def test_shell_bases_static(A, tmpdir):
     @shell_task
     class B(A):
         class Outputs:
@@ -276,12 +276,24 @@ def test_shell_task_bases_static(A, tmpdir):
     assert result.output.y == str(ypath)
 
 
-def test_shell_task_dynamic_inputs_bases(tmpdir):
+def test_shell_inputs_outputs_bases_dynamic(tmpdir):
     A = shell_task(
         "A",
         "ls",
         input_fields={
-            "directory": {"type": os.PathLike, "help_string": "input directory"}
+            "directory": {
+                "type": os.PathLike,
+                "help_string": "input directory",
+                "argstr": "",
+                "position": -1,
+            }
+        },
+        output_fields={
+            "entries": {
+                "type": list,
+                "help_string": "list of entries returned by ls command",
+                "callable": list_entries,
+            }
         },
     )
     B = shell_task(
@@ -290,13 +302,58 @@ def test_shell_task_dynamic_inputs_bases(tmpdir):
         input_fields={
             "hidden": {
                 "type": bool,
+                "argstr": "-a",
                 "help_string": "show hidden files",
                 "default": False,
             }
         },
+        bases=[A],
         inputs_bases=[A.Inputs],
     )
 
-    b = B(directory=tmpdir)
+    Path.touch(tmpdir / ".hidden")
+
+    b = B(directory=tmpdir, hidden=True)
 
     assert b.inputs.directory == tmpdir
+    assert b.inputs.hidden
+    assert b.cmdline == f"ls -a {tmpdir}"
+
+    result = b()
+    assert result.output.entries == [".", "..", ".hidden"]
+
+
+def test_shell_inputs_outputs_bases_static(tmpdir):
+    @shell_task
+    class A:
+        executable = "ls"
+
+        class Inputs:
+            directory: os.PathLike = shell_arg(
+                help_string="input directory", argstr="", position=-1
+            )
+
+        class Outputs:
+            entries: list = shell_out(
+                help_string="list of entries returned by ls command",
+                callable=list_entries,
+            )
+
+    @shell_task
+    class B(A):
+        class Inputs(A.Inputs):
+            hidden: bool = shell_arg(
+                help_string="show hidden files",
+                argstr="-a",
+                default=False,
+            )
+
+    Path.touch(tmpdir / ".hidden")
+
+    b = B(directory=tmpdir, hidden=True)
+
+    assert b.inputs.directory == tmpdir
+    assert b.inputs.hidden
+
+    result = b()
+    assert result.output.entries == [".", "..", ".hidden"]
