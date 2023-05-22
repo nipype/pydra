@@ -628,7 +628,7 @@ def template_update_single(
     based on the value from inputs_dict
     (checking the types of the fields, that have "output_file_template)"
     """
-    from .specs import File, MultiOutputFile, Directory
+    from .specs import File, MultiOutputFile, Directory, LazyField
 
     # if input_dict_st with state specific value is not available,
     # the dictionary will be created from inputs object
@@ -642,7 +642,9 @@ def template_update_single(
                 "has to be a string or Union[str, bool]"
             )
         inp_val_set = inputs_dict_st[field.name]
-        if inp_val_set is not attr.NOTHING and not isinstance(inp_val_set, (str, bool)):
+        if inp_val_set is not attr.NOTHING and not isinstance(
+            inp_val_set, (str, bool, LazyField)
+        ):
             raise Exception(
                 f"{field.name} has to be str or bool, but {inp_val_set} set"
             )
