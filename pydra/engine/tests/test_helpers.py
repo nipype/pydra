@@ -1,5 +1,7 @@
 import os
 import hashlib
+import tempfile
+import typing as ty
 from pathlib import Path
 import random
 import platform
@@ -15,6 +17,7 @@ from ..helpers import (
     save,
     load_and_run,
     position_sort,
+    TypeCoercer,
 )
 from .. import helpers_file
 from ..specs import File, Directory
@@ -306,3 +309,128 @@ def test_load_and_run_wf(tmpdir):
 def test_position_sort(pos_args):
     final_args = position_sort(pos_args)
     assert final_args == ["a", "b", "c"]
+
+
+def test_type_coercion_basic():
+    assert TypeCoercer(int)(1.0) == 1
+    assert TypeCoercer(int, coercible=[(ty.Any, int)])(1.0) == 1  # coerced
+    assert TypeCoercer(int, coercible=[(ty.Any, float)])(1.0) == 1.0  # not coerced
+    assert TypeCoercer(int, not_coercible=[(ty.Any, str)])(1.0) == 1  # coerced
+    assert TypeCoercer(int, not_coercible=[(float, int)])(1.0) == 1.0  # not coerced
+
+    assert (
+        TypeCoercer(Path, coercible=[(os.PathLike, os.PathLike)])("/a/path")
+        == "/a/path"
+    )  # not coerced
+    assert TypeCoercer(str, coercible=[(os.PathLike, os.PathLike)])(
+        Path("/a/path")
+    ) == Path(
+        "/a/path"
+    )  # not coerced
+
+    PathTypes = ty.Union[str, bytes, os.PathLike]
+
+    assert TypeCoercer(Path, coercible=[(PathTypes, PathTypes)])("/a/path") == Path(
+        "/a/path"
+    )  # coerced
+    assert (
+        TypeCoercer(str, coercible=[(PathTypes, PathTypes)])(Path("/a/path"))
+        == "/a/path"
+    )  # coerced
+
+    tmpdir = Path(tempfile.mkdtemp())
+    a_file = tmpdir / "a-file.txt"
+    Path.touch(a_file)
+
+    assert TypeCoercer(File, coercible=[(PathTypes, File)])(a_file) == File(
+        a_file
+    )  # coerced
+    assert TypeCoercer(File, coercible=[(PathTypes, File)])(str(a_file)) == File(
+        a_file
+    )  # coerced
+
+    assert TypeCoercer(str, coercible=[(PathTypes, File)])(File(a_file)) == File(
+        a_file
+    )  # not coerced
+    assert TypeCoercer(str, coercible=[(PathTypes, File)])(File(a_file)) == File(
+        a_file
+    )  # not coerced
+
+    assert TypeCoercer(str, coercible=[(PathTypes, PathTypes)])(File(a_file)) == str(
+        a_file
+    )  # coerced
+    assert TypeCoercer(File, coercible=[(PathTypes, PathTypes)])(str(a_file)) == File(
+        a_file
+    )  # coerced
+
+    assert TypeCoercer(
+        list,
+        coercible=[(ty.Sequence, ty.Sequence)],
+        not_coercible=[(str, ty.Sequence)],
+    )((1, 2, 3)) == [1, 2, 3]
+
+    assert (
+        TypeCoercer(
+            list,
+            coercible=[(ty.Sequence, ty.Sequence)],
+            not_coercible=[(str, ty.Sequence)],
+        )("a-string")
+        == "a-string"
+    )
+
+    assert TypeCoercer(ty.Union[Path, File, int])(1.0) == 1
+    assert TypeCoercer(ty.Union[Path, File, bool, int])(1.0) is True
+
+
+def test_type_coercion_nested():
+    tmpdir = Path(tempfile.mkdtemp())
+    a_file = tmpdir / "a-file.txt"
+    another_file = tmpdir / "another-file.txt"
+    yet_another_file = tmpdir / "yet-another-file.txt"
+    Path.touch(a_file)
+    Path.touch(another_file)
+    Path.touch(yet_another_file)
+
+    PathTypes = ty.Union[str, bytes, os.PathLike]
+
+    assert TypeCoercer(ty.List[File], coercible=[(PathTypes, PathTypes)])(
+        [a_file, another_file, yet_another_file]
+    ) == [File(a_file), File(another_file), File(yet_another_file)]
+
+    assert TypeCoercer(ty.List[Path], coercible=[(PathTypes, PathTypes)])(
+        [File(a_file), File(another_file), File(yet_another_file)]
+    ) == [a_file, another_file, yet_another_file]
+
+    assert TypeCoercer(ty.Dict[str, ty.List[File]], coercible=[(PathTypes, PathTypes)])(
+        {
+            "a": [a_file, another_file, yet_another_file],
+            "b": [a_file, another_file],
+        }
+    ) == {
+        "a": [File(a_file), File(another_file), File(yet_another_file)],
+        "b": [File(a_file), File(another_file)],
+    }
+
+    assert TypeCoercer(ty.List[File], coercible=[(PathTypes, PathTypes)])(
+        [a_file, another_file, yet_another_file]
+    ) == [File(a_file), File(another_file), File(yet_another_file)]
+
+    assert TypeCoercer(ty.Tuple[int, int, int])([1.0, 2.0, 3.0]) == (1, 2, 3)
+    assert TypeCoercer(ty.Tuple[int, ...])([1.0, 2.0, 3.0]) == (1, 2, 3)
+    assert TypeCoercer(
+        ty.Tuple[int, ...],
+        not_coercible=[(ty.Sequence, ty.Tuple)],
+    )(
+        [1.0, 2.0, 3.0]
+    ) == [1, 2, 3]
+
+
+def test_type_coercion_fail():
+    with pytest.raises(TypeError, match="Incorrect number of items"):
+        TypeCoercer(ty.Tuple[int, int, int])([1.0, 2.0, 3.0, 4.0])
+
+    with pytest.raises(TypeError, match="to any of the union types"):
+        TypeCoercer(ty.Union[Path, File])(1)
+
+    with pytest.raises(TypeError, match="Cannot coerce to abstract type"):
+        TypeCoercer(ty.Sequence)

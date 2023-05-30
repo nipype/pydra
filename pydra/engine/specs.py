@@ -1,11 +1,15 @@
 """Task I/O specifications."""
 import os
-import attr
 from pathlib import Path
 import typing as ty
 import inspect
 import re
 from glob import glob
+import attr
+from fileformats.generic import (
+    File,
+    Directory,
+)
 
 from .helpers_file import template_update_single
 
@@ -22,8 +26,8 @@ def attr_fields_dict(spec, exclude_names=()):
     }
 
 
-class File:
-    """An :obj:`os.pathlike` object, designating a file."""
+# class File:
+#     """An :obj:`os.pathlike` object, designating a file."""
 
     def __init__(self, path, chunk_size=8192):
         self._path = os.fspath(path)
@@ -41,8 +45,8 @@ class File:
                 yield chunk
 
 
-class Directory:
-    """An :obj:`os.pathlike` object, designating a folder."""
+# class Directory:
+#     """An :obj:`os.pathlike` object, designating a folder."""
 
 
 class MultiInputObj:

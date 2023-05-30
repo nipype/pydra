@@ -2,9 +2,9 @@
 import asyncio
 import asyncio.subprocess as asp
 import attr
-import cloudpickle as cp
+import itertools
+import abc
 from pathlib import Path
-from filelock import SoftFileLock, Timeout
 import os
 import sys
 from uuid import uuid4
@@ -16,6 +16,8 @@ from traceback import format_exception
 import typing as ty
 import inspect
 import warnings
+from filelock import SoftFileLock, Timeout
+import cloudpickle as cp
 
 
 from .specs import (
@@ -924,3 +926,126 @@ class PydraFileLock:
     async def __aexit__(self, exc_type, exc_value, traceback):
         self.lock.release()
         return None
+
+
+T = ty.TypeVar("T")
+TypeOrAny = ty.Union[type, ty.Any]
+
+
+class TypeCoercer(ty.Generic[T]):
+    """Coerces an object to the given type, expanding container classes and unions.
+
+    Parameters
+    ----------
+    tp : type
+        the type objects will be coerced to
+    coercible: Iterable[tuple[type or Any, type or Any]], optional
+        limits coercing between the pairs of types where they appear within the
+        tree of more complex nested container types.
+    not_coercible: Iterable[tuple[type or Any, type or Any]], optional
+        excludes the limits coercing between the pairs of types where they appear within
+        the tree of more complex nested container types. Overrides 'coercible' to enable
+        you to carve out exceptions, such as
+            TypeCoercer(list, coercible=[(ty.Iterable, list)], not_coercible=[(str, list)])
+    """
+
+    coercible: list[tuple[TypeOrAny, TypeOrAny]]
+    not_coercible: list[tuple[TypeOrAny, TypeOrAny]]
+
+    def __init__(
+        self,
+        tp,
+        coercible: ty.Optional[ty.Iterable[tuple[TypeOrAny, TypeOrAny]]] = None,
+        not_coercible: ty.Optional[ty.Iterable[tuple[TypeOrAny, TypeOrAny]]] = None,
+    ):
+        def expand(t):
+            origin = ty.get_origin(t)
+            if origin is None:
+                if any(
+                    t is k or k is ty.Any or issubclass(t, k)
+                    for k in self.coercible_targets
+                ):
+                    return t
+                return None
+            if isinstance(origin, abc.ABCMeta):
+                raise TypeError(
+                    f"Cannot coerce to abstract type {tp} ({origin} is abstract)"
+                )
+            args = ty.get_args(t)
+            if not args or args == (Ellipsis,):
+                assert isinstance(origin, type)
+                return origin
+            return (origin, [expand(a) for a in args])
+
+        self.coercible = (
+            list(coercible) if coercible is not None else [(ty.Any, ty.Any)]
+        )
+        self.not_coercible = list(not_coercible) if not_coercible is not None else []
+        self.pattern = expand(tp)
+
+    def __call__(self, obj: ty.Any) -> T:
+        def coerce(obj, pattern: ty.Union[type | tuple | None]):
+            if not isinstance(pattern, tuple):
+                if (
+                    pattern is None
+                    or isinstance(obj, pattern)
+                    or not self._is_coercible(obj, pattern)
+                ):
+                    return obj
+                return pattern(obj)
+            origin, args = pattern
+            if origin is ty.Union:
+                # Return the first argument in the union that is coercible
+                for arg in args:
+                    try:
+                        return coerce(obj, arg)
+                    except TypeError:
+                        pass
+                raise TypeError(
+                    f"Could not coerce {obj} to any of the union types {args}"
+                )
+            if issubclass(origin, ty.Mapping):
+                assert len(args) == 2
+                return origin(
+                    (coerce(k, args[0]), coerce(v, args[1])) for k, v in obj.items()
+                )
+            type_ = origin if self._is_coercible(obj, origin) else type(obj)
+            if issubclass(origin, ty.Tuple):  # type: ignore[arg-type]
+                if args[-1] is Ellipsis:
+                    args = itertools.chain(args[:-2], itertools.repeat(args[-2]))
+                elif len(args) != len(obj):
+                    raise TypeError(
+                        f"Incorrect number of items in {obj}, expected {len(args)}, "
+                        f"got {len(obj)}"
+                    )
+                return type_(coerce(o, p) for o, p in zip(obj, args))
+            assert len(args) == 1
+            return type_(coerce(o, args[0]) for o in obj)
+
+        return coerce(obj, self.pattern)
+
+    def _is_coercible(self, source, target):
+        def is_instance(o, c):
+            return c is ty.Any or isinstance(o, c)
+
+        def is_or_subclass(a, b):
+            return a is b or b is ty.Any or issubclass(a, b)
+
+        return (
+            any(
+                is_instance(source, src) and is_or_subclass(target, tgt)
+                for src, tgt in self.coercible
+            )
+            or self.coercible is None
+        ) and not any(
+            is_instance(source, src) and is_or_subclass(target, tgt)
+            for src, tgt in self.not_coercible
+        )
+
+    @property
+    def coercible_targets(self):
+        return [t for _, t in self.coercible]
+
+    @property
+    def not_coercible_targets(self):
+        return [t for _, t in self.not_coercible]
