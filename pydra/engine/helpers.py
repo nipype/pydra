@@ -1,9 +1,10 @@
 """Administrative support for the engine framework."""
 import asyncio
 import asyncio.subprocess as asp
-import attr
 import itertools
-import abc
+import inspect
+
+# import abc
 from pathlib import Path
 import os
 import sys
@@ -14,8 +15,10 @@ import re
 from time import strftime
 from traceback import format_exception
 import typing as ty
-import inspect
-import warnings
+
+# import inspect
+# import warnings
+import attr
 from filelock import SoftFileLock, Timeout
 import cloudpickle as cp
 
@@ -28,9 +31,9 @@ from .specs import (
     Result,
     LazyField,
     MultiOutputObj,
-    MultiInputObj,
-    MultiInputFile,
-    MultiOutputFile,
+    # MultiInputObj,
+    # MultiInputFile,
+    # MultiOutputFile,
 )
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 from ..utils.hash import hash_object
@@ -259,15 +262,14 @@ def make_klass(spec):
         return None
     fields = spec.fields
     if fields:
-        newfields = dict()
+        newfields = {}
         for item in fields:
             if len(item) == 2:
                 name = item[0]
                 if isinstance(item[1], attr._make._CountingAttr):
-                    newfields[name] = item[1]
-                    newfields[name].validator(custom_validator)
+                    newfield = item[1]
                 else:
-                    newfields[name] = attr.ib(type=item[1], validator=custom_validator)
+                    newfield = attr.ib(type=item[1])
             else:
                 if (
                     any([isinstance(ii, attr._make._CountingAttr) for ii in item])
@@ -278,210 +280,447 @@ def make_klass(spec):
                         "(name, type, default), (name, type, default, metadata)"
                         "or (name, type, metadata)"
                     )
-                else:
-                    if len(item) == 3:
-                        name, tp = item[:2]
-                        if isinstance(item[-1], dict) and "help_string" in item[-1]:
-                            mdata = item[-1]
-                            newfields[name] = attr.ib(
-                                type=tp, metadata=mdata, validator=custom_validator
-                            )
-                        else:
-                            dflt = item[-1]
-                            newfields[name] = attr.ib(
-                                type=tp, default=dflt, validator=custom_validator
-                            )
-                    elif len(item) == 4:
-                        name, tp, dflt, mdata = item
-                        newfields[name] = attr.ib(
-                            type=tp,
-                            default=dflt,
-                            metadata=mdata,
-                            validator=custom_validator,
-                        )
-            # if type has converter, e.g. MultiInputObj
-            if hasattr(newfields[name].type, "converter"):
-                newfields[name].converter = newfields[name].type.converter
+                kwargs = {}
+                if len(item) == 3:
+                    name, tp = item[:2]
+                    if isinstance(item[-1], dict) and "help_string" in item[-1]:
+                        mdata = item[-1]
+                        kwargs["metadata"] = mdata
+                    else:
+                        kwargs["default"] = item[-1]
+                elif len(item) == 4:
+                    name, tp, dflt, mdata = item
+                    kwargs["default"] = dflt
+                    kwargs["metadata"] = mdata
+                newfield = attr.ib(
+                    type=tp,
+                    **kwargs,
+                )
+            newfield.converter = TypeCoercer[newfield.type](
+                newfield.type,
+                coercible=[
+                    (os.PathLike, os.PathLike),
+                    (str, os.PathLike),
+                    (os.PathLike, str),
+                    (ty.Sequence, ty.Sequence),
+                    (ty.Mapping, ty.Mapping),
+                ],
+                not_coercible=[(str, ty.Sequence), (ty.Sequence, str)],
+            )
+            try:
+                newfield.metadata["allowed_values"]
+            except KeyError:
+                pass
+            else:
+                newfield.validator = allowed_values_validator
+            newfields[name] = newfield
         fields = newfields
     return attr.make_class(spec.name, fields, bases=spec.bases, kw_only=True)
 
 
-def custom_validator(instance, attribute, value):
-    """simple custom validation
-    take into account ty.Union, ty.List, ty.Dict (but only one level depth)
-    adding an additional validator, if allowe_values provided
+T = ty.TypeVar("T")
+TypeOrAny = ty.Union[type, ty.Any]
+
+
+class TypeCoercer(ty.Generic[T]):
+    """Coerces an object to the given type, expanding container classes and unions.
+
+    Parameters
+    ----------
+    tp : type
+        the type objects will be coerced to
+    coercible: Iterable[tuple[type or Any, type or Any]], optional
+        limits coercing between the pairs of types where they appear within the
+        tree of more complex nested container types.
+    not_coercible: Iterable[tuple[type or Any, type or Any]], optional
+        excludes the limits coercing between the pairs of types where they appear within
+        the tree of more complex nested container types. Overrides 'coercible' to enable
+        you to carve out exceptions, such as
+            TypeCoercer(list, coercible=[(ty.Iterable, list)], not_coercible=[(str, list)])
     """
-    validators = []
-    tp_attr = attribute.type
-    # a flag that could be changed to False, if the type is not recognized
-    check_type = True
-    if (
-        value is attr.NOTHING
-        or value is None
-        or attribute.name.startswith("_")  # e.g. _func
-        or isinstance(value, LazyField)
-        or tp_attr
-        in [
-            ty.Any,
-            inspect._empty,
-            MultiOutputObj,
-            MultiInputObj,
-            MultiOutputFile,
-            MultiInputFile,
-        ]
+
+    coercible: list[tuple[TypeOrAny, TypeOrAny]]
+    not_coercible: list[tuple[TypeOrAny, TypeOrAny]]
+
+    def __init__(
+        self,
+        tp,
+        coercible: ty.Optional[ty.Iterable[tuple[TypeOrAny, TypeOrAny]]] = None,
+        not_coercible: ty.Optional[ty.Iterable[tuple[TypeOrAny, TypeOrAny]]] = None,
     ):
-        check_type = False  # no checking of the type
-    elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:
-        tp = _single_type_update(tp_attr, name=attribute.name)
-        cont_type = None
-    else:  # more complex types
-        cont_type, tp_attr_list = _check_special_type(tp_attr, name=attribute.name)
-        if cont_type is ty.Union:
-            tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
-        elif cont_type is list:
-            tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
-        elif cont_type is dict:
-            # assuming that it should have length of 2 for keys and values
-            if len(tp_attr_list) != 2:
-                check_type = False
-            else:
-                tp_attr_key, tp_attr_val = tp_attr_list
-            # updating types separately for keys and values
-            tp_k, check_k = _types_updates([tp_attr_key], name=attribute.name)
-            tp_v, check_v = _types_updates([tp_attr_val], name=attribute.name)
-            # assuming that I have to be able to check keys and values
-            if not (check_k and check_v):
-                check_type = False
-            else:
-                tp = {"key": tp_k, "val": tp_v}
-        else:
-            warnings.warn(
-                f"no type check for {attribute.name} field, "
-                f"no type check implemented for value {value} and type {tp_attr}"
-            )
-            check_type = False
+        def expand(t):
+            origin = ty.get_origin(t)
+            if origin is None:
+                return t
+            args = ty.get_args(t)
+            if not args or args == (Ellipsis,):
+                assert isinstance(origin, type)
+                return origin
+            return (origin, [expand(a) for a in args])
 
-    if check_type:
-        validators.append(_type_validator(instance, attribute, value, tp, cont_type))
+        self.coercible = (
+            list(coercible) if coercible is not None else [(ty.Any, ty.Any)]
+        )
+        self.not_coercible = list(not_coercible) if not_coercible is not None else []
+        self.pattern = expand(tp)
 
-    # checking additional requirements for values (e.g. allowed_values)
-    meta_attr = attribute.metadata
-    if "allowed_values" in meta_attr:
-        validators.append(_allowed_values_validator(isinstance, attribute, value))
-    return validators
+    def __call__(self, object_: ty.Any) -> T:
+        """Attempts to coerce
 
+        Parameters
+        ----------
+        object_ : ty.Any
+            the object to coerce
 
-def _type_validator(instance, attribute, value, tp, cont_type):
-    """creating a customized type validator,
-    uses validator.deep_iterable/mapping if the field is a container
-    (i.e. ty.List or ty.Dict),
-    it also tries to guess when the value is a list due to the splitter
-    and validates the elements
-    """
-    if cont_type is None or cont_type is ty.Union:
-        # if tp is not (list,), we are assuming that the value is a list
-        # due to the splitter, so checking the member types
-        if isinstance(value, list) and tp != (list,):
-            return attr.validators.deep_iterable(
-                member_validator=attr.validators.instance_of(
-                    tp + (attr._make._Nothing,)
+        Returns
+        -------
+        T
+            the coerced object
+
+        Raises
+        ------
+        TypeError
+            if the coercion is not possible, or not specified by the `coercible`/`not_coercible`
+            parameters, then a TypeError is raised
+        """
+
+        def expand_and_coerce(obj, pattern: ty.Union[type | tuple]):
+            """Attempt to expand the object along the lines of the coercion pattern"""
+            if not isinstance(pattern, tuple):
+                return coerce_single(obj, pattern)
+            origin, pattern_args = pattern
+            if origin is ty.Union:
+                # Return the first argument in the union that is coercible
+                for arg in pattern_args:
+                    try:
+                        return expand_and_coerce(obj, arg)
+                    except TypeError:
+                        pass
+                raise TypeError(
+                    f"Could not coerce {obj} to any of the union types {pattern_args}"
                 )
-            )(instance, attribute, value)
-        else:
-            return attr.validators.instance_of(tp + (attr._make._Nothing,))(
-                instance, attribute, value
+            if not self.is_instance(obj, origin):
+                self._check_coercible(obj, origin)
+                type_ = origin
+            else:
+                type_ = type(obj)
+            if issubclass(type_, ty.Mapping):
+                return coerce_mapping(obj, type_, pattern_args)
+            return coerce_sequence(obj, type_, pattern_args)
+
+        def coerce_single(obj, pattern):
+            """Coerce a "single" object, i.e. one not nested within a container"""
+            if (
+                obj is attr.NOTHING
+                or pattern is inspect._empty
+                or self.is_instance(obj, pattern)
+            ):
+                return obj
+            if isinstance(obj, LazyField):
+                self._check_coercible(obj.type, pattern)
+                return obj
+            self._check_coercible(obj, pattern)
+            return coerce_to_type(obj, pattern)
+
+        def coerce_mapping(
+            obj: ty.Mapping, type_: ty.Type[ty.Mapping], pattern_args: list
+        ):
+            """Coerce a mapping (e.g. dict)"""
+            assert len(pattern_args) == 2
+            try:
+                items = obj.items()
+            except AttributeError as e:
+                msg = (
+                    f" (part of coercion from {object_} to {self.pattern}"
+                    if obj is not object_
+                    else ""
+                )
+                raise TypeError(
+                    f"Could not coerce to {type_} as {obj} is not a mapping type{msg}"
+                ) from e
+            return coerce_to_type(
+                (
+                    (
+                        expand_and_coerce(k, pattern_args[0]),
+                        expand_and_coerce(v, pattern_args[1]),
+                    )
+                    for k, v in items
+                ),
+                type_,
             )
-    elif cont_type is list:
-        return attr.validators.deep_iterable(
-            member_validator=attr.validators.instance_of(tp + (attr._make._Nothing,))
-        )(instance, attribute, value)
-    elif cont_type is dict:
-        return attr.validators.deep_mapping(
-            key_validator=attr.validators.instance_of(tp["key"]),
-            value_validator=attr.validators.instance_of(
-                tp["val"] + (attr._make._Nothing,)
-            ),
-        )(instance, attribute, value)
-    else:
-        raise Exception(
-            f"container type of {attribute.name} should be None, list, dict or ty.Union, "
-            f"and not {cont_type}"
+
+        def coerce_sequence(
+            obj: ty.Sequence, type_: ty.Type[ty.Sequence], pattern_args: list
+        ):
+            """Coerce a sequence object (e.g. list, tuple, ...)"""
+            try:
+                args = list(obj)
+            except TypeError as e:
+                msg = (
+                    f" (part of coercion from {object_} to {self.pattern}"
+                    if obj is not object_
+                    else ""
+                )
+                raise TypeError(
+                    f"Could not coerce to {type_} as {obj} is not iterable{msg}"
+                ) from e
+            if issubclass(type_, ty.Tuple):  # type: ignore[arg-type]
+                if pattern_args[-1] is Ellipsis:
+                    pattern_args = itertools.chain(
+                        pattern_args[:-2], itertools.repeat(pattern_args[-2])
+                    )
+                elif len(pattern_args) != len(args):
+                    raise TypeError(
+                        f"Incorrect number of items in {obj}, expected "
+                        f"{len(pattern_args)}, got {len(args)}"
+                    )
+                return coerce_to_type(
+                    [expand_and_coerce(o, p) for o, p in zip(args, pattern_args)], type_
+                )
+            assert len(pattern_args) == 1
+            return coerce_to_type(
+                [expand_and_coerce(o, pattern_args[0]) for o in args], type_
+            )
+
+        def coerce_to_type(obj, type_):
+            """Attempt to do the innermost (i.e. non-nested) coercion and fail with
+            helpful message
+            """
+            try:
+                return type_(obj)
+            except TypeError as e:
+                msg = (
+                    f" (part of coercion from {object_} to {self.pattern}"
+                    if obj is not object_
+                    else ""
+                )
+                raise TypeError(f"Cannot coerce {obj} into {type_}{msg}") from e
+
+        return expand_and_coerce(object_, self.pattern)
+
+    def _check_coercible(self, source: object | type, target: type | ty.Any):
+        """Checks whether the source object or type is coercible to the target type
+        given the coercion rules defined in the `coercible` and `not_coercible` attrs
+
+        Parameters
+        ----------
+        source : object | type
+            source object or type to be coerced
+        target : type | ty.Any
+            target type for the source to be coerced to
+        """
+
+        source_check = (
+            self.is_or_subclass if inspect.isclass(source) else self.is_instance
         )
 
+        def matches(criteria):
+            return [
+                (src, tgt)
+                for src, tgt in criteria
+                if source_check(source, src) and self.is_or_subclass(target, tgt)
+            ]
 
-def _types_updates(tp_list, name):
-    """updating the type's tuple with possible additional types"""
-    tp_upd_list = []
-    check = True
-    for tp_el in tp_list:
-        tp_upd = _single_type_update(tp_el, name, simplify=True)
-        if tp_upd is None:
-            check = False
-            break
-        else:
-            tp_upd_list += list(tp_upd)
-    tp_upd = tuple(set(tp_upd_list))
-    return tp_upd, check
-
-
-def _single_type_update(tp, name, simplify=False):
-    """updating a single type with other related types - e.g. adding bytes for str
-    if simplify is True, than changing typing.List to list etc.
-    (assuming that I validate only one depth, so have to simplify at some point)
-    """
-    if isinstance(tp, type) or tp in [File, Directory]:
-        if tp is str:
-            return (str, bytes)
-        elif tp in [File, Directory, os.PathLike]:
-            return (os.PathLike, str)
-        elif tp is float:
-            return (float, int)
-        else:
-            return (tp,)
-    elif simplify is True:
-        warnings.warn(f"simplify validator for {name} field, checking only one depth")
-        cont_tp, types_list = _check_special_type(tp, name=name)
-        if cont_tp is list:
-            return (list,)
-        elif cont_tp is dict:
-            return (dict,)
-        elif cont_tp is ty.Union:
-            return types_list
-        else:
-            warnings.warn(
-                f"no type check for {name} field, type check not implemented for type of {tp}"
+        if not matches(self.coercible):
+            raise TypeError(
+                f"Cannot coerce {source} into {target} as the coercion doesn't match "
+                f"any of the explicit inclusion criteria {self.coercible}"
             )
-            return None
-    else:
-        warnings.warn(
-            f"no type check for {name} field, type check not implemented for type - {tp}, "
-            f"consider using simplify=True"
-        )
-        return None
+        matches_not_coercible = matches(self.not_coercible)
+        if matches_not_coercible:
+            raise TypeError(
+                f"Cannot coerce {source} into {target} as it is explicitly excluded by "
+                f"the following coercion criteria {matches_not_coercible}"
+            )
+
+    @staticmethod
+    def is_instance(obj, cls):
+        """Checks whether the object is an instance of cls or that cls is typing.Any"""
+        return cls is ty.Any or isinstance(obj, cls)
+
+    @staticmethod
+    def is_or_subclass(a, b):
+        """Checks whether the class a is either the same as b, a subclass of b or b is
+        typing.Any"""
+        return a is b or b is ty.Any or issubclass(a, b)
 
 
-def _check_special_type(tp, name):
-    """checking if the type is a container: ty.List, ty.Dict or ty.Union"""
-    if sys.version_info.minor >= 8:
-        return ty.get_origin(tp), ty.get_args(tp)
-    else:
-        if isinstance(tp, type):  # simple type
-            return None, ()
-        else:
-            if tp._name == "List":
-                return list, tp.__args__
-            elif tp._name == "Dict":
-                return dict, tp.__args__
-            elif tp.__origin__ is ty.Union:
-                return ty.Union, tp.__args__
-            else:
-                warnings.warn(
-                    f"not type check for {name} field, type check not implemented for type {tp}"
-                )
-                return None, ()
+# def custom_validator(instance, attribute, value):
+#     """simple custom validation
+#     take into account ty.Union, ty.List, ty.Dict (but only one level depth)
+#     adding an additional validator, if allowe_values provided
+#     """
+#     validators = []
+#     tp_attr = attribute.type
+#     # a flag that could be changed to False, if the type is not recognized
+#     check_type = True
+#     if (
+#         value is attr.NOTHING
+#         or value is None
+#         or attribute.name.startswith("_")  # e.g. _func
+#         or isinstance(value, LazyField)
+#         or tp_attr
+#         in [
+#             ty.Any,
+#             inspect._empty,
+#             MultiOutputObj,
+#             MultiInputObj,
+#             MultiOutputFile,
+#             MultiInputFile,
+#         ]
+#     ):
+#         check_type = False  # no checking of the type
+#     elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:
+#         tp = _single_type_update(tp_attr, name=attribute.name)
+#         cont_type = None
+#     else:  # more complex types
+#         cont_type, tp_attr_list = _check_special_type(tp_attr, name=attribute.name)
+#         if cont_type is ty.Union:
+#             tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
+#         elif cont_type is list:
+#             tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
+#         elif cont_type is dict:
+#             # assuming that it should have length of 2 for keys and values
+#             if len(tp_attr_list) != 2:
+#                 check_type = False
+#             else:
+#                 tp_attr_key, tp_attr_val = tp_attr_list
+#             # updating types separately for keys and values
+#             tp_k, check_k = _types_updates([tp_attr_key], name=attribute.name)
+#             tp_v, check_v = _types_updates([tp_attr_val], name=attribute.name)
+#             # assuming that I have to be able to check keys and values
+#             if not (check_k and check_v):
+#                 check_type = False
+#             else:
+#                 tp = {"key": tp_k, "val": tp_v}
+#         else:
+#             warnings.warn(
+#                 f"no type check for {attribute.name} field, "
+#                 f"no type check implemented for value {value} and type {tp_attr}"
+#             )
+#             check_type = False
+
+#     if check_type:
+#         validators.append(_type_validator(instance, attribute, value, tp, cont_type))
+
+#     # checking additional requirements for values (e.g. allowed_values)
+#     meta_attr = attribute.metadata
+#     if "allowed_values" in meta_attr:
+#         validators.append(_allowed_values_validator(isinstance, attribute, value))
+#     return validators
 
 
-def _allowed_values_validator(instance, attribute, value):
+# def _type_validator(instance, attribute, value, tp, cont_type):
+#     """creating a customized type validator,
+#     uses validator.deep_iterable/mapping if the field is a container
+#     (i.e. ty.List or ty.Dict),
+#     it also tries to guess when the value is a list due to the splitter
+#     and validates the elements
+#     """
+#     if cont_type is None or cont_type is ty.Union:
+#         # if tp is not (list,), we are assuming that the value is a list
+#         # due to the splitter, so checking the member types
+#         if isinstance(value, list) and tp != (list,):
+#             return attr.validators.deep_iterable(
+#                 member_validator=attr.validators.instance_of(
+#                     tp + (attr._make._Nothing,)
+#                 )
+#             )(instance, attribute, value)
+#         else:
+#             return attr.validators.instance_of(tp + (attr._make._Nothing,))(
+#                 instance, attribute, value
+#             )
+#     elif cont_type is list:
+#         return attr.validators.deep_iterable(
+#             member_validator=attr.validators.instance_of(tp + (attr._make._Nothing,))
+#         )(instance, attribute, value)
+#     elif cont_type is dict:
+#         return attr.validators.deep_mapping(
+#             key_validator=attr.validators.instance_of(tp["key"]),
+#             value_validator=attr.validators.instance_of(
+#                 tp["val"] + (attr._make._Nothing,)
+#             ),
+#         )(instance, attribute, value)
+#     else:
+#         raise Exception(
+#             f"container type of {attribute.name} should be None, list, dict or ty.Union, "
+#             f"and not {cont_type}"
+#         )
+
+
+# def _types_updates(tp_list, name):
+#     """updating the type's tuple with possible additional types"""
+#     tp_upd_list = []
+#     check = True
+#     for tp_el in tp_list:
+#         tp_upd = _single_type_update(tp_el, name, simplify=True)
+#         if tp_upd is None:
+#             check = False
+#             break
+#         else:
+#             tp_upd_list += list(tp_upd)
+#     tp_upd = tuple(set(tp_upd_list))
+#     return tp_upd, check
+
+
+# def _single_type_update(tp, name, simplify=False):
+#     """updating a single type with other related types - e.g. adding bytes for str
+#     if simplify is True, than changing typing.List to list etc.
+#     (assuming that I validate only one depth, so have to simplify at some point)
+#     """
+#     if isinstance(tp, type) or tp in [File, Directory]:
+#         if tp is str:
+#             return (str, bytes)
+#         elif tp in [File, Directory, os.PathLike]:
+#             return (os.PathLike, str)
+#         elif tp is float:
+#             return (float, int)
+#         else:
+#             return (tp,)
+#     elif simplify is True:
+#         warnings.warn(f"simplify validator for {name} field, checking only one depth")
+#         cont_tp, types_list = _check_special_type(tp, name=name)
+#         if cont_tp is list:
+#             return (list,)
+#         elif cont_tp is dict:
+#             return (dict,)
+#         elif cont_tp is ty.Union:
+#             return types_list
+#         else:
+#             warnings.warn(
+#                 f"no type check for {name} field, type check not implemented for type of {tp}"
+#             )
+#             return None
+#     else:
+#         warnings.warn(
+#             f"no type check for {name} field, type check not implemented for type - {tp}, "
+#             f"consider using simplify=True"
+#         )
+#         return None
+
+
+# def _check_special_type(tp, name):
+#     """checking if the type is a container: ty.List, ty.Dict or ty.Union"""
+#     if sys.version_info.minor >= 8:
+#         return ty.get_origin(tp), ty.get_args(tp)
+#     else:
+#         if isinstance(tp, type):  # simple type
+#             return None, ()
+#         else:
+#             if tp._name == "List":
+#                 return list, tp.__args__
+#             elif tp._name == "Dict":
+#                 return dict, tp.__args__
+#             elif tp.__origin__ is ty.Union:
+#                 return ty.Union, tp.__args__
+#             else:
+#                 warnings.warn(
+#                     f"not type check for {name} field, type check not implemented for type {tp}"
+#                 )
+#                 return None, ()
+
+
+def allowed_values_validator(_, attribute, value):
     """checking if the values is in allowed_values"""
     allowed = attribute.metadata["allowed_values"]
     if value is attr.NOTHING or isinstance(value, LazyField):
@@ -926,126 +1165,3 @@ class PydraFileLock:
     async def __aexit__(self, exc_type, exc_value, traceback):
         self.lock.release()
         return None
-
-
-T = ty.TypeVar("T")
-TypeOrAny = ty.Union[type, ty.Any]
-
-
-class TypeCoercer(ty.Generic[T]):
-    """Coerces an object to the given type, expanding container classes and unions.
-
-    Parameters
-    ----------
-    tp : type
-        the type objects will be coerced to
-    coercible: Iterable[tuple[type or Any, type or Any]], optional
-        limits coercing between the pairs of types where they appear within the
-        tree of more complex nested container types.
-    not_coercible: Iterable[tuple[type or Any, type or Any]], optional
-        excludes the limits coercing between the pairs of types where they appear within
-        the tree of more complex nested container types. Overrides 'coercible' to enable
-        you to carve out exceptions, such as
-            TypeCoercer(list, coercible=[(ty.Iterable, list)], not_coercible=[(str, list)])
-    """
-
-    coercible: list[tuple[TypeOrAny, TypeOrAny]]
-    not_coercible: list[tuple[TypeOrAny, TypeOrAny]]
-
-    def __init__(
-        self,
-        tp,
-        coercible: ty.Optional[ty.Iterable[tuple[TypeOrAny, TypeOrAny]]] = None,
-        not_coercible: ty.Optional[ty.Iterable[tuple[TypeOrAny, TypeOrAny]]] = None,
-    ):
-        def expand(t):
-            origin = ty.get_origin(t)
-            if origin is None:
-                if any(
-                    t is k or k is ty.Any or issubclass(t, k)
-                    for k in self.coercible_targets
-                ):
-                    return t
-                return None
-            if isinstance(origin, abc.ABCMeta):
-                raise TypeError(
-                    f"Cannot coerce to abstract type {tp} ({origin} is abstract)"
-                )
-            args = ty.get_args(t)
-            if not args or args == (Ellipsis,):
-                assert isinstance(origin, type)
-                return origin
-            return (origin, [expand(a) for a in args])
-
-        self.coercible = (
-            list(coercible) if coercible is not None else [(ty.Any, ty.Any)]
-        )
-        self.not_coercible = list(not_coercible) if not_coercible is not None else []
-        self.pattern = expand(tp)
-
-    def __call__(self, obj: ty.Any) -> T:
-        def coerce(obj, pattern: ty.Union[type | tuple | None]):
-            if not isinstance(pattern, tuple):
-                if (
-                    pattern is None
-                    or isinstance(obj, pattern)
-                    or not self._is_coercible(obj, pattern)
-                ):
-                    return obj
-                return pattern(obj)
-            origin, args = pattern
-            if origin is ty.Union:
-                # Return the first argument in the union that is coercible
-                for arg in args:
-                    try:
-                        return coerce(obj, arg)
-                    except TypeError:
-                        pass
-                raise TypeError(
-                    f"Could not coerce {obj} to any of the union types {args}"
-                )
-            if issubclass(origin, ty.Mapping):
-                assert len(args) == 2
-                return origin(
-                    (coerce(k, args[0]), coerce(v, args[1])) for k, v in obj.items()
-                )
-            type_ = origin if self._is_coercible(obj, origin) else type(obj)
-            if issubclass(origin, ty.Tuple):  # type: ignore[arg-type]
-                if args[-1] is Ellipsis:
-                    args = itertools.chain(args[:-2], itertools.repeat(args[-2]))
-                elif len(args) != len(obj):
-                    raise TypeError(
-                        f"Incorrect number of items in {obj}, expected {len(args)}, "
-                        f"got {len(obj)}"
-                    )
-                return type_(coerce(o, p) for o, p in zip(obj, args))
-            assert len(args) == 1
-            return type_(coerce(o, args[0]) for o in obj)
-
-        return coerce(obj, self.pattern)
-
-    def _is_coercible(self, source, target):
-        def is_instance(o, c):
-            return c is ty.Any or isinstance(o, c)
-
-        def is_or_subclass(a, b):
-            return a is b or b is ty.Any or issubclass(a, b)
-
-        return (
-            any(
-                is_instance(source, src) and is_or_subclass(target, tgt)
-                for src, tgt in self.coercible
-            )
-            or self.coercible is None
-        ) and not any(
-            is_instance(source, src) and is_or_subclass(target, tgt)
-            for src, tgt in self.not_coercible
-        )
-
-    @property
-    def coercible_targets(self):
-        return [t for _, t in self.coercible]
-
-    @property
-    def not_coercible_targets(self):
-        return [t for _, t in self.not_coercible]

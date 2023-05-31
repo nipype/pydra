@@ -24,6 +24,8 @@ from .specs import (
     RuntimeSpec,
     Result,
     SpecInfo,
+    LazyIn,
+    LazyOut,
     LazyField,
     TaskHook,
     attr_fields,
@@ -225,7 +227,7 @@ class TaskBase:
 
     def __getattr__(self, name):
         if name == "lzout":  # lazy output
-            return LazyField(self, "output")
+            return LazyOut(self)
         return self.__getattribute__(name)
 
     def help(self, returnhelp=False):
@@ -932,7 +934,7 @@ class Workflow(TaskBase):
 
     def __getattr__(self, name):
         if name == "lzin":
-            return LazyField(self, "input")
+            return LazyIn(self)
         if name == "lzout":
             return super().__getattr__(name)
         if name in self.name2obj:

@@ -48,37 +48,54 @@ def attr_fields_dict(spec, exclude_names=()):
 # class Directory:
 #     """An :obj:`os.pathlike` object, designating a folder."""
 
+T = ty.TypeVar("T")
 
-class MultiInputObj:
+
+class MultiInputObj(ty.List[T]):
     """A ty.List[ty.Any] object, converter changes a single values to a list"""
 
-    @classmethod
-    def converter(cls, value):
-        from .helpers import ensure_list
+    def __init__(self, items):
+        if not isinstance(items, ty.Iterable):
+            items = (items,)
+        super().__init__(items)
 
-        if value == attr.NOTHING:
-            return value
-        else:
-            return ensure_list(value)
+    # @classmethod
+    # def converter(cls, value):
+    #     from .helpers import ensure_list
 
-
-class MultiOutputObj:
-    """A ty.List[ty.Any] object, converter changes an 1-el list to the single value"""
-
-    @classmethod
-    def converter(cls, value):
-        if isinstance(value, list) and len(value) == 1:
-            return value[0]
-        else:
-            return value
+    #     if value == attr.NOTHING:
+    #         return value
+    #     else:
+    #         return ensure_list(value)
 
 
-class MultiInputFile(MultiInputObj):
-    """A ty.List[File] object, converter changes a single file path to a list"""
+# class MultiOutputObj:
+#     """A ty.List[ty.Any] object, converter changes an 1-el list to the single value"""
+
+#     @classmethod
+#     def converter(cls, value):
+#         if isinstance(value, list) and len(value) == 1:
+#             return value[0]
+#         else:
+#             return value
+
+# Not attempting to do the conversion from list to singular value as this seems like
+# poor design. Downstream nodes will need to handle the case where it is a list in any
+# case so no point creating extra work by requiring them to handle the single value case
+# as well
+MultiOutputObj = ty.List
+
+# class MultiInputFile(MultiInputObj):
+#     """A ty.List[File] object, converter changes a single file path to a list"""
+
+MultiInputFile = MultiInputObj[File]
 
 
-class MultiOutputFile(MultiOutputObj):
-    """A ty.List[File] object, converter changes an 1-el list to the single value"""
+# class MultiOutputFile(MultiOutputObj):
+#     """A ty.List[File] object, converter changes an 1-el list to the single value"""
+
+# See note on MultiOutputObj
+MultiOutputFile = ty.List[File]
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -758,43 +775,68 @@ class SingularitySpec(ContainerSpec):
     container: str = attr.ib("singularity", metadata={"help_string": "container type"})
 
 
+@attr.s
+class LazyInterface:
+    _node: "core.TaskBase" = attr.ib()
+    _attr_type: str
+
+    def __getattr__(self, name):
+        if name not in self._field_names:
+            raise AttributeError(
+                f"Task {self._node.name} has no {self._attr_type} attribute {name}"
+            )
+        return LazyField(
+            name=self._node.name,
+            field=name,
+            attr_type=self._attr_type,
+            type=self._get_type(name),
+        )
+
+
+class LazyIn(LazyInterface):
+    _attr_type = "input"
+
+    def _get_type(self, name):
+        return next(t for n, t in self._node.input_spec.fields if n == name).type
+
+    @property
+    def _field_names(self):
+        return [field[0] for field in self._node.input_spec.fields]
+
+
+class LazyOut(LazyInterface):
+    _attr_type = "output"
+
+    def _get_type(self, name):
+        return next(t for n, t in self._node.output_spec.fields if n == name)
+
+    @property
+    def _field_names(self):
+        return self._node.output_names
+
+
+@attr.s(auto_attribs=True, kw_only=True)
 class LazyField:
     """Lazy fields implement promises."""
 
-    def __init__(self, node, attr_type):
-        """Initialize a lazy field."""
-        self.name = node.name
-        if attr_type == "input":
-            self.fields = [field[0] for field in node.input_spec.fields]
-        elif attr_type == "output":
-            self.fields = node.output_names
-        else:
-            raise ValueError(f"LazyField: Unknown attr_type: {attr_type}")
-        self.attr_type = attr_type
-        self.field = None
+    name: str
+    field: str
+    attr_type: str
+    type: ty.Type[ty.Any]
 
-    def __getattr__(self, name):
-        if name in self.fields or name == "all_":
-            self.field = name
-            return self
-        if name in dir(self):
-            return self.__getattribute__(name)
-        raise AttributeError(
-            f"Task {self.name} has no {self.attr_type} attribute {name}"
-        )
+    # def __getstate__(self):
+    #     state = self.__dict__.copy()
+    #     state["name"] = self.name
+    #     state["field"] = self.field
+    #     state["attr_type"] = self.attr_type
+    #     state["type"] = self.type
+    #     return state
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["name"] = self.name
-        state["fields"] = self.fields
-        state["field"] = self.field
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
+    # def __setstate__(self, state):
+    #     self.__dict__.update(state)
 
     def __repr__(self):
-        return f"LF('{self.name}', '{self.field}')"
+        return f"LF('{self.name}', '{self.field}', {self.type})"
 
     def get_value(self, wf, state_index=None):
         """Return the value of a lazy field."""
@@ -859,3 +901,6 @@ def path_to_string(value):
     elif isinstance(value, list) and len(value) and isinstance(value[0], Path):
         value = [str(val) for val in value]
     return value
+
+
+from . import core  # noqa

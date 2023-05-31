@@ -137,11 +137,11 @@ class FunctionTask(TaskBase):
                         ),
                     )
                 )
-            fields.append(("_func", attr.ib(default=cp.dumps(func), type=str)))
+            fields.append(("_func", attr.ib(default=cp.dumps(func), type=bytes)))
             input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
         else:
             input_spec.fields.append(
-                ("_func", attr.ib(default=cp.dumps(func), type=str))
+                ("_func", attr.ib(default=cp.dumps(func), type=bytes))
             )
         self.input_spec = input_spec
         if name is None:
