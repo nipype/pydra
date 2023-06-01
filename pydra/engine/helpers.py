@@ -1,10 +1,6 @@
 """Administrative support for the engine framework."""
 import asyncio
 import asyncio.subprocess as asp
-import itertools
-import inspect
-
-# import abc
 from pathlib import Path
 import os
 import sys
@@ -14,14 +10,9 @@ import getpass
 import re
 from time import strftime
 from traceback import format_exception
-import typing as ty
-
-# import inspect
-# import warnings
 import attr
 from filelock import SoftFileLock, Timeout
 import cloudpickle as cp
-
 
 from .specs import (
     Runtime,
@@ -31,12 +22,10 @@ from .specs import (
     Result,
     LazyField,
     MultiOutputObj,
-    # MultiInputObj,
-    # MultiInputFile,
-    # MultiOutputFile,
 )
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 from ..utils.hash import hash_object
+from .type_checking import TypeChecker
 
 
 def ensure_list(obj, tuple2list=False):
@@ -296,17 +285,7 @@ def make_klass(spec):
                     type=tp,
                     **kwargs,
                 )
-            newfield.converter = TypeCoercer[newfield.type](
-                newfield.type,
-                coercible=[
-                    (os.PathLike, os.PathLike),
-                    (str, os.PathLike),
-                    (os.PathLike, str),
-                    (ty.Sequence, ty.Sequence),
-                    (ty.Mapping, ty.Mapping),
-                ],
-                not_coercible=[(str, ty.Sequence), (ty.Sequence, str)],
-            )
+            newfield.converter = TypeChecker[newfield.type](newfield.type)
             try:
                 newfield.metadata["allowed_values"]
             except KeyError:
@@ -316,233 +295,6 @@ def make_klass(spec):
             newfields[name] = newfield
         fields = newfields
     return attr.make_class(spec.name, fields, bases=spec.bases, kw_only=True)
-
-
-T = ty.TypeVar("T")
-TypeOrAny = ty.Union[type, ty.Any]
-
-
-class TypeCoercer(ty.Generic[T]):
-    """Coerces an object to the given type, expanding container classes and unions.
-
-    Parameters
-    ----------
-    tp : type
-        the type objects will be coerced to
-    coercible: Iterable[tuple[type or Any, type or Any]], optional
-        limits coercing between the pairs of types where they appear within the
-        tree of more complex nested container types.
-    not_coercible: Iterable[tuple[type or Any, type or Any]], optional
-        excludes the limits coercing between the pairs of types where they appear within
-        the tree of more complex nested container types. Overrides 'coercible' to enable
-        you to carve out exceptions, such as
-            TypeCoercer(list, coercible=[(ty.Iterable, list)], not_coercible=[(str, list)])
-    """
-
-    coercible: list[tuple[TypeOrAny, TypeOrAny]]
-    not_coercible: list[tuple[TypeOrAny, TypeOrAny]]
-
-    def __init__(
-        self,
-        tp,
-        coercible: ty.Optional[ty.Iterable[tuple[TypeOrAny, TypeOrAny]]] = None,
-        not_coercible: ty.Optional[ty.Iterable[tuple[TypeOrAny, TypeOrAny]]] = None,
-    ):
-        def expand(t):
-            origin = ty.get_origin(t)
-            if origin is None:
-                return t
-            args = ty.get_args(t)
-            if not args or args == (Ellipsis,):
-                assert isinstance(origin, type)
-                return origin
-            return (origin, [expand(a) for a in args])
-
-        self.coercible = (
-            list(coercible) if coercible is not None else [(ty.Any, ty.Any)]
-        )
-        self.not_coercible = list(not_coercible) if not_coercible is not None else []
-        self.pattern = expand(tp)
-
-    def __call__(self, object_: ty.Any) -> T:
-        """Attempts to coerce
-
-        Parameters
-        ----------
-        object_ : ty.Any
-            the object to coerce
-
-        Returns
-        -------
-        T
-            the coerced object
-
-        Raises
-        ------
-        TypeError
-            if the coercion is not possible, or not specified by the `coercible`/`not_coercible`
-            parameters, then a TypeError is raised
-        """
-
-        def expand_and_coerce(obj, pattern: ty.Union[type | tuple]):
-            """Attempt to expand the object along the lines of the coercion pattern"""
-            if not isinstance(pattern, tuple):
-                return coerce_single(obj, pattern)
-            origin, pattern_args = pattern
-            if origin is ty.Union:
-                # Return the first argument in the union that is coercible
-                for arg in pattern_args:
-                    try:
-                        return expand_and_coerce(obj, arg)
-                    except TypeError:
-                        pass
-                raise TypeError(
-                    f"Could not coerce {obj} to any of the union types {pattern_args}"
-                )
-            if not self.is_instance(obj, origin):
-                self._check_coercible(obj, origin)
-                type_ = origin
-            else:
-                type_ = type(obj)
-            if issubclass(type_, ty.Mapping):
-                return coerce_mapping(obj, type_, pattern_args)
-            return coerce_sequence(obj, type_, pattern_args)
-
-        def coerce_single(obj, pattern):
-            """Coerce a "single" object, i.e. one not nested within a container"""
-            if (
-                obj is attr.NOTHING
-                or pattern is inspect._empty
-                or self.is_instance(obj, pattern)
-            ):
-                return obj
-            if isinstance(obj, LazyField):
-                self._check_coercible(obj.type, pattern)
-                return obj
-            self._check_coercible(obj, pattern)
-            return coerce_to_type(obj, pattern)
-
-        def coerce_mapping(
-            obj: ty.Mapping, type_: ty.Type[ty.Mapping], pattern_args: list
-        ):
-            """Coerce a mapping (e.g. dict)"""
-            assert len(pattern_args) == 2
-            try:
-                items = obj.items()
-            except AttributeError as e:
-                msg = (
-                    f" (part of coercion from {object_} to {self.pattern}"
-                    if obj is not object_
-                    else ""
-                )
-                raise TypeError(
-                    f"Could not coerce to {type_} as {obj} is not a mapping type{msg}"
-                ) from e
-            return coerce_to_type(
-                (
-                    (
-                        expand_and_coerce(k, pattern_args[0]),
-                        expand_and_coerce(v, pattern_args[1]),
-                    )
-                    for k, v in items
-                ),
-                type_,
-            )
-
-        def coerce_sequence(
-            obj: ty.Sequence, type_: ty.Type[ty.Sequence], pattern_args: list
-        ):
-            """Coerce a sequence object (e.g. list, tuple, ...)"""
-            try:
-                args = list(obj)
-            except TypeError as e:
-                msg = (
-                    f" (part of coercion from {object_} to {self.pattern}"
-                    if obj is not object_
-                    else ""
-                )
-                raise TypeError(
-                    f"Could not coerce to {type_} as {obj} is not iterable{msg}"
-                ) from e
-            if issubclass(type_, ty.Tuple):  # type: ignore[arg-type]
-                if pattern_args[-1] is Ellipsis:
-                    pattern_args = itertools.chain(
-                        pattern_args[:-2], itertools.repeat(pattern_args[-2])
-                    )
-                elif len(pattern_args) != len(args):
-                    raise TypeError(
-                        f"Incorrect number of items in {obj}, expected "
-                        f"{len(pattern_args)}, got {len(args)}"
-                    )
-                return coerce_to_type(
-                    [expand_and_coerce(o, p) for o, p in zip(args, pattern_args)], type_
-                )
-            assert len(pattern_args) == 1
-            return coerce_to_type(
-                [expand_and_coerce(o, pattern_args[0]) for o in args], type_
-            )
-
-        def coerce_to_type(obj, type_):
-            """Attempt to do the innermost (i.e. non-nested) coercion and fail with
-            helpful message
-            """
-            try:
-                return type_(obj)
-            except TypeError as e:
-                msg = (
-                    f" (part of coercion from {object_} to {self.pattern}"
-                    if obj is not object_
-                    else ""
-                )
-                raise TypeError(f"Cannot coerce {obj} into {type_}{msg}") from e
-
-        return expand_and_coerce(object_, self.pattern)
-
-    def _check_coercible(self, source: object | type, target: type | ty.Any):
-        """Checks whether the source object or type is coercible to the target type
-        given the coercion rules defined in the `coercible` and `not_coercible` attrs
-
-        Parameters
-        ----------
-        source : object | type
-            source object or type to be coerced
-        target : type | ty.Any
-            target type for the source to be coerced to
-        """
-
-        source_check = (
-            self.is_or_subclass if inspect.isclass(source) else self.is_instance
-        )
-
-        def matches(criteria):
-            return [
-                (src, tgt)
-                for src, tgt in criteria
-                if source_check(source, src) and self.is_or_subclass(target, tgt)
-            ]
-
-        if not matches(self.coercible):
-            raise TypeError(
-                f"Cannot coerce {source} into {target} as the coercion doesn't match "
-                f"any of the explicit inclusion criteria {self.coercible}"
-            )
-        matches_not_coercible = matches(self.not_coercible)
-        if matches_not_coercible:
-            raise TypeError(
-                f"Cannot coerce {source} into {target} as it is explicitly excluded by "
-                f"the following coercion criteria {matches_not_coercible}"
-            )
-
-    @staticmethod
-    def is_instance(obj, cls):
-        """Checks whether the object is an instance of cls or that cls is typing.Any"""
-        return cls is ty.Any or isinstance(obj, cls)
-
-    @staticmethod
-    def is_or_subclass(a, b):
-        """Checks whether the class a is either the same as b, a subclass of b or b is
-        typing.Any"""
-        return a is b or b is ty.Any or issubclass(a, b)
 
 
 # def custom_validator(instance, attribute, value):

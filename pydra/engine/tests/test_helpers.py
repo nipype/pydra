@@ -1,13 +1,10 @@
 import os
 import hashlib
-import typing as ty
 from pathlib import Path
 import random
 import platform
-
 import pytest
 import cloudpickle as cp
-
 from .utils import multiply, raise_xeq1
 from ..helpers import (
     hash_value,
@@ -16,10 +13,8 @@ from ..helpers import (
     save,
     load_and_run,
     position_sort,
-    TypeCoercer,
 )
 from .. import helpers_file
-from ..specs import File, Directory
 from ..core import Workflow
 
 
@@ -308,130 +303,3 @@ def test_load_and_run_wf(tmpdir):
 def test_position_sort(pos_args):
     final_args = position_sort(pos_args)
     assert final_args == ["a", "b", "c"]
-
-
-def test_type_coercion_basic(tmpdir):
-    assert TypeCoercer(int)(1.0) == 1
-    assert TypeCoercer(int, coercible=[(ty.Any, int)])(1.0) == 1
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
-        assert TypeCoercer(int, coercible=[(ty.Any, float)])(1.0) == 1.0
-    assert TypeCoercer(int, not_coercible=[(ty.Any, str)])(1.0) == 1
-    with pytest.raises(TypeError, match="explicitly excluded"):
-        assert TypeCoercer(int, not_coercible=[(float, int)])(1.0) == 1.0
-
-    path_coercer = TypeCoercer(Path, coercible=[(os.PathLike, os.PathLike)])
-
-    assert path_coercer(Path("/a/path")) == Path("/a/path")
-
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
-        path_coercer("/a/path")
-
-    PathTypes = ty.Union[str, os.PathLike]
-
-    assert TypeCoercer(Path, coercible=[(PathTypes, PathTypes)])("/a/path") == Path(
-        "/a/path"
-    )
-    assert (
-        TypeCoercer(str, coercible=[(PathTypes, PathTypes)])(Path("/a/path"))
-        == "/a/path"
-    )
-
-    a_file = tmpdir / "a-file.txt"
-    Path.touch(a_file)
-
-    file_coercer = TypeCoercer(File, coercible=[(PathTypes, File)])
-
-    assert file_coercer(a_file) == File(a_file)
-    assert file_coercer(str(a_file)) == File(a_file)
-
-    impotent_str_coercer = TypeCoercer(str, coercible=[(PathTypes, File)])
-
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
-        impotent_str_coercer(File(a_file))
-
-    assert TypeCoercer(str, coercible=[(PathTypes, PathTypes)])(File(a_file)) == str(
-        a_file
-    )
-    assert TypeCoercer(File, coercible=[(PathTypes, PathTypes)])(str(a_file)) == File(
-        a_file
-    )
-
-    assert TypeCoercer(
-        list,
-        coercible=[(ty.Sequence, ty.Sequence)],
-        not_coercible=[(str, ty.Sequence)],
-    )((1, 2, 3)) == [1, 2, 3]
-
-    with pytest.raises(TypeError, match="explicitly excluded"):
-        TypeCoercer(
-            list,
-            coercible=[(ty.Sequence, ty.Sequence)],
-            not_coercible=[(str, ty.Sequence)],
-        )("a-string")
-
-    assert TypeCoercer(ty.Union[Path, File, int])(1.0) == 1
-    assert TypeCoercer(ty.Union[Path, File, bool, int])(1.0) is True
-    assert TypeCoercer(ty.Sequence)((1, 2, 3)) == (1, 2, 3)
-
-
-def test_type_coercion_nested(tmpdir):
-    a_file = tmpdir / "a-file.txt"
-    another_file = tmpdir / "another-file.txt"
-    yet_another_file = tmpdir / "yet-another-file.txt"
-    Path.touch(a_file)
-    Path.touch(another_file)
-    Path.touch(yet_another_file)
-
-    PathTypes = ty.Union[str, bytes, os.PathLike]
-
-    assert TypeCoercer(ty.List[File], coercible=[(PathTypes, PathTypes)])(
-        [a_file, another_file, yet_another_file]
-    ) == [File(a_file), File(another_file), File(yet_another_file)]
-
-    assert TypeCoercer(ty.List[Path], coercible=[(PathTypes, PathTypes)])(
-        [File(a_file), File(another_file), File(yet_another_file)]
-    ) == [a_file, another_file, yet_another_file]
-
-    assert TypeCoercer(ty.Dict[str, ty.List[File]], coercible=[(PathTypes, PathTypes)])(
-        {
-            "a": [a_file, another_file, yet_another_file],
-            "b": [a_file, another_file],
-        }
-    ) == {
-        "a": [File(a_file), File(another_file), File(yet_another_file)],
-        "b": [File(a_file), File(another_file)],
-    }
-
-    assert TypeCoercer(ty.List[File], coercible=[(PathTypes, PathTypes)])(
-        [a_file, another_file, yet_another_file]
-    ) == [File(a_file), File(another_file), File(yet_another_file)]
-
-    assert TypeCoercer(ty.Tuple[int, int, int])([1.0, 2.0, 3.0]) == (1, 2, 3)
-    assert TypeCoercer(ty.Tuple[int, ...])([1.0, 2.0, 3.0]) == (1, 2, 3)
-    with pytest.raises(TypeError, match="explicitly excluded"):
-        TypeCoercer(
-            ty.Tuple[int, ...],
-            not_coercible=[(ty.Sequence, ty.Tuple)],
-        )([1.0, 2.0, 3.0])
-
-
-def test_type_coercion_fail():
-    with pytest.raises(TypeError, match="Incorrect number of items"):
-        TypeCoercer(ty.Tuple[int, int, int])([1.0, 2.0, 3.0, 4.0])
-
-    with pytest.raises(TypeError, match="to any of the union types"):
-        TypeCoercer(ty.Union[Path, File])(1)
-
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
-        TypeCoercer(ty.Sequence, coercible=[(ty.Sequence, ty.Sequence)])(
-            {"a": 1, "b": 2}
-        )
-
-    with pytest.raises(TypeError, match="Cannot coerce {'a': 1} into"):
-        TypeCoercer(ty.Sequence)({"a": 1})
-
-    with pytest.raises(TypeError, match="as 1 is not iterable"):
-        TypeCoercer(ty.List[int])(1)
-
-    with pytest.raises(TypeError, match="is not a mapping type"):
-        TypeCoercer(ty.List[ty.Dict[str, str]])((1, 2, 3))

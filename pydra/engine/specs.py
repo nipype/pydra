@@ -824,17 +824,6 @@ class LazyField:
     attr_type: str
     type: ty.Type[ty.Any]
 
-    # def __getstate__(self):
-    #     state = self.__dict__.copy()
-    #     state["name"] = self.name
-    #     state["field"] = self.field
-    #     state["attr_type"] = self.attr_type
-    #     state["type"] = self.type
-    #     return state
-
-    # def __setstate__(self, state):
-    #     self.__dict__.update(state)
-
     def __repr__(self):
         return f"LF('{self.name}', '{self.field}', {self.type})"
 
