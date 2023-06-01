@@ -12,6 +12,8 @@ from ..specs import (
     ContainerSpec,
     DockerSpec,
     SingularitySpec,
+    LazyIn,
+    LazyOut,
     LazyField,
 )
 from ..helpers import make_klass
@@ -120,7 +122,7 @@ class WorkflowTesting:
 
 def test_lazy_inp():
     tn = NodeTesting()
-    lf = LazyField(node=tn, attr_type="input")
+    lf = LazyIn(node=tn)
 
     with pytest.raises(Exception):
         lf.get_value(wf=WorkflowTesting())
@@ -134,29 +136,22 @@ def test_lazy_inp():
 
 def test_lazy_out():
     tn = NodeTesting()
-    lf = LazyField(node=tn, attr_type="output")
+    lf = LazyOut(node=tn)
 
     lf.out_a
     assert lf.get_value(wf=WorkflowTesting()) == "OUT_A"
 
 
-def test_laxy_errorattr():
-    with pytest.raises(Exception) as excinfo:
-        tn = NodeTesting()
-        LazyField(node=tn, attr_type="out")
-    assert "LazyField: Unknown attr_type:" in str(excinfo.value)
-
-
 def test_lazy_getvale():
     tn = NodeTesting()
-    lf = LazyField(node=tn, attr_type="input")
+    lf = LazyIn(node=tn)
     with pytest.raises(Exception) as excinfo:
         lf.inp_c
     assert str(excinfo.value) == "Task tn has no input attribute inp_c"
 
 
-def test_input_file_hash_1(tmpdir):
-    tmpdir.chdir()
+def test_input_file_hash_1(tmp_path):
+    tmp_path.chdir()
     outfile = "test.file"
     fields = [("in_file", ty.Any)]
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
@@ -171,9 +166,9 @@ def test_input_file_hash_1(tmpdir):
     assert inputs(in_file=outfile).hash == "48a76c08d33bc0260b7118f83631f1af"
 
 
-def test_input_file_hash_2(tmpdir):
+def test_input_file_hash_2(tmp_path):
     """input spec with File types, checking when the checksum changes"""
-    file = tmpdir.join("in_file_1.txt")
+    file = tmp_path / "in_file_1.txt"
     with open(file, "w") as f:
         f.write("hello")
 
@@ -185,23 +180,23 @@ def test_input_file_hash_2(tmpdir):
     assert hash1 == "1165e3d220aff3ee99d2b19d9078d60e"
 
     # checking if different name doesn't affect the hash
-    file_diffname = tmpdir.join("in_file_2.txt")
+    file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
     hash2 = inputs(in_file=file_diffname).hash
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
-    file_diffcontent = tmpdir.join("in_file_1.txt")
+    file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
     hash3 = inputs(in_file=file_diffcontent).hash
     assert hash1 != hash3
 
 
-def test_input_file_hash_2a(tmpdir):
+def test_input_file_hash_2a(tmp_path):
     """input spec with ty.Union[File, ...] type, checking when the checksum changes"""
-    file = tmpdir.join("in_file_1.txt")
+    file = tmp_path / "in_file_1.txt"
     with open(file, "w") as f:
         f.write("hello")
 
@@ -215,14 +210,14 @@ def test_input_file_hash_2a(tmpdir):
     assert hash1 == "1165e3d220aff3ee99d2b19d9078d60e"
 
     # checking if different name doesn't affect the hash
-    file_diffname = tmpdir.join("in_file_2.txt")
+    file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
     hash2 = inputs(in_file=file_diffname).hash
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
-    file_diffcontent = tmpdir.join("in_file_1.txt")
+    file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
     hash3 = inputs(in_file=file_diffcontent).hash
@@ -233,9 +228,9 @@ def test_input_file_hash_2a(tmpdir):
     assert hash4 == "a9b1e2f386992922e65191e6f447dcf6"
 
 
-def test_input_file_hash_3(tmpdir):
+def test_input_file_hash_3(tmp_path):
     """input spec with File types, checking when the hash and file_hash change"""
-    file = tmpdir.join("in_file_1.txt")
+    file = tmp_path / "in_file_1.txt"
     with open(file, "w") as f:
         f.write("hello")
 
@@ -286,11 +281,11 @@ def test_input_file_hash_3(tmpdir):
     assert filename in my_inp.files_hash["in_file"]
 
 
-def test_input_file_hash_4(tmpdir):
+def test_input_file_hash_4(tmp_path):
     """input spec with nested list, that contain ints and Files,
     checking changes in checksums
     """
-    file = tmpdir.join("in_file_1.txt")
+    file = tmp_path / "in_file_1.txt"
     with open(file, "w") as f:
         f.write("hello")
 
@@ -310,23 +305,23 @@ def test_input_file_hash_4(tmpdir):
     assert hash1 != hash1a
 
     # checking if different name doesn't affect the hash
-    file_diffname = tmpdir.join("in_file_2.txt")
+    file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
     hash2 = inputs(in_file=[[file_diffname, 3]]).hash
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
-    file_diffcontent = tmpdir.join("in_file_1.txt")
+    file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
     hash3 = inputs(in_file=[[file_diffcontent, 3]]).hash
     assert hash1 != hash3
 
 
-def test_input_file_hash_5(tmpdir):
+def test_input_file_hash_5(tmp_path):
     """input spec with File in nested containers, checking changes in checksums"""
-    file = tmpdir.join("in_file_1.txt")
+    file = tmp_path / "in_file_1.txt"
     with open(file, "w") as f:
         f.write("hello")
 
@@ -346,14 +341,14 @@ def test_input_file_hash_5(tmpdir):
     assert hash1 != hash1a
 
     # checking if different name doesn't affect the hash
-    file_diffname = tmpdir.join("in_file_2.txt")
+    file_diffname = tmp_path / "in_file_2.txt"
     with open(file_diffname, "w") as f:
         f.write("hello")
     hash2 = inputs(in_file=[{"file": file_diffname, "int": 3}]).hash
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
-    file_diffcontent = tmpdir.join("in_file_1.txt")
+    file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
     hash3 = inputs(in_file=[{"file": file_diffcontent, "int": 3}]).hash

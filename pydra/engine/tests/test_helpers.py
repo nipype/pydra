@@ -5,6 +5,7 @@ import random
 import platform
 import pytest
 import cloudpickle as cp
+from fileformats.generic import Directory
 from .utils import multiply, raise_xeq1
 from ..helpers import (
     hash_value,

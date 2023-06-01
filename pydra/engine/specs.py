@@ -54,7 +54,7 @@ T = ty.TypeVar("T")
 class MultiInputObj(ty.List[T]):
     """A ty.List[ty.Any] object, converter changes a single values to a list"""
 
-    def __init__(self, items):
+    def __init__(self, items: ty.Union[T, ty.Iterable[T]]):
         if not isinstance(items, ty.Iterable):
             items = (items,)
         super().__init__(items)
@@ -124,25 +124,25 @@ class BaseSpec:
             if field.metadata.get("output_file_template") is None
         }
 
-    def __setattr__(self, name, value):
-        """changing settatr, so the converter and validator is run
-        if input is set after __init__
-        """
-        if inspect.stack()[1][3] == "__init__" or name in [
-            "inp_hash",
-            "changed",
-            "files_hash",
-        ]:
-            super().__setattr__(name, value)
-        else:
-            tp = attr.fields_dict(self.__class__)[name].type
-            # if the type has a converter, e.g., MultiInputObj
-            if hasattr(tp, "converter"):
-                value = tp.converter(value)
-            self.files_hash[name] = {}
-            super().__setattr__(name, value)
-            # validate all fields that have set a validator
-            attr.validate(self)
+    # def __setattr__(self, name, value):
+    #     """changing settatr, so the converter and validator is run
+    #     if input is set after __init__
+    #     """
+    #     if inspect.stack()[1][3] == "__init__" or name in [
+    #         "inp_hash",
+    #         "changed",
+    #         "files_hash",
+    #     ]:
+    #         super().__setattr__(name, value)
+    #     else:
+    #         tp = attr.fields_dict(self.__class__)[name].type
+    #         # if the type has a converter, e.g., MultiInputObj
+    #         if hasattr(tp, "converter"):
+    #             value = tp.converter(value)
+    #         self.files_hash[name] = {}
+    #         super().__setattr__(name, value)
+    #         # validate all fields that have set a validator
+    #         attr.validate(self)
 
     def collect_additional_outputs(self, inputs, output_dir, outputs):
         """Get additional outputs."""
@@ -808,11 +808,14 @@ class LazyOut(LazyInterface):
     _attr_type = "output"
 
     def _get_type(self, name):
-        return next(t for n, t in self._node.output_spec.fields if n == name)
+        try:
+            return next(f[1] for f in self._node.output_spec.fields if f[0] == name)
+        except StopIteration:
+            return ty.Any
 
     @property
     def _field_names(self):
-        return self._node.output_names
+        return self._node.output_names + ["all_"]
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -836,28 +839,33 @@ class LazyField:
             result = node.result(state_index=state_index)
             if isinstance(result, list):
                 if len(result) and isinstance(result[0], list):
-                    results_new = []
+                    results_new = gathered()
                     for res_l in result:
-                        res_l_new = []
+                        res_l_new = gathered()
                         for res in res_l:
                             if res.errored:
                                 raise ValueError("Error from get_value")
                             else:
                                 res_l_new.append(res.get_output_field(self.field))
                         results_new.append(res_l_new)
-                    return results_new
                 else:
-                    results_new = []
+                    results_new = gathered()
                     for res in result:
                         if res.errored:
                             raise ValueError("Error from get_value")
                         else:
                             results_new.append(res.get_output_field(self.field))
-                    return results_new
+                return results_new
             else:
                 if result.errored:
                     raise ValueError("Error from get_value")
                 return result.get_output_field(self.field)
+
+
+class gathered(list):
+    """a list of values gathered from, or to be split over, multiple nodes of the same
+    task. Used in type-checking to differentiate between list types and gathered values
+    """
 
 
 def donothing(*args, **kwargs):

@@ -11,6 +11,7 @@ import re
 from time import strftime
 from traceback import format_exception
 import attr
+import attrs  # New defaults
 from filelock import SoftFileLock, Timeout
 import cloudpickle as cp
 
@@ -285,7 +286,9 @@ def make_klass(spec):
                     type=tp,
                     **kwargs,
                 )
-            newfield.converter = TypeChecker[newfield.type](newfield.type)
+            type_checker = TypeChecker[newfield.type](newfield.type)
+            newfield.converter = type_checker
+            newfield.on_setattr = attr.setters.convert
             try:
                 newfield.metadata["allowed_values"]
             except KeyError:
@@ -294,7 +297,9 @@ def make_klass(spec):
                 newfield.validator = allowed_values_validator
             newfields[name] = newfield
         fields = newfields
-    return attr.make_class(spec.name, fields, bases=spec.bases, kw_only=True)
+    return attrs.make_class(
+        spec.name, fields, bases=spec.bases, kw_only=True, on_setattr=None
+    )
 
 
 # def custom_validator(instance, attribute, value):

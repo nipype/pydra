@@ -287,3 +287,8 @@ def test_type_coercion_realistic():
         match="Cannot coerce <class 'fileformats.generic.File'> into <class 'int'>",
     ):
         TypeChecker(ty.List[int])(task.lzout.a)  # pylint: disable=no-member
+
+    with pytest.raises(
+        TypeError, match="Cannot coerce 'bad-value' into <class 'list'>"
+    ):
+        task.inputs.x = "bad-value"

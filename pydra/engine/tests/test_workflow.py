@@ -18,6 +18,7 @@ from .utils import (
     fun_addvar,
     fun_addtwo,
     add2_sub2_res,
+    add2_sub2_res_list,
     fun_addvar_none,
     fun_addvar_default,
     fun_write_file,
@@ -29,7 +30,7 @@ from .utils import (
 from ..submitter import Submitter
 from ..core import Workflow
 from ... import mark
-from ..specs import SpecInfo, BaseSpec, ShellSpec
+from ..specs import SpecInfo, BaseSpec, ShellSpec, gathered
 
 
 def test_wf_no_input_spec():
@@ -4047,10 +4048,10 @@ def test_wf_lzoutall_st_2(plugin, tmpdir):
     wf.add(
         multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]).combine("x")
     )
-    wf.add(add2_sub2_res(name="add_sub", res=wf.mult.lzout.all_))
+    wf.add(add2_sub2_res_list(name="add_sub", res=wf.mult.lzout.all_))
     wf.set_output([("out_add", wf.add_sub.lzout.out_add)])
-    wf.inputs.x = [2, 20]
-    wf.inputs.y = [3, 30]
+    wf.inputs.x = gathered([2, 20])
+    wf.inputs.y = gathered([3, 30])
     wf.plugin = plugin
     wf.cache_dir = tmpdir
 
@@ -4106,8 +4107,9 @@ def test_wf_resultfile_1(plugin, tmpdir):
 
     results = wf.result()
     # checking if the file exists and if it is in the Workflow directory
-    assert results.output.wf_out.exists()
-    assert results.output.wf_out == wf.output_dir / "file_1.txt"
+    wf_out = results.output.wf_out.fspath
+    wf_out.exists()
+    assert wf_out == wf.output_dir / "file_1.txt"
 
 
 def test_wf_resultfile_2(plugin, tmpdir):

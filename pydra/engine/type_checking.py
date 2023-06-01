@@ -1,9 +1,10 @@
 import itertools
 import inspect
+from pathlib import Path
 import os
 import typing as ty
 import attr
-from .specs import LazyField
+from .specs import LazyField, gathered
 
 
 T = ty.TypeVar("T")
@@ -39,8 +40,9 @@ class TypeChecker(ty.Generic[T]):
     COERCIBLE_DEFAULT = (
         (ty.Sequence, ty.Sequence),
         (ty.Mapping, ty.Mapping),
-        (os.PathLike, os.PathLike),
+        (Path, os.PathLike),
         (str, os.PathLike),
+        (os.PathLike, Path),
         (os.PathLike, str),
         (int, float),
     )
@@ -59,6 +61,8 @@ class TypeChecker(ty.Generic[T]):
     ):
         def expand_pattern(t):
             """Recursively expand the type arguments of the target type in nested tuples"""
+            if t is inspect._empty:
+                return None
             origin = ty.get_origin(t)
             if origin is None:
                 return t
@@ -98,16 +102,21 @@ class TypeChecker(ty.Generic[T]):
         """
         coerced: T
         if obj is attr.NOTHING:
-            coerced = attr.NOTHING  # type: ignore
+            coerced = attr.NOTHING  # type: ignore[assignment]
         elif isinstance(obj, LazyField):
-            self.check_type(obj.type)
-            coerced = obj  # type: ignore
+            if obj.attr_type == "output":
+                self.check_type(obj.type)
+            coerced = obj  # type: ignore[assignment]
+        elif isinstance(obj, gathered):
+            coerced = gathered(self(o) for o in obj)  # type: ignore[assignment]
         else:
             coerced = self.coerce(obj)
         return coerced
 
     def coerce(self, object_: ty.Any) -> T:
         """Attempts to coerce the given object to the type of the specified type"""
+        if self.pattern is None:
+            return object_
 
         def expand_and_coerce(obj, pattern: ty.Union[type | tuple]):
             """Attempt to expand the object along the lines of the coercion pattern"""
@@ -142,7 +151,7 @@ class TypeChecker(ty.Generic[T]):
             """Coerce an object to a "basic types" like `int`, `float`, `bool`, `Path`
             and `File` in contrast to compound types like `list[int]`,
             `dict[str, str]` and `dict[str, list[int]]`"""
-            if pattern is inspect._empty or self.is_instance(obj, pattern):
+            if self.is_instance(obj, pattern):
                 return obj
             self.check_coercible(obj, pattern)
             return coerce_to_type(obj, pattern)
@@ -154,7 +163,7 @@ class TypeChecker(ty.Generic[T]):
             for arg in pattern_args:
                 try:
                     return expand_and_coerce(obj, arg)
-                except TypeError as e:
+                except Exception as e:
                     reasons.append(e)
             raise TypeError(
                 f"Could not coerce {obj} to any of the union types:\n\n"
@@ -245,6 +254,8 @@ class TypeChecker(ty.Generic[T]):
         TypeError
             if the type is not either the specified type, a sub-type or coercible to it
         """
+        if self.pattern is None:
+            return
 
         def expand_and_check(tp, pattern: ty.Union[type | tuple]):
             """Attempt to expand the object along the lines of the coercion pattern"""
@@ -369,14 +380,18 @@ class TypeChecker(ty.Generic[T]):
 
         if not matches(self.coercible):
             raise TypeError(
-                f"Cannot coerce {source} into {target} as the coercion doesn't match "
-                f"any of the explicit inclusion criteria {self.coercible}"
+                f"Cannot coerce {repr(source)} into {target} as the coercion doesn't match "
+                f"any of the explicit inclusion criteria: "
+                + ", ".join(f"{s.__name__} -> {t.__name__}" for s, t in self.coercible)
             )
         matches_not_coercible = matches(self.not_coercible)
         if matches_not_coercible:
             raise TypeError(
-                f"Cannot coerce {source} into {target} as it is explicitly excluded by "
-                f"the following coercion criteria {matches_not_coercible}"
+                f"Cannot coerce {repr(source)} into {target} as it is explicitly "
+                "excluded by the following coercion criteria: "
+                + ", ".join(
+                    f"{s.__name__} -> {t.__name__}" for s, t in matches_not_coercible
+                )
             )
 
     @staticmethod

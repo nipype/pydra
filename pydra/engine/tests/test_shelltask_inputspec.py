@@ -9,6 +9,7 @@ from ..specs import (
     SpecInfo,
     File,
     MultiInputObj,
+    gathered,
 )
 
 
@@ -108,7 +109,7 @@ def test_shell_cmd_inputs_1_st():
         name="shelly",
         executable="executable",
         args="arg",
-        inpA=["inp1", "inp2"],
+        inpA=gathered(["inp1", "inp2"]),
         input_spec=my_input_spec,
     ).split("inpA")
     # cmdline should be a list
@@ -1926,7 +1927,9 @@ def test_shell_cmd_inputs_template_1_st():
 
 
 # TODO: after deciding how we use requires/templates
-def test_shell_cmd_inputs_di(tmpdir, use_validator):
+def test_shell_cmd_inputs_di(
+    tmpdir,
+):
     """example from #279"""
     my_input_spec = SpecInfo(
         name="Input",

@@ -1,5 +1,6 @@
 import pytest
-from pydra import set_input_validator
+
+# from pydra import set_input_validator
 
 try:
     import importlib_resources
@@ -16,8 +17,8 @@ def data_tests_dir():
         yield path
 
 
-@pytest.fixture()
-def use_validator():
-    set_input_validator(flag=True)
-    yield None
-    set_input_validator(flag=False)
+# @pytest.fixture()
+# def use_validator():
+#     set_input_validator(flag=True)
+#     yield None
+#     set_input_validator(flag=False)

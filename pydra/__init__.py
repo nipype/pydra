@@ -49,9 +49,9 @@ if not hasattr(__main__, "__file__"):
         TaskBase._etelemetry_version_data = check_latest_version()
 
 
-# attr run_validators is set to False, but could be changed using use_validator
-attr.set_run_validators(False)
+# # attr run_validators is set to False, but could be changed using use_validator
+# attr.set_run_validators(False)
 
 
-def set_input_validator(flag=False):
-    attr.set_run_validators(flag)
+# def set_input_validator(flag=False):
+#     attr.set_run_validators(flag)

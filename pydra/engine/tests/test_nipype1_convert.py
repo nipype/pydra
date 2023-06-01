@@ -119,4 +119,4 @@ def test_interface_run_1():
     task = TouchInterf(new_file="hello.txt")
     assert task.cmdline == "touch hello.txt"
     res = task()
-    assert res.output.new_file.exists()
+    assert res.output.new_file.fspath.exists()

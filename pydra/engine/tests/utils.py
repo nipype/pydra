@@ -142,9 +142,14 @@ def raise_xeq1(x):
 @mark.annotate({"return": {"out_add": float, "out_sub": float}})
 def add2_sub2_res(res):
     """function that takes entire output as an input"""
-    if isinstance(res, list):
-        return [r["out"] + 2 for r in res], [r["out"] - 2 for r in res]
     return res["out"] + 2, res["out"] - 2
+
+
+@mark.task
+@mark.annotate({"return": {"out_add": ty.List[float], "out_sub": ty.List[float]}})
+def add2_sub2_res_list(res):
+    """function that takes entire output as an input"""
+    return [r["out"] + 2 for r in res], [r["out"] - 2 for r in res]
 
 
 @mark.task

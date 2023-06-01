@@ -49,7 +49,7 @@ def test_name_conflict():
     assert "Cannot use names of attributes or methods" in str(excinfo2.value)
 
 
-def test_numpy(use_validator):
+def test_numpy():
     """checking if mark.task works for numpy functions"""
     np = pytest.importorskip("numpy")
     fft = mark.annotate({"a": np.ndarray, "return": np.ndarray})(np.fft.fft)
@@ -69,7 +69,7 @@ def test_checksum():
     )
 
 
-def test_annotated_func(use_validator):
+def test_annotated_func():
     @mark.task
     def testfunc(
         a: int, b: float = 0.1
@@ -107,13 +107,13 @@ def test_annotated_func(use_validator):
         "Input Parameters:",
         "- a: int",
         "- b: float (default: 0.1)",
-        "- _func: str",
+        "- _func: bytes",
         "Output Parameters:",
         "- out_out: float",
     ]
 
 
-def test_annotated_func_dictreturn(use_validator):
+def test_annotated_func_dictreturn():
     """Test mapping from returned dictionary to output spec."""
 
     @mark.task
@@ -127,14 +127,14 @@ def test_annotated_func_dictreturn(use_validator):
     # Part of the annotation and returned, should be exposed to output.
     assert result.output.sum == 5
 
-    # Part of the annotation but not returned, should be coalesced to None.
-    assert result.output.mul is None
+    # Part of the annotation but not returned, should be coalesced to attr.NOTHING.
+    assert result.output.mul is attr.NOTHING
 
     # Not part of the annotation, should be discarded.
     assert not hasattr(result.output, "diff")
 
 
-def test_annotated_func_multreturn(use_validator):
+def test_annotated_func_multreturn():
     """the function has two elements in the return statement"""
 
     @mark.task
@@ -166,14 +166,14 @@ def test_annotated_func_multreturn(use_validator):
         "Help for FunctionTask",
         "Input Parameters:",
         "- a: float",
-        "- _func: str",
+        "- _func: bytes",
         "Output Parameters:",
         "- fractional: float",
         "- integer: int",
     ]
 
 
-def test_annotated_input_func_1(use_validator):
+def test_annotated_input_func_1():
     """the function with annotated input (float)"""
 
     @mark.task
@@ -184,7 +184,7 @@ def test_annotated_input_func_1(use_validator):
     assert getattr(funky.inputs, "a") == 3.5
 
 
-def test_annotated_input_func_2(use_validator):
+def test_annotated_input_func_2():
     """the function with annotated input (int, but float provided)"""
 
     @mark.task
@@ -195,7 +195,7 @@ def test_annotated_input_func_2(use_validator):
         testfunc(a=3.5)
 
 
-def test_annotated_input_func_2a(use_validator):
+def test_annotated_input_func_2a():
     """the function with annotated input (int, but float provided)"""
 
     @mark.task
@@ -207,7 +207,7 @@ def test_annotated_input_func_2a(use_validator):
         funky.inputs.a = 3.5
 
 
-def test_annotated_input_func_3(use_validator):
+def test_annotated_input_func_3():
     """the function with annotated input (list)"""
 
     @mark.task
@@ -229,7 +229,7 @@ def test_annotated_input_func_3a():
     assert getattr(funky.inputs, "a") == [1.0, 3.5]
 
 
-def test_annotated_input_func_3b(use_validator):
+def test_annotated_input_func_3b():
     """the function with annotated input
     (list of floats - int and float provided, should be fine)
     """
@@ -242,7 +242,7 @@ def test_annotated_input_func_3b(use_validator):
     assert getattr(funky.inputs, "a") == [1, 3.5]
 
 
-def test_annotated_input_func_3c_excep(use_validator):
+def test_annotated_input_func_3c_excep():
     """the function with annotated input
     (list of ints - int and float provided, should raise an error)
     """
@@ -255,7 +255,7 @@ def test_annotated_input_func_3c_excep(use_validator):
         testfunc(a=[1, 3.5])
 
 
-def test_annotated_input_func_4(use_validator):
+def test_annotated_input_func_4():
     """the function with annotated input (dictionary)"""
 
     @mark.task
@@ -266,7 +266,7 @@ def test_annotated_input_func_4(use_validator):
     assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
 
 
-def test_annotated_input_func_4a(use_validator):
+def test_annotated_input_func_4a():
     """the function with annotated input (dictionary of floats)"""
 
     @mark.task
@@ -277,7 +277,7 @@ def test_annotated_input_func_4a(use_validator):
     assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
 
 
-def test_annotated_input_func_4b_excep(use_validator):
+def test_annotated_input_func_4b_excep():
     """the function with annotated input (dictionary of ints, but float provided)"""
 
     @mark.task
@@ -288,7 +288,7 @@ def test_annotated_input_func_4b_excep(use_validator):
         testfunc(a={"el1": 1, "el2": 3.5})
 
 
-def test_annotated_input_func_5(use_validator):
+def test_annotated_input_func_5():
     """the function with annotated more complex input type (ty.List in ty.Dict)
     the validator should simply check if values of dict are lists
     so no error for 3.5
@@ -302,7 +302,7 @@ def test_annotated_input_func_5(use_validator):
     assert getattr(funky.inputs, "a") == {"el1": [1, 3.5]}
 
 
-def test_annotated_input_func_5a_except(use_validator):
+def test_annotated_input_func_5a_except():
     """the function with annotated more complex input type (ty.Dict in ty.Dict)
     list is provided as a dict value (instead a dict), so error is raised
     """
@@ -315,7 +315,7 @@ def test_annotated_input_func_5a_except(use_validator):
         testfunc(a={"el1": [1, 3.5]})
 
 
-def test_annotated_input_func_6(use_validator):
+def test_annotated_input_func_6():
     """the function with annotated more complex input type (ty.Union in ty.Dict)
     the validator should unpack values from the Union
     """
@@ -328,7 +328,7 @@ def test_annotated_input_func_6(use_validator):
     assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
 
 
-def test_annotated_input_func_6a_excep(use_validator):
+def test_annotated_input_func_6a_excep():
     """the function with annotated more complex input type (ty.Union in ty.Dict)
     the validator should unpack values from the Union and raise an error for 3.5
     """
@@ -341,7 +341,7 @@ def test_annotated_input_func_6a_excep(use_validator):
         testfunc(a={"el1": 1, "el2": 3.5})
 
 
-def test_annotated_input_func_7(use_validator):
+def test_annotated_input_func_7():
     """the function with annotated input (float)
     the task has a splitter, so list of float is provided
     it should work, the validator tries to guess if this is a field with a splitter
@@ -355,7 +355,7 @@ def test_annotated_input_func_7(use_validator):
     assert getattr(funky.inputs, "a") == [3.5, 2.1]
 
 
-def test_annotated_input_func_7a_excep(use_validator):
+def test_annotated_input_func_7a_excep():
     """the function with annotated input (int) and splitter
     list of float provided - should raise an error (list of int would be fine)
     """
@@ -416,7 +416,7 @@ def test_annotated_input_func_8b():
     assert res.output.out == 1
 
 
-def test_annotated_func_multreturn_exception(use_validator):
+def test_annotated_func_multreturn_exception():
     """function has two elements in the return statement,
     but three element provided in the spec - should raise an error
     """
@@ -472,7 +472,7 @@ def test_halfannotated_func():
         "Input Parameters:",
         "- a: _empty",
         "- b: _empty",
-        "- _func: str",
+        "- _func: bytes",
         "Output Parameters:",
         "- out: int",
     ]
@@ -513,7 +513,7 @@ def test_halfannotated_func_multreturn():
         "Input Parameters:",
         "- a: _empty",
         "- b: _empty",
-        "- _func: str",
+        "- _func: bytes",
         "Output Parameters:",
         "- out1: int",
         "- out2: int",
@@ -581,7 +581,7 @@ def test_notannotated_func_multreturn():
     assert result.output.out == (20.2, 13.8)
 
 
-def test_input_spec_func_1(use_validator):
+def test_input_spec_func_1():
     """the function w/o annotated, but input_spec is used"""
 
     @mark.task
@@ -598,7 +598,7 @@ def test_input_spec_func_1(use_validator):
     assert getattr(funky.inputs, "a") == 3.5
 
 
-def test_input_spec_func_1a_except(use_validator):
+def test_input_spec_func_1a_except():
     """the function w/o annotated, but input_spec is used
     a TypeError is raised (float is provided instead of int)
     """
@@ -616,7 +616,7 @@ def test_input_spec_func_1a_except(use_validator):
         testfunc(a=3.5, input_spec=my_input_spec)
 
 
-def test_input_spec_func_1b_except(use_validator):
+def test_input_spec_func_1b_except():
     """the function w/o annotated, but input_spec is used
     metadata checks raise an error
     """
@@ -639,7 +639,7 @@ def test_input_spec_func_1b_except(use_validator):
         testfunc(a=3.5, input_spec=my_input_spec)
 
 
-def test_input_spec_func_1d_except(use_validator):
+def test_input_spec_func_1d_except():
     """the function w/o annotated, but input_spec is used
     input_spec doesn't contain 'a' input, an error is raised
     """
@@ -654,7 +654,7 @@ def test_input_spec_func_1d_except(use_validator):
         funky()
 
 
-def test_input_spec_func_2(use_validator):
+def test_input_spec_func_2():
     """the function with annotation, and the task has input_spec,
     input_spec changes the type of the input (so error is not raised)
     """
@@ -673,7 +673,7 @@ def test_input_spec_func_2(use_validator):
     assert getattr(funky.inputs, "a") == 3.5
 
 
-def test_input_spec_func_2a(use_validator):
+def test_input_spec_func_2a():
     """the function with annotation, and the task has input_spec,
     input_spec changes the type of the input (so error is not raised)
     using the shorter syntax
@@ -693,7 +693,7 @@ def test_input_spec_func_2a(use_validator):
     assert getattr(funky.inputs, "a") == 3.5
 
 
-def test_input_spec_func_3(use_validator):
+def test_input_spec_func_3():
     """the function w/o annotated, but input_spec is used
     additional keys (allowed_values) are used in metadata
     """
@@ -720,7 +720,7 @@ def test_input_spec_func_3(use_validator):
     assert getattr(funky.inputs, "a") == 2
 
 
-def test_input_spec_func_3a_except(use_validator):
+def test_input_spec_func_3a_except():
     """the function w/o annotated, but input_spec is used
     allowed_values is used in metadata and the ValueError is raised
     """
@@ -747,7 +747,7 @@ def test_input_spec_func_3a_except(use_validator):
         testfunc(a=3, input_spec=my_input_spec)
 
 
-def test_input_spec_func_4(use_validator):
+def test_input_spec_func_4():
     """the function with a default value for b
     but b is set as mandatory in the input_spec, so error is raised if not provided
     """
@@ -780,7 +780,7 @@ def test_input_spec_func_4(use_validator):
         funky()
 
 
-def test_input_spec_func_4a(use_validator):
+def test_input_spec_func_4a():
     """the function with a default value for b and metadata in the input_spec
     has a different default value, so value from the function is overwritten
     """
@@ -831,7 +831,7 @@ def test_input_spec_func_5():
     assert res.output.out == 1
 
 
-def test_output_spec_func_1(use_validator):
+def test_output_spec_func_1():
     """the function w/o annotated, but output_spec is used"""
 
     @mark.task
@@ -849,7 +849,7 @@ def test_output_spec_func_1(use_validator):
     assert res.output.out1 == 3.5
 
 
-def test_output_spec_func_1a_except(use_validator):
+def test_output_spec_func_1a_except():
     """the function w/o annotated, but output_spec is used
     float returned instead of int - TypeError
     """
@@ -869,7 +869,7 @@ def test_output_spec_func_1a_except(use_validator):
         funky()
 
 
-def test_output_spec_func_2(use_validator):
+def test_output_spec_func_2():
     """the function w/o annotated, but output_spec is used
     output_spec changes the type of the output (so error is not raised)
     """
@@ -889,7 +889,7 @@ def test_output_spec_func_2(use_validator):
     assert res.output.out1 == 3.5
 
 
-def test_output_spec_func_2a(use_validator):
+def test_output_spec_func_2a():
     """the function w/o annotated, but output_spec is used
     output_spec changes the type of the output (so error is not raised)
     using a shorter syntax
@@ -910,7 +910,7 @@ def test_output_spec_func_2a(use_validator):
     assert res.output.out1 == 3.5
 
 
-def test_output_spec_func_3(use_validator):
+def test_output_spec_func_3():
     """the function w/o annotated, but output_spec is used
     MultiOutputObj is used, output is a 2-el list, so converter doesn't do anything
     """
@@ -935,7 +935,7 @@ def test_output_spec_func_3(use_validator):
     assert res.output.out_list == [3.5, 1]
 
 
-def test_output_spec_func_4(use_validator):
+def test_output_spec_func_4():
     """the function w/o annotated, but output_spec is used
     MultiOutputObj is used, output is a 1el list, so converter return the element
     """
@@ -994,7 +994,9 @@ def test_result_none_2():
     assert res.output.out2 is None
 
 
-def test_audit_prov(tmpdir, use_validator):
+def test_audit_prov(
+    tmpdir,
+):
     @mark.task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
@@ -1192,7 +1194,9 @@ def test_audit_shellcommandtask_version(tmpdir):
     assert any(version_content)
 
 
-def test_audit_prov_messdir_1(tmpdir, use_validator):
+def test_audit_prov_messdir_1(
+    tmpdir,
+):
     """customized messenger dir"""
 
     @mark.task
@@ -1218,7 +1222,9 @@ def test_audit_prov_messdir_1(tmpdir, use_validator):
     assert (tmpdir / funky.checksum / "messages.jsonld").exists()
 
 
-def test_audit_prov_messdir_2(tmpdir, use_validator):
+def test_audit_prov_messdir_2(
+    tmpdir,
+):
     """customized messenger dir in init"""
 
     @mark.task
@@ -1248,7 +1254,9 @@ def test_audit_prov_messdir_2(tmpdir, use_validator):
     assert (tmpdir / "messages.jsonld").exists()
 
 
-def test_audit_prov_wf(tmpdir, use_validator):
+def test_audit_prov_wf(
+    tmpdir,
+):
     """FileMessenger for wf"""
 
     @mark.task
@@ -1275,7 +1283,9 @@ def test_audit_prov_wf(tmpdir, use_validator):
     assert (tmpdir / wf.checksum / "messages.jsonld").exists()
 
 
-def test_audit_all(tmpdir, use_validator):
+def test_audit_all(
+    tmpdir,
+):
     @mark.task
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b

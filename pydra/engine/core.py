@@ -536,7 +536,9 @@ class TaskBase:
     def _collect_outputs(self, output_dir):
         run_output = self.output_
         output_klass = make_klass(self.output_spec)
-        output = output_klass(**{f.name: None for f in attr.fields(output_klass)})
+        output = output_klass(
+            **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
+        )
         other_output = output.collect_additional_outputs(
             self.inputs, output_dir, run_output
         )
@@ -1207,7 +1209,9 @@ class Workflow(TaskBase):
 
     def _collect_outputs(self):
         output_klass = make_klass(self.output_spec)
-        output = output_klass(**{f.name: None for f in attr.fields(output_klass)})
+        output = output_klass(
+            **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
+        )
         # collecting outputs from tasks
         output_wf = {}
         for name, val in self._connections:

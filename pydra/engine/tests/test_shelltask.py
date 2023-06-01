@@ -275,7 +275,7 @@ def test_wf_shell_cmd_1(plugin, tmpdir):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_1(plugin, results_function, use_validator, tmpdir):
+def test_shell_cmd_inputspec_1(plugin, results_function, tmpdir):
     """a command with executable, args and one command opt,
     using a customized input_spec to add the opt to the command
     in the right place that is specified in metadata["cmd_pos"]
@@ -315,7 +315,7 @@ def test_shell_cmd_inputspec_1(plugin, results_function, use_validator, tmpdir):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_2(plugin, results_function, use_validator, tmpdir):
+def test_shell_cmd_inputspec_2(plugin, results_function, tmpdir):
     """a command with executable, args and two command options,
     using a customized input_spec to add the opt to the command
     in the right place that is specified in metadata["cmd_pos"]
@@ -1664,10 +1664,11 @@ def test_shell_cmd_inputspec_12(tmpdir, plugin, results_function):
 
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
-    assert res.output.file_copy.exists()
-    assert res.output.file_copy.name == "file_even.txt"
+    fspath = res.output.file_copy.fspath
+    assert fspath.exists()
+    assert fspath.name == "file_even.txt"
     # checking if it's created in a good place
-    assert shelly.output_dir == res.output.file_copy.parent
+    assert shelly.output_dir == fspath.parent
 
 
 def test_shell_cmd_inputspec_with_iterable():
@@ -1941,7 +1942,7 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function, tmpdir):
     assert res[1].output.stdout == "hi\n"
 
 
-def test_shell_cmd_inputspec_typeval_1(use_validator):
+def test_shell_cmd_inputspec_typeval_1():
     """customized input_spec with a type that doesn't match the value
     - raise an exception
     """
@@ -1965,7 +1966,7 @@ def test_shell_cmd_inputspec_typeval_1(use_validator):
         ShellCommandTask(executable=cmd_exec, text="hello", input_spec=my_input_spec)
 
 
-def test_shell_cmd_inputspec_typeval_2(use_validator):
+def test_shell_cmd_inputspec_typeval_2():
     """customized input_spec (shorter syntax) with a type that doesn't match the value
     - raise an exception
     """
