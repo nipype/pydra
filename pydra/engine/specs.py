@@ -839,9 +839,9 @@ class LazyField:
             result = node.result(state_index=state_index)
             if isinstance(result, list):
                 if len(result) and isinstance(result[0], list):
-                    results_new = gathered()
+                    results_new = array()
                     for res_l in result:
-                        res_l_new = gathered()
+                        res_l_new = array()
                         for res in res_l:
                             if res.errored:
                                 raise ValueError("Error from get_value")
@@ -849,7 +849,7 @@ class LazyField:
                                 res_l_new.append(res.get_output_field(self.field))
                         results_new.append(res_l_new)
                 else:
-                    results_new = gathered()
+                    results_new = array()
                     for res in result:
                         if res.errored:
                             raise ValueError("Error from get_value")
@@ -862,9 +862,9 @@ class LazyField:
                 return result.get_output_field(self.field)
 
 
-class gathered(list):
-    """a list of values gathered from, or to be split over, multiple nodes of the same
-    task. Used in type-checking to differentiate between list types and gathered values
+class array(list):
+    """a list of values array from, or to be split over, multiple nodes of the same
+    task. Used in type-checking to differentiate between list types and array values
     """
 
 

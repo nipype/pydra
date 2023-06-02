@@ -9,7 +9,7 @@ from ..specs import (
     SpecInfo,
     File,
     MultiInputObj,
-    gathered,
+    array,
 )
 
 
@@ -109,7 +109,7 @@ def test_shell_cmd_inputs_1_st():
         name="shelly",
         executable="executable",
         args="arg",
-        inpA=gathered(["inp1", "inp2"]),
+        inpA=array(["inp1", "inp2"]),
         input_spec=my_input_spec,
     ).split("inpA")
     # cmdline should be a list
@@ -404,7 +404,9 @@ def test_shell_cmd_inputs_list_sep_1():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA=["aaa", "bbb", "ccc"], input_spec=my_input_spec
+        executable="executable",
+        inpA=array(["aaa", "bbb", "ccc"]),
+        input_spec=my_input_spec,
     )
     # separated by commas
     assert shelly.cmdline == "executable aaa,bbb,ccc"
@@ -432,7 +434,9 @@ def test_shell_cmd_inputs_list_sep_2():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA=["aaa", "bbb", "ccc"], input_spec=my_input_spec
+        executable="executable",
+        inpA=array(["aaa", "bbb", "ccc"]),
+        input_spec=my_input_spec,
     )
     # a flag is used once
     assert shelly.cmdline == "executable -v aaa,bbb,ccc"
@@ -460,7 +464,9 @@ def test_shell_cmd_inputs_list_sep_2a():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA=["aaa", "bbb", "ccc"], input_spec=my_input_spec
+        executable="executable",
+        inpA=array(["aaa", "bbb", "ccc"]),
+        input_spec=my_input_spec,
     )
     # a flag is used once
     assert shelly.cmdline == "executable -v aaa,bbb,ccc"
@@ -488,7 +494,9 @@ def test_shell_cmd_inputs_list_sep_3():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA=["aaa", "bbb", "ccc"], input_spec=my_input_spec
+        executable="executable",
+        inpA=array(["aaa", "bbb", "ccc"]),
+        input_spec=my_input_spec,
     )
     # a flag is repeated
     assert shelly.cmdline == "executable -v aaa, -v bbb, -v ccc"
@@ -516,7 +524,9 @@ def test_shell_cmd_inputs_list_sep_3a():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA=["aaa", "bbb", "ccc"], input_spec=my_input_spec
+        executable="executable",
+        inpA=array(["aaa", "bbb", "ccc"]),
+        input_spec=my_input_spec,
     )
     # a flag is repeated
     assert shelly.cmdline == "executable -v aaa, -v bbb, -v ccc"
@@ -544,7 +554,7 @@ def test_shell_cmd_inputs_sep_4():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA=["aaa"], input_spec=my_input_spec
+        executable="executable", inpA=array(["aaa"]), input_spec=my_input_spec
     )
     assert shelly.cmdline == "executable -v aaa"
 
@@ -623,7 +633,7 @@ def test_shell_cmd_inputs_format_2():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA=["el_1", "el_2"], input_spec=my_input_spec
+        executable="executable", inpA=array(["el_1", "el_2"]), input_spec=my_input_spec
     )
     assert shelly.cmdline == "executable -v el_1 -v el_2"
 

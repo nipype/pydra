@@ -4,7 +4,7 @@ from pathlib import Path
 import os
 import typing as ty
 import attr
-from .specs import LazyField, gathered
+from .specs import LazyField, array
 
 
 T = ty.TypeVar("T")
@@ -107,8 +107,8 @@ class TypeChecker(ty.Generic[T]):
             if obj.attr_type == "output":
                 self.check_type(obj.type)
             coerced = obj  # type: ignore[assignment]
-        elif isinstance(obj, gathered):
-            coerced = gathered(self(o) for o in obj)  # type: ignore[assignment]
+        elif isinstance(obj, array):
+            coerced = array(self(o) for o in obj)  # type: ignore[assignment]
         else:
             coerced = self.coerce(obj)
         return coerced
