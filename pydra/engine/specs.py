@@ -25,9 +25,8 @@ def attr_fields_dict(spec, exclude_names=()):
         if field.name not in exclude_names
     }
 
-
-# class File:
-#     """An :obj:`os.pathlike` object, designating a file."""
+    # class File:
+    #     """An :obj:`os.pathlike` object, designating a file."""
 
     def __init__(self, path, chunk_size=8192):
         self._path = os.fspath(path)
@@ -839,9 +838,9 @@ class LazyField:
             result = node.result(state_index=state_index)
             if isinstance(result, list):
                 if len(result) and isinstance(result[0], list):
-                    results_new = array()
+                    results_new = gathered()
                     for res_l in result:
-                        res_l_new = array()
+                        res_l_new = gathered()
                         for res in res_l:
                             if res.errored:
                                 raise ValueError("Error from get_value")
@@ -849,7 +848,7 @@ class LazyField:
                                 res_l_new.append(res.get_output_field(self.field))
                         results_new.append(res_l_new)
                 else:
-                    results_new = array()
+                    results_new = gathered()
                     for res in result:
                         if res.errored:
                             raise ValueError("Error from get_value")
@@ -862,9 +861,10 @@ class LazyField:
                 return result.get_output_field(self.field)
 
 
-class array(list):
-    """a list of values array from, or to be split over, multiple nodes of the same
-    task. Used in type-checking to differentiate between list types and array values
+class gathered(list):
+    """an array of values from, or to be split over, multiple nodes of the same
+    task. Used in type-checking to differentiate between list types and values for
+    multiple nodes
     """
 
 

@@ -9,7 +9,7 @@ from ..specs import (
     SpecInfo,
     File,
     MultiInputObj,
-    array,
+    gathered,
 )
 
 
@@ -109,7 +109,7 @@ def test_shell_cmd_inputs_1_st():
         name="shelly",
         executable="executable",
         args="arg",
-        inpA=array(["inp1", "inp2"]),
+        inpA=gathered(["inp1", "inp2"]),
         input_spec=my_input_spec,
     ).split("inpA")
     # cmdline should be a list
