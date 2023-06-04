@@ -14,6 +14,7 @@ from typing import (
     Sequence,
     Set,
     runtime_checkable,
+    _SpecialForm,
 )
 
 __all__ = (
@@ -187,6 +188,13 @@ def bytes_repr_dict(obj: dict, cache: Cache) -> Iterator[bytes]:
     yield b"dict:{"
     yield from bytes_repr_mapping_contents(obj, cache)
     yield b"}"
+
+
+@register_serializer(_SpecialForm)
+@register_serializer(type)
+def bytes_repr_type(obj: type, cache: Cache) -> Iterator[bytes]:
+    cls = type(obj)
+    yield f"{cls.__module__}.{cls.__name__}".encode()
 
 
 @register_serializer(list)
