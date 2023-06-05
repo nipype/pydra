@@ -4073,14 +4073,14 @@ def test_wf_lzoutall_st_2a(plugin, tmpdir):
     wf.add(
         multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y).split(["x", "y"]).combine("x")
     )
-    wf.add(add2_sub2_res(name="add_sub", res=wf.mult.lzout.all_))
+    wf.add(add2_sub2_res_list(name="add_sub", res=wf.mult.lzout.all_))
     wf.set_output([("out_all", wf.add_sub.lzout.all_)])
     wf.inputs.x = [2, 20]
     wf.inputs.y = [3, 30]
     wf.plugin = plugin
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin="serial") as sub:
+    with Submitter(plugin="cf") as sub:
         sub(wf)
 
     assert wf.output_dir.exists()
