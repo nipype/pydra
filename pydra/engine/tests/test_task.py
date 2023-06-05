@@ -296,7 +296,7 @@ def test_annotated_input_func_5():
     """
 
     @mark.task
-    def testfunc(a: ty.Dict[str, ty.List[int]]):
+    def testfunc(a: ty.Dict[str, ty.List]):
         return sum(a["el1"])
 
     funky = testfunc(a={"el1": [1, 3.5]})
@@ -379,7 +379,7 @@ def test_annotated_input_func_8():
         return len(a)
 
     funky = testfunc(a=3.5)
-    assert getattr(funky.inputs, "a") == [3.5]
+    assert getattr(funky.inputs, "a") == MultiInputObj([3.5])
     res = funky()
     assert res.output.out == 1
 
@@ -394,7 +394,7 @@ def test_annotated_input_func_8a():
         return len(a)
 
     funky = testfunc(a=[3.5])
-    assert getattr(funky.inputs, "a") == [3.5]
+    assert getattr(funky.inputs, "a") == MultiInputObj([3.5])
     res = funky()
     assert res.output.out == 1
 
@@ -412,7 +412,7 @@ def test_annotated_input_func_8b():
     funky = testfunc()
     # setting a after init
     funky.inputs.a = 3.5
-    assert getattr(funky.inputs, "a") == [3.5]
+    assert getattr(funky.inputs, "a") == MultiInputObj([3.5])
     res = funky()
     assert res.output.out == 1
 
@@ -933,7 +933,7 @@ def test_output_spec_func_3():
 
     funky = testfunc(a=3.5, b=1, output_spec=my_output_spec)
     res = funky()
-    assert res.output.out_list == [3.5, 1]
+    assert res.output.out_list == MultiOutputObj([3.5, 1])
 
 
 def test_output_spec_func_4():
@@ -958,7 +958,7 @@ def test_output_spec_func_4():
 
     funky = testfunc(a=3.5, output_spec=my_output_spec)
     res = funky()
-    assert res.output.out_1el == [3.5]  # MultiOutputObj always produce a list
+    assert res.output.out_1el == MultiOutputObj([3.5])
 
 
 def test_exception_func():

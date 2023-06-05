@@ -3743,7 +3743,7 @@ def test_shell_cmd_inputspec_outputspec_3():
                 str,
                 {"help_string": "2nd creadted file", "argstr": "", "position": 2},
             ),
-            ("additional_inp", str, {"help_string": "additional inp"}),
+            ("additional_inp", int, {"help_string": "additional inp"}),
         ],
         bases=(ShellSpec,),
     )
@@ -3873,7 +3873,7 @@ def test_shell_cmd_inputspec_outputspec_4():
                 str,
                 {"help_string": "1st creadted file", "argstr": "", "position": 1},
             ),
-            ("additional_inp", str, {"help_string": "additional inp"}),
+            ("additional_inp", int, {"help_string": "additional inp"}),
         ],
         bases=(ShellSpec,),
     )
@@ -3928,7 +3928,7 @@ def test_shell_cmd_inputspec_outputspec_4a():
                 str,
                 {"help_string": "1st creadted file", "argstr": "", "position": 1},
             ),
-            ("additional_inp", str, {"help_string": "additional inp"}),
+            ("additional_inp", int, {"help_string": "additional inp"}),
         ],
         bases=(ShellSpec,),
     )
@@ -3978,7 +3978,7 @@ def test_shell_cmd_inputspec_outputspec_5():
                 str,
                 {"help_string": "1st creadted file", "argstr": "", "position": 1},
             ),
-            ("additional_inp_A", str, {"help_string": "additional inp A"}),
+            ("additional_inp_A", int, {"help_string": "additional inp A"}),
             ("additional_inp_B", str, {"help_string": "additional inp B"}),
         ],
         bases=(ShellSpec,),
@@ -4033,7 +4033,7 @@ def test_shell_cmd_inputspec_outputspec_5a():
                 {"help_string": "1st creadted file", "argstr": "", "position": 1},
             ),
             ("additional_inp_A", str, {"help_string": "additional inp A"}),
-            ("additional_inp_B", str, {"help_string": "additional inp B"}),
+            ("additional_inp_B", int, {"help_string": "additional inp B"}),
         ],
         bases=(ShellSpec,),
     )

@@ -7,6 +7,7 @@ import sys
 from uuid import uuid4
 import subprocess as sp
 import getpass
+import typing as ty
 import re
 from time import strftime
 from traceback import format_exception
@@ -286,18 +287,6 @@ def make_klass(spec):
                     name, tp, dflt, mdata = item
                     kwargs["default"] = dflt
                     kwargs["metadata"] = mdata
-                try:
-                    kwargs["metadata"]["allowed_values"]
-                except KeyError:
-                    pass
-                else:
-                    try:
-                        validator = kwargs["validator"]
-                    except KeyError:
-                        validators = allowed_values_validator
-                    else:
-                        validators = [validator, allowed_values_validator]
-                    kwargs["validator"] = validators
                 newfield = attr.ib(
                     type=tp,
                     **kwargs,
@@ -305,6 +294,17 @@ def make_klass(spec):
             type_checker = TypeChecker[newfield.type](newfield.type)
             newfield.converter = type_checker
             newfield.on_setattr = attr.setters.convert
+            if "allowed_values" in newfield.metadata:
+                if newfield._validator is None:
+                    newfield._validator = allowed_values_validator
+                elif isinstance(newfield._validator, ty.Iterable):
+                    if allowed_values_validator not in newfield._validator:
+                        newfield._validator.append(allowed_values_validator)
+                elif newfield._validator is not allowed_values_validator:
+                    newfield._validator = [
+                        newfield._validator,
+                        allowed_values_validator,
+                    ]
             newfields[name] = newfield
         fields = newfields
     return attrs.make_class(

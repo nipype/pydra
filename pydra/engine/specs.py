@@ -1,17 +1,18 @@
 """Task I/O specifications."""
-import os
 from pathlib import Path
 import typing as ty
 import inspect
 import re
 from glob import glob
 import attr
+import attrs
 from fileformats.generic import (
     File,
     Directory,
 )
 
 from .helpers_file import template_update_single
+from ..utils.hash import register_serializer, bytes_repr_seq
 
 
 def attr_fields(spec, exclude_names=()):
@@ -28,44 +29,112 @@ def attr_fields_dict(spec, exclude_names=()):
     # class File:
     #     """An :obj:`os.pathlike` object, designating a file."""
 
-    def __init__(self, path, chunk_size=8192):
-        self._path = os.fspath(path)
-        self.chunk_size = chunk_size
+    # def __init__(self, path, chunk_size=8192):
+    #     self._path = os.fspath(path)
+    #     self.chunk_size = chunk_size
 
-    def __fspath__(self) -> str:
-        return self._path
+    # def __fspath__(self) -> str:
+    #     return self._path
 
-    def __bytes_repr__(self, cache):
-        with open(self._path, "rb") as fobj:
-            while True:
-                chunk = fobj.read(self.chunk_size)
-                if not chunk:
-                    break
-                yield chunk
+    # def __bytes_repr__(self, cache):
+    #     with open(self._path, "rb") as fobj:
+    #         while True:
+    #             chunk = fobj.read(self.chunk_size)
+    #             if not chunk:
+    #                 break
+    #             yield chunk
 
 
 # class Directory:
 #     """An :obj:`os.pathlike` object, designating a folder."""
-
 T = ty.TypeVar("T")
 
 
-class MultiInputObj(ty.List[T]):
+def to_list(lst):
+    if not isinstance(lst, ty.Iterable) or isinstance(lst, str):
+        lst = [lst]
+    else:
+        lst = list(lst)
+    return lst
+
+
+@attrs.define
+class MultiInputObj(ty.Generic[T]):
     """A ty.List[ty.Any] object, converter changes a single values to a list"""
 
-    def __init__(self, items: ty.Union[T, ty.Iterable[T]]):
-        if not isinstance(items, ty.Iterable):
-            items = (items,)
-        super().__init__(items)
+    items: ty.List[T] = attrs.field(converter=to_list)
 
-    # @classmethod
-    # def converter(cls, value):
-    #     from .helpers import ensure_list
+    def __getattr__(self, name):
+        """Pass all calls to methods and attributes onto underlying list so it can be
+        duck-typed"""
+        return getattr(self.items, name)
 
-    #     if value == attr.NOTHING:
-    #         return value
-    #     else:
-    #         return ensure_list(value)
+    def __repr__(self):
+        return repr(self.items)
+
+    def __iter__(self):
+        return iter(self.items)
+
+    def __len__(self):
+        return len(self.items)
+
+
+def convert_to_files(lst):
+    return [File(x) for x in lst]
+
+
+def to_single(lst):
+    if isinstance(lst, ty.Iterable) and len(lst) == 1:
+        return lst[0]
+    return lst
+
+
+class MultiInputFile(MultiInputObj[File]):
+    items: ty.List[File] = attrs.field(
+        converter=attrs.converters.pipe(to_list, convert_to_files)
+    )
+
+
+@attrs.define
+class MultiOutputObj(ty.Generic[T]):
+    item: ty.Union[T, ty.List[T]] = attrs.field(converter=to_single)
+
+    def __getattr__(self, name):
+        """Pass all calls to methods and attributes onto underlying list so it can be
+        duck-typed"""
+        return getattr(self.item, name)
+
+    def __repr__(self):
+        return repr(self.item)
+
+    def __iter__(self):
+        if not isinstance(self.item, ty.Iterable):
+            raise TypeError(f"{type(self).__name__}, {self}, is not iterable")
+        return iter(self.item)
+
+    def __len__(self):
+        if not isinstance(self.item, ty.Iterable):
+            return 1
+        return len(self.items)
+
+
+class MultiOutputFile(MultiOutputObj[File]):
+    item: ty.List[File] = attrs.field(
+        converter=attrs.converters.pipe(convert_to_files, to_single)
+    )
+
+
+register_serializer(MultiInputObj)(bytes_repr_seq)
+register_serializer(MultiOutputObj)(bytes_repr_seq)
+
+# @classmethod
+# def converter(cls, value):
+#     from .helpers import ensure_list
+
+#     if value == attr.NOTHING:
+#         return value
+#     else:
+#         return ensure_list(value)
 
 
 # class MultiOutputObj:
@@ -82,19 +151,13 @@ class MultiInputObj(ty.List[T]):
 # poor design. Downstream nodes will need to handle the case where it is a list in any
 # case so no point creating extra work by requiring them to handle the single value case
 # as well
-MultiOutputObj = ty.List
 
 # class MultiInputFile(MultiInputObj):
 #     """A ty.List[File] object, converter changes a single file path to a list"""
 
-MultiInputFile = MultiInputObj[File]
-
 
 # class MultiOutputFile(MultiOutputObj):
 #     """A ty.List[File] object, converter changes an 1-el list to the single value"""
-
-# See note on MultiOutputObj
-MultiOutputFile = ty.List[File]
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -796,7 +859,11 @@ class LazyIn(LazyInterface):
     _attr_type = "input"
 
     def _get_type(self, name):
-        return next(t for n, t in self._node.input_spec.fields if n == name).type
+        attr = next(t for n, t in self._node.input_spec.fields if n == name)
+        if attr is None:
+            return ty.Any
+        else:
+            return attr.type
 
     @property
     def _field_names(self):

@@ -1,5 +1,6 @@
 from pathlib import Path
 import typing as ty
+import os
 from copy import deepcopy
 
 from ..specs import (
@@ -88,9 +89,14 @@ class NodeTesting:
             def __init__(self):
                 self.fields = [("inp_a", None), ("inp_b", None)]
 
+        class OutSpec:
+            def __init__(self):
+                self.fields = [("out_a", None)]
+
         self.name = "tn"
         self.inputs = Input()
         self.input_spec = InpSpec()
+        self.output_spec = OutSpec()
         self.output_names = ["out_a"]
 
     def result(self, state_index=None):
@@ -122,23 +128,19 @@ class WorkflowTesting:
 
 def test_lazy_inp():
     tn = NodeTesting()
-    lf = LazyIn(node=tn)
+    lzin = LazyIn(node=tn)
 
-    with pytest.raises(Exception):
-        lf.get_value(wf=WorkflowTesting())
-
-    lf.inp_a
+    lf = lzin.inp_a
     assert lf.get_value(wf=WorkflowTesting()) == "A"
 
-    lf.inp_b
+    lf = lzin.inp_b
     assert lf.get_value(wf=WorkflowTesting()) == "B"
 
 
 def test_lazy_out():
     tn = NodeTesting()
-    lf = LazyOut(node=tn)
-
-    lf.out_a
+    lzout = LazyOut(node=tn)
+    lf = lzout.out_a
     assert lf.get_value(wf=WorkflowTesting()) == "OUT_A"
 
 
@@ -151,7 +153,7 @@ def test_lazy_getvale():
 
 
 def test_input_file_hash_1(tmp_path):
-    tmp_path.chdir()
+    os.chdir(tmp_path)
     outfile = "test.file"
     fields = [("in_file", ty.Any)]
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))

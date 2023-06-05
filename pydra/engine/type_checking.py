@@ -4,7 +4,13 @@ from pathlib import Path
 import os
 import typing as ty
 import attr
-from .specs import LazyField, gathered
+from .specs import (
+    LazyField,
+    gathered,
+    MultiInputObj,
+    MultiInputFile,
+    MultiOutputObj,
+)
 
 
 T = ty.TypeVar("T")
@@ -44,6 +50,9 @@ class TypeChecker(ty.Generic[T]):
         (str, os.PathLike),
         (os.PathLike, Path),
         (os.PathLike, str),
+        (ty.Any, MultiInputObj),
+        (ty.Union[os.PathLike, str], MultiInputFile),
+        (ty.Sequence, MultiOutputObj),
         (int, float),
     )
 
