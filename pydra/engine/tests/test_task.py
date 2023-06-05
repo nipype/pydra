@@ -118,7 +118,7 @@ def test_annotated_func_dictreturn():
     """Test mapping from returned dictionary to output spec."""
 
     @mark.task
-    @mark.annotate({"return": {"sum": int, "mul": int}})
+    @mark.annotate({"return": {"sum": int, "mul": ty.Optional[int]}})
     def testfunc(a: int, b: int):
         return dict(sum=a + b, diff=a - b)
 
@@ -128,8 +128,8 @@ def test_annotated_func_dictreturn():
     # Part of the annotation and returned, should be exposed to output.
     assert result.output.sum == 5
 
-    # Part of the annotation but not returned, should be coalesced to attr.NOTHING.
-    assert result.output.mul is attr.NOTHING
+    # Part of the annotation but not returned, should be coalesced to None
+    assert result.output.mul is None
 
     # Not part of the annotation, should be discarded.
     assert not hasattr(result.output, "diff")
@@ -827,7 +827,7 @@ def test_input_spec_func_5():
     )
 
     funky = testfunc(a=3.5, input_spec=my_input_spec)
-    assert getattr(funky.inputs, "a") == [3.5]
+    assert getattr(funky.inputs, "a") == MultiInputObj([3.5])
     res = funky()
     assert res.output.out == 1
 
@@ -958,7 +958,7 @@ def test_output_spec_func_4():
 
     funky = testfunc(a=3.5, output_spec=my_output_spec)
     res = funky()
-    assert res.output.out_1el == 3.5
+    assert res.output.out_1el == [3.5]  # MultiOutputObj always produce a list
 
 
 def test_exception_func():
