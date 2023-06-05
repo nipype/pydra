@@ -286,6 +286,18 @@ def make_klass(spec):
                     name, tp, dflt, mdata = item
                     kwargs["default"] = dflt
                     kwargs["metadata"] = mdata
+                try:
+                    kwargs["metadata"]["allowed_values"]
+                except KeyError:
+                    pass
+                else:
+                    try:
+                        validator = kwargs["validator"]
+                    except KeyError:
+                        validators = allowed_values_validator
+                    else:
+                        validators = [validator, allowed_values_validator]
+                    kwargs["validator"] = validators
                 newfield = attr.ib(
                     type=tp,
                     **kwargs,
@@ -293,12 +305,6 @@ def make_klass(spec):
             type_checker = TypeChecker[newfield.type](newfield.type)
             newfield.converter = type_checker
             newfield.on_setattr = attr.setters.convert
-            try:
-                newfield.metadata["allowed_values"]
-            except KeyError:
-                pass
-            else:
-                newfield.validator = allowed_values_validator
             newfields[name] = newfield
         fields = newfields
     return attrs.make_class(
