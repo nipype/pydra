@@ -19,6 +19,7 @@ from ..specs import (
     BaseSpec,
     ShellSpec,
     File,
+    gathered,
 )
 from ..helpers import hash_file
 
@@ -351,7 +352,7 @@ def test_annotated_input_func_7():
     def testfunc(a: float):
         return a
 
-    funky = testfunc(a=[3.5, 2.1]).split("a")
+    funky = testfunc(a=gathered([3.5, 2.1])).split("a")
     assert getattr(funky.inputs, "a") == [3.5, 2.1]
 
 
@@ -365,7 +366,7 @@ def test_annotated_input_func_7a_excep():
         return a
 
     with pytest.raises(TypeError):
-        testfunc(a=[3.5, 2.1]).split("a")
+        testfunc(a=gathered([3.5, 2.1])).split("a")
 
 
 def test_annotated_input_func_8():
@@ -1084,7 +1085,7 @@ def test_audit_shellcommandtask(tmpdir):
     assert any(command_content)
 
 
-def test_audit_shellcommandtask_file(tmpdir):
+def test_audit_shellcommandtask_file(tmp_path):
     # sourcery skip: use-fstring-for-concatenation
     import glob
     import shutil
@@ -1098,12 +1099,12 @@ def test_audit_shellcommandtask_file(tmpdir):
         f.write("This is a test")
 
     # copy the test.txt file to the tmpdir
-    shutil.copy("test.txt", tmpdir)
-    shutil.copy("test2.txt", tmpdir)
+    shutil.copy("test.txt", tmp_path)
+    shutil.copy("test2.txt", tmp_path)
 
     cmd = "cat"
-    file_in = tmpdir / "test.txt"
-    file_in_2 = tmpdir / "test2.txt"
+    file_in = tmp_path / "test.txt"
+    file_in_2 = tmp_path / "test2.txt"
     test_file_hash = hash_file(file_in)
     test_file_hash_2 = hash_file(file_in_2)
     my_input_spec = SpecInfo(
@@ -1145,9 +1146,9 @@ def test_audit_shellcommandtask_file(tmpdir):
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
-    shelly.cache_dir = tmpdir
+    shelly.cache_dir = tmp_path
     shelly()
-    message_path = tmpdir / shelly.checksum / "messages"
+    message_path = tmp_path / shelly.checksum / "messages"
     for file in glob.glob(str(message_path) + "/*.jsonld"):
         with open(file) as x:
             data = json.load(x)

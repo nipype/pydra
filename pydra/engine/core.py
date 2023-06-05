@@ -358,7 +358,9 @@ class TaskBase:
         """
         output_klass = make_klass(self.output_spec)
         if hasattr(output_klass, "generated_output_names"):
-            output = output_klass(**{f.name: None for f in attr.fields(output_klass)})
+            output = output_klass(
+                **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
+            )
             # using updated input (after filing the templates)
             _inputs = deepcopy(self.inputs)
             modified_inputs = template_update(_inputs, self.output_dir)

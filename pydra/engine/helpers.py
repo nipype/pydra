@@ -23,6 +23,7 @@ from .specs import (
     Result,
     LazyField,
     MultiOutputObj,
+    gathered,
 )
 from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
 from ..utils.hash import hash_object
@@ -172,7 +173,10 @@ def copyfile_workflow(wf_path, result):
 def _copyfile_single_value(wf_path, value):
     """checking a single value for files that need to be copied to the wf dir"""
     if isinstance(value, (tuple, list)):
-        return [_copyfile_single_value(wf_path, val) for val in value]
+        lst = [_copyfile_single_value(wf_path, val) for val in value]
+        if isinstance(value, gathered):
+            lst = gathered(lst)
+        return lst
     elif isinstance(value, dict):
         return {
             key: _copyfile_single_value(wf_path, val) for (key, val) in value.items()

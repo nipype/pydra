@@ -120,6 +120,8 @@ class TypeChecker(ty.Generic[T]):
 
         def expand_and_coerce(obj, pattern: ty.Union[type | tuple]):
             """Attempt to expand the object along the lines of the coercion pattern"""
+            if obj is attr.NOTHING:
+                return attr.NOTHING
             if not isinstance(pattern, tuple):
                 return coerce_basic(obj, pattern)
             origin, pattern_args = pattern
@@ -143,7 +145,7 @@ class TypeChecker(ty.Generic[T]):
                 raise TypeError(
                     f"Could not coerce to {type_} as {obj} is not iterable{msg}"
                 ) from e
-            if issubclass(type_, ty.Tuple):
+            if issubclass(origin, ty.Tuple):
                 return coerce_tuple(type_, obj_args, pattern_args)
             return coerce_sequence(type_, obj_args, pattern_args)
 
@@ -199,7 +201,9 @@ class TypeChecker(ty.Generic[T]):
             )
 
         def coerce_tuple(
-            type_: ty.Type[ty.Sequence], obj_args: list, pattern_args: list
+            type_: ty.Type[ty.Sequence],
+            obj_args: list,
+            pattern_args: list,
         ):
             """coerce to a tuple object"""
             if pattern_args[-1] is Ellipsis:

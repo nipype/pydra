@@ -808,9 +808,13 @@ class LazyOut(LazyInterface):
 
     def _get_type(self, name):
         try:
-            return next(f[1] for f in self._node.output_spec.fields if f[0] == name)
+            type_ = next(f[1] for f in self._node.output_spec.fields if f[0] == name)
         except StopIteration:
-            return ty.Any
+            type_ = ty.Any
+        else:
+            if not inspect.isclass(type_):
+                type_ = type_.type  # attrs _CountingAttribute
+        return type_
 
     @property
     def _field_names(self):

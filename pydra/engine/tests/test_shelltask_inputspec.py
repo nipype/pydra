@@ -1,5 +1,6 @@
-import attr
 import typing as ty
+from pathlib import Path
+import attr
 import pytest
 
 from ..task import ShellCommandTask
@@ -405,7 +406,7 @@ def test_shell_cmd_inputs_list_sep_1():
 
     shelly = ShellCommandTask(
         executable="executable",
-        inpA=array(["aaa", "bbb", "ccc"]),
+        inpA=gathered(["aaa", "bbb", "ccc"]),
         input_spec=my_input_spec,
     )
     # separated by commas
@@ -435,7 +436,7 @@ def test_shell_cmd_inputs_list_sep_2():
 
     shelly = ShellCommandTask(
         executable="executable",
-        inpA=array(["aaa", "bbb", "ccc"]),
+        inpA=gathered(["aaa", "bbb", "ccc"]),
         input_spec=my_input_spec,
     )
     # a flag is used once
@@ -465,7 +466,7 @@ def test_shell_cmd_inputs_list_sep_2a():
 
     shelly = ShellCommandTask(
         executable="executable",
-        inpA=array(["aaa", "bbb", "ccc"]),
+        inpA=gathered(["aaa", "bbb", "ccc"]),
         input_spec=my_input_spec,
     )
     # a flag is used once
@@ -495,7 +496,7 @@ def test_shell_cmd_inputs_list_sep_3():
 
     shelly = ShellCommandTask(
         executable="executable",
-        inpA=array(["aaa", "bbb", "ccc"]),
+        inpA=gathered(["aaa", "bbb", "ccc"]),
         input_spec=my_input_spec,
     )
     # a flag is repeated
@@ -525,7 +526,7 @@ def test_shell_cmd_inputs_list_sep_3a():
 
     shelly = ShellCommandTask(
         executable="executable",
-        inpA=array(["aaa", "bbb", "ccc"]),
+        inpA=gathered(["aaa", "bbb", "ccc"]),
         input_spec=my_input_spec,
     )
     # a flag is repeated
@@ -554,7 +555,7 @@ def test_shell_cmd_inputs_sep_4():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA=array(["aaa"]), input_spec=my_input_spec
+        executable="executable", inpA=gathered(["aaa"]), input_spec=my_input_spec
     )
     assert shelly.cmdline == "executable -v aaa"
 
@@ -633,7 +634,9 @@ def test_shell_cmd_inputs_format_2():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA=array(["el_1", "el_2"]), input_spec=my_input_spec
+        executable="executable",
+        inpA=gathered(["el_1", "el_2"]),
+        input_spec=my_input_spec,
     )
     assert shelly.cmdline == "executable -v el_1 -v el_2"
 
@@ -1239,7 +1242,7 @@ def test_shell_cmd_inputs_template_6a():
     assert shelly.cmdline == "executable inpA"
 
 
-def test_shell_cmd_inputs_template_7(tmpdir):
+def test_shell_cmd_inputs_template_7(tmp_path: Path):
     """additional inputs uses output_file_template with a suffix (no extension)
     no keep_extension is used
     """
@@ -1274,8 +1277,8 @@ def test_shell_cmd_inputs_template_7(tmpdir):
         bases=(ShellSpec,),
     )
 
-    inpA_file = tmpdir.join("a_file.txt")
-    inpA_file.write("content")
+    inpA_file = tmp_path / "a_file.txt"
+    inpA_file.write_text("content")
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA=inpA_file
     )
@@ -1283,11 +1286,11 @@ def test_shell_cmd_inputs_template_7(tmpdir):
     # outA should be formatted in a way that that .txt goes to the end
     assert (
         shelly.cmdline
-        == f"executable {tmpdir.join('a_file.txt')} {shelly.output_dir / 'a_file_out.txt'}"
+        == f"executable {tmp_path / 'a_file.txt'} {shelly.output_dir / 'a_file_out.txt'}"
     )
 
 
-def test_shell_cmd_inputs_template_7a(tmpdir):
+def test_shell_cmd_inputs_template_7a(tmp_path: Path):
     """additional inputs uses output_file_template with a suffix (no extension)
     keep_extension is True (as default)
     """
@@ -1323,8 +1326,8 @@ def test_shell_cmd_inputs_template_7a(tmpdir):
         bases=(ShellSpec,),
     )
 
-    inpA_file = tmpdir.join("a_file.txt")
-    inpA_file.write("content")
+    inpA_file = tmp_path / "a_file.txt"
+    inpA_file.write_text("content")
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA=inpA_file
     )
@@ -1332,11 +1335,11 @@ def test_shell_cmd_inputs_template_7a(tmpdir):
     # outA should be formatted in a way that that .txt goes to the end
     assert (
         shelly.cmdline
-        == f"executable {tmpdir.join('a_file.txt')} {shelly.output_dir / 'a_file_out.txt'}"
+        == f"executable {tmp_path / 'a_file.txt'} {shelly.output_dir / 'a_file_out.txt'}"
     )
 
 
-def test_shell_cmd_inputs_template_7b(tmpdir):
+def test_shell_cmd_inputs_template_7b(tmp_path: Path):
     """additional inputs uses output_file_template with a suffix (no extension)
     keep extension is False (so the extension is removed when creating the output)
     """
@@ -1372,8 +1375,8 @@ def test_shell_cmd_inputs_template_7b(tmpdir):
         bases=(ShellSpec,),
     )
 
-    inpA_file = tmpdir.join("a_file.txt")
-    inpA_file.write("content")
+    inpA_file = tmp_path / "a_file.txt"
+    inpA_file.write_text("content")
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA=inpA_file
     )
@@ -1381,11 +1384,11 @@ def test_shell_cmd_inputs_template_7b(tmpdir):
     # outA should be formatted in a way that that .txt goes to the end
     assert (
         shelly.cmdline
-        == f"executable {tmpdir.join('a_file.txt')} {shelly.output_dir / 'a_file_out'}"
+        == f"executable {tmp_path / 'a_file.txt'} {shelly.output_dir / 'a_file_out'}"
     )
 
 
-def test_shell_cmd_inputs_template_8(tmpdir):
+def test_shell_cmd_inputs_template_8(tmp_path: Path):
     """additional inputs uses output_file_template with a suffix and an extension"""
     my_input_spec = SpecInfo(
         name="Input",
@@ -1418,8 +1421,8 @@ def test_shell_cmd_inputs_template_8(tmpdir):
         bases=(ShellSpec,),
     )
 
-    inpA_file = tmpdir.join("a_file.t")
-    inpA_file.write("content")
+    inpA_file = tmp_path / "a_file.t"
+    inpA_file.write_text("content")
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA=inpA_file
     )
@@ -1427,11 +1430,11 @@ def test_shell_cmd_inputs_template_8(tmpdir):
     # outA should be formatted in a way that inpA extension is removed and the template extension is used
     assert (
         shelly.cmdline
-        == f"executable {tmpdir.join('a_file.t')} {shelly.output_dir / 'a_file_out.txt'}"
+        == f"executable {tmp_path / 'a_file.t'} {shelly.output_dir / 'a_file_out.txt'}"
     )
 
 
-def test_shell_cmd_inputs_template_9(tmpdir):
+def test_shell_cmd_inputs_template_9(tmp_path: Path):
     """additional inputs, one uses output_file_template with two fields:
     one File and one ints - the output should be recreated from the template
     """
@@ -1478,8 +1481,8 @@ def test_shell_cmd_inputs_template_9(tmpdir):
         bases=(ShellSpec,),
     )
 
-    inpA_file = tmpdir.join("inpA.t")
-    inpA_file.write("content")
+    inpA_file = tmp_path / "inpA.t"
+    inpA_file.write_text("content")
 
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA=inpA_file, inpInt=3
@@ -1487,13 +1490,13 @@ def test_shell_cmd_inputs_template_9(tmpdir):
 
     assert (
         shelly.cmdline
-        == f"executable {tmpdir.join('inpA.t')} -i 3 -o {shelly.output_dir / 'inpA_3_out.txt'}"
+        == f"executable {tmp_path / 'inpA.t'} -i 3 -o {shelly.output_dir / 'inpA_3_out.txt'}"
     )
     # checking if outA in the output fields
     assert shelly.output_names == ["return_code", "stdout", "stderr", "outA"]
 
 
-def test_shell_cmd_inputs_template_9a(tmpdir):
+def test_shell_cmd_inputs_template_9a(tmp_path: Path):
     """additional inputs, one uses output_file_template with two fields:
     one file and one string without extension - should be fine
     """
@@ -1540,8 +1543,8 @@ def test_shell_cmd_inputs_template_9a(tmpdir):
         bases=(ShellSpec,),
     )
 
-    inpA_file = tmpdir.join("inpA.t")
-    inpA_file.write("content")
+    inpA_file = tmp_path / "inpA.t"
+    inpA_file.write_text("content")
 
     shelly = ShellCommandTask(
         executable="executable", input_spec=my_input_spec, inpA=inpA_file, inpStr="hola"
@@ -1549,13 +1552,13 @@ def test_shell_cmd_inputs_template_9a(tmpdir):
 
     assert (
         shelly.cmdline
-        == f"executable {tmpdir.join('inpA.t')} -i hola -o {shelly.output_dir / 'inpA_hola_out.txt'}"
+        == f"executable {tmp_path / 'inpA.t'} -i hola -o {shelly.output_dir / 'inpA_hola_out.txt'}"
     )
     # checking if outA in the output fields
     assert shelly.output_names == ["return_code", "stdout", "stderr", "outA"]
 
 
-def test_shell_cmd_inputs_template_9b_err(tmpdir):
+def test_shell_cmd_inputs_template_9b_err(tmp_path: Path):
     """output_file_template with two fields that are both Files,
     an exception should be raised
     """
@@ -1602,11 +1605,11 @@ def test_shell_cmd_inputs_template_9b_err(tmpdir):
         bases=(ShellSpec,),
     )
 
-    inpA_file = tmpdir.join("inpA.t")
-    inpA_file.write("content")
+    inpA_file = tmp_path / "inpA.t"
+    inpA_file.write_text("content")
 
-    inpFile_file = tmpdir.join("inpFile.t")
-    inpFile_file.write("content")
+    inpFile_file = tmp_path / "inpFile.t"
+    inpFile_file.write_text("content")
 
     shelly = ShellCommandTask(
         executable="executable",
@@ -1619,7 +1622,7 @@ def test_shell_cmd_inputs_template_9b_err(tmpdir):
         shelly.cmdline
 
 
-def test_shell_cmd_inputs_template_9c_err(tmpdir):
+def test_shell_cmd_inputs_template_9c_err(tmp_path: Path):
     """output_file_template with two fields: a file and a string with extension,
     that should be used as an additional file and the exception should be raised
     """
@@ -1666,8 +1669,8 @@ def test_shell_cmd_inputs_template_9c_err(tmpdir):
         bases=(ShellSpec,),
     )
 
-    inpA_file = tmpdir.join("inpA.t")
-    inpA_file.write("content")
+    inpA_file = tmp_path / "inpA.t"
+    inpA_file.write_text("content")
 
     shelly = ShellCommandTask(
         executable="executable",
@@ -1921,7 +1924,7 @@ def test_shell_cmd_inputs_template_1_st():
         bases=(ShellSpec,),
     )
 
-    inpA = ["inpA_1", "inpA_2"]
+    inpA = gathered(["inpA_1", "inpA_2"])
     ShellCommandTask(
         name="f",
         executable="executable",
@@ -1938,7 +1941,7 @@ def test_shell_cmd_inputs_template_1_st():
 
 # TODO: after deciding how we use requires/templates
 def test_shell_cmd_inputs_di(
-    tmpdir,
+    tmp_path,
 ):
     """example from #279"""
     my_input_spec = SpecInfo(
@@ -2117,8 +2120,8 @@ def test_shell_cmd_inputs_di(
         bases=(ShellSpec,),
     )
 
-    my_input_file = tmpdir.join("a_file.ext")
-    my_input_file.write("content")
+    my_input_file = tmp_path / "a_file.ext"
+    my_input_file.write_text("content")
 
     # no input provided
     shelly = ShellCommandTask(executable="DenoiseImage", input_spec=my_input_spec)
@@ -2134,7 +2137,7 @@ def test_shell_cmd_inputs_di(
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{shelly.output_dir / 'a_file_out.ext'}]"
+        == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -o [{shelly.output_dir / 'a_file_out.ext'}]"
     )
 
     # input file name, noiseImage is set to True, so template is used in the output
@@ -2145,7 +2148,7 @@ def test_shell_cmd_inputs_di(
         noiseImage=True,
     )
     assert (
-        shelly.cmdline == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 "
+        shelly.cmdline == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 "
         f"-o [{shelly.output_dir / 'a_file_out.ext'}, {str(shelly.output_dir / 'a_file_noise.ext')}]"
     )
 
@@ -2158,7 +2161,7 @@ def test_shell_cmd_inputs_di(
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -h -o [{shelly.output_dir / 'a_file_out.ext'}]"
+        == f"DenoiseImage -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -h -o [{shelly.output_dir / 'a_file_out.ext'}]"
     )
 
     assert shelly.output_names == [
@@ -2178,7 +2181,7 @@ def test_shell_cmd_inputs_di(
     )
     assert (
         shelly.cmdline
-        == f"DenoiseImage -d 2 -i {tmpdir.join('a_file.ext')} -s 1 -p 1 -r 2 -o [{shelly.output_dir / 'a_file_out.ext'}]"
+        == f"DenoiseImage -d 2 -i {tmp_path / 'a_file.ext'} -s 1 -p 1 -r 2 -o [{shelly.output_dir / 'a_file_out.ext'}]"
     )
 
     # adding image_dimensionality that has allowed_values [2, 3, 4] and providing 5 - exception should be raised
