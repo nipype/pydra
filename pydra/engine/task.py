@@ -192,14 +192,14 @@ class FunctionTask(TaskBase):
         output = cp.loads(self.inputs._func)(**inputs)
         output_names = [el[0] for el in self.output_spec.fields]
         if output is None:
-            self.output_ = {nm: attr.NOTHING for nm in output_names}
+            self.output_ = {nm: None for nm in output_names}
         elif len(output_names) == 1:
             # if only one element in the fields, everything should be returned together
             self.output_ = {output_names[0]: output}
         elif isinstance(output, tuple) and len(output_names) == len(output):
             self.output_ = dict(zip(output_names, output))
         elif isinstance(output, dict):
-            self.output_ = {key: output.get(key, attr.NOTHING) for key in output_names}
+            self.output_ = {key: output.get(key, None) for key in output_names}
         else:
             raise RuntimeError(
                 f"expected {len(self.output_spec.fields)} elements, "
