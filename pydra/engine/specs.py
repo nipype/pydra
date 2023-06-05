@@ -813,7 +813,10 @@ class LazyOut(LazyInterface):
             type_ = ty.Any
         else:
             if not inspect.isclass(type_):
-                type_ = type_.type  # attrs _CountingAttribute
+                try:
+                    type_ = type_.type  # attrs _CountingAttribute
+                except AttributeError:
+                    pass  # typing._SpecialForm
         return type_
 
     @property
