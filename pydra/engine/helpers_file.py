@@ -682,7 +682,7 @@ def _template_formatting(field, inputs, inputs_dict_st):
     Allowing for multiple input values used in the template as longs as
     there is no more than one file (i.e. File, PathLike or string with extensions)
     """
-    from .specs import MultiOutputFile
+    from .specs import MultiInputObj, MultiOutputFile
 
     # if a template is a function it has to be run first with the inputs as the only arg
     template = field.metadata["output_file_template"]
@@ -732,10 +732,12 @@ def _template_formatting(field, inputs, inputs_dict_st):
     # each element of the list should be used separately in the template
     # and return a list with formatted values
     if field.type is MultiOutputFile and any(
-        [isinstance(el, list) for el in val_dict.values()]
+        [isinstance(el, (list, MultiInputObj)) for el in val_dict.values()]
     ):
         # all fields that are lists
-        keys_list = [k for k, el in val_dict.items() if isinstance(el, list)]
+        keys_list = [
+            k for k, el in val_dict.items() if isinstance(el, (list, MultiInputObj))
+        ]
         if any(
             [len(val_dict[key]) != len(val_dict[keys_list[0]]) for key in keys_list[1:]]
         ):

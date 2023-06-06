@@ -2785,7 +2785,7 @@ def test_shell_cmd_outputspec_3(plugin, results_function, tmp_path):
     assert res.output.stdout == ""
     # newfile is a list
     assert len(res.output.newfile) == 2
-    assert all([file.fspath.exists() for file in res.output.newfile])
+    assert all([file.exists() for file in res.output.newfile])
 
 
 @pytest.mark.xfail(
@@ -2887,7 +2887,7 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmp_path):
     assert res.output.stdout == ""
     # newfile is a list
     assert len(res.output.newfile) == 2
-    assert all([file.fspath.exists() for file in res.output.newfile])
+    assert all([file.exists() for file in res.output.newfile])
     assert (
         shelly.output_names
         == shelly.generated_output_names
@@ -2924,7 +2924,7 @@ def test_shell_cmd_outputspec_5a(plugin, results_function):
     assert res.output.stdout == ""
     # newfile is a list
     assert len(res.output.newfile) == 2
-    assert all([file.fspath.exists() for file in res.output.newfile])
+    assert all([file.exists() for file in res.output.newfile])
 
 
 def test_shell_cmd_outputspec_5b_error():
@@ -3119,7 +3119,7 @@ def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     for file in res.output.new_files:
-        assert file.fspath.exists()
+        assert file.exists()
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -3194,7 +3194,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
 
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
-    assert res.output.new_files.fspath.exists()
+    assert res.output.new_files.exists()
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -4780,7 +4780,7 @@ def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
     shelly()
     res = shelly.result()
     # checking if the outputs are Nothing
-    assert res.output.out_list[0].fspath == Path(shelly.output_dir) / "test_1_real.nii"
+    assert res.output.out_list[0] == Path(shelly.output_dir) / "test_1_real.nii"
     assert res.output.out_list[1] == attr.NOTHING
 
 

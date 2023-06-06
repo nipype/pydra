@@ -3,8 +3,10 @@ import os
 import json
 import attr
 from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
-from .helpers import ensure_list, gather_runtime_info, hash_file
-from .specs import attr_fields, File, Directory
+from ..utils.hash import hash_function
+from .helpers import ensure_list, gather_runtime_info
+from .specs import attr_fields
+from fileformats.core import FileSet
 
 try:
     import importlib_resources
@@ -181,10 +183,11 @@ class Audit:
         command = task.cmdline if hasattr(task.inputs, "executable") else None
         attr_list = attr_fields(task.inputs)
         for attrs in attr_list:
-            if attrs.type in [File, Directory]:
+            if issubclass(attrs.type, FileSet):
                 input_name = attrs.name
-                input_path = os.path.abspath(getattr(task.inputs, input_name))
-                file_hash = hash_file(input_path)
+                value = getattr(task.inputs, input_name)
+                input_path = os.path.abspath(value)
+                file_hash = hash_function(value)
                 entity_id = f"uid:{gen_uuid()}"
                 entity_message = {
                     "@id": entity_id,

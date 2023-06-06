@@ -3,6 +3,7 @@ import os
 import stat
 import struct
 from collections.abc import Mapping
+import itertools
 from functools import singledispatch
 from hashlib import blake2b
 from pathlib import Path
@@ -17,7 +18,15 @@ from typing import (
     _SpecialForm,
 )
 
+try:
+    import numpy
+except ImportError:
+    HAVE_NUMPY = False
+else:
+    HAVE_NUMPY = True
+
 __all__ = (
+    "hash_function",
     "hash_object",
     "hash_single",
     "register_serializer",
@@ -35,6 +44,11 @@ class UnhashableError(ValueError):
     """Error for objects that cannot be hashed"""
 
 
+def hash_function(obj):
+    """Generate hash of object."""
+    return hash_object(obj).hex()
+
+
 def hash_object(obj: object) -> Hash:
     """Hash an object
 
@@ -47,7 +61,7 @@ def hash_object(obj: object) -> Hash:
     try:
         return hash_single(obj, Cache({}))
     except Exception as e:
-        raise UnhashableError(r"Cannot hash object {obj!r}") from e
+        raise UnhashableError(f"Cannot hash object {obj!r}") from e
 
 
 def hash_single(obj: object, cache: Cache) -> Hash:
@@ -245,6 +259,24 @@ def bytes_repr_sequence_contents(seq: Sequence, cache: Cache) -> Iterator[bytes]
     """
     for val in seq:
         yield bytes(hash_single(val, cache))
+
+
+if HAVE_NUMPY:
+
+    @register_serializer(numpy.ndarray)
+    def bytes_repr_ndarray(obj: numpy.ndarray, cache: Cache) -> Iterator[bytes]:
+        yield f"{obj.__class__.__module__}{obj.__class__.__name__}:{obj.size}:".encode()
+        if obj.dtype == "object":
+            yield from bytes_repr_sequence_contents(iter(obj.ravel()), cache)
+        else:
+            bytes_it = iter(obj.tobytes(order="C"))
+            for chunk in iter(
+                lambda: bytes(itertools.islice(bytes_it, NUMPY_CHUNK_LEN)), b""
+            ):
+                yield chunk
+
+
+NUMPY_CHUNK_LEN = 8192
 
 
 class MtimeCachingHash:

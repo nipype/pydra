@@ -26,8 +26,7 @@ from .specs import (
     MultiOutputObj,
     gathered,
 )
-from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
-from ..utils.hash import hash_object
+from .helpers_file import copyfile, is_existing_file
 from .type_checking import TypeChecker
 
 
@@ -677,43 +676,38 @@ def get_open_loop():
     return loop
 
 
-def hash_function(obj):
-    """Generate hash of object."""
-    return hash_object(obj).hex()
-
-
-def hash_value(value, tp=None, metadata=None, precalculated=None):
-    """calculating hash or returning values recursively"""
-    if metadata is None:
-        metadata = {}
-    if isinstance(value, (tuple, list, set)):
-        return [hash_value(el, tp, metadata, precalculated) for el in value]
-    elif isinstance(value, dict):
-        dict_hash = {
-            k: hash_value(v, tp, metadata, precalculated) for (k, v) in value.items()
-        }
-        # returning a sorted object
-        return [list(el) for el in sorted(dict_hash.items(), key=lambda x: x[0])]
-    else:  # not a container
-        if (
-            (tp is File or "pydra.engine.specs.File" in str(tp))
-            and is_existing_file(value)
-            and "container_path" not in metadata
-        ):
-            return hash_file(value, precalculated=precalculated)
-        elif (
-            (tp is File or "pydra.engine.specs.Directory" in str(tp))
-            and is_existing_file(value)
-            and "container_path" not in metadata
-        ):
-            return hash_dir(value, precalculated=precalculated)
-        elif type(value).__module__ == "numpy":  # numpy objects
-            return [
-                hash_value(el, tp, metadata, precalculated)
-                for el in ensure_list(value.tolist())
-            ]
-        else:
-            return value
+# def hash_value(value, tp=None, metadata=None, precalculated=None):
+#     """calculating hash or returning values recursively"""
+#     if metadata is None:
+#         metadata = {}
+#     if isinstance(value, (tuple, list, set)):
+#         return [hash_value(el, tp, metadata, precalculated) for el in value]
+#     elif isinstance(value, dict):
+#         dict_hash = {
+#             k: hash_value(v, tp, metadata, precalculated) for (k, v) in value.items()
+#         }
+#         # returning a sorted object
+#         return [list(el) for el in sorted(dict_hash.items(), key=lambda x: x[0])]
+#     else:  # not a container
+#         if (
+#             (tp is File or "pydra.engine.specs.File" in str(tp))
+#             and is_existing_file(value)
+#             and "container_path" not in metadata
+#         ):
+#             return hash_file(value, precalculated=precalculated)
+#         elif (
+#             (tp is File or "pydra.engine.specs.Directory" in str(tp))
+#             and is_existing_file(value)
+#             and "container_path" not in metadata
+#         ):
+#             return hash_dir(value, precalculated=precalculated)
+#         elif type(value).__module__ == "numpy":  # numpy objects
+#             return [
+#                 hash_value(el, tp, metadata, precalculated)
+#                 for el in ensure_list(value.tolist())
+#             ]
+#         else:
+#             return value
 
 
 def output_from_inputfields(output_spec, input_spec):

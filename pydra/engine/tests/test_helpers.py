@@ -1,20 +1,19 @@
 import os
-import hashlib
+import shutil
 from pathlib import Path
 import random
 import platform
 import pytest
 import cloudpickle as cp
-from fileformats.generic import Directory
+from fileformats.generic import Directory, File
 from .utils import multiply, raise_xeq1
 from ..helpers import (
-    hash_value,
-    hash_function,
     get_available_cpus,
     save,
     load_and_run,
     position_sort,
 )
+from ...utils.hash import hash_function
 from .. import helpers_file
 from ..core import Workflow
 
@@ -49,7 +48,7 @@ def test_hash_file(tmpdir):
         fp.write("test")
     assert (
         helpers_file.hash_file(outdir / "test.file")
-        == "ea6e7d6117e089d7e32fe4f9eb16c5bf"
+        == "37fcc546dce7e59585f3217bb4c30299"
     )
 
 
@@ -71,118 +70,87 @@ def test_hashfun_float():
     assert hash_function(math.pi) != hash_function(pi_10)
 
 
-def test_hash_value_dict():
+def test_hash_function_dict():
     dict1 = {"a": 10, "b": 5}
     dict2 = {"b": 5, "a": 10}
-    assert (
-        hash_value(dict1)
-        == hash_value(dict2)
-        == [["a", hash_value(10)], ["b", hash_value(5)]]
-        == [["a", 10], ["b", 5]]
-    )
+    assert hash_function(dict1) == hash_function(dict2)
 
 
-def test_hash_value_list_tpl():
+def test_hash_function_list_tpl():
     lst = [2, 5.6, "ala"]
     tpl = (2, 5.6, "ala")
-    assert hash_value(lst) == [hash_value(2), hash_value(5.6), hash_value("ala")] == lst
-    assert hash_value(lst) == hash_value(tpl)
+    assert hash_function(lst) != hash_function(tpl)
 
 
-def test_hash_value_list_dict():
+def test_hash_function_list_dict():
     lst = [2, {"a": "ala", "b": 1}]
-    hash_value(lst)
-    assert (
-        hash_value(lst)
-        == [hash_value(2), hash_value([["a", "ala"], ["b", 1]])]
-        == [2, [["a", "ala"], ["b", 1]]]
-    )
+    hash_function(lst)
 
 
-def test_hash_value_files(tmpdir):
-    file_1 = tmpdir.join("file_1.txt")
-    file_2 = tmpdir.join("file_2.txt")
-    with open(file_1, "w") as f:
-        f.write("hello")
-    with open(file_2, "w") as f:
-        f.write("hello")
+def test_hash_function_files(tmp_path: Path):
+    file_1 = tmp_path / "file_1.txt"
+    file_2 = tmp_path / "file_2.txt"
+    file_1.write_text("hello")
+    file_2.write_text("hello")
 
-    assert hash_value(file_1, tp=File) == hash_value(file_2, tp=File)
-    assert hash_value(file_1, tp=str) != hash_value(file_2, tp=str)
-    assert hash_value(file_1) != hash_value(file_2)
-    assert hash_value(file_1, tp=File) == helpers_file.hash_file(file_1)
+    assert hash_function(File(file_1)) == hash_function(File(file_2))
 
 
-def test_hash_value_files_list(tmpdir):
-    file_1 = tmpdir.join("file_1.txt")
-    file_2 = tmpdir.join("file_2.txt")
-    with open(file_1, "w") as f:
-        f.write("hello")
-    with open(file_2, "w") as f:
-        f.write("hi")
+def test_hash_function_dir_and_files_list(tmp_path: Path):
+    dir1 = tmp_path / "foo"
+    dir2 = tmp_path / "bar"
+    for d in (dir1, dir2):
+        d.mkdir()
+        for i in range(3):
+            f = d / f"{i}.txt"
+            f.write_text(str(i))
 
-    assert hash_value([file_1, file_2], tp=File) == [
-        hash_value(file_1, tp=File),
-        hash_value(file_2, tp=File),
-    ]
-
-
-def test_hash_value_dir(tmpdir):
-    file_1 = tmpdir.join("file_1.txt")
-    file_2 = tmpdir.join("file_2.txt")
-    with open(file_1, "w") as f:
-        f.write("hello")
-    with open(file_2, "w") as f:
-        f.write("hi")
-
-    test_sha = hashlib.sha256()
-    for fx in [file_1, file_2]:
-        test_sha.update(helpers_file.hash_file(fx).encode())
-
-    bad_sha = hashlib.sha256()
-    for fx in [file_2, file_1]:
-        bad_sha.update(helpers_file.hash_file(fx).encode())
-
-    orig_hash = helpers_file.hash_dir(tmpdir)
-
-    assert orig_hash == test_sha.hexdigest()
-    assert orig_hash != bad_sha.hexdigest()
-    assert orig_hash == hash_value(tmpdir, tp=Directory)
+    assert hash_function(Directory(dir1)) == hash_function(Directory(dir2))
+    file_list1: list[File] = [File(f) for f in dir1.iterdir()]
+    file_list2: list[File] = [File(f) for f in dir2.iterdir()]
+    assert hash_function(file_list1) == hash_function(file_list2)
 
 
-def test_hash_value_nested(tmpdir):
-    hidden = tmpdir.mkdir(".hidden")
-    nested = tmpdir.mkdir("nested")
-    file_1 = tmpdir.join("file_1.txt")
-    file_2 = hidden.join("file_2.txt")
-    file_3 = nested.join(".file_3.txt")
-    file_4 = nested.join("file_4.txt")
+def test_hash_function_files_mismatch(tmp_path: Path):
+    file_1 = tmp_path / "file_1.txt"
+    file_2 = tmp_path / "file_2.txt"
+    file_1.write_text("hello")
+    file_2.write_text("hi")
 
-    test_sha = hashlib.sha256()
+    assert hash_function(File(file_1)) != hash_function(File(file_2))
+
+
+def test_hash_function_nested(tmp_path: Path):
+    dpath = tmp_path / "dir"
+    dpath.mkdir()
+    hidden = dpath / ".hidden"
+    nested = dpath / "nested"
+    hidden.mkdir()
+    nested.mkdir()
+    file_1 = dpath / "file_1.txt"
+    file_2 = hidden / "file_2.txt"
+    file_3 = nested / ".file_3.txt"
+    file_4 = nested / "file_4.txt"
+
     for fx in [file_1, file_2, file_3, file_4]:
-        with open(fx, "w") as f:
-            f.write(str(random.randint(0, 1000)))
-        test_sha.update(helpers_file.hash_file(fx).encode())
+        fx.write_text(str(random.randint(0, 1000)))
 
-    orig_hash = helpers_file.hash_dir(tmpdir)
+    nested_dir = Directory(dpath)
 
-    assert orig_hash == test_sha.hexdigest()
-    assert orig_hash == hash_value(tmpdir, tp=Directory)
+    orig_hash = nested_dir.hash()
 
-    nohidden_hash = helpers_file.hash_dir(
-        tmpdir, ignore_hidden_dirs=True, ignore_hidden_files=True
-    )
-    nohiddendirs_hash = helpers_file.hash_dir(tmpdir, ignore_hidden_dirs=True)
-    nohiddenfiles_hash = helpers_file.hash_dir(tmpdir, ignore_hidden_files=True)
+    nohidden_hash = nested_dir.hash(ignore_hidden_dirs=True, ignore_hidden_files=True)
+    nohiddendirs_hash = nested_dir.hash(ignore_hidden_dirs=True)
+    nohiddenfiles_hash = nested_dir.hash(ignore_hidden_files=True)
 
     assert orig_hash != nohidden_hash
     assert orig_hash != nohiddendirs_hash
     assert orig_hash != nohiddenfiles_hash
 
-    file_3.remove()
-    assert helpers_file.hash_dir(tmpdir) == nohiddenfiles_hash
-    hidden.remove()
-    assert helpers_file.hash_dir(tmpdir) == nohidden_hash
+    os.remove(file_3)
+    assert nested_dir.hash() == nohiddenfiles_hash
+    shutil.rmtree(hidden)
+    assert nested_dir.hash() == nohidden_hash
 
 
 def test_get_available_cpus():

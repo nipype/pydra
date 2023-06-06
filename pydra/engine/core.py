@@ -38,9 +38,9 @@ from .helpers import (
     save,
     ensure_list,
     record_error,
-    hash_function,
     PydraFileLock,
 )
+from ..utils.hash import hash_function
 from .helpers_file import copyfile_input, template_update
 from .graph import DiGraph
 from .audit import Audit

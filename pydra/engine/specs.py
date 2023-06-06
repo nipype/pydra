@@ -12,7 +12,10 @@ from fileformats.generic import (
 )
 
 from .helpers_file import template_update_single
-from ..utils.hash import register_serializer, bytes_repr_seq
+from ..utils.hash import register_serializer, bytes_repr_seq, hash_function
+
+
+T = ty.TypeVar("T")
 
 
 def attr_fields(spec, exclude_names=()):
@@ -26,29 +29,6 @@ def attr_fields_dict(spec, exclude_names=()):
         if field.name not in exclude_names
     }
 
-    # class File:
-    #     """An :obj:`os.pathlike` object, designating a file."""
-
-    # def __init__(self, path, chunk_size=8192):
-    #     self._path = os.fspath(path)
-    #     self.chunk_size = chunk_size
-
-    # def __fspath__(self) -> str:
-    #     return self._path
-
-    # def __bytes_repr__(self, cache):
-    #     with open(self._path, "rb") as fobj:
-    #         while True:
-    #             chunk = fobj.read(self.chunk_size)
-    #             if not chunk:
-    #                 break
-    #             yield chunk
-
-
-# class Directory:
-#     """An :obj:`os.pathlike` object, designating a folder."""
-T = ty.TypeVar("T")
-
 
 def to_list(lst):
     if not isinstance(lst, ty.Iterable) or isinstance(lst, str):
@@ -60,7 +40,7 @@ def to_list(lst):
 
 @attrs.define
 class MultiInputObj(ty.Generic[T]):
-    """A ty.List[ty.Any] object, converter changes a single values to a list"""
+    """A ty.List[ty.Any] object, encapsulates single values so they act like a list"""
 
     items: ty.List[T] = attrs.field(converter=to_list)
 
@@ -68,6 +48,9 @@ class MultiInputObj(ty.Generic[T]):
         """Pass all calls to methods and attributes onto underlying list so it can be
         duck-typed"""
         return getattr(self.items, name)
+
+    def __getitem__(self, index):
+        return self.items[index]
 
     def __repr__(self):
         return repr(self.items)
@@ -86,7 +69,7 @@ def convert_to_files(lst):
 def to_single(lst):
     if isinstance(lst, ty.Iterable) and len(lst) == 1:
         return lst[0]
-    return lst
+    return list(lst)
 
 
 class MultiInputFile(MultiInputObj[File]):
@@ -97,25 +80,36 @@ class MultiInputFile(MultiInputObj[File]):
 
 @attrs.define
 class MultiOutputObj(ty.Generic[T]):
+    """Takes a ty.List[ty.Any] object and encapsulates it so that len-1 lists behave like
+    single items"""
+
     item: ty.Union[T, ty.List[T]] = attrs.field(converter=to_single)
 
     def __getattr__(self, name):
-        """Pass all calls to methods and attributes onto underlying list so it can be
+        """Pass all calls to methods and attributes onto underlying item/list so it can be
         duck-typed"""
         return getattr(self.item, name)
+
+    def __getitem__(self, index):
+        if not isinstance(self.item, list):
+            if index == 0:
+                return self.item
+            else:
+                raise IndexError(f"List index out of range {index} (length 1)")
+        return self.item[index]
 
     def __repr__(self):
         return repr(self.item)
 
     def __iter__(self):
-        if not isinstance(self.item, ty.Iterable):
-            raise TypeError(f"{type(self).__name__}, {self}, is not iterable")
+        if not isinstance(self.item, list):
+            return iter([self.item])
         return iter(self.item)
 
     def __len__(self):
         if not isinstance(self.item, ty.Iterable):
             return 1
-        return len(self.items)
+        return len(self.item)
 
 
 class MultiOutputFile(MultiOutputObj[File]):
@@ -126,38 +120,6 @@ class MultiOutputFile(MultiOutputObj[File]):
 
 register_serializer(MultiInputObj)(bytes_repr_seq)
 register_serializer(MultiOutputObj)(bytes_repr_seq)
-
-# @classmethod
-# def converter(cls, value):
-#     from .helpers import ensure_list
-
-#     if value == attr.NOTHING:
-#         return value
-#     else:
-#         return ensure_list(value)
-
-
-# class MultiOutputObj:
-#     """A ty.List[ty.Any] object, converter changes an 1-el list to the single value"""
-
-#     @classmethod
-#     def converter(cls, value):
-#         if isinstance(value, list) and len(value) == 1:
-#             return value[0]
-#         else:
-#             return value
-
-# Not attempting to do the conversion from list to singular value as this seems like
-# poor design. Downstream nodes will need to handle the case where it is a list in any
-# case so no point creating extra work by requiring them to handle the single value case
-# as well
-
-# class MultiInputFile(MultiInputObj):
-#     """A ty.List[File] object, converter changes a single file path to a list"""
-
-
-# class MultiOutputFile(MultiOutputObj):
-#     """A ty.List[File] object, converter changes an 1-el list to the single value"""
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -177,34 +139,14 @@ class SpecInfo:
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
 
-    def __attrs_post_init__(self):
-        self.files_hash = {
-            field.name: {}
-            for field in attr_fields(
-                self, exclude_names=("_graph_checksums", "bindings", "files_hash")
-            )
-            if field.metadata.get("output_file_template") is None
-        }
-
-    # def __setattr__(self, name, value):
-    #     """changing settatr, so the converter and validator is run
-    #     if input is set after __init__
-    #     """
-    #     if inspect.stack()[1][3] == "__init__" or name in [
-    #         "inp_hash",
-    #         "changed",
-    #         "files_hash",
-    #     ]:
-    #         super().__setattr__(name, value)
-    #     else:
-    #         tp = attr.fields_dict(self.__class__)[name].type
-    #         # if the type has a converter, e.g., MultiInputObj
-    #         if hasattr(tp, "converter"):
-    #             value = tp.converter(value)
-    #         self.files_hash[name] = {}
-    #         super().__setattr__(name, value)
-    #         # validate all fields that have set a validator
-    #         attr.validate(self)
+    # def __attrs_post_init__(self):
+    #     self.files_hash = {
+    #         field.name: {}
+    #         for field in attr_fields(
+    #             self, exclude_names=("_graph_checksums", "bindings", "files_hash")
+    #         )
+    #         if field.metadata.get("output_file_template") is None
+    #     }
 
     def collect_additional_outputs(self, inputs, output_dir, outputs):
         """Get additional outputs."""
@@ -213,8 +155,6 @@ class BaseSpec:
     @property
     def hash(self):
         """Compute a basic hash for any given set of fields."""
-        from .helpers import hash_value, hash_function
-
         inp_dict = {}
         for field in attr_fields(
             self, exclude_names=("_graph_checksums", "bindings", "files_hash")
@@ -224,13 +164,9 @@ class BaseSpec:
             # removing values that are not set from hash calculation
             if getattr(self, field.name) is attr.NOTHING:
                 continue
-            value = getattr(self, field.name)
-            inp_dict[field.name] = hash_value(
-                value=value,
-                tp=field.type,
-                metadata=field.metadata,
-                precalculated=self.files_hash[field.name],
-            )
+            if "container_path" in field.metadata:
+                continue
+            inp_dict[field.name] = getattr(self, field.name)
         inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph_checksums"):
             inp_hash = hash_function((inp_hash, self._graph_checksums))
@@ -306,32 +242,6 @@ class BaseSpec:
                     name for name, is_set in required_fields.items() if not is_set
                 ]
                 raise AttributeError(f"{field.name} requires {unset_required_fields}")
-
-            if (
-                field.type in [File, Directory]
-                or "pydra.engine.specs.File" in str(field.type)
-                or "pydra.engine.specs.Directory" in str(field.type)
-            ):
-                self._file_check(field)
-
-    def _file_check(self, field):
-        """checking if the file exists"""
-        if isinstance(getattr(self, field.name), list):
-            # if value is a list and type is a list of Files/Directory, checking all elements
-            if field.type in [ty.List[File], ty.List[Directory]]:
-                for el in getattr(self, field.name):
-                    file = Path(el)
-                    if not file.exists() and field.type in [File, Directory]:
-                        raise FileNotFoundError(
-                            f"the file {file} from the {field.name} input does not exist"
-                        )
-        else:
-            file = Path(getattr(self, field.name))
-            # error should be raised only if the type is strictly File or Directory
-            if not file.exists() and field.type in [File, Directory]:
-                raise FileNotFoundError(
-                    f"the file {file} from the {field.name} input does not exist"
-                )
 
     def check_metadata(self):
         """Check contained metadata."""
@@ -955,7 +865,7 @@ class TaskHook:
     pre_run: ty.Callable = donothing
     post_run: ty.Callable = donothing
 
-    def __setattr__(cls, attr, val):
+    def __setattr__(self, attr, val):
         if attr not in ["pre_run_task", "post_run_task", "pre_run", "post_run"]:
             raise AttributeError("Cannot set unknown hook")
         super().__setattr__(attr, val)
