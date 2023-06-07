@@ -38,7 +38,7 @@ logger = logging.getLogger("pydra")
 def check_latest_version():
     import etelemetry
 
-    return etelemetry.check_available_version("nipype/pydra", __version__, lgr=logger)
+    # return etelemetry.check_available_version("nipype/pydra", __version__, lgr=logger)
 
 
 # Run telemetry on import for interactive sessions, such as IPython, Jupyter notebooks, Python REPL

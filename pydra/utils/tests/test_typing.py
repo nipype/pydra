@@ -5,8 +5,8 @@ from pathlib import Path
 import tempfile
 import pytest
 from pydra import mark
-from ..specs import File, LazyField
-from ..type_checking import TypeChecker
+from ...engine.specs import File, LazyField
+from ..typing import TypeChecker
 
 
 def lz(tp: ty.Type):

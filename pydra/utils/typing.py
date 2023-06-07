@@ -4,7 +4,7 @@ from pathlib import Path
 import os
 import typing as ty
 import attr
-from .specs import (
+from ..engine.specs import (
     LazyField,
     gathered,
     MultiInputObj,

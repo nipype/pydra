@@ -27,7 +27,7 @@ from .specs import (
     gathered,
 )
 from .helpers_file import copyfile, is_existing_file
-from .type_checking import TypeChecker
+from ..utils.typing import TypeChecker
 
 
 def ensure_list(obj, tuple2list=False):
