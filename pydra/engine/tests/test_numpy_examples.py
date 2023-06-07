@@ -10,7 +10,7 @@ from ..submitter import Submitter
 from ..core import Workflow
 from ...mark import task, annotate
 from .utils import identity
-from ...utils.hash import hash_function, Cache, bytes_repr_ndarray
+from ...utils.hash import hash_function, Cache
 from ..specs import gathered
 
 if importlib.util.find_spec("numpy") is None:
@@ -72,8 +72,6 @@ def test_numpy_hash_2():
     A = np.array([["NDAR"]], dtype=object)
     A_pk = pk.loads(pk.dumps(A))
     assert (A == A_pk).all()
-    a = b",".join(bytes_repr_ndarray(A, Cache({})))
-    a_pk = b",".join(bytes_repr_ndarray(A_pk, Cache({})))
     assert hash_function(A) == hash_function(A_pk)
 
 

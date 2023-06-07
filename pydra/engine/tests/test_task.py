@@ -21,6 +21,7 @@ from ..specs import (
     File,
     gathered,
 )
+from ...utils.hash import hash_function
 
 # from ..helpers import hash_file
 
@@ -1104,10 +1105,10 @@ def test_audit_shellcommandtask_file(tmp_path):
     shutil.copy("test2.txt", tmp_path)
 
     cmd = "cat"
-    file_in = tmp_path / "test.txt"
-    file_in_2 = tmp_path / "test2.txt"
-    test_file_hash = hash_file(file_in)
-    test_file_hash_2 = hash_file(file_in_2)
+    file_in = File(tmp_path / "test.txt")
+    file_in_2 = File(tmp_path / "test2.txt")
+    test_file_hash = hash_function(file_in)
+    test_file_hash_2 = hash_function(file_in_2)
     my_input_spec = SpecInfo(
         name="Input",
         fields=[

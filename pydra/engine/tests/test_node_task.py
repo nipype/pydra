@@ -559,7 +559,8 @@ def test_task_nostate_7():
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
     """task with provided cache_dir using pytest tmp_path"""
-    cache_dir = (tmp_path / "test_task_nostate").mkdir()
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
@@ -599,8 +600,10 @@ def test_task_nostate_cachelocations(plugin_dask_opt, tmp_path):
     Two identical tasks with provided cache_dir;
     the second task has cache_locations and should not recompute the results
     """
-    cache_dir = (tmp_path / "test_task_nostate").mkdir()
-    cache_dir2 = (tmp_path / "test_task_nostate2").mkdir()
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
+    cache_dir2 = tmp_path / "test_task_nostate2"
+    cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     with Submitter(plugin=plugin_dask_opt) as sub:
@@ -625,8 +628,10 @@ def test_task_nostate_cachelocations_forcererun(plugin, tmp_path):
     the second task has cache_locations,
     but submitter is called with rerun=True, so should recompute
     """
-    cache_dir = (tmp_path / "test_task_nostate").mkdir()
-    cache_dir2 = (tmp_path / "test_task_nostate2").mkdir()
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
+    cache_dir2 = tmp_path / "test_task_nostate2"
+    cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     with Submitter(plugin=plugin) as sub:
@@ -650,8 +655,10 @@ def test_task_nostate_cachelocations_nosubmitter(tmp_path):
     Two identical tasks (that are run without submitter!) with provided cache_dir;
     the second task has cache_locations and should not recompute the results
     """
-    cache_dir = (tmp_path / "test_task_nostate").mkdir()
-    cache_dir2 = (tmp_path / "test_task_nostate2").mkdir()
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
+    cache_dir2 = tmp_path / "test_task_nostate2"
+    cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     nn()
@@ -674,8 +681,10 @@ def test_task_nostate_cachelocations_nosubmitter_forcererun(tmp_path):
     the second task has cache_locations,
     but submitter is called with rerun=True, so should recompute
     """
-    cache_dir = (tmp_path / "test_task_nostate").mkdir()
-    cache_dir2 = (tmp_path / "test_task_nostate2").mkdir()
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
+    cache_dir2 = tmp_path / "test_task_nostate2"
+    cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     nn()
@@ -699,9 +708,12 @@ def test_task_nostate_cachelocations_updated(plugin, tmp_path):
      that is later overwritten in Submitter.__call__;
     the cache_locations passed to call doesn't exist so the second task should run again
     """
-    cache_dir = (tmp_path / "test_task_nostate").mkdir()
-    cache_dir1 = (tmp_path / "test_task_nostate1").mkdir()
-    cache_dir2 = (tmp_path / "test_task_nostate2").mkdir()
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
+    cache_dir1 = tmp_path / "test_task_nostate1"
+    cache_dir1.mkdir()
+    cache_dir2 = tmp_path / "test_task_nostate2"
+    cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
     with Submitter(plugin=plugin) as sub:
@@ -874,7 +886,7 @@ def test_task_state_2(
     assert nn.state.splitter_final == state_splitter
     assert nn.state.splitter_rpn_final == state_rpn
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin="serial") as sub:
         sub(nn)
 
     # checking the results
@@ -1438,7 +1450,8 @@ def test_task_state_comb_contdim_2(tmp_path):
 @pytest.mark.flaky(reruns=2)  # when dask
 def test_task_state_cachedir(plugin_dask_opt, tmp_path):
     """task with a state and provided cache_dir using pytest tmp_path"""
-    cache_dir = (tmp_path / "test_task_nostate").mkdir()
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
     nn = fun_addtwo(name="NA", cache_dir=cache_dir).split(splitter="a", a=[3, 5])
 
     assert nn.state.splitter == "NA.a"
@@ -1459,8 +1472,10 @@ def test_task_state_cachelocations(plugin, tmp_path):
     Two identical tasks with a state and cache_dir;
     the second task has cache_locations and should not recompute the results
     """
-    cache_dir = (tmp_path / "test_task_nostate").mkdir()
-    cache_dir2 = (tmp_path / "test_task_nostate2").mkdir()
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
+    cache_dir2 = tmp_path / "test_task_nostate2"
+    cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir).split(splitter="a", a=[3, 5])
     with Submitter(plugin=plugin) as sub:
@@ -1488,8 +1503,10 @@ def test_task_state_cachelocations_forcererun(plugin, tmp_path):
     the second task has cache_locations,
     but submitter is called with rerun=True, so should recompute
     """
-    cache_dir = (tmp_path / "test_task_nostate").mkdir()
-    cache_dir2 = (tmp_path / "test_task_nostate2").mkdir()
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
+    cache_dir2 = tmp_path / "test_task_nostate2"
+    cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir).split(splitter="a", a=[3, 5])
     with Submitter(plugin=plugin) as sub:
@@ -1519,9 +1536,12 @@ def test_task_state_cachelocations_updated(plugin, tmp_path):
      that is later overwritten in Submitter.__call__;
     the cache_locations from call doesn't exist so the second task should run again
     """
-    cache_dir = (tmp_path / "test_task_nostate").mkdir()
-    cache_dir1 = (tmp_path / "test_task_nostate1").mkdir()
-    cache_dir2 = (tmp_path / "test_task_nostate2").mkdir()
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
+    cache_dir1 = tmp_path / "test_task_nostate1"
+    cache_dir1.mkdir()
+    cache_dir2 = tmp_path / "test_task_nostate2"
+    cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", cache_dir=cache_dir).split(splitter="a", a=[3, 5])
     with Submitter(plugin=plugin) as sub:

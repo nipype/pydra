@@ -263,8 +263,9 @@ def bytes_repr_sequence_contents(seq: Sequence, cache: Cache) -> Iterator[bytes]
 
 if HAVE_NUMPY:
 
+    @register_serializer(numpy.generic)
     @register_serializer(numpy.ndarray)
-    def bytes_repr_ndarray(obj: numpy.ndarray, cache: Cache) -> Iterator[bytes]:
+    def bytes_repr_numpy(obj: numpy.ndarray, cache: Cache) -> Iterator[bytes]:
         yield f"{obj.__class__.__module__}{obj.__class__.__name__}:{obj.size}:".encode()
         if obj.dtype == "object":
             yield from bytes_repr_sequence_contents(iter(obj.ravel()), cache)

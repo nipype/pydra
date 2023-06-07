@@ -183,9 +183,9 @@ class Audit:
         command = task.cmdline if hasattr(task.inputs, "executable") else None
         attr_list = attr_fields(task.inputs)
         for attrs in attr_list:
-            if issubclass(attrs.type, FileSet):
-                input_name = attrs.name
-                value = getattr(task.inputs, input_name)
+            input_name = attrs.name
+            value = getattr(task.inputs, input_name)
+            if isinstance(value, FileSet):
                 input_path = os.path.abspath(value)
                 file_hash = hash_function(value)
                 entity_id = f"uid:{gen_uuid()}"
