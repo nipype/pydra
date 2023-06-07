@@ -288,13 +288,7 @@ class TaskBase:
             # setting files_hash again in case it was cleaned by setting specific element
             # that might be important for outer splitter of input variable with big files
             # the file can be changed with every single index even if there are only two files
-            inputs_copy.files_hash = self.inputs.files_hash
             input_hash = inputs_copy.hash
-            # updating self.inputs.files_hash, so big files hashes
-            # doesn't have to be recompute for the next element
-            for key, val in inputs_copy.files_hash.items():
-                if val:
-                    self.inputs.files_hash[key].update(val)
             if is_workflow(self):
                 con_hash = hash_function(self._connections)
                 # TODO: hash list is not used
