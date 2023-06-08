@@ -13,7 +13,6 @@ from typing import (
     NewType,
     Sequence,
     Set,
-    runtime_checkable,
     _SpecialForm,
 )
 
@@ -21,6 +20,12 @@ try:
     from typing import Protocol
 except ImportError:
     from typing_extensions import Protocol  # type: ignore
+
+try:
+    from typing import runtime_checkable
+except ImportError:
+    from typing_extensions import runtime_checkable  # type: ignore
+
 
 try:
     import numpy
