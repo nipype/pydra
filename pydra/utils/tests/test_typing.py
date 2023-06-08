@@ -227,9 +227,8 @@ def test_type_coercion_basic5():
 
 
 def test_type_coercion_basic6():
-    assert (
-        TypeChecker(str, coercible=[(PathTypes, PathTypes)])(Path("/a/path"))
-        == "/a/path"
+    assert TypeChecker(str, coercible=[(PathTypes, PathTypes)])(Path("/a/path")) == str(
+        Path("/a/path")
     )
 
 
