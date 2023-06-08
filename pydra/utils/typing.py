@@ -28,11 +28,11 @@ class TypeChecker(ty.Generic[T]):
     ----------
     tp : type
         the type objects will be coerced to
-    coercible: Iterable[tuple[type or Any, type or Any]], optional
+    coercible: Iterable[ty.Tuple[type or Any, type or Any]], optional
         limits coercing between the pairs of types where they appear within the
         tree of more complex nested container types. If None, then all types are
         coercible except explicitly excluded
-    not_coercible: Iterable[tuple[type or Any, type or Any]], optional
+    not_coercible: Iterable[ty.Tuple[type or Any, type or Any]], optional
         excludes the limits coercing between the pairs of types where they appear within
         the tree of more complex nested container types. Overrides 'coercible' to enable
         you to carve out exceptions, such as
@@ -40,8 +40,8 @@ class TypeChecker(ty.Generic[T]):
     """
 
     tp: ty.Type[T]
-    coercible: list[tuple[TypeOrAny, TypeOrAny]]
-    not_coercible: list[tuple[TypeOrAny, TypeOrAny]]
+    coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
+    not_coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
 
     COERCIBLE_DEFAULT = (
         (ty.Sequence, ty.Sequence),
@@ -62,10 +62,10 @@ class TypeChecker(ty.Generic[T]):
         self,
         tp,
         coercible: ty.Optional[
-            ty.Iterable[tuple[TypeOrAny, TypeOrAny]]
+            ty.Iterable[ty.Tuple[TypeOrAny, TypeOrAny]]
         ] = COERCIBLE_DEFAULT,
         not_coercible: ty.Optional[
-            ty.Iterable[tuple[TypeOrAny, TypeOrAny]]
+            ty.Iterable[ty.Tuple[TypeOrAny, TypeOrAny]]
         ] = NOT_COERCIBLE_DEFAULT,
     ):
         def expand_pattern(t):

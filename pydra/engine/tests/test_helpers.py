@@ -106,8 +106,8 @@ def test_hash_function_dir_and_files_list(tmp_path: Path):
             f.write_text(str(i))
 
     assert hash_function(Directory(dir1)) == hash_function(Directory(dir2))
-    file_list1: list[File] = [File(f) for f in dir1.iterdir()]
-    file_list2: list[File] = [File(f) for f in dir2.iterdir()]
+    file_list1: ty.List[File] = [File(f) for f in dir1.iterdir()]
+    file_list2: ty.List[File] = [File(f) for f in dir2.iterdir()]
     assert hash_function(file_list1) == hash_function(file_list2)
 
 

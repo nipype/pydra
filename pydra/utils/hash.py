@@ -15,6 +15,7 @@ from typing import (
     Set,
     _SpecialForm,
 )
+import typing as ty
 
 try:
     from typing import Protocol
@@ -301,7 +302,7 @@ class MtimeCachingHash:
     """
 
     def __init__(self) -> None:
-        self.cache: dict[os.PathLike, tuple[float, Hash]] = {}
+        self.cache: ty.Dict[os.PathLike, ty.Tuple[float, Hash]] = {}
 
     def __call__(self, obj: object) -> Hash:
         if isinstance(obj, os.PathLike):
