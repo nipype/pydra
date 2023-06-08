@@ -6,7 +6,7 @@ import attr
 from ..task import SingularityTask, DockerTask, ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, SpecInfo, File, SingularitySpec
+from ..specs import ShellOutSpec, SpecInfo, File, SingularitySpec, gathered
 
 
 need_docker = pytest.mark.skipif(
@@ -407,7 +407,7 @@ def test_singularity_outputspec_1(plugin, tmp_path):
 
     res = singu.result()
     assert res.output.stdout == ""
-    assert res.output.newfile.exists()
+    assert res.output.newfile.fspath.exists()
 
 
 # tests with customised input_spec
@@ -728,9 +728,9 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
 
     res = singu()
     assert res.output.stdout == ""
-    assert res.output.out_file.exists()
+    assert res.output.out_file.fspath.exists()
     # the file is  copied, and than it is changed in place
-    assert res.output.out_file.parent == singu.output_dir
+    assert res.output.out_file.fspath.parent == singu.output_dir
     with open(res.output.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged
@@ -751,7 +751,7 @@ def test_singularity_inputspec_state_1(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = [str(filename_1), str(filename_2)]
+    filename = gathered([str(filename_1), str(filename_2)])
     image = "docker://alpine"
 
     my_input_spec = SpecInfo(
@@ -802,7 +802,7 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = [str(file_1), str(file_2)]
+    filename = gathered([str(file_1), str(file_2)])
     image = "docker://alpine"
 
     my_input_spec = SpecInfo(
@@ -960,7 +960,7 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = [str(file_1), str(file_2)]
+    filename = gathered([str(file_1), str(file_2)])
     image = "docker://alpine"
 
     my_input_spec = SpecInfo(

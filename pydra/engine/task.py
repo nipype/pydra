@@ -70,6 +70,7 @@ from .helpers import (
     output_from_inputfields,
 )
 from .helpers_file import template_update, is_local_file
+import fileformats.core
 
 
 class FunctionTask(TaskBase):
@@ -165,18 +166,17 @@ class FunctionTask(TaskBase):
                 # # e.g. python annotation: fun() -> ty.NamedTuple("Output", [("out", float)])
                 # # or pydra decorator: @pydra.mark.annotate({"return": ty.NamedTuple(...)})
                 #
-                # This first option was disabled as it wasn't working in 3.7 when the output
-                # was a File, which has __name__ and __annotations__.
-                #
-                # if hasattr(return_info, "__name__") and getattr(
-                #     return_info, "__annotations__", None
-                # ):
-                #     name = return_info.__name__
-                #     fields = list(return_info.__annotations__.items())
-                # # e.g. python annotation: fun() -> {"out": int}
-                # # or pydra decorator: @pydra.mark.annotate({"return": {"out": int}})
-                # el
-                if isinstance(return_info, dict):
+
+                if (
+                    hasattr(return_info, "__name__")
+                    and getattr(return_info, "__annotations__", None)
+                    and not issubclass(return_info, fileformats.core.DataType)
+                ):
+                    name = return_info.__name__
+                    fields = list(return_info.__annotations__.items())
+                # e.g. python annotation: fun() -> {"out": int}
+                # or pydra decorator: @pydra.mark.annotate({"return": {"out": int}})
+                elif isinstance(return_info, dict):
                     fields = list(return_info.items())
                 # e.g. python annotation: fun() -> (int, int)
                 # or pydra decorator: @pydra.mark.annotate({"return": (int, int)})
