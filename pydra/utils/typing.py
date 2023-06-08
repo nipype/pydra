@@ -12,6 +12,12 @@ from ..engine.specs import (
     MultiOutputObj,
 )
 
+try:
+    from typing import get_origin, get_args
+except ImportError:
+    # Python < 3.8
+    from typing_extensions import get_origin, get_args  # type: ignore
+
 
 T = ty.TypeVar("T")
 TypeOrAny = ty.Union[type, ty.Any]
@@ -35,8 +41,8 @@ class TypeChecker(ty.Generic[T]):
     not_coercible: Iterable[ty.Tuple[type or Any, type or Any]], optional
         excludes the limits coercing between the pairs of types where they appear within
         the tree of more complex nested container types. Overrides 'coercible' to enable
-        you to carve out exceptions, such as
-            TypeChecker(list, coercible=[(ty.Iterable, list)], not_coercible=[(str, list)])
+        you to carve out exceptions, such as TypeChecker(list, coercible=[(ty.Iterable, list)],
+        not_coercible=[(str, list)])
     """
 
     tp: ty.Type[T]
@@ -72,10 +78,10 @@ class TypeChecker(ty.Generic[T]):
             """Recursively expand the type arguments of the target type in nested tuples"""
             if t is inspect._empty:
                 return None
-            origin = ty.get_origin(t)
+            origin = get_origin(t)
             if origin is None:
                 return t
-            args = ty.get_args(t)
+            args = get_args(t)
             if not args or args == (Ellipsis,):
                 assert isinstance(origin, type)
                 return origin
@@ -277,7 +283,7 @@ class TypeChecker(ty.Generic[T]):
             pattern_origin, pattern_args = pattern
             if pattern_origin is ty.Union:
                 return check_union(tp, pattern_args)
-            tp_origin = ty.get_origin(tp)
+            tp_origin = get_origin(tp)
             if tp_origin is None:
                 if issubclass(tp, pattern_origin):
                     raise TypeError(
@@ -288,7 +294,7 @@ class TypeChecker(ty.Generic[T]):
                     f"{tp} doesn't match pattern {pattern}, when matching {type_} to "
                     f"{self.pattern}"
                 )
-            tp_args = ty.get_args(tp)
+            tp_args = get_args(tp)
             self.check_coercible(tp_origin, pattern_origin)
             if issubclass(pattern_origin, ty.Mapping):
                 return check_mapping(tp_args, pattern_args)
@@ -378,7 +384,7 @@ class TypeChecker(ty.Generic[T]):
             member attrs
         """
 
-        source_origin = ty.get_origin(source)
+        source_origin = get_origin(source)
         if source_origin is not None:
             source = source_origin
 
@@ -418,7 +424,7 @@ class TypeChecker(ty.Generic[T]):
     def is_or_subclass(a, b):
         """Checks whether the class a is either the same as b, a subclass of b or b is
         typing.Any"""
-        origin = ty.get_origin(a)
+        origin = get_origin(a)
         if origin is not None:
             a = origin
         return a is b or b is ty.Any or issubclass(a, b)
