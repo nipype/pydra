@@ -11,12 +11,16 @@ from typing import (
     Dict,
     Iterator,
     NewType,
-    Protocol,
     Sequence,
     Set,
     runtime_checkable,
     _SpecialForm,
 )
+
+try:
+    from typing import Protocol
+except ImportError:
+    from typing_extensions import Protocol  # type: ignore
 
 try:
     import numpy
