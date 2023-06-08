@@ -2,6 +2,7 @@ import itertools
 import inspect
 from pathlib import Path
 import os
+import sys
 import typing as ty
 import attr
 from ..engine.specs import (
@@ -17,6 +18,11 @@ try:
 except ImportError:
     # Python < 3.8
     from typing_extensions import get_origin, get_args  # type: ignore
+
+NO_GENERIC_ISSUBCLASS = sys.version_info.major == 3 and sys.version_info.minor < 10
+
+if NO_GENERIC_ISSUBCLASS:
+    from typing_utils import issubtype
 
 
 T = ty.TypeVar("T")
@@ -399,11 +405,19 @@ class TypeChecker(ty.Generic[T]):
                 if source_check(source, src) and self.is_or_subclass(target, tgt)
             ]
 
+        def type_name(t):
+            try:
+                return t.__name__
+            except AttributeError:
+                return t._name  # typing generics for Python < 3.10
+
         if not matches(self.coercible):
             raise TypeError(
                 f"Cannot coerce {repr(source)} into {target} as the coercion doesn't match "
                 f"any of the explicit inclusion criteria: "
-                + ", ".join(f"{s.__name__} -> {t.__name__}" for s, t in self.coercible)
+                + ", ".join(
+                    f"{type_name(s)} -> {type_name(t)}" for s, t in self.coercible
+                )
             )
         matches_not_coercible = matches(self.not_coercible)
         if matches_not_coercible:
@@ -411,14 +425,22 @@ class TypeChecker(ty.Generic[T]):
                 f"Cannot coerce {repr(source)} into {target} as it is explicitly "
                 "excluded by the following coercion criteria: "
                 + ", ".join(
-                    f"{s.__name__} -> {t.__name__}" for s, t in matches_not_coercible
+                    f"{type_name(s)} -> {type_name(t)}"
+                    for s, t in matches_not_coercible
                 )
             )
 
     @staticmethod
     def is_instance(obj, cls):
         """Checks whether the object is an instance of cls or that cls is typing.Any"""
-        return cls is ty.Any or isinstance(obj, cls)
+        if cls is ty.Any:
+            return True
+        if NO_GENERIC_ISSUBCLASS:
+            return issubtype(type(obj), cls) or (
+                type(obj) is dict and cls is ty.Mapping
+            )
+        else:
+            return isinstance(obj, cls)
 
     @staticmethod
     def is_or_subclass(a, b):
@@ -427,4 +449,9 @@ class TypeChecker(ty.Generic[T]):
         origin = get_origin(a)
         if origin is not None:
             a = origin
-        return a is b or b is ty.Any or issubclass(a, b)
+        if a is b or b is ty.Any:
+            return True
+        if NO_GENERIC_ISSUBCLASS:
+            return issubtype(a, b) or (a is dict and b is ty.Mapping)
+        else:
+            return issubclass(a, b)

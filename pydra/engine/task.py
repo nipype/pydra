@@ -162,16 +162,21 @@ class FunctionTask(TaskBase):
             fields = [("out", ty.Any)]
             if "return" in func.__annotations__:
                 return_info = func.__annotations__["return"]
-                # e.g. python annotation: fun() -> ty.NamedTuple("Output", [("out", float)])
-                # or pydra decorator: @pydra.mark.annotate({"return": ty.NamedTuple(...)})
-                if hasattr(return_info, "__name__") and getattr(
-                    return_info, "__annotations__", None
-                ):
-                    name = return_info.__name__
-                    fields = list(return_info.__annotations__.items())
-                # e.g. python annotation: fun() -> {"out": int}
-                # or pydra decorator: @pydra.mark.annotate({"return": {"out": int}})
-                elif isinstance(return_info, dict):
+                # # e.g. python annotation: fun() -> ty.NamedTuple("Output", [("out", float)])
+                # # or pydra decorator: @pydra.mark.annotate({"return": ty.NamedTuple(...)})
+                #
+                # This first option was disabled as it wasn't working in 3.7 when the output
+                # was a File, which has __name__ and __annotations__.
+                #
+                # if hasattr(return_info, "__name__") and getattr(
+                #     return_info, "__annotations__", None
+                # ):
+                #     name = return_info.__name__
+                #     fields = list(return_info.__annotations__.items())
+                # # e.g. python annotation: fun() -> {"out": int}
+                # # or pydra decorator: @pydra.mark.annotate({"return": {"out": int}})
+                # el
+                if isinstance(return_info, dict):
                     fields = list(return_info.items())
                 # e.g. python annotation: fun() -> (int, int)
                 # or pydra decorator: @pydra.mark.annotate({"return": (int, int)})
