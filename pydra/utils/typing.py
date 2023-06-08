@@ -127,7 +127,7 @@ class TypeChecker(ty.Generic[T]):
         if self.pattern is None:
             return object_
 
-        def expand_and_coerce(obj, pattern: ty.Union[type | tuple]):
+        def expand_and_coerce(obj, pattern: ty.Union[type, tuple]):
             """Attempt to expand the object along the lines of the coercion pattern"""
             if obj is attr.NOTHING:
                 return attr.NOTHING
@@ -270,7 +270,7 @@ class TypeChecker(ty.Generic[T]):
         if self.pattern is None:
             return
 
-        def expand_and_check(tp, pattern: ty.Union[type | tuple]):
+        def expand_and_check(tp, pattern: ty.Union[type, tuple]):
             """Attempt to expand the object along the lines of the coercion pattern"""
             if not isinstance(pattern, tuple):
                 return check_basic(tp, pattern)
@@ -357,7 +357,9 @@ class TypeChecker(ty.Generic[T]):
 
         return expand_and_check(type_, self.pattern)
 
-    def check_coercible(self, source: object | type, target: type | ty.Any):
+    def check_coercible(
+        self, source: ty.Union[object, type], target: ty.Union[type, ty.Any]
+    ):
         """Checks whether the source object or type is coercible to the target type
         given the coercion rules defined in the `coercible` and `not_coercible` attrs
 
