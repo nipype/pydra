@@ -174,12 +174,7 @@ class ConcurrentFuturesWorker(Worker):
     async def exec_as_coro(self, runnable, rerun=False):
         """Run a task (coroutine wrapper)."""
         if isinstance(runnable, TaskBase):
-            try:
-                res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
-            except TypeError as e:
-                raise TypeError(
-                    f"Could not run {self.pool} in {runnable._run} with {rerun}"
-                ) from e
+            res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
         else:  # it could be tuple that includes pickle files with tasks and inputs
             ind, task_main_pkl, task_orig = runnable
             res = await self.loop.run_in_executor(
