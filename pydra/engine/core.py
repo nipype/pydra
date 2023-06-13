@@ -458,15 +458,12 @@ class TaskBase:
         map_copyfiles = {}
         for fld in attr_fields(self.inputs):
             value = getattr(self.inputs, fld.name)
-            if value is not attr.NOTHING:
+            copyfile_attr = fld.metadata.get("copyfile")
+            if copyfile_attr is not None and value is not attr.NOTHING:
                 copied_value = copy_nested_files(
                     value=value,
                     dest_dir=self.output_dir,
-                    link_type=(
-                        "symbolic_with_cifs_fallback"
-                        if not fld.metadata.get("copyfile")
-                        else None
-                    ),
+                    link_type=None if copyfile_attr else "symbolic_with_cifs_fallback",
                 )
                 if value is not copied_value:
                     map_copyfiles[fld.name] = copied_value

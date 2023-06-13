@@ -29,7 +29,7 @@ T = ty.TypeVar("T")
 TypeOrAny = ty.Union[type, ty.Any]
 
 
-class TypeChecker(ty.Generic[T]):
+class TypeParser(ty.Generic[T]):
     """A callable which can be used as a converter for attrs.fields to check whether an
     object or LazyField matches the specified field type, or can be
     coerced into it (given the criteria passed on initialisation of the checker).
@@ -47,7 +47,7 @@ class TypeChecker(ty.Generic[T]):
     not_coercible: Iterable[ty.Tuple[type or Any, type or Any]], optional
         excludes the limits coercing between the pairs of types where they appear within
         the tree of more complex nested container types. Overrides 'coercible' to enable
-        you to carve out exceptions, such as TypeChecker(list, coercible=[(ty.Iterable, list)],
+        you to carve out exceptions, such as TypeParser(list, coercible=[(ty.Iterable, list)],
         not_coercible=[(str, list)])
     """
 

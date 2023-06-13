@@ -22,7 +22,7 @@ from .specs import (
     LazyField,
 )
 from .helpers_file import copy_nested_files
-from ..utils.typing import TypeChecker
+from ..utils.typing import TypeParser
 from .specs import File
 
 
@@ -262,7 +262,7 @@ def make_klass(spec):
                     type=tp,
                     **kwargs,
                 )
-            type_checker = TypeChecker[newfield.type](newfield.type)
+            type_checker = TypeParser[newfield.type](newfield.type)
             newfield.converter = type_checker
             newfield.on_setattr = attr.setters.convert
             if "allowed_values" in newfield.metadata:
