@@ -5,11 +5,12 @@ import typing as ty
 from pathlib import Path
 import subprocess as sp
 import pytest
+from fileformats.generic import File
 
 from ..core import Workflow
 from ..submitter import Submitter
 from ... import mark
-from ..specs import File
+
 
 need_docker = pytest.mark.skipif(
     shutil.which("docker") is None or sp.call(["docker", "info"]),
@@ -204,7 +205,9 @@ def fun_write_file(filename: ty.Union[str, File, Path], text="hello") -> File:
 
 
 @mark.task
-def fun_write_file_list(filename_list: ty.List[ty.Union[str, File, Path]], text="hi"):
+def fun_write_file_list(
+    filename_list: ty.List[ty.Union[str, File, Path]], text="hi"
+) -> ty.List[File]:
     for ii, filename in enumerate(filename_list):
         with open(filename, "w") as f:
             f.write(f"from file {ii}: {text}")
@@ -215,7 +218,7 @@ def fun_write_file_list(filename_list: ty.List[ty.Union[str, File, Path]], text=
 @mark.task
 def fun_write_file_list2dict(
     filename_list: ty.List[ty.Union[str, File, Path]], text="hi"
-):
+) -> ty.Dict[str, ty.Union[File, int]]:
     filename_dict = {}
     for ii, filename in enumerate(filename_list):
         with open(filename, "w") as f:

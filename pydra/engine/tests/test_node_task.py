@@ -886,7 +886,7 @@ def test_task_state_2(
     assert nn.state.splitter_final == state_splitter
     assert nn.state.splitter_rpn_final == state_rpn
 
-    with Submitter(plugin="serial") as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(nn)
 
     # checking the results

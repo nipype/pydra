@@ -67,9 +67,10 @@ def convert_to_files(lst):
 
 
 def to_single(lst):
-    if isinstance(lst, ty.Iterable) and len(lst) == 1:
+    lst = list(lst)
+    if len(lst) == 1:
         return lst[0]
-    return list(lst)
+    return lst
 
 
 class MultiInputFile(MultiInputObj[File]):

@@ -41,7 +41,7 @@ from .helpers import (
     PydraFileLock,
 )
 from ..utils.hash import hash_function
-from .helpers_file import copyfile_input, template_update
+from .helpers_file import copy_nested_files, template_update
 from .graph import DiGraph
 from .audit import Audit
 from ..utils.messenger import AuditFlag
@@ -455,7 +455,21 @@ class TaskBase:
         orig_inputs = {
             k: deepcopy(v) for k, v in attr.asdict(self.inputs, recurse=False).items()
         }
-        map_copyfiles = copyfile_input(self.inputs, self.output_dir)
+        map_copyfiles = {}
+        for fld in attr_fields(self.inputs):
+            value = getattr(self.inputs, fld.name)
+            if value is not attr.NOTHING:
+                copied_value = copy_nested_files(
+                    value=value,
+                    dest_dir=self.output_dir,
+                    link_type=(
+                        "symbolic_with_cifs_fallback"
+                        if not fld.metadata.get("copyfile")
+                        else None
+                    ),
+                )
+                if value is not copied_value:
+                    map_copyfiles[fld.name] = copied_value
         modified_inputs = template_update(
             self.inputs, self.output_dir, map_copyfiles=map_copyfiles
         )

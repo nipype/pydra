@@ -5,9 +5,9 @@ from pathlib import Path
 import os
 import sys
 from uuid import uuid4
-import subprocess as sp
 import getpass
 import typing as ty
+import subprocess as sp
 import re
 from time import strftime
 from traceback import format_exception
@@ -15,19 +15,15 @@ import attr
 import attrs  # New defaults
 from filelock import SoftFileLock, Timeout
 import cloudpickle as cp
-
 from .specs import (
     Runtime,
-    File,
-    Directory,
     attr_fields,
     Result,
     LazyField,
-    MultiOutputObj,
-    gathered,
 )
-from .helpers_file import copyfile, is_existing_file
+from .helpers_file import copy_nested_files
 from ..utils.typing import TypeChecker
+from .specs import File
 
 
 def ensure_list(obj, tuple2list=False):
@@ -154,39 +150,15 @@ def save(task_path: Path, result=None, task=None, name_prefix=None):
                 cp.dump(task, fp)
 
 
-def copyfile_workflow(wf_path, result):
+def copyfile_workflow(wf_path: os.PathLike, result):
     """if file in the wf results, the file will be copied to the workflow directory"""
     for field in attr_fields(result.output):
         value = getattr(result.output, field.name)
         # if the field is a path or it can contain a path _copyfile_single_value is run
         # to move all files and directories to the workflow directory
-        if field.type in [File, Directory, MultiOutputObj] or type(value) in [
-            list,
-            tuple,
-            dict,
-        ]:
-            new_value = _copyfile_single_value(wf_path=wf_path, value=value)
-            setattr(result.output, field.name, new_value)
+        new_value = copy_nested_files(value, wf_path, link_type="hard")
+        setattr(result.output, field.name, new_value)
     return result
-
-
-def _copyfile_single_value(wf_path, value):
-    """checking a single value for files that need to be copied to the wf dir"""
-    if isinstance(value, (tuple, list)):
-        lst = [_copyfile_single_value(wf_path, val) for val in value]
-        if isinstance(value, gathered):
-            lst = gathered(lst)
-        return lst
-    elif isinstance(value, dict):
-        return {
-            key: _copyfile_single_value(wf_path, val) for (key, val) in value.items()
-        }
-    elif is_existing_file(value):
-        new_path = wf_path / Path(value).name
-        copyfile(originalfile=value, newfile=new_path, copy=True, use_hardlink=True)
-        return new_path
-    else:
-        return value
 
 
 def task_hash(task):

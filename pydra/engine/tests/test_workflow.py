@@ -4130,14 +4130,14 @@ def test_wf_resultfile_2(plugin, tmpdir):
     wf.plugin = plugin
     wf.set_output([("wf_out", wf.writefile.lzout.out)])
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin="serial") as sub:
         sub(wf)
 
     results = wf.result()
     # checking if the file exists and if it is in the Workflow directory
     for ii, file in enumerate(results.output.wf_out):
-        assert file.exists()
-        assert file == wf.output_dir / file_list[ii]
+        assert file.fspath.exists()
+        assert file.fspath == wf.output_dir / file_list[ii]
 
 
 def test_wf_resultfile_3(plugin, tmpdir):
@@ -4160,9 +4160,9 @@ def test_wf_resultfile_3(plugin, tmpdir):
         if key == "random_int":
             assert val == 20
         else:
-            assert val.exists()
+            assert val.fspath.exists()
             ii = int(key.split("_")[1])
-            assert val == wf.output_dir / file_list[ii]
+            assert val.fspath == wf.output_dir / file_list[ii]
 
 
 def test_wf_upstream_error1(plugin, tmpdir):
