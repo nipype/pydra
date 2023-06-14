@@ -13,6 +13,8 @@ import logging
 from pathlib import Path
 import typing as ty
 from copy import copy
+import subprocess as sp
+from contextlib import contextmanager
 import attr
 from fileformats.core import FileSet
 
@@ -550,6 +552,7 @@ def copy_nested_files(
     value: ty.Any,
     dest_dir: os.PathLike,
     cache: ty.Optional[ty.Dict[int, ty.Any]] = None,
+    supported_modes: FileSet.CopyMode = FileSet.CopyMode.all,
     **kwargs,
 ) -> ty.Any:
     """Copies all "file-sets" found with the nested value into the destination
@@ -589,7 +592,9 @@ def copy_nested_files(
     elif isinstance(value, (ty.Sequence, MultiOutputObj)):
         value = value_type(copy_nested_files(val, dest_dir) for val in value)
     elif isinstance(value, FileSet):
-        value = value.copy(dest_dir=dest_dir, **kwargs)
+        if any(MountIndentifier.on_cifs(p) for p in value.fspaths):
+            supported_modes -= FileSet.CopyMode.symlink
+        value = value.copy(dest_dir=dest_dir, supported_modes=supported_modes, **kwargs)
     cache[id(value)] = value
     return value
 
@@ -867,11 +872,120 @@ def is_local_file(f):
         return False
 
 
-def is_existing_file(value):
-    """checking if an object is an existing file"""
-    if isinstance(value, str) and value == "":
+# def is_existing_file(value):
+#     """checking if an object is an existing file"""
+#     if isinstance(value, str) and value == "":
+#         return False
+#     try:
+#         return Path(value).exists()
+#     except TypeError:
+#         return False
+
+
+class MountIndentifier:
+    """Used to check the mount type that given file paths reside on in order to determine
+    features that can be used (e.g. symlinks)"""
+
+    @classmethod
+    def on_cifs(cls, fname: Path) -> bool:
+        """
+        Check whether a file path is on a CIFS filesystem mounted in a POSIX host.
+
+        POSIX hosts are assumed to have the ``mount`` command.
+
+        On Windows, Docker mounts host directories into containers through CIFS
+        shares, which has support for Minshall+French symlinks, or text files that
+        the CIFS driver exposes to the OS as symlinks.
+        We have found that under concurrent access to the filesystem, this feature
+        can result in failures to create or read recently-created symlinks,
+        leading to inconsistent behavior and ``FileNotFoundError`` errors.
+
+        This check is written to support disabling symlinks on CIFS shares.
+
+        NB: This function and sub-functions are copied from the nipype.utils.filemanip module
+
+
+        Copied from https://github.com/nipy/nipype
+        """
+        # Only the first match (most recent parent) counts
+        for fspath, fstype in cls.get_mount_table():
+            if str(fname).startswith(fspath):
+                return fstype == "cifs"
         return False
-    try:
-        return Path(value).exists()
-    except TypeError:
-        return False
+
+    @classmethod
+    def generate_cifs_table(cls) -> ty.List[ty.Tuple[str, str]]:
+        """
+        Construct a reverse-length-ordered list of mount points that fall under a CIFS mount.
+
+        This precomputation allows efficient checking for whether a given path
+        would be on a CIFS filesystem.
+        On systems without a ``mount`` command, or with no CIFS mounts, returns an
+        empty list.
+
+        """
+        exit_code, output = sp.getstatusoutput("mount")
+        return cls.parse_mount_table(exit_code, output)
+
+    @classmethod
+    def parse_mount_table(
+        cls, exit_code: int, output: str
+    ) -> ty.List[ty.Tuple[str, str]]:
+        """
+        Parse the output of ``mount`` to produce (path, fs_type) pairs.
+
+        Separated from _generate_cifs_table to enable testing logic with real
+        outputs
+
+        """
+        # Not POSIX
+        if exit_code != 0:
+            return []
+
+        # Linux mount example:  sysfs on /sys type sysfs (rw,nosuid,nodev,noexec)
+        #                          <PATH>^^^^      ^^^^^<FSTYPE>
+        # OSX mount example:    /dev/disk2 on / (hfs, local, journaled)
+        #                               <PATH>^  ^^^<FSTYPE>
+        pattern = re.compile(r".*? on (/.*?) (?:type |\()([^\s,\)]+)")
+
+        # Keep line and match for error reporting (match == None on failure)
+        # Ignore empty lines
+        matches = [(ll, pattern.match(ll)) for ll in output.strip().splitlines() if ll]
+
+        # (path, fstype) tuples, sorted by path length (longest first)
+        mount_info = sorted(
+            (match.groups() for _, match in matches if match is not None),
+            key=lambda x: len(x[0]),
+            reverse=True,
+        )
+        cifs_paths = [path for path, fstype in mount_info if fstype.lower() == "cifs"]
+
+        # Report failures as warnings
+        for line, match in matches:
+            if match is None:
+                logger.debug("Cannot parse mount line: '%s'", line)
+
+        return [
+            mount
+            for mount in mount_info
+            if any(mount[0].startswith(path) for path in cifs_paths)
+        ]
+
+    @classmethod
+    def get_mount_table(cls) -> ty.List[ty.Tuple[str, str]]:
+        if cls._mount_table is None:
+            cls._mount_table = cls.generate_cifs_table()
+        return cls._mount_table
+
+    @classmethod
+    @contextmanager
+    def patch_table(cls, mount_table: ty.List[ty.Tuple[str, str]]):
+        """Patch the mount table with new values. Used in test routines"""
+        orig_table = cls._mount_table
+        cls._mount_table = list(mount_table)
+        try:
+            yield
+        finally:
+            cls._mount_table = orig_table
+
+    _mount_table: ty.Optional[ty.List[ty.Tuple[str, str]]] = None

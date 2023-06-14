@@ -1106,7 +1106,7 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
                         "argstr": "",
                         "help_string": "orig file",
                         "mandatory": True,
-                        "copyfile": True,
+                        "copyfile": "copy",
                     },
                 ),
             ),

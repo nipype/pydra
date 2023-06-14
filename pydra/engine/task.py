@@ -70,7 +70,7 @@ from .helpers import (
     output_from_inputfields,
 )
 from .helpers_file import template_update, is_local_file
-import fileformats.core
+from fileformats.core import FileSet, DataType
 
 
 class FunctionTask(TaskBase):
@@ -170,7 +170,7 @@ class FunctionTask(TaskBase):
                 if (
                     hasattr(return_info, "__name__")
                     and getattr(return_info, "__annotations__", None)
-                    and not issubclass(return_info, fileformats.core.DataType)
+                    and not issubclass(return_info, DataType)
                 ):
                     name = return_info.__name__
                     fields = list(return_info.__annotations__.items())
@@ -689,6 +689,8 @@ class ContainerTask(ShellCommandTask):
                         f"if the file comes from the container, "
                         f"use field.metadata['container_path']=True"
                     )
+
+    SUPPORTED_COPY_MODES = FileSet.CopyMode.all - FileSet.CopyMode.symlink
 
 
 class DockerTask(ContainerTask):

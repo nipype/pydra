@@ -45,6 +45,7 @@ from .helpers_file import copy_nested_files, template_update
 from .graph import DiGraph
 from .audit import Audit
 from ..utils.messenger import AuditFlag
+from fileformats.core import FileSet
 
 logger = logging.getLogger("pydra")
 
@@ -458,12 +459,18 @@ class TaskBase:
         map_copyfiles = {}
         for fld in attr_fields(self.inputs):
             value = getattr(self.inputs, fld.name)
-            copyfile_attr = fld.metadata.get("copyfile")
-            if copyfile_attr is not None and value is not attr.NOTHING:
+            copy_mode = fld.metadata.get("copyfile", "dont_copy")
+            if isinstance(copy_mode, str):
+                copy_mode = FileSet.CopyMode[copy_mode]
+            if (
+                value is not attr.NOTHING
+                and copy_mode is not FileSet.CopyMode.dont_copy
+            ):
                 copied_value = copy_nested_files(
                     value=value,
                     dest_dir=self.output_dir,
-                    link_type=None if copyfile_attr else "symbolic_with_cifs_fallback",
+                    mode=copy_mode,
+                    supported_modes=self.SUPPORTED_COPY_MODES,
                 )
                 if value is not copied_value:
                     map_copyfiles[fld.name] = copied_value
@@ -806,6 +813,8 @@ class TaskBase:
         if is_workflow(self):
             for task in self.graph.nodes:
                 task._reset()
+
+    SUPPORTED_COPY_MODES = FileSet.CopyMode.all
 
 
 def _sanitize_input_spec(

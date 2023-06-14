@@ -156,7 +156,7 @@ def copyfile_workflow(wf_path: os.PathLike, result):
         value = getattr(result.output, field.name)
         # if the field is a path or it can contain a path _copyfile_single_value is run
         # to move all files and directories to the workflow directory
-        new_value = copy_nested_files(value, wf_path, link_type="hard")
+        new_value = copy_nested_files(value, wf_path, mode=File.CopyMode.hardlink)
         setattr(result.output, field.name, new_value)
     return result
 

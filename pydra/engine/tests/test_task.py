@@ -1157,14 +1157,10 @@ def test_audit_shellcommandtask_file(tmp_path):
             if "@type" in data:
                 if data["@type"] == "input":
                     if data["Label"] == "in_file":
-                        assert data["AtLocation"] == str(
-                            shelly.output_dir / file_in.fspath.name
-                        )
+                        assert data["AtLocation"] == str(file_in)
                         assert data["digest"] == test_file_hash
                     if data["Label"] == "in_file_2":
-                        assert data["AtLocation"] == str(
-                            shelly.output_dir / file_in_2.fspath.name
-                        )
+                        assert data["AtLocation"] == str(file_in_2)
                         assert data["digest"] == test_file_hash_2
 
 
