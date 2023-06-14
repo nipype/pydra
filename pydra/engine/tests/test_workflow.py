@@ -34,7 +34,7 @@ from ..specs import SpecInfo, BaseSpec, ShellSpec, gathered
 
 
 def test_wf_no_input_spec():
-    with pytest.raises(ValueError, match="Empty input_spec"):
+    with pytest.raises(ValueError, match='Empty "Inputs" spec'):
         Workflow(name="workflow")
 
 

@@ -23,7 +23,8 @@ from .specs import (
 )
 from .helpers_file import copy_nested_files
 from ..utils.typing import TypeParser
-from .specs import File
+from fileformats.core import FileSet
+from .specs import MultiInputFile, MultiInputObj, MultiOutputObj, MultiOutputFile
 
 
 def ensure_list(obj, tuple2list=False):
@@ -46,6 +47,8 @@ def ensure_list(obj, tuple2list=False):
     [5.0]
 
     """
+    if obj is attr.NOTHING:
+        return attr.NOTHING
     if obj is None:
         return []
     # list or numpy.array (this might need some extra flag in case an array has to be converted)
@@ -53,11 +56,21 @@ def ensure_list(obj, tuple2list=False):
         return obj
     elif tuple2list and isinstance(obj, tuple):
         return list(obj)
-    elif isinstance(obj, list):
-        return obj
     elif isinstance(obj, LazyField):
         return obj
     return [obj]
+
+
+def from_list_if_single(obj):
+    """Converts a list to a single item if it is of length == 1"""
+    if obj is attr.NOTHING:
+        return obj
+    if isinstance(obj, LazyField):
+        return obj
+    obj = list(obj)
+    if len(obj) == 1:
+        return obj[0]
+    return obj
 
 
 def print_help(obj):
@@ -156,7 +169,7 @@ def copyfile_workflow(wf_path: os.PathLike, result):
         value = getattr(result.output, field.name)
         # if the field is a path or it can contain a path _copyfile_single_value is run
         # to move all files and directories to the workflow directory
-        new_value = copy_nested_files(value, wf_path, mode=File.CopyMode.hardlink)
+        new_value = copy_nested_files(value, wf_path, mode=FileSet.CopyMode.hardlink)
         setattr(result.output, field.name, new_value)
     return result
 
@@ -263,7 +276,13 @@ def make_klass(spec):
                     **kwargs,
                 )
             type_checker = TypeParser[newfield.type](newfield.type)
-            newfield.converter = type_checker
+            if newfield.type in (MultiInputObj, MultiInputFile):
+                converter = attr.converters.pipe(ensure_list, type_checker)
+            elif newfield.type in (MultiOutputObj, MultiOutputFile):
+                converter = attr.converters.pipe(from_list_if_single, type_checker)
+            else:
+                converter = type_checker
+            newfield.converter = converter
             newfield.on_setattr = attr.setters.convert
             if "allowed_values" in newfield.metadata:
                 if newfield._validator is None:
@@ -281,181 +300,6 @@ def make_klass(spec):
     return attrs.make_class(
         spec.name, fields, bases=spec.bases, kw_only=True, on_setattr=None
     )
-
-
-# def custom_validator(instance, attribute, value):
-#     """simple custom validation
-#     take into account ty.Union, ty.List, ty.Dict (but only one level depth)
-#     adding an additional validator, if allowe_values provided
-#     """
-#     validators = []
-#     tp_attr = attribute.type
-#     # a flag that could be changed to False, if the type is not recognized
-#     check_type = True
-#     if (
-#         value is attr.NOTHING
-#         or value is None
-#         or attribute.name.startswith("_")  # e.g. _func
-#         or isinstance(value, LazyField)
-#         or tp_attr
-#         in [
-#             ty.Any,
-#             inspect._empty,
-#             MultiOutputObj,
-#             MultiInputObj,
-#             MultiOutputFile,
-#             MultiInputFile,
-#         ]
-#     ):
-#         check_type = False  # no checking of the type
-#     elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:
-#         tp = _single_type_update(tp_attr, name=attribute.name)
-#         cont_type = None
-#     else:  # more complex types
-#         cont_type, tp_attr_list = _check_special_type(tp_attr, name=attribute.name)
-#         if cont_type is ty.Union:
-#             tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
-#         elif cont_type is list:
-#             tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
-#         elif cont_type is dict:
-#             # assuming that it should have length of 2 for keys and values
-#             if len(tp_attr_list) != 2:
-#                 check_type = False
-#             else:
-#                 tp_attr_key, tp_attr_val = tp_attr_list
-#             # updating types separately for keys and values
-#             tp_k, check_k = _types_updates([tp_attr_key], name=attribute.name)
-#             tp_v, check_v = _types_updates([tp_attr_val], name=attribute.name)
-#             # assuming that I have to be able to check keys and values
-#             if not (check_k and check_v):
-#                 check_type = False
-#             else:
-#                 tp = {"key": tp_k, "val": tp_v}
-#         else:
-#             warnings.warn(
-#                 f"no type check for {attribute.name} field, "
-#                 f"no type check implemented for value {value} and type {tp_attr}"
-#             )
-#             check_type = False
-
-#     if check_type:
-#         validators.append(_type_validator(instance, attribute, value, tp, cont_type))
-
-#     # checking additional requirements for values (e.g. allowed_values)
-#     meta_attr = attribute.metadata
-#     if "allowed_values" in meta_attr:
-#         validators.append(_allowed_values_validator(isinstance, attribute, value))
-#     return validators
-
-
-# def _type_validator(instance, attribute, value, tp, cont_type):
-#     """creating a customized type validator,
-#     uses validator.deep_iterable/mapping if the field is a container
-#     (i.e. ty.List or ty.Dict),
-#     it also tries to guess when the value is a list due to the splitter
-#     and validates the elements
-#     """
-#     if cont_type is None or cont_type is ty.Union:
-#         # if tp is not (list,), we are assuming that the value is a list
-#         # due to the splitter, so checking the member types
-#         if isinstance(value, list) and tp != (list,):
-#             return attr.validators.deep_iterable(
-#                 member_validator=attr.validators.instance_of(
-#                     tp + (attr._make._Nothing,)
-#                 )
-#             )(instance, attribute, value)
-#         else:
-#             return attr.validators.instance_of(tp + (attr._make._Nothing,))(
-#                 instance, attribute, value
-#             )
-#     elif cont_type is list:
-#         return attr.validators.deep_iterable(
-#             member_validator=attr.validators.instance_of(tp + (attr._make._Nothing,))
-#         )(instance, attribute, value)
-#     elif cont_type is dict:
-#         return attr.validators.deep_mapping(
-#             key_validator=attr.validators.instance_of(tp["key"]),
-#             value_validator=attr.validators.instance_of(
-#                 tp["val"] + (attr._make._Nothing,)
-#             ),
-#         )(instance, attribute, value)
-#     else:
-#         raise Exception(
-#             f"container type of {attribute.name} should be None, list, dict or ty.Union, "
-#             f"and not {cont_type}"
-#         )
-
-
-# def _types_updates(tp_list, name):
-#     """updating the type's tuple with possible additional types"""
-#     tp_upd_list = []
-#     check = True
-#     for tp_el in tp_list:
-#         tp_upd = _single_type_update(tp_el, name, simplify=True)
-#         if tp_upd is None:
-#             check = False
-#             break
-#         else:
-#             tp_upd_list += list(tp_upd)
-#     tp_upd = tuple(set(tp_upd_list))
-#     return tp_upd, check
-
-
-# def _single_type_update(tp, name, simplify=False):
-#     """updating a single type with other related types - e.g. adding bytes for str
-#     if simplify is True, than changing typing.List to list etc.
-#     (assuming that I validate only one depth, so have to simplify at some point)
-#     """
-#     if isinstance(tp, type) or tp in [File, Directory]:
-#         if tp is str:
-#             return (str, bytes)
-#         elif tp in [File, Directory, os.PathLike]:
-#             return (os.PathLike, str)
-#         elif tp is float:
-#             return (float, int)
-#         else:
-#             return (tp,)
-#     elif simplify is True:
-#         warnings.warn(f"simplify validator for {name} field, checking only one depth")
-#         cont_tp, types_list = _check_special_type(tp, name=name)
-#         if cont_tp is list:
-#             return (list,)
-#         elif cont_tp is dict:
-#             return (dict,)
-#         elif cont_tp is ty.Union:
-#             return types_list
-#         else:
-#             warnings.warn(
-#                 f"no type check for {name} field, type check not implemented for type of {tp}"
-#             )
-#             return None
-#     else:
-#         warnings.warn(
-#             f"no type check for {name} field, type check not implemented for type - {tp}, "
-#             f"consider using simplify=True"
-#         )
-#         return None
-
-
-# def _check_special_type(tp, name):
-#     """checking if the type is a container: ty.List, ty.Dict or ty.Union"""
-#     if sys.version_info.minor >= 8:
-#         return ty.get_origin(tp), ty.get_args(tp)
-#     else:
-#         if isinstance(tp, type):  # simple type
-#             return None, ()
-#         else:
-#             if tp._name == "List":
-#                 return list, tp.__args__
-#             elif tp._name == "Dict":
-#                 return dict, tp.__args__
-#             elif tp.__origin__ is ty.Union:
-#                 return ty.Union, tp.__args__
-#             else:
-#                 warnings.warn(
-#                     f"not type check for {name} field, type check not implemented for type {tp}"
-#                 )
-#                 return None, ()
 
 
 def allowed_values_validator(_, attribute, value):
@@ -648,40 +492,6 @@ def get_open_loop():
     return loop
 
 
-# def hash_value(value, tp=None, metadata=None, precalculated=None):
-#     """calculating hash or returning values recursively"""
-#     if metadata is None:
-#         metadata = {}
-#     if isinstance(value, (tuple, list, set)):
-#         return [hash_value(el, tp, metadata, precalculated) for el in value]
-#     elif isinstance(value, dict):
-#         dict_hash = {
-#             k: hash_value(v, tp, metadata, precalculated) for (k, v) in value.items()
-#         }
-#         # returning a sorted object
-#         return [list(el) for el in sorted(dict_hash.items(), key=lambda x: x[0])]
-#     else:  # not a container
-#         if (
-#             (tp is File or "pydra.engine.specs.File" in str(tp))
-#             and is_existing_file(value)
-#             and "container_path" not in metadata
-#         ):
-#             return hash_file(value, precalculated=precalculated)
-#         elif (
-#             (tp is File or "pydra.engine.specs.Directory" in str(tp))
-#             and is_existing_file(value)
-#             and "container_path" not in metadata
-#         ):
-#             return hash_dir(value, precalculated=precalculated)
-#         elif type(value).__module__ == "numpy":  # numpy objects
-#             return [
-#                 hash_value(el, tp, metadata, precalculated)
-#                 for el in ensure_list(value.tolist())
-#             ]
-#         else:
-#             return value
-
-
 def output_from_inputfields(output_spec, input_spec):
     """
     Collect values from output from input fields.
@@ -700,6 +510,13 @@ def output_from_inputfields(output_spec, input_spec):
     new_fields = []
     for fld in attr.fields(make_klass(input_spec)):
         if "output_file_template" in fld.metadata:
+            fld_type = fld.metadata.get("_output_type", fld.type)
+            if not TypeParser.is_subclass(fld_type, (FileSet, ty.Union[FileSet, bool])):
+                raise TypeError(
+                    "Since 'output_file_template' is specified, the type of field "
+                    f"'{fld.name}' must a sub-class of fileformats.core.FileSet or a "
+                    "file-set subclass in union with a bool"
+                )
             if "output_field_name" in fld.metadata:
                 field_name = fld.metadata["output_field_name"]
             else:
@@ -708,8 +525,25 @@ def output_from_inputfields(output_spec, input_spec):
             if field_name not in current_output_spec_names:
                 # TODO: should probably remove some of the keys
                 new_fields.append(
-                    (field_name, attr.ib(type=File, metadata=fld.metadata))
+                    (field_name, attr.ib(type=fld_type, metadata=fld.metadata))
                 )
+            if "_output_type" not in fld.metadata:
+                # Set the field in the input spec to be pathlib.Path so it doesn't have to
+                # exist
+                index, fld_spec = next(
+                    (i, s) for i, s in enumerate(input_spec.fields) if s[0] == fld.name
+                )
+                if TypeParser(FileSet).matches(fld_type):
+                    new_type = Path
+                else:
+                    assert TypeParser(ty.Union[FileSet, bool]).matches(fld_type)
+                    new_type = ty.Union[Path, bool]
+                if len(fld_spec) > 2:
+                    fld_spec[-1]["_output_type"] = fld_type
+                    input_spec.fields[index] = (fld_spec[0], new_type) + fld_spec[2:]
+                else:
+                    fld_spec[-1].metadata["_output_type"] = fld_type
+                    fld_spec[1].type = new_type
     output_spec.fields += new_fields
     return output_spec
 
@@ -898,3 +732,17 @@ class PydraFileLock:
     async def __aexit__(self, exc_type, exc_value, traceback):
         self.lock.release()
         return None
+
+
+def get_copy_mode(fld: attr.Attribute):
+    """Gets the copy mode from the 'copyfile' value from a field attribute"""
+    copyfile = fld.metadata.get("copyfile", FileSet.CopyMode.dont_copy)
+    if isinstance(copyfile, str):
+        copyfile = FileSet.CopyMode[copyfile]
+    elif copyfile is True:
+        copyfile = FileSet.CopyMode.copy
+    elif copyfile is False:
+        copyfile = FileSet.CopyMode.link
+    if not isinstance(copyfile, FileSet.CopyMode):
+        raise TypeError(f"Unrecognised type for copyfile metadata of {fld}, {copyfile}")
+    return copyfile

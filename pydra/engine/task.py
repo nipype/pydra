@@ -41,13 +41,14 @@ Implement processing nodes.
 import platform
 import re
 import attr
-import cloudpickle as cp
+import os
 import inspect
 import typing as ty
 import shlex
 from pathlib import Path
 import warnings
-
+import cloudpickle as cp
+from fileformats.core import FileSet, DataType
 from .core import TaskBase, is_lazy
 from ..utils.messenger import AuditFlag
 from .specs import (
@@ -59,8 +60,6 @@ from .specs import (
     DockerSpec,
     SingularitySpec,
     attr_fields,
-    File,
-    Directory,
 )
 from .helpers import (
     ensure_list,
@@ -68,9 +67,10 @@ from .helpers import (
     position_sort,
     argstr_formatting,
     output_from_inputfields,
+    get_copy_mode,
 )
 from .helpers_file import template_update, is_local_file
-from fileformats.core import FileSet, DataType
+from ..utils.typing import TypeParser
 
 
 class FunctionTask(TaskBase):
@@ -375,6 +375,11 @@ class ShellCommandTask(TaskBase):
         value = getattr(self.inputs, field.name)
         if value == attr.NOTHING:
             value = None
+        if isinstance(value, Path):
+            try:
+                value = value.relative_to(self.output_dir)
+            except ValueError:
+                pass
         return value
 
     def _command_shelltask_executable(self, field):
@@ -662,33 +667,22 @@ class ContainerTask(ShellCommandTask):
     def _check_inputs(self):
         fields = attr_fields(self.inputs)
         for fld in fields:
-            if (
-                fld.type in [File, Directory]
-                or "pydra.engine.specs.File" in str(fld.type)
-                or "pydra.engine.specs.Directory" in str(fld.type)
-            ):
-                if fld.name == "image":
+            if TypeParser.is_subclass(
+                fld.type, FileSet
+            ):  # instead of issubclass for Python <3.10
+                assert not fld.metadata.get(
+                    "container_path"
+                )  # <-- Is container_path necessary, container paths should just be typed PurePath
+                if fld.name == "image":  # <-- What is the image about?
                     continue
-                file = Path(getattr(self.inputs, fld.name))
-                if fld.metadata.get("container_path"):
-                    # if the path is in a container the input should be treated as a str (hash as a str)
-                    # field.type = "str"
-                    # setattr(self, field.name, str(file))
-                    pass
-                # if this is a local path, checking if the path exists
-                # TODO: if copyfile, ro -> rw
-                elif file.exists():  # is it ok if two inputs have the same parent?
-                    self.bindings[Path(file.parent)] = (
-                        Path(f"/pydra_inp_{fld.name}"),
-                        "ro",
-                    )
-                # error should be raised only if the type is strictly File or Directory
-                elif fld.type in [File, Directory]:
-                    raise FileNotFoundError(
-                        f"the file {file} from {fld.name} input does not exist, "
-                        f"if the file comes from the container, "
-                        f"use field.metadata['container_path']=True"
-                    )
+                fileset = getattr(self.inputs, fld.name)
+                copy_mode = get_copy_mode(fld)
+                common_path = Path(os.path.commonpath(fileset.fspaths))
+                container_path = Path(f"/pydra_inp_{fld.name}")
+                self.bindings[common_path] = (
+                    container_path,
+                    "rw" if copy_mode == FileSet.CopyMode.copy else "ro",
+                )
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.all - FileSet.CopyMode.symlink
 

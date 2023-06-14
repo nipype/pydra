@@ -3,6 +3,7 @@ import abc
 import attr
 import json
 import logging
+import itertools
 import os
 import sys
 from pathlib import Path
@@ -39,6 +40,7 @@ from .helpers import (
     ensure_list,
     record_error,
     PydraFileLock,
+    get_copy_mode,
 )
 from ..utils.hash import hash_function
 from .helpers_file import copy_nested_files, template_update
@@ -459,13 +461,8 @@ class TaskBase:
         map_copyfiles = {}
         for fld in attr_fields(self.inputs):
             value = getattr(self.inputs, fld.name)
-            copy_mode = fld.metadata.get("copyfile", "dont_copy")
-            if isinstance(copy_mode, str):
-                copy_mode = FileSet.CopyMode[copy_mode]
-            if (
-                value is not attr.NOTHING
-                and copy_mode is not FileSet.CopyMode.dont_copy
-            ):
+            copy_mode = get_copy_mode(fld)
+            if value is not attr.NOTHING and copy_mode != FileSet.CopyMode.dont_copy:
                 copied_value = copy_nested_files(
                     value=value,
                     dest_dir=self.output_dir,
@@ -817,9 +814,13 @@ class TaskBase:
     SUPPORTED_COPY_MODES = FileSet.CopyMode.all
 
 
-def _sanitize_input_spec(
-    input_spec: ty.Union[SpecInfo, ty.List[str]],
+def _sanitize_spec(
+    spec: ty.Union[
+        SpecInfo, ty.List[str], ty.Dict[str, ty.Type[ty.Any]], BaseSpec, None
+    ],
     wf_name: str,
+    spec_name: str,
+    allow_empty: bool = False,
 ) -> SpecInfo:
     """Makes sure the provided input specifications are valid.
 
@@ -828,51 +829,66 @@ def _sanitize_input_spec(
 
     Parameters
     ----------
-    input_spec : SpecInfo or List[str]
+    spec : SpecInfo or List[str] or Dict[str, type]
         Input specification to be sanitized.
-
     wf_name : str
         The name of the workflow for which the input specifications
         are sanitized.
+    spec_name : str
+        name given to generated SpecInfo object
 
     Returns
     -------
-    input_spec : SpecInfo
-        Sanitized input specifications.
+    spec : SpecInfo
+        Sanitized specification.
 
     Raises
     ------
     ValueError
-        If provided `input_spec` is None.
+        If provided `spec` is None.
     """
     graph_checksum_input = ("_graph_checksums", ty.Any)
-    if input_spec:
-        if isinstance(input_spec, SpecInfo):
-            if not any([x == BaseSpec for x in input_spec.bases]):
+    if spec:
+        if isinstance(spec, SpecInfo):
+            if not any([x == BaseSpec for x in spec.bases]):
                 raise ValueError("Provided SpecInfo must have BaseSpec as it's base.")
-            if "_graph_checksums" not in {f[0] for f in input_spec.fields}:
-                input_spec.fields.insert(0, graph_checksum_input)
-            return input_spec
+            if "_graph_checksums" not in {f[0] for f in spec.fields}:
+                spec.fields.insert(0, graph_checksum_input)
+            return spec
         else:
+            base = BaseSpec
+            if isinstance(spec, list):
+                typed_spec = zip(spec, itertools.repeat(ty.Any))
+            elif isinstance(spec, dict):
+                typed_spec = spec.items()  # type: ignore
+            elif isinstance(spec, BaseSpec):
+                base = spec
+                typed_spec = []
+            else:
+                raise TypeError(
+                    f"Unrecognised spec type, {spec}, should be SpecInfo, list or dict"
+                )
             return SpecInfo(
-                name="Inputs",
+                name=spec_name,
                 fields=[graph_checksum_input]
                 + [
                     (
                         nm,
                         attr.ib(
-                            type=ty.Any,
+                            type=tp,
                             metadata={
                                 "help_string": f"{nm} input from {wf_name} workflow"
                             },
                         ),
                     )
-                    for nm in input_spec
+                    for nm, tp in typed_spec
                 ],
-                bases=(BaseSpec,),
+                bases=(base,),
             )
+    elif allow_empty:
+        return None
     else:
-        raise ValueError(f"Empty input_spec provided to Workflow {wf_name}.")
+        raise ValueError(f'Empty "{spec_name}" spec provided to Workflow {wf_name}.')
 
 
 class Workflow(TaskBase):
@@ -884,11 +900,17 @@ class Workflow(TaskBase):
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
-        input_spec: ty.Optional[ty.Union[ty.List[ty.Text], SpecInfo]] = None,
+        input_spec: ty.Optional[
+            ty.Union[ty.List[ty.Text], ty.Dict[ty.Text, ty.Type[ty.Any]], SpecInfo]
+        ] = None,
         cont_dim=None,
         messenger_args=None,
         messengers=None,
-        output_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
+        output_spec: ty.Optional[
+            ty.Union[
+                ty.List[ty.Text], ty.Dict[ty.Text, ty.Type[ty.Any]], SpecInfo, BaseSpec
+            ]
+        ] = None,
         rerun=False,
         propagate_rerun=True,
         **kwargs,
@@ -920,9 +942,10 @@ class Workflow(TaskBase):
             TODO
 
         """
-        self.input_spec = _sanitize_input_spec(input_spec, name)
-
-        self.output_spec = output_spec
+        self.input_spec = _sanitize_spec(input_spec, name, "Inputs")
+        self.output_spec = _sanitize_spec(
+            output_spec, name, "Outputs", allow_empty=True
+        )
 
         if name in dir(self):
             raise ValueError(

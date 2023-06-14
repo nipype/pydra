@@ -935,7 +935,7 @@ def test_output_spec_func_3():
 
     funky = testfunc(a=3.5, b=1, output_spec=my_output_spec)
     res = funky()
-    assert res.output.out_list == MultiOutputObj([3.5, 1])
+    assert res.output.out_list == [3.5, 1]
 
 
 def test_output_spec_func_4():
@@ -960,7 +960,7 @@ def test_output_spec_func_4():
 
     funky = testfunc(a=3.5, output_spec=my_output_spec)
     res = funky()
-    assert res.output.out_1el == MultiOutputObj([3.5])
+    assert res.output.out_1el == 3.5
 
 
 def test_exception_func():

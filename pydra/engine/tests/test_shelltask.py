@@ -665,7 +665,7 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
             (
                 "text",
                 attr.ib(
-                    type=str,
+                    type=File,
                     default="Hello",
                     metadata={
                         "position": 1,
@@ -938,7 +938,7 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
             (
                 "out1",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
@@ -982,7 +982,7 @@ def test_shell_cmd_inputspec_7a(plugin, results_function, tmp_path):
             (
                 "out1",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{args}",
                         "output_field_name": "out1_changed",
@@ -1023,14 +1023,14 @@ def test_shell_cmd_inputspec_7b(plugin, results_function, tmp_path):
             (
                 "newfile",
                 attr.ib(
-                    type=str,
+                    type=Path,
                     metadata={"position": 1, "help_string": "new file", "argstr": ""},
                 ),
             ),
             (
                 "out1",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{newfile}",
                         "help_string": "output file",
@@ -1069,7 +1069,7 @@ def test_shell_cmd_inputspec_7c(plugin, results_function, tmp_path):
             (
                 "out1",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{args}.txt",
                         "help_string": "output file",
@@ -1109,7 +1109,7 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmp_path):
             (
                 "newfile",
                 attr.ib(
-                    type=str,
+                    type=Path,
                     metadata={"position": 2, "help_string": "new file", "argstr": ""},
                 ),
             ),
@@ -1127,7 +1127,7 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmp_path):
             (
                 "out1",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{newfile}",
                         "help_string": "output file",
@@ -1166,7 +1166,7 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmp_path):
             (
                 "newfile",
                 attr.ib(
-                    type=str,
+                    type=Path,
                     metadata={"position": 2, "help_string": "new file", "argstr": ""},
                 ),
             ),
@@ -1184,7 +1184,7 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmp_path):
             (
                 "out1",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{newfile}",
                         "help_string": "output file",
@@ -1234,7 +1234,7 @@ def test_shell_cmd_inputspec_9(tmp_path, plugin, results_function):
             (
                 "file_copy",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{file_orig}_copy",
                         "help_string": "output file",
@@ -1288,7 +1288,7 @@ def test_shell_cmd_inputspec_9a(tmp_path, plugin, results_function):
             (
                 "file_copy",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{file_orig}_copy",
                         "help_string": "output file",
@@ -1335,7 +1335,7 @@ def test_shell_cmd_inputspec_9b(tmp_path, plugin, results_function):
             (
                 "file_copy",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{file_orig}_copy",
                         "keep_extension": False,
@@ -1386,7 +1386,7 @@ def test_shell_cmd_inputspec_9c(tmp_path, plugin, results_function):
             (
                 "file_copy",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{file_orig}",
                         "keep_extension": False,
@@ -1439,7 +1439,7 @@ def test_shell_cmd_inputspec_9d(tmp_path, plugin, results_function):
             (
                 "file_copy",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{file_orig}_copy",
                         "help_string": "output file",
@@ -1604,7 +1604,7 @@ def test_shell_cmd_inputsspec_11():
     result = wf.result()
 
     for out_file in result.output.out:
-        assert out_file.name == "test1" or out_file.name == "test2"
+        assert out_file.fspath.name == "test1" or out_file.fspath.name == "test2"
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -1646,7 +1646,7 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, plugin, results_function):
             (
                 "file_copy",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": template_function,
                         "help_string": "output file",
@@ -1741,7 +1741,7 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path):
             (
                 "out_file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{orig_file}",
                         "help_string": "output file",
@@ -1803,7 +1803,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path):
             (
                 "out_file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{orig_file}",
                         "help_string": "output file",
@@ -2037,7 +2037,7 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function, tmp_path):
             (
                 "out1",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
@@ -2146,7 +2146,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
             (
                 "out_file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{orig_file}",
                         "help_string": "output file",
@@ -2199,7 +2199,7 @@ def test_wf_shell_cmd_2(plugin_dask_opt, tmp_path):
             (
                 "out1",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
@@ -2246,7 +2246,7 @@ def test_wf_shell_cmd_2a(plugin, tmp_path):
             (
                 "out1",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
@@ -2294,7 +2294,7 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
             (
                 "file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
@@ -2322,7 +2322,7 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
             (
                 "out_file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "position": 2,
                         "argstr": "",
@@ -2391,7 +2391,7 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
             (
                 "file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
@@ -2419,7 +2419,7 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
             (
                 "out_file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "position": 2,
                         "argstr": "",
@@ -2485,7 +2485,7 @@ def test_wf_shell_cmd_state_1(plugin):
             (
                 "file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
@@ -2513,7 +2513,7 @@ def test_wf_shell_cmd_state_1(plugin):
             (
                 "out_file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "position": 2,
                         "argstr": "",
@@ -2583,7 +2583,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
             (
                 "file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "output_file_template": "{args}",
                         "help_string": "output file",
@@ -2611,7 +2611,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
             (
                 "out_file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "position": 2,
                         "argstr": "",
@@ -2785,7 +2785,7 @@ def test_shell_cmd_outputspec_3(plugin, results_function, tmp_path):
     assert res.output.stdout == ""
     # newfile is a list
     assert len(res.output.newfile) == 2
-    assert all([file.exists() for file in res.output.newfile])
+    assert all([file.fspath.exists() for file in res.output.newfile])
 
 
 @pytest.mark.xfail(
@@ -2887,7 +2887,7 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmp_path):
     assert res.output.stdout == ""
     # newfile is a list
     assert len(res.output.newfile) == 2
-    assert all([file.exists() for file in res.output.newfile])
+    assert all([file.fspath.exists() for file in res.output.newfile])
     assert (
         shelly.output_names
         == shelly.generated_output_names
@@ -2924,7 +2924,7 @@ def test_shell_cmd_outputspec_5a(plugin, results_function):
     assert res.output.stdout == ""
     # newfile is a list
     assert len(res.output.newfile) == 2
-    assert all([file.exists() for file in res.output.newfile])
+    assert all([file.fspath.exists() for file in res.output.newfile])
 
 
 def test_shell_cmd_outputspec_5b_error():
@@ -2975,7 +2975,7 @@ def test_shell_cmd_outputspec_5c(plugin, results_function):
     assert res.output.stdout == ""
     # newfile is a list
     assert len(res.output.newfile) == 2
-    assert all([file.exists for file in res.output.newfile])
+    assert all([file.exists() for file in res.output.newfile])
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -3119,7 +3119,7 @@ def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     for file in res.output.new_files:
-        assert file.exists()
+        assert file.fspath.exists()
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -3194,7 +3194,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
 
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
-    assert res.output.new_files.exists()
+    assert res.output.new_files.fspath.exists()
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -4214,7 +4214,7 @@ def test_fsl(data_tests_dir):
             (
                 "out_file",
                 attr.ib(
-                    type=str,
+                    type=File,
                     metadata={
                         "help_string": "name of output skull stripped image",
                         "position": 2,
@@ -4412,9 +4412,8 @@ def test_fsl(data_tests_dir):
     shelly = ShellCommandTask(
         name="bet_task", executable="bet", in_file=in_file, input_spec=bet_input_spec
     )
-    out_file = shelly.output_dir / "test_brain.nii.gz"
     assert shelly.inputs.executable == "bet"
-    assert shelly.cmdline == f"bet {in_file} {out_file}"
+    assert shelly.cmdline == f"bet {in_file} test_brain.nii.gz"
     # res = shelly(plugin="cf")
 
 
@@ -4780,7 +4779,7 @@ def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
     shelly()
     res = shelly.result()
     # checking if the outputs are Nothing
-    assert res.output.out_list[0] == Path(shelly.output_dir) / "test_1_real.nii"
+    assert res.output.out_list[0] == File(Path(shelly.output_dir) / "test_1_real.nii")
     assert res.output.out_list[1] == attr.NOTHING
 
 

@@ -3,16 +3,16 @@ from pathlib import Path
 import typing as ty
 import inspect
 import re
+import os
 from glob import glob
 import attr
-import attrs
 from fileformats.generic import (
     File,
     Directory,
 )
 
 from .helpers_file import template_update_single
-from ..utils.hash import register_serializer, bytes_repr_seq, hash_function
+from ..utils.hash import hash_function
 
 
 T = ty.TypeVar("T")
@@ -30,97 +30,23 @@ def attr_fields_dict(spec, exclude_names=()):
     }
 
 
-def to_list(lst):
-    if not isinstance(lst, ty.Iterable) or isinstance(lst, str):
-        lst = [lst]
-    else:
-        lst = list(lst)
-    return lst
+# These are special types that are checked for in the construction of input/output specs
+# and special converters inserted into the attrs fields.
+#
+# Ideally Multi(In|Out)putObj would be a generic (see https://github.com/python/mypy/issues/3331)
+# and then Multi(In|Out)putFile could be just Multi(In|Out)obj.
+MultiInputObj = ty.NewType("MultiInputObj", list)
+MultiInputFile = ty.NewType("MultiInputFile", ty.List[File])
 
 
-@attrs.define
-class MultiInputObj(ty.Generic[T]):
-    """A ty.List[ty.Any] object, encapsulates single values so they act like a list"""
-
-    items: ty.List[T] = attrs.field(converter=to_list)
-
-    def __getattr__(self, name):
-        """Pass all calls to methods and attributes onto underlying list so it can be
-        duck-typed"""
-        return getattr(self.items, name)
-
-    def __getitem__(self, index):
-        return self.items[index]
-
-    def __repr__(self):
-        return repr(self.items)
-
-    def __iter__(self):
-        return iter(self.items)
-
-    def __len__(self):
-        return len(self.items)
+# Since we can't create a NewType from a type union, we add a dummy type to the union
+# so we can detect the MultiOutput in the input/output spec creation
+class MultiOutputType:
+    pass
 
 
-def convert_to_files(lst):
-    return [File(x) for x in lst]
-
-
-def to_single(lst):
-    lst = list(lst)
-    if len(lst) == 1:
-        return lst[0]
-    return lst
-
-
-class MultiInputFile(MultiInputObj[File]):
-    items: ty.List[File] = attrs.field(
-        converter=attrs.converters.pipe(to_list, convert_to_files)
-    )
-
-
-@attrs.define
-class MultiOutputObj(ty.Generic[T]):
-    """Takes a ty.List[ty.Any] object and encapsulates it so that len-1 lists behave like
-    single items"""
-
-    item: ty.Union[T, ty.List[T]] = attrs.field(converter=to_single)
-
-    def __getattr__(self, name):
-        """Pass all calls to methods and attributes onto underlying item/list so it can be
-        duck-typed"""
-        return getattr(self.item, name)
-
-    def __getitem__(self, index):
-        if not isinstance(self.item, list):
-            if index == 0:
-                return self.item
-            else:
-                raise IndexError(f"List index out of range {index} (length 1)")
-        return self.item[index]
-
-    def __repr__(self):
-        return repr(self.item)
-
-    def __iter__(self):
-        if not isinstance(self.item, list):
-            return iter([self.item])
-        return iter(self.item)
-
-    def __len__(self):
-        if not isinstance(self.item, ty.Iterable):
-            return 1
-        return len(self.item)
-
-
-class MultiOutputFile(MultiOutputObj[File]):
-    item: ty.List[File] = attrs.field(
-        converter=attrs.converters.pipe(convert_to_files, to_single)
-    )
-
-
-register_serializer(MultiInputObj)(bytes_repr_seq)
-register_serializer(MultiOutputObj)(bytes_repr_seq)
+MultiOutputObj = ty.Union[list, ty.Any, MultiOutputType]
+MultiOutputFile = ty.Union[File, ty.List[File], MultiOutputType]
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -432,6 +358,7 @@ class ShellSpec(BaseSpec):
             "xor",
             "sep",
             "formatter",
+            "_output_type",
         }
         for fld in attr_fields(self, exclude_names=("_func", "_graph_checksums")):
             mdata = fld.metadata
@@ -474,28 +401,31 @@ class ShellOutSpec:
     """The process' standard input."""
 
     def collect_additional_outputs(self, inputs, output_dir, outputs):
+        from ..utils.typing import TypeParser
+
         """Collect additional outputs from shelltask output_spec."""
         additional_out = {}
         for fld in attr_fields(self, exclude_names=("return_code", "stdout", "stderr")):
-            if fld.type not in [
-                File,
-                MultiOutputFile,
-                Directory,
-                Path,
-                int,
-                float,
-                bool,
-                str,
-                list,
-            ]:
-                raise Exception(
+            if not TypeParser.is_subclass(
+                fld.type,
+                (
+                    os.PathLike,
+                    MultiOutputObj,
+                    int,
+                    float,
+                    bool,
+                    str,
+                    list,
+                ),
+            ):
+                raise TypeError(
                     f"Support for {fld.type} type, required for {fld.name} in {self}, "
                     "has not been implemented in collect_additional_output"
                 )
             # assuming that field should have either default or metadata, but not both
             input_value = getattr(inputs, fld.name, attr.NOTHING)
             if input_value is not attr.NOTHING:
-                if fld.type in (File, MultiOutputFile, Directory, Path):
+                if isinstance(fld.type, os.PathLike):
                     input_value = Path(input_value).absolute()
                 additional_out[fld.name] = input_value
             elif (

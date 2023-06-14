@@ -19,6 +19,7 @@ except ImportError:
     # Python < 3.8
     from typing_extensions import get_origin, get_args  # type: ignore
 
+
 NO_GENERIC_ISSUBCLASS = sys.version_info.major == 3 and sys.version_info.minor < 10
 
 if NO_GENERIC_ISSUBCLASS:
@@ -255,7 +256,7 @@ class TypeParser(ty.Generic[T]):
             """
             try:
                 return type_(obj)
-            except TypeError as e:
+            except (TypeError, ValueError) as e:
                 msg = (
                     f" (part of coercion from {object_} to {self.pattern}"
                     if obj is not object_
@@ -312,14 +313,34 @@ class TypeParser(ty.Generic[T]):
             return check_sequence(tp_args, pattern_args)
 
         def check_basic(tp, pattern):
-            if not self.is_or_subclass(tp, pattern):
+            if not self.is_subclass(tp, pattern):
                 self.check_coercible(tp, pattern)
 
         def check_union(tp, pattern_args):
+            if get_origin(tp) is ty.Union:
+                for tp_arg in get_args(tp):
+                    reasons = []
+                    for pattern_arg in pattern_args:
+                        try:
+                            expand_and_check(tp_arg, pattern_arg)
+                        except TypeError as e:
+                            reasons.append(e)
+                        else:
+                            reasons = None
+                            break
+                    if reasons:
+                        raise TypeError(
+                            f"Cannot coerce {tp} to ty.Union[{', '.join(pattern_args)}], "
+                            f"because {tp_arg} cannot be coerced to any of its args:\n\n"
+                            + "\n\n".join(
+                                f"{a} -> {e}" for a, e in zip(pattern_args, reasons)
+                            )
+                        )
+                return
             reasons = []
-            for arg in pattern_args:
+            for pattern_arg in pattern_args:
                 try:
-                    return expand_and_check(tp, arg)
+                    return expand_and_check(tp, pattern_arg)
                 except TypeError as e:
                     reasons.append(e)
             raise TypeError(
@@ -394,15 +415,13 @@ class TypeParser(ty.Generic[T]):
         if source_origin is not None:
             source = source_origin
 
-        source_check = (
-            self.is_or_subclass if inspect.isclass(source) else self.is_instance
-        )
+        source_check = self.is_subclass if inspect.isclass(source) else self.is_instance
 
         def matches(criteria):
             return [
                 (src, tgt)
                 for src, tgt in criteria
-                if source_check(source, src) and self.is_or_subclass(target, tgt)
+                if source_check(source, src) and self.is_subclass(target, tgt)
             ]
 
         def type_name(t):
@@ -430,28 +449,151 @@ class TypeParser(ty.Generic[T]):
                 )
             )
 
-    @staticmethod
-    def is_instance(obj, cls):
-        """Checks whether the object is an instance of cls or that cls is typing.Any"""
-        if cls is ty.Any:
-            return True
-        if NO_GENERIC_ISSUBCLASS:
-            return issubtype(type(obj), cls) or (
-                type(obj) is dict and cls is ty.Mapping
-            )
-        else:
-            return isinstance(obj, cls)
+    def matches(self, type_: ty.Type[ty.Any]) -> bool:
+        """Returns true if the provided type matches the pattern of the TypeParser
+
+        Parameters
+        ----------
+        type_ : type
+            the type to check
+
+        Returns
+        -------
+        matches : bool
+            whether the type matches the pattern of the type parser
+        """
+        try:
+            self.check_type(type_)
+        except TypeError:
+            return False
+        return True
 
     @staticmethod
-    def is_or_subclass(a, b):
+    def is_instance(obj, candidates):
+        """Checks whether the object is an instance of cls or that cls is typing.Any"""
+        if not isinstance(candidates, ty.Iterable):
+            candidates = [candidates]
+        for candidate in candidates:
+            if candidate is ty.Any:
+                return True
+            if NO_GENERIC_ISSUBCLASS:
+                if issubtype(type(obj), candidate) or (
+                    type(obj) is dict and candidate is ty.Mapping
+                ):
+                    return True
+            else:
+                if isinstance(obj, candidate):
+                    return True
+        return False
+
+    @staticmethod
+    def is_subclass(klass, candidates):
         """Checks whether the class a is either the same as b, a subclass of b or b is
         typing.Any"""
-        origin = get_origin(a)
-        if origin is not None:
-            a = origin
-        if a is b or b is ty.Any:
+        if not isinstance(candidates, ty.Iterable):
+            candidates = [candidates]
+
+        for candidate in candidates:
+            if NO_GENERIC_ISSUBCLASS:
+                if issubtype(klass, candidate) or (
+                    klass is dict and candidate is ty.Mapping
+                ):
+                    return True
+            else:
+                origin = get_origin(klass)
+                if origin is not None:
+                    klass = origin
+                if klass is candidate or candidate is ty.Any:
+                    return True
+                if issubclass(klass, candidate):
+                    return True
+        return False
+
+    @classmethod
+    def contains_type(cls, target: ty.Type[ty.Any], type_: ty.Type[ty.Any]):
+        """Checks a potentially nested type for sub-classes of the target type
+
+        Parameters
+        ----------
+        target : type
+            the target type to check for sub-classes of
+        type_: type
+            the type to check for nested types that are sub-classes of target
+        """
+        if type_ in (str, bytes, int, bool, float):  # shortcut primitive types
+            return False
+        if cls.is_subclass(type_, target):
             return True
-        if NO_GENERIC_ISSUBCLASS:
-            return issubtype(a, b) or (a is dict and b is ty.Mapping)
+        type_args = get_args(type_)
+        if not type_args:
+            return False
+        type_origin = get_origin(type_)
+        if type_origin is ty.Union:
+            for type_arg in type_args:
+                if cls.contains_type(target, type_arg):
+                    return True
+            return False
+        if cls.is_subclass(type_origin, ty.Mapping):
+            type_key, type_val = type_args
+            return cls.contains_type(target, type_key) or cls.contains_type(
+                target, type_val
+            )
+        if cls.is_subclass(type_, (ty.Sequence, MultiOutputObj)):
+            assert len(type_args) == 1
+            type_item = type_args[0]
+            return cls.contains_type(target, type_item)
+        return False
+
+    @classmethod
+    def apply_to_instances(
+        cls,
+        target_type: ty.Type[ty.Any],
+        func: ty.Callable,
+        value: ty.Any,
+        cache: ty.Optional[ty.Dict[int, ty.Any]] = None,
+    ) -> ty.Any:
+        """Applies a function to all instances of the given type that are potentially
+        nested within the given value, caching previously computed modifications to
+        handle repeated elements
+
+        Parameters
+        ----------
+        target_type : type
+            the target type to apply the function to
+        func : callable
+            the callable object (e.g. function) to apply to the instances
+        value : Any
+            the value to copy files from (if required)
+        cache: dict, optional
+            guards against multiple references to the same objects by keeping a cache of
+            the modified
+        """
+        if (
+            not cls.is_instance(value, (target_type, ty.Mapping, ty.Sequence))
+            or target_type is not str
+            and cls.is_instance(value, str)
+        ):
+            return value
+        if cache is None:
+            cache = {}
+        obj_id = id(value)
+        try:
+            return cache[obj_id]
+        except KeyError:
+            pass
+        if cls.is_instance(value, target_type):
+            modified = func(value)
+        elif cls.is_instance(value, ty.Mapping):
+            modified = type(value)(  # type: ignore
+                (
+                    cls.apply_to_instances(target_type, func, key),
+                    cls.apply_to_instances(target_type, func, val),
+                )
+                for (key, val) in value.items()
+            )
         else:
-            return issubclass(a, b)
+            assert cls.is_instance(value, (ty.Sequence, MultiOutputObj))
+            args = [cls.apply_to_instances(target_type, func, val) for val in value]
+            modified = type(value)(args)  # type: ignore
+        cache[obj_id] = modified
+        return modified

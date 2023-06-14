@@ -53,7 +53,7 @@ class TouchInterf(ShellCommandTask):
         fields=[
             (
                 "new_file",
-                str,
+                File,
                 {
                     "help_string": "new_file",
                     "argstr": "",

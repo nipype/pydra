@@ -54,7 +54,6 @@ def ensure_list(filename):
 def copy_nested_files(
     value: ty.Any,
     dest_dir: os.PathLike,
-    cache: ty.Optional[ty.Dict[int, ty.Any]] = None,
     supported_modes: FileSet.CopyMode = FileSet.CopyMode.all,
     **kwargs,
 ) -> ty.Any:
@@ -70,36 +69,18 @@ def copy_nested_files(
         the value to copy files from (if required)
     dest_dir : os.PathLike
         the destination directory to copy the files to
-    cache: dict, optional
-        guards against multiple references of the same file-set by keeping a cache of the
-        copies
     **kwargs
         passed directly onto FileSet.copy()
     """
-    from .specs import MultiOutputObj
+    from ..utils.typing import TypeParser  # noqa
 
-    if isinstance(value, (str, bytes, int, bool, float)):  # shortcut primitive types
-        return value
-    if cache is None:
-        cache = {}
-    obj_id = id(value)
-    try:
-        return cache[obj_id]
-    except KeyError:
-        pass
-    value_type = type(value)
-    if isinstance(value, ty.Mapping):
-        value = value_type(
-            (key, copy_nested_files(val, dest_dir)) for (key, val) in value.items()
-        )
-    elif isinstance(value, (ty.Sequence, MultiOutputObj)):
-        value = value_type(copy_nested_files(val, dest_dir) for val in value)
-    elif isinstance(value, FileSet):
-        if any(MountIndentifier.on_cifs(p) for p in value.fspaths):
-            supported_modes -= FileSet.CopyMode.symlink
-        value = value.copy(dest_dir=dest_dir, supported_modes=supported_modes, **kwargs)
-    cache[id(value)] = value
-    return value
+    def copy_fileset(fileset: FileSet):
+        supported = supported_modes
+        if any(MountIndentifier.on_cifs(p) for p in fileset.fspaths):
+            supported -= FileSet.CopyMode.symlink
+        return fileset.copy(dest_dir=dest_dir, supported_modes=supported, **kwargs)
+
+    return TypeParser.apply_to_instances(FileSet, copy_fileset, value)
 
 
 # not sure if this might be useful for Function Task
@@ -121,6 +102,7 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
             inputs_dict_st[k] = inputs_dict_st[k][v]
 
     from .specs import attr_fields
+    from ..utils.typing import TypeParser
 
     # Collect templated inputs for which all requirements are satisfied.
     fields_templ = [
@@ -135,8 +117,8 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
 
     dict_mod = {}
     for fld in fields_templ:
-        if fld.type not in [str, ty.Union[str, bool]]:
-            raise Exception(
+        if TypeParser.is_subclass(fld.type, (FileSet, ty.Union[FileSet, bool])):
+            raise TypeError(
                 "fields with output_file_template"
                 " has to be a string or Union[str, bool]"
             )
@@ -159,37 +141,41 @@ def template_update_single(
     based on the value from inputs_dict
     (checking the types of the fields, that have "output_file_template)"
     """
-    from .specs import File, MultiOutputFile, Directory
-
     # if input_dict_st with state specific value is not available,
     # the dictionary will be created from inputs object
+    from ..utils.typing import TypeParser  # noqa
+
     if inputs_dict_st is None:
         inputs_dict_st = attr.asdict(inputs, recurse=False)
 
     if spec_type == "input":
-        if field.type not in [str, ty.Union[str, bool]]:
-            raise Exception(
-                "fields with output_file_template"
-                "has to be a string or Union[str, bool]"
+        if not TypeParser.is_subclass(field.type, (Path, ty.Union[Path, bool])):
+            raise TypeError(
+                f"'{field.name}' field has an 'output_file_template' and therefore "
+                "needs to be typed with a subclass of FileSet or a FileSet in union "
+                f"with a bool, not {field.type}"  # <-- What is the bool option?
             )
         inp_val_set = inputs_dict_st[field.name]
-        if inp_val_set is not attr.NOTHING and not isinstance(inp_val_set, (str, bool)):
-            raise Exception(
-                f"{field.name} has to be str or bool, but {inp_val_set} set"
+        if inp_val_set is not attr.NOTHING and not TypeParser.is_instance(
+            inp_val_set, (Path, ty.Union[Path, bool])
+        ):
+            raise TypeError(
+                f"'{field.name}' field has to be a Path instance or a bool, but {inp_val_set} set"
             )
-        if isinstance(inp_val_set, bool) and field.type is str:
-            raise Exception(
-                f"type of {field.name} is str, consider using Union[str, bool]"
+        if isinstance(inp_val_set, bool) and field.type is Path:
+            raise TypeError(
+                f"type of '{field.name}' is Path, consider using Union[Path, bool]"
             )
     elif spec_type == "output":
-        if field.type not in [File, MultiOutputFile, Directory]:
-            raise Exception(
-                f"output {field.name} should be a File, but {field.type} set as the type"
+        if not TypeParser.contains_type(FileSet, field.type):
+            raise TypeError(
+                f"output {field.name} should be file-system object, but {field.type} "
+                "set as the type"
             )
     else:
-        raise Exception(f"spec_type can be input or output, but {spec_type} provided")
+        raise TypeError(f"spec_type can be input or output, but {spec_type} provided")
     # for inputs that the value is set (so the template is ignored)
-    if spec_type == "input" and isinstance(inputs_dict_st[field.name], str):
+    if spec_type == "input" and isinstance(inputs_dict_st[field.name], Path):
         return inputs_dict_st[field.name]
     elif spec_type == "input" and inputs_dict_st[field.name] is False:
         # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
@@ -233,7 +219,6 @@ def _template_formatting(field, inputs, inputs_dict_st):
 
     val_dict = {}
     file_template = None
-    from .specs import attr_fields_dict, File
 
     for fld in inp_fields:
         fld_name = fld[1:-1]  # extracting the name form {field_name}
@@ -246,10 +231,8 @@ def _template_formatting(field, inputs, inputs_dict_st):
         else:
             # checking for fields that can be treated as a file:
             # have type File, or value that is path like (including str with extensions)
-            if (
-                attr_fields_dict(inputs)[fld_name].type is File
-                or isinstance(fld_value, os.PathLike)
-                or (isinstance(fld_value, str) and "." in fld_value)
+            if isinstance(fld_value, os.PathLike) or (
+                isinstance(fld_value, str) and "." in fld_value
             ):
                 if file_template:
                     raise Exception(
@@ -338,7 +321,9 @@ def _element_formatting(template, values_template_dict, file_template, keep_exte
 def is_local_file(f):
     from ..utils.typing import TypeParser
 
-    return "container_path" not in f.metadata and TypeParser.contains_file_type(f.type)
+    return "container_path" not in f.metadata and TypeParser.contains_type(
+        FileSet, f.type
+    )
 
 
 class MountIndentifier:
