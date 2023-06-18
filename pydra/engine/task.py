@@ -41,7 +41,6 @@ Implement processing nodes.
 import platform
 import re
 import attr
-import os
 import inspect
 import typing as ty
 import shlex
@@ -67,7 +66,7 @@ from .helpers import (
     position_sort,
     argstr_formatting,
     output_from_inputfields,
-    get_copy_mode,
+    parse_copyfile,
 )
 from .helpers_file import template_update, is_local_file
 from ..utils.typing import TypeParser
@@ -555,6 +554,8 @@ class ShellCommandTask(TaskBase):
                     msg += "\n\nstdout:\n" + self.output_["stdout"]
                 raise RuntimeError(msg)
 
+    DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
+
 
 class ContainerTask(ShellCommandTask):
     """Extend shell command task for containerized execution."""
@@ -676,15 +677,14 @@ class ContainerTask(ShellCommandTask):
                 if fld.name == "image":  # <-- What is the image about?
                     continue
                 fileset = getattr(self.inputs, fld.name)
-                copy_mode = get_copy_mode(fld)
-                common_path = Path(os.path.commonpath(fileset.fspaths))
+                copy_mode, _ = parse_copyfile(fld)
                 container_path = Path(f"/pydra_inp_{fld.name}")
-                self.bindings[common_path] = (
+                self.bindings[fileset.parent] = (
                     container_path,
                     "rw" if copy_mode == FileSet.CopyMode.copy else "ro",
                 )
 
-    SUPPORTED_COPY_MODES = FileSet.CopyMode.all - FileSet.CopyMode.symlink
+    SUPPORTED_COPY_MODES = FileSet.CopyMode.any - FileSet.CopyMode.symlink
 
 
 class DockerTask(ContainerTask):

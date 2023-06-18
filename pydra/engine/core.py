@@ -40,13 +40,14 @@ from .helpers import (
     ensure_list,
     record_error,
     PydraFileLock,
-    get_copy_mode,
+    parse_copyfile,
 )
 from ..utils.hash import hash_function
 from .helpers_file import copy_nested_files, template_update
 from .graph import DiGraph
 from .audit import Audit
 from ..utils.messenger import AuditFlag
+from ..utils.typing import TypeParser
 from fileformats.core import FileSet
 
 logger = logging.getLogger("pydra")
@@ -461,12 +462,17 @@ class TaskBase:
         map_copyfiles = {}
         for fld in attr_fields(self.inputs):
             value = getattr(self.inputs, fld.name)
-            copy_mode = get_copy_mode(fld)
-            if value is not attr.NOTHING and copy_mode != FileSet.CopyMode.dont_copy:
+            copy_mode, copy_collation = parse_copyfile(
+                fld, default_collation=self.DEFAULT_COPY_COLLATION
+            )
+            if value is not attr.NOTHING and TypeParser.contains_type(
+                FileSet, fld.type
+            ):
                 copied_value = copy_nested_files(
                     value=value,
                     dest_dir=self.output_dir,
                     mode=copy_mode,
+                    collation=copy_collation,
                     supported_modes=self.SUPPORTED_COPY_MODES,
                 )
                 if value is not copied_value:
@@ -811,7 +817,8 @@ class TaskBase:
             for task in self.graph.nodes:
                 task._reset()
 
-    SUPPORTED_COPY_MODES = FileSet.CopyMode.all
+    SUPPORTED_COPY_MODES = FileSet.CopyMode.any
+    DEFAULT_COPY_COLLATION = FileSet.CopyCollation.separated
 
 
 def _sanitize_spec(

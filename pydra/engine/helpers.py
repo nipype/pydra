@@ -734,15 +734,36 @@ class PydraFileLock:
         return None
 
 
-def get_copy_mode(fld: attr.Attribute):
+def parse_copyfile(
+    fld: attr.Attribute, default_collation=FileSet.CopyCollation.separated
+):
     """Gets the copy mode from the 'copyfile' value from a field attribute"""
-    copyfile = fld.metadata.get("copyfile", FileSet.CopyMode.dont_copy)
-    if isinstance(copyfile, str):
-        copyfile = FileSet.CopyMode[copyfile]
-    elif copyfile is True:
-        copyfile = FileSet.CopyMode.copy
-    elif copyfile is False:
-        copyfile = FileSet.CopyMode.link
-    if not isinstance(copyfile, FileSet.CopyMode):
-        raise TypeError(f"Unrecognised type for copyfile metadata of {fld}, {copyfile}")
-    return copyfile
+    copyfile = fld.metadata.get("copyfile", FileSet.CopyMode.any)
+    if isinstance(copyfile, tuple):
+        mode, collation = copyfile
+    elif isinstance(copyfile, str):
+        try:
+            mode, collation = copyfile.split(",")
+        except ValueError:
+            mode = copyfile
+            collation = default_collation
+        else:
+            collation = FileSet.CopyCollation[mode]
+        mode = FileSet.CopyMode[mode]
+    else:
+        if copyfile is True:
+            copyfile = FileSet.CopyMode.copy
+        elif copyfile is False:
+            copyfile = FileSet.CopyMode.link
+        else:
+            mode = copyfile
+        collation = default_collation
+    if not isinstance(mode, FileSet.CopyMode):
+        raise TypeError(
+            f"Unrecognised type for mode copyfile metadata of {fld}, {mode}"
+        )
+    if not isinstance(collation, FileSet.CopyCollation):
+        raise TypeError(
+            f"Unrecognised type for collation copyfile metadata of {fld}, {collation}"
+        )
+    return mode, collation

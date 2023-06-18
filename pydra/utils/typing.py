@@ -477,6 +477,8 @@ class TypeParser(ty.Generic[T]):
             if candidate is ty.Any:
                 return True
             if NO_GENERIC_ISSUBCLASS:
+                if candidate is type and inspect.isclass(obj):
+                    return True
                 if issubtype(type(obj), candidate) or (
                     type(obj) is dict and candidate is ty.Mapping
                 ):
@@ -495,6 +497,8 @@ class TypeParser(ty.Generic[T]):
 
         for candidate in candidates:
             if NO_GENERIC_ISSUBCLASS:
+                if klass is type and candidate is not type:
+                    return False
                 if issubtype(klass, candidate) or (
                     klass is dict and candidate is ty.Mapping
                 ):

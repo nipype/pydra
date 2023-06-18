@@ -54,7 +54,7 @@ def ensure_list(filename):
 def copy_nested_files(
     value: ty.Any,
     dest_dir: os.PathLike,
-    supported_modes: FileSet.CopyMode = FileSet.CopyMode.all,
+    supported_modes: FileSet.CopyMode = FileSet.CopyMode.any,
     **kwargs,
 ) -> ty.Any:
     """Copies all "file-sets" found with the nested value into the destination
@@ -78,6 +78,10 @@ def copy_nested_files(
         supported = supported_modes
         if any(MountIndentifier.on_cifs(p) for p in fileset.fspaths):
             supported -= FileSet.CopyMode.symlink
+        if not all(
+            MountIndentifier.on_same_mount(p, dest_dir) for p in fileset.fspaths
+        ):
+            supported -= FileSet.CopyMode.hardlink
         return fileset.copy(dest_dir=dest_dir, supported_modes=supported, **kwargs)
 
     return TypeParser.apply_to_instances(FileSet, copy_fileset, value)
@@ -331,7 +335,7 @@ class MountIndentifier:
     features that can be used (e.g. symlinks)"""
 
     @classmethod
-    def on_cifs(cls, fname: Path) -> bool:
+    def on_cifs(cls, path: os.PathLike) -> bool:
         """
         Check whether a file path is on a CIFS filesystem mounted in a POSIX host.
 
@@ -349,13 +353,40 @@ class MountIndentifier:
         NB: This function and sub-functions are copied from the nipype.utils.filemanip module
 
 
-        Copied from https://github.com/nipy/nipype
+        NB: Adapted from https://github.com/nipy/nipype
         """
-        # Only the first match (most recent parent) counts
-        for fspath, fstype in cls.get_mount_table():
-            if str(fname).startswith(fspath):
-                return fstype == "cifs"
-        return False
+        return cls.get_mount(path)[1] == "cifs"
+
+    @classmethod
+    def on_same_mount(cls, path1: os.PathLike, path2: os.PathLike) -> bool:
+        """Checks whether two or paths are on the same logical file system"""
+        return cls.get_mount(path1)[0] == cls.get_mount(path2)[0]
+
+    @classmethod
+    def get_mount(cls, path: os.PathLike) -> ty.Tuple[Path, str]:
+        """Get the mount point for a given file-system path
+
+        Parameters
+        ----------
+        path: os.PathLike
+            the file-system path to identify the mount of
+
+        Returns
+        -------
+        mount_point: os.PathLike
+            the root of the mount the path sits on
+        fstype : str
+            the type of the file-system (e.g. ext4 or cifs)"""
+        try:
+            # Only the first match (most recent parent) counts, mount table sorted longest
+            # to shortest
+            return next(
+                (Path(p), t)
+                for p, t in cls.get_mount_table()
+                if str(path).startswith(p)
+            )
+        except StopIteration:
+            return (Path("/"), "ext4")
 
     @classmethod
     def generate_cifs_table(cls) -> ty.List[ty.Tuple[str, str]]:
