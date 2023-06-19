@@ -733,9 +733,9 @@ def parse_copyfile(fld: attr.Attribute, default_collation=FileSet.CopyCollation.
         mode = FileSet.CopyMode[mode]
     else:
         if copyfile is True:
-            copyfile = FileSet.CopyMode.copy
+            mode = FileSet.CopyMode.copy
         elif copyfile is False:
-            copyfile = FileSet.CopyMode.link
+            mode = FileSet.CopyMode.link
         else:
             mode = copyfile
         collation = default_collation
