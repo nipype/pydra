@@ -1,6 +1,7 @@
 import pytest
 import shutil, os, sys
 import time
+import typing as ty
 import attr
 from pathlib import Path
 
@@ -66,6 +67,47 @@ def test_wf_specinfo_input_spec():
         ValueError, match="Provided SpecInfo must have BaseSpec as it's base."
     ):
         Workflow(name="workflow", input_spec=bad_input_spec)
+
+
+def test_wf_dict_input_and_output_spec():
+    spec = {
+        "a": str,
+        "b": ty.Dict[str, ty.Union[int, bool]],
+    }
+    wf = Workflow(
+        name="workflow",
+        input_spec=spec,
+        output_spec=spec,
+    )
+    wf.add(
+        identity_2flds(
+            name="identity",
+            x1=wf.lzin.a,
+            x2=wf.lzin.b,
+        )
+    )
+    wf.set_output(
+        [
+            ("a", wf.identity.lzout.out1),
+            ("b", wf.identity.lzout.out2),
+        ]
+    )
+    for x in ["a", "b", "_graph_checksums"]:
+        assert hasattr(wf.inputs, x)
+    wf.inputs.a = "any-string"
+    wf.inputs.b = {"foo": 1, "bar": False}
+
+    with pytest.raises(TypeError, match="Cannot coerce 1.0 into <class 'str'>"):
+        wf.inputs.a = 1.0
+    with pytest.raises(
+        TypeError,
+        match=("Could not coerce object, bad-value, to any of the union types "),
+    ):
+        wf.inputs.b = {"foo": 1, "bar": "bad-value"}
+
+    result = wf()
+    assert result.output.a == "any-string"
+    assert result.output.b == {"foo": 1, "bar": False}
 
 
 def test_wf_name_conflict1():

@@ -668,9 +668,7 @@ class ContainerTask(ShellCommandTask):
     def _check_inputs(self):
         fields = attr_fields(self.inputs)
         for fld in fields:
-            if TypeParser.is_subclass(
-                fld.type, FileSet
-            ):  # instead of issubclass for Python <3.10
+            if TypeParser.contains_type(FileSet, fld.type):
                 assert not fld.metadata.get(
                     "container_path"
                 )  # <-- Is container_path necessary, container paths should just be typed PurePath

@@ -27,16 +27,6 @@ if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
 
 
-@pytest.fixture
-def sed():
-    try:
-        sp.check_call(["gsed", "--help"])
-    except sp.SubprocessError:
-        return "sed"
-    else:
-        return "gsed"
-
-
 @pytest.mark.flaky(reruns=2)  # when dask
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_1(plugin_dask_opt, results_function, tmp_path):
@@ -1567,12 +1557,12 @@ def test_shell_cmd_inputspec_10_err(tmp_path):
         )
 
 
-def test_shell_cmd_inputsspec_11():
+def test_shell_cmd_inputsspec_11(tmp_path):
     input_fields = [
         (
             "inputFiles",
             attr.ib(
-                type=MultiInputFile,
+                type=MultiInputObj[str],
                 metadata={
                     "argstr": "...",
                     "help_string": "The list of input image files to be segmented.",
@@ -1603,6 +1593,7 @@ def test_shell_cmd_inputsspec_11():
         input_spec=input_spec,
         output_spec=output_spec,
     )
+
     wf = Workflow(name="wf", input_spec=["inputFiles"], inputFiles=["test1", "test2"])
 
     task.inputs.inputFiles = wf.lzin.inputFiles
@@ -1722,7 +1713,7 @@ def test_shell_cmd_inputspec_with_iterable():
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path, sed):
+def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path):
     """shelltask changes a file in place,
     adding copyfile=True to the file-input from input_spec
     hardlink or copy in the output_dir should be created
@@ -1731,7 +1722,7 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path, sed)
     with open(file, "w") as f:
         f.write("hello from pydra\n")
 
-    cmd = [sed, "-is", "s/hello/hi/"]
+    cmd = ["sed", "-is", "s/hello/hi/"]
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1784,7 +1775,7 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path, sed)
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path, sed):
+def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path):
     """shelltask changes a file in place,
     adding copyfile=False to the File-input from input_spec
     hardlink or softlink in the output_dir is created
@@ -1793,7 +1784,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path, sed
     with open(file, "w") as f:
         f.write("hello from pydra\n")
 
-    cmd = [sed, "-is", "s/hello/hi/"]
+    cmd = ["sed", "-is", "s/hello/hi/"]
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1807,7 +1798,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path, sed
                         "argstr": "",
                         "help_string": "orig file",
                         "mandatory": True,
-                        "copyfile": False,
+                        "copyfile": "hardlink",
                     },
                 ),
             ),
@@ -1864,7 +1855,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path, sed
     " and the results can't be found"
 )
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path, sed):
+def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path):
     """shelltask changes a file in place,
     copyfile is None for the file-input, so original filed is changed
     """
@@ -1872,7 +1863,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path, sed
     with open(file, "w") as f:
         f.write("hello from pydra\n")
 
-    cmd = [sed, "-is", "s/hello/hi/"]
+    cmd = ["sed", "-is", "s/hello/hi/"]
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -2124,7 +2115,7 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmp_path):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path, sed):
+def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path):
     """adding state to the File-input from input_spec"""
 
     file1 = tmp_path / "file1.txt"
@@ -2136,7 +2127,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
         f.write("hello world\n")
 
     files = gathered([str(file1), str(file2)])
-    cmd = [sed, "-is", "s/hello/hi/"]
+    cmd = ["sed", "-is", "s/hello/hi/"]
 
     my_input_spec = SpecInfo(
         name="Input",

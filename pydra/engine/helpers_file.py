@@ -121,7 +121,9 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
 
     dict_mod = {}
     for fld in fields_templ:
-        if TypeParser.is_subclass(fld.type, (FileSet, ty.Union[FileSet, bool])):
+        if not TypeParser.is_subclass(
+            fld.type, (str, Path, ty.Union[str, bool], ty.Union[Path, bool])
+        ):
             raise TypeError(
                 "fields with output_file_template"
                 " has to be a string or Union[str, bool]"

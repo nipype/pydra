@@ -35,8 +35,11 @@ def attr_fields_dict(spec, exclude_names=()):
 #
 # Ideally Multi(In|Out)putObj would be a generic (see https://github.com/python/mypy/issues/3331)
 # and then Multi(In|Out)putFile could be just Multi(In|Out)obj.
-MultiInputObj = ty.NewType("MultiInputObj", list)
-MultiInputFile = ty.NewType("MultiInputFile", ty.List[File])
+class MultiInputObj(list, ty.Generic[T]):
+    pass
+
+
+MultiInputFile = MultiInputObj[File]
 
 
 # Since we can't create a NewType from a type union, we add a dummy type to the union
@@ -45,7 +48,7 @@ class MultiOutputType:
     pass
 
 
-MultiOutputObj = ty.Union[list, ty.Any, MultiOutputType]
+MultiOutputObj = ty.Union[list, object, MultiOutputType]
 MultiOutputFile = ty.Union[File, ty.List[File], MultiOutputType]
 
 

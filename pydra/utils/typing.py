@@ -9,7 +9,6 @@ from ..engine.specs import (
     LazyField,
     gathered,
     MultiInputObj,
-    MultiInputFile,
     MultiOutputObj,
 )
 
@@ -64,8 +63,6 @@ class TypeParser(ty.Generic[T]):
         (os.PathLike, Path),
         (os.PathLike, str),
         (ty.Any, MultiInputObj),
-        (ty.Union[os.PathLike, str], MultiInputFile),
-        (ty.Sequence, MultiOutputObj),
         (int, float),
     )
 
@@ -187,10 +184,10 @@ class TypeParser(ty.Generic[T]):
             for arg in pattern_args:
                 try:
                     return expand_and_coerce(obj, arg)
-                except Exception as e:
+                except TypeError as e:
                     reasons.append(e)
             raise TypeError(
-                f"Could not coerce {obj} to any of the union types:\n\n"
+                f"Could not coerce object, {obj}, to any of the union types {pattern_args}:\n\n"
                 + "\n\n".join(f"{a} -> {e}" for a, e in zip(pattern_args, reasons))
             )
 
@@ -212,13 +209,10 @@ class TypeParser(ty.Generic[T]):
                     f"Could not coerce to {type_} as {obj} is not a mapping type{msg}"
                 ) from e
             return coerce_to_type(
-                (
-                    (
-                        expand_and_coerce(k, key_pattern),
-                        expand_and_coerce(v, val_pattern),
-                    )
+                {
+                    expand_and_coerce(k, key_pattern): expand_and_coerce(v, val_pattern)
                     for k, v in items
-                ),
+                },
                 type_,
             )
 
@@ -488,8 +482,8 @@ class TypeParser(ty.Generic[T]):
                     return True
         return False
 
-    @staticmethod
-    def is_subclass(klass, candidates):
+    @classmethod
+    def is_subclass(cls, klass, candidates):
         """Checks whether the class a is either the same as b, a subclass of b or b is
         typing.Any"""
         if not isinstance(candidates, ty.Iterable):
@@ -505,6 +499,15 @@ class TypeParser(ty.Generic[T]):
                     return True
             else:
                 origin = get_origin(klass)
+                if origin is ty.Union:
+                    args = get_args(klass)
+                    if get_origin(candidate) is ty.Union:
+                        candidate_args = get_args(candidate)
+                    else:
+                        candidate_args = [candidate]
+                    return all(
+                        any(cls.is_subclass(a, c) for a in args) for c in candidate_args
+                    )
                 if origin is not None:
                     klass = origin
                 if klass is candidate or candidate is ty.Any:
