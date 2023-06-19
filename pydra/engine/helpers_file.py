@@ -149,24 +149,25 @@ def template_update_single(
     # the dictionary will be created from inputs object
     from ..utils.typing import TypeParser  # noqa
 
+    VALID_TYPES = (str, ty.Union[str, bool], Path, ty.Union[Path, bool])
+
     if inputs_dict_st is None:
         inputs_dict_st = attr.asdict(inputs, recurse=False)
 
     if spec_type == "input":
-        if not TypeParser.is_subclass(field.type, (Path, ty.Union[Path, bool])):
+        if not TypeParser.is_subclass(field.type, VALID_TYPES):
             raise TypeError(
                 f"'{field.name}' field has an 'output_file_template' and therefore "
-                "needs to be typed with a subclass of FileSet or a FileSet in union "
-                f"with a bool, not {field.type}"  # <-- What is the bool option?
+                f"needs to be typed {VALID_TYPES}, not {field.type}"  # <-- What is the bool option?
             )
         inp_val_set = inputs_dict_st[field.name]
         if inp_val_set is not attr.NOTHING and not TypeParser.is_instance(
-            inp_val_set, (Path, ty.Union[Path, bool])
+            inp_val_set, VALID_TYPES
         ):
             raise TypeError(
                 f"'{field.name}' field has to be a Path instance or a bool, but {inp_val_set} set"
             )
-        if isinstance(inp_val_set, bool) and field.type is Path:
+        if isinstance(inp_val_set, bool) and field.type in (Path, str):
             raise TypeError(
                 f"type of '{field.name}' is Path, consider using Union[Path, bool]"
             )
@@ -179,7 +180,7 @@ def template_update_single(
     else:
         raise TypeError(f"spec_type can be input or output, but {spec_type} provided")
     # for inputs that the value is set (so the template is ignored)
-    if spec_type == "input" and isinstance(inputs_dict_st[field.name], Path):
+    if spec_type == "input" and isinstance(inputs_dict_st[field.name], (str, Path)):
         return inputs_dict_st[field.name]
     elif spec_type == "input" and inputs_dict_st[field.name] is False:
         # if input fld is set to False, the fld shouldn't be used (setting NOTHING)

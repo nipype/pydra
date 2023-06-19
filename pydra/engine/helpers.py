@@ -20,6 +20,7 @@ from .specs import (
     attr_fields,
     Result,
     LazyField,
+    File,
 )
 from .helpers_file import copy_nested_files
 from ..utils.typing import TypeParser
@@ -510,12 +511,11 @@ def output_from_inputfields(output_spec, input_spec):
     new_fields = []
     for fld in attr.fields(make_klass(input_spec)):
         if "output_file_template" in fld.metadata:
-            fld_type = fld.metadata.get("_output_type", fld.type)
-            if not TypeParser.is_subclass(fld_type, (FileSet, ty.Union[FileSet, bool])):
+            if fld.type not in (str, ty.Union[str, bool], Path, ty.Union[Path, bool]):
                 raise TypeError(
                     "Since 'output_file_template' is specified, the type of field "
-                    f"'{fld.name}' must a sub-class of fileformats.core.FileSet or a "
-                    "file-set subclass in union with a bool"
+                    f"'{fld.name}' must a sub-class of str/Path or a "
+                    "str/Path subclass in union with a bool"
                 )
             if "output_field_name" in fld.metadata:
                 field_name = fld.metadata["output_field_name"]
@@ -525,25 +525,8 @@ def output_from_inputfields(output_spec, input_spec):
             if field_name not in current_output_spec_names:
                 # TODO: should probably remove some of the keys
                 new_fields.append(
-                    (field_name, attr.ib(type=fld_type, metadata=fld.metadata))
+                    (field_name, attr.ib(type=File, metadata=fld.metadata))
                 )
-            if "_output_type" not in fld.metadata:
-                # Set the field in the input spec to be pathlib.Path so it doesn't have to
-                # exist
-                index, fld_spec = next(
-                    (i, s) for i, s in enumerate(input_spec.fields) if s[0] == fld.name
-                )
-                if TypeParser(FileSet).matches(fld_type):
-                    new_type = Path
-                else:
-                    assert TypeParser(ty.Union[FileSet, bool]).matches(fld_type)
-                    new_type = ty.Union[Path, bool]
-                if len(fld_spec) > 2:
-                    fld_spec[-1]["_output_type"] = fld_type
-                    input_spec.fields[index] = (fld_spec[0], new_type) + fld_spec[2:]
-                else:
-                    fld_spec[-1].metadata["_output_type"] = fld_type
-                    fld_spec[1].type = new_type
     output_spec.fields += new_fields
     return output_spec
 

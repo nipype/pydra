@@ -425,8 +425,8 @@ class ShellOutSpec:
             # assuming that field should have either default or metadata, but not both
             input_value = getattr(inputs, fld.name, attr.NOTHING)
             if input_value is not attr.NOTHING:
-                if isinstance(fld.type, os.PathLike):
-                    input_value = Path(input_value).absolute()
+                if issubclass(fld.type, os.PathLike):
+                    input_value = fld.type(input_value)
                 additional_out[fld.name] = input_value
             elif (
                 fld.default is None or fld.default == attr.NOTHING
