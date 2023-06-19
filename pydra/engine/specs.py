@@ -398,9 +398,9 @@ class ShellOutSpec:
 
     return_code: int
     """The process' exit code."""
-    stdout: ty.Union[File, str]
+    stdout: str
     """The process' standard output."""
-    stderr: ty.Union[File, str]
+    stderr: str
     """The process' standard input."""
 
     def collect_additional_outputs(self, inputs, output_dir, outputs):
