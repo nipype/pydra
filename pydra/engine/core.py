@@ -818,7 +818,7 @@ class TaskBase:
                 task._reset()
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any
-    DEFAULT_COPY_COLLATION = FileSet.CopyCollation.separated
+    DEFAULT_COPY_COLLATION = FileSet.CopyCollation.any
 
 
 def _sanitize_spec(

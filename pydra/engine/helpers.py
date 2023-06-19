@@ -734,9 +734,7 @@ class PydraFileLock:
         return None
 
 
-def parse_copyfile(
-    fld: attr.Attribute, default_collation=FileSet.CopyCollation.separated
-):
+def parse_copyfile(fld: attr.Attribute, default_collation=FileSet.CopyCollation.any):
     """Gets the copy mode from the 'copyfile' value from a field attribute"""
     copyfile = fld.metadata.get("copyfile", FileSet.CopyMode.any)
     if isinstance(copyfile, tuple):
