@@ -19,7 +19,7 @@ from ..specs import (
     BaseSpec,
     ShellSpec,
     File,
-    gathered,
+    StateArray,
 )
 from ...utils.hash import hash_function
 
@@ -354,7 +354,7 @@ def test_annotated_input_func_7():
     def testfunc(a: float):
         return a
 
-    funky = testfunc(a=gathered([3.5, 2.1])).split("a")
+    funky = testfunc(a=StateArray([3.5, 2.1])).split("a")
     assert getattr(funky.inputs, "a") == [3.5, 2.1]
 
 
@@ -368,7 +368,7 @@ def test_annotated_input_func_7a_excep():
         return a
 
     with pytest.raises(TypeError):
-        testfunc(a=gathered([3.5, 2.1])).split("a")
+        testfunc(a=StateArray([3.5, 2.1])).split("a")
 
 
 def test_annotated_input_func_8():

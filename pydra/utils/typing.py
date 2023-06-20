@@ -7,7 +7,7 @@ import typing as ty
 import attr
 from ..engine.specs import (
     LazyField,
-    gathered,
+    StateArray,
     MultiInputObj,
     MultiOutputObj,
 )
@@ -126,8 +126,8 @@ class TypeParser(ty.Generic[T]):
             if obj.attr_type == "output":
                 self.check_type(obj.type)
             coerced = obj  # type: ignore[assignment]
-        elif isinstance(obj, gathered):
-            coerced = gathered(self(o) for o in obj)  # type: ignore[assignment]
+        elif isinstance(obj, StateArray):
+            coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]
         else:
             coerced = self.coerce(obj)
         return coerced

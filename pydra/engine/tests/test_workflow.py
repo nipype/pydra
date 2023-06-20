@@ -31,7 +31,7 @@ from .utils import (
 from ..submitter import Submitter
 from ..core import Workflow
 from ... import mark
-from ..specs import SpecInfo, BaseSpec, ShellSpec, gathered
+from ..specs import SpecInfo, BaseSpec, ShellSpec, StateArray
 
 
 def test_wf_no_input_spec():
@@ -4092,8 +4092,8 @@ def test_wf_lzoutall_st_2(plugin, tmpdir):
     )
     wf.add(add2_sub2_res_list(name="add_sub", res=wf.mult.lzout.all_))
     wf.set_output([("out_add", wf.add_sub.lzout.out_add)])
-    wf.inputs.x = gathered([2, 20])
-    wf.inputs.y = gathered([3, 30])
+    wf.inputs.x = StateArray([2, 20])
+    wf.inputs.y = StateArray([3, 30])
     wf.plugin = plugin
     wf.cache_dir = tmpdir
 
@@ -4124,8 +4124,8 @@ def test_wf_lzoutall_st_2a(plugin, tmpdir):
     )
     wf.add(add2_sub2_res_list(name="add_sub", res=wf.mult.lzout.all_))
     wf.set_output([("out_all", wf.add_sub.lzout.all_)])
-    wf.inputs.x = gathered([2, 20])
-    wf.inputs.y = gathered([3, 30])
+    wf.inputs.x = StateArray([2, 20])
+    wf.inputs.y = StateArray([3, 30])
     wf.plugin = plugin
     wf.cache_dir = tmpdir
 

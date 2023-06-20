@@ -11,7 +11,7 @@ from ..core import Workflow
 from ...mark import task, annotate
 from .utils import identity
 from ...utils.hash import hash_function, Cache
-from ..specs import gathered
+from ..specs import StateArray
 
 if importlib.util.find_spec("numpy") is None:
     pytest.skip("can't find numpy library", allow_module_level=True)
@@ -84,7 +84,7 @@ def test_numpy_hash_3():
 
 def test_task_numpyinput_1(tmp_path: Path):
     """task with numeric numpy array as an input"""
-    nn = identity(name="NA", x=gathered([np.array([1, 2]), np.array([3, 4])]))
+    nn = identity(name="NA", x=StateArray([np.array([1, 2]), np.array([3, 4])]))
     nn.cache_dir = tmp_path
     nn.split("x")
     # checking the results
@@ -97,7 +97,7 @@ def test_task_numpyinput_2(tmp_path: Path):
     """task with numpy array of type object as an input"""
     nn = identity(
         name="NA",
-        x=gathered(
+        x=StateArray(
             [np.array(["VAL1"], dtype=object), np.array(["VAL2"], dtype=object)]
         ),
     )
