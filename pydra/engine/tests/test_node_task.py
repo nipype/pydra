@@ -18,6 +18,7 @@ from .utils import (
 )
 
 from ..core import TaskBase
+from ..specs import StateArray
 from ..submitter import Submitter
 
 
@@ -69,7 +70,7 @@ def test_task_init_3(
     if input_type == "array":
         a_in = np.array(a_in)
 
-    nn = fun_addtwo(name="NA", a=a_in).split(splitter=splitter)
+    nn = fun_addtwo(name="NA").split(splitter=splitter, a=a_in)
 
     assert np.allclose(nn.inputs.a, [3, 5])
     assert nn.state.splitter == state_splitter
@@ -133,7 +134,7 @@ def test_task_init_3a(
 
 def test_task_init_4():
     """task with interface and inputs. splitter set using split method"""
-    nn = fun_addtwo(name="NA", a=[3, 5])
+    nn = fun_addtwo(name="NA", a=StateArray([3, 5]))
     nn.split(splitter="a")
     assert np.allclose(nn.inputs.a, [3, 5])
 
@@ -162,8 +163,8 @@ def test_task_init_4a():
 def test_task_init_4b():
     """updating splitter using overwrite=True"""
     nn = fun_addtwo(name="NA")
-    nn.split(splitter="b", a=[3, 5])
-    nn.split(splitter="a", overwrite=True)
+    nn.split(splitter="a", a=[1, 2])
+    nn.split(splitter="a", a=[3, 5], overwrite=True)
     assert np.allclose(nn.inputs.a, [3, 5])
 
     assert nn.state.splitter == "NA.a"
@@ -176,9 +177,9 @@ def test_task_init_4b():
 
 def test_task_init_4c():
     """trying to set splitter twice without using overwrite"""
-    nn = fun_addtwo(name="NA").split(splitter="b", a=[3, 5])
+    nn = fun_addvar(name="NA").split(splitter="b", b=[1, 2])
     with pytest.raises(Exception) as excinfo:
-        nn.split(splitter="a")
+        nn.split(splitter="a", a=[3, 5])
     assert "splitter has been already set" in str(excinfo.value)
 
     assert nn.state.splitter == "NA.b"
@@ -293,9 +294,9 @@ def test_task_init_5c():
 
 def test_task_init_6():
     """task with splitter, but the input is an empty list"""
-    nn = fun_addtwo(name="NA", a=[])
-    nn.split(splitter="a")
-    assert nn.inputs.a == []
+    nn = fun_addtwo(name="NA")
+    nn.split(splitter="a", a=[])
+    assert nn.inputs.a == StateArray[int]([])
 
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
@@ -785,7 +786,7 @@ def test_task_state_1a(plugin, tmp_path):
     """task with the simplest splitter (inputs set separately)"""
     nn = fun_addtwo(name="NA")
     nn.split(splitter="a")
-    nn.inputs.a = [3, 5]
+    nn.inputs.a = StateArray([3, 5])
     nn.cache_dir = tmp_path
 
     assert nn.state.splitter == "NA.a"

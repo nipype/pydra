@@ -24,6 +24,12 @@ NO_GENERIC_ISSUBCLASS = sys.version_info.major == 3 and sys.version_info.minor <
 if NO_GENERIC_ISSUBCLASS:
     from typing_utils import issubtype
 
+try:
+    import numpy
+except ImportError:
+    HAVE_NUMPY = False
+else:
+    HAVE_NUMPY = True
 
 T = ty.TypeVar("T")
 TypeOrAny = ty.Union[type, ty.Any]
@@ -55,7 +61,7 @@ class TypeParser(ty.Generic[T]):
     coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
     not_coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
 
-    COERCIBLE_DEFAULT = (
+    COERCIBLE_DEFAULT: ty.Tuple[ty.Tuple[type, type], ...] = (
         (ty.Sequence, ty.Sequence),
         (ty.Mapping, ty.Mapping),
         (Path, os.PathLike),
@@ -65,6 +71,16 @@ class TypeParser(ty.Generic[T]):
         (ty.Any, MultiInputObj),
         (int, float),
     )
+    if HAVE_NUMPY:
+        COERCIBLE_DEFAULT += (
+            (numpy.integer, int),
+            (numpy.floating, float),
+            (numpy.bool_, bool),
+            (numpy.integer, float),
+            (numpy.character, str),
+            (numpy.complexfloating, complex),
+            (numpy.bytes_, bytes),
+        )
 
     NOT_COERCIBLE_DEFAULT = ((str, ty.Sequence), (ty.Sequence, str))
 
@@ -98,7 +114,7 @@ class TypeParser(ty.Generic[T]):
         self.not_coercible = list(not_coercible) if not_coercible is not None else []
         self.pattern = expand_pattern(tp)
 
-    def __call__(self, obj: ty.Any) -> T:
+    def __call__(self, obj: ty.Any) -> ty.Union[T, LazyField[T]]:
         """Attempts to coerce the object to the specified type, unless the value is
         a LazyField where the type of the field is just checked instead or an
         attrs.NOTHING where it is simply returned.
@@ -123,9 +139,8 @@ class TypeParser(ty.Generic[T]):
         if obj is attr.NOTHING:
             coerced = attr.NOTHING  # type: ignore[assignment]
         elif isinstance(obj, LazyField):
-            if obj.attr_type == "output":
-                self.check_type(obj.type)
-            coerced = obj  # type: ignore[assignment]
+            self.check_type(obj.type)
+            coerced = obj
         elif isinstance(obj, StateArray):
             coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]
         else:
@@ -274,8 +289,17 @@ class TypeParser(ty.Generic[T]):
         TypeError
             if the type is not either the specified type, a sub-type or coercible to it
         """
-        if self.pattern is None:
+        if self.pattern is None or type_ is ty.Any:
             return
+        if self.is_subclass(type_, StateArray):
+            args = get_args(type_)
+            if not args:
+                raise TypeError("StateArrays without any type arguments are invalid")
+            if len(args) > 1:
+                raise TypeError(
+                    f"StateArrays with more than one type argument ({args}) are invalid"
+                )
+            return self.check_type(args[0])
 
         def expand_and_check(tp, pattern: ty.Union[type, tuple]):
             """Attempt to expand the object along the lines of the coercion pattern"""
@@ -442,6 +466,45 @@ class TypeParser(ty.Generic[T]):
     @classmethod
     def matches(
         cls,
+        obj: ty.Type[ty.Any],
+        target: ty.Type[ty.Any],
+        coercible: ty.Optional[ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]] = None,
+        not_coercible: ty.Optional[ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]] = None,
+    ) -> bool:
+        """Returns true if the provided type matches the pattern of the TypeParser
+
+        Parameters
+        ----------
+        type_ : type
+            the type to check
+        target : type
+            the target type to check against
+        coercible: list[tuple[type, type]], optional
+            determines the types that can be automatically coerced from one to the other, e.g. int->float
+        not_coercible: list[tuple[type, type]], optional
+            explicitly excludes some coercions from the coercible list,
+            e.g. str -> Sequence where coercible includes Sequence -> Sequence
+
+        Returns
+        -------
+        matches : bool
+            whether the type matches the target type factoring in sub-classes and coercible
+            pairs
+        """
+        if coercible is None:
+            coercible = []
+        if not_coercible is None:
+            not_coercible = []
+        parser = cls(target, coercible=coercible, not_coercible=not_coercible)
+        try:
+            parser.coerce(obj)
+        except TypeError:
+            return False
+        return True
+
+    @classmethod
+    def matches_type(
+        cls,
         type_: ty.Type[ty.Any],
         target: ty.Type[ty.Any],
         coercible: ty.Optional[ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]] = None,
@@ -514,6 +577,8 @@ class TypeParser(ty.Generic[T]):
                 ):
                     return True
             else:
+                if klass is ty.Any:
+                    return True
                 origin = get_origin(klass)
                 if origin is ty.Union:
                     args = get_args(klass)
@@ -620,3 +685,33 @@ class TypeParser(ty.Generic[T]):
             modified = type(value)(args)  # type: ignore
         cache[obj_id] = modified
         return modified
+
+    @classmethod
+    def get_item_type(
+        cls, sequence_type: ty.Type[ty.Sequence[T]]
+    ) -> ty.Union[ty.Type[T], ty.Any]:
+        """Return the type of the types of items in a sequence type
+
+        Parameters
+        ----------
+        sequence_type: type[Sequence]
+            the type to find the type of the items of
+
+        Returns
+        -------
+        item_type: type or None
+            the type of the items
+        """
+        if not TypeParser.is_subclass(sequence_type, ty.Sequence):
+            raise TypeError(
+                f"Cannot get item type from {sequence_type}, as it is not a sequence type"
+            )
+        args = get_args(sequence_type)
+        if not args:
+            return ty.Any
+        if len(args) > 1 and not (len(args) == 2 and args[-1] == Ellipsis):
+            raise TypeError(
+                f"Cannot get item type from {sequence_type}, as it has multiple "
+                f"item types: {args}"
+            )
+        return args[0]

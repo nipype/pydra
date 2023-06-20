@@ -13,6 +13,7 @@ from fileformats.generic import (
 
 from .helpers_file import template_update_single
 from ..utils.hash import hash_function
+from ..utils.misc import add_exc_note
 
 
 T = ty.TypeVar("T")
@@ -96,12 +97,19 @@ class BaseSpec:
 
     def retrieve_values(self, wf, state_index=None):
         """Get values contained by this spec."""
+        from pydra.utils.typing import TypeParser
+
         temp_values = {}
         for field in attr_fields(self):
             value = getattr(self, field.name)
             if isinstance(value, LazyField):
-                value = value.get_value(wf, state_index=state_index)
-                temp_values[field.name] = value
+                resolved_value = value.get_value(wf, state_index=state_index)
+                if value.combined:
+                    assert isinstance(resolved_value, StateArray)
+                    resolved_value = list(resolved_value)
+                elif TypeParser.is_subclass(value.type, StateArray):
+                    resolved_value = StateArray(resolved_value)
+                temp_values[field.name] = resolved_value
         for field, value in temp_values.items():
             setattr(self, field, value)
 
@@ -683,11 +691,12 @@ class LazyInterface:
             raise AttributeError(
                 f"Task {self._node.name} has no {self._attr_type} attribute {name}"
             )
-        return LazyField(
+        type_ = self._get_type(name)
+        return LazyField[type_](
             name=self._node.name,
             field=name,
             attr_type=self._attr_type,
-            type=self._get_type(name),
+            type=type_,
         )
 
 
@@ -727,14 +736,18 @@ class LazyOut(LazyInterface):
         return self._node.output_names + ["all_"]
 
 
+TypeOrAny: ty.TypeAlias = ty.Union[ty.Type[ty.Any], ty.Any]
+
+
 @attr.s(auto_attribs=True, kw_only=True)
-class LazyField:
+class LazyField(ty.Generic[T]):
     """Lazy fields implement promises."""
 
     name: str
     field: str
     attr_type: str
-    type: ty.Type[ty.Any]
+    type: TypeOrAny
+    combined: bool = False
 
     def __repr__(self):
         return f"LF('{self.name}', '{self.field}', {self.type})"
@@ -770,11 +783,64 @@ class LazyField:
                     raise ValueError("Error from get_value")
                 return result.get_output_field(self.field)
 
+    def cast(self, new_type: TypeOrAny) -> "LazyField":
+        """ "casts" the lazy field to a new type
 
-class StateArray(list):
-    """an array of values from, or to be split over, multiple nodes of the same
-    task. Used in type-checking to differentiate between list types and values for
-    multiple nodes
+        Parameters
+        ----------
+        new_type : type
+            the type to cast the lazy-field to
+
+        Returns
+        -------
+        cast_field : LazyField
+            a copy of the lazy field with the new type
+        """
+        return LazyField[new_type](
+            name=self.name,
+            field=self.field,
+            attr_type=self.attr_type,
+            type=new_type,
+        )
+
+    def split(self) -> "LazyField":
+        """ "Splits" the lazy field over an array of nodes by replacing the sequence type
+        of the lazy field with StateArray to signify that it will be "split" across
+        """
+        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
+
+        try:
+            item_type = TypeParser.get_item_type(self.type)
+        except TypeError as e:
+            add_exc_note(e, f"Attempting to split {self} over multiple nodes")
+            raise e
+        type_ = StateArray[item_type]  # type: ignore
+        return LazyField[type_](
+            name=self.name,
+            field=self.field,
+            attr_type=self.attr_type,
+            type=type_,
+        )
+
+    def combine(self) -> "LazyField[StateArray[T]]":
+        """ "Combines" the lazy field over an array of nodes by wrapping the type of the
+        lazy field in a list to signify that it will be actually a list of
+        values of that type
+        """
+        type_ = ty.List[self.type]
+        return LazyField[type_](
+            name=self.name,
+            field=self.field,
+            attr_type=self.attr_type,
+            type=type_,
+            combined=True,
+        )
+
+
+class StateArray(ty.List[T]):
+    """an array of values from, or to be split over in an array of nodes (see TaskBase.split()),
+    multiple nodes of the same task. Used in type-checking to differentiate between list
+    types and values for multiple nodes
     """
 
 

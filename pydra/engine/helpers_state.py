@@ -4,6 +4,7 @@ import attr
 import itertools
 from copy import deepcopy
 import logging
+import typing as ty
 from .helpers import ensure_list
 
 logger = logging.getLogger("pydra")
@@ -326,7 +327,9 @@ def add_name_combiner(combiner, name):
     return combiner_changed
 
 
-def add_name_splitter(splitter, name):
+def add_name_splitter(
+    splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None], name: str
+) -> ty.Optional[ty.List[str]]:
     """adding a node's name to each field from the splitter"""
     if isinstance(splitter, str):
         return _add_name([splitter], name)[0]

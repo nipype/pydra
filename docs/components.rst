@@ -169,7 +169,7 @@ the Task execution, the user can set splitter and combiner attributes of the Sta
 .. code-block:: python
 
   task_with_state =
-        add2(x=[1, 5]).split("x").combine("x")
+        add2().split(x=[1, 5]).combine("x")
 
 In this example, the ``State`` class is responsible for creating a list of two
 separate inputs, *[{x: 1}, {x:5}]*, each run of the *Task* should get one

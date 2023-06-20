@@ -30,6 +30,7 @@ from .specs import (
     LazyField,
     TaskHook,
     attr_fields,
+    StateArray,
 )
 from .helpers import (
     make_klass,
@@ -561,22 +562,39 @@ class TaskBase:
         )
         return attr.evolve(output, **run_output, **other_output)
 
-    def split(self, splitter, overwrite=False, cont_dim=None, **kwargs):
+    def split(
+        self,
+        splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None] = None,
+        overwrite: bool = False,
+        cont_dim: ty.Optional[dict] = None,
+        **kwargs,
+    ):
         """
         Run this task parametrically over lists of split inputs.
 
         Parameters
         ----------
-        splitter :
-            TODO
-        overwrite : :obj:`bool`
-            TODO
-        cont_dim : :obj:`dict`
+        splitter : str or list[str] or tuple[str] or None
+            the fields which to split over. If splitting over multiple fields, lists of
+            fields are interpreted as outer-products and tuples inner-products. If None,
+            then the fields to split are taken from the keyword-arg names.
+        overwrite : bool, optional
+            whether to overwrite an existing split on the node, by default False
+        cont_dim : dict, optional
             Container dimensions for specific inputs, used in the splitter.
             If input name is not in cont_dim, it is assumed that the input values has
             a container dimension of 1, so only the most outer dim will be used for splitting.
+        **kwargs
+            fields to split over, will automatically be wrapped in a StateArray object
+            and passed to the node inputs
 
+        Returns
+        -------
+        self : TaskBase
+            a reference to the task
         """
+        if splitter is None and kwargs:
+            splitter = list(kwargs)
         splitter = hlpst.add_name_splitter(splitter, self.name)
         # if user want to update the splitter, overwrite has to be True
         if self.state and not overwrite and self.state.splitter != splitter:
@@ -588,22 +606,46 @@ class TaskBase:
             for key, vel in cont_dim.items():
                 self._cont_dim[f"{self.name}.{key}"] = vel
         if kwargs:
-            self.inputs = attr.evolve(self.inputs, **kwargs)
+            new_inputs = {}
+            for inpt_name, inpt_val in kwargs.items():
+                new_val: ty.Any
+                if f"{self.name}.{inpt_name}" in splitter:  # type: ignore
+                    if isinstance(inpt_val, LazyField):
+                        new_val = inpt_val.split()
+                    elif isinstance(inpt_val, ty.Sequence):
+                        new_val = StateArray(inpt_val)
+                    else:
+                        raise TypeError(
+                            f"Could not split {inpt_val} as it is not a sequence type"
+                        )
+                else:
+                    new_val = inpt_val
+                new_inputs[inpt_name] = new_val
+            self.inputs = attr.evolve(self.inputs, **new_inputs)
         if not self.state or splitter != self.state.splitter:
             self.set_state(splitter)
         return self
 
-    def combine(self, combiner, overwrite=False):
+    def combine(
+        self, combiner: ty.Union[ty.List[str], str], overwrite: bool = False, **kwargs
+    ):
         """
         Combine inputs parameterized by one or more previous tasks.
 
         Parameters
         ----------
-        combiner :
-            TODO
-        overwrite : :obj:`bool`
-            TODO
+        combiner : list[str] or str
+            the
+        overwrite : bool
+            whether to overwrite an existing combiner on the node
+        **kwargs : dict[str, Any]
+            values for the task that will be "combined" before they are provided to the
+            node
 
+        Returns
+        -------
+        self : TaskBase
+            a reference to the task
         """
         if not isinstance(combiner, (str, list)):
             raise Exception("combiner has to be a string or a list")
@@ -618,17 +660,26 @@ class TaskBase:
                 "combiner has been already set, "
                 "if you want to overwrite it - use overwrite=True"
             )
+        if kwargs:
+            new_inputs = {}
+            for inpt_name, inpt_val in kwargs.items():
+                if not isinstance(inpt_val, LazyField):
+                    raise TypeError(
+                        "Only lazy-fields can be set as inputs in the combine method "
+                        f"not {inpt_name}:{inpt_val}"
+                    )
+                new_inputs[inpt_name] = inpt_val.combine()
+            self.inputs = attr.evolve(self.inputs, **new_inputs)
         if not self.state:
             self.split(splitter=None)
             # a task can have a combiner without a splitter
             # if is connected to one with a splitter;
             # self.fut_combiner will be used later as a combiner
             self.fut_combiner = combiner
-            return self
         else:  # self.state and not self.state.combiner
             self.combiner = combiner
             self.set_state(splitter=self.state.splitter, combiner=self.combiner)
-            return self
+        return self
 
     def _extract_input_el(self, inputs, inp_nm, ind):
         """
@@ -1201,15 +1252,20 @@ class Workflow(TaskBase):
         # at this point Workflow is stateless so this should be fine
         await submitter.expand_workflow(self, rerun=rerun)
 
-    def set_output(self, connections):
+    def set_output(
+        self,
+        connections: ty.Union[
+            ty.Tuple[str, LazyField], ty.List[ty.Tuple[str, LazyField]]
+        ],
+    ):
         """
-        Write outputs.
+        Set outputs of the workflow by linking them with lazy outputs of tasks
 
         Parameters
         ----------
-        connections :
-            TODO
-
+        connections : tuple[str, LazyField] or list[tuple[str, LazyField]] or None
+            single or list of tuples linking the name of the output to a lazy output
+            of a task in the workflow.
         """
         if self._connections is None:
             self._connections = []
@@ -1222,17 +1278,39 @@ class Workflow(TaskBase):
         elif isinstance(connections, dict):
             new_connections = list(connections.items())
         else:
-            raise Exception(
+            raise TypeError(
                 "Connections can be a 2-elements tuple, a list of these tuples, or dictionary"
             )
         # checking if a new output name is already in the connections
         connection_names = [name for name, _ in self._connections]
-        new_names = [name for name, _ in new_connections]
-        if set(connection_names).intersection(new_names):
-            raise Exception(
-                f"output name {set(connection_names).intersection(new_names)} is already set"
+        if self.output_spec:
+            output_types = {
+                a.name: a.type for a in attr.fields(make_klass(self.output_spec))
+            }
+        else:
+            output_types = {}
+        conflicting = []
+        type_mismatches = []
+        for conn_name, lazy_field in new_connections:
+            if conn_name in connection_names:
+                conflicting.append(conn_name)
+            try:
+                output_type = output_types[conn_name]
+            except KeyError:
+                pass
+            else:
+                if not TypeParser.matches_type(lazy_field.type, output_type):
+                    type_mismatches.append((conn_name, output_type, lazy_field.type))
+        if conflicting:
+            raise ValueError(f"the output names {conflicting} are already set")
+        if type_mismatches:
+            raise TypeError(
+                f"the types of the following outputs of {self} don't match their declared types: "
+                + ", ".join(
+                    f"{n} (expected: {ex}, provided: {p})"
+                    for n, ex, p in type_mismatches
+                )
             )
-
         self._connections += new_connections
         fields = []
         for con in self._connections:

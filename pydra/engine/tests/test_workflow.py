@@ -4,7 +4,6 @@ import time
 import typing as ty
 import attr
 from pathlib import Path
-
 from .utils import (
     add2,
     add2_wait,
@@ -26,6 +25,7 @@ from .utils import (
     fun_write_file_list,
     fun_write_file_list2dict,
     list_sum,
+    list_mult_sum,
     DOT_FLAG,
 )
 from ..submitter import Submitter
@@ -4978,3 +4978,68 @@ def test_rerun_errored(tmpdir, capfd):
     # and another 2 messagers after calling the second time
     assert tasks_run == 7
     assert errors_found == 4
+
+
+def test_state_arrays_and_workflow_input_output_typing():
+    wf = Workflow(
+        name="test",
+        input_spec={"x": ty.List[int], "y": int},
+        output_spec={"alpha": int, "beta": ty.List[int]},
+    )
+
+    with pytest.raises(
+        TypeError, match="Cannot coerce <class 'list'> into <class 'int'>"
+    ):
+        list_mult_sum(
+            scalar=wf.lzin.x,
+            in_list=wf.lzin.x,
+            name="A",
+        )
+
+    wf.add(  # Split over workflow input "x" on "scalar" input
+        list_mult_sum(
+            in_list=wf.lzin.x,
+            name="A",
+        ).split(scalar=wf.lzin.x)
+    )
+
+    wf.add(  # Workflow is still split over "x"
+        list_mult_sum(
+            name="B",
+            scalar=wf.A.lzout.sum,
+            in_list=wf.A.lzout.products,
+        )
+    )
+
+    wf.add(  # Workflow is combined over "x"
+        list_mult_sum(
+            name="C",
+            scalar=wf.lzin.y,
+        ).combine("A.scalar", in_list=wf.B.lzout.sum)
+    )
+
+    wf.add(  # Workflow is split again, this time over C.products
+        list_mult_sum(
+            name="D",
+            in_list=wf.lzin.x,
+        ).split(scalar=wf.C.lzout.products)
+    )
+
+    wf.add(  # Workflow is finally combined again into a single node
+        list_mult_sum(name="E", scalar=wf.lzin.y, in_list=wf.D.lzout.sum).combine(
+            "D.scalar"
+        )
+    )
+
+    with pytest.raises(TypeError, match="don't match their declared types"):
+        wf.set_output(
+            [
+                ("alpha", wf.D.lzout.products),
+            ]
+        )
+
+    wf.set_output([("alpha", wf.D.lzout.sum), ("beta", wf.D.lzout.products)])
+
+    results = wf(x=[1, 2, 3, 4], y=10)
+    assert results.outputs.alpha == 100000
+    assert results.outputs.beta == [10000, 20000, 30000, 40000]

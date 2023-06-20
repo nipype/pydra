@@ -464,10 +464,11 @@ def test_matches_type():
 
 
 def test_matches_tuple():
-    COERCIBLE = [(int, float)]
     assert TypeParser.matches(ty.Tuple[int], ty.Tuple[int])
-    assert TypeParser.matches(ty.Tuple[int], ty.Tuple[float], coercible=COERCIBLE)
-    assert not TypeParser.matches(ty.Tuple[float], ty.Tuple[int], coercible=COERCIBLE)
+    assert TypeParser.matches(ty.Tuple[int], ty.Tuple[float], coercible=[(int, float)])
+    assert not TypeParser.matches(
+        ty.Tuple[float], ty.Tuple[int], coercible=[(int, float)]
+    )
     assert TypeParser.matches(ty.Tuple[int, int], ty.Tuple[int, int])
     assert not TypeParser.matches(ty.Tuple[int, int], ty.Tuple[int])
     assert not TypeParser.matches(ty.Tuple[int], ty.Tuple[int, int])
@@ -478,6 +479,10 @@ def test_matches_tuple_ellipsis():
     assert TypeParser.matches(ty.Tuple[int, int], ty.Tuple[int, ...])
     assert not TypeParser.matches(ty.Tuple[int, float], ty.Tuple[int, ...])
     assert not TypeParser.matches(ty.Tuple[int, ...], ty.Tuple[int])
+    assert TypeParser.matches(ty.Tuple[int], ty.List[int], coercible=[(tuple, list)])
+    assert TypeParser.matches(
+        ty.Tuple[int, ...], ty.List[int], coercible=[(tuple, list)]
+    )
 
 
 def test_contains_type_in_dict():

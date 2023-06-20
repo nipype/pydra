@@ -3,6 +3,8 @@ import time
 import sys, shutil
 import typing as ty
 from pathlib import Path
+import functools
+import operator
 import subprocess as sp
 import pytest
 from fileformats.generic import File
@@ -57,7 +59,7 @@ def op_4var(a, b, c, d):
 
 
 @mark.task
-def fun_addtwo(a):
+def fun_addtwo(a: int):
     import time
 
     time.sleep(1)
@@ -304,3 +306,10 @@ def gen_basic_wf_with_threadcount_concurrent(name="basic-wf-with-threadcount"):
     wf.add(fun_addvar(name="task2", a=wf.task1_1.lzout.out, b=2))
     wf.set_output([("out1", wf.task2.lzout.out), ("out2", wf.task1_2.lzout.out)])
     return wf
+
+
+@mark.task
+@mark.annotate({"return": {"sum": int, "products": ty.List[int]}})
+def list_mult_sum(scalar: int, in_list: ty.List[int]) -> ty.Tuple[int, ty.List[int]]:
+    products = [scalar * x for x in in_list]
+    return functools.reduce(operator.add, products, 0), products
