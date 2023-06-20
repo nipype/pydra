@@ -424,3 +424,64 @@ def test_type_coercion_realistic():
         TypeError, match="Cannot coerce 'bad-value' into <class 'list'>"
     ):
         task.inputs.x = "bad-value"
+
+
+def test_check_missing_type_args():
+    with pytest.raises(TypeError, match="wasn't declared with type args required"):
+        TypeParser(ty.List[int]).check_type(list)
+    with pytest.raises(TypeError, match="doesn't match pattern"):
+        TypeParser(ty.List[int]).check_type(dict)
+
+
+def test_matches_union():
+    assert TypeParser.matches(ty.Union[int, bool, str], ty.Union[int, bool, str])
+    assert TypeParser.matches(ty.Union[int, bool], ty.Union[int, bool, str])
+    assert not TypeParser.matches(ty.Union[int, bool, str], ty.Union[int, bool])
+
+
+def test_matches_dict():
+    COERCIBLE = [(str, Path), (Path, str), (int, float)]
+
+    assert TypeParser.matches(
+        ty.Dict[Path, int], ty.Dict[str, int], coercible=COERCIBLE
+    )
+    assert TypeParser.matches(
+        ty.Dict[Path, int], ty.Dict[str, float], coercible=COERCIBLE
+    )
+    assert not TypeParser.matches(ty.Dict[Path, int], ty.Dict[str, int])
+    assert not TypeParser.matches(ty.Dict[Path, int], ty.Dict[str, float])
+    assert not TypeParser.matches(
+        ty.Dict[Path, float], ty.Dict[str, int], coercible=COERCIBLE
+    )
+    assert not TypeParser.matches(
+        ty.Tuple[str, int], ty.Dict[str, int], coercible=COERCIBLE
+    )
+
+
+def test_matches_type():
+    assert TypeParser.matches(type, type)
+    assert not TypeParser.matches(object, type)
+
+
+def test_matches_tuple():
+    COERCIBLE = [(int, float)]
+    assert TypeParser.matches(ty.Tuple[int], ty.Tuple[int])
+    assert TypeParser.matches(ty.Tuple[int], ty.Tuple[float], coercible=COERCIBLE)
+    assert not TypeParser.matches(ty.Tuple[float], ty.Tuple[int], coercible=COERCIBLE)
+    assert TypeParser.matches(ty.Tuple[int, int], ty.Tuple[int, int])
+    assert not TypeParser.matches(ty.Tuple[int, int], ty.Tuple[int])
+    assert not TypeParser.matches(ty.Tuple[int], ty.Tuple[int, int])
+
+
+def test_matches_tuple_ellipsis():
+    assert TypeParser.matches(ty.Tuple[int], ty.Tuple[int, ...])
+    assert TypeParser.matches(ty.Tuple[int, int], ty.Tuple[int, ...])
+    assert not TypeParser.matches(ty.Tuple[int, float], ty.Tuple[int, ...])
+    assert not TypeParser.matches(ty.Tuple[int, ...], ty.Tuple[int])
+
+
+def test_contains_type_in_dict():
+    assert TypeParser.contains_type(int, ty.Dict[str, ty.List[ty.Tuple[int, ...]]])
+    assert not TypeParser.contains_type(
+        int, ty.Dict[str, ty.List[ty.Tuple[float, ...]]]
+    )

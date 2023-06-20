@@ -352,11 +352,6 @@ class TypeParser(ty.Generic[T]):
             if pattern_args[-1] is Ellipsis:
                 if len(pattern_args) == 1:  # matches anything
                     return
-                if len(tp_args) == 1:
-                    raise TypeError(
-                        "Generic ellipsis type arguments not specific enough to match "
-                        f"{pattern_args} in attempting to match {type_} to {self.pattern}"
-                    )
                 if tp_args[-1] is Ellipsis:
                     return expand_and_check(tp_args[0], pattern_args[0])
                 for arg in tp_args:
@@ -404,7 +399,8 @@ class TypeParser(ty.Generic[T]):
             explicit inclusions and exclusions set in the `coercible` and `not_coercible`
             member attrs
         """
-
+        if source is target:
+            return
         source_origin = get_origin(source)
         if source_origin is not None:
             source = source_origin
@@ -443,21 +439,41 @@ class TypeParser(ty.Generic[T]):
                 )
             )
 
-    def matches(self, type_: ty.Type[ty.Any]) -> bool:
+    @classmethod
+    def matches(
+        cls,
+        type_: ty.Type[ty.Any],
+        target: ty.Type[ty.Any],
+        coercible: ty.Optional[ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]] = None,
+        not_coercible: ty.Optional[ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]] = None,
+    ) -> bool:
         """Returns true if the provided type matches the pattern of the TypeParser
 
         Parameters
         ----------
         type_ : type
             the type to check
+        target : type
+            the target type to check against
+        coercible: list[tuple[type, type]], optional
+            determines the types that can be automatically coerced from one to the other, e.g. int->float
+        not_coercible: list[tuple[type, type]], optional
+            explicitly excludes some coercions from the coercible list,
+            e.g. str -> Sequence where coercible includes Sequence -> Sequence
 
         Returns
         -------
         matches : bool
-            whether the type matches the pattern of the type parser
+            whether the type matches the target type factoring in sub-classes and coercible
+            pairs
         """
+        if coercible is None:
+            coercible = []
+        if not_coercible is None:
+            not_coercible = []
+        parser = cls(target, coercible=coercible, not_coercible=not_coercible)
         try:
-            self.check_type(type_)
+            parser.check_type(type_)
         except TypeError:
             return False
         return True
@@ -527,10 +543,10 @@ class TypeParser(ty.Generic[T]):
         type_: type
             the type to check for nested types that are sub-classes of target
         """
-        if type_ in (str, bytes, int, bool, float):  # shortcut primitive types
-            return False
         if cls.is_subclass(type_, target):
             return True
+        if type_ in (str, bytes, int, bool, float):  # shortcut primitive types
+            return False
         type_args = get_args(type_)
         if not type_args:
             return False
@@ -546,9 +562,9 @@ class TypeParser(ty.Generic[T]):
                 target, type_val
             )
         if cls.is_subclass(type_, (ty.Sequence, MultiOutputObj)):
-            assert len(type_args) == 1
-            type_item = type_args[0]
-            return cls.contains_type(target, type_item)
+            if type_args[-1] == Ellipsis:
+                type_args = type_args[:-1]
+            return any(cls.contains_type(target, a) for a in type_args)
         return False
 
     @classmethod

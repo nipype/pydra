@@ -175,21 +175,6 @@ def copyfile_workflow(wf_path: os.PathLike, result):
     return result
 
 
-def task_hash(task):
-    """
-    Calculate the checksum of a task.
-
-    input hash, output hash, environment hash
-
-    Parameters
-    ----------
-    task : :class:`~pydra.engine.core.TaskBase`
-        The input task.
-
-    """
-    return NotImplementedError
-
-
 def gather_runtime_info(fname):
     """
     Extract runtime information from a file.
@@ -729,13 +714,15 @@ def parse_copyfile(fld: attr.Attribute, default_collation=FileSet.CopyCollation.
             mode = copyfile
             collation = default_collation
         else:
-            collation = FileSet.CopyCollation[mode]
+            collation = FileSet.CopyCollation[collation]
         mode = FileSet.CopyMode[mode]
     else:
         if copyfile is True:
             mode = FileSet.CopyMode.copy
         elif copyfile is False:
             mode = FileSet.CopyMode.link
+        elif copyfile is None:
+            mode = FileSet.CopyMode.any
         else:
             mode = copyfile
         collation = default_collation

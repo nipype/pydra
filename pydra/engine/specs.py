@@ -22,14 +22,6 @@ def attr_fields(spec, exclude_names=()):
     return [field for field in spec.__attrs_attrs__ if field.name not in exclude_names]
 
 
-def attr_fields_dict(spec, exclude_names=()):
-    return {
-        field.name: field
-        for field in spec.__attrs_attrs__
-        if field.name not in exclude_names
-    }
-
-
 # These are special types that are checked for in the construction of input/output specs
 # and special converters inserted into the attrs fields.
 #

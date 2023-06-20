@@ -5,13 +5,16 @@ import random
 import platform
 import pytest
 import cloudpickle as cp
+from unittest.mock import Mock
 from fileformats.generic import Directory, File
+from fileformats.core import FileSet
 from .utils import multiply, raise_xeq1
 from ..helpers import (
     get_available_cpus,
     save,
     load_and_run,
     position_sort,
+    parse_copyfile,
 )
 from ...utils.hash import hash_function
 from .. import helpers_file
@@ -272,3 +275,42 @@ def test_load_and_run_wf(tmpdir):
 def test_position_sort(pos_args):
     final_args = position_sort(pos_args)
     assert final_args == ["a", "b", "c"]
+
+
+def test_parse_copyfile():
+    Mode = FileSet.CopyMode
+    Collation = FileSet.CopyCollation
+
+    def mock_field(copyfile):
+        mock = Mock(["metadata"])
+        mock.metadata = {"copyfile": copyfile}
+        return mock
+
+    assert parse_copyfile(mock_field((Mode.any, Collation.any))) == (
+        Mode.any,
+        Collation.any,
+    )
+    assert parse_copyfile(mock_field("copy"), default_collation=Collation.siblings) == (
+        Mode.copy,
+        Collation.siblings,
+    )
+    assert parse_copyfile(mock_field("link,adjacent")) == (
+        Mode.link,
+        Collation.adjacent,
+    )
+    assert parse_copyfile(mock_field(True)) == (
+        Mode.copy,
+        Collation.any,
+    )
+    assert parse_copyfile(mock_field(False)) == (
+        Mode.link,
+        Collation.any,
+    )
+    assert parse_copyfile(mock_field(None)) == (
+        Mode.any,
+        Collation.any,
+    )
+    with pytest.raises(TypeError, match="Unrecognised type for mode copyfile"):
+        parse_copyfile(mock_field((1, 2)))
+    with pytest.raises(TypeError, match="Unrecognised type for collation copyfile"):
+        parse_copyfile(mock_field((Mode.copy, 2)))
