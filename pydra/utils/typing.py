@@ -542,8 +542,19 @@ class TypeParser(ty.Generic[T]):
         return True
 
     @staticmethod
-    def is_instance(obj, candidates):
-        """Checks whether the object is an instance of cls or that cls is typing.Any"""
+    def is_instance(
+        obj: object, candidates: ty.Union[ty.Type[ty.Any], ty.Iterable[ty.Type[ty.Any]]]
+    ) -> bool:
+        """Checks whether the object is an instance of cls or that cls is typing.Any,
+        extending the built-in isinstance to check nested type args
+
+        Parameters
+        ----------
+        obj: object
+            the object to check whether it is an instance of one of the candidates
+        candidates : type or ty.Iterable[type]
+            the candidate types to check the object against
+        """
         if not isinstance(candidates, ty.Iterable):
             candidates = [candidates]
         for candidate in candidates:
@@ -562,9 +573,20 @@ class TypeParser(ty.Generic[T]):
         return False
 
     @classmethod
-    def is_subclass(cls, klass, candidates):
+    def is_subclass(
+        cls,
+        klass: ty.Type[ty.Any],
+        candidates: ty.Union[ty.Type[ty.Any], ty.Iterable[ty.Type[ty.Any]]],
+    ) -> bool:
         """Checks whether the class a is either the same as b, a subclass of b or b is
-        typing.Any"""
+        typing.Any, extending built-in issubclass to check nested type args
+
+        Parameters
+        ----------
+        klass : type
+            the klass to check whether it is a subclass of one of the candidates
+        candidates : type or ty.Iterable[type]
+            the candidate types to check the object against"""
         if not isinstance(candidates, ty.Iterable):
             candidates = [candidates]
 
