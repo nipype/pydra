@@ -30,7 +30,7 @@ from .specs import (
     LazyField,
     TaskHook,
     attr_fields,
-    SplitArray,
+    Split,
 )
 from .helpers import (
     make_klass,
@@ -276,7 +276,7 @@ class TaskBase:
             depth = 0
             if isinstance(inpt, LazyField):
                 tp = inpt.type
-                while TypeParser.is_subclass(tp, SplitArray):
+                while TypeParser.is_subclass(tp, Split):
                     depth += 1
                     tp = TypeParser.get_item_type(tp)
             if depth > max_depth:
@@ -616,7 +616,7 @@ class TaskBase:
             If input name is not in cont_dim, it is assumed that the input values has
             a container dimension of 1, so only the most outer dim will be used for splitting.
         **kwargs
-            fields to split over, will automatically be wrapped in a SplitArray object
+            fields to split over, will automatically be wrapped in a Split object
             and passed to the node inputs
 
         Returns
@@ -646,7 +646,7 @@ class TaskBase:
                     elif isinstance(inpt_val, ty.Iterable) and not isinstance(
                         inpt_val, (ty.Mapping, str)
                     ):
-                        new_val = SplitArray(inpt_val)
+                        new_val = Split(inpt_val)
                     else:
                         raise TypeError(
                             f"Could not split {inpt_val} as it is not a sequence type"

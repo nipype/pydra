@@ -104,12 +104,12 @@ class BaseSpec:
             value = getattr(self, field.name)
             if isinstance(value, LazyField):
                 resolved_value = value.get_value(wf, state_index=state_index)
-                if TypeParser.is_subclass(value.type, SplitArray) and not isinstance(
-                    resolved_value, SplitArray
+                if TypeParser.is_subclass(value.type, Split) and not isinstance(
+                    resolved_value, Split
                 ):
-                    resolved_value = SplitArray(resolved_value)
-                elif not TypeParser.is_subclass(value.type, SplitArray) and isinstance(
-                    resolved_value, SplitArray
+                    resolved_value = Split(resolved_value)
+                elif not TypeParser.is_subclass(value.type, Split) and isinstance(
+                    resolved_value, Split
                 ):
                     resolved_value = list(resolved_value)
                 temp_values[field.name] = resolved_value
@@ -698,10 +698,10 @@ class LazyInterface:
 
         type_ = self._get_type(name)
         for _ in range(self._node.split_depth):
-            type_ = SplitArray[type_]
+            type_ = Split[type_]
         for _ in range(self._node.combine_depth):
-            # Convert SplitArray type to List type
-            if not TypeParser.is_subclass(type_, SplitArray):
+            # Convert Split type to List type
+            if not TypeParser.is_subclass(type_, Split):
                 raise ValueError(
                     f"Attempting to combine a task, '{self._node.name}' that hasn't "
                     "been split, either locally or in upstream nodes"
@@ -776,9 +776,9 @@ class LazyField(ty.Generic[T]):
             result = node.result(state_index=state_index)
             if isinstance(result, list):
                 if len(result) and isinstance(result[0], list):
-                    results_new = SplitArray()
+                    results_new = Split()
                     for res_l in result:
-                        res_l_new = SplitArray()
+                        res_l_new = Split()
                         for res in res_l:
                             if res.errored:
                                 raise ValueError("Error from get_value")
@@ -786,7 +786,7 @@ class LazyField(ty.Generic[T]):
                                 res_l_new.append(res.get_output_field(self.field))
                         results_new.append(res_l_new)
                 else:
-                    results_new = SplitArray()
+                    results_new = Split()
                     for res in result:
                         if res.errored:
                             raise ValueError("Error from get_value")
@@ -820,19 +820,19 @@ class LazyField(ty.Generic[T]):
 
     def split(self) -> "LazyField":
         """ "Splits" the lazy field over an array of nodes by replacing the sequence type
-        of the lazy field with SplitArray to signify that it will be "split" across
+        of the lazy field with Split to signify that it will be "split" across
         """
         from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
 
         if self.type is ty.Any:
-            type_ = SplitArray[ty.Any]
+            type_ = Split[ty.Any]
         else:
             try:
                 item_type = TypeParser.get_item_type(self.type)
             except TypeError as e:
                 add_exc_note(e, f"Attempting to split {self} over multiple nodes")
                 raise e
-            type_ = SplitArray[item_type]  # type: ignore
+            type_ = Split[item_type]  # type: ignore
         return LazyField[type_](
             name=self.name,
             field=self.field,
@@ -855,7 +855,7 @@ class LazyField(ty.Generic[T]):
         )
 
 
-class SplitArray(ty.List[T]):
+class Split(ty.List[T]):
     """an array of values from, or to be split over in an array of nodes (see TaskBase.split()),
     multiple nodes of the same task. Used in type-checking to differentiate between list
     types and values for multiple nodes

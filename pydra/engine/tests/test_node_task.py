@@ -18,7 +18,7 @@ from .utils import (
 )
 
 from ..core import TaskBase
-from ..specs import SplitArray
+from ..specs import Split
 from ..submitter import Submitter
 
 
@@ -134,7 +134,7 @@ def test_task_init_3a(
 
 def test_task_init_4():
     """task with interface and inputs. splitter set using split method"""
-    nn = fun_addtwo(name="NA", a=SplitArray([3, 5]))
+    nn = fun_addtwo(name="NA", a=Split([3, 5]))
     nn.split(splitter="a")
     assert np.allclose(nn.inputs.a, [3, 5])
 
@@ -296,7 +296,7 @@ def test_task_init_6():
     """task with splitter, but the input is an empty list"""
     nn = fun_addtwo(name="NA")
     nn.split(splitter="a", a=[])
-    assert nn.inputs.a == SplitArray[int]([])
+    assert nn.inputs.a == Split[int]([])
 
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]
@@ -786,7 +786,7 @@ def test_task_state_1a(plugin, tmp_path):
     """task with the simplest splitter (inputs set separately)"""
     nn = fun_addtwo(name="NA")
     nn.split(splitter="a")
-    nn.inputs.a = SplitArray([3, 5])
+    nn.inputs.a = Split([3, 5])
     nn.cache_dir = tmp_path
 
     assert nn.state.splitter == "NA.a"

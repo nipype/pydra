@@ -6,7 +6,7 @@ import attr
 from ..task import SingularityTask, DockerTask, ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, SpecInfo, File, SingularitySpec, SplitArray
+from ..specs import ShellOutSpec, SpecInfo, File, SingularitySpec, Split
 
 
 need_docker = pytest.mark.skipif(
@@ -751,7 +751,7 @@ def test_singularity_inputspec_state_1(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = SplitArray([str(filename_1), str(filename_2)])
+    filename = Split([str(filename_1), str(filename_2)])
     image = "docker://alpine"
 
     my_input_spec = SpecInfo(
@@ -802,7 +802,7 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = SplitArray([str(file_1), str(file_2)])
+    filename = Split([str(file_1), str(file_2)])
     image = "docker://alpine"
 
     my_input_spec = SpecInfo(
@@ -960,7 +960,7 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = SplitArray([str(file_1), str(file_2)])
+    filename = Split([str(file_1), str(file_2)])
     image = "docker://alpine"
 
     my_input_spec = SpecInfo(
