@@ -19,7 +19,7 @@ from ..specs import (
     MultiInputFile,
     MultiOutputFile,
     MultiInputObj,
-    StateArray,
+    SplitArray,
 )
 from .utils import result_no_submitter, result_submitter, no_win
 
@@ -1915,7 +1915,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path):
 def test_shell_cmd_inputspec_state_1(plugin, results_function, tmp_path):
     """adding state to the input from input_spec"""
     cmd_exec = "echo"
-    hello = StateArray(["HELLO", "hi"])
+    hello = SplitArray(["HELLO", "hi"])
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -1997,7 +1997,7 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmp_path):
     using shorter syntax for input_spec (without default)
     """
     cmd_exec = "echo"
-    hello = StateArray(["HELLO", "hi"])
+    hello = SplitArray(["HELLO", "hi"])
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -2077,7 +2077,7 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmp_path):
         f.write("have a nice one")
 
     cmd_exec = "cat"
-    files = StateArray([file_1, file_2])
+    files = SplitArray([file_1, file_2])
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -2126,7 +2126,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
     with open(file2, "w") as f:
         f.write("hello world\n")
 
-    files = StateArray([str(file1), str(file2)])
+    files = SplitArray([str(file1), str(file2)])
     cmd = ["sed", "-is", "s/hello/hi/"]
 
     my_input_spec = SpecInfo(
@@ -2576,7 +2576,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
 
     wf.inputs.cmd1 = "touch"
     wf.inputs.cmd2 = "cp"
-    wf.inputs.args = StateArray(["newfile_1.txt", "newfile_2.txt"])
+    wf.inputs.args = SplitArray(["newfile_1.txt", "newfile_2.txt"])
     wf.cache_dir = tmp_path
 
     my_input_spec1 = SpecInfo(
@@ -4966,7 +4966,7 @@ def test_shellspec_formatter_splitter_2(tmp_path):
         return f"-t [{in1} {in2}]"
 
     input_spec = spec_info(formatter_1)
-    in1 = StateArray(["in11", "in12"])
+    in1 = SplitArray(["in11", "in12"])
     shelly = ShellCommandTask(
         name="f", executable="executable", input_spec=input_spec, in1=in1, in2="in2"
     ).split("in1")

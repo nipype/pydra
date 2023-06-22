@@ -5,7 +5,7 @@ import attr
 from ..task import DockerTask, ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec, ShellSpec, StateArray
+from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec, ShellSpec, SplitArray
 from .utils import no_win, need_docker
 
 
@@ -1159,7 +1159,7 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = StateArray([str(filename_1), str(filename_2)])
+    filename = SplitArray([str(filename_1), str(filename_2)])
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1209,7 +1209,7 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = StateArray([str(file_1), str(file_2)])
+    filename = SplitArray([str(file_1), str(file_2)])
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1366,7 +1366,7 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = StateArray([str(file_1), str(file_2)])
+    filename = SplitArray([str(file_1), str(file_2)])
 
     my_input_spec = SpecInfo(
         name="Input",

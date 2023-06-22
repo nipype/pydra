@@ -7,7 +7,7 @@ import typing as ty
 import attr
 from ..engine.specs import (
     LazyField,
-    StateArray,
+    SplitArray,
     MultiInputObj,
     MultiOutputObj,
 )
@@ -141,8 +141,8 @@ class TypeParser(ty.Generic[T]):
         elif isinstance(obj, LazyField):
             self.check_type(obj.type)
             coerced = obj
-        elif isinstance(obj, StateArray):
-            coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]
+        elif isinstance(obj, SplitArray):
+            coerced = SplitArray(self(o) for o in obj)  # type: ignore[assignment]
         else:
             coerced = self.coerce(obj)
         return coerced
@@ -291,13 +291,13 @@ class TypeParser(ty.Generic[T]):
         """
         if self.pattern is None or type_ is ty.Any:
             return
-        if self.is_subclass(type_, StateArray):
+        if self.is_subclass(type_, SplitArray):
             args = get_args(type_)
             if not args:
-                raise TypeError("StateArrays without any type arguments are invalid")
+                raise TypeError("SplitArrays without any type arguments are invalid")
             if len(args) > 1:
                 raise TypeError(
-                    f"StateArrays with more than one type argument ({args}) are invalid"
+                    f"SplitArrays with more than one type argument ({args}) are invalid"
                 )
             return self.check_type(args[0])
 
