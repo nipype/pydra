@@ -43,8 +43,8 @@ def test_multiout(tmpdir):
 def test_multiout_st(tmpdir):
     """testing a simple function that returns a numpy array, adding splitter"""
     wf = Workflow("wf", input_spec=["val"], val=[0, 1, 2])
-    wf.add(arrayout(name="mo", val=wf.lzin.val))
-    wf.mo.split("val").combine("val")
+    wf.add(arrayout(name="mo"))
+    wf.mo.split("val", val=wf.lzin.val).combine("val")
 
     wf.set_output([("array", wf.mo.lzout.b)])
     wf.cache_dir = tmpdir

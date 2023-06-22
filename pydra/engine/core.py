@@ -268,6 +268,37 @@ class TaskBase:
             )
         return self._checksum
 
+    @property
+    def split_depth(self) -> int:
+        """Returns the depth of the split for the inputs to the node"""
+        max_depth = 0
+        for inpt in attr.asdict(self.inputs, recurse=False).values():
+            depth = 0
+            if isinstance(inpt, LazyField):
+                tp = inpt.type
+                while TypeParser.is_subclass(tp, StateArray):
+                    depth += 1
+                    tp = TypeParser.get_item_type(tp)
+            if depth > max_depth:
+                max_depth = depth
+        return max_depth
+
+    @property
+    def combine_depth(self) -> int:
+        """Returns the depth of the split for the inputs to the node"""
+        combiner = (
+            self.state.combiner
+            if self.state is not None
+            else getattr(self, "fut_combiner", None)
+        )
+        if not combiner:
+            depth = 0
+        elif isinstance(combiner, (str, tuple)):
+            depth = 1
+        else:
+            depth = len(combiner)
+        return depth
+
     def checksum_states(self, state_index=None):
         """
         Calculate a checksum for the specific state or all of the states of the task.

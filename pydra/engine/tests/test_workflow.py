@@ -5013,20 +5013,20 @@ def test_wf_state_arrays():
         list_mult_sum(
             name="D",
             in_list=wf.lzin.x,
-        ).split(scalar=wf.C.lzout.products)
+        )
+        .split(scalar=wf.C.lzout.products)
+        .combine("scalar")
     )
 
     wf.add(  # Workflow is finally combined again into a single node
-        list_mult_sum(name="E", scalar=wf.lzin.y, in_list=wf.D.lzout.sum).combine(
-            "D.scalar"
-        )
+        list_mult_sum(name="E", scalar=wf.lzin.y, in_list=wf.D.lzout.sum)
     )
 
-    wf.set_output([("alpha", wf.D.lzout.sum), ("beta", wf.D.lzout.products)])
+    wf.set_output([("alpha", wf.E.lzout.sum), ("beta", wf.E.lzout.products)])
 
     results = wf(x=[1, 2, 3, 4], y=10)
-    assert results.outputs.alpha == 100000
-    assert results.outputs.beta == [10000, 20000, 30000, 40000]
+    assert results.output.alpha == 3000000
+    assert results.output.beta == [100000, 400000, 900000, 1600000]
 
 
 def test_wf_input_output_typing():

@@ -104,11 +104,17 @@ class BaseSpec:
             value = getattr(self, field.name)
             if isinstance(value, LazyField):
                 resolved_value = value.get_value(wf, state_index=state_index)
-                if TypeParser.is_subclass(value.type, StateArray):
+                if TypeParser.is_subclass(value.type, StateArray) and not isinstance(
+                    resolved_value, StateArray
+                ):
                     resolved_value = StateArray(resolved_value)
+                elif not TypeParser.is_subclass(value.type, StateArray) and isinstance(
+                    resolved_value, StateArray
+                ):
+                    resolved_value = list(resolved_value)
                 temp_values[field.name] = resolved_value
-        for field, value in temp_values.items():
-            setattr(self, field, value)
+        for field, val in temp_values.items():
+            setattr(self, field, val)
 
     def check_fields_input_spec(self):
         """
@@ -688,10 +694,19 @@ class LazyInterface:
             raise AttributeError(
                 f"Task {self._node.name} has no {self._attr_type} attribute {name}"
             )
+        from ..utils.typing import TypeParser
+
         type_ = self._get_type(name)
-        if self._node.state:
-            for _ in range(self._node.state.output_depth):
-                type_ = StateArray[type_]
+        for _ in range(self._node.split_depth):
+            type_ = StateArray[type_]
+        for _ in range(self._node.combine_depth):
+            # Convert StateArray type to List type
+            if not TypeParser.is_subclass(type_, StateArray):
+                raise ValueError(
+                    f"Attempting to combine a task, '{self._node.name}' that hasn't "
+                    "been split, either locally or in upstream nodes"
+                )
+            type_ = ty.List[TypeParser.get_item_type(type_)]
         return LazyField[type_](
             name=self._node.name,
             field=name,
@@ -809,12 +824,15 @@ class LazyField(ty.Generic[T]):
         """
         from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
 
-        try:
-            item_type = TypeParser.get_item_type(self.type)
-        except TypeError as e:
-            add_exc_note(e, f"Attempting to split {self} over multiple nodes")
-            raise e
-        type_ = StateArray[item_type]  # type: ignore
+        if self.type is ty.Any:
+            type_ = StateArray[ty.Any]
+        else:
+            try:
+                item_type = TypeParser.get_item_type(self.type)
+            except TypeError as e:
+                add_exc_note(e, f"Attempting to split {self} over multiple nodes")
+                raise e
+            type_ = StateArray[item_type]  # type: ignore
         return LazyField[type_](
             name=self.name,
             field=self.field,
