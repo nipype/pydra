@@ -334,10 +334,9 @@ def add_name_splitter(
     if isinstance(splitter, str):
         return _add_name([splitter], name)[0]
     elif isinstance(splitter, list):
-        return _add_name(splitter, name)
+        return _add_name(list(splitter), name)
     elif isinstance(splitter, tuple):
-        splitter_l = list(splitter)
-        return tuple(_add_name(splitter_l, name))
+        return tuple(_add_name(list(splitter), name))
 
 
 def _add_name(mlist, name):

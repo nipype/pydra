@@ -120,7 +120,7 @@ def test_task_init_3a(
         a_in, b_in = np.array(a_in), np.array(b_in)
     elif input_type == "mixed":
         a_in = np.array(a_in)
-    nn = fun_addvar(name="NA", a=a_in, b=b_in).split(splitter=splitter)
+    nn = fun_addvar(name="NA").split(splitter=splitter, a=a_in, b=b_in)
 
     assert np.allclose(nn.inputs.a, [3, 5])
     assert np.allclose(nn.inputs.b, [10, 20])
@@ -134,8 +134,8 @@ def test_task_init_3a(
 
 def test_task_init_4():
     """task with interface and inputs. splitter set using split method"""
-    nn = fun_addtwo(name="NA", a=Split([3, 5]))
-    nn.split(splitter="a")
+    nn = fun_addtwo(name="NA")
+    nn.split(splitter="a", a=[3, 5])
     assert np.allclose(nn.inputs.a, [3, 5])
 
     assert nn.state.splitter == "NA.a"
@@ -190,7 +190,7 @@ def test_task_init_4d():
     if the splitter is the same, the exception shouldn't be raised
     """
     nn = fun_addtwo(name="NA").split(splitter="a", a=[3, 5])
-    nn.split(splitter="a")
+    nn.split(splitter="a", a=[3, 5])
     assert nn.state.splitter == "NA.a"
 
 
@@ -785,8 +785,7 @@ def test_task_state_1(plugin_dask_opt, input_type, tmp_path):
 def test_task_state_1a(plugin, tmp_path):
     """task with the simplest splitter (inputs set separately)"""
     nn = fun_addtwo(name="NA")
-    nn.split(splitter="a")
-    nn.inputs.a = Split([3, 5])
+    nn.split(splitter="a", a=[3, 5])
     nn.cache_dir = tmp_path
 
     assert nn.state.splitter == "NA.a"
@@ -942,7 +941,7 @@ def test_task_state_4(plugin, input_type, tmp_path):
     lst_in = [[2, 3, 4], [1, 2, 3]]
     if input_type == "array":
         lst_in = np.array(lst_in)
-    nn = moment(name="NA", n=3, lst=lst_in).split(splitter="lst")
+    nn = moment(name="NA", n=3).split(splitter="lst", lst=lst_in)
     nn.cache_dir = tmp_path
 
     assert np.allclose(nn.inputs.n, 3)
@@ -972,7 +971,7 @@ def test_task_state_4(plugin, input_type, tmp_path):
 
 def test_task_state_4a(plugin, tmp_path):
     """task with a tuple as an input, and a simple splitter"""
-    nn = moment(name="NA", n=3, lst=[(2, 3, 4), (1, 2, 3)]).split(splitter="lst")
+    nn = moment(name="NA", n=3).split(splitter="lst", lst=[(2, 3, 4), (1, 2, 3)])
     nn.cache_dir = tmp_path
 
     assert np.allclose(nn.inputs.n, 3)
@@ -994,8 +993,8 @@ def test_task_state_4a(plugin, tmp_path):
 
 def test_task_state_5(plugin, tmp_path):
     """task with a list as an input, and the variable is part of the scalar splitter"""
-    nn = moment(name="NA", n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]).split(
-        splitter=("n", "lst")
+    nn = moment(name="NA").split(
+        splitter=("n", "lst"), n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]
     )
     nn.cache_dir = tmp_path
 
@@ -1020,8 +1019,8 @@ def test_task_state_5_exception(plugin, tmp_path):
     """task with a list as an input, and the variable is part of the scalar splitter
     the shapes are not matching, so exception should be raised
     """
-    nn = moment(name="NA", n=[1, 3, 3], lst=[[2, 3, 4], [1, 2, 3]]).split(
-        splitter=("n", "lst")
+    nn = moment(name="NA").split(
+        splitter=("n", "lst"), n=[1, 3, 3], lst=[[2, 3, 4], [1, 2, 3]]
     )
     nn.cache_dir = tmp_path
 
@@ -1037,8 +1036,8 @@ def test_task_state_5_exception(plugin, tmp_path):
 
 def test_task_state_6(plugin, tmp_path):
     """ask with a list as an input, and the variable is part of the outer splitter"""
-    nn = moment(name="NA", n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]).split(
-        splitter=["n", "lst"]
+    nn = moment(name="NA").split(
+        splitter=["n", "lst"], n=[1, 3], lst=[[2, 3, 4], [1, 2, 3]]
     )
     nn.cache_dir = tmp_path
 
@@ -1061,8 +1060,8 @@ def test_task_state_6(plugin, tmp_path):
 
 def test_task_state_6a(plugin, tmp_path):
     """ask with a tuple as an input, and the variable is part of the outer splitter"""
-    nn = moment(name="NA", n=[1, 3], lst=[(2, 3, 4), (1, 2, 3)]).split(
-        splitter=["n", "lst"]
+    nn = moment(name="NA").split(
+        splitter=["n", "lst"], n=[1, 3], lst=[(2, 3, 4), (1, 2, 3)]
     )
     nn.cache_dir = tmp_path
 
@@ -1382,12 +1381,15 @@ def test_task_state_contdim_1(tmp_path):
     task_4var = op_4var(
         name="op_4var",
         a="a1",
+        cache_dir=tmp_path,
+    )
+    task_4var.split(
+        ("b", ["c", "d"]),
         b=[["b1", "b2"], ["b3", "b4"]],
         c=["c1", "c2"],
         d=["d1", "d2"],
-        cache_dir=tmp_path,
+        cont_dim={"b": 2},
     )
-    task_4var.split(("b", ["c", "d"]), cont_dim={"b": 2})
     task_4var()
     res = task_4var.result()
     assert len(res) == 4
@@ -1398,13 +1400,16 @@ def test_task_state_contdim_2(tmp_path):
     """task with a splitter and container dimension for one of the value"""
     task_4var = op_4var(
         name="op_4var",
+        cache_dir=tmp_path,
+    )
+    task_4var.split(
+        ["a", ("b", ["c", "d"])],
+        cont_dim={"b": 2},
         a=["a1", "a2"],
         b=[["b1", "b2"], ["b3", "b4"]],
         c=["c1", "c2"],
         d=["d1", "d2"],
-        cache_dir=tmp_path,
     )
-    task_4var.split(["a", ("b", ["c", "d"])], cont_dim={"b": 2})
     task_4var()
     res = task_4var.result()
     assert len(res) == 8
@@ -1416,12 +1421,15 @@ def test_task_state_comb_contdim_1(tmp_path):
     task_4var = op_4var(
         name="op_4var",
         a="a1",
+        cache_dir=tmp_path,
+    )
+    task_4var.split(
+        ("b", ["c", "d"]),
+        cont_dim={"b": 2},
         b=[["b1", "b2"], ["b3", "b4"]],
         c=["c1", "c2"],
         d=["d1", "d2"],
-        cache_dir=tmp_path,
-    )
-    task_4var.split(("b", ["c", "d"]), cont_dim={"b": 2}).combine("b")
+    ).combine("b")
     task_4var()
     res = task_4var.result()
     assert len(res) == 4
@@ -1432,13 +1440,16 @@ def test_task_state_comb_contdim_2(tmp_path):
     """task with a splitter-combiner, and container dimension for one of the value"""
     task_4var = op_4var(
         name="op_4var",
+        cache_dir=tmp_path,
+    )
+    task_4var.split(
+        ["a", ("b", ["c", "d"])],
         a=["a1", "a2"],
         b=[["b1", "b2"], ["b3", "b4"]],
         c=["c1", "c2"],
         d=["d1", "d2"],
-        cache_dir=tmp_path,
-    )
-    task_4var.split(["a", ("b", ["c", "d"])], cont_dim={"b": 2}).combine("a")
+        cont_dim={"b": 2},
+    ).combine("a")
     task_4var()
     res = task_4var.result()
     assert len(res) == 4

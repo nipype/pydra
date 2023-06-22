@@ -319,8 +319,8 @@ def test_docker_st_1(plugin):
     splitter = executable
     """
     cmd = ["pwd", "whoami"]
-    docky = DockerTask(name="docky", executable=cmd, image="busybox").split(
-        "executable"
+    docky = DockerTask(name="docky", image="busybox").split(
+        "executable", executable=cmd
     )
     assert docky.state.splitter == "docky.executable"
 
@@ -343,8 +343,8 @@ def test_docker_st_2(plugin):
     splitter = image
     """
     cmd = ["cat", "/etc/issue"]
-    docky = DockerTask(name="docky", executable=cmd, image=["debian", "ubuntu"]).split(
-        "image"
+    docky = DockerTask(name="docky", executable=cmd).split(
+        "image", image=["debian", "ubuntu"]
     )
     assert docky.state.splitter == "docky.image"
 
@@ -365,8 +365,8 @@ def test_docker_st_2(plugin):
 def test_docker_st_3(plugin):
     """outer splitter image and executable"""
     cmd = ["whoami", ["cat", "/etc/issue"]]
-    docky = DockerTask(name="docky", executable=cmd, image=["debian", "ubuntu"]).split(
-        ["image", "executable"]
+    docky = DockerTask(name="docky").split(
+        ["image", "executable"], executable=cmd, image=["debian", "ubuntu"]
     )
     assert docky.state.splitter == ["docky.image", "docky.executable"]
     res = docky(plugin=plugin)
@@ -383,8 +383,8 @@ def test_docker_st_4(plugin):
     """outer splitter image and executable, combining with images"""
     cmd = ["whoami", ["cat", "/etc/issue"]]
     docky = (
-        DockerTask(name="docky", executable=cmd, image=["debian", "ubuntu"])
-        .split(["image", "executable"])
+        DockerTask(name="docky")
+        .split(["image", "executable"], executable=cmd, image=["debian", "ubuntu"])
         .combine("image")
     )
     assert docky.state.splitter == ["docky.image", "docky.executable"]
@@ -1159,7 +1159,6 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = Split([str(filename_1), str(filename_2)])
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1184,10 +1183,9 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
         name="docky",
         image="busybox",
         executable=cmd,
-        file=filename,
         input_spec=my_input_spec,
         strip=True,
-    ).split("file")
+    ).split("file", file=[str(filename_1), str(filename_2)])
 
     res = docky()
     assert res[0].output.stdout == "hello from pydra"
@@ -1209,7 +1207,7 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = Split([str(file_1), str(file_2)])
+    filename = Split()
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1234,10 +1232,9 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
         name="docky",
         image="busybox",
         executable=cmd,
-        file=filename,
         input_spec=my_input_spec,
         strip=True,
-    ).split("file")
+    ).split("file", file=[str(file_1), str(file_2)])
 
     res = docky()
     assert res[0].output.stdout == "hello from pydra"
@@ -1308,7 +1305,6 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = [str(file_1), str(file_2)]
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1331,18 +1327,16 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"])
     wf.inputs.cmd = cmd
-    wf.inputs.file = filename
 
     docky = DockerTask(
         name="docky",
         image="busybox",
         executable=wf.lzin.cmd,
-        file=wf.lzin.file,
         input_spec=my_input_spec,
         strip=True,
     )
     wf.add(docky)
-    wf.split("file")
+    wf.split(file=[str(file_1), str(file_2)])
 
     wf.set_output([("out", wf.docky.lzout.stdout)])
 
@@ -1366,7 +1360,6 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = Split([str(file_1), str(file_2)])
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -1389,7 +1382,6 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"])
     wf.inputs.cmd = cmd
-    wf.inputs.file = filename
 
     docky = DockerTask(
         name="docky",
@@ -1398,7 +1390,7 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
         file=wf.lzin.file,
         input_spec=my_input_spec,
         strip=True,
-    ).split("file")
+    ).split("file", file=[str(file_1), str(file_2)])
     wf.add(docky)
 
     wf.set_output([("out", wf.docky.lzout.stdout)])

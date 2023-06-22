@@ -354,7 +354,7 @@ def test_annotated_input_func_7():
     def testfunc(a: float):
         return a
 
-    funky = testfunc(a=Split([3.5, 2.1])).split("a")
+    funky = testfunc().split("a", a=[3.5, 2.1])
     assert getattr(funky.inputs, "a") == [3.5, 2.1]
 
 
@@ -1538,7 +1538,7 @@ def test_traceback(tmpdir):
     def fun_error(x):
         raise Exception("Error from the function")
 
-    task = fun_error(name="error", x=[3, 4], cache_dir=tmpdir).split("x")
+    task = fun_error(name="error", cache_dir=tmpdir).split("x", x=[3, 4])
 
     with pytest.raises(Exception, match="from the function") as exinfo:
         task()
@@ -1565,7 +1565,7 @@ def test_traceback_wf(tmpdir):
     def fun_error(x):
         raise Exception("Error from the function")
 
-    wf = Workflow(name="wf", input_spec=["x"], x=[3, 4], cache_dir=tmpdir).split("x")
+    wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir).split("x", x=[3, 4])
     wf.add(fun_error(name="error", x=wf.lzin.x))
     wf.set_output([("out", wf.error.lzout.out)])
 
@@ -1597,7 +1597,7 @@ def test_rerun_errored(tmpdir, capfd):
             print(f"x%2 = {x % 2}\n")
             return x
 
-    task = pass_odds(name="pass_odds", x=[1, 2, 3, 4, 5], cache_dir=tmpdir).split("x")
+    task = pass_odds(name="pass_odds", cache_dir=tmpdir).split("x", x=[1, 2, 3, 4, 5])
 
     with pytest.raises(Exception, match="even error"):
         task()

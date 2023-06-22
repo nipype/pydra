@@ -87,19 +87,19 @@ class NodeTesting:
 
         class InpSpec:
             def __init__(self):
-                self.fields = [("inp_a", None), ("inp_b", None)]
+                self.fields = [("inp_a", int), ("inp_b", int)]
 
         class OutSpec:
             def __init__(self):
-                self.fields = [("out_a", None)]
+                self.fields = [("out_a", int)]
 
         self.name = "tn"
         self.inputs = Input()
         self.input_spec = InpSpec()
         self.output_spec = OutSpec()
         self.output_names = ["out_a"]
-        self.split_depth = 0
-        self.combine_depth = 0
+        self.splits = set()
+        self.combines = set()
 
     def result(self, state_index=None):
         class Output:

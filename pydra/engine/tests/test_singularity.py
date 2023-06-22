@@ -227,9 +227,9 @@ def test_singularity_st_1(plugin, tmp_path):
     """
     cmd = ["pwd", "ls"]
     image = "docker://alpine"
-    singu = SingularityTask(
-        name="singu", executable=cmd, image=image, cache_dir=tmp_path
-    ).split("executable")
+    singu = SingularityTask(name="singu", image=image, cache_dir=tmp_path).split(
+        "executable", executable=cmd
+    )
     assert singu.state.splitter == "singu.executable"
 
     res = singu(plugin=plugin)
@@ -245,9 +245,9 @@ def test_singularity_st_2(plugin, tmp_path):
     """
     cmd = ["cat", "/etc/issue"]
     image = ["docker://alpine", "docker://ubuntu"]
-    singu = SingularityTask(
-        name="singu", executable=cmd, image=image, cache_dir=tmp_path
-    ).split("image")
+    singu = SingularityTask(name="singu", executable=cmd, cache_dir=tmp_path).split(
+        "image", image=image
+    )
     assert singu.state.splitter == "singu.image"
 
     res = singu(plugin=plugin)
@@ -261,9 +261,9 @@ def test_singularity_st_3(plugin, tmp_path):
     """outer splitter image and executable"""
     cmd = ["pwd", ["cat", "/etc/issue"]]
     image = ["docker://alpine", "docker://ubuntu"]
-    singu = SingularityTask(
-        name="singu", executable=cmd, image=image, cache_dir=tmp_path
-    ).split(["image", "executable"])
+    singu = SingularityTask(name="singu", cache_dir=tmp_path).split(
+        ["image", "executable"], executable=cmd, image=image
+    )
     assert singu.state.splitter == ["singu.image", "singu.executable"]
     res = singu(plugin=plugin)
 
@@ -284,8 +284,8 @@ def test_singularity_st_4(tmp_path, n):
     args_n = list(range(n))
     image = "docker://alpine"
     singu = SingularityTask(
-        name="singu", executable="echo", image=image, cache_dir=tmp_path, args=args_n
-    ).split("args")
+        name="singu", executable="echo", image=image, cache_dir=tmp_path
+    ).split("args", args=args_n)
     assert singu.state.splitter == "singu.args"
     res = singu(plugin="slurm")
     assert "1" in res[1].output.stdout
@@ -777,11 +777,10 @@ def test_singularity_inputspec_state_1(plugin, tmp_path):
         name="singu",
         image=image,
         executable=cmd,
-        file=filename,
         input_spec=my_input_spec,
         strip=True,
         cache_dir=tmp_path,
-    ).split("file")
+    ).split("file", file=filename)
 
     res = singu()
     assert res[0].output.stdout == "hello from pydra"
@@ -828,11 +827,10 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
         name="singu",
         image=image,
         executable=cmd,
-        file=filename,
         input_spec=my_input_spec,
         strip=True,
         cache_dir=tmp_path,
-    ).split("file")
+    ).split("file", file=filename)
 
     res = singu()
     assert res[0].output.stdout == "hello from pydra"
@@ -932,12 +930,11 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
         name="singu",
         image=image,
         executable=wf.lzin.cmd,
-        file=wf.lzin.file,
         input_spec=my_input_spec,
         strip=True,
     )
     wf.add(singu)
-    wf.split("file")
+    wf.split("file", file=wf.lzin.file)
 
     wf.set_output([("out", wf.singu.lzout.stdout)])
 
@@ -990,10 +987,9 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
         name="singu",
         image=image,
         executable=wf.lzin.cmd,
-        file=wf.lzin.file,
         input_spec=my_input_spec,
         strip=True,
-    ).split("file")
+    ).split("file", file=wf.lzin.file)
     wf.add(singu)
 
     wf.set_output([("out", wf.singu.lzout.stdout)])

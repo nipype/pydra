@@ -1,6 +1,5 @@
 """Basic processing graph elements."""
 import abc
-import attr
 import json
 import logging
 import itertools
@@ -10,13 +9,12 @@ from pathlib import Path
 import typing as ty
 from copy import deepcopy
 from uuid import uuid4
-
-import cloudpickle as cp
 from filelock import SoftFileLock
 import shutil
 from tempfile import mkdtemp
 from traceback import format_exception
-
+import attr
+import cloudpickle as cp
 from . import state
 from . import helpers_state as hlpst
 from .specs import (
@@ -269,35 +267,29 @@ class TaskBase:
         return self._checksum
 
     @property
-    def split_depth(self) -> int:
+    def splits(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
         """Returns the depth of the split for the inputs to the node"""
-        max_depth = 0
+        splits = set()
         for inpt in attr.asdict(self.inputs, recurse=False).values():
-            depth = 0
             if isinstance(inpt, LazyField):
-                tp = inpt.type
-                while TypeParser.is_subclass(tp, Split):
-                    depth += 1
-                    tp = TypeParser.get_item_type(tp)
-            if depth > max_depth:
-                max_depth = depth
-        return max_depth
+                splits.update(inpt.splits)
+        return splits
 
     @property
-    def combine_depth(self) -> int:
+    def combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
         """Returns the depth of the split for the inputs to the node"""
         combiner = (
             self.state.combiner
             if self.state is not None
             else getattr(self, "fut_combiner", None)
         )
-        if not combiner:
-            depth = 0
-        elif isinstance(combiner, (str, tuple)):
-            depth = 1
-        else:
-            depth = len(combiner)
-        return depth
+        combines = set()
+        if combiner:
+            if isinstance(combiner, (str, tuple)):
+                combines.add(combiner)
+            else:
+                combines.update(combiner)
+        return combines
 
     def checksum_states(self, state_index=None):
         """
@@ -598,7 +590,7 @@ class TaskBase:
         splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None] = None,
         overwrite: bool = False,
         cont_dim: ty.Optional[dict] = None,
-        **kwargs,
+        **split_inputs,
     ):
         """
         Run this task parametrically over lists of split inputs.
@@ -615,7 +607,7 @@ class TaskBase:
             Container dimensions for specific inputs, used in the splitter.
             If input name is not in cont_dim, it is assumed that the input values has
             a container dimension of 1, so only the most outer dim will be used for splitting.
-        **kwargs
+        **split_inputs
             fields to split over, will automatically be wrapped in a Split object
             and passed to the node inputs
 
@@ -624,8 +616,14 @@ class TaskBase:
         self : TaskBase
             a reference to the task
         """
-        if splitter is None and kwargs:
-            splitter = list(kwargs)
+        if splitter is None and split_inputs:
+            splitter = list(split_inputs)
+        elif splitter:
+            missing = set(self._unwrap_splitter(splitter)) - set(split_inputs)
+            if missing:
+                raise ValueError(
+                    f"Split is missing values for the following fields {list(missing)}"
+                )
         splitter = hlpst.add_name_splitter(splitter, self.name)
         # if user want to update the splitter, overwrite has to be True
         if self.state and not overwrite and self.state.splitter != splitter:
@@ -636,13 +634,13 @@ class TaskBase:
         if cont_dim:
             for key, vel in cont_dim.items():
                 self._cont_dim[f"{self.name}.{key}"] = vel
-        if kwargs:
+        if split_inputs:
             new_inputs = {}
-            for inpt_name, inpt_val in kwargs.items():
+            for inpt_name, inpt_val in split_inputs.items():
                 new_val: ty.Any
                 if f"{self.name}.{inpt_name}" in splitter:  # type: ignore
                     if isinstance(inpt_val, LazyField):
-                        new_val = inpt_val.split()
+                        new_val = inpt_val.split(splitter)
                     elif isinstance(inpt_val, ty.Iterable) and not isinstance(
                         inpt_val, (ty.Mapping, str)
                     ):
@@ -659,8 +657,32 @@ class TaskBase:
             self.set_state(splitter)
         return self
 
+    @classmethod
+    def _unwrap_splitter(
+        cls, splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...]]
+    ) -> ty.Iterable[str]:
+        """Unwraps a potentially nested splitter to a flat list of fields that are split
+        over
+
+        Parameters
+        ----------
+        splitter: str or list[str] or tuple[str, ...]
+            the splitter spec to unwrap
+
+        Returns
+        -------
+        unwrapped : ty.Iterable[str]
+            the field names listed in the splitter
+        """
+        if isinstance(splitter, str):
+            return [splitter]
+        else:
+            return itertools.chain(*(cls._unwrap_splitter(s) for s in splitter))
+
     def combine(
-        self, combiner: ty.Union[ty.List[str], str], overwrite: bool = False, **kwargs
+        self,
+        combiner: ty.Union[ty.List[str], str],
+        overwrite: bool = False,  # **kwargs
     ):
         """
         Combine inputs parameterized by one or more previous tasks.
@@ -693,16 +715,16 @@ class TaskBase:
                 "combiner has been already set, "
                 "if you want to overwrite it - use overwrite=True"
             )
-        if kwargs:
-            new_inputs = {}
-            for inpt_name, inpt_val in kwargs.items():
-                if not isinstance(inpt_val, LazyField):
-                    raise TypeError(
-                        "Only lazy-fields can be set as inputs in the combine method "
-                        f"not {inpt_name}:{inpt_val}"
-                    )
-                new_inputs[inpt_name] = inpt_val.combine()
-            self.inputs = attr.evolve(self.inputs, **new_inputs)
+        # if kwargs:
+        #     new_inputs = {}
+        #     for inpt_name, inpt_val in kwargs.items():
+        #         if not isinstance(inpt_val, LazyField):
+        #             raise TypeError(
+        #                 "Only lazy-fields can be set as inputs in the combine method "
+        #                 f"not {inpt_name}:{inpt_val}"
+        #             )
+        #         new_inputs[inpt_name] = inpt_val.combine()
+        #     self.inputs = attr.evolve(self.inputs, **new_inputs)
         if not self.state:
             self.split(splitter=None)
             # a task can have a combiner without a splitter
@@ -734,26 +756,23 @@ class TaskBase:
 
     def get_input_el(self, ind):
         """Collect all inputs required to run the node (for specific state element)."""
-        if ind is not None:
-            # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
-            state_dict = self.state.states_val[ind]
-            input_ind = self.state.inputs_ind[ind]
-            inputs_dict = {}
-            for inp in set(self.input_names):
-                if f"{self.name}.{inp}" in input_ind:
-                    inputs_dict[inp] = self._extract_input_el(
-                        inputs=self.inputs,
-                        inp_nm=inp,
-                        ind=input_ind[f"{self.name}.{inp}"],
-                    )
-                else:
-                    inputs_dict[inp] = getattr(self.inputs, inp)
-            return state_dict, inputs_dict
-        else:
-            # todo it never gets here
-            breakpoint()
-            inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
-            return None, inputs_dict
+        assert ind is not None
+        # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
+        input_ind = self.state.inputs_ind[ind]
+        inputs_dict = {}
+        for inp in set(self.input_names):
+            if f"{self.name}.{inp}" in input_ind:
+                inputs_dict[inp] = self._extract_input_el(
+                    inputs=self.inputs,
+                    inp_nm=inp,
+                    ind=input_ind[f"{self.name}.{inp}"],
+                )
+        return inputs_dict
+        # else:
+        #     # todo it never gets here
+        #     breakpoint()
+        #     inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
+        #     return None, inputs_dict
 
     def pickle_task(self):
         """Pickling the tasks with full inputs"""
@@ -1082,6 +1101,28 @@ class Workflow(TaskBase):
     def graph_sorted(self):
         """Get a sorted graph representation of the workflow."""
         return self.graph.sorted_nodes
+
+    @property
+    def splits(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
+        """Returns the depth of the split for the inputs to the node"""
+        splits = super().splits
+        if self.state:
+            if isinstance(self.state.splitter, str):
+                splits |= set([self.state.splitter])
+            elif self.state.splitter:
+                splits |= set(self.state.splitter)
+        return splits
+
+    @property
+    def combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
+        """Returns the depth of the split for the inputs to the node"""
+        combines = super().combines
+        if self.state:
+            if isinstance(self.state.combiner, str):
+                combines |= set([self.state.combiner])
+            elif self.state.combiner:
+                combines |= set(self.state.combiner)
+        return combines
 
     @property
     def checksum(self):

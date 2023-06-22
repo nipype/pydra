@@ -116,7 +116,7 @@ def test_shell_cmd_3(plugin_dask_opt, tmp_path):
     cmd = ["pwd", "whoami"]
 
     # all args given as executable
-    shelly = ShellCommandTask(name="shelly", executable=cmd).split("executable")
+    shelly = ShellCommandTask(name="shelly").split("executable", executable=cmd)
     shelly.cache_dir = tmp_path
 
     # assert shelly.cmdline == ["pwd", "whoami"]
@@ -138,8 +138,8 @@ def test_shell_cmd_4(plugin, tmp_path):
     cmd_exec = "echo"
     cmd_args = ["nipype", "pydra"]
     # separate command into exec + args
-    shelly = ShellCommandTask(name="shelly", executable=cmd_exec, args=cmd_args).split(
-        splitter="args"
+    shelly = ShellCommandTask(name="shelly", executable=cmd_exec).split(
+        splitter="args", args=cmd_args
     )
     shelly.cache_dir = tmp_path
 
@@ -163,8 +163,8 @@ def test_shell_cmd_5(plugin, tmp_path):
     cmd_args = ["nipype", "pydra"]
     # separate command into exec + args
     shelly = (
-        ShellCommandTask(name="shelly", executable=cmd_exec, args=cmd_args)
-        .split(splitter="args")
+        ShellCommandTask(name="shelly", executable=cmd_exec)
+        .split(splitter="args", args=cmd_args)
         .combine("args")
     )
     shelly.cache_dir = tmp_path
@@ -185,8 +185,8 @@ def test_shell_cmd_6(plugin, tmp_path):
     cmd_exec = ["echo", ["echo", "-n"]]
     cmd_args = ["nipype", "pydra"]
     # separate command into exec + args
-    shelly = ShellCommandTask(name="shelly", executable=cmd_exec, args=cmd_args).split(
-        splitter=["executable", "args"]
+    shelly = ShellCommandTask(name="shelly").split(
+        splitter=["executable", "args"], executable=cmd_exec, args=cmd_args
     )
     shelly.cache_dir = tmp_path
 
@@ -229,8 +229,8 @@ def test_shell_cmd_7(plugin, tmp_path):
     cmd_args = ["nipype", "pydra"]
     # separate command into exec + args
     shelly = (
-        ShellCommandTask(name="shelly", executable=cmd_exec, args=cmd_args)
-        .split(splitter=["executable", "args"])
+        ShellCommandTask(name="shelly")
+        .split(splitter=["executable", "args"], executable=cmd_exec, args=cmd_args)
         .combine("args")
     )
     shelly.cache_dir = tmp_path
@@ -1939,10 +1939,9 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function, tmp_path):
     shelly = ShellCommandTask(
         name="shelly",
         executable=cmd_exec,
-        text=hello,
         input_spec=my_input_spec,
         cache_dir=tmp_path,
-    ).split("text")
+    ).split("text", text=hello)
     assert shelly.inputs.executable == cmd_exec
     # todo: this doesn't work when state
     # assert shelly.cmdline == "echo HELLO"
@@ -1997,7 +1996,6 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmp_path):
     using shorter syntax for input_spec (without default)
     """
     cmd_exec = "echo"
-    hello = Split(["HELLO", "hi"])
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
@@ -2014,10 +2012,9 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmp_path):
     shelly = ShellCommandTask(
         name="shelly",
         executable=cmd_exec,
-        text=hello,
         input_spec=my_input_spec,
         cache_dir=tmp_path,
-    ).split("text")
+    ).split(text=["HELLO", "hi"])
     assert shelly.inputs.executable == cmd_exec
 
     res = results_function(shelly, plugin)
@@ -2053,10 +2050,9 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function, tmp_path):
     shelly = ShellCommandTask(
         name="shelly",
         executable=cmd,
-        args=args,
         input_spec=my_input_spec,
         cache_dir=tmp_path,
-    ).split("args")
+    ).split(args=args)
 
     res = results_function(shelly, plugin)
     for i in range(len(args)):
@@ -2077,7 +2073,6 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmp_path):
         f.write("have a nice one")
 
     cmd_exec = "cat"
-    files = Split([file_1, file_2])
 
     my_input_spec = SpecInfo(
         name="Input",
@@ -2101,10 +2096,9 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmp_path):
     shelly = ShellCommandTask(
         name="shelly",
         executable=cmd_exec,
-        file=files,
         input_spec=my_input_spec,
         cache_dir=tmp_path,
-    ).split("file")
+    ).split(file=[file_1, file_2])
 
     assert shelly.inputs.executable == cmd_exec
     # todo: this doesn't work when state
@@ -2163,9 +2157,8 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
         name="shelly",
         executable=cmd,
         input_spec=my_input_spec,
-        orig_file=files,
         cache_dir=tmp_path,
-    ).split("orig_file")
+    ).split("orig_file", orig_file=files)
 
     txt_l = ["from pydra", "world"]
     res_l = results_function(shelly, plugin)
@@ -2475,11 +2468,12 @@ def test_wf_shell_cmd_state_1(plugin):
     first one has input with output_file_template (str, uses wf.lzin),
     that is passed to the second task
     """
-    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2", "args"]).split("args")
+    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2", "args"]).split(
+        "args", args=["newfile_1.txt", "newfile_2.txt"]
+    )
 
     wf.inputs.cmd1 = "touch"
     wf.inputs.cmd2 = "cp"
-    wf.inputs.args = ["newfile_1.txt", "newfile_2.txt"]
 
     my_input_spec1 = SpecInfo(
         name="Input",
@@ -2576,7 +2570,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
 
     wf.inputs.cmd1 = "touch"
     wf.inputs.cmd2 = "cp"
-    wf.inputs.args = Split(["newfile_1.txt", "newfile_2.txt"])
+    wf.inputs.args = ["newfile_1.txt", "newfile_2.txt"]
     wf.cache_dir = tmp_path
 
     my_input_spec1 = SpecInfo(
@@ -2631,8 +2625,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
             name="shelly1",
             input_spec=my_input_spec1,
             executable=wf.lzin.cmd1,
-            args=wf.lzin.args,
-        ).split("args")
+        ).split("args", args=wf.lzin.args)
     )
     wf.add(
         ShellCommandTask(
@@ -3252,8 +3245,8 @@ def test_shell_cmd_outputspec_8a(tmp_path, plugin, results_function):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
-    ).split("args")
+        name="shelly", executable=cmd, output_spec=my_output_spec
+    ).split("args", args=args)
 
     results = results_function(shelly, plugin)
     for index, res in enumerate(results):
@@ -3282,8 +3275,8 @@ def test_shell_cmd_outputspec_8b_error():
         bases=(ShellOutSpec,),
     )
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, args=args, output_spec=my_output_spec
-    ).split("args")
+        name="shelly", executable=cmd, output_spec=my_output_spec
+    ).split("args", args=args)
     with pytest.raises(Exception) as e:
         shelly()
     assert "has to have a callable" in str(e.value)
@@ -3321,10 +3314,9 @@ def test_shell_cmd_outputspec_8c(tmp_path, plugin, results_function):
     shelly = ShellCommandTask(
         name="shelly",
         executable=cmd,
-        args=args,
         output_spec=my_output_spec,
         resultsDir="outdir",
-    ).split("args")
+    ).split("args", args=args)
 
     results_function(shelly, plugin)
     for index, arg_dir in enumerate(args):
@@ -3429,10 +3421,9 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function, tmp_path):
     shelly = ShellCommandTask(
         name="shelly",
         executable=cmd,
-        args=args,
         output_spec=my_output_spec,
         cache_dir=tmp_path,
-    ).split("args")
+    ).split("args", args=args)
 
     res = results_function(shelly, plugin)
     for i in range(len(args)):
@@ -4968,8 +4959,8 @@ def test_shellspec_formatter_splitter_2(tmp_path):
     input_spec = spec_info(formatter_1)
     in1 = Split(["in11", "in12"])
     shelly = ShellCommandTask(
-        name="f", executable="executable", input_spec=input_spec, in1=in1, in2="in2"
-    ).split("in1")
+        name="f", executable="executable", input_spec=input_spec, in2="in2"
+    ).split("in1", in1=in1)
     assert shelly is not None
 
     # results = shelly.cmdline

@@ -431,7 +431,7 @@ class TypeParser(ty.Generic[T]):
 
         source_check = self.is_subclass if inspect.isclass(source) else self.is_instance
 
-        def matches(criteria):
+        def matches_criteria(criteria):
             return [
                 (src, tgt)
                 for src, tgt in criteria
@@ -444,7 +444,7 @@ class TypeParser(ty.Generic[T]):
             except AttributeError:
                 return t._name  # typing generics for Python < 3.10
 
-        if not matches(self.coercible):
+        if not matches_criteria(self.coercible):
             raise TypeError(
                 f"Cannot coerce {repr(source)} into {target} as the coercion doesn't match "
                 f"any of the explicit inclusion criteria: "
@@ -452,7 +452,7 @@ class TypeParser(ty.Generic[T]):
                     f"{type_name(s)} -> {type_name(t)}" for s, t in self.coercible
                 )
             )
-        matches_not_coercible = matches(self.not_coercible)
+        matches_not_coercible = matches_criteria(self.not_coercible)
         if matches_not_coercible:
             raise TypeError(
                 f"Cannot coerce {repr(source)} into {target} as it is explicitly "
@@ -464,13 +464,7 @@ class TypeParser(ty.Generic[T]):
             )
 
     @classmethod
-    def matches(
-        cls,
-        obj: ty.Type[ty.Any],
-        target: ty.Type[ty.Any],
-        coercible: ty.Optional[ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]] = None,
-        not_coercible: ty.Optional[ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]] = None,
-    ) -> bool:
+    def matches(cls, obj: ty.Type[ty.Any], target: ty.Type[ty.Any], **kwargs) -> bool:
         """Returns true if the provided type matches the pattern of the TypeParser
 
         Parameters
@@ -479,11 +473,8 @@ class TypeParser(ty.Generic[T]):
             the type to check
         target : type
             the target type to check against
-        coercible: list[tuple[type, type]], optional
-            determines the types that can be automatically coerced from one to the other, e.g. int->float
-        not_coercible: list[tuple[type, type]], optional
-            explicitly excludes some coercions from the coercible list,
-            e.g. str -> Sequence where coercible includes Sequence -> Sequence
+        **kwargs : dict[str, Any], optional
+            passed on to TypeParser.__init__
 
         Returns
         -------
@@ -491,11 +482,7 @@ class TypeParser(ty.Generic[T]):
             whether the type matches the target type factoring in sub-classes and coercible
             pairs
         """
-        if coercible is None:
-            coercible = []
-        if not_coercible is None:
-            not_coercible = []
-        parser = cls(target, coercible=coercible, not_coercible=not_coercible)
+        parser = cls(target, **kwargs)
         try:
             parser.coerce(obj)
         except TypeError:
@@ -504,11 +491,7 @@ class TypeParser(ty.Generic[T]):
 
     @classmethod
     def matches_type(
-        cls,
-        type_: ty.Type[ty.Any],
-        target: ty.Type[ty.Any],
-        coercible: ty.Optional[ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]] = None,
-        not_coercible: ty.Optional[ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]] = None,
+        cls, type_: ty.Type[ty.Any], target: ty.Type[ty.Any], **kwargs
     ) -> bool:
         """Returns true if the provided type matches the pattern of the TypeParser
 
@@ -518,11 +501,8 @@ class TypeParser(ty.Generic[T]):
             the type to check
         target : type
             the target type to check against
-        coercible: list[tuple[type, type]], optional
-            determines the types that can be automatically coerced from one to the other, e.g. int->float
-        not_coercible: list[tuple[type, type]], optional
-            explicitly excludes some coercions from the coercible list,
-            e.g. str -> Sequence where coercible includes Sequence -> Sequence
+        **kwargs : dict[str, Any], optional
+            passed on to TypeParser.__init__
 
         Returns
         -------
@@ -530,11 +510,7 @@ class TypeParser(ty.Generic[T]):
             whether the type matches the target type factoring in sub-classes and coercible
             pairs
         """
-        if coercible is None:
-            coercible = []
-        if not_coercible is None:
-            not_coercible = []
-        parser = cls(target, coercible=coercible, not_coercible=not_coercible)
+        parser = cls(target, **kwargs)
         try:
             parser.check_type(type_)
         except TypeError:
@@ -744,3 +720,37 @@ class TypeParser(ty.Generic[T]):
                 f"item types: {args}"
             )
         return args[0]
+
+    @classmethod
+    def nested_sequence_types(
+        cls, type_: ty.Type[ty.Any], only_splits: bool = False
+    ) -> ty.Tuple[ty.List[ty.Optional[ty.Type]], ty.Type]:
+        """Strips any Split types from the outside of the specified type and returns
+        the stripped type and the depth it was found at
+
+        Parameters
+        ----------
+        type_ : ty.Type[ty.Any]
+            the type to list the nested sequences of
+        only_splits : bool, optional
+            whether to only return nested splits, not all sequence types
+
+        Returns
+        -------
+        nested : list[Type[Sequence]]
+        inner_type : type
+            the inner type once all outer sequences are stripped
+        """
+        match_type = Split if only_splits else ty.Sequence
+        nested = []
+        while cls.is_subclass(type_, match_type) and not cls.is_subclass(type_, str):
+            origin = get_origin(type_)
+            # If type is a union, pick the first sequence type in the union
+            if origin is ty.Union:
+                for tp in get_args(type_):
+                    if cls.is_subclass(tp, ty.Sequence):
+                        type_ = tp
+                        break
+            nested.append(get_origin(type_))
+            type_ = cls.get_item_type(type_)
+        return nested, type_

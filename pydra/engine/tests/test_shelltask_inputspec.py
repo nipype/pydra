@@ -110,9 +110,8 @@ def test_shell_cmd_inputs_1_st():
         name="shelly",
         executable="executable",
         args="arg",
-        inpA=Split(["inp1", "inp2"]),
         input_spec=my_input_spec,
-    ).split("inpA")
+    ).split("inpA", inpA=["inp1", "inp2"])
     # cmdline should be a list
     # assert shelly.cmdline[0] == "executable inp1 arg"
     # assert shelly.cmdline[1] == "executable inp2 arg"
@@ -1933,8 +1932,7 @@ def test_shell_cmd_inputs_template_1_st():
         name="f",
         executable="executable",
         input_spec=my_input_spec,
-        inpA=inpA,
-    ).split("inpA")
+    ).split("inpA", inpA=inpA)
 
     # cmdline_list = shelly.cmdline
     # assert len(cmdline_list) == 2

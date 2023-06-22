@@ -84,9 +84,9 @@ def test_numpy_hash_3():
 
 def test_task_numpyinput_1(tmp_path: Path):
     """task with numeric numpy array as an input"""
-    nn = identity(name="NA", x=Split([np.array([1, 2]), np.array([3, 4])]))
+    nn = identity(name="NA")
     nn.cache_dir = tmp_path
-    nn.split("x")
+    nn.split(x=[np.array([1, 2]), np.array([3, 4])])
     # checking the results
     results = nn()
     assert (results[0].output.out == np.array([1, 2])).all()
@@ -95,12 +95,9 @@ def test_task_numpyinput_1(tmp_path: Path):
 
 def test_task_numpyinput_2(tmp_path: Path):
     """task with numpy array of type object as an input"""
-    nn = identity(
-        name="NA",
-        x=Split([np.array(["VAL1"], dtype=object), np.array(["VAL2"], dtype=object)]),
-    )
+    nn = identity(name="NA")
     nn.cache_dir = tmp_path
-    nn.split("x")
+    nn.split(x=[np.array(["VAL1"], dtype=object), np.array(["VAL2"], dtype=object)])
     # checking the results
     results = nn()
     assert (results[0].output.out == np.array(["VAL1"], dtype=object)).all()

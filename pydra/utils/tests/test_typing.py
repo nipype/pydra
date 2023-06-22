@@ -448,8 +448,12 @@ def test_matches_type_dict():
     assert TypeParser.matches_type(
         ty.Dict[Path, int], ty.Dict[str, float], coercible=COERCIBLE
     )
-    assert not TypeParser.matches_type(ty.Dict[Path, int], ty.Dict[str, int])
-    assert not TypeParser.matches_type(ty.Dict[Path, int], ty.Dict[str, float])
+    assert not TypeParser.matches_type(
+        ty.Dict[Path, int], ty.Dict[str, int], coercible=[]
+    )
+    assert not TypeParser.matches_type(
+        ty.Dict[Path, int], ty.Dict[str, float], coercible=[]
+    )
     assert not TypeParser.matches_type(
         ty.Dict[Path, float], ty.Dict[str, int], coercible=COERCIBLE
     )

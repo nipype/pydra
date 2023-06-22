@@ -128,7 +128,7 @@ def multiply(x: int, y: int) -> int:
 
 
 @mark.task
-def multiply_list(x: int, y: int) -> int:
+def multiply_list(x: list, y: int) -> list:
     return x * y
 
 

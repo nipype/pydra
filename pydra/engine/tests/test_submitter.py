@@ -156,8 +156,7 @@ def test_wf_with_state(plugin_dask_opt, tmpdir):
     wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
     wf.add(sleep_add_one(name="taskb", x=wf.taska.lzout.out))
 
-    wf.inputs.x = [1, 2, 3]
-    wf.split("x")
+    wf.split("x", x=[1, 2, 3])
     wf.set_output([("out", wf.taskb.lzout.out)])
     wf.cache_dir = tmpdir
 
