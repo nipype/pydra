@@ -491,9 +491,8 @@ def test_wf_5b_exception(tmpdir):
     wf.set_output([("out", wf.addsub.lzout.sum)])
     wf.cache_dir = tmpdir
 
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(Exception, match="are already set"):
         wf.set_output([("out", wf.addsub.lzout.sub)])
-    assert "is already set" in str(excinfo.value)
 
 
 def test_wf_6(plugin, tmpdir):
@@ -4980,21 +4979,12 @@ def test_rerun_errored(tmpdir, capfd):
     assert errors_found == 4
 
 
-def test_state_arrays_and_workflow_input_output_typing():
+def test_wf_state_arrays():
     wf = Workflow(
         name="test",
         input_spec={"x": ty.List[int], "y": int},
         output_spec={"alpha": int, "beta": ty.List[int]},
     )
-
-    with pytest.raises(
-        TypeError, match="Cannot coerce <class 'list'> into <class 'int'>"
-    ):
-        list_mult_sum(
-            scalar=wf.lzin.x,
-            in_list=wf.lzin.x,
-            name="A",
-        )
 
     wf.add(  # Split over workflow input "x" on "scalar" input
         list_mult_sum(
@@ -5003,19 +4993,20 @@ def test_state_arrays_and_workflow_input_output_typing():
         ).split(scalar=wf.lzin.x)
     )
 
-    wf.add(  # Workflow is still split over "x"
+    wf.add(  # Workflow is still split over "x", combined over "x" on out
         list_mult_sum(
             name="B",
             scalar=wf.A.lzout.sum,
             in_list=wf.A.lzout.products,
-        )
+        ).combine("A.scalar")
     )
 
-    wf.add(  # Workflow is combined over "x"
+    wf.add(  # Workflow "
         list_mult_sum(
             name="C",
             scalar=wf.lzin.y,
-        ).combine("A.scalar", in_list=wf.B.lzout.sum)
+            in_list=wf.B.lzout.sum,
+        )
     )
 
     wf.add(  # Workflow is split again, this time over C.products
@@ -5031,15 +5022,42 @@ def test_state_arrays_and_workflow_input_output_typing():
         )
     )
 
-    with pytest.raises(TypeError, match="don't match their declared types"):
-        wf.set_output(
-            [
-                ("alpha", wf.D.lzout.products),
-            ]
-        )
-
     wf.set_output([("alpha", wf.D.lzout.sum), ("beta", wf.D.lzout.products)])
 
     results = wf(x=[1, 2, 3, 4], y=10)
     assert results.outputs.alpha == 100000
     assert results.outputs.beta == [10000, 20000, 30000, 40000]
+
+
+def test_wf_input_output_typing():
+    wf = Workflow(
+        name="test",
+        input_spec={"x": int, "y": ty.List[int]},
+        output_spec={"alpha": int, "beta": ty.List[int]},
+    )
+
+    with pytest.raises(
+        TypeError, match="Cannot coerce <class 'list'> into <class 'int'>"
+    ):
+        list_mult_sum(
+            scalar=wf.lzin.y,
+            in_list=wf.lzin.y,
+            name="A",
+        )
+
+    wf.add(  # Split over workflow input "x" on "scalar" input
+        list_mult_sum(
+            scalar=wf.lzin.x,
+            in_list=wf.lzin.y,
+            name="A",
+        )
+    )
+
+    with pytest.raises(TypeError, match="don't match their declared types"):
+        wf.set_output(
+            [
+                ("alpha", wf.A.lzout.products),
+            ]
+        )
+
+    wf.set_output([("alpha", wf.A.lzout.sum), ("beta", wf.A.lzout.products)])

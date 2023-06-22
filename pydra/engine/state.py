@@ -127,6 +127,23 @@ class State:
         # updating splitter_rpn
         self._splitter_rpn_updates()
 
+    @property
+    def input_depth(self) -> int:
+        """Returns the depth of the split for the inputs to the node"""
+        if isinstance(self.splitter, (str, tuple)):
+            return 1
+        else:
+            return len(self.splitter)
+
+    @property
+    def output_depth(self) -> int:
+        """Returns the depth of the split for the inputs to the node"""
+        if isinstance(self.combiner, (str, tuple)):
+            increments = 1
+        else:
+            increments = len(self.combiner)
+        return self.input_depth - increments
+
     def _splitter_rpn_updates(self):
         """updating splitter_rpn and splitter_rpn_compact"""
         try:

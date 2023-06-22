@@ -612,7 +612,9 @@ class TaskBase:
                 if f"{self.name}.{inpt_name}" in splitter:  # type: ignore
                     if isinstance(inpt_val, LazyField):
                         new_val = inpt_val.split()
-                    elif isinstance(inpt_val, ty.Sequence):
+                    elif isinstance(inpt_val, ty.Iterable) and not isinstance(
+                        inpt_val, (ty.Mapping, str)
+                    ):
                         new_val = StateArray(inpt_val)
                     else:
                         raise TypeError(

@@ -577,6 +577,7 @@ class TypeParser(ty.Generic[T]):
         cls,
         klass: ty.Type[ty.Any],
         candidates: ty.Union[ty.Type[ty.Any], ty.Iterable[ty.Type[ty.Any]]],
+        any_ok: bool = False,
     ) -> bool:
         """Checks whether the class a is either the same as b, a subclass of b or b is
         typing.Any, extending built-in issubclass to check nested type args
@@ -586,7 +587,10 @@ class TypeParser(ty.Generic[T]):
         klass : type
             the klass to check whether it is a subclass of one of the candidates
         candidates : type or ty.Iterable[type]
-            the candidate types to check the object against"""
+            the candidate types to check the object against
+        any_ok : bool
+            whether klass=typing.Any should return True or False
+        """
         if not isinstance(candidates, ty.Iterable):
             candidates = [candidates]
 
@@ -600,7 +604,10 @@ class TypeParser(ty.Generic[T]):
                     return True
             else:
                 if klass is ty.Any:
-                    return True
+                    if ty.Any in candidates:
+                        return True
+                    else:
+                        return any_ok
                 origin = get_origin(klass)
                 if origin is ty.Union:
                     args = get_args(klass)

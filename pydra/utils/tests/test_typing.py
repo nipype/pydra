@@ -433,54 +433,58 @@ def test_check_missing_type_args():
         TypeParser(ty.List[int]).check_type(dict)
 
 
-def test_matches_union():
-    assert TypeParser.matches(ty.Union[int, bool, str], ty.Union[int, bool, str])
-    assert TypeParser.matches(ty.Union[int, bool], ty.Union[int, bool, str])
-    assert not TypeParser.matches(ty.Union[int, bool, str], ty.Union[int, bool])
+def test_matches_type_union():
+    assert TypeParser.matches_type(ty.Union[int, bool, str], ty.Union[int, bool, str])
+    assert TypeParser.matches_type(ty.Union[int, bool], ty.Union[int, bool, str])
+    assert not TypeParser.matches_type(ty.Union[int, bool, str], ty.Union[int, bool])
 
 
-def test_matches_dict():
+def test_matches_type_dict():
     COERCIBLE = [(str, Path), (Path, str), (int, float)]
 
-    assert TypeParser.matches(
+    assert TypeParser.matches_type(
         ty.Dict[Path, int], ty.Dict[str, int], coercible=COERCIBLE
     )
-    assert TypeParser.matches(
+    assert TypeParser.matches_type(
         ty.Dict[Path, int], ty.Dict[str, float], coercible=COERCIBLE
     )
-    assert not TypeParser.matches(ty.Dict[Path, int], ty.Dict[str, int])
-    assert not TypeParser.matches(ty.Dict[Path, int], ty.Dict[str, float])
-    assert not TypeParser.matches(
+    assert not TypeParser.matches_type(ty.Dict[Path, int], ty.Dict[str, int])
+    assert not TypeParser.matches_type(ty.Dict[Path, int], ty.Dict[str, float])
+    assert not TypeParser.matches_type(
         ty.Dict[Path, float], ty.Dict[str, int], coercible=COERCIBLE
     )
-    assert not TypeParser.matches(
+    assert not TypeParser.matches_type(
         ty.Tuple[str, int], ty.Dict[str, int], coercible=COERCIBLE
     )
 
 
-def test_matches_type():
-    assert TypeParser.matches(type, type)
-    assert not TypeParser.matches(object, type)
+def test_matches_type_type():
+    assert TypeParser.matches_type(type, type)
+    assert not TypeParser.matches_type(object, type)
 
 
-def test_matches_tuple():
-    assert TypeParser.matches(ty.Tuple[int], ty.Tuple[int])
-    assert TypeParser.matches(ty.Tuple[int], ty.Tuple[float], coercible=[(int, float)])
-    assert not TypeParser.matches(
+def test_matches_type_tuple():
+    assert TypeParser.matches_type(ty.Tuple[int], ty.Tuple[int])
+    assert TypeParser.matches_type(
+        ty.Tuple[int], ty.Tuple[float], coercible=[(int, float)]
+    )
+    assert not TypeParser.matches_type(
         ty.Tuple[float], ty.Tuple[int], coercible=[(int, float)]
     )
-    assert TypeParser.matches(ty.Tuple[int, int], ty.Tuple[int, int])
-    assert not TypeParser.matches(ty.Tuple[int, int], ty.Tuple[int])
-    assert not TypeParser.matches(ty.Tuple[int], ty.Tuple[int, int])
+    assert TypeParser.matches_type(ty.Tuple[int, int], ty.Tuple[int, int])
+    assert not TypeParser.matches_type(ty.Tuple[int, int], ty.Tuple[int])
+    assert not TypeParser.matches_type(ty.Tuple[int], ty.Tuple[int, int])
 
 
-def test_matches_tuple_ellipsis():
-    assert TypeParser.matches(ty.Tuple[int], ty.Tuple[int, ...])
-    assert TypeParser.matches(ty.Tuple[int, int], ty.Tuple[int, ...])
-    assert not TypeParser.matches(ty.Tuple[int, float], ty.Tuple[int, ...])
-    assert not TypeParser.matches(ty.Tuple[int, ...], ty.Tuple[int])
-    assert TypeParser.matches(ty.Tuple[int], ty.List[int], coercible=[(tuple, list)])
-    assert TypeParser.matches(
+def test_matches_type_tuple_ellipsis():
+    assert TypeParser.matches_type(ty.Tuple[int], ty.Tuple[int, ...])
+    assert TypeParser.matches_type(ty.Tuple[int, int], ty.Tuple[int, ...])
+    assert not TypeParser.matches_type(ty.Tuple[int, float], ty.Tuple[int, ...])
+    assert not TypeParser.matches_type(ty.Tuple[int, ...], ty.Tuple[int])
+    assert TypeParser.matches_type(
+        ty.Tuple[int], ty.List[int], coercible=[(tuple, list)]
+    )
+    assert TypeParser.matches_type(
         ty.Tuple[int, ...], ty.List[int], coercible=[(tuple, list)]
     )
 

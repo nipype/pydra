@@ -123,12 +123,17 @@ def fun_div(a, b):
 
 
 @mark.task
-def multiply(x, y):
+def multiply(x: int, y: int) -> int:
     return x * y
 
 
 @mark.task
-def add2(x):
+def multiply_list(x: int, y: int) -> int:
+    return x * y
+
+
+@mark.task
+def add2(x: int) -> int:
     if x == 1 or x == 12:
         time.sleep(1)
     return x + 2

@@ -104,10 +104,7 @@ class BaseSpec:
             value = getattr(self, field.name)
             if isinstance(value, LazyField):
                 resolved_value = value.get_value(wf, state_index=state_index)
-                if value.combined:
-                    assert isinstance(resolved_value, StateArray)
-                    resolved_value = list(resolved_value)
-                elif TypeParser.is_subclass(value.type, StateArray):
+                if TypeParser.is_subclass(value.type, StateArray):
                     resolved_value = StateArray(resolved_value)
                 temp_values[field.name] = resolved_value
         for field, value in temp_values.items():
@@ -692,6 +689,9 @@ class LazyInterface:
                 f"Task {self._node.name} has no {self._attr_type} attribute {name}"
             )
         type_ = self._get_type(name)
+        if self._node.state:
+            for _ in range(self._node.state.output_depth):
+                type_ = StateArray[type_]
         return LazyField[type_](
             name=self._node.name,
             field=name,
@@ -822,7 +822,7 @@ class LazyField(ty.Generic[T]):
             type=type_,
         )
 
-    def combine(self) -> "LazyField[StateArray[T]]":
+    def combine(self) -> "LazyField":
         """ "Combines" the lazy field over an array of nodes by wrapping the type of the
         lazy field in a list to signify that it will be actually a list of
         values of that type
