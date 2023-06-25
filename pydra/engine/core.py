@@ -206,6 +206,7 @@ class TaskBase:
         self.plugin = None
         self.hooks = TaskHook()
         self._errored = False
+        self._lzout = None
 
     def __str__(self):
         return self.name
@@ -228,10 +229,12 @@ class TaskBase:
         state["inputs"] = make_klass(state["input_spec"])(**state["inputs"])
         self.__dict__.update(state)
 
-    def __getattr__(self, name):
-        if name == "lzout":  # lazy output
-            return LazyOut(self)
-        return self.__getattribute__(name)
+    @property
+    def lzout(self):
+        if self._lzout:
+            return self._lzout
+        self._lzout = LazyOut(self)
+        return self._lzout
 
     def help(self, returnhelp=False):
         """Print class help."""
@@ -267,17 +270,19 @@ class TaskBase:
         return self._checksum
 
     @property
-    def splits(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
-        """Returns the depth of the split for the inputs to the node"""
+    def _splits(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
+        """Returns the states over which the inputs of the task are split"""
         splits = set()
-        for inpt in attr.asdict(self.inputs, recurse=False).values():
-            if isinstance(inpt, LazyField):
+        for field, inpt in attr.asdict(self.inputs, recurse=False).items():
+            if isinstance(inpt, Split):
+                splits.add(f"{self.name}.{field}")
+            elif isinstance(inpt, LazyField):
                 splits.update(inpt.splits)
         return splits
 
     @property
-    def combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
-        """Returns the depth of the split for the inputs to the node"""
+    def _combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
+        """Returns the states over which the outputs of the task are combined"""
         combiner = (
             self.state.combiner
             if self.state is not None
@@ -616,6 +621,10 @@ class TaskBase:
         self : TaskBase
             a reference to the task
         """
+        if self._lzout:
+            raise Exception(
+                f"Cannot split {self} as its output interface has already been accessed"
+            )
         if splitter is None and split_inputs:
             splitter = list(split_inputs)
         elif splitter:
@@ -702,6 +711,11 @@ class TaskBase:
         self : TaskBase
             a reference to the task
         """
+        if self._lzout:
+            raise Exception(
+                f"Cannot combine {self} as its output interface has already been "
+                "accessed"
+            )
         if not isinstance(combiner, (str, list)):
             raise Exception("combiner has to be a string or a list")
         combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
@@ -1077,17 +1091,21 @@ class Workflow(TaskBase):
 
         self.graph = DiGraph(name=name)
         self.name2obj = {}
+        self._lzin = None
 
         # store output connections
         self._connections = None
         # propagating rerun if task_rerun=True
         self.propagate_rerun = propagate_rerun
 
+    @property
+    def lzin(self):
+        if self._lzin:
+            return self._lzin
+        self._lzin = LazyIn(self)
+        return self._lzin
+
     def __getattr__(self, name):
-        if name == "lzin":
-            return LazyIn(self)
-        if name == "lzout":
-            return super().__getattr__(name)
         if name in self.name2obj:
             return self.name2obj[name]
         return self.__getattribute__(name)
@@ -1103,9 +1121,9 @@ class Workflow(TaskBase):
         return self.graph.sorted_nodes
 
     @property
-    def splits(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
+    def _splits(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
         """Returns the depth of the split for the inputs to the node"""
-        splits = super().splits
+        splits = super()._splits
         if self.state:
             if isinstance(self.state.splitter, str):
                 splits |= set([self.state.splitter])
@@ -1114,9 +1132,9 @@ class Workflow(TaskBase):
         return splits
 
     @property
-    def combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
+    def _combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
         """Returns the depth of the split for the inputs to the node"""
-        combines = super().combines
+        combines = super()._combines
         if self.state:
             if isinstance(self.state.combiner, str):
                 combines |= set([self.state.combiner])
@@ -1341,6 +1359,8 @@ class Workflow(TaskBase):
             single or list of tuples linking the name of the output to a lazy output
             of a task in the workflow.
         """
+        from ..utils.typing import TypeParser
+
         if self._connections is None:
             self._connections = []
         if isinstance(connections, tuple) and len(connections) == 2:
@@ -1363,6 +1383,7 @@ class Workflow(TaskBase):
             }
         else:
             output_types = {}
+        # Check for type matches with explicitly defined outputs
         conflicting = []
         type_mismatches = []
         for conn_name, lazy_field in new_connections:
@@ -1394,6 +1415,8 @@ class Workflow(TaskBase):
                 help_string = f"all outputs from {task_nm}"
                 fields.append((wf_out_nm, dict, {"help_string": help_string}))
             else:
+                from ..utils.typing import TypeParser
+
                 # getting information about the output field from the task output_spec
                 # providing proper type and some help string
                 task_output_spec = getattr(self, task_nm).output_spec
@@ -1401,7 +1424,11 @@ class Workflow(TaskBase):
                 help_string = (
                     f"{out_fld.metadata.get('help_string', '')} (from {task_nm})"
                 )
-                fields.append((wf_out_nm, out_fld.type, {"help_string": help_string}))
+                if TypeParser.get_origin(lf.type) is Split:
+                    type_ = TypeParser.get_item_type(lf.type)
+                else:
+                    type_ = lf.type
+                fields.append((wf_out_nm, type_, {"help_string": help_string}))
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
         logger.info("Added %s to %s", self.output_spec, self)
 
@@ -1418,7 +1445,7 @@ class Workflow(TaskBase):
             try:
                 val_out = val.get_value(self)
                 output_wf[name] = val_out
-            except (ValueError, AttributeError):
+            except (ValueError, AttributeError) as e:
                 output_wf[name] = None
                 # checking if the tasks has predecessors that raises error
                 if isinstance(getattr(self, val.name)._errored, list):
@@ -1431,8 +1458,12 @@ class Workflow(TaskBase):
                             el / "_error.pklz"
                             for el in getattr(self, val.name).output_dir
                         ]
+                        if not all(e.exists() for e in err_file):
+                            raise e
                     else:
                         err_file = getattr(self, val.name).output_dir / "_error.pklz"
+                        if not Path(err_file).exists():
+                            raise e
                     raise ValueError(
                         f"Task {val.name} raised an error, full crash report is here: "
                         f"{err_file}"

@@ -681,37 +681,18 @@ class LazyInterface:
     _attr_type: str
 
     def __getattr__(self, name):
+        if name in ("_node", "_attr_type", "_field_names"):
+            raise AttributeError(f"{name} hasn't been set yet")
         if name not in self._field_names:
             raise AttributeError(
                 f"Task {self._node.name} has no {self._attr_type} attribute {name}"
             )
-        from ..utils.typing import TypeParser
-
-        def enclose_in_splits(tp: type, depth: int) -> Split:
-            "Enclose a type in nested splits of depth 'depth'"
-            for _ in range(depth):
-                tp = Split[tp]  # type: ignore
-            return tp  # type: ignore
 
         type_ = self._get_type(name)
         task = self._node
-        splits = task.splits
-        # if isinstance(task, Workflow) and task._connections:
-        #     # Add in any uncombined splits from the output field
-        #     conn_lf = next(lf for n, lf in task._connections if n == name)
-        #     splits |= conn_lf.splits
-        type_ = enclose_in_splits(type_, len(splits))
-        for combiner in self._node.combines:
-            # Convert Split type to List type
-            if not TypeParser.is_subclass(type_, Split):
-                raise ValueError(
-                    f"Attempting to combine a task, '{self._node.name}' that hasn't "
-                    "been split, either locally or in upstream nodes"
-                )
-            nested_splits, split_type = TypeParser.nested_sequence_types(
-                type_, only_splits=True
-            )
-            type_ = enclose_in_splits(ty.List[split_type], len(nested_splits) - 1)
+        splits = task._splits
+        combines = task._combines
+        for combiner in combines:
             try:
                 splits.remove(combiner)
             except KeyError:
@@ -720,6 +701,12 @@ class LazyInterface:
                     s for s in splits if combiner in self._node._unwrap_splitter(s)
                 )
                 splits.remove(splitter)
+        if combines:
+            type_ = ty.List[type_]
+        if splits:
+            # for _ in splits:
+            #     type_ = Split[type_]
+            type_ = Split[type_]
 
         return LazyField[type_](
             name=self._node.name,
@@ -840,6 +827,8 @@ class LazyField(ty.Generic[T]):
                             "the node errored"
                         )
                     val = res.get_output_field(self.field)
+                    if nested_seqs == [Split]:
+                        val = Split(val)
                 return val
 
             value = get_nested_results(result, nested_seqs=nested_sequences)
@@ -927,6 +916,9 @@ class Split(ty.List[T]):
     multiple nodes of the same task. Used in type-checking to differentiate between list
     types and values for multiple nodes
     """
+
+    def __repr__(self):
+        return f"{type(self).__name__}(" + ", ".join(repr(i) for i in self) + ")"
 
 
 def donothing(*args, **kwargs):

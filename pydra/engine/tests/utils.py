@@ -133,6 +133,11 @@ def multiply_list(x: list, y: int) -> list:
 
 
 @mark.task
+def multiply_mixed(x: list, y: int) -> list:
+    return x * y
+
+
+@mark.task
 def add2(x: int) -> int:
     if x == 1 or x == 12:
         time.sleep(1)

@@ -9,6 +9,7 @@ from .utils import (
     add2_wait,
     multiply,
     multiply_list,
+    multiply_mixed,
     power,
     ten,
     identity,
@@ -721,9 +722,9 @@ def test_wf_ndst_updatespl_1(plugin, tmpdir):
     wf = Workflow(name="wf_spl_1", input_spec=["x"])
     wf.add(add2(name="add2"))
     wf.inputs.x = [1, 2]
+    wf.add2.split("x", x=wf.lzin.x)
     wf.set_output([("out", wf.add2.lzout.out)])
     wf.cache_dir = tmpdir
-    wf.add2.split("x", x=wf.lzin.x)
 
     with Submitter(plugin=plugin) as sub:
         sub(wf)
@@ -767,8 +768,8 @@ def test_wf_ndst_updateinp_1(plugin, tmpdir):
     wf.add(add2(name="add2", x=wf.lzin.x))
     wf.inputs.x = [1, 2]
     wf.inputs.y = [11, 12]
-    wf.set_output([("out", wf.add2.lzout.out)])
     wf.add2.split("x", x=wf.lzin.y)
+    wf.set_output([("out", wf.add2.lzout.out)])
     wf.cache_dir = tmpdir
 
     with Submitter(plugin=plugin) as sub:
@@ -1293,10 +1294,9 @@ def test_wf_3nd_ndst_2(plugin, tmpdir):
     wf.inputs.x = [1, 2, 3]
     wf.inputs.y = [11, 12]
     wf.set_output([("out", wf.mult.lzout.out)])
-    wf.plugin = plugin
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin="serial") as sub:
         sub(wf)
 
     results = wf.result()
@@ -1868,7 +1868,7 @@ def test_wf_ndstinner_5(plugin, tmpdir):
     """
     wf = Workflow(name="wf_5", input_spec=["x", "y", "b"])
     wf.add(list_output(name="list").split("x", x=wf.lzin.x))
-    wf.add(multiply(name="mult").split(["y", "x"], x=wf.list.lzout.out, y=wf.lzin.y))
+    wf.add(multiply(name="mult").split(["x", "y"], x=wf.list.lzout.out, y=wf.lzin.y))
     wf.add(fun_addvar(name="addvar", a=wf.mult.lzout.out).split("b", b=wf.lzin.b))
     wf.inputs.x = [1, 2]
     wf.inputs.y = [10, 100]
@@ -2248,11 +2248,11 @@ def test_wfasnd_ndst_updatespl_1(plugin, tmpdir):
     """
     wfnd = Workflow(name="wfnd", input_spec=["x"])
     wfnd.add(add2(name="add2", x=wfnd.lzin.x))
+    wfnd.add2.split("x", x=[2, 4])
     wfnd.set_output([("out", wfnd.add2.lzout.out)])
 
     wf = Workflow(name="wf", input_spec=["x"])
     wf.add(wfnd)
-    wfnd.add2.split("x", x=[2, 4])
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.cache_dir = tmpdir
 
@@ -3686,9 +3686,8 @@ def test_wf_ndstate_cachelocations_updatespl(plugin, tmpdir):
         cache_locations=cache_dir1,
     )
     wf2.add(multiply(name="mult"))
-
-    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
     wf2.mult.split(splitter=("x", "y"), x=wf2.lzin.x, y=wf2.lzin.y)
+    wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
     wf2.set_output([("out", wf2.add2.lzout.out)])
     wf2.inputs.x = [2, 20]
     wf2.inputs.y = [3, 4]

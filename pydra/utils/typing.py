@@ -754,3 +754,6 @@ class TypeParser(ty.Generic[T]):
             nested.append(get_origin(type_))
             type_ = cls.get_item_type(type_)
         return nested, type_
+
+    get_origin = staticmethod(get_origin)
+    get_args = staticmethod(get_args)

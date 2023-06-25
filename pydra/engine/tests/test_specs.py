@@ -98,8 +98,8 @@ class NodeTesting:
         self.input_spec = InpSpec()
         self.output_spec = OutSpec()
         self.output_names = ["out_a"]
-        self.splits = set()
-        self.combines = set()
+        self._splits = set()
+        self._combines = set()
 
     def result(self, state_index=None):
         class Output:

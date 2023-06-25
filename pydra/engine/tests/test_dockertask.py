@@ -1326,6 +1326,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
     )
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"])
+    wf.split(file=[str(file_1), str(file_2)])
     wf.inputs.cmd = cmd
 
     docky = DockerTask(
@@ -1336,7 +1337,6 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
         strip=True,
     )
     wf.add(docky)
-    wf.split(file=[str(file_1), str(file_2)])
 
     wf.set_output([("out", wf.docky.lzout.stdout)])
 
