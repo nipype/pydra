@@ -270,13 +270,24 @@ class TaskBase:
         return self._checksum
 
     @property
-    def _splits(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
+    def _splits(self) -> ty.Set[ty.Tuple[ty.Tuple[str, ...], ...]]:
         """Returns the states over which the inputs of the task are split"""
         splits = set()
-        for field, inpt in attr.asdict(self.inputs, recurse=False).items():
-            if isinstance(inpt, Split):
-                splits.add(f"{self.name}.{field}")
-            elif isinstance(inpt, LazyField):
+        if self.state and self.state.splitter:
+            # Ensure that splits is of tuple[tuple[str, ...], ...] form
+            splitter = self.state.splitter
+            if isinstance(splitter, str):
+                splitter = (splitter,)
+            if isinstance(splitter, tuple):
+                splitter = (splitter,)  # type: ignore
+            else:
+                assert isinstance(splitter, list)
+                # convert to frozenset to differentiate from tuple, yet still be hashable
+                # (NB: order of fields in list splitters aren't relevant)
+                splitter = tuple(splitter)
+            splits.add(splitter)
+        for inpt in attr.asdict(self.inputs, recurse=False).values():
+            if isinstance(inpt, LazyField):
                 splits.update(inpt.splits)
         return splits
 
@@ -649,7 +660,7 @@ class TaskBase:
                 new_val: ty.Any
                 if f"{self.name}.{inpt_name}" in splitter:  # type: ignore
                     if isinstance(inpt_val, LazyField):
-                        new_val = inpt_val.split(splitter)
+                        new_val = inpt_val.split()
                     elif isinstance(inpt_val, ty.Iterable) and not isinstance(
                         inpt_val, (ty.Mapping, str)
                     ):
@@ -712,7 +723,7 @@ class TaskBase:
             a reference to the task
         """
         if self._lzout:
-            raise Exception(
+            raise RuntimeError(
                 f"Cannot combine {self} as its output interface has already been "
                 "accessed"
             )

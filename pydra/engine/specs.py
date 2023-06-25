@@ -4,6 +4,7 @@ import typing as ty
 import inspect
 import re
 import os
+from copy import copy
 from glob import glob
 import attr
 from fileformats.generic import (
@@ -687,27 +688,24 @@ class LazyInterface:
             raise AttributeError(
                 f"Task {self._node.name} has no {self._attr_type} attribute {name}"
             )
-
         type_ = self._get_type(name)
-        task = self._node
-        splits = task._splits
-        combines = task._combines
-        for combiner in combines:
-            try:
-                splits.remove(combiner)
-            except KeyError:
-                # For combinations referring to only one field in a nested splitter spec
-                splitter = next(
-                    s for s in splits if combiner in self._node._unwrap_splitter(s)
-                )
-                splits.remove(splitter)
-        if combines:
+        splits = self._node._splits
+        combines = self._node._combines
+        if self._attr_type == "output" and combines:
+            # Wrap type in list which holds the combined items
             type_ = ty.List[type_]
-        if splits:
-            # for _ in splits:
-            #     type_ = Split[type_]
+            # Iterate through splits to remove any splits which are removed by the combiner
+            for splitter in copy(splits):
+                remaining = tuple(
+                    s for s in splitter if not any(x in combines for x in s)
+                )
+                if remaining != splitter:
+                    splits.remove(splitter)
+                    if remaining:
+                        splits.add(remaining)
+        # Wrap the type in nested Split objects
+        for _ in splits:
             type_ = Split[type_]
-
         return LazyField[type_](
             name=self._node.name,
             field=name,
@@ -753,7 +751,7 @@ class LazyOut(LazyInterface):
         return self._node.output_names + ["all_"]
 
 
-TypeOrAny = ty.Union[ty.Type[ty.Any], ty.Any]
+TypeOrAny = ty.Union[ty.Type[T], ty.Any]
 Splitter = ty.Union[str, ty.Tuple[str, ...]]
 
 
@@ -765,7 +763,13 @@ class LazyField(ty.Generic[T]):
     field: str
     attr_type: str
     type: TypeOrAny
-    splits: ty.Set[Splitter] = attr.field(factory=set)
+    # Set of splitters that have been applied to the lazy field. Note that the splitter
+    # specifications are transformed to a tuple[tuple[str, ...], ...] form where the
+    # outer tuple is the outer product, the inner tuple are inner products (where either
+    # product can be of length==1)
+    splits: ty.FrozenSet[ty.Tuple[ty.Tuple[str, ...], ...]] = attr.field(
+        factory=frozenset, converter=frozenset
+    )
 
     def __repr__(self):
         return f"LF('{self.name}', '{self.field}', {self.type})"
@@ -853,9 +857,10 @@ class LazyField(ty.Generic[T]):
             field=self.field,
             attr_type=self.attr_type,
             type=new_type,
+            splits=self.splits,
         )
 
-    def split(self, splitter: Splitter) -> "LazyField":
+    def split(self) -> "LazyField":
         """ "Splits" the lazy field over an array of nodes by replacing the sequence type
         of the lazy field with Split to signify that it will be "split" across
 
@@ -875,19 +880,12 @@ class LazyField(ty.Generic[T]):
                 add_exc_note(e, f"Attempting to split {self} over multiple nodes")
                 raise e
             type_ = Split[item_type]  # type: ignore
-        if isinstance(splitter, list):
-            splits = set(splitter)
-        elif splitter is not None:
-            splits = set([splitter])
-        else:
-            splits = []
-        splits |= self.splits
         return LazyField[type_](
             name=self.name,
             field=self.field,
             attr_type=self.attr_type,
             type=type_,
-            splits=splits,
+            splits=self.splits,
         )
 
     # def combine(self, combiner=None) -> "LazyField":
