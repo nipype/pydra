@@ -1,6 +1,7 @@
 from pathlib import Path
 import typing as ty
 import os
+import attrs
 from copy import deepcopy
 
 from ..specs import (
@@ -79,12 +80,12 @@ def test_singularity():
 
 
 class NodeTesting:
-    def __init__(self):
-        class Input:
-            def __init__(self):
-                self.inp_a = "A"
-                self.inp_b = "B"
+    @attrs.define()
+    class Input:
+        inp_a: str = "A"
+        inp_b: str = "B"
 
+    def __init__(self):
         class InpSpec:
             def __init__(self):
                 self.fields = [("inp_a", int), ("inp_b", int)]
@@ -94,12 +95,11 @@ class NodeTesting:
                 self.fields = [("out_a", int)]
 
         self.name = "tn"
-        self.inputs = Input()
+        self.inputs = self.Input()
         self.input_spec = InpSpec()
         self.output_spec = OutSpec()
         self.output_names = ["out_a"]
-        self._splits = set()
-        self._combines = set()
+        self.state = None
 
     def result(self, state_index=None):
         class Output:

@@ -776,6 +776,8 @@ class LazyIn(LazyInterface):
         attr = next(t for n, t in self._node.input_spec.fields if n == name)
         if attr is None:
             return ty.Any
+        elif inspect.isclass(attr):
+            return attr
         else:
             return attr.type
 
