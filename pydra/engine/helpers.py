@@ -599,7 +599,7 @@ def load_task(task_pkl, ind=None):
     if ind is not None:
         ind_inputs = task.get_input_el(ind)
         task.inputs = attr.evolve(task.inputs, **ind_inputs)
-        task.pre_split = True
+        task._pre_split = True
         task.state = None
         # resetting uid for task
         task._uid = uuid4().hex

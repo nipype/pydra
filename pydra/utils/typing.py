@@ -722,9 +722,7 @@ class TypeParser(ty.Generic[T]):
         return args[0]
 
     @classmethod
-    def nested_sequence_types(
-        cls, type_: ty.Type[ty.Any], only_splits: bool = False
-    ) -> ty.Tuple[ty.List[ty.Optional[ty.Type]], ty.Type]:
+    def strip_splits(cls, type_: ty.Type[ty.Any]) -> ty.Tuple[ty.Type, int]:
         """Strips any Split types from the outside of the specified type and returns
         the stripped type and the depth it was found at
 
@@ -737,13 +735,13 @@ class TypeParser(ty.Generic[T]):
 
         Returns
         -------
-        nested : list[Type[Sequence]]
         inner_type : type
             the inner type once all outer sequences are stripped
+        depth : int
+            the number of splits outside the inner_type
         """
-        match_type = Split if only_splits else ty.Sequence
-        nested = []
-        while cls.is_subclass(type_, match_type) and not cls.is_subclass(type_, str):
+        depth = 0
+        while cls.is_subclass(type_, Split) and not cls.is_subclass(type_, str):
             origin = get_origin(type_)
             # If type is a union, pick the first sequence type in the union
             if origin is ty.Union:
@@ -751,9 +749,9 @@ class TypeParser(ty.Generic[T]):
                     if cls.is_subclass(tp, ty.Sequence):
                         type_ = tp
                         break
-            nested.append(get_origin(type_))
             type_ = cls.get_item_type(type_)
-        return nested, type_
+            depth += 1
+        return type_, depth
 
     get_origin = staticmethod(get_origin)
     get_args = staticmethod(get_args)

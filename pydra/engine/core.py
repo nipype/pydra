@@ -275,17 +275,7 @@ class TaskBase:
         splits = set()
         if self.state and self.state.splitter:
             # Ensure that splits is of tuple[tuple[str, ...], ...] form
-            splitter = self.state.splitter
-            if isinstance(splitter, str):
-                splitter = (splitter,)
-            if isinstance(splitter, tuple):
-                splitter = (splitter,)  # type: ignore
-            else:
-                assert isinstance(splitter, list)
-                # convert to frozenset to differentiate from tuple, yet still be hashable
-                # (NB: order of fields in list splitters aren't relevant)
-                splitter = tuple(splitter)
-            splits.add(splitter)
+            splits.add(LazyField.sanitize_splitter(self.state.splitter))
         for inpt in attr.asdict(self.inputs, recurse=False).values():
             if isinstance(inpt, LazyField):
                 splits.update(inpt.splits)
@@ -660,7 +650,7 @@ class TaskBase:
                 new_val: ty.Any
                 if f"{self.name}.{inpt_name}" in splitter:  # type: ignore
                     if isinstance(inpt_val, LazyField):
-                        new_val = inpt_val.split()
+                        new_val = inpt_val.split(splitter)
                     elif isinstance(inpt_val, ty.Iterable) and not isinstance(
                         inpt_val, (ty.Mapping, str)
                     ):
@@ -1103,6 +1093,9 @@ class Workflow(TaskBase):
         self.graph = DiGraph(name=name)
         self.name2obj = {}
         self._lzin = None
+        self._pre_split = (
+            False  # To signify if the workflow has been split on task load or not
+        )
 
         # store output connections
         self._connections = None
@@ -1132,14 +1125,11 @@ class Workflow(TaskBase):
         return self.graph.sorted_nodes
 
     @property
-    def _splits(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
+    def _splits(self) -> ty.Set[ty.Tuple[ty.Tuple[str, ...], ...]]:
         """Returns the depth of the split for the inputs to the node"""
         splits = super()._splits
         if self.state:
-            if isinstance(self.state.splitter, str):
-                splits |= set([self.state.splitter])
-            elif self.state.splitter:
-                splits |= set(self.state.splitter)
+            splits.add(LazyField.sanitize_splitter(self.state.splitter))
         return splits
 
     @property

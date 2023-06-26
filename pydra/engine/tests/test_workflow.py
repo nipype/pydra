@@ -1868,7 +1868,7 @@ def test_wf_ndstinner_5(plugin, tmpdir):
     """
     wf = Workflow(name="wf_5", input_spec=["x", "y", "b"])
     wf.add(list_output(name="list").split("x", x=wf.lzin.x))
-    wf.add(multiply(name="mult").split(["x", "y"], x=wf.list.lzout.out, y=wf.lzin.y))
+    wf.add(multiply(name="mult").split(["y", "x"], x=wf.list.lzout.out, y=wf.lzin.y))
     wf.add(fun_addvar(name="addvar", a=wf.mult.lzout.out).split("b", b=wf.lzin.b))
     wf.inputs.x = [1, 2]
     wf.inputs.y = [10, 100]

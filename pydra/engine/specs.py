@@ -15,7 +15,8 @@ from fileformats.generic import (
 import pydra
 from .helpers_file import template_update_single
 from ..utils.hash import hash_function
-from ..utils.misc import add_exc_note
+
+# from ..utils.misc import add_exc_note
 
 
 T = ty.TypeVar("T")
@@ -703,8 +704,8 @@ class LazyInterface:
                     splits.remove(splitter)
                     if remaining:
                         splits.add(remaining)
-        # Wrap the type in nested Split objects
-        for _ in splits:
+        # Wrap the type in a nested Split type
+        if splits:
             type_ = Split[type_]
         return LazyField[type_](
             name=self._node.name,
@@ -795,35 +796,28 @@ class LazyField(ty.Generic[T]):
 
         if self.attr_type == "input":
             value = getattr(wf.inputs, self.field)
-            if TypeParser.is_subclass(self.type, Split) and not getattr(
-                wf, "pre_split", False
-            ):
-                nested_splits, _ = TypeParser.nested_sequence_types(
-                    self.type, only_splits=True
-                )
+            if TypeParser.is_subclass(self.type, Split) and not wf._pre_split:
+                _, split_depth = TypeParser.strip_splits(self.type)
 
                 def apply_splits(obj, depth):
                     if depth < 1:
                         return obj
                     return Split(apply_splits(i, depth - 1) for i in obj)
 
-                value = apply_splits(value, len(nested_splits))
+                value = apply_splits(value, split_depth)
         elif self.attr_type == "output":
             node = getattr(wf, self.name)
             result = node.result(state_index=state_index)
-            nested_sequences, _ = TypeParser.nested_sequence_types(self.type)
+            _, split_depth = TypeParser.strip_splits(self.type)
 
-            def get_nested_results(res, nested_seqs):
+            def get_nested_results(res, depth: int):
                 if isinstance(res, list):
-                    if not nested_seqs:
-                        raise ValueError(
-                            f"Declared type for field {self.name} in {self.name}, {self.type}, "
-                            f"does not match the level of nested results returned {result}"
+                    if not depth:
+                        val = [r.get_output_field(self.field) for r in res]
+                    else:
+                        val = Split(
+                            get_nested_results(res=r, depth=depth - 1) for r in res
                         )
-                    val = nested_seqs[0](
-                        get_nested_results(res=r, nested_seqs=nested_seqs[1:])
-                        for r in res
-                    )
                 else:
                     if res.errored:
                         raise ValueError(
@@ -831,11 +825,12 @@ class LazyField(ty.Generic[T]):
                             "the node errored"
                         )
                     val = res.get_output_field(self.field)
-                    if nested_seqs == [Split]:
+                    if depth and not wf._pre_split:
+                        assert isinstance(val, ty.Sequence) and not isinstance(val, str)
                         val = Split(val)
                 return val
 
-            value = get_nested_results(result, nested_seqs=nested_sequences)
+            value = get_nested_results(result, depth=split_depth)
 
         return value
 
@@ -860,7 +855,7 @@ class LazyField(ty.Generic[T]):
             splits=self.splits,
         )
 
-    def split(self) -> "LazyField":
+    def split(self, splitter) -> "LazyField":
         """ "Splits" the lazy field over an array of nodes by replacing the sequence type
         of the lazy field with Split to signify that it will be "split" across
 
@@ -871,22 +866,47 @@ class LazyField(ty.Generic[T]):
         """
         from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
 
-        if self.type is ty.Any:
+        inner_type, prev_split_depth = TypeParser.strip_splits(self.type)
+
+        assert prev_split_depth <= 1
+        if inner_type is ty.Any:
             type_ = Split[ty.Any]
+        elif TypeParser.matches_type(inner_type, list):
+            item_type = TypeParser.get_item_type(inner_type)
+            type_ = Split[item_type]
         else:
-            try:
-                item_type = TypeParser.get_item_type(self.type)
-            except TypeError as e:
-                add_exc_note(e, f"Attempting to split {self} over multiple nodes")
-                raise e
-            type_ = Split[item_type]  # type: ignore
+            raise TypeError(
+                f"Cannot split non-sequence field {self}  of type {inner_type}"
+            )
+        if prev_split_depth:
+            type_ = Split[type_]
+        # else:
+        # Apply existing splits to the type
+        # for _ in range(prev_split_depth):
+        #     type_ = Split[type_]
+        splits = self.splits | set([LazyField.sanitize_splitter(splitter)])
         return LazyField[type_](
             name=self.name,
             field=self.field,
             attr_type=self.attr_type,
             type=type_,
-            splits=self.splits,
+            splits=splits,
         )
+
+    @classmethod
+    def sanitize_splitter(cls, splitter: Splitter) -> ty.Tuple[ty.Tuple[str, ...], ...]:
+        """Converts the splitter spec into a consistent tuple[tuple[str, ...], ...] form
+        used in LazyFields"""
+        if isinstance(splitter, str):
+            splitter = (splitter,)
+        if isinstance(splitter, tuple):
+            splitter = (splitter,)  # type: ignore
+        else:
+            assert isinstance(splitter, list)
+            # convert to frozenset to differentiate from tuple, yet still be hashable
+            # (NB: order of fields in list splitters aren't relevant)
+            splitter = tuple((s,) if isinstance(s, str) else s for s in splitter)
+        return splitter  # type: ignore
 
     # def combine(self, combiner=None) -> "LazyField":
     #     """ "Combines" the lazy field over an array of nodes by wrapping the type of the

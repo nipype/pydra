@@ -74,6 +74,7 @@ def hash_object(obj: object) -> Hash:
     try:
         return hash_single(obj, Cache({}))
     except Exception as e:
+        hash_single(obj, Cache({}))  # for debugging
         raise UnhashableError(f"Cannot hash object {obj!r}") from e
 
 
