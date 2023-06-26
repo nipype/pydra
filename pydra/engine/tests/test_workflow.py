@@ -3329,7 +3329,7 @@ def test_wf_state_cachelocations_updateinp(plugin, tmpdir):
         cache_dir=cache_dir2,
         cache_locations=cache_dir1,
     )
-    wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.x))
+    wf2.add(multiply(name="mult", x=wf2.lzin.x, y=wf2.lzin.y))
     wf2.add(add2_wait(name="add2", x=wf2.mult.lzout.out))
     wf2.set_output([("out", wf2.add2.lzout.out)])
     wf2.split(splitter=("x", "y"), x=[2, 20], y=[3, 4])

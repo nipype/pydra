@@ -696,17 +696,20 @@ class LazyInterface:
             # Add in any scalar splits referencing upstream splits, i.e. "_myupstreamtask",
             # "_myarbitrarytask"
             combined_upstreams = set()
-            for scalar in LazyField.sanitize_splitter(
-                self._node.state.splitter, strip_previous=False
-            ):
-                for field in scalar:
-                    if field.startswith("_"):
-                        node_name = field[1:]
-                        if any(c.split(".")[0] == node_name for c in combines):
-                            combines.update(f for f in scalar if not f.startswith("_"))
-                            combined_upstreams.update(
-                                f[1:] for f in scalar if f.startswith("_")
-                            )
+            if self._node.state:
+                for scalar in LazyField.sanitize_splitter(
+                    self._node.state.splitter, strip_previous=False
+                ):
+                    for field in scalar:
+                        if field.startswith("_"):
+                            node_name = field[1:]
+                            if any(c.split(".")[0] == node_name for c in combines):
+                                combines.update(
+                                    f for f in scalar if not f.startswith("_")
+                                )
+                                combined_upstreams.update(
+                                    f[1:] for f in scalar if f.startswith("_")
+                                )
             if combines:
                 # Wrap type in list which holds the combined items
                 type_ = ty.List[type_]
@@ -825,6 +828,12 @@ class LazyField(ty.Generic[T]):
     def __repr__(self):
         return f"LF('{self.name}', '{self.field}', {self.type})"
 
+    def __bytes_repr__(self, cache):
+        yield type(self).__name__.encode()
+        yield self.name.encode()
+        yield self.field.encode()
+        yield self.attr_type.encode()
+
     def get_value(
         self, wf: "pydra.Workflow", state_index: ty.Optional[int] = None
     ) -> ty.Any:
@@ -858,6 +867,12 @@ class LazyField(ty.Generic[T]):
         elif self.attr_type == "output":
             node = getattr(wf, self.name)
             result = node.result(state_index=state_index)
+            if result is None:
+                raise RuntimeError(
+                    f"Could not find results of '{node.name}' node in a sub-directory "
+                    f"named '{node.checksum}' in any of the cache locations:\n"
+                    + "\n".join(str(p) for p in set(node.cache_locations))
+                )
             _, split_depth = TypeParser.strip_splits(self.type)
 
             def get_nested_results(res, depth: int):

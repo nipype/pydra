@@ -1333,6 +1333,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
         name="docky",
         image="busybox",
         executable=wf.lzin.cmd,
+        file=wf.lzin.file,
         input_spec=my_input_spec,
         strip=True,
     )
