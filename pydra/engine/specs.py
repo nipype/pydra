@@ -728,9 +728,9 @@ class LazyInterface:
                         splits.remove(splitter)
                         if remaining:
                             splits.add(remaining)
-        # Wrap the type in a nested Split type
+        # Wrap the type in a nested StateArray type
         if splits:
-            type_ = Split[type_]
+            type_ = StateArray[type_]
         return LazyField[type_](
             name=self._node.name,
             field=name,
@@ -857,13 +857,13 @@ class LazyField(ty.Generic[T]):
 
         if self.attr_type == "input":
             value = getattr(wf.inputs, self.field)
-            if TypeParser.is_subclass(self.type, Split) and not wf._pre_split:
+            if TypeParser.is_subclass(self.type, StateArray) and not wf._pre_split:
                 _, split_depth = TypeParser.strip_splits(self.type)
 
                 def apply_splits(obj, depth):
                     if depth < 1:
                         return obj
-                    return Split(apply_splits(i, depth - 1) for i in obj)
+                    return StateArray(apply_splits(i, depth - 1) for i in obj)
 
                 value = apply_splits(value, split_depth)
         elif self.attr_type == "output":
@@ -882,7 +882,7 @@ class LazyField(ty.Generic[T]):
                     if not depth:
                         val = [r.get_output_field(self.field) for r in res]
                     else:
-                        val = Split(
+                        val = StateArray(
                             get_nested_results(res=r, depth=depth - 1) for r in res
                         )
                 else:
@@ -894,7 +894,7 @@ class LazyField(ty.Generic[T]):
                     val = res.get_output_field(self.field)
                     if depth and not wf._pre_split:
                         assert isinstance(val, ty.Sequence) and not isinstance(val, str)
-                        val = Split(val)
+                        val = StateArray(val)
                 return val
 
             value = get_nested_results(result, depth=split_depth)
@@ -924,7 +924,7 @@ class LazyField(ty.Generic[T]):
 
     def split(self, splitter) -> "LazyField":
         """ "Splits" the lazy field over an array of nodes by replacing the sequence type
-        of the lazy field with Split to signify that it will be "split" across
+        of the lazy field with StateArray to signify that it will be "split" across
 
         Parameters
         ----------
@@ -937,20 +937,20 @@ class LazyField(ty.Generic[T]):
 
         assert prev_split_depth <= 1
         if inner_type is ty.Any:
-            type_ = Split[ty.Any]
+            type_ = StateArray[ty.Any]
         elif TypeParser.matches_type(inner_type, list):
             item_type = TypeParser.get_item_type(inner_type)
-            type_ = Split[item_type]
+            type_ = StateArray[item_type]
         else:
             raise TypeError(
                 f"Cannot split non-sequence field {self}  of type {inner_type}"
             )
         if prev_split_depth:
-            type_ = Split[type_]
+            type_ = StateArray[type_]
         # else:
         # Apply existing splits to the type
         # for _ in range(prev_split_depth):
-        #     type_ = Split[type_]
+        #     type_ = StateArray[type_]
         splits = self.splits | set([LazyField.sanitize_splitter(splitter)])
         return LazyField[type_](
             name=self.name,
@@ -1004,7 +1004,7 @@ class LazyField(ty.Generic[T]):
     #     )
 
 
-class Split(ty.List[T]):
+class StateArray(ty.List[T]):
     """an array of values from, or to be split over in an array of nodes (see TaskBase.split()),
     multiple nodes of the same task. Used in type-checking to differentiate between list
     types and values for multiple nodes

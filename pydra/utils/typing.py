@@ -7,7 +7,7 @@ import typing as ty
 import attr
 from ..engine.specs import (
     LazyField,
-    Split,
+    StateArray,
     MultiInputObj,
     MultiOutputObj,
 )
@@ -141,8 +141,8 @@ class TypeParser(ty.Generic[T]):
         elif isinstance(obj, LazyField):
             self.check_type(obj.type)
             coerced = obj
-        elif isinstance(obj, Split):
-            coerced = Split(self(o) for o in obj)  # type: ignore[assignment]
+        elif isinstance(obj, StateArray):
+            coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]
         else:
             coerced = self.coerce(obj)
         return coerced
@@ -291,7 +291,7 @@ class TypeParser(ty.Generic[T]):
         """
         if self.pattern is None or type_ is ty.Any:
             return
-        if self.is_subclass(type_, Split):
+        if self.is_subclass(type_, StateArray):
             args = get_args(type_)
             if not args:
                 raise TypeError("Splits without any type arguments are invalid")
@@ -723,7 +723,7 @@ class TypeParser(ty.Generic[T]):
 
     @classmethod
     def strip_splits(cls, type_: ty.Type[ty.Any]) -> ty.Tuple[ty.Type, int]:
-        """Strips any Split types from the outside of the specified type and returns
+        """Strips any StateArray types from the outside of the specified type and returns
         the stripped type and the depth it was found at
 
         Parameters
@@ -741,7 +741,7 @@ class TypeParser(ty.Generic[T]):
             the number of splits outside the inner_type
         """
         depth = 0
-        while cls.is_subclass(type_, Split) and not cls.is_subclass(type_, str):
+        while cls.is_subclass(type_, StateArray) and not cls.is_subclass(type_, str):
             origin = get_origin(type_)
             # If type is a union, pick the first sequence type in the union
             if origin is ty.Union:

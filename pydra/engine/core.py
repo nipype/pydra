@@ -28,7 +28,7 @@ from .specs import (
     LazyField,
     TaskHook,
     attr_fields,
-    Split,
+    StateArray,
 )
 from .helpers import (
     make_klass,
@@ -586,7 +586,7 @@ class TaskBase:
             If input name is not in cont_dim, it is assumed that the input values has
             a container dimension of 1, so only the most outer dim will be used for splitting.
         **split_inputs
-            fields to split over, will automatically be wrapped in a Split object
+            fields to split over, will automatically be wrapped in a StateArray object
             and passed to the node inputs
 
         Returns
@@ -627,7 +627,7 @@ class TaskBase:
                     elif isinstance(inpt_val, ty.Iterable) and not isinstance(
                         inpt_val, (ty.Mapping, str)
                     ):
-                        new_val = Split(inpt_val)
+                        new_val = StateArray(inpt_val)
                     else:
                         raise TypeError(
                             f"Could not split {inpt_val} as it is not a sequence type"
@@ -1398,7 +1398,7 @@ class Workflow(TaskBase):
                 help_string = (
                     f"{out_fld.metadata.get('help_string', '')} (from {task_nm})"
                 )
-                if TypeParser.get_origin(lf.type) is Split:
+                if TypeParser.get_origin(lf.type) is StateArray:
                     type_ = TypeParser.get_item_type(lf.type)
                 else:
                     type_ = lf.type

@@ -5,7 +5,7 @@ import attr
 from ..task import DockerTask, ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec, ShellSpec, Split
+from ..specs import ShellOutSpec, SpecInfo, File, DockerSpec, ShellSpec, StateArray
 from .utils import no_win, need_docker
 
 
@@ -1207,7 +1207,7 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = Split()
+    filename = StateArray()
 
     my_input_spec = SpecInfo(
         name="Input",

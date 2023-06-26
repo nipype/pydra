@@ -18,7 +18,7 @@ from .utils import (
 )
 
 from ..core import TaskBase
-from ..specs import Split
+from ..specs import StateArray
 from ..submitter import Submitter
 
 
@@ -296,7 +296,7 @@ def test_task_init_6():
     """task with splitter, but the input is an empty list"""
     nn = fun_addtwo(name="NA")
     nn.split(splitter="a", a=[])
-    assert nn.inputs.a == Split[int]([])
+    assert nn.inputs.a == StateArray[int]([])
 
     assert nn.state.splitter == "NA.a"
     assert nn.state.splitter_rpn == ["NA.a"]

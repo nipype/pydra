@@ -10,7 +10,7 @@ from ..specs import (
     SpecInfo,
     File,
     MultiInputObj,
-    Split,
+    StateArray,
 )
 
 
@@ -405,7 +405,7 @@ def test_shell_cmd_inputs_list_sep_1():
 
     shelly = ShellCommandTask(
         executable="executable",
-        inpA=Split(["aaa", "bbb", "ccc"]),
+        inpA=StateArray(["aaa", "bbb", "ccc"]),
         input_spec=my_input_spec,
     )
     # separated by commas
@@ -435,7 +435,7 @@ def test_shell_cmd_inputs_list_sep_2():
 
     shelly = ShellCommandTask(
         executable="executable",
-        inpA=Split(["aaa", "bbb", "ccc"]),
+        inpA=StateArray(["aaa", "bbb", "ccc"]),
         input_spec=my_input_spec,
     )
     # a flag is used once
@@ -465,7 +465,7 @@ def test_shell_cmd_inputs_list_sep_2a():
 
     shelly = ShellCommandTask(
         executable="executable",
-        inpA=Split(["aaa", "bbb", "ccc"]),
+        inpA=StateArray(["aaa", "bbb", "ccc"]),
         input_spec=my_input_spec,
     )
     # a flag is used once
@@ -495,7 +495,7 @@ def test_shell_cmd_inputs_list_sep_3():
 
     shelly = ShellCommandTask(
         executable="executable",
-        inpA=Split(["aaa", "bbb", "ccc"]),
+        inpA=StateArray(["aaa", "bbb", "ccc"]),
         input_spec=my_input_spec,
     )
     # a flag is repeated
@@ -525,7 +525,7 @@ def test_shell_cmd_inputs_list_sep_3a():
 
     shelly = ShellCommandTask(
         executable="executable",
-        inpA=Split(["aaa", "bbb", "ccc"]),
+        inpA=StateArray(["aaa", "bbb", "ccc"]),
         input_spec=my_input_spec,
     )
     # a flag is repeated
@@ -554,7 +554,7 @@ def test_shell_cmd_inputs_sep_4():
     )
 
     shelly = ShellCommandTask(
-        executable="executable", inpA=Split(["aaa"]), input_spec=my_input_spec
+        executable="executable", inpA=StateArray(["aaa"]), input_spec=my_input_spec
     )
     assert shelly.cmdline == "executable -v aaa"
 
@@ -634,7 +634,7 @@ def test_shell_cmd_inputs_format_2():
 
     shelly = ShellCommandTask(
         executable="executable",
-        inpA=Split(["el_1", "el_2"]),
+        inpA=StateArray(["el_1", "el_2"]),
         input_spec=my_input_spec,
     )
     assert shelly.cmdline == "executable -v el_1 -v el_2"
@@ -1927,7 +1927,7 @@ def test_shell_cmd_inputs_template_1_st():
         bases=(ShellSpec,),
     )
 
-    inpA = Split(["inpA_1", "inpA_2"])
+    inpA = StateArray(["inpA_1", "inpA_2"])
     ShellCommandTask(
         name="f",
         executable="executable",
