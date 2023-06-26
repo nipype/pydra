@@ -906,7 +906,9 @@ class LazyField(ty.Generic[T]):
             # convert to frozenset to differentiate from tuple, yet still be hashable
             # (NB: order of fields in list splitters aren't relevant)
             splitter = tuple((s,) if isinstance(s, str) else s for s in splitter)
-        return splitter  # type: ignore
+        # Strip out fields starting with "_"
+        stripped = tuple(tuple(f for f in i if not f.startswith("_")) for i in splitter)
+        return tuple(s for s in stripped if s)
 
     # def combine(self, combiner=None) -> "LazyField":
     #     """ "Combines" the lazy field over an array of nodes by wrapping the type of the

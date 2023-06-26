@@ -275,7 +275,9 @@ class TaskBase:
         splits = set()
         if self.state and self.state.splitter:
             # Ensure that splits is of tuple[tuple[str, ...], ...] form
-            splits.add(LazyField.sanitize_splitter(self.state.splitter))
+            splitter = LazyField.sanitize_splitter(self.state.splitter)
+            if splitter:
+                splits.add(splitter)
         for inpt in attr.asdict(self.inputs, recurse=False).values():
             if isinstance(inpt, LazyField):
                 splits.update(inpt.splits)
@@ -630,6 +632,7 @@ class TaskBase:
             splitter = list(split_inputs)
         elif splitter:
             missing = set(self._unwrap_splitter(splitter)) - set(split_inputs)
+            missing = [m for m in missing if not m.startswith("_")]
             if missing:
                 raise ValueError(
                     f"Split is missing values for the following fields {list(missing)}"
