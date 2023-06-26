@@ -11,7 +11,6 @@ from ..core import Workflow
 from ...mark import task, annotate
 from .utils import identity
 from ...utils.hash import hash_function, Cache
-from ..specs import StateArray
 
 if importlib.util.find_spec("numpy") is None:
     pytest.skip("can't find numpy library", allow_module_level=True)
