@@ -690,20 +690,41 @@ class LazyInterface:
                 f"Task {self._node.name} has no {self._attr_type} attribute {name}"
             )
         type_ = self._get_type(name)
-        splits = self._node._splits
-        combines = self._node._combines
-        if self._attr_type == "output" and combines:
-            # Wrap type in list which holds the combined items
-            type_ = ty.List[type_]
-            # Iterate through splits to remove any splits which are removed by the combiner
-            for splitter in copy(splits):
-                remaining = tuple(
-                    s for s in splitter if not any(x in combines for x in s)
-                )
-                if remaining != splitter:
-                    splits.remove(splitter)
-                    if remaining:
-                        splits.add(remaining)
+        splits = self._get_node_splits()
+        if self._attr_type == "output":
+            combines = self._get_node_combines()
+            # Add in any scalar splits referencing upstream splits, i.e. "_myupstreamtask",
+            # "_myarbitrarytask"
+            combined_upstreams = set()
+            for scalar in LazyField.sanitize_splitter(
+                self._node.state.splitter, strip_previous=False
+            ):
+                for field in scalar:
+                    if field.startswith("_"):
+                        node_name = field[1:]
+                        if any(c.split(".")[0] == node_name for c in combines):
+                            combines.update(f for f in scalar if not f.startswith("_"))
+                            combined_upstreams.update(
+                                f[1:] for f in scalar if f.startswith("_")
+                            )
+            if combines:
+                # Wrap type in list which holds the combined items
+                type_ = ty.List[type_]
+                # Iterate through splits to remove any splits which are removed by the
+                # combiner
+                for splitter in copy(splits):
+                    remaining = tuple(
+                        s
+                        for s in splitter
+                        if not any(
+                            (x in combines or x.split(".")[0] in combined_upstreams)
+                            for x in s
+                        )
+                    )
+                    if remaining != splitter:
+                        splits.remove(splitter)
+                        if remaining:
+                            splits.add(remaining)
         # Wrap the type in a nested Split type
         if splits:
             type_ = Split[type_]
@@ -714,6 +735,35 @@ class LazyInterface:
             type=type_,
             splits=splits,
         )
+
+    def _get_node_splits(self) -> ty.Set[ty.Tuple[ty.Tuple[str, ...], ...]]:
+        """Returns the states over which the inputs of the task are split"""
+        splitter = self._node.state.splitter if self._node.state else None
+        splits = set()
+        if splitter:
+            # Ensure that splits is of tuple[tuple[str, ...], ...] form
+            splitter = LazyField.sanitize_splitter(splitter)
+            if splitter:
+                splits.add(splitter)
+        for inpt in attr.asdict(self._node.inputs, recurse=False).values():
+            if isinstance(inpt, LazyField):
+                splits.update(inpt.splits)
+        return splits
+
+    def _get_node_combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
+        """Returns the states over which the outputs of the task are combined"""
+        combiner = (
+            self._node.state.combiner
+            if self._node.state is not None
+            else getattr(self._node, "fut_combiner", None)
+        )
+        combines = set()
+        if combiner:
+            if isinstance(combiner, (str, tuple)):
+                combines.add(combiner)
+            else:
+                combines.update(combiner)
+        return combines
 
 
 class LazyIn(LazyInterface):
@@ -894,7 +944,9 @@ class LazyField(ty.Generic[T]):
         )
 
     @classmethod
-    def sanitize_splitter(cls, splitter: Splitter) -> ty.Tuple[ty.Tuple[str, ...], ...]:
+    def sanitize_splitter(
+        cls, splitter: Splitter, strip_previous: bool = True
+    ) -> ty.Tuple[ty.Tuple[str, ...], ...]:
         """Converts the splitter spec into a consistent tuple[tuple[str, ...], ...] form
         used in LazyFields"""
         if isinstance(splitter, str):
@@ -906,9 +958,13 @@ class LazyField(ty.Generic[T]):
             # convert to frozenset to differentiate from tuple, yet still be hashable
             # (NB: order of fields in list splitters aren't relevant)
             splitter = tuple((s,) if isinstance(s, str) else s for s in splitter)
-        # Strip out fields starting with "_"
-        stripped = tuple(tuple(f for f in i if not f.startswith("_")) for i in splitter)
-        return tuple(s for s in stripped if s)
+        # Strip out fields starting with "_" designating splits in upstream nodes
+        if strip_previous:
+            stripped = tuple(
+                tuple(f for f in i if not f.startswith("_")) for i in splitter
+            )
+            splitter = tuple(s for s in stripped if s)  # type: ignore
+        return splitter  # type: ignore
 
     # def combine(self, combiner=None) -> "LazyField":
     #     """ "Combines" the lazy field over an array of nodes by wrapping the type of the

@@ -269,36 +269,6 @@ class TaskBase:
             )
         return self._checksum
 
-    @property
-    def _splits(self) -> ty.Set[ty.Tuple[ty.Tuple[str, ...], ...]]:
-        """Returns the states over which the inputs of the task are split"""
-        splits = set()
-        if self.state and self.state.splitter:
-            # Ensure that splits is of tuple[tuple[str, ...], ...] form
-            splitter = LazyField.sanitize_splitter(self.state.splitter)
-            if splitter:
-                splits.add(splitter)
-        for inpt in attr.asdict(self.inputs, recurse=False).values():
-            if isinstance(inpt, LazyField):
-                splits.update(inpt.splits)
-        return splits
-
-    @property
-    def _combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
-        """Returns the states over which the outputs of the task are combined"""
-        combiner = (
-            self.state.combiner
-            if self.state is not None
-            else getattr(self, "fut_combiner", None)
-        )
-        combines = set()
-        if combiner:
-            if isinstance(combiner, (str, tuple)):
-                combines.add(combiner)
-            else:
-                combines.update(combiner)
-        return combines
-
     def checksum_states(self, state_index=None):
         """
         Calculate a checksum for the specific state or all of the states of the task.
