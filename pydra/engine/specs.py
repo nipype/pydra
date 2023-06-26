@@ -691,8 +691,8 @@ class LazyInterface:
             )
         type_ = self._get_type(name)
         splits = self._get_node_splits()
-        if self._attr_type == "output":
-            combines = self._get_node_combines()
+        combines = self._get_node_combines()
+        if combines and self._attr_type == "output":
             # Add in any scalar splits referencing upstream splits, i.e. "_myupstreamtask",
             # "_myarbitrarytask"
             combined_upstreams = set()
