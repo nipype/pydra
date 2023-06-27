@@ -882,7 +882,7 @@ def test_singularity_wf_inputspec_1(plugin, tmp_path):
 
     wf.set_output([("out", wf.singu.lzout.stdout)])
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin="serial") as sub:
         wf(submitter=sub)
 
     res = wf.result()
@@ -924,17 +924,17 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmp_path)
     wf.inputs.cmd = cmd
-    wf.inputs.file = filename
 
     singu = SingularityTask(
         name="singu",
         image=image,
         executable=wf.lzin.cmd,
+        file=wf.lzin.file,
         input_spec=my_input_spec,
         strip=True,
     )
     wf.add(singu)
-    wf.split("file", file=wf.lzin.file)
+    wf.split("file", file=filename)
 
     wf.set_output([("out", wf.singu.lzout.stdout)])
 

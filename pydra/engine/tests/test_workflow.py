@@ -4823,7 +4823,7 @@ def test_graph_5(tmpdir):
         exporting_graphs(wf=wf, name=name)
 
 
-# @pytest.mark.timeout(20)
+@pytest.mark.timeout(20)
 def test_duplicate_input_on_split_wf(tmpdir):
     """checking if the workflow gets stuck if it has to run two tasks with equal checksum;
     This can occur when splitting on a list containing duplicate values.
@@ -4849,7 +4849,7 @@ def test_duplicate_input_on_split_wf(tmpdir):
     assert res[0].output.out1 == "test" and res[1].output.out1 == "test"
 
 
-# @pytest.mark.timeout(40)
+@pytest.mark.timeout(40)
 def test_inner_outer_wf_duplicate(tmpdir):
     """checking if the execution gets stuck if there is an inner and outer workflows
     that run two nodes with the exact same inputs.

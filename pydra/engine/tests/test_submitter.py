@@ -215,8 +215,7 @@ def test_slurm_wf_cf(tmpdir):
 @need_slurm
 def test_slurm_wf_state(tmpdir):
     wf = gen_basic_wf()
-    wf.split("x")
-    wf.inputs.x = [5, 6]
+    wf.split("x", x=[5, 6])
     wf.cache_dir = tmpdir
     with Submitter("slurm") as sub:
         sub(wf)
