@@ -173,11 +173,13 @@ the Task execution, the user can set splitter and combiner attributes of the Sta
 
 In this example, the ``State`` class is responsible for creating a list of two
 separate inputs, *[{x: 1}, {x:5}]*, each run of the *Task* should get one
-element from the list.
-The results are grouped back when returning the result from the *Task*.
-While this example
-illustrates mapping and grouping of results over a single parameter, *Pydra*
-extends this to arbitrary combinations of input fields and downstream grouping
+element from the list. Note that in this case the value for `x` is set in the `split()`
+method, not at the task's initialisation.
+The `combine()` method, specifies that the results are grouped back when returning the
+result from the *Task*.
+
+While this example illustrates mapping and grouping of results over a single parameter,
+*Pydra* extends this to arbitrary combinations of input fields and downstream grouping
 over nested dataflows. Details of how splitters and combiners power *Pydra*'s
 scalable dataflows are described in the next section.
 
