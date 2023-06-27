@@ -38,7 +38,7 @@ logger = logging.getLogger("pydra")
 def check_latest_version():
     import etelemetry
 
-    # return etelemetry.check_available_version("nipype/pydra", __version__, lgr=logger)
+    return etelemetry.check_available_version("nipype/pydra", __version__, lgr=logger)
 
 
 # Run telemetry on import for interactive sessions, such as IPython, Jupyter notebooks, Python REPL
@@ -47,11 +47,3 @@ if not hasattr(__main__, "__file__"):
 
     if TaskBase._etelemetry_version_data is None:
         TaskBase._etelemetry_version_data = check_latest_version()
-
-
-# # attr run_validators is set to False, but could be changed using use_validator
-# attr.set_run_validators(False)
-
-
-# def set_input_validator(flag=False):
-#     attr.set_run_validators(flag)
