@@ -374,11 +374,6 @@ class ShellCommandTask(TaskBase):
         value = getattr(self.inputs, field.name)
         if value == attr.NOTHING:
             value = None
-        if isinstance(value, Path):
-            try:
-                value = value.relative_to(self.output_dir)
-            except ValueError:
-                pass
         return value
 
     def _command_shelltask_executable(self, field):
