@@ -679,26 +679,26 @@ class SingularitySpec(ContainerSpec):
 
 @attr.s
 class LazyInterface:
-    _node: "core.TaskBase" = attr.ib()
+    _task: "core.TaskBase" = attr.ib()
     _attr_type: str
 
     def __getattr__(self, name):
-        if name in ("_node", "_attr_type", "_field_names"):
+        if name in ("_task", "_attr_type", "_field_names"):
             raise AttributeError(f"{name} hasn't been set yet")
         if name not in self._field_names:
             raise AttributeError(
-                f"Task {self._node.name} has no {self._attr_type} attribute {name}"
+                f"Task {self._task.name} has no {self._attr_type} attribute {name}"
             )
         type_ = self._get_type(name)
-        splits = self._get_node_splits()
-        combines = self._get_node_combines()
+        splits = self._get_task_splits()
+        combines = self._get_task_combines()
         if combines and self._attr_type == "output":
             # Add in any scalar splits referencing upstream splits, i.e. "_myupstreamtask",
             # "_myarbitrarytask"
             combined_upstreams = set()
-            if self._node.state:
+            if self._task.state:
                 for scalar in LazyField.sanitize_splitter(
-                    self._node.state.splitter, strip_previous=False
+                    self._task.state.splitter, strip_previous=False
                 ):
                     for field in scalar:
                         if field.startswith("_"):
@@ -731,49 +731,43 @@ class LazyInterface:
         # Wrap the type in a nested StateArray type
         if splits:
             type_ = StateArray[type_]
-        return LazyField[type_](
-            name=self._node.name,
+        lf_klass = LazyInField if self._attr_type == "input" else LazyOutField
+        return lf_klass[type_](
+            name=self._task.name,
             field=name,
-            attr_type=self._attr_type,
             type=type_,
             splits=splits,
         )
 
-    def _get_node_splits(self) -> ty.Set[ty.Tuple[ty.Tuple[str, ...], ...]]:
+    def _get_task_splits(self) -> ty.Set[ty.Tuple[ty.Tuple[str, ...], ...]]:
         """Returns the states over which the inputs of the task are split"""
-        splitter = self._node.state.splitter if self._node.state else None
+        splitter = self._task.state.splitter if self._task.state else None
         splits = set()
         if splitter:
             # Ensure that splits is of tuple[tuple[str, ...], ...] form
             splitter = LazyField.sanitize_splitter(splitter)
             if splitter:
                 splits.add(splitter)
-        for inpt in attr.asdict(self._node.inputs, recurse=False).values():
+        for inpt in attr.asdict(self._task.inputs, recurse=False).values():
             if isinstance(inpt, LazyField):
                 splits.update(inpt.splits)
         return splits
 
-    def _get_node_combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
+    def _get_task_combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
         """Returns the states over which the outputs of the task are combined"""
         combiner = (
-            self._node.state.combiner
-            if self._node.state is not None
-            else getattr(self._node, "fut_combiner", None)
+            self._task.state.combiner
+            if self._task.state is not None
+            else getattr(self._task, "fut_combiner", None)
         )
-        combines = set()
-        if combiner:
-            if isinstance(combiner, (str, tuple)):
-                combines.add(combiner)
-            else:
-                combines.update(combiner)
-        return combines
+        return set(combiner) if combiner else set()
 
 
 class LazyIn(LazyInterface):
     _attr_type = "input"
 
     def _get_type(self, name):
-        attr = next(t for n, t in self._node.input_spec.fields if n == name)
+        attr = next(t for n, t in self._task.input_spec.fields if n == name)
         if attr is None:
             return ty.Any
         elif inspect.isclass(attr):
@@ -783,7 +777,7 @@ class LazyIn(LazyInterface):
 
     @property
     def _field_names(self):
-        return [field[0] for field in self._node.input_spec.fields]
+        return [field[0] for field in self._task.input_spec.fields]
 
 
 class LazyOut(LazyInterface):
@@ -791,7 +785,7 @@ class LazyOut(LazyInterface):
 
     def _get_type(self, name):
         try:
-            type_ = next(f[1] for f in self._node.output_spec.fields if f[0] == name)
+            type_ = next(f[1] for f in self._task.output_spec.fields if f[0] == name)
         except StopIteration:
             type_ = ty.Any
         else:
@@ -804,7 +798,7 @@ class LazyOut(LazyInterface):
 
     @property
     def _field_names(self):
-        return self._node.output_names + ["all_"]
+        return self._task.output_names + ["all_"]
 
 
 TypeOrAny = ty.Union[ty.Type[T], ty.Any]
@@ -817,7 +811,6 @@ class LazyField(ty.Generic[T]):
 
     name: str
     field: str
-    attr_type: str
     type: TypeOrAny
     # Set of splitters that have been applied to the lazy field. Note that the splitter
     # specifications are transformed to a tuple[tuple[str, ...], ...] form where the
@@ -828,78 +821,12 @@ class LazyField(ty.Generic[T]):
     )
 
     def __repr__(self):
-        return f"LF('{self.name}', '{self.field}', {self.type})"
+        return f"{type(self).__name__}('{self.name}', '{self.field}', {self.type})"
 
     def __bytes_repr__(self, cache):
         yield type(self).__name__.encode()
         yield self.name.encode()
         yield self.field.encode()
-        yield self.attr_type.encode()
-
-    def get_value(
-        self, wf: "pydra.Workflow", state_index: ty.Optional[int] = None
-    ) -> ty.Any:
-        """Return the value of a lazy field.
-
-        Parameters
-        ----------
-        wf : Workflow
-            the workflow the lazy field references
-        state_index : int, optional
-            the state index of the field to access
-
-        Returns
-        -------
-        value : Any
-            the resolved value of the lazy-field
-        """
-        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
-
-        if self.attr_type == "input":
-            value = getattr(wf.inputs, self.field)
-            if TypeParser.is_subclass(self.type, StateArray) and not wf._pre_split:
-                _, split_depth = TypeParser.strip_splits(self.type)
-
-                def apply_splits(obj, depth):
-                    if depth < 1:
-                        return obj
-                    return StateArray(apply_splits(i, depth - 1) for i in obj)
-
-                value = apply_splits(value, split_depth)
-        elif self.attr_type == "output":
-            node = getattr(wf, self.name)
-            result = node.result(state_index=state_index)
-            if result is None:
-                raise RuntimeError(
-                    f"Could not find results of '{node.name}' node in a sub-directory "
-                    f"named '{node.checksum}' in any of the cache locations:\n"
-                    + "\n".join(str(p) for p in set(node.cache_locations))
-                )
-            _, split_depth = TypeParser.strip_splits(self.type)
-
-            def get_nested_results(res, depth: int):
-                if isinstance(res, list):
-                    if not depth:
-                        val = [r.get_output_field(self.field) for r in res]
-                    else:
-                        val = StateArray(
-                            get_nested_results(res=r, depth=depth - 1) for r in res
-                        )
-                else:
-                    if res.errored:
-                        raise ValueError(
-                            f"Cannot retrieve value for {self.field} from {self.name} as "
-                            "the node errored"
-                        )
-                    val = res.get_output_field(self.field)
-                    if depth and not wf._pre_split:
-                        assert isinstance(val, ty.Sequence) and not isinstance(val, str)
-                        val = StateArray(val)
-                return val
-
-            value = get_nested_results(result, depth=split_depth)
-
-        return value
 
     def cast(self, new_type: TypeOrAny) -> "LazyField":
         """ "casts" the lazy field to a new type
@@ -914,10 +841,9 @@ class LazyField(ty.Generic[T]):
         cast_field : LazyField
             a copy of the lazy field with the new type
         """
-        return LazyField[new_type](
+        return type(self)[new_type](
             name=self.name,
             field=self.field,
-            attr_type=self.attr_type,
             type=new_type,
             splits=self.splits,
         )
@@ -952,10 +878,9 @@ class LazyField(ty.Generic[T]):
         # for _ in range(prev_split_depth):
         #     type_ = StateArray[type_]
         splits = self.splits | set([LazyField.sanitize_splitter(splitter)])
-        return LazyField[type_](
+        return type(self)[type_](
             name=self.name,
             field=self.field,
-            attr_type=self.attr_type,
             type=type_,
             splits=splits,
         )
@@ -983,25 +908,97 @@ class LazyField(ty.Generic[T]):
             splitter = tuple(s for s in stripped if s)  # type: ignore
         return splitter  # type: ignore
 
-    # def combine(self, combiner=None) -> "LazyField":
-    #     """ "Combines" the lazy field over an array of nodes by wrapping the type of the
-    #     lazy field in a list to signify that it will be actually a list of
-    #     values of that type
-    #     """
-    #     if combiner is not None:
-    #         splits = [s for s in self.splits if s != combiner]
-    #         if splits == self.splits:
-    #             raise ValueError(
-    #                 f"{combiner} wasn't found in list of splits for {self}: {self.splits}"
-    #             )
-    #     type_ = ty.List[self.type]
-    #     return LazyField[type_](
-    #         name=self.name,
-    #         field=self.field,
-    #         attr_type=self.attr_type,
-    #         type=type_,
-    #         splits=splits,
-    #     )
+
+class LazyInField(LazyField[T]):
+    attr_type = "input"
+
+    def get_value(
+        self, wf: "pydra.Workflow", state_index: ty.Optional[int] = None
+    ) -> ty.Any:
+        """Return the value of a lazy field.
+
+        Parameters
+        ----------
+        wf : Workflow
+            the workflow the lazy field references
+        state_index : int, optional
+            the state index of the field to access
+
+        Returns
+        -------
+        value : Any
+            the resolved value of the lazy-field
+        """
+        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
+
+        value = getattr(wf.inputs, self.field)
+        if TypeParser.is_subclass(self.type, StateArray) and not wf._pre_split:
+            _, split_depth = TypeParser.strip_splits(self.type)
+
+            def apply_splits(obj, depth):
+                if depth < 1:
+                    return obj
+                return StateArray(apply_splits(i, depth - 1) for i in obj)
+
+            value = apply_splits(value, split_depth)
+        return value
+
+
+class LazyOutField(LazyField[T]):
+    attr_type = "output"
+
+    def get_value(
+        self, wf: "pydra.Workflow", state_index: ty.Optional[int] = None
+    ) -> ty.Any:
+        """Return the value of a lazy field.
+
+        Parameters
+        ----------
+        wf : Workflow
+            the workflow the lazy field references
+        state_index : int, optional
+            the state index of the field to access
+
+        Returns
+        -------
+        value : Any
+            the resolved value of the lazy-field
+        """
+        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
+
+        node = getattr(wf, self.name)
+        result = node.result(state_index=state_index)
+        if result is None:
+            raise RuntimeError(
+                f"Could not find results of '{node.name}' node in a sub-directory "
+                f"named '{node.checksum}' in any of the cache locations:\n"
+                + "\n".join(str(p) for p in set(node.cache_locations))
+            )
+        _, split_depth = TypeParser.strip_splits(self.type)
+
+        def get_nested_results(res, depth: int):
+            if isinstance(res, list):
+                if not depth:
+                    val = [r.get_output_field(self.field) for r in res]
+                else:
+                    val = StateArray(
+                        get_nested_results(res=r, depth=depth - 1) for r in res
+                    )
+            else:
+                if res.errored:
+                    raise ValueError(
+                        f"Cannot retrieve value for {self.field} from {self.name} as "
+                        "the node errored"
+                    )
+                val = res.get_output_field(self.field)
+                if depth and not wf._pre_split:
+                    assert isinstance(val, ty.Sequence) and not isinstance(val, str)
+                    val = StateArray(val)
+            return val
+
+        value = get_nested_results(result, depth=split_depth)
+
+        return value
 
 
 class StateArray(ty.List[T]):

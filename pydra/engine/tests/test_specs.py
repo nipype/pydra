@@ -130,7 +130,7 @@ class WorkflowTesting:
 
 def test_lazy_inp():
     tn = NodeTesting()
-    lzin = LazyIn(node=tn)
+    lzin = LazyIn(task=tn)
 
     lf = lzin.inp_a
     assert lf.get_value(wf=WorkflowTesting()) == "A"
@@ -141,14 +141,14 @@ def test_lazy_inp():
 
 def test_lazy_out():
     tn = NodeTesting()
-    lzout = LazyOut(node=tn)
+    lzout = LazyOut(task=tn)
     lf = lzout.out_a
     assert lf.get_value(wf=WorkflowTesting()) == "OUT_A"
 
 
 def test_lazy_getvale():
     tn = NodeTesting()
-    lf = LazyIn(node=tn)
+    lf = LazyIn(task=tn)
     with pytest.raises(Exception) as excinfo:
         lf.inp_c
     assert str(excinfo.value) == "Task tn has no input attribute inp_c"

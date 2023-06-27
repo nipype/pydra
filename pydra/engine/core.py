@@ -1098,25 +1098,6 @@ class Workflow(TaskBase):
         return self.graph.sorted_nodes
 
     @property
-    def _splits(self) -> ty.Set[ty.Tuple[ty.Tuple[str, ...], ...]]:
-        """Returns the depth of the split for the inputs to the node"""
-        splits = super()._splits
-        if self.state:
-            splits.add(LazyField.sanitize_splitter(self.state.splitter))
-        return splits
-
-    @property
-    def _combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
-        """Returns the depth of the split for the inputs to the node"""
-        combines = super()._combines
-        if self.state:
-            if isinstance(self.state.combiner, str):
-                combines |= set([self.state.combiner])
-            elif self.state.combiner:
-                combines |= set(self.state.combiner)
-        return combines
-
-    @property
     def checksum(self):
         """Calculates the unique checksum of the task.
         Used to create specific directory name for task that are run;

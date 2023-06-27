@@ -5,13 +5,13 @@ from pathlib import Path
 import tempfile
 import pytest
 from pydra import mark
-from ...engine.specs import File, LazyField
+from ...engine.specs import File, LazyOutField
 from ..typing import TypeParser
 
 
 def lz(tp: ty.Type):
     """convenience method for creating a LazyField of type 'tp'"""
-    return LazyField(name="foo", field="boo", attr_type="output", type=tp)
+    return LazyOutField(name="foo", field="boo", type=tp)
 
 
 PathTypes = ty.Union[str, os.PathLike]
