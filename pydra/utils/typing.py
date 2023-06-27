@@ -62,7 +62,7 @@ class TypeParser(ty.Generic[T]):
     not_coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
 
     COERCIBLE_DEFAULT: ty.Tuple[ty.Tuple[type, type], ...] = (
-        (ty.Sequence, ty.Sequence),
+        (ty.Sequence, ty.Sequence),  # type: ignore
         (ty.Mapping, ty.Mapping),
         (Path, os.PathLike),
         (str, os.PathLike),
@@ -80,6 +80,8 @@ class TypeParser(ty.Generic[T]):
             (numpy.character, str),
             (numpy.complexfloating, complex),
             (numpy.bytes_, bytes),
+            (numpy.ndarray, ty.Sequence),
+            (ty.Sequence, numpy.ndarray),
         )
 
     NOT_COERCIBLE_DEFAULT = ((str, ty.Sequence), (ty.Sequence, str))

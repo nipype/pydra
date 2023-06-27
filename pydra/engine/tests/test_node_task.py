@@ -939,7 +939,7 @@ def test_task_state_4(plugin, input_type, tmp_path):
     """task with a list as an input, and a simple splitter"""
     lst_in = [[2, 3, 4], [1, 2, 3]]
     if input_type == "array":
-        lst_in = np.array(lst_in)
+        lst_in = np.array(lst_in, dtype=int)
     nn = moment(name="NA", n=3).split(splitter="lst", lst=lst_in)
     nn.cache_dir = tmp_path
 
@@ -955,8 +955,7 @@ def test_task_state_4(plugin, input_type, tmp_path):
     if input_type == "list":
         assert el_0 == [2, 3, 4]
     elif input_type == "array":
-        assert isinstance(el_0, np.ndarray)
-        assert (el_0 == [2, 3, 4]).all()
+        assert el_0 == [2, 3, 4]
 
     # checking the results
     results = nn.result()

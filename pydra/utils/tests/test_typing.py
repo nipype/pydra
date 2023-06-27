@@ -498,3 +498,11 @@ def test_contains_type_in_dict():
     assert not TypeParser.contains_type(
         int, ty.Dict[str, ty.List[ty.Tuple[float, ...]]]
     )
+
+
+def test_matches():
+    assert TypeParser.matches([1, 2, 3], ty.List[int])
+    assert TypeParser.matches((1, 2, 3), ty.Tuple[int, ...])
+
+    assert TypeParser.matches((1, 2, 3), ty.List[int])
+    assert not TypeParser.matches((1, 2, 3), ty.List[int], coercible=[])

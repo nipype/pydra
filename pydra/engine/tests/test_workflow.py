@@ -23,6 +23,9 @@ from .utils import (
     add2_sub2_res_list,
     fun_addvar_none,
     fun_addvar_default,
+    fun_addvar_default_notype,
+    fun_addvar_notype,
+    fun_addtwo_notype,
     fun_write_file,
     fun_write_file_list,
     fun_write_file_list2dict,
@@ -1760,7 +1763,7 @@ def test_wf_ndstinner_1(plugin, tmpdir):
     """workflow with 2 tasks,
     the second task has inner splitter
     """
-    wf = Workflow(name="wf_st_3", input_spec=["x"])
+    wf = Workflow(name="wf_st_3", input_spec={"x": int})
     wf.add(list_output(name="list", x=wf.lzin.x))
     wf.add(add2(name="add2").split("x", x=wf.list.lzout.out))
     wf.inputs.x = 1
@@ -4170,10 +4173,10 @@ def test_wf_resultfile_3(plugin, tmpdir):
 def test_wf_upstream_error1(plugin, tmpdir):
     """workflow with two tasks, task2 dependent on an task1 which raised an error"""
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
-    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default_notype(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
-    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar2", a=wf.addvar1.lzout.out))
     wf.set_output([("out", wf.addvar2.lzout.out)])
 
     with pytest.raises(ValueError) as excinfo:
@@ -4188,10 +4191,10 @@ def test_wf_upstream_error2(plugin, tmpdir):
     goal - workflow finish running, one output errors but the other doesn't
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
-    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default_notype(name="addvar1", a=wf.lzin.x))
     wf.split("x", x=[1, "hi"])  # workflow-level split TypeError for adding str and int
     wf.plugin = plugin
-    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar2", a=wf.addvar1.lzout.out))
     wf.set_output([("out", wf.addvar2.lzout.out)])
 
     with pytest.raises(Exception) as excinfo:
@@ -4207,11 +4210,11 @@ def test_wf_upstream_error3(plugin, tmpdir):
     goal - workflow finish running, one output errors but the other doesn't
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
-    wf.add(fun_addvar_default(name="addvar1"))
+    wf.add(fun_addvar_default_notype(name="addvar1"))
     wf.inputs.x = [1, "hi"]  # TypeError for adding str and int
     wf.addvar1.split("a", a=wf.lzin.x)  # task-level split
     wf.plugin = plugin
-    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar2", a=wf.addvar1.lzout.out))
     wf.set_output([("out", wf.addvar2.lzout.out)])
 
     with pytest.raises(Exception) as excinfo:
@@ -4224,7 +4227,7 @@ def test_wf_upstream_error3(plugin, tmpdir):
 def test_wf_upstream_error4(plugin, tmpdir):
     """workflow with one task, which raises an error"""
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
-    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default_notype(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
     wf.set_output([("out", wf.addvar1.lzout.out)])
@@ -4240,7 +4243,7 @@ def test_wf_upstream_error5(plugin, tmpdir):
     """nested workflow with one task, which raises an error"""
     wf_main = Workflow(name="wf_main", input_spec=["x"], cache_dir=tmpdir)
     wf = Workflow(name="wf", input_spec=["x"], x=wf_main.lzin.x)
-    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default_notype(name="addvar1", a=wf.lzin.x))
     wf.plugin = plugin
     wf.set_output([("wf_out", wf.addvar1.lzout.out)])
 
@@ -4260,8 +4263,8 @@ def test_wf_upstream_error6(plugin, tmpdir):
     """nested workflow with two tasks, the first one raises an error"""
     wf_main = Workflow(name="wf_main", input_spec=["x"], cache_dir=tmpdir)
     wf = Workflow(name="wf", input_spec=["x"], x=wf_main.lzin.x)
-    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
-    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default_notype(name="addvar2", a=wf.addvar1.lzout.out))
     wf.plugin = plugin
     wf.set_output([("wf_out", wf.addvar2.lzout.out)])
 
@@ -4283,11 +4286,11 @@ def test_wf_upstream_error7(plugin, tmpdir):
     the last task is set as the workflow output
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
-    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default_notype(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
-    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
-    wf.add(fun_addvar_default(name="addvar3", a=wf.addvar2.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar3", a=wf.addvar2.lzout.out))
     wf.set_output([("out", wf.addvar3.lzout.out)])
 
     with pytest.raises(ValueError) as excinfo:
@@ -4305,11 +4308,11 @@ def test_wf_upstream_error7a(plugin, tmpdir):
     the second task is set as the workflow output
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
-    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default_notype(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
-    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
-    wf.add(fun_addvar_default(name="addvar3", a=wf.addvar2.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar3", a=wf.addvar2.lzout.out))
     wf.set_output([("out", wf.addvar2.lzout.out)])
 
     with pytest.raises(ValueError) as excinfo:
@@ -4327,11 +4330,11 @@ def test_wf_upstream_error7b(plugin, tmpdir):
     the second and the third tasks are set as the workflow output
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
-    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default_notype(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
-    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
-    wf.add(fun_addvar_default(name="addvar3", a=wf.addvar2.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar3", a=wf.addvar2.lzout.out))
     wf.set_output([("out1", wf.addvar2.lzout.out), ("out2", wf.addvar3.lzout.out)])
 
     with pytest.raises(ValueError) as excinfo:
@@ -4346,10 +4349,10 @@ def test_wf_upstream_error7b(plugin, tmpdir):
 def test_wf_upstream_error8(plugin, tmpdir):
     """workflow with three tasks, the first one raises an error, so 2 others are removed"""
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
-    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default_notype(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = "hi"  # TypeError for adding str and int
     wf.plugin = plugin
-    wf.add(fun_addvar_default(name="addvar2", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar2", a=wf.addvar1.lzout.out))
     wf.add(fun_addtwo(name="addtwo", a=wf.addvar1.lzout.out))
     wf.set_output([("out1", wf.addvar2.lzout.out), ("out2", wf.addtwo.lzout.out)])
 
@@ -4370,13 +4373,13 @@ def test_wf_upstream_error9(plugin, tmpdir):
     the errored branch is connected to the workflow output
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
-    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default_notype(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = 2
-    wf.add(fun_addvar(name="err", a=wf.addvar1.lzout.out, b="hi"))
-    wf.add(fun_addvar_default(name="follow_err", a=wf.err.lzout.out))
+    wf.add(fun_addvar_notype(name="err", a=wf.addvar1.lzout.out, b="hi"))
+    wf.add(fun_addvar_default_notype(name="follow_err", a=wf.err.lzout.out))
 
-    wf.add(fun_addtwo(name="addtwo", a=wf.addvar1.lzout.out))
-    wf.add(fun_addvar_default(name="addvar2", a=wf.addtwo.lzout.out))
+    wf.add(fun_addtwo_notype(name="addtwo", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar2", a=wf.addtwo.lzout.out))
     wf.set_output([("out1", wf.follow_err.lzout.out)])
 
     wf.plugin = plugin
@@ -4399,10 +4402,10 @@ def test_wf_upstream_error9a(plugin, tmpdir):
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
     wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = 2
-    wf.add(fun_addvar(name="err", a=wf.addvar1.lzout.out, b="hi"))
+    wf.add(fun_addvar_notype(name="err", a=wf.addvar1.lzout.out, b="hi"))
     wf.add(fun_addvar_default(name="follow_err", a=wf.err.lzout.out))
 
-    wf.add(fun_addtwo(name="addtwo", a=wf.addvar1.lzout.out))
+    wf.add(fun_addtwo_notype(name="addtwo", a=wf.addvar1.lzout.out))
     wf.add(fun_addvar_default(name="addvar2", a=wf.addtwo.lzout.out))
     wf.set_output([("out1", wf.addvar2.lzout.out)])  # , ("out2", wf.addtwo.lzout.out)])
 
@@ -4420,13 +4423,13 @@ def test_wf_upstream_error9b(plugin, tmpdir):
     both branches are connected to the workflow output
     """
     wf = Workflow(name="wf", input_spec=["x"], cache_dir=tmpdir)
-    wf.add(fun_addvar_default(name="addvar1", a=wf.lzin.x))
+    wf.add(fun_addvar_default_notype(name="addvar1", a=wf.lzin.x))
     wf.inputs.x = 2
-    wf.add(fun_addvar(name="err", a=wf.addvar1.lzout.out, b="hi"))
-    wf.add(fun_addvar_default(name="follow_err", a=wf.err.lzout.out))
+    wf.add(fun_addvar_notype(name="err", a=wf.addvar1.lzout.out, b="hi"))
+    wf.add(fun_addvar_default_notype(name="follow_err", a=wf.err.lzout.out))
 
-    wf.add(fun_addtwo(name="addtwo", a=wf.addvar1.lzout.out))
-    wf.add(fun_addvar_default(name="addvar2", a=wf.addtwo.lzout.out))
+    wf.add(fun_addtwo_notype(name="addtwo", a=wf.addvar1.lzout.out))
+    wf.add(fun_addvar_default_notype(name="addvar2", a=wf.addtwo.lzout.out))
     wf.set_output([("out1", wf.follow_err.lzout.out), ("out2", wf.addtwo.lzout.out)])
 
     wf.plugin = plugin

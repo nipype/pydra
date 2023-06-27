@@ -54,12 +54,12 @@ else:
 
 
 @mark.task
-def op_4var(a, b, c, d):
+def op_4var(a, b, c, d) -> str:
     return f"{a} {b} {c} {d}"
 
 
 @mark.task
-def fun_addtwo(a: int):
+def fun_addtwo(a: int) -> int:
     import time
 
     time.sleep(1)
@@ -69,7 +69,7 @@ def fun_addtwo(a: int):
 
 
 @mark.task
-def fun_addtwo_with_threadcount(a, sgeThreads=1):
+def fun_addtwo_notype(a):
     import time
 
     time.sleep(1)
@@ -79,18 +79,35 @@ def fun_addtwo_with_threadcount(a, sgeThreads=1):
 
 
 @mark.task
-def fun_addvar(a, b):
+def fun_addtwo_with_threadcount(a: int, sgeThreads: int = 1) -> int:
+    import time
+
+    time.sleep(1)
+    if a == 3:
+        time.sleep(2)
+    return a + 2
+
+
+@mark.task
+def fun_addvar(
+    a: ty.Union[int, float], b: ty.Union[int, float]
+) -> ty.Union[int, float]:
+    return a + b
+
+
+@mark.task
+def fun_addvar_notype(a, b):
     return a + b
 
 
 @mark.task
 @mark.annotate({"return": {"sum": float, "sub": float}})
-def fun_addsubvar(a, b):
+def fun_addsubvar(a: float, b: float):
     return a + b, a - b
 
 
 @mark.task
-def fun_addvar_none(a, b):
+def fun_addvar_none(a: int, b: ty.Optional[int]) -> int:
     if b is None:
         return a
     else:
@@ -98,27 +115,32 @@ def fun_addvar_none(a, b):
 
 
 @mark.task
-def fun_addvar_default(a, b=1):
+def fun_addvar_default(a: int, b: int = 1) -> int:
     return a + b
 
 
 @mark.task
-def fun_addvar3(a, b, c):
+def fun_addvar_default_notype(a, b=1):
+    return a + b
+
+
+@mark.task
+def fun_addvar3(a: int, b: int, c: int) -> int:
     return a + b + c
 
 
 @mark.task
-def fun_addvar4(a, b, c, d):
+def fun_addvar4(a: int, b: int, c: int, d: int) -> int:
     return a + b + c + d
 
 
 @mark.task
-def moment(lst, n):
+def moment(lst: ty.List[float], n: float) -> float:
     return sum([i**n for i in lst]) / len(lst)
 
 
 @mark.task
-def fun_div(a, b):
+def fun_div(a: ty.Union[int, float], b: ty.Union[int, float]) -> float:
     return a / b
 
 
@@ -145,7 +167,7 @@ def add2(x: int) -> int:
 
 
 @mark.task
-def raise_xeq1(x):
+def raise_xeq1(x: int) -> int:
     if x == 1:
         raise Exception("x is 1, so i'm raising an exception!")
     return x
@@ -166,7 +188,7 @@ def add2_sub2_res_list(res):
 
 
 @mark.task
-def power(a, b):
+def power(a: int, b: int) -> int:
     return a**b
 
 
@@ -183,37 +205,37 @@ def identity_2flds(
 
 
 @mark.task
-def ten(x):
+def ten(x) -> int:
     return 10
 
 
 @mark.task
-def add2_wait(x):
+def add2_wait(x: int) -> int:
     time.sleep(2)
     return x + 2
 
 
 @mark.task
-def list_output(x):
+def list_output(x: int) -> ty.List[int]:
     return [x, 2 * x, 3 * x]
 
 
 @mark.task
-def list_sum(x):
+def list_sum(x: ty.Sequence[ty.Union[int, float]]) -> ty.Union[int, float]:
     return sum(x)
 
 
 @mark.task
-def fun_dict(d):
+def fun_dict(d: dict) -> str:
     kv_list = [f"{k}:{v}" for (k, v) in d.items()]
     return "_".join(kv_list)
 
 
 @mark.task
-def fun_write_file(filename: ty.Union[str, File, Path], text="hello") -> File:
+def fun_write_file(filename: Path, text="hello") -> File:
     with open(filename, "w") as f:
         f.write(text)
-    return Path(filename).absolute()
+    return File(filename)
 
 
 @mark.task
@@ -323,3 +345,9 @@ def gen_basic_wf_with_threadcount_concurrent(name="basic-wf-with-threadcount"):
 def list_mult_sum(scalar: int, in_list: ty.List[int]) -> ty.Tuple[int, ty.List[int]]:
     products = [scalar * x for x in in_list]
     return functools.reduce(operator.add, products, 0), products
+
+
+@mark.task
+@mark.annotate({"return": {"x": str, "y": int, "z": float}})
+def foo(a: str, b: int, c: float) -> ty.Tuple[str, int, float]:
+    return a, b, c

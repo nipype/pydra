@@ -568,7 +568,7 @@ class TaskBase:
         splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None] = None,
         overwrite: bool = False,
         cont_dim: ty.Optional[dict] = None,
-        **split_inputs,
+        **inputs,
     ):
         """
         Run this task parametrically over lists of split inputs.
@@ -598,10 +598,10 @@ class TaskBase:
             raise Exception(
                 f"Cannot split {self} as its output interface has already been accessed"
             )
-        if splitter is None and split_inputs:
-            splitter = list(split_inputs)
+        if splitter is None and inputs:
+            splitter = list(inputs)
         elif splitter:
-            missing = set(self._unwrap_splitter(splitter)) - set(split_inputs)
+            missing = set(self._unwrap_splitter(splitter)) - set(inputs)
             missing = [m for m in missing if not m.startswith("_")]
             if missing:
                 raise ValueError(
@@ -617,11 +617,16 @@ class TaskBase:
         if cont_dim:
             for key, vel in cont_dim.items():
                 self._cont_dim[f"{self.name}.{key}"] = vel
-        if split_inputs:
+        if inputs:
             new_inputs = {}
-            for inpt_name, inpt_val in split_inputs.items():
+            split_inputs = set(
+                f"{self.name}.{n}" if "." not in n else n
+                for n in self._unwrap_splitter(splitter)
+                if not n.startswith("_")
+            )
+            for inpt_name, inpt_val in inputs.items():
                 new_val: ty.Any
-                if f"{self.name}.{inpt_name}" in splitter:  # type: ignore
+                if f"{self.name}.{inpt_name}" in split_inputs:  # type: ignore
                     if isinstance(inpt_val, LazyField):
                         new_val = inpt_val.split(splitter)
                     elif isinstance(inpt_val, ty.Iterable) and not isinstance(

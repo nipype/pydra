@@ -17,8 +17,11 @@ from ..specs import (
     LazyIn,
     LazyOut,
     LazyField,
+    StateArray,
 )
 from ..helpers import make_klass
+from .utils import foo
+from pydra import mark, Workflow
 import pytest
 
 
@@ -357,3 +360,65 @@ def test_input_file_hash_5(tmp_path):
         f.write("hi")
     hash3 = inputs(in_file=[{"file": file_diffcontent, "int": 3}]).hash
     assert hash1 != hash3
+
+
+def test_lazy_field_cast():
+    task = foo(a="a", b=1, c=2.0, name="foo")
+
+    assert task.lzout.y.type == int
+    assert task.lzout.y.cast(float).type == float
+
+
+def test_lazy_field_multi_same_split():
+    @mark.task
+    def f(x: ty.List[int]) -> ty.List[int]:
+        return x
+
+    task = f(x=[1, 2, 3], name="foo")
+
+    lf = task.lzout.out.split("foo.x")
+
+    assert lf.type == StateArray[int]
+    assert lf.splits == set([(("foo.x",),)])
+
+    lf2 = lf.split("foo.x")
+    assert lf2.type == StateArray[int]
+    assert lf2.splits == set([(("foo.x",),)])
+
+
+def test_lazy_field_multi_diff_split():
+    @mark.task
+    def f(x: ty.Any, y: ty.Any) -> ty.Any:
+        return x
+
+    task = f(x=[1, 2, 3], name="foo")
+
+    lf = task.lzout.out.split("foo.x")
+
+    assert lf.type == StateArray[ty.Any]
+    assert lf.splits == set([(("foo.x",),)])
+
+    lf2 = lf.split("foo.x")
+    assert lf2.type == StateArray[ty.Any]
+    assert lf2.splits == set([(("foo.x",),)])
+
+    lf3 = lf.split("foo.y")
+    assert lf3.type == StateArray[StateArray[ty.Any]]
+    assert lf3.splits == set([(("foo.x",),), (("foo.y",),)])
+
+
+def test_wf_lzin_split():
+    @mark.task
+    def identity(x: int) -> int:
+        return x
+
+    inner = Workflow(name="inner", input_spec=["x"])
+    inner.add(identity(x=inner.lzin.x, name="f"))
+    inner.set_output(("out", inner.f.lzout.out))
+
+    outer = Workflow(name="outer", input_spec=["x"])
+    outer.add(inner.split(x=outer.lzin.x))
+    outer.set_output(("out", outer.inner.lzout.out))
+
+    result = outer(x=[1, 2, 3])
+    assert result.output.out == StateArray([1, 2, 3])

@@ -820,9 +820,6 @@ class LazyField(ty.Generic[T]):
         factory=frozenset, converter=frozenset
     )
 
-    def __repr__(self):
-        return f"{type(self).__name__}('{self.name}', '{self.field}', {self.type})"
-
     def __bytes_repr__(self, cache):
         yield type(self).__name__.encode()
         yield self.name.encode()
@@ -848,7 +845,7 @@ class LazyField(ty.Generic[T]):
             splits=self.splits,
         )
 
-    def split(self, splitter) -> "LazyField":
+    def split(self, splitter: Splitter) -> "LazyField":
         """ "Splits" the lazy field over an array of nodes by replacing the sequence type
         of the lazy field with StateArray to signify that it will be "split" across
 
@@ -859,8 +856,13 @@ class LazyField(ty.Generic[T]):
         """
         from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
 
-        inner_type, prev_split_depth = TypeParser.strip_splits(self.type)
+        splits = self.splits | set([LazyField.sanitize_splitter(splitter)])
+        # Check to see whether the field has already been split over the given splitter
+        if splits == self.splits:
+            return self
 
+        # Modify the type of the lazy field to include the split across a state-array
+        inner_type, prev_split_depth = TypeParser.strip_splits(self.type)
         assert prev_split_depth <= 1
         if inner_type is ty.Any:
             type_ = StateArray[ty.Any]
@@ -873,11 +875,6 @@ class LazyField(ty.Generic[T]):
             )
         if prev_split_depth:
             type_ = StateArray[type_]
-        # else:
-        # Apply existing splits to the type
-        # for _ in range(prev_split_depth):
-        #     type_ = StateArray[type_]
-        splits = self.splits | set([LazyField.sanitize_splitter(splitter)])
         return type(self)[type_](
             name=self.name,
             field=self.field,
