@@ -957,7 +957,7 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
         cache_dir=tmp_path,
     )
 
-    res = results_function(shelly, "serial")
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     out1 = res.output.out1.fspath
     assert out1.exists()
@@ -1002,7 +1002,7 @@ def test_shell_cmd_inputspec_7a(plugin, results_function, tmp_path):
         cache_dir=tmp_path,
     )
 
-    res = results_function(shelly, "serial")
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     # checking if the file is created in a good place
     assert shelly.output_dir == res.output.out1_changed.fspath.parent
@@ -3110,7 +3110,7 @@ def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
         files_id=new_files_id,
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, "serial")
     assert res.output.stdout == ""
     for file in res.output.new_files:
         assert file.fspath.exists()
@@ -3186,7 +3186,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
         files_id=new_files_id,
     )
 
-    res = results_function(shelly, plugin)
+    res = results_function(shelly, "serial")
     assert res.output.stdout == ""
     assert res.output.new_files.fspath.exists()
 
