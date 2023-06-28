@@ -1600,7 +1600,7 @@ def test_shell_cmd_inputsspec_11(tmp_path):
     wf.add(task)
     wf.set_output([("out", wf.echoMultiple.lzout.outputFiles)])
 
-    with Submitter(plugin="cf") as sub:
+    with Submitter(plugin="serial") as sub:
         sub(wf)
     result = wf.result()
 
