@@ -28,9 +28,8 @@ def attr_fields(spec, exclude_names=()):
 
 # These are special types that are checked for in the construction of input/output specs
 # and special converters inserted into the attrs fields.
-#
-# Ideally Multi(In|Out)putObj would be a generic (see https://github.com/python/mypy/issues/3331)
-# and then Multi(In|Out)putFile could be just Multi(In|Out)obj.
+
+
 class MultiInputObj(list, ty.Generic[T]):
     pass
 
