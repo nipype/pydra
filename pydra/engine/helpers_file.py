@@ -150,8 +150,9 @@ def template_update_single(
     # if input_dict_st with state specific value is not available,
     # the dictionary will be created from inputs object
     from ..utils.typing import TypeParser  # noqa
+    from pydra.engine.specs import LazyField
 
-    VALID_TYPES = (str, ty.Union[str, bool], Path, ty.Union[Path, bool])
+    VALID_TYPES = (str, ty.Union[str, bool], Path, ty.Union[Path, bool], LazyField)
 
     if inputs_dict_st is None:
         inputs_dict_st = attr.asdict(inputs, recurse=False)
