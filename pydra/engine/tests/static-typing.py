@@ -1,6 +1,7 @@
 import typing as ty
 from typing_extensions import dataclass_transform
 import attrs
+from fileformats.generic import File, Directory
 
 
 OutSpec = ty.TypeVar("OutSpec")
@@ -81,34 +82,69 @@ def shell_arg(default=attrs.NOTHING, factory=None, argstr="", position=None, hel
     )
 
 
+def shell_out(
+    default=attrs.NOTHING,
+    argstr="",
+    position=None,
+    help=None,
+    file_template=None,
+    callable=None,
+):
+    return attrs.field(
+        default=default,
+        metadata={
+            "argstr": argstr,
+            "position": position,
+            "output_file_template": file_template,
+            "help_string": help,
+            "callable": callable,
+        },
+    )
+
+
 @dataclass_transform(kw_only_default=True, field_specifiers=(shell_arg,))
 def shell_task(klass):
-    return attrs.define(kw_only=True, slots=False)(klass)
+    return attrs.define(kw_only=True, auto_attrib=False, slots=False)(klass)
+
+
+@dataclass_transform(kw_only_default=True, field_specifiers=(shell_out,))
+def shell_outputs(klass):
+    return attrs.define(kw_only=True, auto_attrib=False, slots=False)(klass)
+
+
+def func_arg(default=attrs.NOTHING, factory=None, help=None):
+    return attrs.field(
+        default=default,
+        metadata={"factory": factory, "help_string": help},
+    )
+
+
+@dataclass_transform(kw_only_default=True, field_specifiers=(func_arg,))
+def func_task(klass):
+    return attrs.define(kw_only=True, auto_attrib=False, slots=False)(klass)
 
 
 @shell_task
 class MyShellSpec(SpecBase["MyShellSpec.Out"]):
-    @staticmethod
-    def func(in_int: int, in_str: str) -> ty.Tuple[int, str]:
-        return in_int, in_str
+    executable: str = "mycmd"
 
-    in_int: int = shell_arg(argstr="", position=0)
-    in_str: str = shell_arg(argstr="--ins", position=-1)
+    in_file: File = shell_arg(argstr="", position=0)
+    an_option: str = shell_arg(argstr="--opt", position=-1)
 
-    @attrs.define
+    @shell_outputs
     class Out:
-        out_int: int
-        out_str: str
+        out_file: File = shell_out(file_template="")
+        out_str: str = shell_out()
 
 
-@attrs.define
+@func_task
 class MyFuncSpec(SpecBase["MyFuncSpec.Out"]):
     @staticmethod
     def func(in_int: int, in_str: str) -> ty.Tuple[int, str]:
         return in_int, in_str
 
-    in_int: int
-    in_str: str
+    in_int: int = func_arg(help="a dummy input int")
+    in_str: str = func_arg(help="a dummy input int")
 
     @attrs.define
     class Out:
