@@ -99,12 +99,14 @@ class BaseSpec:
 
     def retrieve_values(self, wf, state_index: ty.Optional[int] = None):
         """Get values contained by this spec."""
-        temp_values = {}
+        retrieved_values = {}
         for field in attr_fields(self):
             value = getattr(self, field.name)
             if isinstance(value, LazyField):
-                temp_values[field.name] = value.get_value(wf, state_index=state_index)
-        for field, val in temp_values.items():
+                retrieved_values[field.name] = value.get_value(
+                    wf, state_index=state_index
+                )
+        for field, val in retrieved_values.items():
             setattr(self, field, val)
 
     def check_fields_input_spec(self):
@@ -818,6 +820,7 @@ class LazyField(ty.Generic[T]):
     splits: ty.FrozenSet[ty.Tuple[ty.Tuple[str, ...], ...]] = attr.field(
         factory=frozenset, converter=frozenset
     )
+    cast_from: ty.Optional[ty.Type[ty.Any]] = None
 
     def __bytes_repr__(self, cache):
         yield type(self).__name__.encode()
@@ -842,6 +845,7 @@ class LazyField(ty.Generic[T]):
             field=self.field,
             type=new_type,
             splits=self.splits,
+            cast_from=self.cast_from if self.cast_from else self.type,
         )
 
     def split(self, splitter: Splitter) -> "LazyField":
@@ -904,6 +908,16 @@ class LazyField(ty.Generic[T]):
             splitter = tuple(s for s in stripped if s)  # type: ignore
         return splitter  # type: ignore
 
+    def _apply_cast(self, value):
+        """\"Casts\" the value from the retrieved type if a cast has been applied to
+        the lazy-field"""
+        from pydra.utils.typing import TypeParser
+
+        if self.cast_from:
+            assert TypeParser.matches(value, self.cast_from)
+            value = self.type(value)
+        return value
+
 
 class LazyInField(LazyField[T]):
     attr_type = "input"
@@ -937,6 +951,7 @@ class LazyInField(LazyField[T]):
                 return StateArray(apply_splits(i, depth - 1) for i in obj)
 
             value = apply_splits(value, split_depth)
+        value = self._apply_cast(value)
         return value
 
 
@@ -993,7 +1008,7 @@ class LazyOutField(LazyField[T]):
             return val
 
         value = get_nested_results(result, depth=split_depth)
-
+        value = self._apply_cast(value)
         return value
 
 

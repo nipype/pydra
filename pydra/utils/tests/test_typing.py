@@ -7,6 +7,16 @@ import pytest
 from pydra import mark
 from ...engine.specs import File, LazyOutField
 from ..typing import TypeParser
+from pydra import Workflow
+from fileformats.serialization import Json
+from .utils import (
+    generic_func_task,
+    GenericShellTask,
+    specific_func_task,
+    SpecificShellTask,
+    MyFormatX,
+    MyHeader,
+)
 
 
 def lz(tp: ty.Type):
@@ -500,9 +510,90 @@ def test_contains_type_in_dict():
     )
 
 
-def test_matches():
+def test_type_matches():
     assert TypeParser.matches([1, 2, 3], ty.List[int])
     assert TypeParser.matches((1, 2, 3), ty.Tuple[int, ...])
 
     assert TypeParser.matches((1, 2, 3), ty.List[int])
     assert not TypeParser.matches((1, 2, 3), ty.List[int], coercible=[])
+
+
+@pytest.fixture(params=["func", "shell"])
+def generic_task(request):
+    if request.param == "func":
+        return generic_func_task
+    elif request.param == "shell":
+        return GenericShellTask
+    else:
+        assert False
+
+
+@pytest.fixture(params=["func", "shell"])
+def specific_task(request):
+    if request.param == "func":
+        return specific_func_task
+    elif request.param == "shell":
+        return SpecificShellTask
+    else:
+        assert False
+
+
+def test_typing_cast(tmp_path, generic_task, specific_task):
+    """Check the casting of lazy fields and whether specific file-sets can be recovered
+    from generic `File` classes"""
+
+    wf = Workflow(
+        name="test",
+        input_spec={"in_file": MyFormatX},
+        output_spec={"out_file": MyFormatX},
+    )
+
+    wf.add(
+        specific_task(
+            in_file=wf.lzin.in_file,
+            name="specific1",
+        )
+    )
+
+    wf.add(  # Generic task
+        generic_task(
+            in_file=wf.specific1.lzout.out,
+            name="generic",
+        )
+    )
+
+    with pytest.raises(TypeError, match="Cannot coerce"):
+        # No cast of generic task output to MyFormatX
+        wf.add(
+            specific_task(
+                in_file=wf.generic.lzout.out,
+                name="specific2",
+            )
+        )
+
+    wf.add(
+        specific_task(
+            in_file=wf.generic.lzout.out.cast(MyFormatX),
+            name="specific2",
+        )
+    )
+
+    wf.set_output(
+        [
+            ("out_file", wf.specific2.lzout.out),
+        ]
+    )
+
+    my_fspath = tmp_path / "in_file.my"
+    hdr_fspath = tmp_path / "in_file.hdr"
+    my_fspath.write_text("my-format")
+    hdr_fspath.write_text("my-header")
+    in_file = MyFormatX([my_fspath, hdr_fspath])
+
+    result = wf(in_file=in_file, plugin="serial")
+
+    out_file: MyFormatX = result.output.out_file
+    assert type(out_file) is MyFormatX
+    assert out_file.parent != in_file.parent
+    assert type(out_file.header) is MyHeader
+    assert out_file.header.parent != in_file.header.parent
