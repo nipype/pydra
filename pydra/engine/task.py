@@ -125,12 +125,14 @@ class FunctionTask(TaskBase):
                     val_dflt = val.default
                 else:
                     val_dflt = attr.NOTHING
+                type_ = val.annotation
+                assert inspect.isclass(type_)
                 fields.append(
                     (
                         val.name,
                         attr.ib(
                             default=val_dflt,
-                            type=val.annotation,
+                            type=type_,
                             metadata={
                                 "help_string": f"{val.name} parameter from {func.__name__}"
                             },
