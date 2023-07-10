@@ -879,7 +879,7 @@ class DaskWorker(Worker):
             from dask.distributed import Client
 
             self.client = await Client(**self.client_args, asynchronous=True)
-    
+
         if isinstance(runnable, TaskBase):
             future = self.client.submit(runnable._run, rerun)
             result = await future
