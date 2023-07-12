@@ -45,14 +45,13 @@ def test_save(tmpdir):
     assert res.output.out == 2
 
 
-# def test_hash_file(tmpdir):
-#     outdir = Path(tmpdir)
-#     with open(outdir / "test.file", "w") as fp:
-#         fp.write("test")
-#     assert (
-#         helpers_file.hash_file(outdir / "test.file")
-#         == "37fcc546dce7e59585f3217bb4c30299"
-#     )
+def test_hash_file(tmpdir):
+    outdir = Path(tmpdir)
+    with open(outdir / "test.file", "w") as fp:
+        fp.write("test")
+    assert (
+        hash_function(File(outdir / "test.file")) == "37fcc546dce7e59585f3217bb4c30299"
+    )
 
 
 def test_hashfun_float():
