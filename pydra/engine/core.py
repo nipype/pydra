@@ -708,16 +708,6 @@ class TaskBase:
                 "combiner has been already set, "
                 "if you want to overwrite it - use overwrite=True"
             )
-        # if kwargs:
-        #     new_inputs = {}
-        #     for inpt_name, inpt_val in kwargs.items():
-        #         if not isinstance(inpt_val, LazyField):
-        #             raise TypeError(
-        #                 "Only lazy-fields can be set as inputs in the combine method "
-        #                 f"not {inpt_name}:{inpt_val}"
-        #             )
-        #         new_inputs[inpt_name] = inpt_val.combine()
-        #     self.inputs = attr.evolve(self.inputs, **new_inputs)
         if not self.state:
             self.split(splitter=None)
             # a task can have a combiner without a splitter
