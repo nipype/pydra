@@ -649,8 +649,8 @@ class TaskBase:
     def _unwrap_splitter(
         cls, splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...]]
     ) -> ty.Iterable[str]:
-        """Unwraps a potentially nested splitter to a flat list of fields that are split
-        over
+        """Unwraps a splitter into a flat list of fields that are split over, i.e.
+        [("a", "b"), "c"] -> ["a", "b", "c"]
 
         Parameters
         ----------
