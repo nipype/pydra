@@ -18,6 +18,7 @@ from .utils import (
 )
 
 from ..core import TaskBase
+from ..specs import StateArray
 from ..submitter import Submitter
 
 
@@ -784,7 +785,8 @@ def test_task_state_1(plugin_dask_opt, input_type, tmp_path):
 def test_task_state_1a(plugin, tmp_path):
     """task with the simplest splitter (inputs set separately)"""
     nn = fun_addtwo(name="NA")
-    nn.split(splitter="a", a=[3, 5])
+    nn.split(splitter="a", a=[1, 2])
+    nn.inputs.a = StateArray([3, 5])
     nn.cache_dir = tmp_path
 
     assert nn.state.splitter == "NA.a"
