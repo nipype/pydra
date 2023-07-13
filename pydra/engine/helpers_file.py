@@ -74,7 +74,13 @@ def copy_nested_files(
     """
     from ..utils.typing import TypeParser  # noqa
 
+    cache: ty.Dict[FileSet, FileSet] = {}
+
     def copy_fileset(fileset: FileSet):
+        try:
+            return cache[fileset]
+        except KeyError:
+            pass
         supported = supported_modes
         if any(MountIndentifier.on_cifs(p) for p in fileset.fspaths):
             supported -= FileSet.CopyMode.symlink
@@ -82,7 +88,9 @@ def copy_nested_files(
             MountIndentifier.on_same_mount(p, dest_dir) for p in fileset.fspaths
         ):
             supported -= FileSet.CopyMode.hardlink
-        return fileset.copy(dest_dir=dest_dir, supported_modes=supported, **kwargs)
+        copied = fileset.copy(dest_dir=dest_dir, supported_modes=supported, **kwargs)
+        cache[fileset] = copied
+        return copied
 
     return TypeParser.apply_to_instances(FileSet, copy_fileset, value)
 

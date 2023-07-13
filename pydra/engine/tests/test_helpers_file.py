@@ -1,8 +1,12 @@
+import typing as ty
+import sys
 from pathlib import Path
 import pytest
+from fileformats.generic import File
 from ..helpers_file import (
     ensure_list,
     MountIndentifier,
+    copy_nested_files,
 )
 
 
@@ -42,6 +46,120 @@ def _temp_analyze_files_prime(tmpdir):
 def test_ensure_list(filename, expected):
     x = ensure_list(filename)
     assert x == expected
+
+
+def test_copy_nested_files_copy(tmp_path: Path):
+    src_dir = tmp_path / "src"
+
+    src_dir.mkdir()
+
+    # Create temporary files
+    files = []
+    for x in "abcde":
+        p = src_dir / (x + ".txt")
+        p.write_text(x)
+        files.append(File(p))
+    a, b, c, d, e = files
+
+    nested_files = [{"a": a}, b, [(c, a), (d, e)]]
+
+    dest_dir = tmp_path / "dest"
+    nested_files_copy = copy_nested_files(
+        nested_files, dest_dir, mode=File.CopyMode.copy
+    )
+    assert sorted(p.relative_to(src_dir) for p in src_dir.glob("**/*.txt")) == sorted(
+        p.relative_to(dest_dir) for p in dest_dir.glob("**/*.txt")
+    )
+    copied_files = []
+    for x in "abcde":
+        copied_files.append(File(dest_dir / (x + ".txt")))
+    a, b, c, d, e = copied_files
+    assert nested_files_copy == [{"a": a}, b, [(c, a), (d, e)]]
+
+
+def test_copy_nested_files_hardlink(tmp_path: Path):
+    src_dir = tmp_path / "src"
+
+    src_dir.mkdir()
+
+    # Create temporary files
+    files = []
+    for x in "abcde":
+        p = src_dir / (x + ".txt")
+        p.write_text(x)
+        files.append(File(p))
+    a, b, c, d, e = files
+
+    nested_files = [{"a": a}, b, [(c, a), (d, e)]]
+
+    dest_dir = tmp_path / "dest"
+    nested_files_copy = copy_nested_files(
+        nested_files, dest_dir, mode=File.CopyMode.hardlink
+    )
+    assert sorted(p.relative_to(src_dir) for p in src_dir.glob("**/*.txt")) == sorted(
+        p.relative_to(dest_dir) for p in dest_dir.glob("**/*.txt")
+    )
+    copied_files = []
+    for x in "abcde":
+        copied_files.append(File(dest_dir / (x + ".txt")))
+    a, b, c, d, e = copied_files
+    assert nested_files_copy == [{"a": a}, b, [(c, a), (d, e)]]
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="symlinks not supported on Windows"
+)
+def test_copy_nested_files_symlink(tmp_path: Path):
+    src_dir = tmp_path / "src"
+
+    src_dir.mkdir()
+
+    # Create temporary files
+    files = []
+    for x in "abcde":
+        p = src_dir / (x + ".txt")
+        p.write_text(x)
+        files.append(File(p))
+    a, b, c, d, e = files
+
+    nested_files = [{"a": a}, b, [(c, a), (d, e)]]
+
+    dest_dir = tmp_path / "dest"
+    nested_files_copy = copy_nested_files(
+        nested_files, dest_dir, mode=File.CopyMode.symlink
+    )
+    assert sorted(p.relative_to(src_dir) for p in src_dir.glob("**/*.txt")) == sorted(
+        p.relative_to(dest_dir) for p in dest_dir.glob("**/*.txt")
+    )
+    copied_files: ty.List[File] = []
+    for x in "abcde":
+        copied_files.append(File(dest_dir / (x + ".txt")))
+    assert all(f.fspath.is_symlink() for f in copied_files)
+    a, b, c, d, e = copied_files
+    assert nested_files_copy == [{"a": a}, b, [(c, a), (d, e)]]
+
+
+def test_copy_nested_files_leave(tmp_path: Path):
+    src_dir = tmp_path / "src"
+
+    src_dir.mkdir()
+
+    # Create temporary files
+    files = []
+    for x in "abcde":
+        p = src_dir / (x + ".txt")
+        p.write_text(x)
+        files.append(File(p))
+    a, b, c, d, e = files
+
+    nested_files = [{"a": a}, b, [(c, a), (d, e)]]
+
+    dest_dir = tmp_path / "dest"  # not used
+
+    nested_files_copy = copy_nested_files(
+        nested_files, dest_dir, mode=File.CopyMode.leave
+    )
+    assert nested_files_copy == nested_files
 
 
 MOUNT_OUTPUTS = (
