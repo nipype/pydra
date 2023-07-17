@@ -1,0 +1,42 @@
+name: Dask Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8, 3.9, "3.10"]
+      fail-fast: false
+
+    steps:
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+
+      - name: Checkout Pydra repo
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.repository }}
+
+      - name: Install pydra with Dask and test dependencies
+        run: |
+          pip install -e ".[test,dask]"
+
+      - name: Run tests
+        run: |
+          pytest -v --dask pydra/engine --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+
+      - name: Upload to codecov
+        run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
