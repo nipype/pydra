@@ -104,9 +104,15 @@ class TypeParser(ty.Generic[T]):
             if origin is None:
                 return t
             args = get_args(t)
-            if not args or args == (Ellipsis,):
+            if not args or args == (Ellipsis,):  # Not sure Ellipsis by itself is valid
+                # If no args were provided, or those arguments were an ellipsis
                 assert isinstance(origin, type)
                 return origin
+            if origin not in (ty.Union, type) or any(
+                issubclass(origin, t) for t in (ty.Mapping, ty.Sequence)
+            ):
+                # Don't know what to do with type arguments so just return original type
+                return t
             return (origin, [expand_pattern(a) for a in args])
 
         self.tp = tp
@@ -185,7 +191,12 @@ class TypeParser(ty.Generic[T]):
                 ) from e
             if issubclass(origin, ty.Tuple):
                 return coerce_tuple(type_, obj_args, pattern_args)
-            return coerce_sequence(type_, obj_args, pattern_args)
+            if issubclass(origin, ty.Sequence):
+                return coerce_sequence(type_, obj_args, pattern_args)
+            else:
+                assert (
+                    False
+                ), f"Don't know how to handle args ({pattern_args}) for {origin} type"
 
         def coerce_basic(obj, pattern):
             """Coerce an object to a "basic types" like `int`, `float`, `bool`, `Path`
