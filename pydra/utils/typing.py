@@ -108,6 +108,10 @@ class TypeParser(ty.Generic[T]):
                 # If no args were provided, or those arguments were an ellipsis
                 assert isinstance(origin, type)
                 return origin
+            if origin not in (ty.Union, type) and not issubclass(origin, ty.Iterable):
+                raise TypeError(
+                    f"Don't know how to handle args ({args}) for {origin} type"
+                )
             return (origin, [expand_pattern(a) for a in args])
 
         self.tp = tp
@@ -143,7 +147,7 @@ class TypeParser(ty.Generic[T]):
             coerced = attr.NOTHING  # type: ignore[assignment]
         elif isinstance(obj, LazyField):
             self.check_type(obj.type)
-            coerced = obj
+            coerced = obj  # type: ignore
         elif isinstance(obj, StateArray):
             coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]
         else:
@@ -184,14 +188,11 @@ class TypeParser(ty.Generic[T]):
                 raise TypeError(
                     f"Could not coerce to {type_} as {obj} is not iterable{msg}"
                 ) from e
-            if issubclass(origin, ty.Tuple):
+            if issubclass(origin, tuple):
                 return coerce_tuple(type_, obj_args, pattern_args)
             if issubclass(origin, ty.Iterable):
                 return coerce_sequence(type_, obj_args, pattern_args)
-            else:
-                assert (
-                    False
-                ), f"Don't know how to handle args ({pattern_args}) for {origin} type"
+            assert False, f"Coercion from {obj} to {pattern} is not handled"
 
         def coerce_basic(obj, pattern):
             """Coerce an object to a "basic types" like `int`, `float`, `bool`, `Path`
