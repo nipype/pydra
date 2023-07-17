@@ -103,10 +103,6 @@ class TypeParser(ty.Generic[T]):
             origin = get_origin(t)
             if origin is None:
                 return t
-            if origin not in (ty.Union, type):
-                if not any(issubclass(origin, t) for t in (ty.Mapping, ty.Sequence)):
-                    # Don't know what to do with type arguments so just return original type
-                    return t
             args = get_args(t)
             if not args or args == (Ellipsis,):  # Not sure Ellipsis by itself is valid
                 # If no args were provided, or those arguments were an ellipsis
@@ -190,7 +186,7 @@ class TypeParser(ty.Generic[T]):
                 ) from e
             if issubclass(origin, ty.Tuple):
                 return coerce_tuple(type_, obj_args, pattern_args)
-            if issubclass(origin, ty.Sequence):
+            if issubclass(origin, ty.Iterable):
                 return coerce_sequence(type_, obj_args, pattern_args)
             else:
                 assert (
