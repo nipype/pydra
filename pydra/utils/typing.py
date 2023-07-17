@@ -163,6 +163,8 @@ class TypeParser(ty.Generic[T]):
             origin, pattern_args = pattern
             if origin is ty.Union:
                 return coerce_union(obj, pattern_args)
+            if origin is type:
+                return coerce_type(obj, pattern_args)
             if not self.is_instance(obj, origin):
                 self.check_coercible(obj, origin)
                 type_ = origin
@@ -192,7 +194,7 @@ class TypeParser(ty.Generic[T]):
             if self.is_instance(obj, pattern):
                 return obj
             self.check_coercible(obj, pattern)
-            return coerce_to_type(obj, pattern)
+            return coerce_obj(obj, pattern)
 
         def coerce_union(obj, pattern_args):
             """Coerce an object into the first type in a Union construct that it is
@@ -225,7 +227,7 @@ class TypeParser(ty.Generic[T]):
                 raise TypeError(
                     f"Could not coerce to {type_} as {obj} is not a mapping type{msg}"
                 ) from e
-            return coerce_to_type(
+            return coerce_obj(
                 {
                     expand_and_coerce(k, key_pattern): expand_and_coerce(v, val_pattern)
                     for k, v in items
@@ -248,7 +250,7 @@ class TypeParser(ty.Generic[T]):
                     f"Incorrect number of items in tuple, expected "
                     f"{len(pattern_args)}, got {len(obj_args)}"
                 )
-            return coerce_to_type(
+            return coerce_obj(
                 [expand_and_coerce(o, p) for o, p in zip(obj_args, pattern_args)], type_
             )
 
@@ -257,11 +259,18 @@ class TypeParser(ty.Generic[T]):
         ):
             """Coerce a non-tuple sequence object (e.g. list, ...)"""
             assert len(pattern_args) == 1
-            return coerce_to_type(
+            return coerce_obj(
                 [expand_and_coerce(o, pattern_args[0]) for o in obj_args], type_
             )
 
-        def coerce_to_type(obj, type_):
+        def coerce_type(type_: ty.Type[ty.Any], pattern_args: ty.List[ty.Type[ty.Any]]):
+            if not any(issubclass(type_, t) for t in pattern_args):
+                raise TypeError(
+                    f"{type_} is not one of the specified types {pattern_args}"
+                )
+            return type_
+
+        def coerce_obj(obj, type_):
             """Attempt to do the innermost (i.e. non-nested) coercion and fail with
             helpful message
             """
