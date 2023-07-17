@@ -110,7 +110,7 @@ class TypeParser(ty.Generic[T]):
                 return origin
             if origin not in (ty.Union, type) and not issubclass(origin, ty.Iterable):
                 raise TypeError(
-                    f"Don't know how to handle args ({args}) for {origin} type"
+                    f"TypeParser doesn't know how to handle args ({args}) for {origin} types"
                 )
             return (origin, [expand_pattern(a) for a in args])
 
