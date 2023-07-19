@@ -341,8 +341,8 @@ class TypeParser(ty.Generic[T]):
             self.check_coercible(tp_origin, pattern_origin)
             if issubclass(pattern_origin, ty.Mapping):
                 return check_mapping(tp_args, pattern_args)
-            if issubclass(pattern_origin, ty.Tuple):
-                if not issubclass(tp_origin, ty.Tuple):
+            if issubclass(pattern_origin, tuple):
+                if not issubclass(tp_origin, tuple):
                     assert len(tp_args) == 1
                     tp_args += (Ellipsis,)
                 return check_tuple(tp_args, pattern_args)
@@ -598,7 +598,7 @@ class TypeParser(ty.Generic[T]):
                     return True
             else:
                 if klass is ty.Any:
-                    if ty.Any in candidates:
+                    if ty.Any in candidates:  # type: ignore
                         return True
                     else:
                         return any_ok
