@@ -101,4 +101,4 @@ target-version = ['py37', 'py38']
 exclude = "pydra/_version.py"
 
 [tool.codespell]
-ignore-words = ".codespell-ignorewords"
+ignore-words-list = "nd,afile"
