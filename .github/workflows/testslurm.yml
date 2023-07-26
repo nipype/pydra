@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DOCKER_IMAGE: mgxd/slurm:19.05.1
+      DOCKER_IMAGE: giovtorres/docker-centos7-slurm:21.08.6
 
     steps:
     - name: Disable etelemetry
@@ -20,14 +20,10 @@ jobs:
       run: |
         docker pull $DOCKER_IMAGE
         # Have image running in background
-        docker run `bash <(curl -s https://codecov.io/env)` -itd -h ernie --name slurm -v `pwd`:/pydra -e NO_ET=$NO_ET $DOCKER_IMAGE
+        docker run `bash <(curl -s https://codecov.io/env)` -itd -h slurmctl --name slurm -v `pwd`:/pydra -e NO_ET=$NO_ET $DOCKER_IMAGE
     - name: Display previous jobs with sacct
       run: |
         echo "Allowing ports/daemons time to start" && sleep 10
-        docker exec slurm bash -c "sacctmgr -i add cluster name=linux \
-          && supervisorctl restart slurmdbd \
-          && supervisorctl restart slurmctld \
-          && sacctmgr -i add account none,test Cluster=linux Description='none' Organization='none'"
         docker exec slurm bash -c "sacct && sinfo && squeue" 2&> /dev/null
         if [ $? -ne 0 ]; then
             echo "Slurm docker image error"
