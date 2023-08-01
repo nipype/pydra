@@ -178,7 +178,7 @@ def test_load_and_run(tmpdir):
     """testing load_and_run for pickled task"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
 
-    task = multiply(name="mult").split("x", x=[1, 2], y=10)
+    task = multiply(name="mult", y=10).split(x=[1, 2])
     task.state.prepare_states(inputs=task.inputs)
     task.state.prepare_inputs()
     with task_pkl.open("wb") as fp:

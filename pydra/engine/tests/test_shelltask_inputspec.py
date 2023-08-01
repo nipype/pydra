@@ -1941,7 +1941,7 @@ def test_shell_cmd_inputs_template_1_st():
 
 
 # TODO: after deciding how we use requires/templates
-def test_shell_cmd_inputs_di(
+def test_shell_cmd_inputs_denoise_image(
     tmp_path,
 ):
     """example from #279"""

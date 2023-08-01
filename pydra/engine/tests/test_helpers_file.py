@@ -49,6 +49,7 @@ def test_ensure_list(filename, expected):
 
 
 def test_copy_nested_files_copy(tmp_path: Path):
+    # Test copying files from within nested data structures
     src_dir = tmp_path / "src"
 
     src_dir.mkdir()

@@ -1,6 +1,5 @@
 import pytest
 
-# from pydra import set_input_validator
 
 try:
     import importlib_resources

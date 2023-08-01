@@ -1270,9 +1270,8 @@ def test_shell_cmd_inputspec_9a(tmp_path, plugin, results_function):
     the change: input file has directory with a dot
     """
     cmd = "cp"
-    ddir = tmp_path / "data.inp"
-    ddir.mkdir()
-    file = ddir / ("file.txt")
+    file = tmp_path / "data.inp" / "file.txt"
+    file.parent.mkdir()
     file.write_text("content\n")
 
     my_input_spec = SpecInfo(
