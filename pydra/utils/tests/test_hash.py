@@ -185,7 +185,7 @@ def test_registration():
 
 
 def test_registration_conflict():
-    # Verify the order of
+    # Verify the order of precedence: class/superclass registration, __bytes_repr__, protocols
     #
     # WARNING: This test appends to a registry that cannot be restored
     # to previous state.

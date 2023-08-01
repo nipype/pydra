@@ -4,7 +4,6 @@ import os
 # import stat
 import struct
 from collections.abc import Mapping
-import itertools
 from functools import singledispatch
 from hashlib import blake2b
 
@@ -74,7 +73,6 @@ def hash_object(obj: object) -> Hash:
     try:
         return hash_single(obj, Cache({}))
     except Exception as e:
-        hash_single(obj, Cache({}))  # for debugging
         raise UnhashableError(f"Cannot hash object {obj!r}") from e
 
 
@@ -284,11 +282,7 @@ if HAVE_NUMPY:
         if obj.dtype == "object":
             yield from bytes_repr_sequence_contents(iter(obj.ravel()), cache)
         else:
-            bytes_it = iter(obj.tobytes(order="C"))
-            for chunk in iter(
-                lambda: bytes(itertools.islice(bytes_it, NUMPY_CHUNK_LEN)), b""
-            ):
-                yield chunk
+            yield obj.tobytes(order="C")
 
 
 NUMPY_CHUNK_LEN = 8192
