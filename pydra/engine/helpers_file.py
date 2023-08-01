@@ -114,7 +114,6 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
             inputs_dict_st[k] = inputs_dict_st[k][v]
 
     from .specs import attr_fields
-    from ..utils.typing import TypeParser
 
     # Collect templated inputs for which all requirements are satisfied.
     fields_templ = [
@@ -129,13 +128,6 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
 
     dict_mod = {}
     for fld in fields_templ:
-        if not TypeParser.is_subclass(
-            fld.type, (str, Path, ty.Union[str, bool], ty.Union[Path, bool])
-        ):
-            raise TypeError(
-                "fields with output_file_template"
-                " has to be a string or Union[str, bool]"
-            )
         dict_mod[fld.name] = template_update_single(
             field=fld,
             inputs=inputs,
@@ -166,11 +158,6 @@ def template_update_single(
         inputs_dict_st = attr.asdict(inputs, recurse=False)
 
     if spec_type == "input":
-        if not TypeParser.is_subclass(field.type, VALID_TYPES):
-            raise TypeError(
-                f"'{field.name}' field has an 'output_file_template' and therefore "
-                f"needs to be typed {VALID_TYPES}, not {field.type}"  # <-- What is the bool option?
-            )
         inp_val_set = inputs_dict_st[field.name]
         if inp_val_set is not attr.NOTHING and not TypeParser.is_instance(
             inp_val_set, VALID_TYPES

@@ -496,12 +496,6 @@ def output_from_inputfields(output_spec, input_spec):
     new_fields = []
     for fld in attr.fields(make_klass(input_spec)):
         if "output_file_template" in fld.metadata:
-            if fld.type not in (str, ty.Union[str, bool], Path, ty.Union[Path, bool]):
-                raise TypeError(
-                    "Since 'output_file_template' is specified, the type of field "
-                    f"'{fld.name}' must a sub-class of str/Path or a "
-                    "str/Path subclass in union with a bool"
-                )
             if "output_field_name" in fld.metadata:
                 field_name = fld.metadata["output_field_name"]
             else:

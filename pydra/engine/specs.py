@@ -11,7 +11,6 @@ from fileformats.generic import (
     File,
     Directory,
 )
-
 import pydra
 from .helpers_file import template_update_single
 from ..utils.hash import hash_function
@@ -366,22 +365,33 @@ class ShellSpec(BaseSpec):
             if set(mdata.keys()) - supported_keys:
                 raise AttributeError(
                     f"only these keys are supported {supported_keys}, but "
-                    f"{set(mdata.keys()) - supported_keys} provided"
+                    f"{set(mdata.keys()) - supported_keys} provided for '{fld.name}' "
+                    f"field in {self}"
                 )
             # checking if the help string is provided (required field)
             if "help_string" not in mdata:
-                raise AttributeError(f"{fld.name} doesn't have help_string field")
-            # assuming that fields with output_file_template shouldn't have default
-            if fld.default not in [attr.NOTHING, True, False] and mdata.get(
-                "output_file_template"
-            ):
                 raise AttributeError(
-                    "default value should not be set together with output_file_template"
+                    f"{fld.name} doesn't have help_string field in {self}"
                 )
+            # assuming that fields with output_file_template shouldn't have default
+            if mdata.get("output_file_template"):
+                if fld.type not in (Path, ty.Union[Path, bool]):
+                    raise TypeError(
+                        f"Type of '{fld.name}' should be either pathlib.Path or "
+                        f"typing.Union[pathlib.Path, bool] (not {fld.type}) because "
+                        f"it has a value for output_file_template ({mdata['output_file_template']})"
+                    )
+                if fld.default not in [attr.NOTHING, True, False]:
+                    raise AttributeError(
+                        f"default value ({fld.default}) should not be set together with "
+                        f"output_file_template ({mdata['output_file_template']}) for "
+                        f"'{fld.name}' field in {self}"
+                    )
             # not allowing for default if the field is mandatory
             if not fld.default == attr.NOTHING and mdata.get("mandatory"):
                 raise AttributeError(
-                    "default value should not be set when the field is mandatory"
+                    f"default value ({fld.default}) should not be set when the field "
+                    f"('{fld.name}' in {self}) is mandatory"
                 )
             # setting default if value not provided and default is available
             if getattr(self, fld.name) is None:
@@ -571,7 +581,10 @@ class ShellOutSpec:
                         )
             return callable_(**call_args_val)
         else:
-            raise Exception("(_field_metadata) is not a current valid metadata key.")
+            raise Exception(
+                f"Metadata for '{fld.name}', does not not contain any of the required fields "
+                f'("callable", "output_file_template" or "value"): {fld.metadata}.'
+            )
 
     def _check_requires(self, fld, inputs):
         """checking if all fields from the requires and template are set in the input
