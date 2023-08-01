@@ -3,6 +3,7 @@ import abc
 import json
 import logging
 import itertools
+from functools import cached_property
 import os
 import sys
 from pathlib import Path
@@ -229,12 +230,9 @@ class TaskBase:
         state["inputs"] = make_klass(state["input_spec"])(**state["inputs"])
         self.__dict__.update(state)
 
-    @property
+    @cached_property
     def lzout(self):
-        if self._lzout:
-            return self._lzout
-        self._lzout = LazyOut(self)
-        return self._lzout
+        return LazyOut(self)
 
     def help(self, returnhelp=False):
         """Print class help."""

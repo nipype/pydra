@@ -94,7 +94,7 @@ def test_wf_1(tmpdir):
     np.save(file_orig, arr)
     wf.inputs.file_orig = file_orig
 
-    with Submitter(plugin="serial") as sub:
+    with Submitter(plugin="cf") as sub:
         sub(wf)
 
     assert wf.output_dir.exists()

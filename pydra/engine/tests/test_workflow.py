@@ -106,7 +106,7 @@ def test_wf_dict_input_and_output_spec():
         wf.inputs.a = 1.0
     with pytest.raises(
         TypeError,
-        match=("Could not coerce object, bad-value, to any of the union types "),
+        match=("Could not coerce object, 'bad-value', to any of the union types "),
     ):
         wf.inputs.b = {"foo": 1, "bar": "bad-value"}
 

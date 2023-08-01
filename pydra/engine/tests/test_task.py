@@ -22,7 +22,6 @@ from ..specs import (
 )
 from ...utils.hash import hash_function
 
-# from ..helpers import hash_file
 
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),

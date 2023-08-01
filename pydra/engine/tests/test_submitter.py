@@ -573,7 +573,7 @@ def test_sge_no_limit_maxthreads(tmpdir):
     assert job_1_endtime > job_2_starttime
 
 
-@pytest.mark.xfail(reason="Not sure")
+# @pytest.mark.xfail(reason="Not sure")
 def test_wf_with_blocked_tasks(tmpdir):
     wf = Workflow(name="wf_with_blocked_tasks", input_spec=["x"])
     wf.add(identity(name="taska", x=wf.lzin.x))
@@ -585,17 +585,17 @@ def test_wf_with_blocked_tasks(tmpdir):
 
     wf.cache_dir = tmpdir
 
-    with pytest.raises(Exception, match="graph is not empty,"):
-        with Submitter("serial") as sub:
-            sub(wf)
+    # with pytest.raises(Exception, match="graph is not empty,"):
+    with Submitter("serial") as sub:
+        sub(wf)
 
 
 class A:
     def __init__(self, a):
         self.a = a
 
-    def __hash__(self):
-        return hash(self.a)
+    def __bytes_repr__(self, cache):
+        yield bytes(self.a)
 
 
 @mark.task

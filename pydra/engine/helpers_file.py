@@ -57,9 +57,9 @@ def copy_nested_files(
     supported_modes: FileSet.CopyMode = FileSet.CopyMode.any,
     **kwargs,
 ) -> ty.Any:
-    """Copies all "file-sets" found with the nested value into the destination
-    directory. If no nested file-sets are found then the original value is returned. Note
-    that multiple nested file-sets (e.g. a list) will to have unique names
+    """Copies all "file-sets" found within the nested value (e.g. dict, list,...) into the
+    destination directory. If no nested file-sets are found then the original value is
+    returned. Note that multiple nested file-sets (e.g. a list) will to have unique names
     names (i.e. not differentiated by parent directories) otherwise there will be a path
     clash in the destination directory.
 

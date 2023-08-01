@@ -213,7 +213,7 @@ class TypeParser(ty.Generic[T]):
                 except TypeError as e:
                     reasons.append(e)
             raise TypeError(
-                f"Could not coerce object, {obj}, to any of the union types {pattern_args}:\n\n"
+                f"Could not coerce object, {obj!r}, to any of the union types {pattern_args}:\n\n"
                 + "\n\n".join(f"{a} -> {e}" for a, e in zip(pattern_args, reasons))
             )
 
