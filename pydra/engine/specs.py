@@ -7,6 +7,7 @@ import os
 from copy import copy
 from glob import glob
 import attr
+from fileformats.core import FileSet
 from fileformats.generic import (
     File,
     Directory,
@@ -435,8 +436,8 @@ class ShellOutSpec:
             # assuming that field should have either default or metadata, but not both
             input_value = getattr(inputs, fld.name, attr.NOTHING)
             if input_value is not attr.NOTHING:
-                if issubclass(fld.type, os.PathLike):
-                    input_value = fld.type(input_value)
+                if TypeParser.contains_type(FileSet, fld.type):
+                    input_value = TypeParser(fld.type).coerce(input_value)
                 additional_out[fld.name] = input_value
             elif (
                 fld.default is None or fld.default == attr.NOTHING
