@@ -376,7 +376,12 @@ class ShellSpec(BaseSpec):
                 )
             # assuming that fields with output_file_template shouldn't have default
             if mdata.get("output_file_template"):
-                if fld.type not in (Path, ty.Union[Path, bool]):
+                if fld.type not in (
+                    Path,
+                    ty.Union[Path, bool],
+                    str,
+                    ty.Union[str, bool],
+                ):
                     raise TypeError(
                         f"Type of '{fld.name}' should be either pathlib.Path or "
                         f"typing.Union[pathlib.Path, bool] (not {fld.type}) because "
