@@ -1595,7 +1595,9 @@ def test_shell_cmd_inputspec_11(tmp_path):
     wf.add(task)
     wf.set_output([("out", wf.echoMultiple.lzout.outputFiles)])
 
-    # XXX: Figure out why this fails with "cf"
+    # XXX: Figure out why this fails with "cf". Occurs in CI when using Ubuntu + Python >= 3.10
+    #      (but not when using macOS + Python >= 3.10). Same error occurs in test_shell_cmd_outputspec_7a
+    #      see https://github.com/nipype/pydra/issues/671
     with Submitter(plugin="serial") as sub:
         sub(wf)
     result = wf.result()
@@ -3114,7 +3116,9 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
         files_id=new_files_id,
     )
 
-    # XXX: Figure out why this fails with "cf"
+    # XXX: Figure out why this fails with "cf". Occurs in CI when using Ubuntu + Python >= 3.10
+    #      (but not when using macOS + Python >= 3.10). Same error occurs in test_shell_cmd_inputspec_11
+    #      see https://github.com/nipype/pydra/issues/671
     res = results_function(shelly, "serial")
     assert res.output.stdout == ""
     assert res.output.new_files.fspath.exists()
