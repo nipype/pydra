@@ -648,12 +648,10 @@ def test_shell_cmd_inputspec_4c_exception(plugin):
     )
 
     # separate command into exec + args
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(
+        Exception, match="default value \('Hello'\) should not be set when the field"
+    ):
         ShellCommandTask(name="shelly", executable=cmd_exec, input_spec=my_input_spec)
-    assert (
-        str(excinfo.value)
-        == "default value should not be set when the field is mandatory"
-    )
 
 
 def test_shell_cmd_inputspec_4d_exception(plugin):
@@ -680,12 +678,10 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
     )
 
     # separate command into exec + args
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(
+        Exception, match="default value \('Hello'\) should not be set together"
+    ) as excinfo:
         ShellCommandTask(name="shelly", executable=cmd_exec, input_spec=my_input_spec)
-    assert (
-        str(excinfo.value)
-        == "default value should not be set together with output_file_template"
-    )
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])

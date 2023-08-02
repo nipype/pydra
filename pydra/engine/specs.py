@@ -294,7 +294,8 @@ class FunctionSpec(BaseSpec):
             # not allowing for default if the field is mandatory
             if not fld.default == attr.NOTHING and mdata.get("mandatory"):
                 raise AttributeError(
-                    "default value should not be set when the field is mandatory"
+                    f"default value ({fld.default!r}) should not be set when the field "
+                    f"('{fld.name}') in {self}) is mandatory"
                 )
             # setting default if value not provided and default is available
             if getattr(self, fld.name) is None:
@@ -385,19 +386,19 @@ class ShellSpec(BaseSpec):
                     raise TypeError(
                         f"Type of '{fld.name}' should be either pathlib.Path or "
                         f"typing.Union[pathlib.Path, bool] (not {fld.type}) because "
-                        f"it has a value for output_file_template ({mdata['output_file_template']})"
+                        f"it has a value for output_file_template ({mdata['output_file_template']!r})"
                     )
                 if fld.default not in [attr.NOTHING, True, False]:
                     raise AttributeError(
-                        f"default value ({fld.default}) should not be set together with "
-                        f"output_file_template ({mdata['output_file_template']}) for "
+                        f"default value ({fld.default!r}) should not be set together with "
+                        f"output_file_template ({mdata['output_file_template']!r}) for "
                         f"'{fld.name}' field in {self}"
                     )
             # not allowing for default if the field is mandatory
             if not fld.default == attr.NOTHING and mdata.get("mandatory"):
                 raise AttributeError(
-                    f"default value ({fld.default}) should not be set when the field "
-                    f"('{fld.name}' in {self}) is mandatory"
+                    f"default value ({fld.default!r}) should not be set when the field "
+                    f"('{fld.name}') in {self}) is mandatory"
                 )
             # setting default if value not provided and default is available
             if getattr(self, fld.name) is None:
