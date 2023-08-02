@@ -379,7 +379,7 @@ def test_annotated_input_func_8():
         return len(a)
 
     funky = testfunc(a=3.5)
-    assert getattr(funky.inputs, "a") == MultiInputObj([3.5])
+    assert getattr(funky.inputs, "a") == [3.5]
     res = funky()
     assert res.output.out == 1
 
@@ -394,7 +394,7 @@ def test_annotated_input_func_8a():
         return len(a)
 
     funky = testfunc(a=[3.5])
-    assert getattr(funky.inputs, "a") == MultiInputObj([3.5])
+    assert getattr(funky.inputs, "a") == [3.5]
     res = funky()
     assert res.output.out == 1
 
@@ -412,7 +412,7 @@ def test_annotated_input_func_8b():
     funky = testfunc()
     # setting a after init
     funky.inputs.a = 3.5
-    assert getattr(funky.inputs, "a") == MultiInputObj([3.5])
+    assert getattr(funky.inputs, "a") == [3.5]
     res = funky()
     assert res.output.out == 1
 

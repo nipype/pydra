@@ -1555,7 +1555,7 @@ def test_shell_cmd_inputspec_10_err(tmp_path):
         )
 
 
-def test_shell_cmd_inputsspec_11(tmp_path):
+def test_shell_cmd_inputspec_11(tmp_path):
     input_fields = [
         (
             "inputFiles",
@@ -1599,7 +1599,7 @@ def test_shell_cmd_inputsspec_11(tmp_path):
     wf.add(task)
     wf.set_output([("out", wf.echoMultiple.lzout.outputFiles)])
 
-    with Submitter(plugin="serial") as sub:
+    with Submitter(plugin="cf") as sub:
         sub(wf)
     result = wf.result()
 
@@ -2781,74 +2781,6 @@ def test_shell_cmd_outputspec_3(plugin, results_function, tmp_path):
     assert all([file.fspath.exists() for file in res.output.newfile])
 
 
-@pytest.mark.xfail(
-    reason=(
-        "This test doesn't look like it ever worked properly. The command isn't being "
-        "split on ';' and instead the arguments are just treated as a list of dirs to create. "
-        "This includes 'tmp/newfile.txt', which fileformats now correctly detects as being "
-        "a directory instead of a file"
-    )
-)
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_4(plugin, results_function, tmp_path):
-    """
-    customised output_spec, adding files to the output,
-    using a wildcard in default (in the directory name)
-    """
-    cmd = ["mkdir", "tmp1", ";", "touch", "tmp1/newfile.txt"]
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[("newfile", File, "tmp*/newfile.txt")],
-        bases=(ShellOutSpec,),
-    )
-    shelly = ShellCommandTask(
-        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
-    )
-
-    res = results_function(shelly, plugin)
-    assert res.output.stdout == ""
-    assert res.output.newfile.fspath.exists()
-
-
-@pytest.mark.xfail(
-    reason=(
-        "This test doesn't look like it ever worked properly. The command isn't being "
-        "split on ';' and instead the arguments are just treated as a list of dirs to create. "
-        "This includes 'tmp/newfile.txt', which fileformats now correctly detects as being "
-        "a directory instead of a file"
-    )
-)
-@pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_4a(plugin, results_function, tmp_path):
-    """
-    customised output_spec, adding files to the output,
-    using a wildcard in default (in the directory name), should collect two files
-    """
-    cmd = [
-        "mkdir",
-        "tmp1",
-        "tmp2",
-        ";",
-        "touch",
-        "tmp1/newfile.txt",
-        "tmp2/newfile.txt",
-    ]
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[("newfile", MultiOutputFile, "tmp*/newfile.txt")],
-        bases=(ShellOutSpec,),
-    )
-    shelly = ShellCommandTask(
-        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
-    )
-
-    res = results_function(shelly, plugin)
-    assert res.output.stdout == ""
-    # newfile is a list
-    assert len(res.output.newfile) == 2
-    assert all([file.exists for file in res.output.newfile])
-
-
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_5(plugin, results_function, tmp_path):
     """
@@ -3185,7 +3117,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
         files_id=new_files_id,
     )
 
-    res = results_function(shelly, "serial")
+    res = results_function(shelly, plugin)
     assert res.output.stdout == ""
     assert res.output.new_files.fspath.exists()
 
