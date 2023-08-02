@@ -593,7 +593,7 @@ class TaskBase:
             a reference to the task
         """
         if self._lzout:
-            raise Exception(
+            raise RuntimeError(
                 f"Cannot split {self} as its output interface has already been accessed"
             )
         if splitter is None and inputs:
@@ -737,7 +737,6 @@ class TaskBase:
 
     def get_input_el(self, ind):
         """Collect all inputs required to run the node (for specific state element)."""
-        assert ind is not None
         # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
         input_ind = self.state.inputs_ind[ind]
         inputs_dict = {}
@@ -921,10 +920,9 @@ def _sanitize_spec(
     Parameters
     ----------
     spec : SpecInfo or List[str] or Dict[str, type]
-        Input specification to be sanitized.
+        Specification to be sanitized.
     wf_name : str
         The name of the workflow for which the input specifications
-        are sanitized.
     spec_name : str
         name given to generated SpecInfo object
 
@@ -941,11 +939,10 @@ def _sanitize_spec(
     graph_checksum_input = ("_graph_checksums", ty.Any)
     if spec:
         if isinstance(spec, SpecInfo):
-            if not any([x == BaseSpec for x in spec.bases]):
-                raise ValueError("Provided SpecInfo must have BaseSpec as it's base.")
+            if BaseSpec not in spec.bases:
+                raise ValueError("Provided SpecInfo must have BaseSpec as its base.")
             if "_graph_checksums" not in {f[0] for f in spec.fields}:
                 spec.fields.insert(0, graph_checksum_input)
-            return spec
         else:
             base = BaseSpec
             if isinstance(spec, list):
@@ -998,9 +995,7 @@ class Workflow(TaskBase):
         messenger_args=None,
         messengers=None,
         output_spec: ty.Optional[
-            ty.Union[
-                ty.List[ty.Text], ty.Dict[ty.Text, ty.Type[ty.Any]], SpecInfo, BaseSpec
-            ]
+            ty.Union[ty.List[str], ty.Dict[str, type], SpecInfo, BaseSpec]
         ] = None,
         rerun=False,
         propagate_rerun=True,
