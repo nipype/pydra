@@ -69,7 +69,7 @@ def test_wf_specinfo_input_spec():
         bases=(ShellSpec,),
     )
     with pytest.raises(
-        ValueError, match="Provided SpecInfo must have BaseSpec as it's base."
+        ValueError, match="Provided SpecInfo must have BaseSpec as its base."
     ):
         Workflow(name="workflow", input_spec=bad_input_spec)
 

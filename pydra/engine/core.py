@@ -943,6 +943,7 @@ def _sanitize_spec(
                 raise ValueError("Provided SpecInfo must have BaseSpec as its base.")
             if "_graph_checksums" not in {f[0] for f in spec.fields}:
                 spec.fields.insert(0, graph_checksum_input)
+            return spec
         else:
             base = BaseSpec
             if isinstance(spec, list):
