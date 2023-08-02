@@ -4135,7 +4135,7 @@ def test_wf_resultfile_2(plugin, tmpdir):
     wf.plugin = plugin
     wf.set_output([("wf_out", wf.writefile.lzout.out)])
 
-    with Submitter(plugin="serial") as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     results = wf.result()
