@@ -599,7 +599,7 @@ class TaskBase:
         if splitter is None and inputs:
             splitter = list(inputs)
         elif splitter:
-            missing = set(self._unwrap_splitter(splitter)) - set(inputs)
+            missing = set(hlpst.unwrap_splitter(splitter)) - set(inputs)
             missing = [m for m in missing if not m.startswith("_")]
             if missing:
                 raise ValueError(
@@ -619,7 +619,7 @@ class TaskBase:
             new_inputs = {}
             split_inputs = set(
                 f"{self.name}.{n}" if "." not in n else n
-                for n in self._unwrap_splitter(splitter)
+                for n in hlpst.unwrap_splitter(splitter)
                 if not n.startswith("_")
             )
             for inpt_name, inpt_val in inputs.items():
@@ -642,28 +642,6 @@ class TaskBase:
         if not self.state or splitter != self.state.splitter:
             self.set_state(splitter)
         return self
-
-    @classmethod
-    def _unwrap_splitter(
-        cls, splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...]]
-    ) -> ty.Iterable[str]:
-        """Unwraps a splitter into a flat list of fields that are split over, i.e.
-        [("a", "b"), "c"] -> ["a", "b", "c"]
-
-        Parameters
-        ----------
-        splitter: str or list[str] or tuple[str, ...]
-            the splitter spec to unwrap
-
-        Returns
-        -------
-        unwrapped : ty.Iterable[str]
-            the field names listed in the splitter
-        """
-        if isinstance(splitter, str):
-            return [splitter]
-        else:
-            return itertools.chain(*(cls._unwrap_splitter(s) for s in splitter))
 
     def combine(
         self,

@@ -236,9 +236,9 @@ def test_load_and_run_wf(tmpdir):
     """testing load_and_run for pickled task"""
     wf_pkl = Path(tmpdir.join("wf_main.pkl"))
 
-    wf = Workflow(name="wf", input_spec=["x", "y"])
+    wf = Workflow(name="wf", input_spec=["x", "y"], y=10)
     wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
-    wf.split("x", x=[1, 2], y=10)
+    wf.split("x", x=[1, 2])
 
     wf.set_output([("out", wf.mult.lzout.out)])
 
