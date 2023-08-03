@@ -549,7 +549,7 @@ class TypeParser(ty.Generic[T]):
         candidates : type or ty.Iterable[type]
             the candidate types to check the object against
         """
-        if not isinstance(candidates, ty.Iterable):
+        if not isinstance(candidates, (tuple, list)):
             candidates = [candidates]
         for candidate in candidates:
             if candidate is ty.Any:
