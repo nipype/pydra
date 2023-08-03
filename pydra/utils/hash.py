@@ -16,8 +16,7 @@ from typing import (
     Set,
     _SpecialForm,
 )
-
-# import typing as ty
+import attrs.exceptions
 
 try:
     from typing import Protocol
@@ -73,6 +72,7 @@ def hash_object(obj: object) -> Hash:
     try:
         return hash_single(obj, Cache({}))
     except Exception as e:
+        hash_single(obj, Cache({}))
         raise UnhashableError(f"Cannot hash object {obj!r}") from e
 
 
@@ -103,7 +103,16 @@ class HasBytesRepr(Protocol):
 def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     cls = obj.__class__
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
-    yield from bytes_repr_mapping_contents(obj.__dict__, cache)
+    try:
+        dct = obj.__dict__
+    except AttributeError as e:
+        # Attrs creates slots classes by default, so we add this here to handle those
+        # cases
+        try:
+            dct = attrs.asdict(obj, recurse=False)  # type: ignore
+        except attrs.exceptions.NotAnAttrsClassError:
+            raise TypeError(f"Cannot hash {obj} as it is a slots class") from e
+    yield from bytes_repr_mapping_contents(dct, cache)
     yield b"}"
 
 
