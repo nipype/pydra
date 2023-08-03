@@ -1042,12 +1042,9 @@ class Workflow(TaskBase):
         # propagating rerun if task_rerun=True
         self.propagate_rerun = propagate_rerun
 
-    @property
+    @cached_property
     def lzin(self):
-        if self._lzin:
-            return self._lzin
-        self._lzin = LazyIn(self)
-        return self._lzin
+        return LazyIn(self)
 
     def __getattr__(self, name):
         if name in self.name2obj:
