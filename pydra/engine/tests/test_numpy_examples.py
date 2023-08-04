@@ -1,14 +1,16 @@
-import numpy as np
 import typing as ty
 import importlib
-import pytest
+from pathlib import Path
 import pickle as pk
+import numpy as np
+import pytest
+
 
 from ..submitter import Submitter
 from ..core import Workflow
 from ...mark import task, annotate
 from .utils import identity
-from ..helpers import hash_value
+from ...utils.hash import hash_function, Cache
 
 if importlib.util.find_spec("numpy") is None:
     pytest.skip("can't find numpy library", allow_module_level=True)
@@ -40,8 +42,8 @@ def test_multiout(tmpdir):
 def test_multiout_st(tmpdir):
     """testing a simple function that returns a numpy array, adding splitter"""
     wf = Workflow("wf", input_spec=["val"], val=[0, 1, 2])
-    wf.add(arrayout(name="mo", val=wf.lzin.val))
-    wf.mo.split("val").combine("val")
+    wf.add(arrayout(name="mo"))
+    wf.mo.split("val", val=wf.lzin.val).combine("val")
 
     wf.set_output([("array", wf.mo.lzout.b)])
     wf.cache_dir = tmpdir
@@ -61,7 +63,7 @@ def test_numpy_hash_1():
     A = np.array([1, 2])
     A_pk = pk.loads(pk.dumps(A))
     assert (A == A_pk).all()
-    assert hash_value(A) == hash_value(A_pk)
+    assert hash_function(A) == hash_function(A_pk)
 
 
 def test_numpy_hash_2():
@@ -69,28 +71,32 @@ def test_numpy_hash_2():
     A = np.array([["NDAR"]], dtype=object)
     A_pk = pk.loads(pk.dumps(A))
     assert (A == A_pk).all()
-    assert hash_value(A) == hash_value(A_pk)
+    assert hash_function(A) == hash_function(A_pk)
 
 
-def test_task_numpyinput_1(tmpdir):
+def test_numpy_hash_3():
+    """hashing check for numeric numpy array"""
+    A = np.array([1, 2])
+    B = np.array([3, 4])
+    assert hash_function(A) != hash_function(B)
+
+
+def test_task_numpyinput_1(tmp_path: Path):
     """task with numeric numpy array as an input"""
-    nn = identity(name="NA", x=[np.array([1, 2]), np.array([3, 4])])
-    nn.cache_dir = tmpdir
-    nn.split("x")
+    nn = identity(name="NA")
+    nn.cache_dir = tmp_path
+    nn.split(x=[np.array([1, 2]), np.array([3, 4])])
     # checking the results
     results = nn()
     assert (results[0].output.out == np.array([1, 2])).all()
     assert (results[1].output.out == np.array([3, 4])).all()
 
 
-def test_task_numpyinput_2(tmpdir):
+def test_task_numpyinput_2(tmp_path: Path):
     """task with numpy array of type object as an input"""
-    nn = identity(
-        name="NA",
-        x=[np.array(["VAL1"], dtype=object), np.array(["VAL2"], dtype=object)],
-    )
-    nn.cache_dir = tmpdir
-    nn.split("x")
+    nn = identity(name="NA")
+    nn.cache_dir = tmp_path
+    nn.split(x=[np.array(["VAL1"], dtype=object), np.array(["VAL2"], dtype=object)])
     # checking the results
     results = nn()
     assert (results[0].output.out == np.array(["VAL1"], dtype=object)).all()

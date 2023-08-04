@@ -21,6 +21,8 @@ jobs:
         docker pull $DOCKER_IMAGE
         # Have image running in background
         docker run `bash <(curl -s https://codecov.io/env)` -itd -h ernie --name slurm -v `pwd`:/pydra -e NO_ET=$NO_ET $DOCKER_IMAGE
+    - name: Update python
+      run: docker exec slurm bash -c "conda install python==3.8.15"
     - name: Display previous jobs with sacct
       run: |
         echo "Allowing ports/daemons time to start" && sleep 10

@@ -41,13 +41,13 @@ Implement processing nodes.
 import platform
 import re
 import attr
-import cloudpickle as cp
 import inspect
 import typing as ty
 import shlex
 from pathlib import Path
 import warnings
-
+import cloudpickle as cp
+from fileformats.core import FileSet, DataType
 from .core import TaskBase, is_lazy
 from ..utils.messenger import AuditFlag
 from .specs import (
@@ -59,8 +59,6 @@ from .specs import (
     DockerSpec,
     SingularitySpec,
     attr_fields,
-    File,
-    Directory,
 )
 from .helpers import (
     ensure_list,
@@ -68,8 +66,10 @@ from .helpers import (
     position_sort,
     argstr_formatting,
     output_from_inputfields,
+    parse_copyfile,
 )
 from .helpers_file import template_update, is_local_file
+from ..utils.typing import TypeParser
 
 
 class FunctionTask(TaskBase):
@@ -125,6 +125,12 @@ class FunctionTask(TaskBase):
                     val_dflt = val.default
                 else:
                     val_dflt = attr.NOTHING
+                if isinstance(val.annotation, ty.TypeVar):
+                    raise NotImplementedError(
+                        "Template types are not currently supported in task signatures "
+                        f"(found in '{val.name}' field of '{name}' task), "
+                        "see https://github.com/nipype/pydra/issues/672"
+                    )
                 fields.append(
                     (
                         val.name,
@@ -137,11 +143,11 @@ class FunctionTask(TaskBase):
                         ),
                     )
                 )
-            fields.append(("_func", attr.ib(default=cp.dumps(func), type=str)))
+            fields.append(("_func", attr.ib(default=cp.dumps(func), type=bytes)))
             input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
         else:
             input_spec.fields.append(
-                ("_func", attr.ib(default=cp.dumps(func), type=str))
+                ("_func", attr.ib(default=cp.dumps(func), type=bytes))
             )
         self.input_spec = input_spec
         if name is None:
@@ -162,10 +168,14 @@ class FunctionTask(TaskBase):
             fields = [("out", ty.Any)]
             if "return" in func.__annotations__:
                 return_info = func.__annotations__["return"]
-                # e.g. python annotation: fun() -> ty.NamedTuple("Output", [("out", float)])
-                # or pydra decorator: @pydra.mark.annotate({"return": ty.NamedTuple(...)})
-                if hasattr(return_info, "__name__") and getattr(
-                    return_info, "__annotations__", None
+                # # e.g. python annotation: fun() -> ty.NamedTuple("Output", [("out", float)])
+                # # or pydra decorator: @pydra.mark.annotate({"return": ty.NamedTuple(...)})
+                #
+
+                if (
+                    hasattr(return_info, "__name__")
+                    and getattr(return_info, "__annotations__", None)
+                    and not issubclass(return_info, DataType)
                 ):
                     name = return_info.__name__
                     fields = list(return_info.__annotations__.items())
@@ -545,6 +555,8 @@ class ShellCommandTask(TaskBase):
                     msg += "\n\nstdout:\n" + self.output_["stdout"]
                 raise RuntimeError(msg)
 
+    DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
+
 
 class ContainerTask(ShellCommandTask):
     """Extend shell command task for containerized execution."""
@@ -657,33 +669,21 @@ class ContainerTask(ShellCommandTask):
     def _check_inputs(self):
         fields = attr_fields(self.inputs)
         for fld in fields:
-            if (
-                fld.type in [File, Directory]
-                or "pydra.engine.specs.File" in str(fld.type)
-                or "pydra.engine.specs.Directory" in str(fld.type)
-            ):
-                if fld.name == "image":
+            if TypeParser.contains_type(FileSet, fld.type):
+                assert not fld.metadata.get(
+                    "container_path"
+                )  # <-- Is container_path necessary, container paths should just be typed PurePath
+                if fld.name == "image":  # <-- What is the image about?
                     continue
-                file = Path(getattr(self.inputs, fld.name))
-                if fld.metadata.get("container_path"):
-                    # if the path is in a container the input should be treated as a str (hash as a str)
-                    # field.type = "str"
-                    # setattr(self, field.name, str(file))
-                    pass
-                # if this is a local path, checking if the path exists
-                # TODO: if copyfile, ro -> rw
-                elif file.exists():  # is it ok if two inputs have the same parent?
-                    self.bindings[Path(file.parent)] = (
-                        Path(f"/pydra_inp_{fld.name}"),
-                        "ro",
-                    )
-                # error should be raised only if the type is strictly File or Directory
-                elif fld.type in [File, Directory]:
-                    raise FileNotFoundError(
-                        f"the file {file} from {fld.name} input does not exist, "
-                        f"if the file comes from the container, "
-                        f"use field.metadata['container_path']=True"
-                    )
+                fileset = getattr(self.inputs, fld.name)
+                copy_mode, _ = parse_copyfile(fld)
+                container_path = Path(f"/pydra_inp_{fld.name}")
+                self.bindings[fileset.parent] = (
+                    container_path,
+                    "rw" if copy_mode == FileSet.CopyMode.copy else "ro",
+                )
+
+    SUPPORTED_COPY_MODES = FileSet.CopyMode.any - FileSet.CopyMode.symlink
 
 
 class DockerTask(ContainerTask):

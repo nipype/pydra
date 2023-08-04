@@ -1,64 +1,50 @@
 """Task I/O specifications."""
-import attr
 from pathlib import Path
 import typing as ty
 import inspect
 import re
+import os
+from copy import copy
 from glob import glob
-
+import attr
+from fileformats.core import FileSet
+from fileformats.generic import (
+    File,
+    Directory,
+)
+import pydra
 from .helpers_file import template_update_single
+from ..utils.hash import hash_function
+
+# from ..utils.misc import add_exc_note
+
+
+T = ty.TypeVar("T")
 
 
 def attr_fields(spec, exclude_names=()):
     return [field for field in spec.__attrs_attrs__ if field.name not in exclude_names]
 
 
-def attr_fields_dict(spec, exclude_names=()):
-    return {
-        field.name: field
-        for field in spec.__attrs_attrs__
-        if field.name not in exclude_names
-    }
+# These are special types that are checked for in the construction of input/output specs
+# and special converters inserted into the attrs fields.
 
 
-class File:
-    """An :obj:`os.pathlike` object, designating a file."""
+class MultiInputObj(list, ty.Generic[T]):
+    pass
 
 
-class Directory:
-    """An :obj:`os.pathlike` object, designating a folder."""
+MultiInputFile = MultiInputObj[File]
 
 
-class MultiInputObj:
-    """A ty.List[ty.Any] object, converter changes a single values to a list"""
-
-    @classmethod
-    def converter(cls, value):
-        from .helpers import ensure_list
-
-        if value == attr.NOTHING:
-            return value
-        else:
-            return ensure_list(value)
+# Since we can't create a NewType from a type union, we add a dummy type to the union
+# so we can detect the MultiOutput in the input/output spec creation
+class MultiOutputType:
+    pass
 
 
-class MultiOutputObj:
-    """A ty.List[ty.Any] object, converter changes an 1-el list to the single value"""
-
-    @classmethod
-    def converter(cls, value):
-        if isinstance(value, list) and len(value) == 1:
-            return value[0]
-        else:
-            return value
-
-
-class MultiInputFile(MultiInputObj):
-    """A ty.List[File] object, converter changes a single file path to a list"""
-
-
-class MultiOutputFile(MultiOutputObj):
-    """A ty.List[File] object, converter changes an 1-el list to the single value"""
+MultiOutputObj = ty.Union[list, object, MultiOutputType]
+MultiOutputFile = ty.Union[File, ty.List[File], MultiOutputType]
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -78,34 +64,14 @@ class SpecInfo:
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
 
-    def __attrs_post_init__(self):
-        self.files_hash = {
-            field.name: {}
-            for field in attr_fields(
-                self, exclude_names=("_graph_checksums", "bindings", "files_hash")
-            )
-            if field.metadata.get("output_file_template") is None
-        }
-
-    def __setattr__(self, name, value):
-        """changing settatr, so the converter and validator is run
-        if input is set after __init__
-        """
-        if inspect.stack()[1][3] == "__init__" or name in [
-            "inp_hash",
-            "changed",
-            "files_hash",
-        ]:
-            super().__setattr__(name, value)
-        else:
-            tp = attr.fields_dict(self.__class__)[name].type
-            # if the type has a converter, e.g., MultiInputObj
-            if hasattr(tp, "converter"):
-                value = tp.converter(value)
-            self.files_hash[name] = {}
-            super().__setattr__(name, value)
-            # validate all fields that have set a validator
-            attr.validate(self)
+    # def __attrs_post_init__(self):
+    #     self.files_hash = {
+    #         field.name: {}
+    #         for field in attr_fields(
+    #             self, exclude_names=("_graph_checksums", "bindings", "files_hash")
+    #         )
+    #         if field.metadata.get("output_file_template") is None
+    #     }
 
     def collect_additional_outputs(self, inputs, output_dir, outputs):
         """Get additional outputs."""
@@ -114,8 +80,6 @@ class BaseSpec:
     @property
     def hash(self):
         """Compute a basic hash for any given set of fields."""
-        from .helpers import hash_value, hash_function
-
         inp_dict = {}
         for field in attr_fields(
             self, exclude_names=("_graph_checksums", "bindings", "files_hash")
@@ -125,28 +89,25 @@ class BaseSpec:
             # removing values that are not set from hash calculation
             if getattr(self, field.name) is attr.NOTHING:
                 continue
-            value = getattr(self, field.name)
-            inp_dict[field.name] = hash_value(
-                value=value,
-                tp=field.type,
-                metadata=field.metadata,
-                precalculated=self.files_hash[field.name],
-            )
+            if "container_path" in field.metadata:
+                continue
+            inp_dict[field.name] = getattr(self, field.name)
         inp_hash = hash_function(inp_dict)
         if hasattr(self, "_graph_checksums"):
             inp_hash = hash_function((inp_hash, self._graph_checksums))
         return inp_hash
 
-    def retrieve_values(self, wf, state_index=None):
+    def retrieve_values(self, wf, state_index: ty.Optional[int] = None):
         """Get values contained by this spec."""
-        temp_values = {}
+        retrieved_values = {}
         for field in attr_fields(self):
             value = getattr(self, field.name)
             if isinstance(value, LazyField):
-                value = value.get_value(wf, state_index=state_index)
-                temp_values[field.name] = value
-        for field, value in temp_values.items():
-            setattr(self, field, value)
+                retrieved_values[field.name] = value.get_value(
+                    wf, state_index=state_index
+                )
+        for field, val in retrieved_values.items():
+            setattr(self, field, val)
 
     def check_fields_input_spec(self):
         """
@@ -207,32 +168,6 @@ class BaseSpec:
                     name for name, is_set in required_fields.items() if not is_set
                 ]
                 raise AttributeError(f"{field.name} requires {unset_required_fields}")
-
-            if (
-                field.type in [File, Directory]
-                or "pydra.engine.specs.File" in str(field.type)
-                or "pydra.engine.specs.Directory" in str(field.type)
-            ):
-                self._file_check(field)
-
-    def _file_check(self, field):
-        """checking if the file exists"""
-        if isinstance(getattr(self, field.name), list):
-            # if value is a list and type is a list of Files/Directory, checking all elements
-            if field.type in [ty.List[File], ty.List[Directory]]:
-                for el in getattr(self, field.name):
-                    file = Path(el)
-                    if not file.exists() and field.type in [File, Directory]:
-                        raise FileNotFoundError(
-                            f"the file {file} from the {field.name} input does not exist"
-                        )
-        else:
-            file = Path(getattr(self, field.name))
-            # error should be raised only if the type is strictly File or Directory
-            if not file.exists() and field.type in [File, Directory]:
-                raise FileNotFoundError(
-                    f"the file {file} from the {field.name} input does not exist"
-                )
 
     def check_metadata(self):
         """Check contained metadata."""
@@ -359,7 +294,8 @@ class FunctionSpec(BaseSpec):
             # not allowing for default if the field is mandatory
             if not fld.default == attr.NOTHING and mdata.get("mandatory"):
                 raise AttributeError(
-                    "default value should not be set when the field is mandatory"
+                    f"default value ({fld.default!r}) should not be set when the field "
+                    f"('{fld.name}') in {self}) is mandatory"
                 )
             # setting default if value not provided and default is available
             if getattr(self, fld.name) is None:
@@ -393,11 +329,12 @@ class ShellSpec(BaseSpec):
             if not field.metadata.get("output_file_template"):
                 value = getattr(self, field.name)
                 if isinstance(value, LazyField):
-                    value = value.get_value(wf, state_index=state_index)
-                    temp_values[field.name] = value
-        for field, value in temp_values.items():
+                    temp_values[field.name] = value.get_value(
+                        wf, state_index=state_index
+                    )
+        for field, val in temp_values.items():
             value = path_to_string(value)
-            setattr(self, field, value)
+            setattr(self, field, val)
 
     def check_metadata(self):
         """
@@ -422,6 +359,7 @@ class ShellSpec(BaseSpec):
             "xor",
             "sep",
             "formatter",
+            "_output_type",
         }
         for fld in attr_fields(self, exclude_names=("_func", "_graph_checksums")):
             mdata = fld.metadata
@@ -429,22 +367,38 @@ class ShellSpec(BaseSpec):
             if set(mdata.keys()) - supported_keys:
                 raise AttributeError(
                     f"only these keys are supported {supported_keys}, but "
-                    f"{set(mdata.keys()) - supported_keys} provided"
+                    f"{set(mdata.keys()) - supported_keys} provided for '{fld.name}' "
+                    f"field in {self}"
                 )
             # checking if the help string is provided (required field)
             if "help_string" not in mdata:
-                raise AttributeError(f"{fld.name} doesn't have help_string field")
-            # assuming that fields with output_file_template shouldn't have default
-            if fld.default not in [attr.NOTHING, True, False] and mdata.get(
-                "output_file_template"
-            ):
                 raise AttributeError(
-                    "default value should not be set together with output_file_template"
+                    f"{fld.name} doesn't have help_string field in {self}"
                 )
+            # assuming that fields with output_file_template shouldn't have default
+            if mdata.get("output_file_template"):
+                if fld.type not in (
+                    Path,
+                    ty.Union[Path, bool],
+                    str,
+                    ty.Union[str, bool],
+                ):
+                    raise TypeError(
+                        f"Type of '{fld.name}' should be either pathlib.Path or "
+                        f"typing.Union[pathlib.Path, bool] (not {fld.type}) because "
+                        f"it has a value for output_file_template ({mdata['output_file_template']!r})"
+                    )
+                if fld.default not in [attr.NOTHING, True, False]:
+                    raise AttributeError(
+                        f"default value ({fld.default!r}) should not be set together with "
+                        f"output_file_template ({mdata['output_file_template']!r}) for "
+                        f"'{fld.name}' field in {self}"
+                    )
             # not allowing for default if the field is mandatory
             if not fld.default == attr.NOTHING and mdata.get("mandatory"):
                 raise AttributeError(
-                    "default value should not be set when the field is mandatory"
+                    f"default value ({fld.default!r}) should not be set when the field "
+                    f"('{fld.name}') in {self}) is mandatory"
                 )
             # setting default if value not provided and default is available
             if getattr(self, fld.name) is None:
@@ -458,35 +412,38 @@ class ShellOutSpec:
 
     return_code: int
     """The process' exit code."""
-    stdout: ty.Union[File, str]
+    stdout: str
     """The process' standard output."""
-    stderr: ty.Union[File, str]
+    stderr: str
     """The process' standard input."""
 
     def collect_additional_outputs(self, inputs, output_dir, outputs):
+        from ..utils.typing import TypeParser
+
         """Collect additional outputs from shelltask output_spec."""
         additional_out = {}
         for fld in attr_fields(self, exclude_names=("return_code", "stdout", "stderr")):
-            if fld.type not in [
-                File,
-                MultiOutputFile,
-                Directory,
-                Path,
-                int,
-                float,
-                bool,
-                str,
-                list,
-            ]:
-                raise Exception(
+            if not TypeParser.is_subclass(
+                fld.type,
+                (
+                    os.PathLike,
+                    MultiOutputObj,
+                    int,
+                    float,
+                    bool,
+                    str,
+                    list,
+                ),
+            ):
+                raise TypeError(
                     f"Support for {fld.type} type, required for {fld.name} in {self}, "
                     "has not been implemented in collect_additional_output"
                 )
             # assuming that field should have either default or metadata, but not both
             input_value = getattr(inputs, fld.name, attr.NOTHING)
             if input_value is not attr.NOTHING:
-                if fld.type in (File, MultiOutputFile, Directory, Path):
-                    input_value = Path(input_value).absolute()
+                if TypeParser.contains_type(FileSet, fld.type):
+                    input_value = TypeParser(fld.type).coerce(input_value)
                 additional_out[fld.name] = input_value
             elif (
                 fld.default is None or fld.default == attr.NOTHING
@@ -631,7 +588,10 @@ class ShellOutSpec:
                         )
             return callable_(**call_args_val)
         else:
-            raise Exception("(_field_metadata) is not a current valid metadata key.")
+            raise Exception(
+                f"Metadata for '{fld.name}', does not not contain any of the required fields "
+                f'("callable", "output_file_template" or "value"): {fld.metadata}.'
+            )
 
     def _check_requires(self, fld, inputs):
         """checking if all fields from the requires and template are set in the input
@@ -738,75 +698,348 @@ class SingularitySpec(ContainerSpec):
     container: str = attr.ib("singularity", metadata={"help_string": "container type"})
 
 
-class LazyField:
-    """Lazy fields implement promises."""
-
-    def __init__(self, node, attr_type):
-        """Initialize a lazy field."""
-        self.name = node.name
-        if attr_type == "input":
-            self.fields = [field[0] for field in node.input_spec.fields]
-        elif attr_type == "output":
-            self.fields = node.output_names
-        else:
-            raise ValueError(f"LazyField: Unknown attr_type: {attr_type}")
-        self.attr_type = attr_type
-        self.field = None
+@attr.s
+class LazyInterface:
+    _task: "core.TaskBase" = attr.ib()
+    _attr_type: str
 
     def __getattr__(self, name):
-        if name in self.fields or name == "all_":
-            self.field = name
-            return self
-        if name in dir(self):
-            return self.__getattribute__(name)
-        raise AttributeError(
-            f"Task {self.name} has no {self.attr_type} attribute {name}"
+        if name in ("_task", "_attr_type", "_field_names"):
+            raise AttributeError(f"{name} hasn't been set yet")
+        if name not in self._field_names:
+            raise AttributeError(
+                f"Task {self._task.name} has no {self._attr_type} attribute {name}"
+            )
+        type_ = self._get_type(name)
+        splits = self._get_task_splits()
+        combines = self._get_task_combines()
+        if combines and self._attr_type == "output":
+            # Add in any scalar splits referencing upstream splits, i.e. "_myupstreamtask",
+            # "_myarbitrarytask"
+            combined_upstreams = set()
+            if self._task.state:
+                for scalar in LazyField.sanitize_splitter(
+                    self._task.state.splitter, strip_previous=False
+                ):
+                    for field in scalar:
+                        if field.startswith("_"):
+                            node_name = field[1:]
+                            if any(c.split(".")[0] == node_name for c in combines):
+                                combines.update(
+                                    f for f in scalar if not f.startswith("_")
+                                )
+                                combined_upstreams.update(
+                                    f[1:] for f in scalar if f.startswith("_")
+                                )
+            if combines:
+                # Wrap type in list which holds the combined items
+                type_ = ty.List[type_]
+                # Iterate through splits to remove any splits which are removed by the
+                # combiner
+                for splitter in copy(splits):
+                    remaining = tuple(
+                        s
+                        for s in splitter
+                        if not any(
+                            (x in combines or x.split(".")[0] in combined_upstreams)
+                            for x in s
+                        )
+                    )
+                    if remaining != splitter:
+                        splits.remove(splitter)
+                        if remaining:
+                            splits.add(remaining)
+        # Wrap the type in a nested StateArray type
+        if splits:
+            type_ = StateArray[type_]
+        lf_klass = LazyInField if self._attr_type == "input" else LazyOutField
+        return lf_klass[type_](
+            name=self._task.name,
+            field=name,
+            type=type_,
+            splits=splits,
         )
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["name"] = self.name
-        state["fields"] = self.fields
-        state["field"] = self.field
-        return state
+    def _get_task_splits(self) -> ty.Set[ty.Tuple[ty.Tuple[str, ...], ...]]:
+        """Returns the states over which the inputs of the task are split"""
+        splitter = self._task.state.splitter if self._task.state else None
+        splits = set()
+        if splitter:
+            # Ensure that splits is of tuple[tuple[str, ...], ...] form
+            splitter = LazyField.sanitize_splitter(splitter)
+            if splitter:
+                splits.add(splitter)
+        for inpt in attr.asdict(self._task.inputs, recurse=False).values():
+            if isinstance(inpt, LazyField):
+                splits.update(inpt.splits)
+        return splits
 
-    def __setstate__(self, state):
-        self.__dict__.update(state)
+    def _get_task_combines(self) -> ty.Set[ty.Union[str, ty.Tuple[str, ...]]]:
+        """Returns the states over which the outputs of the task are combined"""
+        combiner = (
+            self._task.state.combiner
+            if self._task.state is not None
+            else getattr(self._task, "fut_combiner", None)
+        )
+        return set(combiner) if combiner else set()
+
+
+class LazyIn(LazyInterface):
+    _attr_type = "input"
+
+    def _get_type(self, name):
+        attr = next(t for n, t in self._task.input_spec.fields if n == name)
+        if attr is None:
+            return ty.Any
+        elif inspect.isclass(attr):
+            return attr
+        else:
+            return attr.type
+
+    @property
+    def _field_names(self):
+        return [field[0] for field in self._task.input_spec.fields]
+
+
+class LazyOut(LazyInterface):
+    _attr_type = "output"
+
+    def _get_type(self, name):
+        try:
+            type_ = next(f[1] for f in self._task.output_spec.fields if f[0] == name)
+        except StopIteration:
+            type_ = ty.Any
+        else:
+            if not inspect.isclass(type_):
+                try:
+                    type_ = type_.type  # attrs _CountingAttribute
+                except AttributeError:
+                    pass  # typing._SpecialForm
+        return type_
+
+    @property
+    def _field_names(self):
+        return self._task.output_names + ["all_"]
+
+
+TypeOrAny = ty.Union[ty.Type[T], ty.Any]
+Splitter = ty.Union[str, ty.Tuple[str, ...]]
+
+
+@attr.s(auto_attribs=True, kw_only=True)
+class LazyField(ty.Generic[T]):
+    """Lazy fields implement promises."""
+
+    name: str
+    field: str
+    type: TypeOrAny
+    # Set of splitters that have been applied to the lazy field. Note that the splitter
+    # specifications are transformed to a tuple[tuple[str, ...], ...] form where the
+    # outer tuple is the outer product, the inner tuple are inner products (where either
+    # product can be of length==1)
+    splits: ty.FrozenSet[ty.Tuple[ty.Tuple[str, ...], ...]] = attr.field(
+        factory=frozenset, converter=frozenset
+    )
+    cast_from: ty.Optional[ty.Type[ty.Any]] = None
+
+    def __bytes_repr__(self, cache):
+        yield type(self).__name__.encode()
+        yield self.name.encode()
+        yield self.field.encode()
+
+    def cast(self, new_type: TypeOrAny) -> "LazyField":
+        """ "casts" the lazy field to a new type
+
+        Parameters
+        ----------
+        new_type : type
+            the type to cast the lazy-field to
+
+        Returns
+        -------
+        cast_field : LazyField
+            a copy of the lazy field with the new type
+        """
+        return type(self)[new_type](
+            name=self.name,
+            field=self.field,
+            type=new_type,
+            splits=self.splits,
+            cast_from=self.cast_from if self.cast_from else self.type,
+        )
+
+    def split(self, splitter: Splitter) -> "LazyField":
+        """ "Splits" the lazy field over an array of nodes by replacing the sequence type
+        of the lazy field with StateArray to signify that it will be "split" across
+
+        Parameters
+        ----------
+        splitter : str or ty.Tuple[str, ...] or ty.List[str]
+            the splitter to append to the list of splitters
+        """
+        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
+
+        splits = self.splits | set([LazyField.sanitize_splitter(splitter)])
+        # Check to see whether the field has already been split over the given splitter
+        if splits == self.splits:
+            return self
+
+        # Modify the type of the lazy field to include the split across a state-array
+        inner_type, prev_split_depth = TypeParser.strip_splits(self.type)
+        assert prev_split_depth <= 1
+        if inner_type is ty.Any:
+            type_ = StateArray[ty.Any]
+        elif TypeParser.matches_type(inner_type, list):
+            item_type = TypeParser.get_item_type(inner_type)
+            type_ = StateArray[item_type]
+        else:
+            raise TypeError(
+                f"Cannot split non-sequence field {self}  of type {inner_type}"
+            )
+        if prev_split_depth:
+            type_ = StateArray[type_]
+        return type(self)[type_](
+            name=self.name,
+            field=self.field,
+            type=type_,
+            splits=splits,
+        )
+
+    @classmethod
+    def sanitize_splitter(
+        cls, splitter: Splitter, strip_previous: bool = True
+    ) -> ty.Tuple[ty.Tuple[str, ...], ...]:
+        """Converts the splitter spec into a consistent tuple[tuple[str, ...], ...] form
+        used in LazyFields"""
+        if isinstance(splitter, str):
+            splitter = (splitter,)
+        if isinstance(splitter, tuple):
+            splitter = (splitter,)  # type: ignore
+        else:
+            assert isinstance(splitter, list)
+            # convert to frozenset to differentiate from tuple, yet still be hashable
+            # (NB: order of fields in list splitters aren't relevant)
+            splitter = tuple((s,) if isinstance(s, str) else s for s in splitter)
+        # Strip out fields starting with "_" designating splits in upstream nodes
+        if strip_previous:
+            stripped = tuple(
+                tuple(f for f in i if not f.startswith("_")) for i in splitter
+            )
+            splitter = tuple(s for s in stripped if s)  # type: ignore
+        return splitter  # type: ignore
+
+    def _apply_cast(self, value):
+        """\"Casts\" the value from the retrieved type if a cast has been applied to
+        the lazy-field"""
+        from pydra.utils.typing import TypeParser
+
+        if self.cast_from:
+            assert TypeParser.matches(value, self.cast_from)
+            value = self.type(value)
+        return value
+
+
+class LazyInField(LazyField[T]):
+    attr_type = "input"
+
+    def get_value(
+        self, wf: "pydra.Workflow", state_index: ty.Optional[int] = None
+    ) -> ty.Any:
+        """Return the value of a lazy field.
+
+        Parameters
+        ----------
+        wf : Workflow
+            the workflow the lazy field references
+        state_index : int, optional
+            the state index of the field to access
+
+        Returns
+        -------
+        value : Any
+            the resolved value of the lazy-field
+        """
+        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
+
+        value = getattr(wf.inputs, self.field)
+        if TypeParser.is_subclass(self.type, StateArray) and not wf._pre_split:
+            _, split_depth = TypeParser.strip_splits(self.type)
+
+            def apply_splits(obj, depth):
+                if depth < 1:
+                    return obj
+                return StateArray[self.type](apply_splits(i, depth - 1) for i in obj)
+
+            value = apply_splits(value, split_depth)
+        value = self._apply_cast(value)
+        return value
+
+
+class LazyOutField(LazyField[T]):
+    attr_type = "output"
+
+    def get_value(
+        self, wf: "pydra.Workflow", state_index: ty.Optional[int] = None
+    ) -> ty.Any:
+        """Return the value of a lazy field.
+
+        Parameters
+        ----------
+        wf : Workflow
+            the workflow the lazy field references
+        state_index : int, optional
+            the state index of the field to access
+
+        Returns
+        -------
+        value : Any
+            the resolved value of the lazy-field
+        """
+        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
+
+        node = getattr(wf, self.name)
+        result = node.result(state_index=state_index)
+        if result is None:
+            raise RuntimeError(
+                f"Could not find results of '{node.name}' node in a sub-directory "
+                f"named '{node.checksum}' in any of the cache locations:\n"
+                + "\n".join(str(p) for p in set(node.cache_locations))
+            )
+        _, split_depth = TypeParser.strip_splits(self.type)
+
+        def get_nested_results(res, depth: int):
+            if isinstance(res, list):
+                if not depth:
+                    val = [r.get_output_field(self.field) for r in res]
+                else:
+                    val = StateArray[self.type](
+                        get_nested_results(res=r, depth=depth - 1) for r in res
+                    )
+            else:
+                if res.errored:
+                    raise ValueError(
+                        f"Cannot retrieve value for {self.field} from {self.name} as "
+                        "the node errored"
+                    )
+                val = res.get_output_field(self.field)
+                if depth and not wf._pre_split:
+                    assert isinstance(val, ty.Sequence) and not isinstance(val, str)
+                    val = StateArray[self.type](val)
+            return val
+
+        value = get_nested_results(result, depth=split_depth)
+        value = self._apply_cast(value)
+        return value
+
+
+class StateArray(ty.List[T]):
+    """an array of values from, or to be split over in an array of nodes (see TaskBase.split()),
+    multiple nodes of the same task. Used in type-checking to differentiate between list
+    types and values for multiple nodes
+    """
 
     def __repr__(self):
-        return f"LF('{self.name}', '{self.field}')"
-
-    def get_value(self, wf, state_index=None):
-        """Return the value of a lazy field."""
-        if self.attr_type == "input":
-            return getattr(wf.inputs, self.field)
-        elif self.attr_type == "output":
-            node = getattr(wf, self.name)
-            result = node.result(state_index=state_index)
-            if isinstance(result, list):
-                if len(result) and isinstance(result[0], list):
-                    results_new = []
-                    for res_l in result:
-                        res_l_new = []
-                        for res in res_l:
-                            if res.errored:
-                                raise ValueError("Error from get_value")
-                            else:
-                                res_l_new.append(res.get_output_field(self.field))
-                        results_new.append(res_l_new)
-                    return results_new
-                else:
-                    results_new = []
-                    for res in result:
-                        if res.errored:
-                            raise ValueError("Error from get_value")
-                        else:
-                            results_new.append(res.get_output_field(self.field))
-                    return results_new
-            else:
-                if result.errored:
-                    raise ValueError("Error from get_value")
-                return result.get_output_field(self.field)
+        return f"{type(self).__name__}(" + ", ".join(repr(i) for i in self) + ")"
 
 
 def donothing(*args, **kwargs):
@@ -822,7 +1055,7 @@ class TaskHook:
     pre_run: ty.Callable = donothing
     post_run: ty.Callable = donothing
 
-    def __setattr__(cls, attr, val):
+    def __setattr__(self, attr, val):
         if attr not in ["pre_run_task", "post_run_task", "pre_run", "post_run"]:
             raise AttributeError("Cannot set unknown hook")
         super().__setattr__(attr, val)
@@ -839,3 +1072,6 @@ def path_to_string(value):
     elif isinstance(value, list) and len(value) and isinstance(value[0], Path):
         value = [str(val) for val in value]
     return value
+
+
+from . import core  # noqa

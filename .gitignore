@@ -15,6 +15,7 @@ cov.xml
 .*.swp
 *~
 .idea
+*.venv
 
 .DS_Store
 

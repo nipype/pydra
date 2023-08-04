@@ -139,7 +139,11 @@ class SerialWorker(Worker):
         """Return whether the task is finished."""
 
     async def exec_serial(self, runnable, rerun=False):
-        return runnable()
+        if isinstance(runnable, TaskBase):
+            return runnable._run(rerun)
+        else:  # it could be tuple that includes pickle files with tasks and inputs
+            ind, task_main_pkl, _ = runnable
+            return load_and_run(task_main_pkl, ind, rerun)
 
     async def fetch_finished(self, futures):
         await asyncio.gather(*futures)

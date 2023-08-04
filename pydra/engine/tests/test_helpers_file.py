@@ -1,55 +1,17 @@
-import os
+import typing as ty
 import sys
-import pytest
 from pathlib import Path
-
+import pytest
+from fileformats.generic import File
 from ..helpers_file import (
-    split_filename,
-    fname_presuffix,
-    copyfile,
-    copyfiles,
-    on_cifs,
-    get_related_files,
     ensure_list,
-    _cifs_table,
-    _parse_mount_table,
+    MountIndentifier,
+    copy_nested_files,
 )
 
 
 def _ignore_atime(stat):
     return stat[:7] + stat[8:]
-
-
-@pytest.mark.parametrize(
-    "filename, split",
-    [
-        ("foo.nii", ("", "foo", ".nii")),
-        ("foo.nii.gz", ("", "foo", ".nii.gz")),
-        ("foo.niml.dset", ("", "foo", ".niml.dset")),
-        ("/usr/local/foo.nii.gz", ("/usr/local", "foo", ".nii.gz")),
-        ("../usr/local/foo.nii", ("../usr/local", "foo", ".nii")),
-        ("/usr/local/foo.a.b.c.d", ("/usr/local", "foo.a.b.c", ".d")),
-        ("/usr/local/", ("/usr/local", "", "")),
-    ],
-)
-def test_split_filename(filename, split):
-    res = split_filename(filename)
-    assert res == split
-
-
-@pytest.mark.skipif(
-    sys.platform.startswith("win"),
-    reason="windows drive not known in advance",
-)
-def test_fname_presuffix():
-    fname = "foo.nii"
-    pth = fname_presuffix(fname, "pre_", "_post", "/tmp")
-    assert pth == str(Path("/tmp/pre_foo_post.nii"))
-    fname += ".gz"
-    pth = fname_presuffix(fname, "pre_", "_post", "/tmp")
-    assert pth == str(Path("/tmp/pre_foo_post.nii.gz"))
-    pth = fname_presuffix(fname, "pre_", "_post", "/tmp", use_ext=False)
-    assert pth == str(Path("/tmp/pre_foo_post"))
 
 
 @pytest.fixture()
@@ -72,148 +34,6 @@ def _temp_analyze_files_prime(tmpdir):
     return Path(orig_img.strpath), Path(orig_hdr.strpath)
 
 
-def test_copyfile(_temp_analyze_files):
-    orig_img, orig_hdr = _temp_analyze_files
-    pth, fname = os.path.split(orig_img)
-    new_img = os.path.join(pth, "newfile.img")
-    new_hdr = os.path.join(pth, "newfile.hdr")
-    copyfile(orig_img, new_img)
-    assert os.path.exists(new_img)
-    assert os.path.exists(new_hdr)
-
-
-def test_copyfile_true(_temp_analyze_files):
-    orig_img, orig_hdr = _temp_analyze_files
-    pth, fname = os.path.split(orig_img)
-    new_img = os.path.join(pth, "newfile.img")
-    new_hdr = os.path.join(pth, "newfile.hdr")
-    # Test with copy=True
-    copyfile(orig_img, new_img, copy=True)
-    assert os.path.exists(new_img)
-    assert os.path.exists(new_hdr)
-
-
-def test_copyfiles(_temp_analyze_files, _temp_analyze_files_prime):
-    orig_img1, orig_hdr1 = _temp_analyze_files
-    orig_img2, orig_hdr2 = _temp_analyze_files_prime
-    pth, fname = os.path.split(orig_img1)
-    new_img1 = os.path.join(pth, "newfile.img")
-    new_hdr1 = os.path.join(pth, "newfile.hdr")
-    pth, fname = os.path.split(orig_img2)
-    new_img2 = os.path.join(pth, "secondfile.img")
-    new_hdr2 = os.path.join(pth, "secondfile.hdr")
-    # providing specific filenames for a new destinations
-    copyfiles([orig_img1, orig_img2], [new_img1, new_img2])
-    # checking if the new files exist (together with hdr files)
-    assert os.path.exists(new_img1)
-    assert os.path.exists(new_hdr1)
-    assert os.path.exists(new_img2)
-    assert os.path.exists(new_hdr2)
-
-
-def test_copyfiles_destdir(_temp_analyze_files, _temp_analyze_files_prime, tmpdir):
-    orig_img1, _ = _temp_analyze_files
-    orig_img2, _ = _temp_analyze_files_prime
-    _, fname = os.path.split(orig_img1)
-    new_img1 = tmpdir.join(fname)
-    _, fname = os.path.split(orig_img2)
-    new_img2 = tmpdir.join(fname)
-    # providing directory as a new destination
-    copyfiles([orig_img1, orig_img2], tmpdir)
-    assert os.path.exists(new_img1)
-    assert os.path.exists(new_img2)
-
-
-def test_linkchain(_temp_analyze_files):
-    if os.name != "posix":
-        return
-    orig_img, orig_hdr = _temp_analyze_files
-    pth, fname = os.path.split(orig_img)
-    new_img1 = os.path.join(pth, "newfile1.img")
-    new_hdr1 = os.path.join(pth, "newfile1.hdr")
-    new_img2 = os.path.join(pth, "newfile2.img")
-    new_hdr2 = os.path.join(pth, "newfile2.hdr")
-    new_img3 = os.path.join(pth, "newfile3.img")
-    new_hdr3 = os.path.join(pth, "newfile3.hdr")
-    copyfile(orig_img, new_img1, use_hardlink=False)
-    assert os.path.islink(new_img1)
-    assert os.path.islink(new_hdr1)
-    copyfile(new_img1, new_img2, copy=True, use_hardlink=False)
-    assert not os.path.islink(new_img2)
-    assert not os.path.islink(new_hdr2)
-    assert not os.path.samefile(orig_img, new_img2)
-    assert not os.path.samefile(orig_hdr, new_hdr2)
-    copyfile(new_img1, new_img3, copy=True, use_hardlink=True)
-    assert not os.path.islink(new_img3)
-    assert not os.path.islink(new_hdr3)
-    assert os.path.samefile(orig_img, new_img3)
-    assert os.path.samefile(orig_hdr, new_hdr3)
-
-
-def test_recopy(_temp_analyze_files):
-    # Re-copying with the same parameters on an unchanged file should be
-    # idempotent
-    #
-    # Test for copying from regular files and symlinks
-    orig_img, orig_hdr = _temp_analyze_files
-    pth, fname = os.path.split(orig_img)
-    img_link = os.path.join(pth, "imglink.img")
-    new_img = os.path.join(pth, "newfile.img")
-    new_hdr = os.path.join(pth, "newfile.hdr")
-    copyfile(orig_img, img_link)
-    for copy in (True, False):
-        for use_hardlink in (True, False):
-            kwargs = {"copy": copy, "use_hardlink": use_hardlink}
-
-            copyfile(orig_img, new_img, **kwargs)
-            img_stat = _ignore_atime(os.stat(new_img))
-            hdr_stat = _ignore_atime(os.stat(new_hdr))
-            copyfile(orig_img, new_img, **kwargs)
-            err_msg = "Regular - OS: {}; Copy: {}; Hardlink: {}".format(
-                os.name, copy, use_hardlink
-            )
-            assert img_stat == _ignore_atime(os.stat(new_img)), err_msg
-            assert hdr_stat == _ignore_atime(os.stat(new_hdr)), err_msg
-            os.unlink(new_img)
-            os.unlink(new_hdr)
-
-            copyfile(img_link, new_img, **kwargs)
-            img_stat = _ignore_atime(os.stat(new_img))
-            hdr_stat = _ignore_atime(os.stat(new_hdr))
-            copyfile(img_link, new_img, **kwargs)
-            err_msg = "Symlink - OS: {}; Copy: {}; Hardlink: {}".format(
-                os.name, copy, use_hardlink
-            )
-            assert img_stat == _ignore_atime(os.stat(new_img)), err_msg
-            assert hdr_stat == _ignore_atime(os.stat(new_hdr)), err_msg
-            os.unlink(new_img)
-            os.unlink(new_hdr)
-
-
-def test_get_related_files(_temp_analyze_files):
-    orig_img, orig_hdr = _temp_analyze_files
-
-    related_files = get_related_files(orig_img)
-    assert orig_img in related_files
-    assert orig_hdr in related_files
-
-    related_files = get_related_files(orig_hdr)
-    assert orig_img in related_files
-    assert orig_hdr in related_files
-
-
-def test_get_related_files_noninclusive(_temp_analyze_files):
-    orig_img, orig_hdr = _temp_analyze_files
-
-    related_files = get_related_files(orig_img, include_this_file=False)
-    assert orig_img not in related_files
-    assert orig_hdr in related_files
-
-    related_files = get_related_files(orig_hdr, include_this_file=False)
-    assert orig_img in related_files
-    assert orig_hdr not in related_files
-
-
 @pytest.mark.parametrize(
     "filename, expected",
     [
@@ -228,31 +48,119 @@ def test_ensure_list(filename, expected):
     assert x == expected
 
 
-@pytest.mark.parametrize(
-    "file, length, expected_files",
-    [
-        (
-            "/path/test.img",
-            3,
-            [Path("/path/test.hdr"), Path("/path/test.img"), Path("/path/test.mat")],
-        ),
-        (
-            "/path/test.hdr",
-            3,
-            [Path("/path/test.hdr"), Path("/path/test.img"), Path("/path/test.mat")],
-        ),
-        ("/path/test.BRIK", 2, [Path("/path/test.BRIK"), Path("/path/test.HEAD")]),
-        ("/path/test.HEAD", 2, [Path("/path/test.BRIK"), Path("/path/test.HEAD")]),
-        ("/path/foo.nii", 2, [Path("/path/foo.nii"), Path("/path/foo.mat")]),
-    ],
+def test_copy_nested_files_copy(tmp_path: Path):
+    # Test copying files from within nested data structures
+    src_dir = tmp_path / "src"
+
+    src_dir.mkdir()
+
+    # Create temporary files
+    files = []
+    for x in "abcde":
+        p = src_dir / (x + ".txt")
+        p.write_text(x)
+        files.append(File(p))
+    a, b, c, d, e = files
+
+    nested_files = [{"a": a}, b, [(c, a), (d, e)]]
+
+    dest_dir = tmp_path / "dest"
+    nested_files_copy = copy_nested_files(
+        nested_files, dest_dir, mode=File.CopyMode.copy
+    )
+    assert sorted(p.relative_to(src_dir) for p in src_dir.glob("**/*.txt")) == sorted(
+        p.relative_to(dest_dir) for p in dest_dir.glob("**/*.txt")
+    )
+    copied_files = []
+    for x in "abcde":
+        copied_files.append(File(dest_dir / (x + ".txt")))
+    a, b, c, d, e = copied_files
+    assert nested_files_copy == [{"a": a}, b, [(c, a), (d, e)]]
+
+
+def test_copy_nested_files_hardlink(tmp_path: Path):
+    src_dir = tmp_path / "src"
+
+    src_dir.mkdir()
+
+    # Create temporary files
+    files = []
+    for x in "abcde":
+        p = src_dir / (x + ".txt")
+        p.write_text(x)
+        files.append(File(p))
+    a, b, c, d, e = files
+
+    nested_files = [{"a": a}, b, [(c, a), (d, e)]]
+
+    dest_dir = tmp_path / "dest"
+    nested_files_copy = copy_nested_files(
+        nested_files, dest_dir, mode=File.CopyMode.hardlink
+    )
+    assert sorted(p.relative_to(src_dir) for p in src_dir.glob("**/*.txt")) == sorted(
+        p.relative_to(dest_dir) for p in dest_dir.glob("**/*.txt")
+    )
+    copied_files = []
+    for x in "abcde":
+        copied_files.append(File(dest_dir / (x + ".txt")))
+    a, b, c, d, e = copied_files
+    assert nested_files_copy == [{"a": a}, b, [(c, a), (d, e)]]
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="symlinks not supported on Windows"
 )
-def test_related_files(file, length, expected_files):
-    related_files = get_related_files(file)
+def test_copy_nested_files_symlink(tmp_path: Path):
+    src_dir = tmp_path / "src"
 
-    assert len(related_files) == length
+    src_dir.mkdir()
 
-    for ef in expected_files:
-        assert ef in related_files
+    # Create temporary files
+    files = []
+    for x in "abcde":
+        p = src_dir / (x + ".txt")
+        p.write_text(x)
+        files.append(File(p))
+    a, b, c, d, e = files
+
+    nested_files = [{"a": a}, b, [(c, a), (d, e)]]
+
+    dest_dir = tmp_path / "dest"
+    nested_files_copy = copy_nested_files(
+        nested_files, dest_dir, mode=File.CopyMode.symlink
+    )
+    assert sorted(p.relative_to(src_dir) for p in src_dir.glob("**/*.txt")) == sorted(
+        p.relative_to(dest_dir) for p in dest_dir.glob("**/*.txt")
+    )
+    copied_files: ty.List[File] = []
+    for x in "abcde":
+        copied_files.append(File(dest_dir / (x + ".txt")))
+    assert all(f.fspath.is_symlink() for f in copied_files)
+    a, b, c, d, e = copied_files
+    assert nested_files_copy == [{"a": a}, b, [(c, a), (d, e)]]
+
+
+def test_copy_nested_files_leave(tmp_path: Path):
+    src_dir = tmp_path / "src"
+
+    src_dir.mkdir()
+
+    # Create temporary files
+    files = []
+    for x in "abcde":
+        p = src_dir / (x + ".txt")
+        p.write_text(x)
+        files.append(File(p))
+    a, b, c, d, e = files
+
+    nested_files = [{"a": a}, b, [(c, a), (d, e)]]
+
+    dest_dir = tmp_path / "dest"  # not used
+
+    nested_files_copy = copy_nested_files(
+        nested_files, dest_dir, mode=File.CopyMode.leave
+    )
+    assert nested_files_copy == nested_files
 
 
 MOUNT_OUTPUTS = (
@@ -411,12 +319,12 @@ devpts on /dev/ptmx type devpts (rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmo
 
 @pytest.mark.parametrize("output, exit_code, expected", MOUNT_OUTPUTS)
 def test_parse_mount_table(output, exit_code, expected):
-    assert _parse_mount_table(exit_code, output) == expected
+    assert MountIndentifier.parse_mount_table(exit_code, output) == expected
 
 
 def test_cifs_check():
-    assert isinstance(_cifs_table, list)
-    assert isinstance(on_cifs("/"), bool)
+    assert isinstance(MountIndentifier.get_mount_table(), list)
+    assert isinstance(MountIndentifier.on_cifs("/"), bool)
     fake_table = [("/scratch/tmp", "ext4"), ("/scratch", "cifs")]
     cifs_targets = [
         ("/scratch/tmp/x/y", False),
@@ -428,15 +336,10 @@ def test_cifs_check():
         ("/", False),
     ]
 
-    orig_table = _cifs_table[:]
-    _cifs_table[:] = []
+    with MountIndentifier.patch_table([]):
+        for target, _ in cifs_targets:
+            assert MountIndentifier.on_cifs(target) is False
 
-    for target, _ in cifs_targets:
-        assert on_cifs(target) is False
-
-    _cifs_table.extend(fake_table)
-    for target, expected in cifs_targets:
-        assert on_cifs(target) is expected
-
-    _cifs_table[:] = []
-    _cifs_table.extend(orig_table)
+    with MountIndentifier.patch_table(fake_table):
+        for target, expected in cifs_targets:
+            assert MountIndentifier.on_cifs(target) is expected

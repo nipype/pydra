@@ -12,7 +12,10 @@ dependencies = [
     "cloudpickle >=2.0.0",
     "etelemetry >=0.2.2",
     "filelock >=3.0.0",
+    "fileformats >=0.8",
     "importlib_resources >=5.7; python_version < '3.11'",
+    "typing_extensions >=4.6.3; python_version < '3.10'",
+    "typing_utils >=0.1.0; python_version < '3.10'",
 ]
 license = {file = "LICENSE"}
 authors = [
@@ -56,7 +59,7 @@ dev = [
 ]
 doc = [
     "packaging",
-    "sphinx >=2.1.2",
+    "sphinx ==6.2.1",
     "sphinx_rtd_theme",
     "sphinxcontrib-apidoc ~=0.3.0",
     "sphinxcontrib-versioning",

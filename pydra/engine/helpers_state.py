@@ -4,6 +4,7 @@ import attr
 import itertools
 from copy import deepcopy
 import logging
+import typing as ty
 from .helpers import ensure_list
 
 logger = logging.getLogger("pydra")
@@ -326,15 +327,18 @@ def add_name_combiner(combiner, name):
     return combiner_changed
 
 
-def add_name_splitter(splitter, name):
+def add_name_splitter(
+    splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None], name: str
+) -> ty.Optional[ty.List[str]]:
     """adding a node's name to each field from the splitter"""
     if isinstance(splitter, str):
         return _add_name([splitter], name)[0]
     elif isinstance(splitter, list):
-        return _add_name(splitter, name)
+        return _add_name(list(splitter), name)
     elif isinstance(splitter, tuple):
-        splitter_l = list(splitter)
-        return tuple(_add_name(splitter_l, name))
+        return tuple(_add_name(list(splitter), name))
+    else:
+        return None
 
 
 def _add_name(mlist, name):
@@ -625,3 +629,25 @@ def inputs_types_to_dict(name, inputs):
     for field in input_names:
         inputs_dict[f"{name}.{field}"] = getattr(inputs, field)
     return inputs_dict
+
+
+def unwrap_splitter(
+    splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...]]
+) -> ty.Iterable[str]:
+    """Unwraps a splitter into a flat list of fields that are split over, i.e.
+    [("a", "b"), "c"] -> ["a", "b", "c"]
+
+    Parameters
+    ----------
+    splitter: str or list[str] or tuple[str, ...]
+        the splitter spec to unwrap
+
+    Returns
+    -------
+    unwrapped : ty.Iterable[str]
+        the field names listed in the splitter
+    """
+    if isinstance(splitter, str):
+        return [splitter]
+    else:
+        return itertools.chain(*(unwrap_splitter(s) for s in splitter))

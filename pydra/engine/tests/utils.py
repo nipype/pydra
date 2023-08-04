@@ -3,13 +3,16 @@ import time
 import sys, shutil
 import typing as ty
 from pathlib import Path
+import functools
+import operator
 import subprocess as sp
 import pytest
+from fileformats.generic import File
 
 from ..core import Workflow
 from ..submitter import Submitter
 from ... import mark
-from ..specs import File
+
 
 need_docker = pytest.mark.skipif(
     shutil.which("docker") is None or sp.call(["docker", "info"]),
@@ -51,12 +54,12 @@ else:
 
 
 @mark.task
-def op_4var(a, b, c, d):
+def op_4var(a, b, c, d) -> str:
     return f"{a} {b} {c} {d}"
 
 
 @mark.task
-def fun_addtwo(a):
+def fun_addtwo(a: int) -> int:
     import time
 
     time.sleep(1)
@@ -66,7 +69,7 @@ def fun_addtwo(a):
 
 
 @mark.task
-def fun_addtwo_with_threadcount(a, sgeThreads=1):
+def fun_addtwo_notype(a):
     import time
 
     time.sleep(1)
@@ -76,18 +79,35 @@ def fun_addtwo_with_threadcount(a, sgeThreads=1):
 
 
 @mark.task
-def fun_addvar(a, b):
+def fun_addtwo_with_threadcount(a: int, sgeThreads: int = 1) -> int:
+    import time
+
+    time.sleep(1)
+    if a == 3:
+        time.sleep(2)
+    return a + 2
+
+
+@mark.task
+def fun_addvar(
+    a: ty.Union[int, float], b: ty.Union[int, float]
+) -> ty.Union[int, float]:
+    return a + b
+
+
+@mark.task
+def fun_addvar_notype(a, b):
     return a + b
 
 
 @mark.task
 @mark.annotate({"return": {"sum": float, "sub": float}})
-def fun_addsubvar(a, b):
+def fun_addsubvar(a: float, b: float):
     return a + b, a - b
 
 
 @mark.task
-def fun_addvar_none(a, b):
+def fun_addvar_none(a: int, b: ty.Optional[int]) -> int:
     if b is None:
         return a
     else:
@@ -95,44 +115,59 @@ def fun_addvar_none(a, b):
 
 
 @mark.task
-def fun_addvar_default(a, b=1):
+def fun_addvar_default(a: int, b: int = 1) -> int:
     return a + b
 
 
 @mark.task
-def fun_addvar3(a, b, c):
+def fun_addvar_default_notype(a, b=1):
+    return a + b
+
+
+@mark.task
+def fun_addvar3(a: int, b: int, c: int) -> int:
     return a + b + c
 
 
 @mark.task
-def fun_addvar4(a, b, c, d):
+def fun_addvar4(a: int, b: int, c: int, d: int) -> int:
     return a + b + c + d
 
 
 @mark.task
-def moment(lst, n):
+def moment(lst: ty.List[float], n: float) -> float:
     return sum([i**n for i in lst]) / len(lst)
 
 
 @mark.task
-def fun_div(a, b):
+def fun_div(a: ty.Union[int, float], b: ty.Union[int, float]) -> float:
     return a / b
 
 
 @mark.task
-def multiply(x, y):
+def multiply(x: int, y: int) -> int:
     return x * y
 
 
 @mark.task
-def add2(x):
+def multiply_list(x: list, y: int) -> list:
+    return x * y
+
+
+@mark.task
+def multiply_mixed(x: list, y: int) -> list:
+    return x * y
+
+
+@mark.task
+def add2(x: int) -> int:
     if x == 1 or x == 12:
         time.sleep(1)
     return x + 2
 
 
 @mark.task
-def raise_xeq1(x):
+def raise_xeq1(x: int) -> int:
     if x == 1:
         raise Exception("x is 1, so i'm raising an exception!")
     return x
@@ -142,13 +177,18 @@ def raise_xeq1(x):
 @mark.annotate({"return": {"out_add": float, "out_sub": float}})
 def add2_sub2_res(res):
     """function that takes entire output as an input"""
-    if isinstance(res, list):
-        return [r["out"] + 2 for r in res], [r["out"] - 2 for r in res]
     return res["out"] + 2, res["out"] - 2
 
 
 @mark.task
-def power(a, b):
+@mark.annotate({"return": {"out_add": ty.List[float], "out_sub": ty.List[float]}})
+def add2_sub2_res_list(res):
+    """function that takes entire output as an input"""
+    return [r["out"] + 2 for r in res], [r["out"] - 2 for r in res]
+
+
+@mark.task
+def power(a: int, b: int) -> int:
     return a**b
 
 
@@ -165,41 +205,43 @@ def identity_2flds(
 
 
 @mark.task
-def ten(x):
+def ten(x) -> int:
     return 10
 
 
 @mark.task
-def add2_wait(x):
+def add2_wait(x: int) -> int:
     time.sleep(2)
     return x + 2
 
 
 @mark.task
-def list_output(x):
+def list_output(x: int) -> ty.List[int]:
     return [x, 2 * x, 3 * x]
 
 
 @mark.task
-def list_sum(x):
+def list_sum(x: ty.Sequence[ty.Union[int, float]]) -> ty.Union[int, float]:
     return sum(x)
 
 
 @mark.task
-def fun_dict(d):
+def fun_dict(d: dict) -> str:
     kv_list = [f"{k}:{v}" for (k, v) in d.items()]
     return "_".join(kv_list)
 
 
 @mark.task
-def fun_write_file(filename: ty.Union[str, File, Path], text="hello") -> File:
+def fun_write_file(filename: Path, text="hello") -> File:
     with open(filename, "w") as f:
         f.write(text)
-    return Path(filename).absolute()
+    return File(filename)
 
 
 @mark.task
-def fun_write_file_list(filename_list: ty.List[ty.Union[str, File, Path]], text="hi"):
+def fun_write_file_list(
+    filename_list: ty.List[ty.Union[str, File, Path]], text="hi"
+) -> ty.List[File]:
     for ii, filename in enumerate(filename_list):
         with open(filename, "w") as f:
             f.write(f"from file {ii}: {text}")
@@ -210,7 +252,7 @@ def fun_write_file_list(filename_list: ty.List[ty.Union[str, File, Path]], text=
 @mark.task
 def fun_write_file_list2dict(
     filename_list: ty.List[ty.Union[str, File, Path]], text="hi"
-):
+) -> ty.Dict[str, ty.Union[File, int]]:
     filename_dict = {}
     for ii, filename in enumerate(filename_list):
         with open(filename, "w") as f:
@@ -296,3 +338,16 @@ def gen_basic_wf_with_threadcount_concurrent(name="basic-wf-with-threadcount"):
     wf.add(fun_addvar(name="task2", a=wf.task1_1.lzout.out, b=2))
     wf.set_output([("out1", wf.task2.lzout.out), ("out2", wf.task1_2.lzout.out)])
     return wf
+
+
+@mark.task
+@mark.annotate({"return": {"sum": int, "products": ty.List[int]}})
+def list_mult_sum(scalar: int, in_list: ty.List[int]) -> ty.Tuple[int, ty.List[int]]:
+    products = [scalar * x for x in in_list]
+    return functools.reduce(operator.add, products, 0), products
+
+
+@mark.task
+@mark.annotate({"return": {"x": str, "y": int, "z": float}})
+def foo(a: str, b: int, c: float) -> ty.Tuple[str, int, float]:
+    return a, b, c

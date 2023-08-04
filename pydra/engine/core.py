@@ -1,21 +1,21 @@
 """Basic processing graph elements."""
 import abc
-import attr
 import json
 import logging
+import itertools
+from functools import cached_property
 import os
 import sys
 from pathlib import Path
 import typing as ty
 from copy import deepcopy
 from uuid import uuid4
-
-import cloudpickle as cp
 from filelock import SoftFileLock
 import shutil
 from tempfile import mkdtemp
 from traceback import format_exception
-
+import attr
+import cloudpickle as cp
 from . import state
 from . import helpers_state as hlpst
 from .specs import (
@@ -24,9 +24,12 @@ from .specs import (
     RuntimeSpec,
     Result,
     SpecInfo,
+    LazyIn,
+    LazyOut,
     LazyField,
     TaskHook,
     attr_fields,
+    StateArray,
 )
 from .helpers import (
     make_klass,
@@ -36,13 +39,16 @@ from .helpers import (
     save,
     ensure_list,
     record_error,
-    hash_function,
     PydraFileLock,
+    parse_copyfile,
 )
-from .helpers_file import copyfile_input, template_update
+from ..utils.hash import hash_function
+from .helpers_file import copy_nested_files, template_update
 from .graph import DiGraph
 from .audit import Audit
 from ..utils.messenger import AuditFlag
+from ..utils.typing import TypeParser
+from fileformats.core import FileSet
 
 logger = logging.getLogger("pydra")
 
@@ -201,6 +207,7 @@ class TaskBase:
         self.plugin = None
         self.hooks = TaskHook()
         self._errored = False
+        self._lzout = None
 
     def __str__(self):
         return self.name
@@ -223,10 +230,9 @@ class TaskBase:
         state["inputs"] = make_klass(state["input_spec"])(**state["inputs"])
         self.__dict__.update(state)
 
-    def __getattr__(self, name):
-        if name == "lzout":  # lazy output
-            return LazyField(self, "output")
-        return self.__getattribute__(name)
+    @cached_property
+    def lzout(self):
+        return LazyOut(self)
 
     def help(self, returnhelp=False):
         """Print class help."""
@@ -286,13 +292,7 @@ class TaskBase:
             # setting files_hash again in case it was cleaned by setting specific element
             # that might be important for outer splitter of input variable with big files
             # the file can be changed with every single index even if there are only two files
-            inputs_copy.files_hash = self.inputs.files_hash
             input_hash = inputs_copy.hash
-            # updating self.inputs.files_hash, so big files hashes
-            # doesn't have to be recompute for the next element
-            for key, val in inputs_copy.files_hash.items():
-                if val:
-                    self.inputs.files_hash[key].update(val)
             if is_workflow(self):
                 con_hash = hash_function(self._connections)
                 # TODO: hash list is not used
@@ -356,7 +356,9 @@ class TaskBase:
         """
         output_klass = make_klass(self.output_spec)
         if hasattr(output_klass, "generated_output_names"):
-            output = output_klass(**{f.name: None for f in attr.fields(output_klass)})
+            output = output_klass(
+                **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
+            )
             # using updated input (after filing the templates)
             _inputs = deepcopy(self.inputs)
             modified_inputs = template_update(_inputs, self.output_dir)
@@ -457,7 +459,24 @@ class TaskBase:
         orig_inputs = {
             k: deepcopy(v) for k, v in attr.asdict(self.inputs, recurse=False).items()
         }
-        map_copyfiles = copyfile_input(self.inputs, self.output_dir)
+        map_copyfiles = {}
+        for fld in attr_fields(self.inputs):
+            value = getattr(self.inputs, fld.name)
+            copy_mode, copy_collation = parse_copyfile(
+                fld, default_collation=self.DEFAULT_COPY_COLLATION
+            )
+            if value is not attr.NOTHING and TypeParser.contains_type(
+                FileSet, fld.type
+            ):
+                copied_value = copy_nested_files(
+                    value=value,
+                    dest_dir=self.output_dir,
+                    mode=copy_mode,
+                    collation=copy_collation,
+                    supported_modes=self.SUPPORTED_COPY_MODES,
+                )
+                if value is not copied_value:
+                    map_copyfiles[fld.name] = copied_value
         modified_inputs = template_update(
             self.inputs, self.output_dir, map_copyfiles=map_copyfiles
         )
@@ -534,28 +553,58 @@ class TaskBase:
     def _collect_outputs(self, output_dir):
         run_output = self.output_
         output_klass = make_klass(self.output_spec)
-        output = output_klass(**{f.name: None for f in attr.fields(output_klass)})
+        output = output_klass(
+            **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
+        )
         other_output = output.collect_additional_outputs(
             self.inputs, output_dir, run_output
         )
         return attr.evolve(output, **run_output, **other_output)
 
-    def split(self, splitter, overwrite=False, cont_dim=None, **kwargs):
+    def split(
+        self,
+        splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None] = None,
+        overwrite: bool = False,
+        cont_dim: ty.Optional[dict] = None,
+        **inputs,
+    ):
         """
         Run this task parametrically over lists of split inputs.
 
         Parameters
         ----------
-        splitter :
-            TODO
-        overwrite : :obj:`bool`
-            TODO
-        cont_dim : :obj:`dict`
+        splitter : str or list[str] or tuple[str] or None
+            the fields which to split over. If splitting over multiple fields, lists of
+            fields are interpreted as outer-products and tuples inner-products. If None,
+            then the fields to split are taken from the keyword-arg names.
+        overwrite : bool, optional
+            whether to overwrite an existing split on the node, by default False
+        cont_dim : dict, optional
             Container dimensions for specific inputs, used in the splitter.
             If input name is not in cont_dim, it is assumed that the input values has
             a container dimension of 1, so only the most outer dim will be used for splitting.
+        **split_inputs
+            fields to split over, will automatically be wrapped in a StateArray object
+            and passed to the node inputs
 
+        Returns
+        -------
+        self : TaskBase
+            a reference to the task
         """
+        if self._lzout:
+            raise RuntimeError(
+                f"Cannot split {self} as its output interface has already been accessed"
+            )
+        if splitter is None and inputs:
+            splitter = list(inputs)
+        elif splitter:
+            missing = set(hlpst.unwrap_splitter(splitter)) - set(inputs)
+            missing = [m for m in missing if not m.startswith("_")]
+            if missing:
+                raise ValueError(
+                    f"Split is missing values for the following fields {list(missing)}"
+                )
         splitter = hlpst.add_name_splitter(splitter, self.name)
         # if user want to update the splitter, overwrite has to be True
         if self.state and not overwrite and self.state.splitter != splitter:
@@ -566,24 +615,62 @@ class TaskBase:
         if cont_dim:
             for key, vel in cont_dim.items():
                 self._cont_dim[f"{self.name}.{key}"] = vel
-        if kwargs:
-            self.inputs = attr.evolve(self.inputs, **kwargs)
+        if inputs:
+            new_inputs = {}
+            split_inputs = set(
+                f"{self.name}.{n}" if "." not in n else n
+                for n in hlpst.unwrap_splitter(splitter)
+                if not n.startswith("_")
+            )
+            for inpt_name, inpt_val in inputs.items():
+                new_val: ty.Any
+                if f"{self.name}.{inpt_name}" in split_inputs:  # type: ignore
+                    if isinstance(inpt_val, LazyField):
+                        new_val = inpt_val.split(splitter)
+                    elif isinstance(inpt_val, ty.Iterable) and not isinstance(
+                        inpt_val, (ty.Mapping, str)
+                    ):
+                        new_val = StateArray(inpt_val)
+                    else:
+                        raise TypeError(
+                            f"Could not split {inpt_val} as it is not a sequence type"
+                        )
+                else:
+                    new_val = inpt_val
+                new_inputs[inpt_name] = new_val
+            self.inputs = attr.evolve(self.inputs, **new_inputs)
         if not self.state or splitter != self.state.splitter:
             self.set_state(splitter)
         return self
 
-    def combine(self, combiner, overwrite=False):
+    def combine(
+        self,
+        combiner: ty.Union[ty.List[str], str],
+        overwrite: bool = False,  # **kwargs
+    ):
         """
         Combine inputs parameterized by one or more previous tasks.
 
         Parameters
         ----------
-        combiner :
-            TODO
-        overwrite : :obj:`bool`
-            TODO
+        combiner : list[str] or str
+            the
+        overwrite : bool
+            whether to overwrite an existing combiner on the node
+        **kwargs : dict[str, Any]
+            values for the task that will be "combined" before they are provided to the
+            node
 
+        Returns
+        -------
+        self : TaskBase
+            a reference to the task
         """
+        if self._lzout:
+            raise RuntimeError(
+                f"Cannot combine {self} as its output interface has already been "
+                "accessed"
+            )
         if not isinstance(combiner, (str, list)):
             raise Exception("combiner has to be a string or a list")
         combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
@@ -603,11 +690,10 @@ class TaskBase:
             # if is connected to one with a splitter;
             # self.fut_combiner will be used later as a combiner
             self.fut_combiner = combiner
-            return self
         else:  # self.state and not self.state.combiner
             self.combiner = combiner
             self.set_state(splitter=self.state.splitter, combiner=self.combiner)
-            return self
+        return self
 
     def _extract_input_el(self, inputs, inp_nm, ind):
         """
@@ -629,26 +715,22 @@ class TaskBase:
 
     def get_input_el(self, ind):
         """Collect all inputs required to run the node (for specific state element)."""
-        if ind is not None:
-            # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
-            state_dict = self.state.states_val[ind]
-            input_ind = self.state.inputs_ind[ind]
-            inputs_dict = {}
-            for inp in set(self.input_names):
-                if f"{self.name}.{inp}" in input_ind:
-                    inputs_dict[inp] = self._extract_input_el(
-                        inputs=self.inputs,
-                        inp_nm=inp,
-                        ind=input_ind[f"{self.name}.{inp}"],
-                    )
-                else:
-                    inputs_dict[inp] = getattr(self.inputs, inp)
-            return state_dict, inputs_dict
-        else:
-            # todo it never gets here
-            breakpoint()
-            inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
-            return None, inputs_dict
+        # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
+        input_ind = self.state.inputs_ind[ind]
+        inputs_dict = {}
+        for inp in set(self.input_names):
+            if f"{self.name}.{inp}" in input_ind:
+                inputs_dict[inp] = self._extract_input_el(
+                    inputs=self.inputs,
+                    inp_nm=inp,
+                    ind=input_ind[f"{self.name}.{inp}"],
+                )
+        return inputs_dict
+        # else:
+        #     # todo it never gets here
+        #     breakpoint()
+        #     inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
+        #     return None, inputs_dict
 
     def pickle_task(self):
         """Pickling the tasks with full inputs"""
@@ -796,10 +878,17 @@ class TaskBase:
             for task in self.graph.nodes:
                 task._reset()
 
+    SUPPORTED_COPY_MODES = FileSet.CopyMode.any
+    DEFAULT_COPY_COLLATION = FileSet.CopyCollation.any
 
-def _sanitize_input_spec(
-    input_spec: ty.Union[SpecInfo, ty.List[str]],
+
+def _sanitize_spec(
+    spec: ty.Union[
+        SpecInfo, ty.List[str], ty.Dict[str, ty.Type[ty.Any]], BaseSpec, None
+    ],
     wf_name: str,
+    spec_name: str,
+    allow_empty: bool = False,
 ) -> SpecInfo:
     """Makes sure the provided input specifications are valid.
 
@@ -808,51 +897,65 @@ def _sanitize_input_spec(
 
     Parameters
     ----------
-    input_spec : SpecInfo or List[str]
-        Input specification to be sanitized.
-
+    spec : SpecInfo or List[str] or Dict[str, type]
+        Specification to be sanitized.
     wf_name : str
         The name of the workflow for which the input specifications
-        are sanitized.
+    spec_name : str
+        name given to generated SpecInfo object
 
     Returns
     -------
-    input_spec : SpecInfo
-        Sanitized input specifications.
+    spec : SpecInfo
+        Sanitized specification.
 
     Raises
     ------
     ValueError
-        If provided `input_spec` is None.
+        If provided `spec` is None.
     """
     graph_checksum_input = ("_graph_checksums", ty.Any)
-    if input_spec:
-        if isinstance(input_spec, SpecInfo):
-            if not any([x == BaseSpec for x in input_spec.bases]):
-                raise ValueError("Provided SpecInfo must have BaseSpec as it's base.")
-            if "_graph_checksums" not in {f[0] for f in input_spec.fields}:
-                input_spec.fields.insert(0, graph_checksum_input)
-            return input_spec
+    if spec:
+        if isinstance(spec, SpecInfo):
+            if BaseSpec not in spec.bases:
+                raise ValueError("Provided SpecInfo must have BaseSpec as its base.")
+            if "_graph_checksums" not in {f[0] for f in spec.fields}:
+                spec.fields.insert(0, graph_checksum_input)
+            return spec
         else:
+            base = BaseSpec
+            if isinstance(spec, list):
+                typed_spec = zip(spec, itertools.repeat(ty.Any))
+            elif isinstance(spec, dict):
+                typed_spec = spec.items()  # type: ignore
+            elif isinstance(spec, BaseSpec):
+                base = spec
+                typed_spec = []
+            else:
+                raise TypeError(
+                    f"Unrecognised spec type, {spec}, should be SpecInfo, list or dict"
+                )
             return SpecInfo(
-                name="Inputs",
+                name=spec_name,
                 fields=[graph_checksum_input]
                 + [
                     (
                         nm,
                         attr.ib(
-                            type=ty.Any,
+                            type=tp,
                             metadata={
                                 "help_string": f"{nm} input from {wf_name} workflow"
                             },
                         ),
                     )
-                    for nm in input_spec
+                    for nm, tp in typed_spec
                 ],
-                bases=(BaseSpec,),
+                bases=(base,),
             )
+    elif allow_empty:
+        return None
     else:
-        raise ValueError(f"Empty input_spec provided to Workflow {wf_name}.")
+        raise ValueError(f'Empty "{spec_name}" spec provided to Workflow {wf_name}.')
 
 
 class Workflow(TaskBase):
@@ -864,11 +967,15 @@ class Workflow(TaskBase):
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
-        input_spec: ty.Optional[ty.Union[ty.List[ty.Text], SpecInfo]] = None,
+        input_spec: ty.Optional[
+            ty.Union[ty.List[ty.Text], ty.Dict[ty.Text, ty.Type[ty.Any]], SpecInfo]
+        ] = None,
         cont_dim=None,
         messenger_args=None,
         messengers=None,
-        output_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
+        output_spec: ty.Optional[
+            ty.Union[ty.List[str], ty.Dict[str, type], SpecInfo, BaseSpec]
+        ] = None,
         rerun=False,
         propagate_rerun=True,
         **kwargs,
@@ -900,9 +1007,10 @@ class Workflow(TaskBase):
             TODO
 
         """
-        self.input_spec = _sanitize_input_spec(input_spec, name)
-
-        self.output_spec = output_spec
+        self.input_spec = _sanitize_spec(input_spec, name, "Inputs")
+        self.output_spec = _sanitize_spec(
+            output_spec, name, "Outputs", allow_empty=True
+        )
 
         if name in dir(self):
             raise ValueError(
@@ -924,17 +1032,21 @@ class Workflow(TaskBase):
 
         self.graph = DiGraph(name=name)
         self.name2obj = {}
+        self._lzin = None
+        self._pre_split = (
+            False  # To signify if the workflow has been split on task load or not
+        )
 
         # store output connections
         self._connections = None
         # propagating rerun if task_rerun=True
         self.propagate_rerun = propagate_rerun
 
+    @cached_property
+    def lzin(self):
+        return LazyIn(self)
+
     def __getattr__(self, name):
-        if name == "lzin":
-            return LazyField(self, "input")
-        if name == "lzout":
-            return super().__getattr__(name)
         if name in self.name2obj:
             return self.name2obj[name]
         return self.__getattribute__(name)
@@ -1151,16 +1263,23 @@ class Workflow(TaskBase):
         # at this point Workflow is stateless so this should be fine
         await submitter.expand_workflow(self, rerun=rerun)
 
-    def set_output(self, connections):
+    def set_output(
+        self,
+        connections: ty.Union[
+            ty.Tuple[str, LazyField], ty.List[ty.Tuple[str, LazyField]]
+        ],
+    ):
         """
-        Write outputs.
+        Set outputs of the workflow by linking them with lazy outputs of tasks
 
         Parameters
         ----------
-        connections :
-            TODO
-
+        connections : tuple[str, LazyField] or list[tuple[str, LazyField]] or None
+            single or list of tuples linking the name of the output to a lazy output
+            of a task in the workflow.
         """
+        from ..utils.typing import TypeParser
+
         if self._connections is None:
             self._connections = []
         if isinstance(connections, tuple) and len(connections) == 2:
@@ -1172,17 +1291,40 @@ class Workflow(TaskBase):
         elif isinstance(connections, dict):
             new_connections = list(connections.items())
         else:
-            raise Exception(
+            raise TypeError(
                 "Connections can be a 2-elements tuple, a list of these tuples, or dictionary"
             )
         # checking if a new output name is already in the connections
         connection_names = [name for name, _ in self._connections]
-        new_names = [name for name, _ in new_connections]
-        if set(connection_names).intersection(new_names):
-            raise Exception(
-                f"output name {set(connection_names).intersection(new_names)} is already set"
+        if self.output_spec:
+            output_types = {
+                a.name: a.type for a in attr.fields(make_klass(self.output_spec))
+            }
+        else:
+            output_types = {}
+        # Check for type matches with explicitly defined outputs
+        conflicting = []
+        type_mismatches = []
+        for conn_name, lazy_field in new_connections:
+            if conn_name in connection_names:
+                conflicting.append(conn_name)
+            try:
+                output_type = output_types[conn_name]
+            except KeyError:
+                pass
+            else:
+                if not TypeParser.matches_type(lazy_field.type, output_type):
+                    type_mismatches.append((conn_name, output_type, lazy_field.type))
+        if conflicting:
+            raise ValueError(f"the output names {conflicting} are already set")
+        if type_mismatches:
+            raise TypeError(
+                f"the types of the following outputs of {self} don't match their declared types: "
+                + ", ".join(
+                    f"{n} (expected: {ex}, provided: {p})"
+                    for n, ex, p in type_mismatches
+                )
             )
-
         self._connections += new_connections
         fields = []
         for con in self._connections:
@@ -1192,6 +1334,8 @@ class Workflow(TaskBase):
                 help_string = f"all outputs from {task_nm}"
                 fields.append((wf_out_nm, dict, {"help_string": help_string}))
             else:
+                from ..utils.typing import TypeParser
+
                 # getting information about the output field from the task output_spec
                 # providing proper type and some help string
                 task_output_spec = getattr(self, task_nm).output_spec
@@ -1199,13 +1343,19 @@ class Workflow(TaskBase):
                 help_string = (
                     f"{out_fld.metadata.get('help_string', '')} (from {task_nm})"
                 )
-                fields.append((wf_out_nm, out_fld.type, {"help_string": help_string}))
+                if TypeParser.get_origin(lf.type) is StateArray:
+                    type_ = TypeParser.get_item_type(lf.type)
+                else:
+                    type_ = lf.type
+                fields.append((wf_out_nm, type_, {"help_string": help_string}))
         self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
         logger.info("Added %s to %s", self.output_spec, self)
 
     def _collect_outputs(self):
         output_klass = make_klass(self.output_spec)
-        output = output_klass(**{f.name: None for f in attr.fields(output_klass)})
+        output = output_klass(
+            **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
+        )
         # collecting outputs from tasks
         output_wf = {}
         for name, val in self._connections:
@@ -1214,7 +1364,7 @@ class Workflow(TaskBase):
             try:
                 val_out = val.get_value(self)
                 output_wf[name] = val_out
-            except (ValueError, AttributeError):
+            except (ValueError, AttributeError) as e:
                 output_wf[name] = None
                 # checking if the tasks has predecessors that raises error
                 if isinstance(getattr(self, val.name)._errored, list):
@@ -1227,8 +1377,12 @@ class Workflow(TaskBase):
                             el / "_error.pklz"
                             for el in getattr(self, val.name).output_dir
                         ]
+                        if not all(e.exists() for e in err_file):
+                            raise e
                     else:
                         err_file = getattr(self, val.name).output_dir / "_error.pklz"
+                        if not Path(err_file).exists():
+                            raise e
                     raise ValueError(
                         f"Task {val.name} raised an error, full crash report is here: "
                         f"{err_file}"

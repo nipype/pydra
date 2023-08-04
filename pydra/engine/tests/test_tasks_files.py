@@ -133,10 +133,8 @@ def test_broken_file(tmpdir):
         with Submitter(plugin="cf") as sub:
             sub(nn)
 
-    nn2 = file_add2_annot(name="add2_annot", file=file)
-    with pytest.raises(FileNotFoundError, match="does not exist"):
-        with Submitter(plugin="cf") as sub:
-            sub(nn2)
+    with pytest.raises(FileNotFoundError, match="do not exist"):
+        file_add2_annot(name="add2_annot", file=file)
 
 
 def test_broken_file_link(tmpdir):
@@ -159,11 +157,8 @@ def test_broken_file_link(tmpdir):
         with Submitter(plugin="cf") as sub:
             sub(nn)
 
-    # raises error before task is run
-    nn2 = file_add2_annot(name="add2_annot", file=file_link)
-    with pytest.raises(FileNotFoundError, match="does not exist"):
-        with Submitter(plugin="cf") as sub:
-            sub(nn2)
+    with pytest.raises(FileNotFoundError, match="do not exist"):
+        file_add2_annot(name="add2_annot", file=file_link)
 
 
 def test_broken_dir():
@@ -178,10 +173,8 @@ def test_broken_dir():
             sub(nn)
 
     # raises error before task is run
-    nn2 = dir_count_file_annot(name="listdir", dirpath="/broken_dir_path/")
     with pytest.raises(FileNotFoundError):
-        with Submitter(plugin="cf") as sub:
-            sub(nn2)
+        dir_count_file_annot(name="listdir", dirpath="/broken_dir_path/")
 
 
 def test_broken_dir_link1(tmpdir):
@@ -195,17 +188,14 @@ def test_broken_dir_link1(tmpdir):
     os.symlink(dir1, dir1_link)
     os.rmdir(dir1)
 
-    nn = dir_count_file(name="listdir", dirpath=dir1)
+    nn = dir_count_file(name="listdir", dirpath=Path(dir1))
     # raises error while running task
     with pytest.raises(FileNotFoundError):
         with Submitter(plugin="cf") as sub:
             sub(nn)
 
-    nn2 = dir_count_file_annot(name="listdir", dirpath=dir1)
-    # raises error before task is run
     with pytest.raises(FileNotFoundError):
-        with Submitter(plugin="cf") as sub:
-            sub(nn2)
+        dir_count_file_annot(name="listdir", dirpath=Path(dir1))
 
 
 def test_broken_dir_link2(tmpdir):

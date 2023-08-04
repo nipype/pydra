@@ -1,37 +1,31 @@
 """Administrative support for the engine framework."""
 import asyncio
 import asyncio.subprocess as asp
-import attr
-import cloudpickle as cp
 from pathlib import Path
-from filelock import SoftFileLock, Timeout
 import os
 import sys
-from hashlib import sha256
 from uuid import uuid4
-import subprocess as sp
 import getpass
+import typing as ty
+import subprocess as sp
 import re
 from time import strftime
 from traceback import format_exception
-import typing as ty
-import inspect
-import warnings
-
-
+import attr
+import attrs  # New defaults
+from filelock import SoftFileLock, Timeout
+import cloudpickle as cp
 from .specs import (
     Runtime,
-    File,
-    Directory,
     attr_fields,
     Result,
     LazyField,
-    MultiOutputObj,
-    MultiInputObj,
-    MultiInputFile,
-    MultiOutputFile,
+    File,
 )
-from .helpers_file import hash_file, hash_dir, copyfile, is_existing_file
+from .helpers_file import copy_nested_files
+from ..utils.typing import TypeParser
+from fileformats.core import FileSet
+from .specs import MultiInputFile, MultiInputObj, MultiOutputObj, MultiOutputFile
 
 
 def ensure_list(obj, tuple2list=False):
@@ -54,6 +48,8 @@ def ensure_list(obj, tuple2list=False):
     [5.0]
 
     """
+    if obj is attr.NOTHING:
+        return attr.NOTHING
     if obj is None:
         return []
     # list or numpy.array (this might need some extra flag in case an array has to be converted)
@@ -61,11 +57,21 @@ def ensure_list(obj, tuple2list=False):
         return obj
     elif tuple2list and isinstance(obj, tuple):
         return list(obj)
-    elif isinstance(obj, list):
-        return obj
     elif isinstance(obj, LazyField):
         return obj
     return [obj]
+
+
+def from_list_if_single(obj):
+    """Converts a list to a single item if it is of length == 1"""
+    if obj is attr.NOTHING:
+        return obj
+    if isinstance(obj, LazyField):
+        return obj
+    obj = list(obj)
+    if len(obj) == 1:
+        return obj[0]
+    return obj
 
 
 def print_help(obj):
@@ -158,51 +164,15 @@ def save(task_path: Path, result=None, task=None, name_prefix=None):
                 cp.dump(task, fp)
 
 
-def copyfile_workflow(wf_path, result):
+def copyfile_workflow(wf_path: os.PathLike, result):
     """if file in the wf results, the file will be copied to the workflow directory"""
     for field in attr_fields(result.output):
         value = getattr(result.output, field.name)
         # if the field is a path or it can contain a path _copyfile_single_value is run
         # to move all files and directories to the workflow directory
-        if field.type in [File, Directory, MultiOutputObj] or type(value) in [
-            list,
-            tuple,
-            dict,
-        ]:
-            new_value = _copyfile_single_value(wf_path=wf_path, value=value)
-            setattr(result.output, field.name, new_value)
+        new_value = copy_nested_files(value, wf_path, mode=FileSet.CopyMode.hardlink)
+        setattr(result.output, field.name, new_value)
     return result
-
-
-def _copyfile_single_value(wf_path, value):
-    """checking a single value for files that need to be copied to the wf dir"""
-    if isinstance(value, (tuple, list)):
-        return [_copyfile_single_value(wf_path, val) for val in value]
-    elif isinstance(value, dict):
-        return {
-            key: _copyfile_single_value(wf_path, val) for (key, val) in value.items()
-        }
-    elif is_existing_file(value):
-        new_path = wf_path / Path(value).name
-        copyfile(originalfile=value, newfile=new_path, copy=True, use_hardlink=True)
-        return new_path
-    else:
-        return value
-
-
-def task_hash(task):
-    """
-    Calculate the checksum of a task.
-
-    input hash, output hash, environment hash
-
-    Parameters
-    ----------
-    task : :class:`~pydra.engine.core.TaskBase`
-        The input task.
-
-    """
-    return NotImplementedError
 
 
 def gather_runtime_info(fname):
@@ -257,15 +227,14 @@ def make_klass(spec):
         return None
     fields = spec.fields
     if fields:
-        newfields = dict()
+        newfields = {}
         for item in fields:
             if len(item) == 2:
                 name = item[0]
                 if isinstance(item[1], attr._make._CountingAttr):
-                    newfields[name] = item[1]
-                    newfields[name].validator(custom_validator)
+                    newfield = item[1]
                 else:
-                    newfields[name] = attr.ib(type=item[1], validator=custom_validator)
+                    newfield = attr.ib(type=item[1])
             else:
                 if (
                     any([isinstance(ii, attr._make._CountingAttr) for ii in item])
@@ -276,210 +245,50 @@ def make_klass(spec):
                         "(name, type, default), (name, type, default, metadata)"
                         "or (name, type, metadata)"
                     )
-                else:
-                    if len(item) == 3:
-                        name, tp = item[:2]
-                        if isinstance(item[-1], dict) and "help_string" in item[-1]:
-                            mdata = item[-1]
-                            newfields[name] = attr.ib(
-                                type=tp, metadata=mdata, validator=custom_validator
-                            )
-                        else:
-                            dflt = item[-1]
-                            newfields[name] = attr.ib(
-                                type=tp, default=dflt, validator=custom_validator
-                            )
-                    elif len(item) == 4:
-                        name, tp, dflt, mdata = item
-                        newfields[name] = attr.ib(
-                            type=tp,
-                            default=dflt,
-                            metadata=mdata,
-                            validator=custom_validator,
-                        )
-            # if type has converter, e.g. MultiInputObj
-            if hasattr(newfields[name].type, "converter"):
-                newfields[name].converter = newfields[name].type.converter
+                kwargs = {}
+                if len(item) == 3:
+                    name, tp = item[:2]
+                    if isinstance(item[-1], dict) and "help_string" in item[-1]:
+                        mdata = item[-1]
+                        kwargs["metadata"] = mdata
+                    else:
+                        kwargs["default"] = item[-1]
+                elif len(item) == 4:
+                    name, tp, dflt, mdata = item
+                    kwargs["default"] = dflt
+                    kwargs["metadata"] = mdata
+                newfield = attr.ib(
+                    type=tp,
+                    **kwargs,
+                )
+            type_checker = TypeParser[newfield.type](newfield.type)
+            if newfield.type in (MultiInputObj, MultiInputFile):
+                converter = attr.converters.pipe(ensure_list, type_checker)
+            elif newfield.type in (MultiOutputObj, MultiOutputFile):
+                converter = attr.converters.pipe(from_list_if_single, type_checker)
+            else:
+                converter = type_checker
+            newfield.converter = converter
+            newfield.on_setattr = attr.setters.convert
+            if "allowed_values" in newfield.metadata:
+                if newfield._validator is None:
+                    newfield._validator = allowed_values_validator
+                elif isinstance(newfield._validator, ty.Iterable):
+                    if allowed_values_validator not in newfield._validator:
+                        newfield._validator.append(allowed_values_validator)
+                elif newfield._validator is not allowed_values_validator:
+                    newfield._validator = [
+                        newfield._validator,
+                        allowed_values_validator,
+                    ]
+            newfields[name] = newfield
         fields = newfields
-    return attr.make_class(spec.name, fields, bases=spec.bases, kw_only=True)
+    return attrs.make_class(
+        spec.name, fields, bases=spec.bases, kw_only=True, on_setattr=None
+    )
 
 
-def custom_validator(instance, attribute, value):
-    """simple custom validation
-    take into account ty.Union, ty.List, ty.Dict (but only one level depth)
-    adding an additional validator, if allowe_values provided
-    """
-    validators = []
-    tp_attr = attribute.type
-    # a flag that could be changed to False, if the type is not recognized
-    check_type = True
-    if (
-        value is attr.NOTHING
-        or value is None
-        or attribute.name.startswith("_")  # e.g. _func
-        or isinstance(value, LazyField)
-        or tp_attr
-        in [
-            ty.Any,
-            inspect._empty,
-            MultiOutputObj,
-            MultiInputObj,
-            MultiOutputFile,
-            MultiInputFile,
-        ]
-    ):
-        check_type = False  # no checking of the type
-    elif isinstance(tp_attr, type) or tp_attr in [File, Directory]:
-        tp = _single_type_update(tp_attr, name=attribute.name)
-        cont_type = None
-    else:  # more complex types
-        cont_type, tp_attr_list = _check_special_type(tp_attr, name=attribute.name)
-        if cont_type is ty.Union:
-            tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
-        elif cont_type is list:
-            tp, check_type = _types_updates(tp_attr_list, name=attribute.name)
-        elif cont_type is dict:
-            # assuming that it should have length of 2 for keys and values
-            if len(tp_attr_list) != 2:
-                check_type = False
-            else:
-                tp_attr_key, tp_attr_val = tp_attr_list
-            # updating types separately for keys and values
-            tp_k, check_k = _types_updates([tp_attr_key], name=attribute.name)
-            tp_v, check_v = _types_updates([tp_attr_val], name=attribute.name)
-            # assuming that I have to be able to check keys and values
-            if not (check_k and check_v):
-                check_type = False
-            else:
-                tp = {"key": tp_k, "val": tp_v}
-        else:
-            warnings.warn(
-                f"no type check for {attribute.name} field, "
-                f"no type check implemented for value {value} and type {tp_attr}"
-            )
-            check_type = False
-
-    if check_type:
-        validators.append(_type_validator(instance, attribute, value, tp, cont_type))
-
-    # checking additional requirements for values (e.g. allowed_values)
-    meta_attr = attribute.metadata
-    if "allowed_values" in meta_attr:
-        validators.append(_allowed_values_validator(isinstance, attribute, value))
-    return validators
-
-
-def _type_validator(instance, attribute, value, tp, cont_type):
-    """creating a customized type validator,
-    uses validator.deep_iterable/mapping if the field is a container
-    (i.e. ty.List or ty.Dict),
-    it also tries to guess when the value is a list due to the splitter
-    and validates the elements
-    """
-    if cont_type is None or cont_type is ty.Union:
-        # if tp is not (list,), we are assuming that the value is a list
-        # due to the splitter, so checking the member types
-        if isinstance(value, list) and tp != (list,):
-            return attr.validators.deep_iterable(
-                member_validator=attr.validators.instance_of(
-                    tp + (attr._make._Nothing,)
-                )
-            )(instance, attribute, value)
-        else:
-            return attr.validators.instance_of(tp + (attr._make._Nothing,))(
-                instance, attribute, value
-            )
-    elif cont_type is list:
-        return attr.validators.deep_iterable(
-            member_validator=attr.validators.instance_of(tp + (attr._make._Nothing,))
-        )(instance, attribute, value)
-    elif cont_type is dict:
-        return attr.validators.deep_mapping(
-            key_validator=attr.validators.instance_of(tp["key"]),
-            value_validator=attr.validators.instance_of(
-                tp["val"] + (attr._make._Nothing,)
-            ),
-        )(instance, attribute, value)
-    else:
-        raise Exception(
-            f"container type of {attribute.name} should be None, list, dict or ty.Union, "
-            f"and not {cont_type}"
-        )
-
-
-def _types_updates(tp_list, name):
-    """updating the type's tuple with possible additional types"""
-    tp_upd_list = []
-    check = True
-    for tp_el in tp_list:
-        tp_upd = _single_type_update(tp_el, name, simplify=True)
-        if tp_upd is None:
-            check = False
-            break
-        else:
-            tp_upd_list += list(tp_upd)
-    tp_upd = tuple(set(tp_upd_list))
-    return tp_upd, check
-
-
-def _single_type_update(tp, name, simplify=False):
-    """updating a single type with other related types - e.g. adding bytes for str
-    if simplify is True, than changing typing.List to list etc.
-    (assuming that I validate only one depth, so have to simplify at some point)
-    """
-    if isinstance(tp, type) or tp in [File, Directory]:
-        if tp is str:
-            return (str, bytes)
-        elif tp in [File, Directory, os.PathLike]:
-            return (os.PathLike, str)
-        elif tp is float:
-            return (float, int)
-        else:
-            return (tp,)
-    elif simplify is True:
-        warnings.warn(f"simplify validator for {name} field, checking only one depth")
-        cont_tp, types_list = _check_special_type(tp, name=name)
-        if cont_tp is list:
-            return (list,)
-        elif cont_tp is dict:
-            return (dict,)
-        elif cont_tp is ty.Union:
-            return types_list
-        else:
-            warnings.warn(
-                f"no type check for {name} field, type check not implemented for type of {tp}"
-            )
-            return None
-    else:
-        warnings.warn(
-            f"no type check for {name} field, type check not implemented for type - {tp}, "
-            f"consider using simplify=True"
-        )
-        return None
-
-
-def _check_special_type(tp, name):
-    """checking if the type is a container: ty.List, ty.Dict or ty.Union"""
-    if sys.version_info.minor >= 8:
-        return ty.get_origin(tp), ty.get_args(tp)
-    else:
-        if isinstance(tp, type):  # simple type
-            return None, ()
-        else:
-            if tp._name == "List":
-                return list, tp.__args__
-            elif tp._name == "Dict":
-                return dict, tp.__args__
-            elif tp.__origin__ is ty.Union:
-                return ty.Union, tp.__args__
-            else:
-                warnings.warn(
-                    f"not type check for {name} field, type check not implemented for type {tp}"
-                )
-                return None, ()
-
-
-def _allowed_values_validator(instance, attribute, value):
+def allowed_values_validator(_, attribute, value):
     """checking if the values is in allowed_values"""
     allowed = attribute.metadata["allowed_values"]
     if value is attr.NOTHING or isinstance(value, LazyField):
@@ -669,45 +478,6 @@ def get_open_loop():
     return loop
 
 
-def hash_function(obj):
-    """Generate hash of object."""
-    return sha256(str(obj).encode()).hexdigest()
-
-
-def hash_value(value, tp=None, metadata=None, precalculated=None):
-    """calculating hash or returning values recursively"""
-    if metadata is None:
-        metadata = {}
-    if isinstance(value, (tuple, list, set)):
-        return [hash_value(el, tp, metadata, precalculated) for el in value]
-    elif isinstance(value, dict):
-        dict_hash = {
-            k: hash_value(v, tp, metadata, precalculated) for (k, v) in value.items()
-        }
-        # returning a sorted object
-        return [list(el) for el in sorted(dict_hash.items(), key=lambda x: x[0])]
-    else:  # not a container
-        if (
-            (tp is File or "pydra.engine.specs.File" in str(tp))
-            and is_existing_file(value)
-            and "container_path" not in metadata
-        ):
-            return hash_file(value, precalculated=precalculated)
-        elif (
-            (tp is File or "pydra.engine.specs.Directory" in str(tp))
-            and is_existing_file(value)
-            and "container_path" not in metadata
-        ):
-            return hash_dir(value, precalculated=precalculated)
-        elif type(value).__module__ == "numpy":  # numpy objects
-            return [
-                hash_value(el, tp, metadata, precalculated)
-                for el in ensure_list(value.tolist())
-            ]
-        else:
-            return value
-
-
 def output_from_inputfields(output_spec, input_spec):
     """
     Collect values from output from input fields.
@@ -821,8 +591,9 @@ def load_task(task_pkl, ind=None):
         task_pkl = Path(task_pkl)
     task = cp.loads(task_pkl.read_bytes())
     if ind is not None:
-        _, inputs_dict = task.get_input_el(ind)
-        task.inputs = attr.evolve(task.inputs, **inputs_dict)
+        ind_inputs = task.get_input_el(ind)
+        task.inputs = attr.evolve(task.inputs, **ind_inputs)
+        task._pre_split = True
         task.state = None
         # resetting uid for task
         task._uid = uuid4().hex
@@ -924,3 +695,38 @@ class PydraFileLock:
     async def __aexit__(self, exc_type, exc_value, traceback):
         self.lock.release()
         return None
+
+
+def parse_copyfile(fld: attr.Attribute, default_collation=FileSet.CopyCollation.any):
+    """Gets the copy mode from the 'copyfile' value from a field attribute"""
+    copyfile = fld.metadata.get("copyfile", FileSet.CopyMode.any)
+    if isinstance(copyfile, tuple):
+        mode, collation = copyfile
+    elif isinstance(copyfile, str):
+        try:
+            mode, collation = copyfile.split(",")
+        except ValueError:
+            mode = copyfile
+            collation = default_collation
+        else:
+            collation = FileSet.CopyCollation[collation]
+        mode = FileSet.CopyMode[mode]
+    else:
+        if copyfile is True:
+            mode = FileSet.CopyMode.copy
+        elif copyfile is False:
+            mode = FileSet.CopyMode.link
+        elif copyfile is None:
+            mode = FileSet.CopyMode.any
+        else:
+            mode = copyfile
+        collation = default_collation
+    if not isinstance(mode, FileSet.CopyMode):
+        raise TypeError(
+            f"Unrecognised type for mode copyfile metadata of {fld}, {mode}"
+        )
+    if not isinstance(collation, FileSet.CopyCollation):
+        raise TypeError(
+            f"Unrecognised type for collation copyfile metadata of {fld}, {collation}"
+        )
+    return mode, collation
