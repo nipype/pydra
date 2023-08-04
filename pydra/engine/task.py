@@ -125,6 +125,12 @@ class FunctionTask(TaskBase):
                     val_dflt = val.default
                 else:
                     val_dflt = attr.NOTHING
+                if isinstance(val.annotation, ty.TypeVar):
+                    raise NotImplementedError(
+                        "Template types are not currently supported in task signatures "
+                        f"(found in '{val.name}' field of '{name}' task), "
+                        "see https://github.com/nipype/pydra/issues/672"
+                    )
                 fields.append(
                     (
                         val.name,
