@@ -59,7 +59,7 @@ dev = [
 ]
 doc = [
     "packaging",
-    "sphinx >=2.1.2",
+    "sphinx ==7.1.1",
     "sphinx_rtd_theme",
     "sphinxcontrib-apidoc ~=0.3.0",
     "sphinxcontrib-versioning",
