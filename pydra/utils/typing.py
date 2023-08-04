@@ -348,9 +348,12 @@ class TypeParser(ty.Generic[T]):
                 return check_tuple(tp_args, pattern_args)
             return check_sequence(tp_args, pattern_args)
 
-        def check_basic(tp, pattern):
-            if not self.is_subclass(tp, pattern):
-                self.check_coercible(tp, pattern)
+        def check_basic(tp, target):
+            # Note that we are deliberately more permissive than typical type-checking
+            # here, allowing parents of the target type as well as children,
+            # to avoid users having to cast from loosely typed tasks to strict ones
+            if not self.is_subclass(tp, target) and not self.is_subclass(target, tp):
+                self.check_coercible(tp, target)
 
         def check_union(tp, pattern_args):
             if get_origin(tp) is ty.Union:
