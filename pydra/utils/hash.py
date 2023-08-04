@@ -72,7 +72,6 @@ def hash_object(obj: object) -> Hash:
     try:
         return hash_single(obj, Cache({}))
     except Exception as e:
-        hash_single(obj, Cache({}))
         raise UnhashableError(f"Cannot hash object {obj!r}") from e
 
 
@@ -227,9 +226,8 @@ def bytes_repr_dict(obj: dict, cache: Cache) -> Iterator[bytes]:
 
 @register_serializer(_SpecialForm)
 @register_serializer(type)
-def bytes_repr_type(obj: type, cache: Cache) -> Iterator[bytes]:
-    cls = type(obj)
-    yield f"{cls.__module__}.{cls.__name__}".encode()
+def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
+    yield f"type:({klass.__module__}.{klass.__name__})".encode()
 
 
 @register_serializer(list)

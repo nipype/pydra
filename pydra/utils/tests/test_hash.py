@@ -2,6 +2,7 @@ import re
 from hashlib import blake2b
 from pathlib import Path
 
+import attrs
 import pytest
 
 from ..hash import Cache, UnhashableError, bytes_repr, hash_object, register_serializer
@@ -131,6 +132,20 @@ def test_bytes_repr_custom_obj():
 
     obj_repr = join_bytes_repr(MyClass(1))
     assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+
+
+def test_bytes_repr_attrs_slots():
+    @attrs.define
+    class MyClass:
+        x: int
+
+    obj_repr = join_bytes_repr(MyClass(1))
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+
+
+def test_bytes_repr_type():
+    obj_repr = join_bytes_repr(Path)
+    assert obj_repr == b"type:(pathlib.Path)"
 
 
 def test_recursive_object():
