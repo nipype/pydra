@@ -968,7 +968,7 @@ class LazyInField(LazyField[T]):
             def apply_splits(obj, depth):
                 if depth < 1:
                     return obj
-                return StateArray(apply_splits(i, depth - 1) for i in obj)
+                return StateArray[self.type](apply_splits(i, depth - 1) for i in obj)
 
             value = apply_splits(value, split_depth)
         value = self._apply_cast(value)
@@ -1012,7 +1012,7 @@ class LazyOutField(LazyField[T]):
                 if not depth:
                     val = [r.get_output_field(self.field) for r in res]
                 else:
-                    val = StateArray(
+                    val = StateArray[self.type](
                         get_nested_results(res=r, depth=depth - 1) for r in res
                     )
             else:
@@ -1024,7 +1024,7 @@ class LazyOutField(LazyField[T]):
                 val = res.get_output_field(self.field)
                 if depth and not wf._pre_split:
                     assert isinstance(val, ty.Sequence) and not isinstance(val, str)
-                    val = StateArray(val)
+                    val = StateArray[self.type](val)
             return val
 
         value = get_nested_results(result, depth=split_depth)
