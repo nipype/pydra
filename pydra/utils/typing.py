@@ -289,7 +289,7 @@ class TypeParser(ty.Generic[T]):
                     if obj is not object_
                     else ""
                 )
-                raise TypeError(f"Cannot coerce {obj} into {type_}{msg}") from e
+                raise TypeError(f"Cannot coerce {obj!r} into {type_}{msg}") from e
 
         return expand_and_coerce(object_, self.pattern)
 
@@ -352,7 +352,7 @@ class TypeParser(ty.Generic[T]):
             # Note that we are deliberately more permissive than typical type-checking
             # here, allowing parents of the target type as well as children,
             # to avoid users having to cast from loosely typed tasks to strict ones
-            if not self.is_subclass(tp, target) and not self.is_subclass(target, tp):
+            if not self.is_subclass(tp, target):
                 self.check_coercible(tp, target)
 
         def check_union(tp, pattern_args):
@@ -369,7 +369,8 @@ class TypeParser(ty.Generic[T]):
                             break
                     if reasons:
                         raise TypeError(
-                            f"Cannot coerce {tp} to ty.Union[{', '.join(pattern_args)}], "
+                            f"Cannot coerce {tp} to "
+                            f"ty.Union[{', '.join(str(a) for a in pattern_args)}], "
                             f"because {tp_arg} cannot be coerced to any of its args:\n\n"
                             + "\n\n".join(
                                 f"{a} -> {e}" for a, e in zip(pattern_args, reasons)

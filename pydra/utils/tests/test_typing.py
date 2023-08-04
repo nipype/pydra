@@ -474,7 +474,7 @@ def test_matches_type_dict():
 
 def test_matches_type_type():
     assert TypeParser.matches_type(type, type)
-    assert not TypeParser.matches_type(object, type)
+    assert not TypeParser.matches_type(int, type)
 
 
 def test_matches_type_tuple():
