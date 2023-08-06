@@ -12,14 +12,33 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9, "3.10"]
+        test-name:
+          - test_boutiques
+          - test_dockertask
+          - test_graph
+          - test_helpers
+          - test_helpers_file
+          - test_helpers_state
+          - test_nipype1_convert
+          - test_node_task
+          - test_numpy_examples
+          - test_profiles
+          - test_shelltask
+          - test_shelltask_inputspec
+          - test_singularity
+          - test_specs
+          - test_state
+          - test_submitter
+          - test_task
+          - test_tasks_files
+          - test_workflow
       fail-fast: false
 
     steps:
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.9
         uses: actions/setup-python@v2
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: 3.9
 
       - name: Install dependencies
         run: |
@@ -36,7 +55,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -v --dask pydra/engine --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+          pytest -v --dask pydra/engine/tests/${{ matrix.test-name }}.py --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
 
       - name: Upload to codecov
         run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW
