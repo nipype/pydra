@@ -45,7 +45,12 @@ def _linkcode_resolve(domain, info, package, url_fmt, revision):
 
     class_name = info["fullname"].split(".")[0]
     module = __import__(info["module"], fromlist=[class_name])
-    obj = attrgetter(info["fullname"])(module)
+
+    # FIXME: Bypass resolving for attrs-defined classes.
+    try:
+        obj = attrgetter(info["fullname"])(module)
+    except AttributeError:
+        return
 
     # Unwrap the object to get the correct source
     # file in case that is wrapped by a decorator
