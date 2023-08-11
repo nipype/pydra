@@ -1,4 +1,4 @@
-name: Dask Tests
+name: Dask
 
 on:
   push:
@@ -6,35 +6,38 @@ on:
       - master
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   test:
-    name: Test
-    runs-on: ubuntu-latest
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest]
         python-version: ['3.9', '3.10', '3.11']
       fail-fast: false
+    runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-
-      - name: Checkout Pydra repo
+      - name: Checkout repository
         uses: actions/checkout@v3
         with:
           repository: ${{ github.repository }}
+  
+      - name: Setup Python version ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
 
-      - name: Install pydra with Dask and test dependencies
+      - name: Install dependencies for Dask
         run: |
           pip install -e ".[test,dask]"
 
-      - name: Run tests
+      - name: Run tests for Dask
         run: |
           pytest -v --dask pydra/engine --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
 
