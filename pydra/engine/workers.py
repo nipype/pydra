@@ -875,18 +875,16 @@ class DaskWorker(Worker):
 
     async def exec_dask(self, runnable, rerun=False):
         """Run a task (coroutine wrapper)."""
-        if self.client is None:
-            from dask.distributed import Client
+        from dask.distributed import Client
 
-            self.client = await Client(**self.client_args, asynchronous=True)
-
-        if isinstance(runnable, TaskBase):
-            future = self.client.submit(runnable._run, rerun)
-            result = await future
-        else:  # it could be tuple that includes pickle files with tasks and inputs
-            ind, task_main_pkl, task_orig = runnable
-            future = self.client.submit(load_and_run, task_main_pkl, ind, rerun)
-            result = await future
+        async with Client(**self.client_args, asynchronous=True) as client:
+            if isinstance(runnable, TaskBase):
+                future = client.submit(runnable._run, rerun)
+                result = await future
+            else:  # it could be tuple that includes pickle files with tasks and inputs
+                ind, task_main_pkl, task_orig = runnable
+                future = client.submit(load_and_run, task_main_pkl, ind, rerun)
+                result = await future
         return result
 
     def close(self):
