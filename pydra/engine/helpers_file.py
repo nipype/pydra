@@ -120,6 +120,7 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
         field
         for field in attr_fields(inputs)
         if field.metadata.get("output_file_template")
+        and getattr(inputs, field.name) is not False
         and all(
             getattr(inputs, required_field) is not attr.NOTHING
             for required_field in field.metadata.get("requires", ())
