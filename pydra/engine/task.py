@@ -612,7 +612,7 @@ class ShellCommandTask(TaskBase):
                 host_path, env_path = fileset.parent, Path(f"{root}{fileset.parent}")
 
                 # Default to mounting paths as read-only, but respect existing modes
-                old_mode = self.bindings.get(host_path, ("", "ro"))
+                old_mode = self.bindings.get(host_path, ("", "ro"))[1]
                 self.bindings[host_path] = (env_path, "rw" if copy else old_mode)
 
                 # Provide in-container paths without type-checking
