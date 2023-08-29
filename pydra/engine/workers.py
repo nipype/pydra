@@ -138,7 +138,7 @@ class SerialWorker(Worker):
     def close(self):
         """Return whether the task is finished."""
 
-    async def exec_serial(self, runnable, rerun=False):
+    async def exec_serial(self, runnable, rerun=False, environment=None):
         if isinstance(runnable, TaskBase):
             return runnable._run(rerun, environment=environment)
         else:  # it could be tuple that includes pickle files with tasks and inputs
