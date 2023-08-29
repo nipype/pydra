@@ -102,9 +102,9 @@ def test_docker_st_1(results_function, plugin):
     splitter = executable
     """
     cmd = ["pwd", "whoami"]
-    docky = ShellCommandTask(
-        name="docky", environment=Docker(image="busybox")
-    ).split("executable", executable=cmd)
+    docky = ShellCommandTask(name="docky", environment=Docker(image="busybox")).split(
+        "executable", executable=cmd
+    )
     assert docky.state.splitter == "docky.executable"
 
     res = results_function(docky, plugin)
@@ -127,7 +127,7 @@ def test_docker_st_1(results_function, plugin):
 #     """
 #     with open(tmp_path / "file_pydra.txt"), "w" as f:
 #         f.write("hello from pydra")
-# 
+#
 #     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
 #     wf.inputs.cmd1 = ["cat", "/tmp_dir/file_pydra.txt"]
 #     wf.inputs.cmd2 = ["echo", "message from the previous task:"]
@@ -150,18 +150,18 @@ def test_docker_st_1(results_function, plugin):
 #         )
 #     )
 #     wf.set_output([("out", wf.docky_echo.lzout.stdout)])
-# 
+#
 #     with pytest.raises(Exception) as excinfo:
 #         wf.docky_echo.cmdline
 #     assert "can't return cmdline" in str(excinfo.value)
-# 
+#
 #     with Submitter(plugin=plugin) as sub:
 #         wf(submitter=sub)
-# 
+#
 #     res = wf.result()
 #     assert res.output.out == "message from the previous task: hello from pydra"
-# 
-# 
+#
+#
 # @no_win
 # @need_docker
 # @pytest.mark.skip(reason="we probably don't want to support bindings as an input")
@@ -173,7 +173,7 @@ def test_docker_st_1(results_function, plugin):
 #     """
 #     with open(tmp_path / "file_pydra.txt"), "w" as f:
 #         f.write("hello from pydra")
-# 
+#
 #     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
 #     wf.inputs.cmd1 = ["cat", "/tmp_dir/file_pydra.txt"]
 #     wf.inputs.cmd2 = ["echo", "message from the previous task:"]
@@ -195,14 +195,14 @@ def test_docker_st_1(results_function, plugin):
 #         )
 #     )
 #     wf.set_output([("out", wf.shocky_echo.lzout.stdout)])
-# 
+#
 #     with Submitter(plugin=plugin) as sub:
 #         wf(submitter=sub)
-# 
+#
 #     res = wf.result()
 #     assert res.output.out == "message from the previous task: hello from pydra"
-# 
-# 
+#
+#
 # @no_win
 # @need_docker
 # @pytest.mark.skip(reason="we probably don't want to support bindings as an input")
@@ -210,7 +210,7 @@ def test_docker_st_1(results_function, plugin):
 #     """a workflow with two connected task that run python scripts
 #     the first one creates a text file and the second one reads the file
 #     """
-# 
+#
 #     cmd1 = ["python", "/scripts/saving.py", "-f", "/outputs/tmp.txt"]
 #     dt = DockerTask(
 #         name="save",
@@ -221,8 +221,8 @@ def test_docker_st_1(results_function, plugin):
 #     )
 #     res = dt(plugin=plugin)
 #     assert res.output.stdout == "/outputs/tmp.txt"
-# 
-# 
+#
+#
 # @no_win
 # @need_docker
 # @pytest.mark.skip(reason="we probably don't want to support bindings as an input")
@@ -230,7 +230,7 @@ def test_docker_st_1(results_function, plugin):
 #     """a workflow with two connected task that run python scripts
 #     the first one creates a text file and the second one reads the file
 #     """
-# 
+#
 #     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
 #     wf.inputs.cmd1 = ["python", "/scripts/saving.py", "-f", "/outputs/tmp.txt"]
 #     wf.inputs.cmd2 = ["python", "/scripts/loading.py", "-f"]
@@ -260,14 +260,14 @@ def test_docker_st_1(results_function, plugin):
 #         )
 #     )
 #     wf.set_output([("out", wf.load.lzout.stdout)])
-# 
+#
 #     with Submitter(plugin=plugin) as sub:
 #         wf(submitter=sub)
-# 
+#
 #     res = wf.result()
 #     assert res.output.out == "Hello!"
-# 
-# 
+#
+#
 # @no_win
 # @need_docker
 # @pytest.mark.skip(reason="we probably don't want to support bindings as an input")
@@ -278,7 +278,7 @@ def test_docker_st_1(results_function, plugin):
 #     """
 #     with open(tmp_path / "image.txt"), "w" as f:
 #         f.write("ubuntu")
-# 
+#
 #     wf = Workflow(name="wf", input_spec=["cmd1", "cmd2"])
 #     wf.inputs.cmd1 = ["cat", "/tmp_dir/image.txt"]
 #     wf.inputs.cmd2 = ["echo", "image passed to the second task:"]
@@ -301,10 +301,10 @@ def test_docker_st_1(results_function, plugin):
 #         )
 #     )
 #     wf.set_output([("out", wf.docky_echo.lzout.stdout)])
-# 
+#
 #     with Submitter(plugin=plugin) as sub:
 #         wf(submitter=sub)
-# 
+#
 #     res = wf.result()
 #     assert res.output.out == "image passed to the second task: ubuntu"
 
@@ -414,19 +414,6 @@ def test_docker_inputspec_1a(tmp_path):
     docky = ShellCommandTask(
         name="docky",
         environment=Docker(image="busybox"),
-        executable=cmd,
-        input_spec=my_input_spec,
-        strip=True,
-    )
-
-    res = docky()
-    assert res.output.stdout == "hello from pydra"
-        bases=(DockerSpec,),
-    )
-
-    docky = DockerTask(
-        name="docky",
-        image="busybox",
         executable=cmd,
         input_spec=my_input_spec,
         strip=True,
