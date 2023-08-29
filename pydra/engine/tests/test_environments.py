@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from ..environments import Native, Docker
 from ..task import ShellCommandTask
 from ..submitter import Submitter
@@ -11,11 +13,19 @@ from .utils import no_win, need_docker
 import attr
 
 
-def test_native_1(tmpdir):
+def makedir(path, name):
+    newdir = path / name
+    newdir.mkdir()
+    return newdir
+
+
+def test_native_1(tmp_path):
     """simple command, no arguments"""
+    newcache = lambda x: makedir(tmp_path, x)
+
     cmd = ["whoami"]
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, cache_dir=tmpdir.mkdir("shelly")
+        name="shelly", executable=cmd, cache_dir=newcache("shelly")
     )
     assert shelly.cmdline == " ".join(cmd)
 
@@ -24,13 +34,13 @@ def test_native_1(tmpdir):
     assert env_res == shelly.output_
 
     shelly_call = ShellCommandTask(
-        name="shelly_call", executable=cmd, cache_dir=tmpdir.mkdir("shelly_call")
+        name="shelly_call", executable=cmd, cache_dir=newcache("shelly_call")
     )
     shelly_call(environment=Native())
     assert env_res == shelly_call.output_
 
     shelly_subm = ShellCommandTask(
-        name="shelly_subm", executable=cmd, cache_dir=tmpdir.mkdir("shelly_subm")
+        name="shelly_subm", executable=cmd, cache_dir=newcache("shelly_subm")
     )
     with Submitter(plugin="cf") as sub:
         shelly_subm(submitter=sub, environment=Native())
@@ -38,7 +48,7 @@ def test_native_1(tmpdir):
 
     # TODO: should be removed at the end
     shelly_old = ShellCommandTask(
-        name="shelly_old", executable=cmd, cache_dir=tmpdir, environment="old"
+        name="shelly_old", executable=cmd, cache_dir=tmp_path, environment="old"
     )
     shelly_old()
     assert env_res == shelly_old.result().output.__dict__
@@ -46,12 +56,14 @@ def test_native_1(tmpdir):
 
 @no_win
 @need_docker
-def test_docker_1(tmpdir):
+def test_docker_1(tmp_path):
     """docker env: simple command, no arguments"""
+    newcache = lambda x: makedir(tmp_path, x)
+
     cmd = ["whoami"]
     docker = Docker(image="busybox")
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, cache_dir=tmpdir.mkdir("shelly")
+        name="shelly", executable=cmd, cache_dir=newcache("shelly")
     )
     assert shelly.cmdline == " ".join(cmd)
     env_res = docker.execute(shelly)
@@ -59,14 +71,14 @@ def test_docker_1(tmpdir):
     shelly_env = ShellCommandTask(
         name="shelly",
         executable=cmd,
-        cache_dir=tmpdir.mkdir("shelly_env"),
+        cache_dir=newcache("shelly_env"),
         environment=docker,
     )
     shelly_env()
     assert env_res == shelly_env.output_ == shelly_env.result().output.__dict__
 
     shelly_call = ShellCommandTask(
-        name="shelly", executable=cmd, cache_dir=tmpdir.mkdir("shelly_call")
+        name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
     shelly_call(environment=docker)
     assert env_res == shelly_call.output_ == shelly_call.result().output.__dict__
@@ -74,12 +86,14 @@ def test_docker_1(tmpdir):
 
 @no_win
 @need_docker
-def test_docker_1_subm(tmpdir, plugin):
+def test_docker_1_subm(tmp_path, plugin):
     """docker env with submitter: simple command, no arguments"""
+    newcache = lambda x: makedir(tmp_path, x)
+
     cmd = ["whoami"]
     docker = Docker(image="busybox")
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, cache_dir=tmpdir.mkdir("shelly")
+        name="shelly", executable=cmd, cache_dir=newcache("shelly")
     )
     assert shelly.cmdline == " ".join(cmd)
     env_res = docker.execute(shelly)
@@ -87,7 +101,7 @@ def test_docker_1_subm(tmpdir, plugin):
     shelly_env = ShellCommandTask(
         name="shelly",
         executable=cmd,
-        cache_dir=tmpdir.mkdir("shelly_env"),
+        cache_dir=newcache("shelly_env"),
         environment=docker,
     )
     with Submitter(plugin=plugin) as sub:
@@ -95,7 +109,7 @@ def test_docker_1_subm(tmpdir, plugin):
     assert env_res == shelly_env.result().output.__dict__
 
     shelly_call = ShellCommandTask(
-        name="shelly", executable=cmd, cache_dir=tmpdir.mkdir("shelly_call")
+        name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
     with Submitter(plugin=plugin) as sub:
         shelly_call(submitter=sub, environment=docker)
@@ -123,68 +137,69 @@ def create_shelly_inputfile(tempdir, filename, name, executable):
         bases=(ShellSpec,),
     )
 
+    kwargs = {} if filename is None else {"file": filename}
     shelly = ShellCommandTask(
         name=name,
         executable=executable,
-        cache_dir=tempdir.mkdir(name),
+        cache_dir=makedir(tempdir, name),
         input_spec=my_input_spec,
-        file=filename,
+        **kwargs,
     )
     return shelly
 
 
-def test_shell_fileinp(tmpdir):
+def test_shell_fileinp(tmp_path):
     """task with a file in the command/input"""
-    input_dir = tmpdir.mkdir("inputs")
-    filename = input_dir.join("file.txt")
+    input_dir = makedir(tmp_path, "inputs")
+    filename = input_dir / "file.txt"
     with open(filename, "w") as f:
         f.write("hello ")
 
     shelly = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly", executable=["cat"]
+        tempdir=tmp_path, filename=filename, name="shelly", executable=["cat"]
     )
     env_res = Native().execute(shelly)
 
     shelly_env = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_env", executable=["cat"]
+        tempdir=tmp_path, filename=filename, name="shelly_env", executable=["cat"]
     )
     shelly_env.environment = Native()
     shelly_env()
     assert env_res == shelly_env.output_ == shelly_env.result().output.__dict__
 
     shelly_call = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_call", executable=["cat"]
+        tempdir=tmp_path, filename=filename, name="shelly_call", executable=["cat"]
     )
     shelly_call(environment=Native())
     assert env_res == shelly_call.output_ == shelly_call.result().output.__dict__
 
 
-def test_shell_fileinp_st(tmpdir):
+def test_shell_fileinp_st(tmp_path):
     """task (with a splitter) with a file in the command/input"""
-    input_dir = tmpdir.mkdir("inputs")
-    filename_1 = input_dir.join("file_1.txt")
+    input_dir = makedir(tmp_path, "inputs")
+    filename_1 = input_dir / "file_1.txt"
     with open(filename_1, "w") as f:
         f.write("hello ")
 
-    filename_2 = input_dir.join("file_2.txt")
+    filename_2 = input_dir / "file_2.txt"
     with open(filename_2, "w") as f:
         f.write("hi ")
 
     filename = [filename_1, filename_2]
 
     shelly_env = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_env", executable=["cat"]
+        tempdir=tmp_path, filename=None, name="shelly_env", executable=["cat"]
     )
     shelly_env.environment = Native()
-    shelly_env.split("file")
+    shelly_env.split(file=filename)
     shelly_env()
     assert shelly_env.result()[0].output.stdout.strip() == "hello"
     assert shelly_env.result()[1].output.stdout.strip() == "hi"
 
     shelly_call = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_call", executable=["cat"]
+        tempdir=tmp_path, filename=None, name="shelly_call", executable=["cat"]
     )
-    shelly_call.split("file")
+    shelly_call.split(file=filename)
     shelly_call(environment=Native())
     assert shelly_call.result()[0].output.stdout.strip() == "hello"
     assert shelly_call.result()[1].output.stdout.strip() == "hi"
@@ -192,22 +207,22 @@ def test_shell_fileinp_st(tmpdir):
 
 @no_win
 @need_docker
-def test_docker_fileinp(tmpdir):
+def test_docker_fileinp(tmp_path):
     """docker env: task with a file in the command/input"""
     docker = Docker(image="busybox")
 
-    input_dir = tmpdir.mkdir("inputs")
-    filename = input_dir.join("file.txt")
+    input_dir = makedir(tmp_path, "inputs")
+    filename = input_dir / "file.txt"
     with open(filename, "w") as f:
         f.write("hello ")
 
     shelly = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly", executable=["cat"]
+        tempdir=tmp_path, filename=filename, name="shelly", executable=["cat"]
     )
     env_res = docker.execute(shelly)
 
     shelly_env = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_env", executable=["cat"]
+        tempdir=tmp_path, filename=filename, name="shelly_env", executable=["cat"]
     )
     shelly_env.environment = docker
     shelly_env()
@@ -215,7 +230,7 @@ def test_docker_fileinp(tmpdir):
     assert env_res == shelly_env.output_ == shelly_env.result().output.__dict__
 
     shelly_call = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_call", executable=["cat"]
+        tempdir=tmp_path, filename=filename, name="shelly_call", executable=["cat"]
     )
     shelly_call(environment=docker)
     assert env_res == shelly_call.output_ == shelly_call.result().output.__dict__
@@ -223,22 +238,22 @@ def test_docker_fileinp(tmpdir):
 
 @no_win
 @need_docker
-def test_docker_fileinp_subm(tmpdir, plugin):
+def test_docker_fileinp_subm(tmp_path, plugin):
     """docker env with a submitter: task with a file in the command/input"""
     docker = Docker(image="busybox")
 
-    input_dir = tmpdir.mkdir("inputs")
-    filename = input_dir.join("file.txt")
+    input_dir = makedir(tmp_path, "inputs")
+    filename = input_dir / "file.txt"
     with open(filename, "w") as f:
         f.write("hello ")
 
     shelly = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly", executable=["cat"]
+        tempdir=tmp_path, filename=filename, name="shelly", executable=["cat"]
     )
     env_res = docker.execute(shelly)
 
     shelly_env = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_env", executable=["cat"]
+        tempdir=tmp_path, filename=filename, name="shelly_env", executable=["cat"]
     )
     shelly_env.environment = docker
     with Submitter(plugin=plugin) as sub:
@@ -246,7 +261,7 @@ def test_docker_fileinp_subm(tmpdir, plugin):
     assert env_res == shelly_env.result().output.__dict__
 
     shelly_call = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_call", executable=["cat"]
+        tempdir=tmp_path, filename=filename, name="shelly_call", executable=["cat"]
     )
     with Submitter(plugin=plugin) as sub:
         shelly_call(submitter=sub, environment=docker)
@@ -255,34 +270,34 @@ def test_docker_fileinp_subm(tmpdir, plugin):
 
 @no_win
 @need_docker
-def test_docker_fileinp_st(tmpdir):
+def test_docker_fileinp_st(tmp_path):
     """docker env: task (with a splitter) with a file in the command/input"""
     docker = Docker(image="busybox")
 
-    input_dir = tmpdir.mkdir("inputs")
-    filename_1 = input_dir.join("file_1.txt")
+    input_dir = makedir(tmp_path, "inputs")
+    filename_1 = input_dir / "file_1.txt"
     with open(filename_1, "w") as f:
         f.write("hello ")
 
-    filename_2 = input_dir.join("file_2.txt")
+    filename_2 = input_dir / "file_2.txt"
     with open(filename_2, "w") as f:
         f.write("hi ")
 
     filename = [filename_1, filename_2]
 
     shelly_env = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_env", executable=["cat"]
+        tempdir=tmp_path, filename=None, name="shelly_env", executable=["cat"]
     )
     shelly_env.environment = docker
-    shelly_env.split("file")
+    shelly_env.split(file=filename)
     shelly_env()
     assert shelly_env.result()[0].output.stdout.strip() == "hello"
     assert shelly_env.result()[1].output.stdout.strip() == "hi"
 
     shelly_call = create_shelly_inputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_call", executable=["cat"]
+        tempdir=tmp_path, filename=None, name="shelly_call", executable=["cat"]
     )
-    shelly_call.split("file")
+    shelly_call.split(file=filename)
     shelly_call(environment=docker)
     assert shelly_call.result()[0].output.stdout.strip() == "hello"
     assert shelly_call.result()[1].output.stdout.strip() == "hi"
@@ -315,139 +330,142 @@ def create_shelly_outputfile(tempdir, filename, name, executable="cp"):
         bases=(ShellSpec,),
     )
 
+    kwargs = {} if filename is None else {"file_orig": filename}
     shelly = ShellCommandTask(
         name=name,
         executable=executable,
-        cache_dir=tempdir.mkdir(name),
+        cache_dir=makedir(tempdir, name),
         input_spec=my_input_spec,
-        file_orig=filename,
+        **kwargs,
     )
     return shelly
 
 
-def test_shell_fileout(tmpdir):
+def test_shell_fileout(tmp_path):
     """task with a file in the output"""
-    input_dir = tmpdir.mkdir("inputs")
-    filename = input_dir.join("file.txt")
+    input_dir = makedir(tmp_path, "inputs")
+    filename = input_dir / "file.txt"
     with open(filename, "w") as f:
         f.write("hello ")
 
     # execute does not create the cashedir, so this part will fail,
     # but I guess we don't want to use it this way anyway
-    # shelly = create_shelly_outputfile(tempdir=tmpdir, filename=filename, name="shelly")
+    # shelly = create_shelly_outputfile(tempdir=tmp_path, filename=filename, name="shelly")
     # env_res = Native().execute(shelly)
 
     shelly_env = create_shelly_outputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_env"
+        tempdir=tmp_path, filename=filename, name="shelly_env"
     )
     shelly_env.environment = Native()
     shelly_env()
     assert (
-        shelly_env.result().output.file_copy == shelly_env.output_dir / "file_copy.txt"
+        Path(shelly_env.result().output.file_copy)
+        == shelly_env.output_dir / "file_copy.txt"
     )
 
     shelly_call = create_shelly_outputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_call"
+        tempdir=tmp_path, filename=filename, name="shelly_call"
     )
     shelly_call(environment=Native())
     assert (
-        shelly_call.result().output.file_copy
+        Path(shelly_call.result().output.file_copy)
         == shelly_call.output_dir / "file_copy.txt"
     )
 
 
-def test_shell_fileout_st(tmpdir):
+def test_shell_fileout_st(tmp_path):
     """task (with a splitter) with a file in the output"""
-    input_dir = tmpdir.mkdir("inputs")
-    filename_1 = input_dir.join("file_1.txt")
+    input_dir = makedir(tmp_path, "inputs")
+    filename_1 = input_dir / "file_1.txt"
     with open(filename_1, "w") as f:
         f.write("hello ")
 
-    filename_2 = input_dir.join("file_2.txt")
+    filename_2 = input_dir / "file_2.txt"
     with open(filename_2, "w") as f:
         f.write("hi ")
 
     filename = [filename_1, filename_2]
 
     shelly_env = create_shelly_outputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_env"
+        tempdir=tmp_path, filename=None, name="shelly_env"
     )
     shelly_env.environment = Native()
-    shelly_env.split("file_orig")
+    shelly_env.split(file_orig=filename)
     shelly_env()
     assert (
-        shelly_env.result()[0].output.file_copy
+        Path(shelly_env.result()[0].output.file_copy)
         == shelly_env.output_dir[0] / "file_1_copy.txt"
     )
     assert (
-        shelly_env.result()[1].output.file_copy
+        Path(shelly_env.result()[1].output.file_copy)
         == shelly_env.output_dir[1] / "file_2_copy.txt"
     )
 
     shelly_call = create_shelly_outputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_call"
+        tempdir=tmp_path, filename=None, name="shelly_call"
     )
-    shelly_call.split("file_orig")
+    shelly_call.split(file_orig=filename)
     shelly_call(environment=Native())
     assert (
-        shelly_call.result()[0].output.file_copy
+        Path(shelly_call.result()[0].output.file_copy)
         == shelly_call.output_dir[0] / "file_1_copy.txt"
     )
     assert (
-        shelly_call.result()[1].output.file_copy
+        Path(shelly_call.result()[1].output.file_copy)
         == shelly_call.output_dir[1] / "file_2_copy.txt"
     )
 
 
 @no_win
 @need_docker
-def test_docker_fileout(tmpdir):
+def test_docker_fileout(tmp_path):
     """docker env: task with a file in the output"""
     docker_env = Docker(image="busybox")
 
-    input_dir = tmpdir.mkdir("inputs")
-    filename = input_dir.join("file.txt")
+    input_dir = makedir(tmp_path, "inputs")
+    filename = input_dir / "file.txt"
     with open(filename, "w") as f:
         f.write("hello ")
 
     shelly_env = create_shelly_outputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_env"
+        tempdir=tmp_path, filename=filename, name="shelly_env"
     )
     shelly_env.environment = docker_env
     shelly_env()
     assert (
-        shelly_env.result().output.file_copy == shelly_env.output_dir / "file_copy.txt"
+        Path(shelly_env.result().output.file_copy)
+        == shelly_env.output_dir / "file_copy.txt"
     )
 
 
 @no_win
 @need_docker
-def test_docker_fileout_st(tmpdir):
+def test_docker_fileout_st(tmp_path):
     """docker env: task (with a splitter) with a file in the output"""
     docker_env = Docker(image="busybox")
 
-    input_dir = tmpdir.mkdir("inputs")
-    filename_1 = input_dir.join("file_1.txt")
+    input_dir = makedir(tmp_path, "inputs")
+    filename_1 = input_dir / "file_1.txt"
     with open(filename_1, "w") as f:
         f.write("hello ")
 
-    filename_2 = input_dir.join("file_2.txt")
+    filename_2 = input_dir / "file_2.txt"
     with open(filename_2, "w") as f:
         f.write("hi ")
 
     filename = [filename_1, filename_2]
 
     shelly_env = create_shelly_outputfile(
-        tempdir=tmpdir, filename=filename, name="shelly_env"
+        tempdir=tmp_path, filename=None, name="shelly_env"
     )
     shelly_env.environment = docker_env
-    shelly_env.split("file_orig")
+    shelly_env.split(file_orig=filename)
     shelly_env()
     assert (
-        shelly_env.result()[0].output.file_copy
+        Path(shelly_env.result()[0].output.file_copy)
         == shelly_env.output_dir[0] / "file_1_copy.txt"
     )
     assert (
-        shelly_env.result()[1].output.file_copy
+        Path(shelly_env.result()[1].output.file_copy)
         == shelly_env.output_dir[1] / "file_2_copy.txt"
     )
