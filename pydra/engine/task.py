@@ -599,42 +599,26 @@ class ShellCommandTask(TaskBase):
             self.output_ = environment.execute(self)
 
     def _check_inputs(self, root):
-        fields = attr_fields(self.inputs)
-        for fld in fields:
-            if (
-                fld.type in [File, Directory]
-                or "pydra.engine.specs.File" in str(fld.type)
-                or "pydra.engine.specs.Directory" in str(fld.type)
-            ):
-                if fld.name == "image":
-                    continue
-                file = Path(getattr(self.inputs, fld.name))
-                if fld.metadata.get("container_path"):  # TODO: this should go..
-                    # if the path is in a container the input should be treated as a str (hash as a str)
-                    # field.type = "str"
-                    # setattr(self, field.name, str(file))
-                    pass
-                # if this is a local path, checking if the path exists
-                # TODO: if copyfile, ro -> rw
-                # TODO: what if it's a directory? add tests
-                elif file.exists():  # is it ok if two inputs have the same parent?
-                    # todo: probably need only keys
-                    if fld.metadata.get("mandatory"):
-                        mod = "rw"
-                    else:
-                        mod = "ro"
-                    self.bindings[Path(file.parent)] = (
-                        Path(f"{root}{file.parent}"),
-                        mod,
-                    )
-                    self.inputs_mod_root[fld.name] = f"{root}{Path(file).absolute()}"
-                # error should be raised only if the type is strictly File or Directory
-                elif fld.type in [File, Directory]:
-                    raise FileNotFoundError(
-                        f"the file {file} from {fld.name} input does not exist, "
-                        f"if the file comes from the container, "
-                        f"use field.metadata['container_path']=True"
-                    )
+        for fld in attr_fields(self.inputs):
+            if TypeParser.contains_type(FileSet, fld.type):
+                # Is container_path necessary? Container paths should just be typed PurePath
+                assert not fld.metadata.get("container_path")
+                # Should no longer happen with environments; assertion for testing purposes
+                # XXX: Remove before merge, so "image" can become a valid input file
+                assert not fld.name == "image"
+                fileset = getattr(self.inputs, fld.name)
+                copy = parse_copyfile(fld)[0] == FileSet.CopyMode.copy
+
+                host_path, env_path = fileset.parent, Path(f"{root}{fileset.parent}")
+
+                # Default to mounting paths as read-only, but respect existing modes
+                old_mode = self.bindings.get(host_path, ("", "ro"))
+                self.bindings[host_path] = (env_path, "rw" if copy else old_mode)
+
+                # Provide in-container paths without type-checking
+                self.inputs_mod_root[fld.name] = tuple(
+                    env_path / rel for rel in fileset.relative_fspaths
+                )
 
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
 
