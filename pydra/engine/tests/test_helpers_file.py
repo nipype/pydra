@@ -1,8 +1,11 @@
 import typing as ty
 import sys
 from pathlib import Path
+import attr
 import pytest
 from fileformats.generic import File
+from ..specs import SpecInfo, ShellSpec
+from ..task import ShellCommandTask
 from ..helpers_file import (
     ensure_list,
     MountIndentifier,
@@ -343,3 +346,55 @@ def test_cifs_check():
     with MountIndentifier.patch_table(fake_table):
         for target, expected in cifs_targets:
             assert MountIndentifier.on_cifs(target) is expected
+
+
+def test_output_template(tmp_path):
+    filename = str(tmp_path / "file.txt")
+    with open(filename, "w") as f:
+        f.write("hello from pydra")
+    in_file = File(filename)
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "in_file",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file",
+                    },
+                ),
+            ),
+            (
+                "optional",
+                attr.ib(
+                    type=ty.Union[Path, bool],
+                    default=False,
+                    metadata={
+                        "position": 2,
+                        "argstr": "--opt",
+                        "output_file_template": "{in_file}.out",
+                        "help_string": "optional file output",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    class MyCommand(ShellCommandTask):
+        executable = "my"
+        input_spec = my_input_spec
+
+    task = MyCommand(in_file=filename)
+    assert task.cmdline == f"my {filename}"
+    task.inputs.optional = True
+    assert task.cmdline == f"my {filename} --opt {task.output_dir}/file.out"
+    task.inputs.optional = False
+    assert task.cmdline == f"my {filename}"
+    task.inputs.optional = "custom-file-out.txt"
+    assert task.cmdline == f"my {filename} --opt custom-file-out.txt"
