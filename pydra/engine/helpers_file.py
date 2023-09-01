@@ -162,7 +162,7 @@ def template_update_single(
             raise TypeError(
                 f"type of '{field.name}' is Path, consider using Union[Path, bool]"
             )
-        if inp_val_set is not attr.NOTHING and not isinstance(LazyField):
+        if inp_val_set is not attr.NOTHING and not isinstance(inp_val_set, LazyField):
             inp_val_set = TypeParser(ty.Union.__getitem__(OUTPUT_TEMPLATE_TYPES))(
                 inp_val_set
             )
@@ -202,16 +202,27 @@ def _template_formatting(field, inputs, inputs_dict_st):
     Allowing for multiple input values used in the template as longs as
     there is no more than one file (i.e. File, PathLike or string with extensions)
     """
-    from .specs import MultiInputObj, MultiOutputFile
-
     # if a template is a function it has to be run first with the inputs as the only arg
     template = field.metadata["output_file_template"]
     if callable(template):
         template = template(inputs)
 
     # as default, we assume that keep_extension is True
-    keep_extension = field.metadata.get("keep_extension", True)
+    if isinstance(template, (tuple, list)):
+        formatted = [
+            _string_template_formatting(field, t, inputs, inputs_dict_st)
+            for t in template
+        ]
+    else:
+        assert isinstance(template, str)
+        formatted = _string_template_formatting(field, template, inputs, inputs_dict_st)
+    return formatted
 
+
+def _string_template_formatting(field, template, inputs, inputs_dict_st):
+    from .specs import MultiInputObj, MultiOutputFile
+
+    keep_extension = field.metadata.get("keep_extension", True)
     inp_fields = re.findall(r"{\w+}", template)
     inp_fields_fl = re.findall(r"{\w+:[0-9.]+f}", template)
     inp_fields += [re.sub(":[0-9.]+f", "", el) for el in inp_fields_fl]
