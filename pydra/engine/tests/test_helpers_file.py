@@ -2,6 +2,7 @@ import typing as ty
 import sys
 from pathlib import Path
 import attr
+from unittest.mock import Mock
 import pytest
 from fileformats.generic import File
 from ..specs import SpecInfo, ShellSpec
@@ -10,6 +11,7 @@ from ..helpers_file import (
     ensure_list,
     MountIndentifier,
     copy_nested_files,
+    template_update_single,
 )
 
 
@@ -398,3 +400,20 @@ def test_output_template(tmp_path):
     assert task.cmdline == f"my {filename}"
     task.inputs.optional = "custom-file-out.txt"
     assert task.cmdline == f"my {filename} --opt custom-file-out.txt"
+
+
+def test_template_formatting(tmp_path):
+    field = Mock()
+    field.name = "grad"
+    field.argstr = "--grad"
+    field.metadata = {"output_file_template": ("{in_file}.bvec", "{in_file}.bval")}
+    inputs = Mock()
+    inputs_dict = {"in_file": "/a/b/c/file.txt", "grad": True}
+
+    assert template_update_single(
+        field,
+        inputs,
+        inputs_dict_st=inputs_dict,
+        output_dir=tmp_path,
+        spec_type="input",
+    ) == [f"{tmp_path}/file.bvec", f"{tmp_path}/file.bval"]
