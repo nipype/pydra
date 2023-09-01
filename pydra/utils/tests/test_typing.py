@@ -597,3 +597,27 @@ def test_typing_cast(tmp_path, generic_task, specific_task):
     assert out_file.parent != in_file.parent
     assert type(out_file.header) is MyHeader
     assert out_file.header.parent != in_file.header.parent
+
+
+def test_type_is_subclass1():
+    assert TypeParser.is_subclass(ty.Type[File], type)
+
+
+def test_type_is_subclass2():
+    assert not TypeParser.is_subclass(ty.Type[File], ty.Type[Json])
+
+
+def test_type_is_subclass3():
+    assert TypeParser.is_subclass(ty.Type[Json], ty.Type[File])
+
+
+def test_type_is_instance1():
+    assert TypeParser.is_instance(File, ty.Type[File])
+
+
+def test_type_is_instance2():
+    assert not TypeParser.is_instance(File, ty.Type[Json])
+
+
+def test_type_is_instance3():
+    assert TypeParser.is_instance(Json, ty.Type[File])

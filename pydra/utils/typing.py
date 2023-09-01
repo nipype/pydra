@@ -547,9 +547,11 @@ class TypeParser(ty.Generic[T]):
             return False
         return True
 
-    @staticmethod
+    @classmethod
     def is_instance(
-        obj: object, candidates: ty.Union[ty.Type[ty.Any], ty.Iterable[ty.Type[ty.Any]]]
+        cls,
+        obj: object,
+        candidates: ty.Union[ty.Type[ty.Any], ty.Iterable[ty.Type[ty.Any]]],
     ) -> bool:
         """Checks whether the object is an instance of cls or that cls is typing.Any,
         extending the built-in isinstance to check nested type args
@@ -566,9 +568,14 @@ class TypeParser(ty.Generic[T]):
         for candidate in candidates:
             if candidate is ty.Any:
                 return True
+            # Handle ty.Type[*] candidates
+            if ty.get_origin(candidate) is type:
+                return inspect.isclass(obj) and cls.is_subclass(
+                    obj, ty.get_args(candidate)[0]
+                )
             if NO_GENERIC_ISSUBCLASS:
-                if candidate is type and inspect.isclass(obj):
-                    return True
+                if inspect.isclass(obj):
+                    return candidate is type
                 if issubtype(type(obj), candidate) or (
                     type(obj) is dict and candidate is ty.Mapping
                 ):
@@ -597,10 +604,19 @@ class TypeParser(ty.Generic[T]):
         any_ok : bool
             whether klass=typing.Any should return True or False
         """
-        if not isinstance(candidates, ty.Iterable):
+        if not isinstance(candidates, ty.Sequence):
             candidates = [candidates]
 
         for candidate in candidates:
+            # Handle ty.Type[*] types in klass and candidates
+            if ty.get_origin(klass) is type and (
+                candidate is type or ty.get_origin(candidate) is type
+            ):
+                if candidate is type:
+                    return True
+                return cls.is_subclass(ty.get_args(klass)[0], ty.get_args(candidate)[0])
+            elif ty.get_origin(klass) is type or ty.get_origin(candidate) is type:
+                return False
             if NO_GENERIC_ISSUBCLASS:
                 if klass is type and candidate is not type:
                     return False
