@@ -11,6 +11,7 @@ from ..engine.specs import (
     MultiInputObj,
     MultiOutputObj,
 )
+from fileformats import field
 
 try:
     from typing import get_origin, get_args
@@ -62,15 +63,28 @@ class TypeParser(ty.Generic[T]):
     not_coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
 
     COERCIBLE_DEFAULT: ty.Tuple[ty.Tuple[type, type], ...] = (
-        (ty.Sequence, ty.Sequence),  # type: ignore
-        (ty.Mapping, ty.Mapping),
-        (Path, os.PathLike),
-        (str, os.PathLike),
-        (os.PathLike, Path),
-        (os.PathLike, str),
-        (ty.Any, MultiInputObj),
-        (int, float),
+        (
+            (ty.Sequence, ty.Sequence),  # type: ignore
+            (ty.Mapping, ty.Mapping),
+            (Path, os.PathLike),
+            (str, os.PathLike),
+            (os.PathLike, Path),
+            (os.PathLike, str),
+            (ty.Any, MultiInputObj),
+            (int, float),
+            (field.Integer, float),
+            (int, field.Decimal),
+        )
+        + tuple(
+            (f, f.primitive)
+            for f in (field.Integer, field.Decimal, field.Boolean, field.Text)
+        )
+        + tuple(
+            (f.primitive, f)
+            for f in (field.Integer, field.Decimal, field.Boolean, field.Text)
+        )
     )
+
     if HAVE_NUMPY:
         COERCIBLE_DEFAULT += (
             (numpy.integer, int),
