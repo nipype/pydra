@@ -51,6 +51,7 @@ OUTPUT_TEMPLATE_TYPES = (
     ty.List[Path],
     ty.Union[Path, bool],
     ty.Union[ty.List[Path], bool],
+    ty.List[ty.List[Path]],
 )
 
 
