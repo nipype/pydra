@@ -621,3 +621,7 @@ def test_type_is_instance2():
 
 def test_type_is_instance3():
     assert TypeParser.is_instance(Json, ty.Type[File])
+
+
+def test_type_is_instance4():
+    assert TypeParser.is_instance(Json, type)
