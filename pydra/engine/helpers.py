@@ -261,7 +261,8 @@ def make_klass(spec):
                     type=tp,
                     **kwargs,
                 )
-            type_checker = TypeParser[newfield.type](newfield.type)
+            checker_label = f"'{name}' field of {spec.name}"
+            type_checker = TypeParser[newfield.type](newfield.type, label=checker_label)
             if newfield.type in (MultiInputObj, MultiInputFile):
                 converter = attr.converters.pipe(ensure_list, type_checker)
             elif newfield.type in (MultiOutputObj, MultiOutputFile):
