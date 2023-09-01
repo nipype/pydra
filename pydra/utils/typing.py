@@ -189,18 +189,18 @@ class TypeParser(ty.Generic[T]):
                 obj_args = list(obj)
             except TypeError as e:
                 msg = (
-                    f" (part of coercion from {object_} to {self.pattern}"
+                    f" (part of coercion from {object_!r} to {self.pattern}"
                     if obj is not object_
                     else ""
                 )
                 raise TypeError(
-                    f"Could not coerce to {type_} as {obj} is not iterable{msg}"
+                    f"Could not coerce to {type_} as {obj!r} is not iterable{msg}"
                 ) from e
             if issubclass(origin, tuple):
                 return coerce_tuple(type_, obj_args, pattern_args)
             if issubclass(origin, ty.Iterable):
                 return coerce_sequence(type_, obj_args, pattern_args)
-            assert False, f"Coercion from {obj} to {pattern} is not handled"
+            assert False, f"Coercion from {obj!r} to {pattern} is not handled"
 
         def coerce_basic(obj, pattern):
             """Coerce an object to a "basic types" like `int`, `float`, `bool`, `Path`
