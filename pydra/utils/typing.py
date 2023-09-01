@@ -421,10 +421,10 @@ class TypeParser(ty.Generic[T]):
                 for arg in tp_args:
                     expand_and_check(arg, pattern_args[0])
                 return
-            elif tp_args[-1] is Ellipsis:
-                for pattern_arg in pattern_args:
-                    expand_and_check(tp_args[0], pattern_arg)
-                return
+            # elif tp_args[-1] is Ellipsis:
+            #     for pattern_arg in pattern_args:
+            #         expand_and_check(tp_args[0], pattern_arg)
+            #     return
             if len(tp_args) != len(pattern_args):
                 raise TypeError(
                     f"Wrong number of type arguments in tuple {tp_args}  compared to pattern "
