@@ -75,14 +75,8 @@ class TypeParser(ty.Generic[T]):
             (field.Integer, float),
             (int, field.Decimal),
         )
-        + tuple(
-            (f, f.primitive)
-            for f in (field.Integer, field.Decimal, field.Boolean, field.Text)
-        )
-        + tuple(
-            (f.primitive, f)
-            for f in (field.Integer, field.Decimal, field.Boolean, field.Text)
-        )
+        + tuple((f, f.primitive) for f in field.Singular.subclasses() if f.primitive)
+        + tuple((f.primitive, f) for f in field.Singular.subclasses() if f.primitive)
     )
 
     if HAVE_NUMPY:
