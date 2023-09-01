@@ -891,6 +891,7 @@ class DaskWorker(Worker):
         """Finalize the internal pool of tasks."""
         pass
 
+
 class PsijWorker(Worker):
     def __init__(self, **kwargs):
         """Initialize worker."""
@@ -909,8 +910,8 @@ class PsijWorker(Worker):
         spec = self.psij.JobSpec()
         spec.executable = cmd
         spec.arguments = arg
-        spec.stdout_path = 'demo.stdout'
-        spec.stderr_path = 'demo.stderr'
+        spec.stdout_path = "demo.stdout"
+        spec.stderr_path = "demo.stderr"
 
         return spec
 
@@ -921,9 +922,12 @@ class PsijWorker(Worker):
 
     async def exec_psij(self, runnable, rerun=False):
         import psij
+
         self.psij = psij
-        jex = psij.JobExecutor.get_instance('local')
-        spec = self.make_spec(runnable.inputs.executable, runnable.inputs.args, runnable.cache_dir)
+        jex = psij.JobExecutor.get_instance("local")
+        spec = self.make_spec(
+            runnable.inputs.executable, runnable.inputs.args, runnable.cache_dir
+        )
         job = self.make_job(spec, None)
         jex.submit(job)
         return
@@ -931,6 +935,7 @@ class PsijWorker(Worker):
     def close(self):
         """Finalize the internal pool of tasks."""
         pass
+
 
 WORKERS = {
     "serial": SerialWorker,
