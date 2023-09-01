@@ -652,7 +652,11 @@ def argstr_formatting(argstr, inputs, value_updates=None):
     for fld in inp_fields:
         fld_name = fld[1:-1]  # extracting the name form {field_name}
         fld_value = inputs_dict[fld_name]
-        if fld_value is attr.NOTHING:
+        fld_attr = getattr(attrs.fields(type(inputs)), fld_name)
+        if fld_value is attr.NOTHING or (
+            fld_value is False
+            and TypeParser.matches_type(fld_attr.type, ty.Union[Path, bool])
+        ):
             # if value is NOTHING, nothing should be added to the command
             val_dict[fld_name] = ""
         else:
