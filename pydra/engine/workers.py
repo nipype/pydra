@@ -904,14 +904,14 @@ class PsijWorker(Worker):
     def run_el(self, interface, rerun=False, **kwargs):
         """Run a task."""
         return self.exec_psij(interface, rerun=rerun)
-    
+
     def make_spec(self, cmd=None, arg=None, cache_dir=None):
         spec = self.psij.JobSpec()
         spec.executable = cmd
         spec.arguments = arg
         spec.stdout_path = 'demo.stdout'
         spec.stderr_path = 'demo.stderr'
-        
+
         return spec
 
     def make_job(self, spec, attributes):
@@ -926,12 +926,12 @@ class PsijWorker(Worker):
         spec = self.make_spec(runnable.inputs.executable, runnable.inputs.args, runnable.cache_dir)
         job = self.make_job(spec, None)
         jex.submit(job)
-        return 
+        return
 
     def close(self):
         """Finalize the internal pool of tasks."""
         pass
-    
+
 WORKERS = {
     "serial": SerialWorker,
     "cf": ConcurrentFuturesWorker,
