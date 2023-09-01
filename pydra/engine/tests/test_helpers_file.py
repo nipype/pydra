@@ -416,4 +416,4 @@ def test_template_formatting(tmp_path):
         inputs_dict_st=inputs_dict,
         output_dir=tmp_path,
         spec_type="input",
-    ) == [f"{tmp_path}/file.bvec", f"{tmp_path}/file.bval"]
+    ) == [str(tmp_path / "file.bvec"), str(tmp_path / "file.bval")]
