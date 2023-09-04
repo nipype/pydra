@@ -22,7 +22,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v4
@@ -80,7 +80,7 @@ jobs:
           name: archive
           path: archive/
       - name: Fetch repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: matrix.install == 'repo'
 
       - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
