@@ -114,12 +114,6 @@ def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
         dct = {attr: getattr(obj, attr) for attr in obj.__slots__}
     else:
         dct = obj.__dict__
-            dct = obj.__dict__
-        except AttributeError as e:
-            try:
-                dct = {n: getattr(obj, n) for n in obj.__slots__}  # type: ignore
-            except AttributeError:
-                raise e
     yield from bytes_repr_mapping_contents(dct, cache)
     yield b"}"
 
