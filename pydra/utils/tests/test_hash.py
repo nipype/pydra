@@ -171,7 +171,7 @@ def test_bytes_repr_type1():
 
 def test_bytes_repr_type1a():
     obj_repr = join_bytes_repr(Zip[Json])
-    assert re.match(rb"type:\(fileformats.application.archive.Json__Zip\)", obj_repr)
+    assert obj_repr == rb"type:(fileformats.application.archive.Json__Zip)"
 
 
 def test_bytes_repr_type2():
