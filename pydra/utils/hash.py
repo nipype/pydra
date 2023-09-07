@@ -106,11 +106,14 @@ class HasBytesRepr(Protocol):
 def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     cls = obj.__class__
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
+    dct: Dict[str, ty.Any]
     if attrs.has(type(obj)):
         # Drop any attributes that aren't used in comparisons by default
-        dct = attrs.asdict(obj, recurse=False, filter=lambda a, _: bool(a.eq))  # type: ignore
+        dct = attrs.asdict(obj, recurse=False, filter=lambda a, _: bool(a.eq))
+    elif hasattr(obj, "__slots__"):
+        dct = {attr: getattr(obj, attr) for attr in obj.__slots__}
     else:
-        try:
+        dct = obj.__dict__
             dct = obj.__dict__
         except AttributeError as e:
             try:
