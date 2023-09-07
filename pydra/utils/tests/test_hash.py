@@ -174,7 +174,7 @@ def test_bytes_repr_type1():
 
 def test_bytes_repr_type1a():
     obj_repr = join_bytes_repr(Zip[Json])
-    assert re.match(rb"type:\(fileformats.application.Zip\[.{16}\]\)", obj_repr)
+    assert re.match(rb"type:\(fileformats.application.archive.Json__Zip\)", obj_repr)
 
 
 def test_bytes_repr_type2():
@@ -199,17 +199,19 @@ def test_bytes_special_form2():
 
 def test_bytes_special_form3():
     obj_repr = join_bytes_repr(ty.Optional[Path])
-    assert re.match(rb"type:\(typing.Optional\[.{16}\]\)", obj_repr)
+    assert re.match(rb"type:\(typing.Union\[.{32}\]\)", obj_repr, flags=re.DOTALL)
 
 
 def test_bytes_special_form4():
     obj_repr = join_bytes_repr(ty.Type[Path])
-    assert re.match(rb"type:\(builtins.type\[.{16}\]\)", obj_repr)
+    assert re.match(rb"type:\(builtins.type\[.{16}\]\)", obj_repr, flags=re.DOTALL)
 
 
 def test_bytes_special_form5():
     obj_repr = join_bytes_repr(ty.Callable[[Path, int], ty.Tuple[float, str]])
-    assert re.match(rb"type:\(typing.Callable\[.{16}\]\)", obj_repr)
+    assert re.match(
+        rb"type:\(collections.abc.Callable\[.{32}\]\)", obj_repr, flags=re.DOTALL
+    )
     assert obj_repr != join_bytes_repr(ty.Callable[[Path, int], ty.Tuple[float, bytes]])
 
 
