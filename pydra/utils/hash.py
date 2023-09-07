@@ -242,7 +242,7 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
     origin = ty.get_origin(klass)
     if origin:
         yield f"{origin.__module__}.{type_name(origin)}[".encode()
-        yield from bytes_repr_sequence_contents(ty.get_args(klass), cache)
+        yield from (b for t in ty.get_args(klass) for b in bytes_repr_type(t, cache))
         yield b"]"
     else:
         yield f"{klass.__module__}.{type_name(klass)}".encode()

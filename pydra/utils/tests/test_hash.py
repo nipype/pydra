@@ -181,7 +181,7 @@ def test_bytes_repr_type2():
         pass
 
     obj_repr = join_bytes_repr(MyClass[int])
-    assert re.match(rb"type:\(pydra.utils.tests.test_hash.MyClass\[.{16}\]\)", obj_repr)
+    assert obj_repr == b"type:(pydra.utils.tests.test_hash.MyClass[type:(int)])"
 
 
 def test_bytes_special_form1():
