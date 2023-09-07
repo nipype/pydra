@@ -139,10 +139,7 @@ def test_bytes_repr_slots_obj():
     class MyClass:
         __slots__ = ("x",)
 
-        def __init__(
-            self,
-            x,
-        ):
+        def __init__(self, x):
             self.x = x
 
     obj_repr = join_bytes_repr(MyClass(1))
