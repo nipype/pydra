@@ -4,6 +4,7 @@ from pathlib import Path
 
 import attrs
 import pytest
+import typing as ty
 
 from ..hash import Cache, UnhashableError, bytes_repr, hash_object, register_serializer
 
@@ -143,9 +144,24 @@ def test_bytes_repr_attrs_slots():
     assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
 
 
-def test_bytes_repr_type():
+def test_bytes_repr_type1():
     obj_repr = join_bytes_repr(Path)
     assert obj_repr == b"type:(pathlib.Path)"
+
+
+def test_bytes_repr_type2():
+    T = ty.TypeVar("T")
+
+    class MyClass(ty.Generic[T]):
+        pass
+
+    obj_repr = join_bytes_repr(MyClass[int])
+    assert re.match(rb"type:\(pydra.utils.tests.test_hash.MyClass\[.{16}\]\)", obj_repr)
+
+
+def test_bytes_special_form():
+    obj_repr = join_bytes_repr(ty.Union[int, float])
+    assert re.match(rb"type:\(typing.Union\[.{32}\]\)", obj_repr)
 
 
 def test_recursive_object():
