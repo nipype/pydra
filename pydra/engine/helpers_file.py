@@ -163,9 +163,7 @@ def template_update_single(
                 f"type of '{field.name}' is Path, consider using Union[Path, bool]"
             )
         if inp_val_set is not attr.NOTHING and not isinstance(inp_val_set, LazyField):
-            inp_val_set = TypeParser(ty.Union.__getitem__(OUTPUT_TEMPLATE_TYPES))(
-                inp_val_set
-            )
+            inp_val_set = TypeParser(ty.Union[OUTPUT_TEMPLATE_TYPES])(inp_val_set)
     elif spec_type == "output":
         if not TypeParser.contains_type(FileSet, field.type):
             raise TypeError(
