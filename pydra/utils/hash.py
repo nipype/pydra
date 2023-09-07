@@ -106,15 +106,17 @@ class HasBytesRepr(Protocol):
 def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     cls = obj.__class__
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
-    try:
-        dct = obj.__dict__
-    except AttributeError as e:
-        # Attrs creates slots classes by default, so we add this here to handle those
-        # cases
+    if attrs.has(type(obj)):
+        # Drop any attributes that aren't used in comparisons by default
+        dct = attrs.asdict(obj, recurse=False, filter=lambda a, _: bool(a.eq))  # type: ignore
+    else:
         try:
-            dct = attrs.asdict(obj, recurse=False)  # type: ignore
-        except attrs.exceptions.NotAnAttrsClassError:
-            raise TypeError(f"Cannot hash {obj} as it is a slots class") from e
+            dct = obj.__dict__
+        except AttributeError as e:
+            try:
+                dct = {n: getattr(obj, n) for n in obj.__slots__}  # type: ignore
+            except AttributeError:
+                raise e
     yield from bytes_repr_mapping_contents(dct, cache)
     yield b"}"
 

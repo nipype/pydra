@@ -135,8 +135,31 @@ def test_bytes_repr_custom_obj():
     assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
 
 
+def test_bytes_repr_slots_obj():
+    class MyClass:
+        __slots__ = ("x",)
+
+        def __init__(
+            self,
+            x,
+        ):
+            self.x = x
+
+    obj_repr = join_bytes_repr(MyClass(1))
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+
+
 def test_bytes_repr_attrs_slots():
     @attrs.define
+    class MyClass:
+        x: int
+
+    obj_repr = join_bytes_repr(MyClass(1))
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+
+
+def test_bytes_repr_attrs_no_slots():
+    @attrs.define(slots=False)
     class MyClass:
         x: int
 
