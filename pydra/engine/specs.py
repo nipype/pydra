@@ -46,6 +46,14 @@ class MultiOutputType:
 MultiOutputObj = ty.Union[list, object, MultiOutputType]
 MultiOutputFile = ty.Union[File, ty.List[File], MultiOutputType]
 
+OUTPUT_TEMPLATE_TYPES = (
+    Path,
+    ty.List[Path],
+    ty.Union[Path, bool],
+    ty.Union[ty.List[Path], bool],
+    ty.List[ty.List[Path]],
+)
+
 
 @attr.s(auto_attribs=True, kw_only=True)
 class SpecInfo:
@@ -343,6 +351,8 @@ class ShellSpec(BaseSpec):
         Also sets the default values when available and needed.
 
         """
+        from ..utils.typing import TypeParser
+
         supported_keys = {
             "allowed_values",
             "argstr",
@@ -361,6 +371,7 @@ class ShellSpec(BaseSpec):
             "formatter",
             "_output_type",
         }
+
         for fld in attr_fields(self, exclude_names=("_func", "_graph_checksums")):
             mdata = fld.metadata
             # checking keys from metadata
@@ -377,16 +388,13 @@ class ShellSpec(BaseSpec):
                 )
             # assuming that fields with output_file_template shouldn't have default
             if mdata.get("output_file_template"):
-                if fld.type not in (
-                    Path,
-                    ty.Union[Path, bool],
-                    str,
-                    ty.Union[str, bool],
+                if not any(
+                    TypeParser.matches_type(fld.type, t) for t in OUTPUT_TEMPLATE_TYPES
                 ):
                     raise TypeError(
-                        f"Type of '{fld.name}' should be either pathlib.Path or "
-                        f"typing.Union[pathlib.Path, bool] (not {fld.type}) because "
-                        f"it has a value for output_file_template ({mdata['output_file_template']!r})"
+                        f"Type of '{fld.name}' should be one of {OUTPUT_TEMPLATE_TYPES} "
+                        f"(not {fld.type}) because it has a value for output_file_template "
+                        f"({mdata['output_file_template']!r})"
                     )
                 if fld.default not in [attr.NOTHING, True, False]:
                     raise AttributeError(
@@ -443,7 +451,8 @@ class ShellOutSpec:
             input_value = getattr(inputs, fld.name, attr.NOTHING)
             if input_value is not attr.NOTHING:
                 if TypeParser.contains_type(FileSet, fld.type):
-                    input_value = TypeParser(fld.type).coerce(input_value)
+                    label = f"output field '{fld.name}' of {self}"
+                    input_value = TypeParser(fld.type, label=label).coerce(input_value)
                 additional_out[fld.name] = input_value
             elif (
                 fld.default is None or fld.default == attr.NOTHING
