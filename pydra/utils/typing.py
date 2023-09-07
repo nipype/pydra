@@ -68,7 +68,7 @@ class TypeParser(ty.Generic[T]):
 
     COERCIBLE_DEFAULT: ty.Tuple[ty.Tuple[type, type], ...] = (
         (
-            (ty.Sequence, ty.Sequence),  # type: ignore
+            (ty.Sequence, ty.Sequence),
             (ty.Mapping, ty.Mapping),
             (Path, os.PathLike),
             (str, os.PathLike),
