@@ -906,12 +906,12 @@ class PsijWorker(Worker):
         """Run a task."""
         return self.exec_psij(interface, rerun=rerun)
 
-    def make_spec(self, cmd=None, arg=None, cache_dir=None):
+    def make_spec(self, cmd=None, arg=None):
         spec = self.psij.JobSpec()
         spec.executable = cmd
         spec.arguments = arg
-        spec.stdout_path = "demo.stdout"
-        spec.stderr_path = "demo.stderr"
+        spec.stdout_path = '/pydra/pydra/engine/demo.stdout'
+        spec.stderr_path = '/pydra/pydra/engine/demo.stderr'
 
         return spec
 
@@ -922,20 +922,33 @@ class PsijWorker(Worker):
 
     async def exec_psij(self, runnable, rerun=False):
         import psij
-
+        import pickle
         self.psij = psij
-        jex = psij.JobExecutor.get_instance("local")
-        spec = self.make_spec(
-            runnable.inputs.executable, runnable.inputs.args, runnable.cache_dir
-        )
+        jex = psij.JobExecutor.get_instance('slurm')
+
+        if isinstance(runnable, TaskBase):
+            with open('/pydra/pydra/engine/my_function.pkl', 'wb') as file:
+                pickle.dump(runnable._run, file)
+            spec = self.make_spec("python3.9", ["/pydra/pydra/engine/run_pickled_function.py"])
+        else:  # it could be tuple that includes pickle files with tasks and inputs
+            ind, task_main_pkl, task_orig = runnable
+            with open('/pydra/pydra/engine/my_function.pkl', 'wb') as file:
+                pickle.dump(load_and_run, file)
+            with open('/pydra/pydra/engine/taskmain.pkl', 'wb') as file:
+                pickle.dump(task_main_pkl, file)
+            with open('/pydra/pydra/engine/ind.pkl', 'wb') as file:
+                pickle.dump(ind, file)
+            spec = self.make_spec("python3.9", ["/pydra/pydra/engine/run_pickled_function_2.py"])
+
         job = self.make_job(spec, None)
         jex.submit(job)
+        job.wait()
+        
         return
 
     def close(self):
         """Finalize the internal pool of tasks."""
         pass
-
 
 WORKERS = {
     "serial": SerialWorker,

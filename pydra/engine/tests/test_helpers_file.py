@@ -1,12 +1,17 @@
 import typing as ty
 import sys
 from pathlib import Path
+import attr
+from unittest.mock import Mock
 import pytest
 from fileformats.generic import File
+from ..specs import SpecInfo, ShellSpec
+from ..task import ShellCommandTask
 from ..helpers_file import (
     ensure_list,
     MountIndentifier,
     copy_nested_files,
+    template_update_single,
 )
 
 
@@ -343,3 +348,72 @@ def test_cifs_check():
     with MountIndentifier.patch_table(fake_table):
         for target, expected in cifs_targets:
             assert MountIndentifier.on_cifs(target) is expected
+
+
+def test_output_template(tmp_path):
+    filename = str(tmp_path / "file.txt")
+    with open(filename, "w") as f:
+        f.write("hello from pydra")
+    in_file = File(filename)
+
+    my_input_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "in_file",
+                attr.ib(
+                    type=File,
+                    metadata={
+                        "mandatory": True,
+                        "position": 1,
+                        "argstr": "",
+                        "help_string": "input file",
+                    },
+                ),
+            ),
+            (
+                "optional",
+                attr.ib(
+                    type=ty.Union[Path, bool],
+                    default=False,
+                    metadata={
+                        "position": 2,
+                        "argstr": "--opt",
+                        "output_file_template": "{in_file}.out",
+                        "help_string": "optional file output",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    class MyCommand(ShellCommandTask):
+        executable = "my"
+        input_spec = my_input_spec
+
+    task = MyCommand(in_file=filename)
+    assert task.cmdline == f"my {filename}"
+    task.inputs.optional = True
+    assert task.cmdline == f"my {filename} --opt {task.output_dir / 'file.out'}"
+    task.inputs.optional = False
+    assert task.cmdline == f"my {filename}"
+    task.inputs.optional = "custom-file-out.txt"
+    assert task.cmdline == f"my {filename} --opt custom-file-out.txt"
+
+
+def test_template_formatting(tmp_path):
+    field = Mock()
+    field.name = "grad"
+    field.argstr = "--grad"
+    field.metadata = {"output_file_template": ("{in_file}.bvec", "{in_file}.bval")}
+    inputs = Mock()
+    inputs_dict = {"in_file": "/a/b/c/file.txt", "grad": True}
+
+    assert template_update_single(
+        field,
+        inputs,
+        inputs_dict_st=inputs_dict,
+        output_dir=tmp_path,
+        spec_type="input",
+    ) == [str(tmp_path / "file.bvec"), str(tmp_path / "file.bval")]

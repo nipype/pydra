@@ -261,7 +261,8 @@ def make_klass(spec):
                     type=tp,
                     **kwargs,
                 )
-            type_checker = TypeParser[newfield.type](newfield.type)
+            checker_label = f"'{name}' field of {spec.name}"
+            type_checker = TypeParser[newfield.type](newfield.type, label=checker_label)
             if newfield.type in (MultiInputObj, MultiInputFile):
                 converter = attr.converters.pipe(ensure_list, type_checker)
             elif newfield.type in (MultiOutputObj, MultiOutputFile):
@@ -652,7 +653,11 @@ def argstr_formatting(argstr, inputs, value_updates=None):
     for fld in inp_fields:
         fld_name = fld[1:-1]  # extracting the name form {field_name}
         fld_value = inputs_dict[fld_name]
-        if fld_value is attr.NOTHING:
+        fld_attr = getattr(attrs.fields(type(inputs)), fld_name)
+        if fld_value is attr.NOTHING or (
+            fld_value is False
+            and TypeParser.matches_type(fld_attr.type, ty.Union[Path, bool])
+        ):
             # if value is NOTHING, nothing should be added to the command
             val_dict[fld_name] = ""
         else:

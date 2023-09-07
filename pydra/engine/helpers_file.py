@@ -120,6 +120,7 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
         field
         for field in attr_fields(inputs)
         if field.metadata.get("output_file_template")
+        and getattr(inputs, field.name) is not False
         and all(
             getattr(inputs, required_field) is not attr.NOTHING
             for required_field in field.metadata.get("requires", ())
@@ -150,25 +151,19 @@ def template_update_single(
     # if input_dict_st with state specific value is not available,
     # the dictionary will be created from inputs object
     from ..utils.typing import TypeParser  # noqa
-    from pydra.engine.specs import LazyField
-
-    VALID_TYPES = (str, ty.Union[str, bool], Path, ty.Union[Path, bool], LazyField)
+    from pydra.engine.specs import LazyField, OUTPUT_TEMPLATE_TYPES
 
     if inputs_dict_st is None:
         inputs_dict_st = attr.asdict(inputs, recurse=False)
 
     if spec_type == "input":
         inp_val_set = inputs_dict_st[field.name]
-        if inp_val_set is not attr.NOTHING and not TypeParser.is_instance(
-            inp_val_set, VALID_TYPES
-        ):
-            raise TypeError(
-                f"'{field.name}' field has to be a Path instance or a bool, but {inp_val_set} set"
-            )
         if isinstance(inp_val_set, bool) and field.type in (Path, str):
             raise TypeError(
                 f"type of '{field.name}' is Path, consider using Union[Path, bool]"
             )
+        if inp_val_set is not attr.NOTHING and not isinstance(inp_val_set, LazyField):
+            inp_val_set = TypeParser(ty.Union[OUTPUT_TEMPLATE_TYPES])(inp_val_set)
     elif spec_type == "output":
         if not TypeParser.contains_type(FileSet, field.type):
             raise TypeError(
@@ -178,22 +173,23 @@ def template_update_single(
     else:
         raise TypeError(f"spec_type can be input or output, but {spec_type} provided")
     # for inputs that the value is set (so the template is ignored)
-    if spec_type == "input" and isinstance(inputs_dict_st[field.name], (str, Path)):
-        return inputs_dict_st[field.name]
-    elif spec_type == "input" and inputs_dict_st[field.name] is False:
-        # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
-        return attr.NOTHING
-    else:  # inputs_dict[field.name] is True or spec_type is output
-        value = _template_formatting(field, inputs, inputs_dict_st)
-        # changing path so it is in the output_dir
-        if output_dir and value is not attr.NOTHING:
-            # should be converted to str, it is also used for input fields that should be str
-            if type(value) is list:
-                return [str(output_dir / Path(val).name) for val in value]
-            else:
-                return str(output_dir / Path(value).name)
-        else:
+    if spec_type == "input":
+        if isinstance(inp_val_set, (Path, list)):
+            return inp_val_set
+        if inp_val_set is False:
+            # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
             return attr.NOTHING
+    # inputs_dict[field.name] is True or spec_type is output
+    value = _template_formatting(field, inputs, inputs_dict_st)
+    # changing path so it is in the output_dir
+    if output_dir and value is not attr.NOTHING:
+        # should be converted to str, it is also used for input fields that should be str
+        if type(value) is list:
+            return [str(output_dir / Path(val).name) for val in value]
+        else:
+            return str(output_dir / Path(value).name)
+    else:
+        return attr.NOTHING
 
 
 def _template_formatting(field, inputs, inputs_dict_st):
@@ -204,16 +200,27 @@ def _template_formatting(field, inputs, inputs_dict_st):
     Allowing for multiple input values used in the template as longs as
     there is no more than one file (i.e. File, PathLike or string with extensions)
     """
-    from .specs import MultiInputObj, MultiOutputFile
-
     # if a template is a function it has to be run first with the inputs as the only arg
     template = field.metadata["output_file_template"]
     if callable(template):
         template = template(inputs)
 
     # as default, we assume that keep_extension is True
-    keep_extension = field.metadata.get("keep_extension", True)
+    if isinstance(template, (tuple, list)):
+        formatted = [
+            _string_template_formatting(field, t, inputs, inputs_dict_st)
+            for t in template
+        ]
+    else:
+        assert isinstance(template, str)
+        formatted = _string_template_formatting(field, template, inputs, inputs_dict_st)
+    return formatted
 
+
+def _string_template_formatting(field, template, inputs, inputs_dict_st):
+    from .specs import MultiInputObj, MultiOutputFile
+
+    keep_extension = field.metadata.get("keep_extension", True)
     inp_fields = re.findall(r"{\w+}", template)
     inp_fields_fl = re.findall(r"{\w+:[0-9.]+f}", template)
     inp_fields += [re.sub(":[0-9.]+f", "", el) for el in inp_fields_fl]
