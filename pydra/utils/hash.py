@@ -7,6 +7,7 @@ import typing as ty
 from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
+import logging
 
 # from pathlib import Path
 from typing import (
@@ -17,6 +18,8 @@ from typing import (
     Set,
 )
 import attrs.exceptions
+
+logger = logging.getLogger("pydra")
 
 try:
     from typing import Protocol
@@ -88,7 +91,8 @@ def hash_single(obj: object, cache: Cache) -> Hash:
         h = blake2b(digest_size=16, person=b"pydra-hash")
         for chunk in bytes_repr(obj, cache):
             h.update(chunk)
-        cache[objid] = Hash(h.digest())
+        hsh = cache[objid] = Hash(h.digest())
+        logger.debug("Hash of %s object is %s", obj, hsh)
     return cache[objid]
 
 
