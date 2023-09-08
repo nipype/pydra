@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DOCKER_IMAGE: giovtorres/docker-centos7-slurm:latest
+      DOCKER_IMAGE: giovtorres/docker-centos7-slurm:21.08.6
 
     steps:
     - name: Disable etelemetry
