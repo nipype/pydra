@@ -4,7 +4,8 @@ from pathlib import Path
 
 import attrs
 import pytest
-
+import typing as ty
+from fileformats.application import Zip, Json
 from ..hash import Cache, UnhashableError, bytes_repr, hash_object, register_serializer
 
 
@@ -134,6 +135,17 @@ def test_bytes_repr_custom_obj():
     assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
 
 
+def test_bytes_repr_slots_obj():
+    class MyClass:
+        __slots__ = ("x",)
+
+        def __init__(self, x):
+            self.x = x
+
+    obj_repr = join_bytes_repr(MyClass(1))
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+
+
 def test_bytes_repr_attrs_slots():
     @attrs.define
     class MyClass:
@@ -143,9 +155,65 @@ def test_bytes_repr_attrs_slots():
     assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
 
 
-def test_bytes_repr_type():
+def test_bytes_repr_attrs_no_slots():
+    @attrs.define(slots=False)
+    class MyClass:
+        x: int
+
+    obj_repr = join_bytes_repr(MyClass(1))
+    assert re.match(rb".*\.MyClass:{str:1:x=.{16}}", obj_repr)
+
+
+def test_bytes_repr_type1():
     obj_repr = join_bytes_repr(Path)
     assert obj_repr == b"type:(pathlib.Path)"
+
+
+def test_bytes_repr_type1a():
+    obj_repr = join_bytes_repr(Zip[Json])
+    assert obj_repr == rb"type:(fileformats.application.archive.Json__Zip)"
+
+
+def test_bytes_repr_type2():
+    T = ty.TypeVar("T")
+
+    class MyClass(ty.Generic[T]):
+        pass
+
+    obj_repr = join_bytes_repr(MyClass[int])
+    assert (
+        obj_repr == b"type:(pydra.utils.tests.test_hash.MyClass[type:(builtins.int)])"
+    )
+
+
+def test_bytes_special_form1():
+    obj_repr = join_bytes_repr(ty.Union[int, float])
+    assert obj_repr == b"type:(typing.Union[type:(builtins.int)type:(builtins.float)])"
+
+
+def test_bytes_special_form2():
+    obj_repr = join_bytes_repr(ty.Any)
+    assert re.match(rb"type:\(typing.Any\)", obj_repr)
+
+
+def test_bytes_special_form3():
+    obj_repr = join_bytes_repr(ty.Optional[Path])
+    assert (
+        obj_repr == b"type:(typing.Union[type:(pathlib.Path)type:(builtins.NoneType)])"
+    )
+
+
+def test_bytes_special_form4():
+    obj_repr = join_bytes_repr(ty.Type[Path])
+    assert obj_repr == b"type:(builtins.type[type:(pathlib.Path)])"
+
+
+def test_bytes_special_form5():
+    obj_repr = join_bytes_repr(ty.Callable[[Path, int], ty.Tuple[float, str]])
+    assert obj_repr == (
+        b"type:(collections.abc.Callable[[type:(pathlib.Path)type:(builtins.int)]"
+        b"type:(builtins.tuple[type:(builtins.float)type:(builtins.str)])])"
+    )
 
 
 def test_recursive_object():

@@ -8,7 +8,7 @@ from pydra import mark
 from ...engine.specs import File, LazyOutField
 from ..typing import TypeParser
 from pydra import Workflow
-from fileformats.serialization import Json
+from fileformats.application import Json
 from .utils import (
     generic_func_task,
     GenericShellTask,
