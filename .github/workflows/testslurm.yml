@@ -24,7 +24,7 @@ jobs:
     - name: Display previous jobs with sacct
       run: |
         echo "Allowing ports/daemons time to start" && sleep 10
-        sacctmgr -i add account none,test Cluster=linux Description='none' Organization='none'"
+        docker exec slurm bash -c "sacctmgr -i add account none,test Cluster=linux Description='none' Organization='none'"
         docker exec slurm bash -c "sacct && sinfo && squeue" 2&> /dev/null
         if [ $? -ne 0 ]; then
             echo "Slurm docker image error"
