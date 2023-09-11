@@ -35,6 +35,7 @@ jobs:
         docker exec slurm bash -c "echo $NO_ET"
         docker exec slurm bash -c "ls -la && echo list top level dir"
         docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
+        docker exec slurm bash -c "pyenv global 3.9.16"
         docker exec slurm bash -c "pip3.9 install --upgrade pip && pip3.9 install -e /pydra[test] && python3.9 -c 'import pydra; print(pydra.__version__)'"
     - name: Run pytest
       run: |
