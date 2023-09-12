@@ -3,7 +3,8 @@ import pydra
 import sys
 
 def run_pickled():
-    with open('/pydra/pydra/engine/my_function.pkl', 'rb') as file:
+    file_path = sys.argv[1]
+    with open(file_path, 'rb') as file:
         loaded_function = pickle.load(file)
 
     result = loaded_function(rerun=False)
