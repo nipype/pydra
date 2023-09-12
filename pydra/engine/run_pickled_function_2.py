@@ -2,6 +2,7 @@ import pickle
 import pydra
 import sys
 
+
 def run_pickled():
     file_path_1 = sys.argv[1]
     file_path_2 = sys.argv[2]
@@ -15,7 +16,8 @@ def run_pickled():
 
     result = loaded_function(taskmain, ind, rerun=False)
 
-    print(f'Result: {result}')    
+    print(f"Result: {result}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     run_pickled()

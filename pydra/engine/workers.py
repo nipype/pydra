@@ -910,8 +910,8 @@ class PsijWorker(Worker):
         spec = self.psij.JobSpec()
         spec.executable = cmd
         spec.arguments = arg
-        spec.stdout_path = '/pydra/pydra/engine/demo.stdout'
-        spec.stderr_path = '/pydra/pydra/engine/demo.stderr'
+        spec.stdout_path = "/pydra/pydra/engine/demo.stdout"
+        spec.stderr_path = "/pydra/pydra/engine/demo.stderr"
 
         return spec
 
@@ -950,12 +950,13 @@ class PsijWorker(Worker):
         job = self.make_job(spec, None)
         jex.submit(job)
         job.wait()
-        
+
         return
 
     def close(self):
         """Finalize the internal pool of tasks."""
         pass
+
 
 WORKERS = {
     "serial": SerialWorker,
