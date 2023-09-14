@@ -8,6 +8,10 @@ on:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        python-version: [3.8.16, 3.9.16, 3.10.9, 3.11.1]
+      fail-fast: false
     runs-on: ubuntu-latest
     env:
       DOCKER_IMAGE: adi611/docker-centos7-slurm:23.02.1
@@ -35,12 +39,13 @@ jobs:
         docker exec slurm bash -c "echo $NO_ET"
         docker exec slurm bash -c "ls -la && echo list top level dir"
         docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
-        docker exec slurm bash -c "pip3 install --upgrade pip && pip3 install -e /pydra[test] && python3 -c 'import pydra; print(pydra.__version__)'"
+        docker exec slurm bash -c "pyenv global ${{ matrix.python-version }}"
+        docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test] && python -c 'import pydra; print(pydra.__version__)'"
     - name: Run pytest
       run: |
         docker exec slurm bash -c "pytest --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/ -k 'not test_audit_prov and not test_audit_prov_messdir_1 and not test_audit_prov_messdir_2 and not test_audit_prov_wf and not test_audit_all'"
     - name: Upload to codecov
       run: |
-        docker exec slurm bash -c "pip3 install urllib3==1.26.6"
+        docker exec slurm bash -c "pip install urllib3==1.26.6"
         docker exec slurm bash -c "codecov --root /pydra -f /pydra/cov.xml -F unittests"
         docker rm -f slurm
