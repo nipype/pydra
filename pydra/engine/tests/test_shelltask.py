@@ -2460,14 +2460,14 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
     assert res.output.cp_file.fspath.exists()
 
 
-def test_wf_shell_cmd_state_1(plugin):
+def test_wf_shell_cmd_state_1(plugin, tmp_path):
     """a workflow with 2 tasks and splitter on the wf level,
     first one has input with output_file_template (str, uses wf.lzin),
     that is passed to the second task
     """
-    wf = Workflow(name="wf", input_spec=["cmd1", "cmd2", "args"]).split(
-        "args", args=["newfile_1.txt", "newfile_2.txt"]
-    )
+    wf = Workflow(
+        name="wf", input_spec=["cmd1", "cmd2", "args"], cache_dir=tmp_path
+    ).split("args", args=["newfile_1.txt", "newfile_2.txt"])
 
     wf.inputs.cmd1 = "touch"
     wf.inputs.cmd2 = "cp"
@@ -2820,7 +2820,7 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmp_path):
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_5a(plugin, results_function):
+def test_shell_cmd_outputspec_5a(plugin, results_function, tmp_path):
     """
     customised output_spec, adding files to the output,
     using a function to collect output, the function is saved in the field metadata
@@ -2842,7 +2842,9 @@ def test_shell_cmd_outputspec_5a(plugin, results_function):
         ],
         bases=(ShellOutSpec,),
     )
-    shelly = ShellCommandTask(name="shelly", executable=cmd, output_spec=my_output_spec)
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
+    )
 
     res = results_function(shelly, plugin)
     assert res.output.stdout == ""
@@ -2874,7 +2876,7 @@ def test_shell_cmd_outputspec_5b_error():
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_outputspec_5c(plugin, results_function):
+def test_shell_cmd_outputspec_5c(plugin, results_function, tmp_path):
     """
     Customised output spec defined as a class,
     using a static function to collect output files.
@@ -2893,6 +2895,7 @@ def test_shell_cmd_outputspec_5c(plugin, results_function):
         name="shelly",
         executable=["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"],
         output_spec=SpecInfo(name="Output", bases=(MyOutputSpec,)),
+        cache_dir=tmp_path,
     )
 
     res = results_function(shelly, plugin)
@@ -3177,7 +3180,7 @@ def test_shell_cmd_outputspec_8a(tmp_path, plugin, results_function):
     )
 
     shelly = ShellCommandTask(
-        name="shelly", executable=cmd, output_spec=my_output_spec
+        name="shelly", executable=cmd, output_spec=my_output_spec, cache_dir=tmp_path
     ).split("args", args=args)
 
     results = results_function(shelly, plugin)
@@ -3248,6 +3251,7 @@ def test_shell_cmd_outputspec_8c(tmp_path, plugin, results_function):
         executable=cmd,
         output_spec=my_output_spec,
         resultsDir="outdir",
+        cache_dir=tmp_path,
     ).split("args", args=args)
 
     results_function(shelly, plugin)
