@@ -10,7 +10,7 @@ jobs:
   build:
     strategy:
       matrix:
-        python-version: [3.8.16, 3.9.16, 3.10.9, 3.11.1]
+        python-version: [3.8.16, 3.9.16, 3.10.9, 3.11.1, 3.11.5]
       fail-fast: false
     runs-on: ubuntu-latest
     env:
@@ -39,6 +39,9 @@ jobs:
         docker exec slurm bash -c "echo $NO_ET"
         docker exec slurm bash -c "ls -la && echo list top level dir"
         docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
+        if [[ "${{ matrix.python-version }}" == "3.11.5" ]]; then
+            docker exec slurm bash -c "CONFIGURE_OPTS=\"-with-openssl=/opt/openssl\" pyenv install -v 3.11.5"
+        fi
         docker exec slurm bash -c "pyenv global ${{ matrix.python-version }}"
         docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test] && python -c 'import pydra; print(pydra.__version__)'"
     - name: Run pytest
