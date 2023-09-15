@@ -5,7 +5,7 @@ import sys
 
 def run_pickled():
     file_path = sys.argv[1]
-    with open(file_path, 'rb') as file:
+    with open(file_path, "rb") as file:
         loaded_function = pickle.load(file)
 
     result = loaded_function(rerun=False)

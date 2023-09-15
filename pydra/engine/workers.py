@@ -924,28 +924,40 @@ class PsijWorker(Worker):
         import psij
         import pickle
         import os
+
         self.psij = psij
-        jex = psij.JobExecutor.get_instance('slurm')
-        
+        jex = psij.JobExecutor.get_instance("slurm")
+        absolute_path = os.path.dirname(__file__)
+
         if isinstance(runnable, TaskBase):
             cache_dir = runnable.cache_dir
-            file_path = os.path.join(cache_dir, 'my_function.pkl')
-            with open(file_path, 'wb') as file:
+            file_path = os.path.join(cache_dir, "my_function.pkl")
+            with open(file_path, "wb") as file:
                 pickle.dump(runnable._run, file)
-            spec = self.make_spec("python3.9", ["/pydra/pydra/engine/run_pickled_function.py", file_path])
+            func_path = os.path.join(absolute_path, "run_pickled_function.py")
+            spec = self.make_spec("python", [func_path, file_path])
         else:  # it could be tuple that includes pickle files with tasks and inputs
             cache_dir = runnable[-1].cache_dir
-            file_path_1 = os.path.join(cache_dir, 'my_function.pkl')
-            file_path_2 = os.path.join(cache_dir, 'taskmain.pkl')
-            file_path_3 = os.path.join(cache_dir, 'ind.pkl')
+            file_path_1 = os.path.join(cache_dir, "my_function.pkl")
+            file_path_2 = os.path.join(cache_dir, "taskmain.pkl")
+            file_path_3 = os.path.join(cache_dir, "ind.pkl")
             ind, task_main_pkl, task_orig = runnable
-            with open(file_path_1, 'wb') as file:
+            with open(file_path_1, "wb") as file:
                 pickle.dump(load_and_run, file)
-            with open(file_path_2, 'wb') as file:
+            with open(file_path_2, "wb") as file:
                 pickle.dump(task_main_pkl, file)
-            with open(file_path_3, 'wb') as file:
+            with open(file_path_3, "wb") as file:
                 pickle.dump(ind, file)
-            spec = self.make_spec("python3.9", ["/pydra/pydra/engine/run_pickled_function_2.py", file_path_1, file_path_2, file_path_3])
+            func_path = os.path.join(absolute_path, "run_pickled_function_2.py")
+            spec = self.make_spec(
+                "python",
+                [
+                    func_path,
+                    file_path_1,
+                    file_path_2,
+                    file_path_3,
+                ],
+            )
 
         job = self.make_job(spec, None)
         jex.submit(job)
