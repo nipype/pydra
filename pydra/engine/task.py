@@ -70,6 +70,7 @@ from .helpers import (
 )
 from .helpers_file import template_update, is_local_file
 from ..utils.typing import TypeParser
+from .environments import Native
 
 
 class FunctionTask(TaskBase):
@@ -195,7 +196,7 @@ class FunctionTask(TaskBase):
 
         self.output_spec = output_spec
 
-    def _run_task(self):
+    def _run_task(self, environment=None):
         inputs = attr.asdict(self.inputs, recurse=False)
         del inputs["_func"]
         self.output_ = None
@@ -262,6 +263,7 @@ class ShellCommandTask(TaskBase):
         output_spec: ty.Optional[SpecInfo] = None,
         rerun=False,
         strip=False,
+        environment=Native(),
         **kwargs,
     ):
         """
@@ -329,9 +331,33 @@ class ShellCommandTask(TaskBase):
             rerun=rerun,
         )
         self.strip = strip
+        self.environment = environment
+        self.bindings = {}
+        self.inputs_mod_root = {}
 
-    @property
-    def command_args(self):
+    def get_inputs_in_root(self, root=None):
+        """Take input files and return their location, re-rooted.
+
+        This is primarily intended for contexts when a task is going
+        to be run in a container with mounted volumes.
+
+        Arguments
+        ---------
+        root: str
+
+        Returns
+        -------
+        inputs: list of str
+          File paths, needed to be exposed to the container
+        """
+
+        if root is None:
+            return []
+        else:
+            self._check_inputs(root=root)
+            return self.bindings
+
+    def command_args(self, root=None):
         """Get command line arguments"""
         if is_lazy(self.inputs):
             raise Exception("can't return cmdline, self.inputs has LazyFields")
@@ -362,7 +388,10 @@ class ShellCommandTask(TaskBase):
                 if pos_val:
                     pos_args.append(pos_val)
             else:
-                pos_val = self._command_pos_args(field)
+                if name in modified_inputs:
+                    pos_val = self._command_pos_args(field, root=root)
+                else:
+                    pos_val = self._command_pos_args(field)
                 if pos_val:
                     pos_args.append(pos_val)
 
@@ -399,7 +428,7 @@ class ShellCommandTask(TaskBase):
         else:
             return pos, ensure_list(value, tuple2list=True)
 
-    def _command_pos_args(self, field):
+    def _command_pos_args(self, field, root=None):
         """
         Checking all additional input fields, setting pos to None, if position not set.
         Creating a list with additional parts of the command that comes from
@@ -428,6 +457,13 @@ class ShellCommandTask(TaskBase):
             pos += 1 if pos >= 0 else -1
 
         value = self._field_value(field, check_file=True)
+
+        if value:
+            if field.name in self.inputs_mod_root:
+                value = self.inputs_mod_root[field.name]
+            elif root:  # values from templates
+                value = value.replace(str(self.output_dir), f"{root}{self.output_dir}")
+
         if field.metadata.get("readonly", False) and value is not None:
             raise Exception(f"{field.name} is read only, the value can't be provided")
         elif (
@@ -520,10 +556,10 @@ class ShellCommandTask(TaskBase):
         if self.state:
             raise NotImplementedError
         if isinstance(self, ContainerTask):
-            command_args = self.container_args + self.command_args
+            command_args = self.container_args + self.command_args()
         else:
-            command_args = self.command_args
-        # Skip the executable, which can be a multipart command, e.g. 'docker run'.
+            command_args = self.command_args()
+        # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
         cmdline = command_args[0]
         for arg in command_args[1:]:
             # If there are spaces in the arg, and it is not enclosed by matching
@@ -535,25 +571,54 @@ class ShellCommandTask(TaskBase):
                 cmdline += " " + arg
         return cmdline
 
-    def _run_task(self):
-        self.output_ = None
-        if isinstance(self, ContainerTask):
-            args = self.container_args + self.command_args
+    def _run_task(self, environment=None):
+        if environment is None:
+            environment = self.environment
+
+        if (
+            environment == "old"
+        ):  # TODO this is just temporarily for testing, remove this part
+            if isinstance(self, ContainerTask):
+                args = self.container_args + self.command_args()
+            else:
+                args = self.command_args()
+            if args:
+                # removing empty strings
+                args = [str(el) for el in args if el not in ["", " "]]
+                keys = ["return_code", "stdout", "stderr"]
+                values = execute(args, strip=self.strip)
+                self.output_ = dict(zip(keys, values))
+                if self.output_["return_code"]:
+                    msg = f"Error running '{self.name}' task with {args}:"
+                    if self.output_["stderr"]:
+                        msg += "\n\nstderr:\n" + self.output_["stderr"]
+                    if self.output_["stdout"]:
+                        msg += "\n\nstdout:\n" + self.output_["stdout"]
+                    raise RuntimeError(msg)
         else:
-            args = self.command_args
-        if args:
-            # removing empty strings
-            args = [str(el) for el in args if el not in ["", " "]]
-            keys = ["return_code", "stdout", "stderr"]
-            values = execute(args, strip=self.strip)
-            self.output_ = dict(zip(keys, values))
-            if self.output_["return_code"]:
-                msg = f"Error running '{self.name}' task with {args}:"
-                if self.output_["stderr"]:
-                    msg += "\n\nstderr:\n" + self.output_["stderr"]
-                if self.output_["stdout"]:
-                    msg += "\n\nstdout:\n" + self.output_["stdout"]
-                raise RuntimeError(msg)
+            self.output_ = environment.execute(self)
+
+    def _check_inputs(self, root):
+        for fld in attr_fields(self.inputs):
+            if TypeParser.contains_type(FileSet, fld.type):
+                # Is container_path necessary? Container paths should just be typed PurePath
+                assert not fld.metadata.get("container_path")
+                # Should no longer happen with environments; assertion for testing purposes
+                # XXX: Remove before merge, so "image" can become a valid input file
+                assert not fld.name == "image"
+                fileset = getattr(self.inputs, fld.name)
+                copy = parse_copyfile(fld)[0] == FileSet.CopyMode.copy
+
+                host_path, env_path = fileset.parent, Path(f"{root}{fileset.parent}")
+
+                # Default to mounting paths as read-only, but respect existing modes
+                old_mode = self.bindings.get(host_path, ("", "ro"))[1]
+                self.bindings[host_path] = (env_path, "rw" if copy else old_mode)
+
+                # Provide in-container paths without type-checking
+                self.inputs_mod_root[fld.name] = tuple(
+                    env_path / rel for rel in fileset.relative_fspaths
+                )
 
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
 

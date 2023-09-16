@@ -131,19 +131,19 @@ class SerialWorker(Worker):
         """Initialize worker."""
         logger.debug("Initialize SerialWorker")
 
-    def run_el(self, interface, rerun=False, **kwargs):
+    def run_el(self, interface, rerun=False, environment=None, **kwargs):
         """Run a task."""
-        return self.exec_serial(interface, rerun=rerun)
+        return self.exec_serial(interface, rerun=rerun, environment=environment)
 
     def close(self):
         """Return whether the task is finished."""
 
-    async def exec_serial(self, runnable, rerun=False):
+    async def exec_serial(self, runnable, rerun=False, environment=None):
         if isinstance(runnable, TaskBase):
-            return runnable._run(rerun)
+            return runnable._run(rerun, environment=environment)
         else:  # it could be tuple that includes pickle files with tasks and inputs
             ind, task_main_pkl, _ = runnable
-            return load_and_run(task_main_pkl, ind, rerun)
+            return load_and_run(task_main_pkl, ind, rerun, environment=environment)
 
     async def fetch_finished(self, futures):
         await asyncio.gather(*futures)
@@ -165,19 +165,21 @@ class ConcurrentFuturesWorker(Worker):
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
-    def run_el(self, runnable, rerun=False, **kwargs):
+    def run_el(self, runnable, rerun=False, environment=None, **kwargs):
         """Run a task."""
         assert self.loop, "No event loop available to submit tasks"
-        return self.exec_as_coro(runnable, rerun=rerun)
+        return self.exec_as_coro(runnable, rerun=rerun, environment=environment)
 
-    async def exec_as_coro(self, runnable, rerun=False):
+    async def exec_as_coro(self, runnable, rerun=False, environment=None):
         """Run a task (coroutine wrapper)."""
         if isinstance(runnable, TaskBase):
-            res = await self.loop.run_in_executor(self.pool, runnable._run, rerun)
+            res = await self.loop.run_in_executor(
+                self.pool, runnable._run, rerun, environment
+            )
         else:  # it could be tuple that includes pickle files with tasks and inputs
             ind, task_main_pkl, task_orig = runnable
             res = await self.loop.run_in_executor(
-                self.pool, load_and_run, task_main_pkl, ind, rerun
+                self.pool, load_and_run, task_main_pkl, ind, rerun, environment
             )
         return res
 
@@ -215,7 +217,7 @@ class SlurmWorker(DistributedWorker):
         self.sbatch_args = sbatch_args or ""
         self.error = {}
 
-    def run_el(self, runnable, rerun=False):
+    def run_el(self, runnable, rerun=False):  # TODO: add env
         """Worker submission API."""
         script_dir, batch_script = self._prepare_runscripts(runnable, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
@@ -443,7 +445,7 @@ class SGEWorker(DistributedWorker):
         self.default_qsub_args = default_qsub_args
         self.max_mem_free = max_mem_free
 
-    def run_el(self, runnable, rerun=False):
+    def run_el(self, runnable, rerun=False):  # TODO: add env
         """Worker submission API."""
         (
             script_dir,
