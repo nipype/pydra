@@ -910,8 +910,8 @@ class PsijWorker(Worker):
         spec = self.psij.JobSpec()
         spec.executable = cmd
         spec.arguments = arg
-        spec.stdout_path = "/pydra/pydra/engine/demo.stdout"
-        spec.stderr_path = "/pydra/pydra/engine/demo.stderr"
+        spec.stdout_path = "demo.stdout"
+        spec.stderr_path = "demo.stderr"
 
         return spec
 
