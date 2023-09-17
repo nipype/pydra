@@ -335,8 +335,8 @@ class ShellCommandTask(TaskBase):
         self.bindings = {}
         self.inputs_mod_root = {}
 
-    def get_inputs_in_root(self, root=None):
-        """Take input files and return their location, re-rooted.
+    def get_bindings(self, root: str | None=None) -> dict[str, tuple[str, str]]:
+        """Return bindings necessary to run task in an alternative root.
 
         This is primarily intended for contexts when a task is going
         to be run in a container with mounted volumes.
@@ -347,12 +347,12 @@ class ShellCommandTask(TaskBase):
 
         Returns
         -------
-        inputs: list of str
-          File paths, needed to be exposed to the container
+        bindings: dict
+          Mapping from paths in the host environment to the target environment
         """
 
         if root is None:
-            return []
+            return {}
         else:
             self._check_inputs(root=root)
             return self.bindings
