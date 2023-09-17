@@ -335,7 +335,7 @@ class ShellCommandTask(TaskBase):
         self.bindings = {}
         self.inputs_mod_root = {}
 
-    def get_bindings(self, root: str | None=None) -> dict[str, tuple[str, str]]:
+    def get_bindings(self, root: str | None = None) -> dict[str, tuple[str, str]]:
         """Return bindings necessary to run task in an alternative root.
 
         This is primarily intended for contexts when a task is going
