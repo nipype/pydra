@@ -55,7 +55,7 @@ class Docker(Environment):
         # Skips over any inputs in task.cache_dir
         # Needs to include `out_file`s when not relative to working dir
         # Possibly a `TargetFile` type to distinguish between `File` and `str`?
-        mounts = task.get_inputs_in_root(root=root)
+        mounts = task.get_bindings(root=root)
 
         # todo adding xargsy etc
         docker_args = ["docker", "run", "-v", self.bind(task.cache_dir, "rw")]

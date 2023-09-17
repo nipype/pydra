@@ -38,6 +38,8 @@ Implement processing nodes.
       <https://colab.research.google.com/drive/1RRV1gHbGJs49qQB1q1d5tQEycVRtuhw6>`__
 
 """
+from __future__ import annotations
+
 import platform
 import re
 import attr
@@ -62,7 +64,6 @@ from .specs import (
 )
 from .helpers import (
     ensure_list,
-    execute,
     position_sort,
     argstr_formatting,
     output_from_inputfields,
@@ -354,7 +355,7 @@ class ShellCommandTask(TaskBase):
         if root is None:
             return {}
         else:
-            self._check_inputs(root=root)
+            self._prepare_bindings(root=root)
             return self.bindings
 
     def command_args(self, root=None):
@@ -574,29 +575,7 @@ class ShellCommandTask(TaskBase):
     def _run_task(self, environment=None):
         if environment is None:
             environment = self.environment
-
-        if (
-            environment == "old"
-        ):  # TODO this is just temporarily for testing, remove this part
-            if isinstance(self, ContainerTask):
-                args = self.container_args + self.command_args()
-            else:
-                args = self.command_args()
-            if args:
-                # removing empty strings
-                args = [str(el) for el in args if el not in ["", " "]]
-                keys = ["return_code", "stdout", "stderr"]
-                values = execute(args, strip=self.strip)
-                self.output_ = dict(zip(keys, values))
-                if self.output_["return_code"]:
-                    msg = f"Error running '{self.name}' task with {args}:"
-                    if self.output_["stderr"]:
-                        msg += "\n\nstderr:\n" + self.output_["stderr"]
-                    if self.output_["stdout"]:
-                        msg += "\n\nstdout:\n" + self.output_["stdout"]
-                    raise RuntimeError(msg)
-        else:
-            self.output_ = environment.execute(self)
+        self.output_ = environment.execute(self)
 
     def _prepare_bindings(self, root: str):
         """Prepare input files to be passed to the task
@@ -721,7 +700,7 @@ class ContainerTask(ShellCommandTask):
         mount points: dict
             mapping from local path to tuple of container path + mode
         """
-        self._check_inputs()
+        self._prepare_bindings()
         return {**self.bindings, **{self.output_dir: (self.output_cpath, "rw")}}
 
     def binds(self, opt):
@@ -736,7 +715,7 @@ class ContainerTask(ShellCommandTask):
             bargs.extend([opt, f"{lpath}:{cpath}:{mode}"])
         return bargs
 
-    def _check_inputs(self):
+    def _prepare_bindings(self):
         fields = attr_fields(self.inputs)
         for fld in fields:
             if TypeParser.contains_type(FileSet, fld.type):

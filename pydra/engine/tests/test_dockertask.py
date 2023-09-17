@@ -17,13 +17,13 @@ def test_docker_1_nosubm():
     no submitter
     """
     cmd = "whoami"
-    docky = DockerTask(name="docky", executable=cmd, image="busybox", environment="old")
-    assert docky.inputs.image == "busybox"
-    assert docky.inputs.container == "docker"
-    assert (
-        docky.cmdline
-        == f"docker run --rm -v {docky.output_dir}:/output_pydra:rw -w /output_pydra {docky.inputs.image} {cmd}"
+    docky = ShellCommandTask(
+        name="docky", executable=cmd, environment=Docker(image="busybox")
     )
+    assert docky.environment.image == "busybox"
+    assert docky.environment.tag == "latest"
+    assert isinstance(docky.environment, Docker)
+    assert docky.cmdline == cmd
 
     res = docky()
     assert res.output.stdout == "root\n"
