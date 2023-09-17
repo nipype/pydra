@@ -598,7 +598,12 @@ class ShellCommandTask(TaskBase):
         else:
             self.output_ = environment.execute(self)
 
-    def _check_inputs(self, root):
+    def _prepare_bindings(self, root: str):
+        """Prepare input files to be passed to the task
+
+        This updates the ``bindings`` attribute of the current task to make files available
+        in an ``Environment``-defined ``root``.
+        """
         for fld in attr_fields(self.inputs):
             if TypeParser.contains_type(FileSet, fld.type):
                 # Is container_path necessary? Container paths should just be typed PurePath
