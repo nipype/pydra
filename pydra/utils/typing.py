@@ -11,6 +11,7 @@ from ..engine.specs import (
     MultiInputObj,
     MultiOutputObj,
 )
+from fileformats import field
 
 try:
     from typing import get_origin, get_args
@@ -55,22 +56,33 @@ class TypeParser(ty.Generic[T]):
         the tree of more complex nested container types. Overrides 'coercible' to enable
         you to carve out exceptions, such as TypeParser(list, coercible=[(ty.Iterable, list)],
         not_coercible=[(str, list)])
+    label : str
+        the label to be used to identify the type parser in error messages. Especially
+        useful when TypeParser is used as a converter in attrs.fields
     """
 
     tp: ty.Type[T]
     coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
     not_coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
+    label: str
 
     COERCIBLE_DEFAULT: ty.Tuple[ty.Tuple[type, type], ...] = (
-        (ty.Sequence, ty.Sequence),  # type: ignore
-        (ty.Mapping, ty.Mapping),
-        (Path, os.PathLike),
-        (str, os.PathLike),
-        (os.PathLike, Path),
-        (os.PathLike, str),
-        (ty.Any, MultiInputObj),
-        (int, float),
+        (
+            (ty.Sequence, ty.Sequence),
+            (ty.Mapping, ty.Mapping),
+            (Path, os.PathLike),
+            (str, os.PathLike),
+            (os.PathLike, Path),
+            (os.PathLike, str),
+            (ty.Any, MultiInputObj),
+            (int, float),
+            (field.Integer, float),
+            (int, field.Decimal),
+        )
+        + tuple((f, f.primitive) for f in field.Singular.subclasses() if f.primitive)
+        + tuple((f.primitive, f) for f in field.Singular.subclasses() if f.primitive)
     )
+
     if HAVE_NUMPY:
         COERCIBLE_DEFAULT += (
             (numpy.integer, int),
@@ -95,6 +107,7 @@ class TypeParser(ty.Generic[T]):
         not_coercible: ty.Optional[
             ty.Iterable[ty.Tuple[TypeOrAny, TypeOrAny]]
         ] = NOT_COERCIBLE_DEFAULT,
+        label: str = "",
     ):
         def expand_pattern(t):
             """Recursively expand the type arguments of the target type in nested tuples"""
@@ -110,10 +123,12 @@ class TypeParser(ty.Generic[T]):
                 return origin
             if origin not in (ty.Union, type) and not issubclass(origin, ty.Iterable):
                 raise TypeError(
-                    f"TypeParser doesn't know how to handle args ({args}) for {origin} types"
+                    f"TypeParser doesn't know how to handle args ({args}) for {origin} "
+                    f"types{self.label_str}"
                 )
             return (origin, [expand_pattern(a) for a in args])
 
+        self.label = label
         self.tp = tp
         self.coercible = (
             list(coercible) if coercible is not None else [(ty.Any, ty.Any)]
@@ -181,18 +196,18 @@ class TypeParser(ty.Generic[T]):
                 obj_args = list(obj)
             except TypeError as e:
                 msg = (
-                    f" (part of coercion from {object_} to {self.pattern}"
+                    f" (part of coercion from {object_!r} to {self.pattern}"
                     if obj is not object_
                     else ""
                 )
                 raise TypeError(
-                    f"Could not coerce to {type_} as {obj} is not iterable{msg}"
+                    f"Could not coerce to {type_} as {obj!r} is not iterable{msg}{self.label_str}"
                 ) from e
             if issubclass(origin, tuple):
                 return coerce_tuple(type_, obj_args, pattern_args)
             if issubclass(origin, ty.Iterable):
                 return coerce_sequence(type_, obj_args, pattern_args)
-            assert False, f"Coercion from {obj} to {pattern} is not handled"
+            assert False, f"Coercion from {obj!r} to {pattern} is not handled"
 
         def coerce_basic(obj, pattern):
             """Coerce an object to a "basic types" like `int`, `float`, `bool`, `Path`
@@ -213,7 +228,8 @@ class TypeParser(ty.Generic[T]):
                 except TypeError as e:
                     reasons.append(e)
             raise TypeError(
-                f"Could not coerce object, {obj!r}, to any of the union types {pattern_args}:\n\n"
+                f"Could not coerce object, {obj!r}, to any of the union types "
+                f"{pattern_args}{self.label_str}:\n\n"
                 + "\n\n".join(f"{a} -> {e}" for a, e in zip(pattern_args, reasons))
             )
 
@@ -232,7 +248,7 @@ class TypeParser(ty.Generic[T]):
                     else ""
                 )
                 raise TypeError(
-                    f"Could not coerce to {type_} as {obj} is not a mapping type{msg}"
+                    f"Could not coerce to {type_} as {obj} is not a mapping type{msg}{self.label_str}"
                 ) from e
             return coerce_obj(
                 {
@@ -255,7 +271,7 @@ class TypeParser(ty.Generic[T]):
             elif len(pattern_args) != len(obj_args):
                 raise TypeError(
                     f"Incorrect number of items in tuple, expected "
-                    f"{len(pattern_args)}, got {len(obj_args)}"
+                    f"{len(pattern_args)}, got {len(obj_args)}{self.label_str}"
                 )
             return coerce_obj(
                 [expand_and_coerce(o, p) for o, p in zip(obj_args, pattern_args)], type_
@@ -273,7 +289,7 @@ class TypeParser(ty.Generic[T]):
         def coerce_type(type_: ty.Type[ty.Any], pattern_args: ty.List[ty.Type[ty.Any]]):
             if not any(issubclass(type_, t) for t in pattern_args):
                 raise TypeError(
-                    f"{type_} is not one of the specified types {pattern_args}"
+                    f"{type_} is not one of the specified types {pattern_args}{self.label_str}"
                 )
             return type_
 
@@ -289,7 +305,9 @@ class TypeParser(ty.Generic[T]):
                     if obj is not object_
                     else ""
                 )
-                raise TypeError(f"Cannot coerce {obj!r} into {type_}{msg}") from e
+                raise TypeError(
+                    f"Cannot coerce {obj!r} into {type_}{msg}{self.label_str}"
+                ) from e
 
         return expand_and_coerce(object_, self.pattern)
 
@@ -315,7 +333,7 @@ class TypeParser(ty.Generic[T]):
                 raise TypeError("Splits without any type arguments are invalid")
             if len(args) > 1:
                 raise TypeError(
-                    f"Splits with more than one type argument ({args}) are invalid"
+                    f"Splits with more than one type argument ({args}) are invalid{self.label_str}"
                 )
             return self.check_type(args[0])
 
@@ -335,7 +353,7 @@ class TypeParser(ty.Generic[T]):
                     )
                 raise TypeError(
                     f"{tp} doesn't match pattern {pattern}, when matching {type_} to "
-                    f"{self.pattern}"
+                    f"{self.pattern}{self.label_str}"
                 )
             tp_args = get_args(tp)
             self.check_coercible(tp_origin, pattern_origin)
@@ -370,7 +388,7 @@ class TypeParser(ty.Generic[T]):
                     if reasons:
                         raise TypeError(
                             f"Cannot coerce {tp} to "
-                            f"ty.Union[{', '.join(str(a) for a in pattern_args)}], "
+                            f"ty.Union[{', '.join(str(a) for a in pattern_args)}]{self.label_str}, "
                             f"because {tp_arg} cannot be coerced to any of its args:\n\n"
                             + "\n\n".join(
                                 f"{a} -> {e}" for a, e in zip(pattern_args, reasons)
@@ -406,7 +424,7 @@ class TypeParser(ty.Generic[T]):
             if len(tp_args) != len(pattern_args):
                 raise TypeError(
                     f"Wrong number of type arguments in tuple {tp_args}  compared to pattern "
-                    f"{pattern_args} in attempting to match {type_} to {self.pattern}"
+                    f"{pattern_args} in attempting to match {type_} to {self.pattern}{self.label_str}"
                 )
             for t, p in zip(tp_args, pattern_args):
                 expand_and_check(t, p)
@@ -418,7 +436,8 @@ class TypeParser(ty.Generic[T]):
                 if not tp_args:
                     raise TypeError(
                         "Generic ellipsis type arguments not specific enough to match "
-                        f"{pattern_args} in attempting to match {type_} to {self.pattern}"
+                        f"{pattern_args} in attempting to match {type_} to "
+                        f"{self.pattern}{self.label_str}"
                     )
             for arg in tp_args:
                 expand_and_check(arg, pattern_args[0])
@@ -468,8 +487,8 @@ class TypeParser(ty.Generic[T]):
 
         if not matches_criteria(self.coercible):
             raise TypeError(
-                f"Cannot coerce {repr(source)} into {target} as the coercion doesn't match "
-                f"any of the explicit inclusion criteria: "
+                f"Cannot coerce {repr(source)} into {target}{self.label_str} as the "
+                "coercion doesn't match any of the explicit inclusion criteria: "
                 + ", ".join(
                     f"{type_name(s)} -> {type_name(t)}" for s, t in self.coercible
                 )
@@ -477,7 +496,7 @@ class TypeParser(ty.Generic[T]):
         matches_not_coercible = matches_criteria(self.not_coercible)
         if matches_not_coercible:
             raise TypeError(
-                f"Cannot coerce {repr(source)} into {target} as it is explicitly "
+                f"Cannot coerce {repr(source)} into {target}{self.label_str} as it is explicitly "
                 "excluded by the following coercion criteria: "
                 + ", ".join(
                     f"{type_name(s)} -> {type_name(t)}"
@@ -539,9 +558,11 @@ class TypeParser(ty.Generic[T]):
             return False
         return True
 
-    @staticmethod
+    @classmethod
     def is_instance(
-        obj: object, candidates: ty.Union[ty.Type[ty.Any], ty.Iterable[ty.Type[ty.Any]]]
+        cls,
+        obj: object,
+        candidates: ty.Union[ty.Type[ty.Any], ty.Iterable[ty.Type[ty.Any]]],
     ) -> bool:
         """Checks whether the object is an instance of cls or that cls is typing.Any,
         extending the built-in isinstance to check nested type args
@@ -558,9 +579,14 @@ class TypeParser(ty.Generic[T]):
         for candidate in candidates:
             if candidate is ty.Any:
                 return True
+            # Handle ty.Type[*] candidates
+            if ty.get_origin(candidate) is type:
+                return inspect.isclass(obj) and cls.is_subclass(
+                    obj, ty.get_args(candidate)[0]
+                )
             if NO_GENERIC_ISSUBCLASS:
-                if candidate is type and inspect.isclass(obj):
-                    return True
+                if inspect.isclass(obj):
+                    return candidate is type
                 if issubtype(type(obj), candidate) or (
                     type(obj) is dict and candidate is ty.Mapping
                 ):
@@ -589,10 +615,19 @@ class TypeParser(ty.Generic[T]):
         any_ok : bool
             whether klass=typing.Any should return True or False
         """
-        if not isinstance(candidates, ty.Iterable):
+        if not isinstance(candidates, ty.Sequence):
             candidates = [candidates]
 
         for candidate in candidates:
+            # Handle ty.Type[*] types in klass and candidates
+            if ty.get_origin(klass) is type and (
+                candidate is type or ty.get_origin(candidate) is type
+            ):
+                if candidate is type:
+                    return True
+                return cls.is_subclass(ty.get_args(klass)[0], ty.get_args(candidate)[0])
+            elif ty.get_origin(klass) is type or ty.get_origin(candidate) is type:
+                return False
             if NO_GENERIC_ISSUBCLASS:
                 if klass is type and candidate is not type:
                     return False
@@ -774,6 +809,10 @@ class TypeParser(ty.Generic[T]):
             type_ = cls.get_item_type(type_)
             depth += 1
         return type_, depth
+
+    @property
+    def label_str(self):
+        return f" in {self.label} " if self.label else ""
 
     get_origin = staticmethod(get_origin)
     get_args = staticmethod(get_args)

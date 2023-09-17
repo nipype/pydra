@@ -46,13 +46,6 @@ def test_native_1(tmp_path):
         shelly_subm(submitter=sub, environment=Native())
     assert env_res == shelly_subm.result().output.__dict__
 
-    # TODO: should be removed at the end
-    shelly_old = ShellCommandTask(
-        name="shelly_old", executable=cmd, cache_dir=tmp_path, environment="old"
-    )
-    shelly_old()
-    assert env_res == shelly_old.result().output.__dict__
-
 
 @no_win
 @need_docker
