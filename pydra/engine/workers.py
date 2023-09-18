@@ -934,7 +934,7 @@ class PsijWorker(Worker):
             file_path = os.path.join(cache_dir, "my_function.pkl")
             with open(file_path, "wb") as file:
                 pickle.dump(runnable._run, file)
-            func_path = os.path.join(absolute_path, "run_pickled_function.py")
+            func_path = os.path.join(absolute_path, "run_pickled.py")
             spec = self.make_spec("python", [func_path, file_path])
         else:  # it could be tuple that includes pickle files with tasks and inputs
             cache_dir = runnable[-1].cache_dir
@@ -948,7 +948,7 @@ class PsijWorker(Worker):
                 pickle.dump(task_main_pkl, file)
             with open(file_path_3, "wb") as file:
                 pickle.dump(ind, file)
-            func_path = os.path.join(absolute_path, "run_pickled_function_2.py")
+            func_path = os.path.join(absolute_path, "run_pickled.py")
             spec = self.make_spec(
                 "python",
                 [
