@@ -217,7 +217,7 @@ class SlurmWorker(DistributedWorker):
         self.sbatch_args = sbatch_args or ""
         self.error = {}
 
-    def run_el(self, runnable, rerun=False):  # TODO: add env
+    def run_el(self, runnable, rerun=False, environment=None):
         """Worker submission API."""
         script_dir, batch_script = self._prepare_runscripts(runnable, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
