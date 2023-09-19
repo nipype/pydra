@@ -694,13 +694,6 @@ class ContainerSpec(ShellSpec):
 
 
 @attr.s(auto_attribs=True, kw_only=True)
-class DockerSpec(ContainerSpec):
-    """Particularize container specifications to the Docker engine."""
-
-    container: str = attr.ib("docker", metadata={"help_string": "container"})
-
-
-@attr.s(auto_attribs=True, kw_only=True)
 class SingularitySpec(ContainerSpec):
     """Particularize container specifications to Singularity."""
 

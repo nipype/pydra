@@ -5,10 +5,9 @@ import pytest
 import cloudpickle as cp
 from pathlib import Path
 import json
-import glob as glob
 from ... import mark
 from ..core import Workflow
-from ..task import AuditFlag, ShellCommandTask, DockerTask, SingularityTask
+from ..task import AuditFlag, ShellCommandTask
 from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from .utils import gen_basic_wf
 from ..specs import (
@@ -1323,58 +1322,6 @@ def test_shell_cmd(tmpdir):
     res = shelly._run()
     assert res.output.return_code == 0
     assert res.output.stdout == " ".join(cmd[1:]) + "\n"
-
-
-def test_container_cmds(tmpdir):
-    containy = DockerTask(name="containy", executable="pwd")
-    with pytest.raises(AttributeError) as excinfo:
-        containy.cmdline
-    assert "mandatory" in str(excinfo.value)
-    containy.inputs.image = "busybox"
-    assert containy.cmdline
-
-
-@no_win
-def test_docker_cmd(tmpdir):
-    docky = DockerTask(name="docky", executable="pwd", image="busybox")
-    assert (
-        docky.cmdline
-        == f"docker run --rm -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
-    )
-    docky.inputs.container_xargs = ["--rm", "-it"]
-    assert (
-        docky.cmdline
-        == f"docker run --rm -it -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
-    )
-    # TODO: we probably don't want to support container_path
-    # docky.inputs.bindings = [
-    #     ("/local/path", "/container/path", "ro"),
-    #     ("/local2", "/container2", None),
-    # ]
-    # assert docky.cmdline == (
-    #     "docker run --rm -it -v /local/path:/container/path:ro"
-    #     f" -v /local2:/container2:rw -v {docky.output_dir}:/output_pydra:rw -w /output_pydra busybox pwd"
-    # )
-
-
-@no_win
-def test_singularity_cmd(tmpdir):
-    # todo how this should be done?
-    image = "library://sylabsed/linux/alpine"
-    singu = SingularityTask(name="singi", executable="pwd", image=image)
-    assert (
-        singu.cmdline
-        == f"singularity exec -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} pwd"
-    )
-    # TODO: we probably don't want to support container_path
-    # singu.inputs.bindings = [
-    #     ("/local/path", "/container/path", "ro"),
-    #     ("/local2", "/container2", None),
-    # ]
-    # assert singu.cmdline == (
-    #     "singularity exec -B /local/path:/container/path:ro"
-    #     f" -B /local2:/container2:rw -B {singu.output_dir}:/output_pydra:rw --pwd /output_pydra {image} pwd"
-    # )
 
 
 def test_functask_callable(tmpdir):

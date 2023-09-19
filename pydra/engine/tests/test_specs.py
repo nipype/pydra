@@ -12,7 +12,6 @@ from ..specs import (
     Result,
     ShellSpec,
     ContainerSpec,
-    DockerSpec,
     SingularitySpec,
     LazyIn,
     LazyOut,
@@ -64,14 +63,6 @@ def test_container():
     )  # (execute, args, image, cont)
     assert all([hasattr(spec, attr) for attr in container_attrs])
     assert hasattr(spec, "executable")
-
-
-def test_docker():
-    with pytest.raises(TypeError):
-        spec = DockerSpec(executable="ls")
-    spec = DockerSpec(executable="ls", image="busybox")
-    assert all(hasattr(spec, attr) for attr in container_attrs)
-    assert getattr(spec, "container") == "docker"
 
 
 def test_singularity():
