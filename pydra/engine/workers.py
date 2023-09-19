@@ -977,5 +977,8 @@ WORKERS = {
     "slurm": SlurmWorker,
     "dask": DaskWorker,
     "sge": SGEWorker,
-    **{"psij-" + subtype: lambda subtype=subtype: PsijWorker(subtype=subtype) for subtype in ["local", "slurm"]},
+    **{
+        "psij-" + subtype: lambda subtype=subtype: PsijWorker(subtype=subtype)
+        for subtype in ["local", "slurm"]
+    },
 }
