@@ -893,7 +893,7 @@ class DaskWorker(Worker):
 
 
 class PsijWorker(Worker):
-    def __init__(self, **kwargs):
+    def __init__(self, subtype=None, **kwargs):
         """Initialize worker."""
         try:
             import psij
@@ -901,6 +901,7 @@ class PsijWorker(Worker):
             logger.critical("Please install psij.")
             raise
         logger.debug("Initialize PsijWorker")
+        self.subtype = subtype
 
     def run_el(self, interface, rerun=False, **kwargs):
         """Run a task."""
@@ -926,7 +927,7 @@ class PsijWorker(Worker):
         import os
 
         self.psij = psij
-        jex = psij.JobExecutor.get_instance("slurm")
+        jex = psij.JobExecutor.get_instance(self.subtype)
         absolute_path = os.path.dirname(__file__)
 
         if isinstance(runnable, TaskBase):
@@ -976,5 +977,5 @@ WORKERS = {
     "slurm": SlurmWorker,
     "dask": DaskWorker,
     "sge": SGEWorker,
-    "psij": PsijWorker,
+    **{"psij-" + subtype: lambda subtype=subtype: PsijWorker(subtype=subtype) for subtype in ["local", "slurm"]},
 }
