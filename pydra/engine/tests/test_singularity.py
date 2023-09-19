@@ -3,7 +3,7 @@ import subprocess as sp
 import pytest
 import attr
 
-from ..task import SingularityTask, DockerTask, ShellCommandTask
+from ..task import SingularityTask, ShellCommandTask
 from ..submitter import Submitter
 from ..core import Workflow
 from ..specs import ShellOutSpec, SpecInfo, File, SingularitySpec

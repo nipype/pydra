@@ -15,14 +15,13 @@ import __main__
 import attr
 
 from . import mark
-from .engine import AuditFlag, DockerTask, ShellCommandTask, Submitter, Workflow, specs
+from .engine import AuditFlag, ShellCommandTask, Submitter, Workflow, specs
 
 __all__ = (
     "Submitter",
     "Workflow",
     "AuditFlag",
     "ShellCommandTask",
-    "DockerTask",
     "specs",
     "mark",
 )

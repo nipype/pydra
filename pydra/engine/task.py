@@ -58,7 +58,6 @@ from .specs import (
     ShellSpec,
     ShellOutSpec,
     ContainerSpec,
-    DockerSpec,
     SingularitySpec,
     attr_fields,
 )
@@ -224,33 +223,6 @@ class ShellCommandTask(TaskBase):
 
     input_spec = None
     output_spec = None
-
-    def __new__(cls, container_info=None, *args, **kwargs):
-        if not container_info:
-            return super().__new__(cls)
-
-        if len(container_info) == 2:
-            type_cont, image = container_info
-        else:
-            raise Exception(
-                f"container_info has to have 2 elements, but {container_info} provided"
-            )
-
-        if type_cont == "docker":
-            # changing base class of spec if user defined
-            if "input_spec" in kwargs:
-                kwargs["input_spec"].bases = (DockerSpec,)
-            return DockerTask(image=image, *args, **kwargs)
-        elif type_cont == "singularity":
-            # changing base class of spec if user defined
-            if "input_spec" in kwargs:
-                kwargs["input_spec"].bases = (SingularitySpec,)
-            return SingularityTask(image=image, *args, **kwargs)
-        else:
-            raise Exception(
-                f"first element of container_info has to be "
-                f"docker or singularity, but {container_info[0]} provided"
-            )
 
     def __init__(
         self,
@@ -733,89 +705,6 @@ class ContainerTask(ShellCommandTask):
                 )
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any - FileSet.CopyMode.symlink
-
-
-class DockerTask(ContainerTask):
-    """Extend shell command task for containerized execution with the Docker Engine."""
-
-    init = False
-
-    def __init__(
-        self,
-        name=None,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        cache_dir=None,
-        input_spec: ty.Optional[SpecInfo] = None,
-        messenger_args=None,
-        messengers=None,
-        output_cpath="/output_pydra",
-        output_spec: ty.Optional[SpecInfo] = None,
-        rerun=False,
-        strip=False,
-        **kwargs,
-    ):
-        """
-        Initialize this task.
-
-        Parameters
-        ----------
-        name : :obj:`str`
-            Name of this task.
-        audit_flags : :obj:`pydra.utils.messenger.AuditFlag`
-            Auditing configuration
-        cache_dir : :obj:`os.pathlike`
-            Cache directory
-        input_spec : :obj:`pydra.engine.specs.SpecInfo`
-            Specification of inputs.
-        messenger_args :
-            TODO
-        messengers :
-            TODO
-        output_cpath : :obj:`str`
-            Output path within the container filesystem.
-        output_spec : :obj:`pydra.engine.specs.BaseSpec`
-            Specification of inputs.
-        strip : :obj:`bool`
-            TODO
-
-        """
-        if not self.init:
-            if input_spec is None:
-                input_spec = SpecInfo(name="Inputs", fields=[], bases=(DockerSpec,))
-            super().__init__(
-                name=name,
-                input_spec=input_spec,
-                output_spec=output_spec,
-                audit_flags=audit_flags,
-                messengers=messengers,
-                messenger_args=messenger_args,
-                cache_dir=cache_dir,
-                strip=strip,
-                output_cpath=output_cpath,
-                rerun=rerun,
-                **kwargs,
-            )
-            self.inputs.container_xargs = ["--rm"]
-            self.init = True
-
-    @property
-    def container_args(self):
-        """Get container-specific CLI arguments, returns a list if the task has a state"""
-        if is_lazy(self.inputs):
-            raise Exception("can't return container_args, self.inputs has LazyFields")
-        self.container_check("docker")
-        if self.state:
-            raise NotImplementedError
-
-        cargs = ["docker", "run"]
-        if self.inputs.container_xargs is not None:
-            cargs.extend(self.inputs.container_xargs)
-
-        cargs.extend(self.binds("-v"))
-        cargs.extend(["-w", str(self.output_cpath)])
-        cargs.append(self.inputs.image)
-
-        return cargs
 
 
 class SingularityTask(ContainerTask):
