@@ -12,7 +12,7 @@ def pytest_addoption(parser):
 def pytest_generate_tests(metafunc):
     if "plugin_dask_opt" in metafunc.fixturenames:
         if bool(shutil.which("sbatch")):
-            Plugins = ["slurm"]
+            Plugins = ["psij-slurm"]
         else:
             Plugins = ["psij-local"]
         try:
@@ -32,7 +32,7 @@ def pytest_generate_tests(metafunc):
         if use_dask:
             Plugins = []
         elif bool(shutil.which("sbatch")):
-            Plugins = ["slurm"]
+            Plugins = ["psij-slurm"]
         else:
             Plugins = ["psij-local"]
         metafunc.parametrize("plugin", Plugins)
