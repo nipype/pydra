@@ -3,9 +3,11 @@ import os
 
 # import stat
 import struct
+import typing as ty
 from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
+import logging
 
 # from pathlib import Path
 from typing import (
@@ -14,9 +16,10 @@ from typing import (
     NewType,
     Sequence,
     Set,
-    _SpecialForm,
 )
 import attrs.exceptions
+
+logger = logging.getLogger("pydra")
 
 try:
     from typing import Protocol
@@ -88,7 +91,8 @@ def hash_single(obj: object, cache: Cache) -> Hash:
         h = blake2b(digest_size=16, person=b"pydra-hash")
         for chunk in bytes_repr(obj, cache):
             h.update(chunk)
-        cache[objid] = Hash(h.digest())
+        hsh = cache[objid] = Hash(h.digest())
+        logger.debug("Hash of %s object is %s", obj, hsh)
     return cache[objid]
 
 
@@ -102,15 +106,14 @@ class HasBytesRepr(Protocol):
 def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     cls = obj.__class__
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
-    try:
+    dct: Dict[str, ty.Any]
+    if attrs.has(type(obj)):
+        # Drop any attributes that aren't used in comparisons by default
+        dct = attrs.asdict(obj, recurse=False, filter=lambda a, _: bool(a.eq))
+    elif hasattr(obj, "__slots__"):
+        dct = {attr: getattr(obj, attr) for attr in obj.__slots__}
+    else:
         dct = obj.__dict__
-    except AttributeError as e:
-        # Attrs creates slots classes by default, so we add this here to handle those
-        # cases
-        try:
-            dct = attrs.asdict(obj, recurse=False)  # type: ignore
-        except attrs.exceptions.NotAnAttrsClassError:
-            raise TypeError(f"Cannot hash {obj} as it is a slots class") from e
     yield from bytes_repr_mapping_contents(dct, cache)
     yield b"}"
 
@@ -224,10 +227,34 @@ def bytes_repr_dict(obj: dict, cache: Cache) -> Iterator[bytes]:
     yield b"}"
 
 
-@register_serializer(_SpecialForm)
+@register_serializer(ty._GenericAlias)
+@register_serializer(ty._SpecialForm)
 @register_serializer(type)
 def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
-    yield f"type:({klass.__module__}.{klass.__name__})".encode()
+    def type_name(tp):
+        try:
+            name = tp.__name__
+        except AttributeError:
+            name = tp._name
+        return name
+
+    yield b"type:("
+    origin = ty.get_origin(klass)
+    if origin:
+        yield f"{origin.__module__}.{type_name(origin)}[".encode()
+        for arg in ty.get_args(klass):
+            if isinstance(
+                arg, list
+            ):  # sometimes (e.g. Callable) the args of a type is a list
+                yield b"["
+                yield from (b for t in arg for b in bytes_repr_type(t, cache))
+                yield b"]"
+            else:
+                yield from bytes_repr_type(arg, cache)
+        yield b"]"
+    else:
+        yield f"{klass.__module__}.{type_name(klass)}".encode()
+    yield b")"
 
 
 @register_serializer(list)
