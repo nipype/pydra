@@ -30,7 +30,10 @@ def pytest_generate_tests(metafunc):
         try:
             if metafunc.config.getoption("psij"):
                 Plugins.append("psij-" + metafunc.config.getoption("psij"))
-                if bool(shutil.which("sbatch")) and metafunc.config.getoption("psij") == "slurm":
+                if (
+                    bool(shutil.which("sbatch"))
+                    and metafunc.config.getoption("psij") == "slurm"
+                ):
                     Plugins.remove("slurm")
         except ValueError:
             pass
@@ -51,7 +54,10 @@ def pytest_generate_tests(metafunc):
         try:
             if metafunc.config.getoption("psij"):
                 Plugins.append("psij-" + metafunc.config.getoption("psij"))
-                if bool(shutil.which("sbatch")) and metafunc.config.getoption("psij") == "slurm":
+                if (
+                    bool(shutil.which("sbatch"))
+                    and metafunc.config.getoption("psij") == "slurm"
+                ):
                     Plugins.remove("slurm")
         except ValueError:
             pass
