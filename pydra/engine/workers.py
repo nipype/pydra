@@ -958,6 +958,9 @@ class PsijWorker(Worker):
                 ],
             )
 
+        if rerun:
+            spec.arguments.append("--rerun")
+
         spec.stdout_path = os.path.join(cache_dir, "demo.stdout")
         spec.stderr_path = os.path.join(cache_dir, "demo.stderr")
         
