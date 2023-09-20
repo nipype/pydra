@@ -22,8 +22,11 @@ def pytest_generate_tests(metafunc):
         except ValueError:
             # Called as --pyargs, so --dask isn't available
             pass
-        if metafunc.config.getoption("psij"):
-            Plugins.append("psij-" + metafunc.config.getoption("psij"))
+        try:
+            if metafunc.config.getoption("psij"):
+                Plugins.append("psij-" + metafunc.config.getoption("psij"))
+        except ValueError:
+            pass
         metafunc.parametrize("plugin_dask_opt", Plugins)
 
     if "plugin" in metafunc.fixturenames:
@@ -38,8 +41,11 @@ def pytest_generate_tests(metafunc):
             Plugins = ["slurm"]
         else:
             Plugins = ["cf"]
-        if metafunc.config.getoption("psij"):
-            Plugins.append("psij-" + metafunc.config.getoption("psij"))
+        try:
+            if metafunc.config.getoption("psij"):
+                Plugins.append("psij-" + metafunc.config.getoption("psij"))
+        except ValueError:
+            pass
         metafunc.parametrize("plugin", Plugins)
 
 
