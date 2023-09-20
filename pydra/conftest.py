@@ -7,20 +7,23 @@ os.environ["NO_ET"] = "true"
 
 def pytest_addoption(parser):
     parser.addoption("--dask", action="store_true", help="run all combinations")
+    parser.addoption("--psij", action="store", help="run with psij subtype plugin", choices=["local", "slurm"])
 
 
 def pytest_generate_tests(metafunc):
     if "plugin_dask_opt" in metafunc.fixturenames:
         if bool(shutil.which("sbatch")):
-            Plugins = ["psij-slurm"]
+            Plugins = ["slurm"]
         else:
-            Plugins = ["psij-local"]
+            Plugins = ["cf"]
         try:
             if metafunc.config.getoption("dask"):
                 Plugins.append("dask")
         except ValueError:
             # Called as --pyargs, so --dask isn't available
             pass
+        if metafunc.config.getoption("psij"):
+            Plugins.append("psij-" + metafunc.config.getoption("psij"))
         metafunc.parametrize("plugin_dask_opt", Plugins)
 
     if "plugin" in metafunc.fixturenames:
@@ -32,9 +35,11 @@ def pytest_generate_tests(metafunc):
         if use_dask:
             Plugins = []
         elif bool(shutil.which("sbatch")):
-            Plugins = ["psij-slurm"]
+            Plugins = ["slurm"]
         else:
-            Plugins = ["psij-local"]
+            Plugins = ["cf"]
+        if metafunc.config.getoption("psij"):
+            Plugins.append("psij-" + metafunc.config.getoption("psij"))
         metafunc.parametrize("plugin", Plugins)
 
 
