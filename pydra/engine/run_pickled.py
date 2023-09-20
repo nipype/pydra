@@ -2,6 +2,7 @@ import pickle
 import pydra
 import sys
 
+
 def run_pickled(*file_paths, rerun=False):
     loaded_objects = []
 
@@ -17,6 +18,7 @@ def run_pickled(*file_paths, rerun=False):
         raise ValueError("Unsupported number of loaded objects")
 
     print(f"Result: {result}")
+
 
 if __name__ == "__main__":
     rerun = False  # Default value for rerun

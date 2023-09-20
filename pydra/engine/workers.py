@@ -911,7 +911,7 @@ class PsijWorker(Worker):
         spec = self.psij.JobSpec()
         spec.executable = cmd
         spec.arguments = arg
-        
+
         return spec
 
     def make_job(self, spec, attributes):
@@ -963,7 +963,7 @@ class PsijWorker(Worker):
 
         spec.stdout_path = os.path.join(cache_dir, "demo.stdout")
         spec.stderr_path = os.path.join(cache_dir, "demo.stderr")
-        
+
         job = self.make_job(spec, None)
         jex.submit(job)
         job.wait()
@@ -971,8 +971,10 @@ class PsijWorker(Worker):
         if os.path.getsize(spec.stderr_path) > 0:
             with open(spec.stderr_path, "r") as stderr_file:
                 stderr_contents = stderr_file.read()
-            raise Exception(f"stderr_path '{spec.stderr_path}' is not empty. Contents:\n{stderr_contents}")
-        
+            raise Exception(
+                f"stderr_path '{spec.stderr_path}' is not empty. Contents:\n{stderr_contents}"
+            )
+
         return
 
     def close(self):
