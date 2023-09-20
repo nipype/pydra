@@ -7,7 +7,12 @@ os.environ["NO_ET"] = "true"
 
 def pytest_addoption(parser):
     parser.addoption("--dask", action="store_true", help="run all combinations")
-    parser.addoption("--psij", action="store", help="run with psij subtype plugin", choices=["local", "slurm"])
+    parser.addoption(
+        "--psij",
+        action="store",
+        help="run with psij subtype plugin",
+        choices=["local", "slurm"],
+    )
 
 
 def pytest_generate_tests(metafunc):
