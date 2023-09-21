@@ -894,7 +894,14 @@ class DaskWorker(Worker):
 
 class PsijWorker(Worker):
     def __init__(self, subtype, **kwargs):
-        """Initialize worker."""
+        """
+        Initialize PsijWorker.
+
+        Parameters
+        ----------
+        subtype : str
+            Scheduler for PSI/J.
+        """
         try:
             import psij
         except ImportError:
@@ -909,6 +916,21 @@ class PsijWorker(Worker):
         return self.exec_psij(interface, rerun=rerun)
 
     def make_spec(self, cmd=None, arg=None):
+        """
+        Create a PSI/J job specification.
+
+        Parameters
+        ----------
+        cmd : str, optional
+            Executable command. Defaults to None.
+        arg : list, optional
+            List of arguments. Defaults to None.
+
+        Returns
+        -------
+        psij.JobSpec
+            PSI/J job specification.
+        """
         spec = self.psij.JobSpec()
         spec.executable = cmd
         spec.arguments = arg
@@ -916,11 +938,38 @@ class PsijWorker(Worker):
         return spec
 
     def make_job(self, spec, attributes):
+        """
+        Create a PSI/J job.
+
+        Parameters
+        ----------
+        spec : psij.JobSpec
+            PSI/J job specification.
+        attributes : any
+            Job attributes.
+
+        Returns
+        -------
+        psij.Job
+            PSI/J job.
+        """
         job = self.psij.Job()
         job.spec = spec
         return job
 
     async def exec_psij(self, runnable, rerun=False):
+        """
+        Run a task (coroutine wrapper).
+
+        Raises
+        ------
+        Exception
+            If stderr is not empty.
+
+        Returns
+        -------
+        None
+        """
         import pickle
         import os
 
