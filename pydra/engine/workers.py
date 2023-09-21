@@ -901,6 +901,7 @@ class PsijWorker(Worker):
             logger.critical("Please install psij.")
             raise
         logger.debug("Initialize PsijWorker")
+        self.psij = psij
         self.subtype = subtype
 
     def run_el(self, interface, rerun=False, **kwargs):
@@ -920,12 +921,10 @@ class PsijWorker(Worker):
         return job
 
     async def exec_psij(self, runnable, rerun=False):
-        import psij
         import pickle
         import os
 
-        self.psij = psij
-        jex = psij.JobExecutor.get_instance(self.subtype)
+        jex = self.psij.JobExecutor.get_instance(self.subtype)
         absolute_path = os.path.dirname(__file__)
 
         if isinstance(runnable, TaskBase):
