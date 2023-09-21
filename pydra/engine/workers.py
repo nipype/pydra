@@ -893,7 +893,7 @@ class DaskWorker(Worker):
 
 
 class PsijWorker(Worker):
-    def __init__(self, subtype=None, **kwargs):
+    def __init__(self, subtype, **kwargs):
         """Initialize worker."""
         try:
             import psij
