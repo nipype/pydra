@@ -28,13 +28,13 @@ if sys.platform.startswith("win"):
 
 @pytest.mark.flaky(reruns=2)  # when dask
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
-def test_shell_cmd_1(plugin_dask_opt, results_function, tmp_path):
+def test_shell_cmd_1(plugin, results_function, tmp_path):
     """simple command, no arguments"""
     cmd = ["pwd"]
     shelly = ShellCommandTask(name="shelly", executable=cmd, cache_dir=tmp_path)
     assert shelly.cmdline == " ".join(cmd)
 
-    res = results_function(shelly, plugin=plugin_dask_opt)
+    res = results_function(shelly, plugin=plugin)
     assert Path(res.output.stdout.rstrip()) == shelly.output_dir
     assert res.output.return_code == 0
     assert res.output.stderr == ""
@@ -108,7 +108,7 @@ def test_shell_cmd_2b(plugin, results_function, tmp_path):
 
 
 @pytest.mark.flaky(reruns=2)
-def test_shell_cmd_3(plugin_dask_opt, tmp_path):
+def test_shell_cmd_3(plugin, tmp_path):
     """commands without arguments
     splitter = executable
     """
@@ -119,7 +119,7 @@ def test_shell_cmd_3(plugin_dask_opt, tmp_path):
     shelly.cache_dir = tmp_path
 
     # assert shelly.cmdline == ["pwd", "whoami"]
-    res = shelly(plugin=plugin_dask_opt)
+    res = shelly(plugin=plugin)
     assert Path(res[0].output.stdout.rstrip()) == shelly.output_dir[0]
 
     if "USER" in os.environ:
@@ -2175,7 +2175,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
 
 
 @pytest.mark.flaky(reruns=2)  # when dask
-def test_wf_shell_cmd_2(plugin_dask_opt, tmp_path):
+def test_wf_shell_cmd_2(plugin, tmp_path):
     """a workflow with input with defined output_file_template (str)
     that requires wf.lzin
     """
@@ -2213,7 +2213,7 @@ def test_wf_shell_cmd_2(plugin_dask_opt, tmp_path):
 
     wf.set_output([("out_f", wf.shelly.lzout.out1), ("out", wf.shelly.lzout.stdout)])
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()
