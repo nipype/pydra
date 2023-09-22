@@ -893,6 +893,8 @@ class DaskWorker(Worker):
 
 
 class PsijWorker(Worker):
+    """A worker to execute tasks using PSI/J."""
+
     def __init__(self, subtype, **kwargs):
         """
         Initialize PsijWorker.
