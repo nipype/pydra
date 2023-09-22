@@ -909,6 +909,12 @@ class PsijWorker(Worker):
             raise
         logger.debug("Initialize PsijWorker")
         self.psij = psij
+        
+        # Check if the provided subtype is valid
+        valid_subtypes = ["local", "slurm"]
+        if subtype not in valid_subtypes:
+            raise ValueError(f"Invalid 'subtype' provided. Available options: {', '.join(valid_subtypes)}")
+        
         self.subtype = subtype
 
     def run_el(self, interface, rerun=False, **kwargs):
