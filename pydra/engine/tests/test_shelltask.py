@@ -26,7 +26,6 @@ if sys.platform.startswith("win"):
     pytest.skip("SLURM not available in windows", allow_module_level=True)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_1(plugin, results_function, tmp_path):
     """simple command, no arguments"""
@@ -2174,7 +2173,6 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
 # customised input_spec in Workflow
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_shell_cmd_2(plugin, tmp_path):
     """a workflow with input with defined output_file_template (str)
     that requires wf.lzin
