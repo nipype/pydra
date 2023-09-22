@@ -229,7 +229,7 @@ def test_slurm_wf_state(tmpdir):
 
 
 @need_slurm
-@pytest.mark.flaky(reruns=3)
+# remove flaky
 def test_slurm_max_jobs(tmpdir):
     wf = Workflow("new_wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wf.inputs.x = 5
