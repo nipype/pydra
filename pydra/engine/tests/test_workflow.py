@@ -378,7 +378,6 @@ def test_wf_2d_outpasdict(plugin, tmpdir):
     assert wf.output_dir.exists()
 
 
-@pytest.mark.flaky(reruns=3)  # when dask
 def test_wf_3(plugin, tmpdir):
     """testing None value for an input"""
     wf = Workflow(name="wf_3", input_spec=["x", "y"])
@@ -1200,7 +1199,6 @@ def test_wf_3sernd_ndst_1a(plugin, tmpdir):
 # workflows with structures A -> C, B -> C
 
 
-@pytest.mark.flaky(reruns=3)  # when dask
 def test_wf_3nd_st_1(plugin, tmpdir):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter on the workflow level
@@ -1228,7 +1226,6 @@ def test_wf_3nd_st_1(plugin, tmpdir):
         assert odir.exists()
 
 
-@pytest.mark.flaky(reruns=3)  # when dask
 def test_wf_3nd_ndst_1(plugin, tmpdir):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter on the tasks levels
