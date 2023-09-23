@@ -2,6 +2,7 @@ import pickle
 import sys
 from pydra.engine.helpers import load_and_run
 
+
 def run_pickled(*file_paths, rerun=False):
     loaded_objects = []
 
