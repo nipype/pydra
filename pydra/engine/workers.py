@@ -979,23 +979,23 @@ class PsijWorker(Worker):
         None
         """
         import pickle
-        import os
+        from pathlib import Path
 
         jex = self.psij.JobExecutor.get_instance(self.subtype)
-        absolute_path = os.path.dirname(__file__)
+        absolute_path = Path(__file__).parent
 
         if isinstance(runnable, TaskBase):
             cache_dir = runnable.cache_dir
-            file_path = os.path.join(cache_dir, "my_function.pkl")
+            file_path = cache_dir / "my_function.pkl"
             with open(file_path, "wb") as file:
                 pickle.dump(runnable._run, file)
-            func_path = os.path.join(absolute_path, "run_pickled.py")
+            func_path = absolute_path / "run_pickled.py"
             spec = self.make_spec("python", [func_path, file_path])
         else:  # it could be tuple that includes pickle files with tasks and inputs
             cache_dir = runnable[-1].cache_dir
-            file_path_1 = os.path.join(cache_dir, "my_function.pkl")
-            file_path_2 = os.path.join(cache_dir, "taskmain.pkl")
-            file_path_3 = os.path.join(cache_dir, "ind.pkl")
+            file_path_1 = cache_dir / "my_function.pkl"
+            file_path_2 = cache_dir / "taskmain.pkl"
+            file_path_3 = cache_dir / "ind.pkl"
             ind, task_main_pkl, task_orig = runnable
             with open(file_path_1, "wb") as file:
                 pickle.dump(load_and_run, file)
@@ -1003,7 +1003,7 @@ class PsijWorker(Worker):
                 pickle.dump(task_main_pkl, file)
             with open(file_path_3, "wb") as file:
                 pickle.dump(ind, file)
-            func_path = os.path.join(absolute_path, "run_pickled.py")
+            func_path = absolute_path / "run_pickled.py"
             spec = self.make_spec(
                 "python",
                 [
@@ -1017,14 +1017,14 @@ class PsijWorker(Worker):
         if rerun:
             spec.arguments.append("--rerun")
 
-        spec.stdout_path = os.path.join(cache_dir, "demo.stdout")
-        spec.stderr_path = os.path.join(cache_dir, "demo.stderr")
+        spec.stdout_path = cache_dir / "demo.stdout"
+        spec.stderr_path = cache_dir / "demo.stderr"
 
         job = self.make_job(spec, None)
         jex.submit(job)
         job.wait()
 
-        if os.path.getsize(spec.stderr_path) > 0:
+        if spec.stderr_path.stat().st_size > 0:
             with open(spec.stderr_path, "r") as stderr_file:
                 stderr_contents = stderr_file.read()
             raise Exception(
