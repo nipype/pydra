@@ -1,6 +1,6 @@
 import pickle
 import sys
-
+from pydra.engine.helpers import load_and_run
 
 def run_pickled(*file_paths, rerun=False):
     loaded_objects = []
@@ -11,8 +11,8 @@ def run_pickled(*file_paths, rerun=False):
 
     if len(loaded_objects) == 1:
         result = loaded_objects[0](rerun=rerun)
-    elif len(loaded_objects) == 3:
-        result = loaded_objects[0](loaded_objects[1], loaded_objects[2], rerun=rerun)
+    elif len(loaded_objects) == 2:
+        result = load_and_run(loaded_objects[0], loaded_objects[1], rerun=rerun)
     else:
         raise ValueError("Unsupported number of loaded objects")
 

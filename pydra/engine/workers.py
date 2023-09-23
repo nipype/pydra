@@ -995,15 +995,12 @@ class PsijWorker(Worker):
             spec = self.make_spec("python", [func_path, file_path])
         else:  # it could be tuple that includes pickle files with tasks and inputs
             cache_dir = runnable[-1].cache_dir
-            file_path_1 = cache_dir / "runnable_function.pkl"
-            file_path_2 = cache_dir / "taskmain.pkl"
-            file_path_3 = cache_dir / "ind.pkl"
+            file_path_1 = cache_dir / "taskmain.pkl"
+            file_path_2 = cache_dir / "ind.pkl"
             ind, task_main_pkl, task_orig = runnable
             with open(file_path_1, "wb") as file:
-                pickle.dump(load_and_run, file)
-            with open(file_path_2, "wb") as file:
                 pickle.dump(task_main_pkl, file)
-            with open(file_path_3, "wb") as file:
+            with open(file_path_2, "wb") as file:
                 pickle.dump(ind, file)
             func_path = absolute_path / "run_pickled.py"
             spec = self.make_spec(
@@ -1012,7 +1009,6 @@ class PsijWorker(Worker):
                     func_path,
                     file_path_1,
                     file_path_2,
-                    file_path_3,
                 ],
             )
 
