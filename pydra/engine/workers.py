@@ -988,14 +988,14 @@ class PsijWorker(Worker):
 
         if isinstance(runnable, TaskBase):
             cache_dir = runnable.cache_dir
-            file_path = cache_dir / "my_function.pkl"
+            file_path = cache_dir / "runnable_function.pkl"
             with open(file_path, "wb") as file:
                 pickle.dump(runnable._run, file)
             func_path = absolute_path / "run_pickled.py"
             spec = self.make_spec("python", [func_path, file_path])
         else:  # it could be tuple that includes pickle files with tasks and inputs
             cache_dir = runnable[-1].cache_dir
-            file_path_1 = cache_dir / "my_function.pkl"
+            file_path_1 = cache_dir / "runnable_function.pkl"
             file_path_2 = cache_dir / "taskmain.pkl"
             file_path_3 = cache_dir / "ind.pkl"
             ind, task_main_pkl, task_orig = runnable
