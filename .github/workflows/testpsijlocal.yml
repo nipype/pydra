@@ -1,0 +1,45 @@
+name: PSI/J-Local
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.11']
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+
+      - name: Setup Python version ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies for PSI/J
+        run: |
+          pip install -e ".[test, psij]"
+
+      - name: Run tests for PSI/J
+        run: |
+          pytest --color=yes -vs --psij=local -n auto pydra/engine --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml
+
+      - name: Upload to codecov
+        run: codecov -f cov.xml -F unittests -e GITHUB_WORKFLOW

@@ -48,6 +48,9 @@ classifiers = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
+psij = [
+    "psij-python",
+]
 dask = [
     "dask",
     "distributed",

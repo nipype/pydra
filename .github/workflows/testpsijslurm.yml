@@ -1,0 +1,54 @@
+name: PSI/J-SLURM
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        python-version: [3.11.5]
+      fail-fast: false
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_IMAGE: adi611/docker-centos7-slurm:23.02.1
+
+    steps:
+    - name: Disable etelemetry
+      run: echo "NO_ET=TRUE" >> $GITHUB_ENV
+    - uses: actions/checkout@v4
+    - name: Pull docker image
+      run: |
+        docker pull $DOCKER_IMAGE
+        # Have image running in the background
+        docker run `bash <(curl -s https://codecov.io/env)` -itd -h slurmctl --cap-add sys_admin -d --name slurm -v `pwd`:/pydra -e NO_ET=$NO_ET $DOCKER_IMAGE
+    - name: Display previous jobs with sacct
+      run: |
+        echo "Allowing ports/daemons time to start" && sleep 10
+        docker exec slurm bash -c "sacctmgr -i add account none,test Cluster=linux Description='none' Organization='none'"
+        docker exec slurm bash -c "sacct && sinfo && squeue" 2&> /dev/null
+        if [ $? -ne 0 ]; then
+            echo "Slurm docker image error"
+            exit 1
+        fi
+    - name: Setup Python
+      run: |
+        docker exec slurm bash -c "echo $NO_ET"
+        docker exec slurm bash -c "ls -la && echo list top level dir"
+        docker exec slurm bash -c "ls -la /pydra && echo list pydra dir"
+        if [[ "${{ matrix.python-version }}" == "3.11.5" ]]; then
+            docker exec slurm bash -c "CONFIGURE_OPTS=\"-with-openssl=/opt/openssl\" pyenv install -v 3.11.5"
+        fi
+        docker exec slurm bash -c "pyenv global ${{ matrix.python-version }}"
+        docker exec slurm bash -c "pip install --upgrade pip && pip install -e /pydra[test,psij] && python -c 'import pydra; print(pydra.__version__)'"
+    - name: Run pytest
+      run: |
+        docker exec slurm bash -c "pytest --color=yes -vs -n auto --psij=slurm --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/ -k 'not test_audit_prov and not test_audit_prov_messdir_1 and not test_audit_prov_messdir_2 and not test_audit_prov_wf and not test_audit_all'"
+    - name: Upload to codecov
+      run: |
+        docker exec slurm bash -c "pip install urllib3==1.26.6"
+        docker exec slurm bash -c "codecov --root /pydra -f /pydra/cov.xml -F unittests"
+        docker rm -f slurm

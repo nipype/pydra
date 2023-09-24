@@ -892,10 +892,158 @@ class DaskWorker(Worker):
         pass
 
 
+class PsijWorker(Worker):
+    """A worker to execute tasks using PSI/J."""
+
+    def __init__(self, subtype, **kwargs):
+        """
+        Initialize PsijWorker.
+
+        Parameters
+        ----------
+        subtype : str
+            Scheduler for PSI/J.
+        """
+        try:
+            import psij
+        except ImportError:
+            logger.critical("Please install psij.")
+            raise
+        logger.debug("Initialize PsijWorker")
+        self.psij = psij
+
+        # Check if the provided subtype is valid
+        valid_subtypes = ["local", "slurm"]
+        if subtype not in valid_subtypes:
+            raise ValueError(
+                f"Invalid 'subtype' provided. Available options: {', '.join(valid_subtypes)}"
+            )
+
+        self.subtype = subtype
+
+    def run_el(self, interface, rerun=False, **kwargs):
+        """Run a task."""
+        return self.exec_psij(interface, rerun=rerun)
+
+    def make_spec(self, cmd=None, arg=None):
+        """
+        Create a PSI/J job specification.
+
+        Parameters
+        ----------
+        cmd : str, optional
+            Executable command. Defaults to None.
+        arg : list, optional
+            List of arguments. Defaults to None.
+
+        Returns
+        -------
+        psij.JobSpec
+            PSI/J job specification.
+        """
+        spec = self.psij.JobSpec()
+        spec.executable = cmd
+        spec.arguments = arg
+
+        return spec
+
+    def make_job(self, spec, attributes):
+        """
+        Create a PSI/J job.
+
+        Parameters
+        ----------
+        spec : psij.JobSpec
+            PSI/J job specification.
+        attributes : any
+            Job attributes.
+
+        Returns
+        -------
+        psij.Job
+            PSI/J job.
+        """
+        job = self.psij.Job()
+        job.spec = spec
+        return job
+
+    async def exec_psij(self, runnable, rerun=False):
+        """
+        Run a task (coroutine wrapper).
+
+        Raises
+        ------
+        Exception
+            If stderr is not empty.
+
+        Returns
+        -------
+        None
+        """
+        import pickle
+        from pathlib import Path
+
+        jex = self.psij.JobExecutor.get_instance(self.subtype)
+        absolute_path = Path(__file__).parent
+
+        if isinstance(runnable, TaskBase):
+            cache_dir = runnable.cache_dir
+            file_path = cache_dir / "runnable_function.pkl"
+            with open(file_path, "wb") as file:
+                pickle.dump(runnable._run, file)
+            func_path = absolute_path / "run_pickled.py"
+            spec = self.make_spec("python", [func_path, file_path])
+        else:  # it could be tuple that includes pickle files with tasks and inputs
+            cache_dir = runnable[-1].cache_dir
+            file_path_1 = cache_dir / "taskmain.pkl"
+            file_path_2 = cache_dir / "ind.pkl"
+            ind, task_main_pkl, task_orig = runnable
+            with open(file_path_1, "wb") as file:
+                pickle.dump(task_main_pkl, file)
+            with open(file_path_2, "wb") as file:
+                pickle.dump(ind, file)
+            func_path = absolute_path / "run_pickled.py"
+            spec = self.make_spec(
+                "python",
+                [
+                    func_path,
+                    file_path_1,
+                    file_path_2,
+                ],
+            )
+
+        if rerun:
+            spec.arguments.append("--rerun")
+
+        spec.stdout_path = cache_dir / "demo.stdout"
+        spec.stderr_path = cache_dir / "demo.stderr"
+
+        job = self.make_job(spec, None)
+        jex.submit(job)
+        job.wait()
+
+        if spec.stderr_path.stat().st_size > 0:
+            with open(spec.stderr_path, "r") as stderr_file:
+                stderr_contents = stderr_file.read()
+            raise Exception(
+                f"stderr_path '{spec.stderr_path}' is not empty. Contents:\n{stderr_contents}"
+            )
+
+        return
+
+    def close(self):
+        """Finalize the internal pool of tasks."""
+        pass
+
+
 WORKERS = {
     "serial": SerialWorker,
     "cf": ConcurrentFuturesWorker,
     "slurm": SlurmWorker,
     "dask": DaskWorker,
     "sge": SGEWorker,
+    **{
+        "psij-" + subtype: lambda subtype=subtype: PsijWorker(subtype=subtype)
+        for subtype in ["local", "slurm"]
+    },
 }
