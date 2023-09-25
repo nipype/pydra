@@ -379,7 +379,7 @@ def test_wf_2d_outpasdict(plugin, tmpdir):
 
 
 @pytest.mark.flaky(reruns=3)  # when dask
-def test_wf_3(plugin_dask_opt, tmpdir):
+def test_wf_3(plugin, tmpdir):
     """testing None value for an input"""
     wf = Workflow(name="wf_3", input_spec=["x", "y"])
     wf.add(fun_addvar_none(name="addvar", a=wf.lzin.x, b=wf.lzin.y))
@@ -389,7 +389,7 @@ def test_wf_3(plugin_dask_opt, tmpdir):
     wf.inputs.y = None
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     assert wf.output_dir.exists()
@@ -1201,7 +1201,7 @@ def test_wf_3sernd_ndst_1a(plugin, tmpdir):
 
 
 @pytest.mark.flaky(reruns=3)  # when dask
-def test_wf_3nd_st_1(plugin_dask_opt, tmpdir):
+def test_wf_3nd_st_1(plugin, tmpdir):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter on the workflow level
     """
@@ -1214,7 +1214,7 @@ def test_wf_3nd_st_1(plugin_dask_opt, tmpdir):
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     results = wf.result()
@@ -1229,7 +1229,7 @@ def test_wf_3nd_st_1(plugin_dask_opt, tmpdir):
 
 
 @pytest.mark.flaky(reruns=3)  # when dask
-def test_wf_3nd_ndst_1(plugin_dask_opt, tmpdir):
+def test_wf_3nd_ndst_1(plugin, tmpdir):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter on the tasks levels
     """
@@ -1242,7 +1242,7 @@ def test_wf_3nd_ndst_1(plugin_dask_opt, tmpdir):
     wf.set_output([("out", wf.mult.lzout.out)])
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     results = wf.result()

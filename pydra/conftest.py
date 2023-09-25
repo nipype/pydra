@@ -16,7 +16,7 @@ def pytest_addoption(parser):
 
 
 def pytest_generate_tests(metafunc):
-    if "plugin_dask_opt" in metafunc.fixturenames:
+    if "plugin" in metafunc.fixturenames:
         if bool(shutil.which("sbatch")):
             Plugins = ["slurm"]
         else:
@@ -27,30 +27,6 @@ def pytest_generate_tests(metafunc):
         except ValueError:
             # Called as --pyargs, so --dask isn't available
             pass
-        try:
-            if metafunc.config.getoption("psij"):
-                Plugins.append("psij-" + metafunc.config.getoption("psij"))
-                if (
-                    bool(shutil.which("sbatch"))
-                    and metafunc.config.getoption("psij") == "slurm"
-                ):
-                    Plugins.remove("slurm")
-        except ValueError:
-            pass
-        metafunc.parametrize("plugin_dask_opt", Plugins)
-
-    if "plugin" in metafunc.fixturenames:
-        use_dask = False
-        try:
-            use_dask = metafunc.config.getoption("dask")
-        except ValueError:
-            pass
-        if use_dask:
-            Plugins = []
-        elif bool(shutil.which("sbatch")):
-            Plugins = ["slurm"]
-        else:
-            Plugins = ["cf"]
         try:
             if metafunc.config.getoption("psij"):
                 Plugins.append("psij-" + metafunc.config.getoption("psij"))
