@@ -4089,7 +4089,7 @@ def test_wf_lzoutall_st_2a(plugin, tmpdir):
     wf.plugin = plugin
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin="cf") as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     assert wf.output_dir.exists()
