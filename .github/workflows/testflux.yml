@@ -16,7 +16,7 @@ jobs:
 
     - name: Start Docker container
       run: |
-        docker run -d --name flux -v `pwd`:/pydra fluxrm/flux-sched:focal-v0.28.0 flux start
+        docker run -itd --name flux -v `pwd`:/pydra fluxrm/flux-sched:focal-v0.28.0 flux start
         sleep 5 # Give the container some time to start
 
     - name: Run necessary changes in container
