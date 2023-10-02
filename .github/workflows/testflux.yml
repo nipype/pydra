@@ -9,38 +9,35 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        container: ['fluxrm/flux-sched:focal-v0.28.0']
 
+    container:
+      image: ${{ matrix.container }}
+      options: "--platform=linux/amd64 --user root -it --init"
+
+    name: ${{ matrix.container }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Make Space
+        run: |
+          rm -rf /usr/share/dotnet
+          rm -rf /opt/ghc
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Start Docker container
-      run: |
-        docker run -itd --name flux -v `pwd`:/pydra fluxrm/flux-sched:focal-v0.28.0 flux start
-        sleep 5 # Give the container some time to start
-
-    - name: Run necessary changes in container
-      run: |
-        # Install Python 3 (if not already installed)
-        docker exec flux apt-get update
-        docker exec flux apt-get install -y python3
-
-        # Add Python to PATH
-        docker exec flux echo 'export PATH="/home/fluxuser/.local/bin:$PATH"' >> ~/.bashrc
-
-        # Create an alias for 'python' (pointing to 'python3')
-        docker exec flux echo 'alias python=python3' >> ~/.bashrc
-
-        # Source the updated .bashrc to apply changes
-        docker exec flux source ~/.bashrc
-
-    - name: Run pytest
-      run: |
-        docker exec flux bash -c "pytest --psij=flux --color=yes -vs -n auto --psij=slurm --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/"
-  
-    - name: Upload to codecov
-      run: |
-        docker exec flux bash -c "codecov --root /pydra -f /pydra/cov.xml -F unittests"
-  
-    - name: Stop and remove Docker container
-      run: docker stop flux && docker rm flux
+      - name: Install
+        run: |
+          apt-get update && apt-get install -y python3-venv
+          export PATH=$PWD/bin:$PATH
+          ln -s /usr/bin/python3 /usr/bin/python
+          python3 -m pip install --upgrade pip && pip install -e ".[test]" && python -c 'import pydra; print(pydra.__version__)'
+          pip install -e "git+https://github.com/adi611/psij-python.git@adi611-patch-2#egg=psij-python"
+      - name: Start Flux and Run Test
+        run: |
+          export PATH=$PWD/bin:$PATH
+          flux start python -V
+          flux start pytest --psij=flux --color=yes -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra/
