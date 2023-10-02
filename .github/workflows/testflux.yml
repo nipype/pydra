@@ -34,7 +34,7 @@ jobs:
           apt-get update && apt-get install -y python3-venv
           export PATH=$PWD/bin:$PATH
           ln -s /usr/bin/python3 /usr/bin/python
-          python3 -m pip install --upgrade pip && pip install -e ".[test]" && python -c 'import pydra; print(pydra.__version__)'
+          python -m pip install --upgrade pip && pip install -e ".[test]" && python -c 'import pydra; print(pydra.__version__)'
           pip install -e "git+https://github.com/adi611/psij-python.git@adi611-patch-2#egg=psij-python"
       - name: Start Flux and Run Test
         run: |

@@ -1016,18 +1016,18 @@ class PsijWorker(Worker):
             spec.arguments.append("--rerun")
 
         spec.stdout_path = cache_dir / "demo.stdout"
-        # spec.stderr_path = cache_dir / "demo.stderr"
+        spec.stderr_path = cache_dir / "demo.stderr"
 
         job = self.make_job(spec, None)
         jex.submit(job)
         job.wait()
 
-        # if spec.stderr_path.stat().st_size > 0:
-        #     with open(spec.stderr_path, "r") as stderr_file:
-        #         stderr_contents = stderr_file.read()
-        #     raise Exception(
-        #         f"stderr_path '{spec.stderr_path}' is not empty. Contents:\n{stderr_contents}"
-        #     )
+        if spec.stderr_path.stat().st_size > 0:
+            with open(spec.stderr_path, "r") as stderr_file:
+                stderr_contents = stderr_file.read()
+            raise Exception(
+                f"stderr_path '{spec.stderr_path}' is not empty. Contents:\n{stderr_contents}"
+            )
 
         return
 
