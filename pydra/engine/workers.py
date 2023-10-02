@@ -913,7 +913,7 @@ class PsijWorker(Worker):
         self.psij = psij
 
         # Check if the provided subtype is valid
-        valid_subtypes = ["local", "slurm"]
+        valid_subtypes = ["local", "slurm", "flux"]
         if subtype not in valid_subtypes:
             raise ValueError(
                 f"Invalid 'subtype' provided. Available options: {', '.join(valid_subtypes)}"
@@ -992,7 +992,7 @@ class PsijWorker(Worker):
             with open(file_path, "wb") as file:
                 pickle.dump(runnable._run, file)
             func_path = absolute_path / "run_pickled.py"
-            spec = self.make_spec("python", [func_path, file_path])
+            spec = self.make_spec("python", [str(func_path), str(file_path)])
         else:  # it could be tuple that includes pickle files with tasks and inputs
             cache_dir = runnable[-1].cache_dir
             file_path_1 = cache_dir / "taskmain.pkl"
@@ -1006,9 +1006,9 @@ class PsijWorker(Worker):
             spec = self.make_spec(
                 "python",
                 [
-                    func_path,
-                    file_path_1,
-                    file_path_2,
+                    str(func_path),
+                    str(file_path_1),
+                    str(file_path_2),
                 ],
             )
 
@@ -1016,18 +1016,18 @@ class PsijWorker(Worker):
             spec.arguments.append("--rerun")
 
         spec.stdout_path = cache_dir / "demo.stdout"
-        spec.stderr_path = cache_dir / "demo.stderr"
+        # spec.stderr_path = cache_dir / "demo.stderr"
 
         job = self.make_job(spec, None)
         jex.submit(job)
         job.wait()
 
-        if spec.stderr_path.stat().st_size > 0:
-            with open(spec.stderr_path, "r") as stderr_file:
-                stderr_contents = stderr_file.read()
-            raise Exception(
-                f"stderr_path '{spec.stderr_path}' is not empty. Contents:\n{stderr_contents}"
-            )
+        # if spec.stderr_path.stat().st_size > 0:
+        #     with open(spec.stderr_path, "r") as stderr_file:
+        #         stderr_contents = stderr_file.read()
+        #     raise Exception(
+        #         f"stderr_path '{spec.stderr_path}' is not empty. Contents:\n{stderr_contents}"
+        #     )
 
         return
 
@@ -1044,6 +1044,6 @@ WORKERS = {
     "sge": SGEWorker,
     **{
         "psij-" + subtype: lambda subtype=subtype: PsijWorker(subtype=subtype)
-        for subtype in ["local", "slurm"]
+        for subtype in ["local", "slurm", "flux"]
     },
 }
