@@ -11,16 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: read
-    strategy:
-      fail-fast: false
-      matrix:
-        container: ['fluxrm/flux-sched:focal-v0.28.0']
 
     container:
-      image: ${{ matrix.container }}
+      image: fluxrm/flux-sched:focal-v0.28.0
       options: "--platform=linux/amd64 --user root -it --init"
 
-    name: ${{ matrix.container }}
     steps:
       - name: Make Space
         run: |
@@ -36,7 +31,7 @@ jobs:
           ln -s /usr/bin/python3 /usr/bin/python
           python -m pip install --upgrade pip && pip install -e ".[test]" && python -c 'import pydra; print(pydra.__version__)'
           pip install -e "git+https://github.com/adi611/psij-python.git@adi611-patch-2#egg=psij-python"
-      - name: Start Flux and Run Test
+      - name: Run pytest
         run: |
           export PATH=$PWD/bin:$PATH
           flux start python -V
