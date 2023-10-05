@@ -693,13 +693,6 @@ class ContainerSpec(ShellSpec):
     )
 
 
-@attr.s(auto_attribs=True, kw_only=True)
-class SingularitySpec(ContainerSpec):
-    """Particularize container specifications to Singularity."""
-
-    container: str = attr.ib("singularity", metadata={"help_string": "container type"})
-
-
 @attr.s
 class LazyInterface:
     _task: "core.TaskBase" = attr.ib()

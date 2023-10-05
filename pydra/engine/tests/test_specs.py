@@ -12,7 +12,6 @@ from ..specs import (
     Result,
     ShellSpec,
     ContainerSpec,
-    SingularitySpec,
     LazyIn,
     LazyOut,
     LazyField,
@@ -63,14 +62,6 @@ def test_container():
     )  # (execute, args, image, cont)
     assert all([hasattr(spec, attr) for attr in container_attrs])
     assert hasattr(spec, "executable")
-
-
-def test_singularity():
-    with pytest.raises(TypeError):
-        spec = SingularitySpec()
-    spec = SingularitySpec(executable="ls", image="busybox")
-    assert all(hasattr(spec, attr) for attr in container_attrs)
-    assert getattr(spec, "container") == "singularity"
 
 
 class NodeTesting:

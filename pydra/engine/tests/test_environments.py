@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ..environments import Native, Docker
+from ..environments import Native, Docker, Singularity
 from ..task import ShellCommandTask
 from ..submitter import Submitter
 from ..specs import (
@@ -8,7 +8,7 @@ from ..specs import (
     SpecInfo,
     File,
 )
-from .utils import no_win, need_docker
+from .utils import no_win, need_docker, need_singularity
 
 import attr
 
@@ -107,6 +107,72 @@ def test_docker_1_subm(tmp_path, plugin):
     with Submitter(plugin=plugin) as sub:
         shelly_call(submitter=sub, environment=docker)
     assert env_res == shelly_call.result().output.__dict__
+
+
+@no_win
+@need_singularity
+def test_singularity_1(tmp_path):
+    """singularity env: simple command, no arguments"""
+    newcache = lambda x: makedir(tmp_path, x)
+
+    cmd = ["whoami"]
+    sing = Singularity(image="docker://alpine")
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, cache_dir=newcache("shelly")
+    )
+    assert shelly.cmdline == " ".join(cmd)
+    env_res = sing.execute(shelly)
+
+    shelly_env = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        cache_dir=newcache("shelly_env"),
+        environment=sing,
+    )
+    shelly_env()
+    assert env_res == shelly_env.output_ == shelly_env.result().output.__dict__
+
+    shelly_call = ShellCommandTask(
+        name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
+    )
+    shelly_call(environment=sing)
+    assert env_res == shelly_call.output_ == shelly_call.result().output.__dict__
+
+
+@no_win
+@need_singularity
+def test_singularity_1_subm(tmp_path, plugin):
+    """docker env with submitter: simple command, no arguments"""
+    newcache = lambda x: makedir(tmp_path, x)
+
+    cmd = ["whoami"]
+    sing = Singularity(image="docker://alpine")
+    shelly = ShellCommandTask(
+        name="shelly", executable=cmd, cache_dir=newcache("shelly")
+    )
+    assert shelly.cmdline == " ".join(cmd)
+    env_res = sing.execute(shelly)
+
+    shelly_env = ShellCommandTask(
+        name="shelly",
+        executable=cmd,
+        cache_dir=newcache("shelly_env"),
+        environment=sing,
+    )
+    with Submitter(plugin=plugin) as sub:
+        shelly_env(submitter=sub)
+    assert env_res == shelly_env.result().output.__dict__
+
+    shelly_call = ShellCommandTask(
+        name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
+    )
+    with Submitter(plugin=plugin) as sub:
+        shelly_call(submitter=sub, environment=sing)
+    for key in [
+        "stdout",
+        "return_code",
+    ]:  # singularity gives info about cashed image in stderr
+        assert env_res[key] == shelly_call.result().output.__dict__[key]
 
 
 def create_shelly_inputfile(tempdir, filename, name, executable):

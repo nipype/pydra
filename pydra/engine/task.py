@@ -58,7 +58,6 @@ from .specs import (
     ShellSpec,
     ShellOutSpec,
     ContainerSpec,
-    SingularitySpec,
     attr_fields,
 )
 from .helpers import (
@@ -705,86 +704,6 @@ class ContainerTask(ShellCommandTask):
                 )
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any - FileSet.CopyMode.symlink
-
-
-class SingularityTask(ContainerTask):
-    """Extend shell command task for containerized execution with Singularity."""
-
-    init = False
-
-    def __init__(
-        self,
-        name=None,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        cache_dir=None,
-        input_spec: ty.Optional[SpecInfo] = None,
-        messenger_args=None,
-        messengers=None,
-        output_spec: ty.Optional[SpecInfo] = None,
-        rerun=False,
-        strip=False,
-        **kwargs,
-    ):
-        """
-        Initialize this task.
-
-        Parameters
-        ----------
-        name : :obj:`str`
-            Name of this task.
-        audit_flags : :obj:`pydra.utils.messenger.AuditFlag`
-            Auditing configuration
-        cache_dir : :obj:`os.pathlike`
-            Cache directory
-        input_spec : :obj:`pydra.engine.specs.SpecInfo`
-            Specification of inputs.
-        messenger_args :
-            TODO
-        messengers :
-            TODO
-        output_spec : :obj:`pydra.engine.specs.BaseSpec`
-            Specification of inputs.
-        strip : :obj:`bool`
-            TODO
-
-        """
-        if not self.init:
-            if input_spec is None:
-                input_spec = SpecInfo(
-                    name="Inputs", fields=[], bases=(SingularitySpec,)
-                )
-            super().__init__(
-                name=name,
-                input_spec=input_spec,
-                output_spec=output_spec,
-                audit_flags=audit_flags,
-                messengers=messengers,
-                messenger_args=messenger_args,
-                cache_dir=cache_dir,
-                strip=strip,
-                rerun=rerun,
-                **kwargs,
-            )
-            self.init = True
-
-    @property
-    def container_args(self):
-        """Get container-specific CLI arguments."""
-        if is_lazy(self.inputs):
-            raise Exception("can't return container_args, self.inputs has LazyFields")
-        self.container_check("singularity")
-        if self.state:
-            raise NotImplementedError
-
-        cargs = ["singularity", "exec"]
-
-        if self.inputs.container_xargs is not None:
-            cargs.extend(self.inputs.container_xargs)
-
-        cargs.extend(self.binds("-B"))
-        cargs.extend(["--pwd", str(self.output_cpath)])
-        cargs.append(self.inputs.image)
-        return cargs
 
 
 def split_cmd(cmd: str):
