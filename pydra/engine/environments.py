@@ -32,9 +32,7 @@ class Native(Environment):
 
 
 class Docker(Environment):
-    def __init__(
-        self, image, tag="latest", binds=None, output_cpath="/output_pydra", xargs=None
-    ):
+    def __init__(self, image, tag="latest", output_cpath="/output_pydra", xargs=None):
         self.image = image
         self.tag = tag
         self.xargs = xargs
@@ -70,6 +68,47 @@ class Docker(Environment):
 
         values = execute(
             docker_args + [docker_img] + task.command_args(root="/mnt/pydra"),
+            strip=task.strip,
+        )
+        output = dict(zip(keys, values))
+        if output["return_code"]:
+            if output["stderr"]:
+                raise RuntimeError(output["stderr"])
+            else:
+                raise RuntimeError(output["stdout"])
+        # Any outputs that have been created with a re-rooted path need
+        # to be de-rooted
+        # task.finalize_outputs("/mnt/pydra") TODO: probably don't need it
+        return output
+
+
+class Singularity(Docker):
+    def execute(self, task, root="/mnt/pydra"):
+        # XXX Need to mount all input locations
+        singularity_img = f"{self.image}:{self.tag}"
+        # TODO ?
+        # Skips over any inputs in task.cache_dir
+        # Needs to include `out_file`s when not relative to working dir
+        # Possibly a `TargetFile` type to distinguish between `File` and `str`?
+        mounts = task.get_bindings(root=root)
+
+        # todo adding xargsy etc
+        singularity_args = [
+            "singularity",
+            "exec",
+            "-B",
+            self.bind(task.cache_dir, "rw"),
+        ]
+        singularity_args.extend(
+            " ".join(
+                [f"-B {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
+            ).split()
+        )
+        singularity_args.extend(["--pwd", f"{root}{task.output_dir}"])
+        keys = ["return_code", "stdout", "stderr"]
+
+        values = execute(
+            singularity_args + [singularity_img] + task.command_args(root="/mnt/pydra"),
             strip=task.strip,
         )
         output = dict(zip(keys, values))

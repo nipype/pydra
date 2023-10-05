@@ -18,6 +18,9 @@ need_docker = pytest.mark.skipif(
     shutil.which("docker") is None or sp.call(["docker", "info"]),
     reason="no docker within the container",
 )
+need_singularity = pytest.mark.skipif(
+    shutil.which("singularity") is None, reason="no singularity available"
+)
 no_win = pytest.mark.skipif(
     sys.platform.startswith("win"),
     reason="docker command not adjusted for windows docker",
