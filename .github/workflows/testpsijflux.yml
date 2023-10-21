@@ -30,7 +30,7 @@ jobs:
           export PATH=$PWD/bin:$PATH
           ln -s /usr/bin/python3 /usr/bin/python
           python -m pip install --upgrade pip && pip install -e ".[test]" && python -c 'import pydra; print(pydra.__version__)'
-          pip install -e "git+https://github.com/adi611/psij-python.git@adi611-patch-2#egg=psij-python"
+          pip install -e "git+https://github.com/ExaWorks/psij-python.git@main#egg=psij-python"
       - name: Run pytest
         run: |
           export PATH=$PWD/bin:$PATH
