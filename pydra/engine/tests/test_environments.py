@@ -79,7 +79,7 @@ def test_docker_1(tmp_path):
 
 @no_win
 @need_docker
-def test_docker_1_subm(tmp_path, plugin):
+def test_docker_1_subm(tmp_path):
     """docker env with submitter: simple command, no arguments"""
     newcache = lambda x: makedir(tmp_path, x)
 
@@ -97,14 +97,14 @@ def test_docker_1_subm(tmp_path, plugin):
         cache_dir=newcache("shelly_env"),
         environment=docker,
     )
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin="cf") as sub:
         shelly_env(submitter=sub)
     assert env_res == shelly_env.result().output.__dict__
 
     shelly_call = ShellCommandTask(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(plugin="cf") as sub:
         shelly_call(submitter=sub, environment=docker)
     assert env_res == shelly_call.result().output.__dict__
 
