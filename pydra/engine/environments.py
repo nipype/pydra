@@ -4,10 +4,30 @@ from pathlib import Path
 
 
 class Environment:
+    """
+    Base class for environments that are used to execute tasks.
+    Right now it is asssumed that the environment, including container images,
+    are available and are not removed at the end
+    TODO: add setup and teardown methods
+    """
+
     def setup(self):
         pass
 
     def execute(self, task):
+        """
+        Execute the task in the environment.
+
+        Parameters
+        ----------
+        task : TaskBase
+            the task to execute
+
+        Returns
+        -------
+        output
+            Output of the task.
+        """
         raise NotImplementedError
 
     def teardown(self):
@@ -15,9 +35,11 @@ class Environment:
 
 
 class Native(Environment):
+    """
+    Native environment, i.e. the tasks are executed in the current python environment.
+    """
+
     def execute(self, task):
-        # breakpoint()
-        # args = task.render_arguments_in_root()
         keys = ["return_code", "stdout", "stderr"]
         values = execute(task.command_args(), strip=task.strip)
         output = dict(zip(keys, values))
@@ -31,7 +53,22 @@ class Native(Environment):
         return output
 
 
-class Docker(Environment):
+class Container(Environment):
+    """
+    Base class for container environments used by Docker and Singularity.
+
+    Parameters
+    ----------
+    image : str
+        Name of the container image
+    tag : str
+        Tag of the container image
+    output_cpath : str
+        Path to the output directory in the container
+    xargs : dict
+        Extra arguments to be passed to the container
+    """
+
     def __init__(self, image, tag="latest", output_cpath="/output_pydra", xargs=None):
         self.image = image
         self.tag = tag
@@ -46,13 +83,13 @@ class Docker(Environment):
         loc_abs = Path(loc).absolute()
         return f"{loc_abs}:{root}{loc_abs}:{mode}"  # TODO: moving entire path?
 
+
+class Docker(Container):
+    """Docker environment."""
+
     def execute(self, task, root="/mnt/pydra"):
-        # XXX Need to mount all input locations
         docker_img = f"{self.image}:{self.tag}"
-        # TODO ?
-        # Skips over any inputs in task.cache_dir
-        # Needs to include `out_file`s when not relative to working dir
-        # Possibly a `TargetFile` type to distinguish between `File` and `str`?
+        # mounting all input locations
         mounts = task.get_bindings(root=root)
 
         # todo adding xargsy etc
@@ -76,20 +113,15 @@ class Docker(Environment):
                 raise RuntimeError(output["stderr"])
             else:
                 raise RuntimeError(output["stdout"])
-        # Any outputs that have been created with a re-rooted path need
-        # to be de-rooted
-        # task.finalize_outputs("/mnt/pydra") TODO: probably don't need it
         return output
 
 
-class Singularity(Docker):
+class Singularity(Container):
+    """Singularity environment."""
+
     def execute(self, task, root="/mnt/pydra"):
-        # XXX Need to mount all input locations
         singularity_img = f"{self.image}:{self.tag}"
-        # TODO ?
-        # Skips over any inputs in task.cache_dir
-        # Needs to include `out_file`s when not relative to working dir
-        # Possibly a `TargetFile` type to distinguish between `File` and `str`?
+        # mounting all input locations
         mounts = task.get_bindings(root=root)
 
         # todo adding xargsy etc
@@ -117,7 +149,4 @@ class Singularity(Docker):
                 raise RuntimeError(output["stderr"])
             else:
                 raise RuntimeError(output["stdout"])
-        # Any outputs that have been created with a re-rooted path need
-        # to be de-rooted
-        # task.finalize_outputs("/mnt/pydra") TODO: probably don't need it
         return output
