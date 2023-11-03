@@ -11,6 +11,7 @@ from ..specs import (
 from .utils import no_win, need_docker, need_singularity
 
 import attr
+import pytest
 
 
 def makedir(path, name):
@@ -79,7 +80,15 @@ def test_docker_1(tmp_path):
 
 @no_win
 @need_docker
-def test_docker_1_subm(tmp_path):
+@pytest.mark.parametrize(
+    "docker",
+    [
+        Docker(image="busybox"),
+        Docker(image="busybox", tag="latest", xargs="--rm"),
+        Docker(image="busybox", xargs=["--rm"]),
+    ],
+)
+def test_docker_1_subm(tmp_path, docker):
     """docker env with submitter: simple command, no arguments"""
     newcache = lambda x: makedir(tmp_path, x)
 
