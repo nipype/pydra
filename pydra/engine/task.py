@@ -57,7 +57,6 @@ from .specs import (
     SpecInfo,
     ShellSpec,
     ShellOutSpec,
-    ContainerSpec,
     attr_fields,
 )
 from .helpers import (
@@ -67,7 +66,7 @@ from .helpers import (
     output_from_inputfields,
     parse_copyfile,
 )
-from .helpers_file import template_update, is_local_file
+from .helpers_file import template_update
 from ..utils.typing import TypeParser
 from .environments import Native
 
@@ -342,10 +341,7 @@ class ShellCommandTask(TaskBase):
 
         pos_args = []  # list for (position, command arg)
         self._positions_provided = []
-        for field in attr_fields(
-            self.inputs,
-            exclude_names=("container", "image", "container_xargs"),
-        ):
+        for field in attr_fields(self.inputs):
             name, meta = field.name, field.metadata
             if (
                 getattr(self.inputs, name) is attr.NOTHING
@@ -527,13 +523,9 @@ class ShellCommandTask(TaskBase):
         self.inputs.check_fields_input_spec()
         if self.state:
             raise NotImplementedError
-        if isinstance(self, ContainerTask):
-            command_args = self.container_args + self.command_args()
-        else:
-            command_args = self.command_args()
         # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
-        cmdline = command_args[0]
-        for arg in command_args[1:]:
+        cmdline = self.command_args()[0]
+        for arg in self.command_args()[1:]:
             # If there are spaces in the arg, and it is not enclosed by matching
             # quotes, add quotes to escape the space. Not sure if this should
             # be expanded to include other special characters apart from spaces
@@ -556,11 +548,6 @@ class ShellCommandTask(TaskBase):
         """
         for fld in attr_fields(self.inputs):
             if TypeParser.contains_type(FileSet, fld.type):
-                # Is container_path necessary? Container paths should just be typed PurePath
-                assert not fld.metadata.get("container_path")
-                # Should no longer happen with environments; assertion for testing purposes
-                # XXX: Remove before merge, so "image" can become a valid input file
-                assert not fld.name == "image"
                 fileset = getattr(self.inputs, fld.name)
                 copy = parse_copyfile(fld)[0] == FileSet.CopyMode.copy
 
@@ -576,134 +563,6 @@ class ShellCommandTask(TaskBase):
                 )
 
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
-
-
-class ContainerTask(ShellCommandTask):
-    """Extend shell command task for containerized execution."""
-
-    def __init__(
-        self,
-        name,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        cache_dir=None,
-        input_spec: ty.Optional[SpecInfo] = None,
-        messenger_args=None,
-        messengers=None,
-        output_cpath="/output_pydra",
-        output_spec: ty.Optional[SpecInfo] = None,
-        rerun=False,
-        strip=False,
-        **kwargs,
-    ):
-        """
-        Initialize this task.
-
-        Parameters
-        ----------
-        name : :obj:`str`
-            Name of this task.
-        audit_flags : :obj:`pydra.utils.messenger.AuditFlag`
-            Auditing configuration
-        cache_dir : :obj:`os.pathlike`
-            Cache directory
-        input_spec : :obj:`pydra.engine.specs.SpecInfo`
-            Specification of inputs.
-        messenger_args :
-            TODO
-        messengers :
-            TODO
-        output_cpath : :obj:`str`
-            Output path within the container filesystem.
-        output_spec : :obj:`pydra.engine.specs.BaseSpec`
-            Specification of inputs.
-        strip : :obj:`bool`
-            TODO
-
-        """
-        if input_spec is None:
-            input_spec = SpecInfo(name="Inputs", fields=[], bases=(ContainerSpec,))
-        self.output_cpath = Path(output_cpath)
-        self.bindings = {}
-        super().__init__(
-            name=name,
-            input_spec=input_spec,
-            output_spec=output_spec,
-            audit_flags=audit_flags,
-            messengers=messengers,
-            messenger_args=messenger_args,
-            cache_dir=cache_dir,
-            strip=strip,
-            rerun=rerun,
-            **kwargs,
-        )
-
-    def _field_value(self, field, check_file=False):
-        """
-        Checking value of the specific field, if value is not set, None is returned.
-        If check_file is True, checking if field is a local file
-        and settings bindings if needed.
-        """
-        value = super()._field_value(field)
-        if value and check_file and is_local_file(field):
-            # changing path to the cpath (the directory should be mounted)
-            lpath = Path(str(value))
-            cdir = self.bind_paths()[lpath.parent][0]
-            cpath = cdir.joinpath(lpath.name)
-            value = str(cpath)
-        return value
-
-    def container_check(self, container_type):
-        """Get container-specific CLI arguments."""
-        if self.inputs.container is None:
-            raise AttributeError("Container software is not specified")
-        elif self.inputs.container != container_type:
-            raise AttributeError(
-                f"Container type should be {container_type}, but {self.inputs.container} given"
-            )
-        if self.inputs.image is attr.NOTHING:
-            raise AttributeError("Container image is not specified")
-
-    def bind_paths(self):
-        """Get bound mount points
-
-        Returns
-        -------
-        mount points: dict
-            mapping from local path to tuple of container path + mode
-        """
-        self._prepare_bindings()
-        return {**self.bindings, **{self.output_dir: (self.output_cpath, "rw")}}
-
-    def binds(self, opt):
-        """
-        Specify mounts to bind from local filesystems to container and working directory.
-
-        Uses py:meth:`bind_paths`
-
-        """
-        bargs = []
-        for lpath, (cpath, mode) in self.bind_paths().items():
-            bargs.extend([opt, f"{lpath}:{cpath}:{mode}"])
-        return bargs
-
-    def _prepare_bindings(self):
-        fields = attr_fields(self.inputs)
-        for fld in fields:
-            if TypeParser.contains_type(FileSet, fld.type):
-                assert not fld.metadata.get(
-                    "container_path"
-                )  # <-- Is container_path necessary, container paths should just be typed PurePath
-                if fld.name == "image":  # <-- What is the image about?
-                    continue
-                fileset = getattr(self.inputs, fld.name)
-                copy_mode, _ = parse_copyfile(fld)
-                container_path = Path(f"/pydra_inp_{fld.name}")
-                self.bindings[fileset.parent] = (
-                    container_path,
-                    "rw" if copy_mode == FileSet.CopyMode.copy else "ro",
-                )
-
-    SUPPORTED_COPY_MODES = FileSet.CopyMode.any - FileSet.CopyMode.symlink
 
 
 def split_cmd(cmd: str):
