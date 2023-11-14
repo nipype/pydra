@@ -1,0 +1,47 @@
+name: OAR
+
+on:
+  push:
+    branches:
+      - master
+      - feature/oar
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11']
+      fail-fast: false
+    runs-on: ubuntu-20.04
+
+    env:
+      OAR_VERSION: 2.5.9
+
+    steps:
+    - name: Disable etelemetry
+      run: echo "NO_ET=TRUE" >> $GITHUB_ENV
+    - name: Checkout Pydra repo
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository }}
+    - name: Test oar with oardocker
+      run: |
+        python -m venv oardocker
+        cd oardocker
+        source bin/activate
+        pip install oar-docker
+        oardocker init -e bullseye
+        oardocker build
+        oardocker install http://oar-ftp.imag.fr/oar/2.5/sources/stable/oar-$OAR_VERSION.tar.gz
+        oardocker start -n 2 -v $PWD:/pydra -e NO_ET=$NO_ET
+        docker ps -a
+        cat /proc/1/cgroup
+        oardocker exec --no-tty frontend echo $NO_ET
+        oardocker exec --no-tty frontend ls -la /pydra && echo list pydra dir
+        oardocker exec --no-tty frontend pip install --upgrade pip
+        oardocker exec --no-tty frontend pip install -e ".[test]"
+        oardocker exec --no-tty frontend python -c 'import pydra; print(pydra.__version__)'
+        oardocker exec --no-tty frontend pytest --color=yes -vs --cov pydra --cov-config /pydra/.coveragerc --cov-report xml:/pydra/cov.xml --doctest-modules /pydra/pydra/ -k 'not test_audit_prov and not test_audit_prov_messdir_1 and not test_audit_prov_messdir_2 and not test_audit_prov_wf and not test_audit_all'
+        oardocker exec --no-tty frontend pip install codecov urllib3==1.26.6
+        oardocker exec --no-tty frontend codecov --root /pydra -f /pydra/cov.xml -F unittests
