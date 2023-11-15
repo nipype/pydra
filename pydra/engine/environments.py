@@ -63,8 +63,8 @@ class Container(Environment):
         Name of the container image
     tag : str
         Tag of the container image
-    output_cpath : str
-        Path to the output directory in the container
+    root : str
+        Base path for mounting host directories into the container
     xargs : Union[str, List[str]]
         Extra arguments to be passed to the container
     """
