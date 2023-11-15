@@ -545,7 +545,6 @@ class TaskBase:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
                 save(output_dir, result=result, task=self)
-                # self.output_ = None
                 # removing the additional file with the chcksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 # # function etc. shouldn't change anyway, so removing
@@ -558,15 +557,14 @@ class TaskBase:
         return result
 
     def _collect_outputs(self, output_dir):
-        run_output = self.output_
         output_klass = make_klass(self.output_spec)
         output = output_klass(
             **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
         )
         other_output = output.collect_additional_outputs(
-            self.inputs, output_dir, run_output
+            self.inputs, output_dir, self.output_
         )
-        return attr.evolve(output, **run_output, **other_output)
+        return attr.evolve(output, **self.output_, **other_output)
 
     def split(
         self,
