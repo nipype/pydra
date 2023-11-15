@@ -108,7 +108,6 @@ class Docker(Container):
         )
         docker_args.extend(["-w", f"{self.root}{task.output_dir}"])
         keys = ["return_code", "stdout", "stderr"]
-        # print("\n Docker args", docker_args)
 
         values = execute(
             docker_args + [docker_img] + task.command_args(root=self.root),
