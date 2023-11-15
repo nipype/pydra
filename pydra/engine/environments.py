@@ -98,8 +98,8 @@ class Docker(Container):
             "run",
             "-v",
             self.bind(task.cache_dir, "rw", self.root),
+            *self.xargs,
         ]
-        docker_args.extend(self.xargs)
         docker_args.extend(
             " ".join(
                 [f"-v {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
