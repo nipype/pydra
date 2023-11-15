@@ -79,10 +79,9 @@ class Container(Environment):
         self.xargs = xargs
         self.root = root
 
-    @staticmethod
-    def bind(loc, mode="ro", root="/mnt/pydra"):
+    def bind(self, loc, mode="ro"):
         loc_abs = Path(loc).absolute()
-        return f"{loc_abs}:{root}{loc_abs}:{mode}"
+        return f"{loc_abs}:{self.root}{loc_abs}:{mode}"
 
 
 class Docker(Container):
