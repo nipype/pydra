@@ -92,12 +92,11 @@ class Docker(Container):
         # mounting all input locations
         mounts = task.get_bindings(root=self.root)
 
-        # todo adding xargsy etc
         docker_args = [
             "docker",
             "run",
             "-v",
-            self.bind(task.cache_dir, "rw", self.root),
+            self.bind(task.cache_dir, "rw"),
             *self.xargs,
         ]
         docker_args.extend(
@@ -134,9 +133,9 @@ class Singularity(Container):
             "singularity",
             "exec",
             "-B",
-            self.bind(task.cache_dir, "rw", self.root),
+            self.bind(task.cache_dir, "rw"),
+            *self.xargs,
         ]
-        singularity_args.extend(self.xargs)
         singularity_args.extend(
             " ".join(
                 [f"-B {key}:{val[0]}:{val[1]}" for (key, val) in mounts.items()]
