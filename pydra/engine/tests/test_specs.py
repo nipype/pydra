@@ -51,8 +51,6 @@ def test_shellspec():
     assert hasattr(spec, "args")
 
 
-
-
 class NodeTesting:
     @attrs.define()
     class Input:
