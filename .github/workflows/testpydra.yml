@@ -68,13 +68,13 @@ jobs:
 
     steps:
       - name: Fetch sdist/wheel
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         if: matrix.install == 'sdist' || matrix.install == 'wheel'
         with:
           name: dist
           path: dist/
       - name: Fetch git archive
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         if: matrix.install == 'archive'
         with:
           name: archive
