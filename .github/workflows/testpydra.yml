@@ -31,7 +31,7 @@ jobs:
       - run: pip install --upgrade build twine
       - run: python -m build
       - run: twine check dist/*
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
@@ -40,7 +40,7 @@ jobs:
           git clean -fxd
           mkdir archive
           git archive -o archive/pydra.zip HEAD
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: archive
           path: archive/
