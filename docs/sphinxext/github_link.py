@@ -2,6 +2,7 @@
 This script comes from scikit-learn:
 https://github.com/scikit-learn/scikit-learn/blob/master/doc/sphinxext/github_link.py
 """
+
 import inspect
 import os
 import subprocess

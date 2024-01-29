@@ -4323,7 +4323,7 @@ def test_fsl(data_tests_dir):
                         "help_string": "bias field and neck cleanup",
                     },
                 ),
-            )
+            ),
             # ("number_classes", int, attr.ib(metadata={"help_string": 'number of tissue-type classes', "argstr": '-n',
             #                                            "allowed_values": {"min_val": 1, "max_val": 10}})),
             # ("output_biasfield", bool,

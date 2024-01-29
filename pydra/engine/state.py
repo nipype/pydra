@@ -1,4 +1,5 @@
 """Keeping track of mapping and reduce operations over tasks."""
+
 from copy import deepcopy
 import itertools
 from functools import reduce

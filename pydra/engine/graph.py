@@ -1,4 +1,5 @@
 """Data structure to support :class:`~pydra.engine.core.Workflow` tasks."""
+
 from copy import copy
 from pathlib import Path
 import subprocess as sp

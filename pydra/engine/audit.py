@@ -1,4 +1,5 @@
 """Module to keep track of provenance information."""
+
 import os
 import json
 import attr

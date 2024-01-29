@@ -1,4 +1,5 @@
 """Messaging of states."""
+
 import abc
 import datetime as dt
 import enum
@@ -129,9 +130,11 @@ class RemoteRESTMessenger(Messenger):
         r = requests.post(
             kwargs["post_url"],
             json=message,
-            auth=kwargs["auth"]()
-            if getattr(kwargs["auth"], "__call__", None)
-            else kwargs["auth"],
+            auth=(
+                kwargs["auth"]()
+                if getattr(kwargs["auth"], "__call__", None)
+                else kwargs["auth"]
+            ),
         )
         return r.status_code
 
