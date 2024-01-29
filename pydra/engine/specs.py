@@ -676,37 +676,6 @@ class ShellOutSpec:
             return False
 
 
-@attr.s(auto_attribs=True, kw_only=True)
-class ContainerSpec(ShellSpec):
-    """Refine the generic command-line specification to container execution."""
-
-    image: ty.Union[File, str] = attr.ib(
-        metadata={"help_string": "image", "mandatory": True}
-    )
-    """The image to be containerized."""
-    container: ty.Union[File, str, None] = attr.ib(
-        metadata={"help_string": "container"}
-    )
-    """The container."""
-    container_xargs: ty.Optional[ty.List[str]] = attr.ib(
-        default=None, metadata={"help_string": "todo"}
-    )
-
-
-@attr.s(auto_attribs=True, kw_only=True)
-class DockerSpec(ContainerSpec):
-    """Particularize container specifications to the Docker engine."""
-
-    container: str = attr.ib("docker", metadata={"help_string": "container"})
-
-
-@attr.s(auto_attribs=True, kw_only=True)
-class SingularitySpec(ContainerSpec):
-    """Particularize container specifications to Singularity."""
-
-    container: str = attr.ib("singularity", metadata={"help_string": "container type"})
-
-
 @attr.s
 class LazyInterface:
     _task: "core.TaskBase" = attr.ib()

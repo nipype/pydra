@@ -35,14 +35,16 @@ class Submitter:
             raise NotImplementedError(f"No worker for {self.plugin}")
         self.worker.loop = self.loop
 
-    def __call__(self, runnable, cache_locations=None, rerun=False):
+    def __call__(self, runnable, cache_locations=None, rerun=False, environment=None):
         """Submitter run function."""
         if cache_locations is not None:
             runnable.cache_locations = cache_locations
-        self.loop.run_until_complete(self.submit_from_call(runnable, rerun))
+        self.loop.run_until_complete(
+            self.submit_from_call(runnable, rerun, environment)
+        )
         return runnable.result()
 
-    async def submit_from_call(self, runnable, rerun):
+    async def submit_from_call(self, runnable, rerun, environment):
         """
         This coroutine should only be called once per Submitter call,
         and serves as the bridge between sync/async lands.
@@ -56,7 +58,7 @@ class Submitter:
         Once Python 3.10 is the minimum, this should probably be refactored into using
         structural pattern matching.
         """
-        if is_workflow(runnable):
+        if is_workflow(runnable):  # TODO: env to wf
             # connect and calculate the checksum of the graph before running
             runnable._connect_and_propagate_to_tasks(override_task_caches=True)
             # 0
@@ -74,10 +76,11 @@ class Submitter:
             # 2
             if runnable.state is None:
                 # run_el should always return a coroutine
-                await self.worker.run_el(runnable, rerun=rerun)
+                print("in SUBM", environment)
+                await self.worker.run_el(runnable, rerun=rerun, environment=environment)
             # 3
             else:
-                await self.expand_runnable(runnable, wait=True, rerun=rerun)
+                await self.expand_runnable(runnable, wait=True, rerun=rerun)  # TODO
         return True
 
     async def expand_runnable(self, runnable, wait=False, rerun=False):

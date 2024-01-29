@@ -11,9 +11,7 @@ from ..specs import (
     Runtime,
     Result,
     ShellSpec,
-    ContainerSpec,
-    DockerSpec,
-    SingularitySpec,
+    # ContainerSpec,
     LazyIn,
     LazyOut,
     LazyField,
@@ -51,35 +49,6 @@ def test_shellspec():
     spec = ShellSpec(executable="ls")  # (executable, args)
     assert hasattr(spec, "executable")
     assert hasattr(spec, "args")
-
-
-container_attrs = ["image", "container", "container_xargs"]
-
-
-def test_container():
-    with pytest.raises(TypeError):
-        spec = ContainerSpec()
-    spec = ContainerSpec(
-        executable="ls", image="busybox", container="docker"
-    )  # (execute, args, image, cont)
-    assert all([hasattr(spec, attr) for attr in container_attrs])
-    assert hasattr(spec, "executable")
-
-
-def test_docker():
-    with pytest.raises(TypeError):
-        spec = DockerSpec(executable="ls")
-    spec = DockerSpec(executable="ls", image="busybox")
-    assert all(hasattr(spec, attr) for attr in container_attrs)
-    assert getattr(spec, "container") == "docker"
-
-
-def test_singularity():
-    with pytest.raises(TypeError):
-        spec = SingularitySpec()
-    spec = SingularitySpec(executable="ls", image="busybox")
-    assert all(hasattr(spec, attr) for attr in container_attrs)
-    assert getattr(spec, "container") == "singularity"
 
 
 class NodeTesting:

@@ -429,7 +429,13 @@ class TaskBase:
             self._cont_dim = cont_dim
 
     def __call__(
-        self, submitter=None, plugin=None, plugin_kwargs=None, rerun=False, **kwargs
+        self,
+        submitter=None,
+        plugin=None,
+        plugin_kwargs=None,
+        rerun=False,
+        environment=None,
+        **kwargs,
     ):
         """Make tasks callable themselves."""
         from .submitter import Submitter
@@ -449,9 +455,9 @@ class TaskBase:
         if submitter:
             with submitter as sub:
                 self.inputs = attr.evolve(self.inputs, **kwargs)
-                res = sub(self)
+                res = sub(self, environment=environment)
         else:  # tasks without state could be run without a submitter
-            res = self._run(rerun=rerun, **kwargs)
+            res = self._run(rerun=rerun, environment=environment, **kwargs)
         return res
 
     def _modify_inputs(self):
@@ -501,7 +507,7 @@ class TaskBase:
             shutil.rmtree(output_dir)
         output_dir.mkdir(parents=False, exist_ok=self.can_resume)
 
-    def _run(self, rerun=False, **kwargs):
+    def _run(self, rerun=False, environment=None, **kwargs):
         self.inputs = attr.evolve(self.inputs, **kwargs)
         self.inputs.check_fields_input_spec()
 
@@ -518,6 +524,7 @@ class TaskBase:
                     return result
             cwd = os.getcwd()
             self._populate_filesystem(checksum, output_dir)
+            os.chdir(output_dir)
             orig_inputs = self._modify_inputs()
             result = Result(output=None, runtime=None, errored=False)
             self.hooks.pre_run_task(self)
@@ -526,7 +533,7 @@ class TaskBase:
                 self.audit.audit_task(task=self)
             try:
                 self.audit.monitor()
-                self._run_task()
+                self._run_task(environment=environment)
                 result.output = self._collect_outputs(output_dir=output_dir)
             except Exception:
                 etype, eval, etr = sys.exc_info()
@@ -538,7 +545,6 @@ class TaskBase:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
                 save(output_dir, result=result, task=self)
-                self.output_ = None
                 # removing the additional file with the chcksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 # # function etc. shouldn't change anyway, so removing
@@ -551,15 +557,14 @@ class TaskBase:
         return result
 
     def _collect_outputs(self, output_dir):
-        run_output = self.output_
         output_klass = make_klass(self.output_spec)
         output = output_klass(
             **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
         )
         other_output = output.collect_additional_outputs(
-            self.inputs, output_dir, run_output
+            self.inputs, output_dir, self.output_
         )
-        return attr.evolve(output, **run_output, **other_output)
+        return attr.evolve(output, **self.output_, **other_output)
 
     def split(
         self,
