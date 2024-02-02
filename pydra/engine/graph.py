@@ -499,7 +499,7 @@ class DiGraph:
         return dotstr
 
     def export_graph(self, dotfile, ext="png"):
-        """exporting dotfile to other format, equires the dot command"""
+        """exporting dotfile to other formats requires the dot command"""
         available_ext = [
             "bmp",
             "canon",

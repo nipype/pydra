@@ -4815,7 +4815,7 @@ def test_shellspec_formatter_1(tmp_path):
         == str(excinfo.value)
     )
 
-    # chcking if field value is accessible when None
+    # checking if field value is accessible when None
     def formatter_5(field):
         assert field == "-t test"
         # formatter must return a string
@@ -4832,7 +4832,7 @@ def test_shellspec_formatter_1(tmp_path):
     )
     assert shelly.cmdline == "exec -t test"
 
-    # chcking if field value is accessible when None
+    # checking if field value is accessible when None
     def formatter_4(field):
         assert field is None
         # formatter must return a string

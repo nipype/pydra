@@ -60,7 +60,7 @@ class TaskBase:
     """
     A base structure for the nodes in the processing graph.
 
-    Tasks are a generic compute step from which both elemntary tasks and
+    Tasks are a generic compute step from which both elementary tasks and
     :class:`Workflow` instances inherit.
 
     """
@@ -546,7 +546,7 @@ class TaskBase:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result)
                 save(output_dir, result=result, task=self)
-                # removing the additional file with the chcksum
+                # removing the additional file with the checksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 # # function etc. shouldn't change anyway, so removing
                 orig_inputs = {
@@ -1252,7 +1252,7 @@ class Workflow(TaskBase):
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
                 save(output_dir, result=result, task=self)
-                # removing the additional file with the chcksum
+                # removing the additional file with the checksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
         self.hooks.post_run(self, result)

@@ -9,7 +9,7 @@ Release Notes
 * adding simple validators to input spec (using ``attr.validator``)
 * adding ``create_dotfile`` for workflows, that creates graphs as dotfiles (can convert to other formats if dot available)
 * adding a simple user guide with ``input_spec`` description
-* expanding docstrings for ``State``, ``audit`` and ``messanger``
+* expanding docstrings for ``State``, ``audit`` and ``messenger``
 * updating syntax to newer python
 
 0.7.0
