@@ -4323,7 +4323,7 @@ def test_fsl(data_tests_dir):
                         "help_string": "bias field and neck cleanup",
                     },
                 ),
-            )
+            ),
             # ("number_classes", int, attr.ib(metadata={"help_string": 'number of tissue-type classes', "argstr": '-n',
             #                                            "allowed_values": {"min_val": 1, "max_val": 10}})),
             # ("output_biasfield", bool,
@@ -4815,7 +4815,7 @@ def test_shellspec_formatter_1(tmp_path):
         == str(excinfo.value)
     )
 
-    # chcking if field value is accessible when None
+    # checking if field value is accessible when None
     def formatter_5(field):
         assert field == "-t test"
         # formatter must return a string
@@ -4832,7 +4832,7 @@ def test_shellspec_formatter_1(tmp_path):
     )
     assert shelly.cmdline == "exec -t test"
 
-    # chcking if field value is accessible when None
+    # checking if field value is accessible when None
     def formatter_4(field):
         assert field is None
         # formatter must return a string

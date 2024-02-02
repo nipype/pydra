@@ -6,7 +6,7 @@ from pathlib import Path
 class Environment:
     """
     Base class for environments that are used to execute tasks.
-    Right now it is asssumed that the environment, including container images,
+    Right now it is assumed that the environment, including container images,
     are available and are not removed at the end
     TODO: add setup and teardown methods
     """
