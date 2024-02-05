@@ -1,0 +1,38 @@
+name: PSI/J-Flux
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+
+    container:
+      image: fluxrm/flux-sched:focal-v0.28.0
+      options: "--platform=linux/amd64 --user root -it --init"
+
+    steps:
+      - name: Make Space
+        run: |
+          rm -rf /usr/share/dotnet
+          rm -rf /opt/ghc
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        run: |
+          apt-get update && apt-get install -y python3-venv && apt-get install less
+          export PATH=$PWD/bin:$PATH
+          ln -s /usr/bin/python3 /usr/bin/python
+          python -m pip install --upgrade pip && pip install -e ".[test]" && python -c 'import pydra; print(pydra.__version__)'
+          pip install -e "git+https://github.com/ExaWorks/psij-python.git@main#egg=psij-python"
+      - name: Run pytest
+        run: |
+          export PATH=$PWD/bin:$PATH
+          flux start python -V
+          flux start pytest --psij=flux --color=yes -vs --cov pydra --cov-config .coveragerc --cov-report xml:cov.xml --doctest-modules pydra/
