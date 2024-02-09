@@ -6,7 +6,7 @@ build-backend = "flit_scm:buildapi"
 name = "pydra"
 description = "Pydra dataflow engine"
 readme = "README.rst"
-requires-python = ">=3.8, !=3.11.1"
+requires-python = ">=3.8"
 dependencies = [
     "attrs >=19.1.0",
     "cloudpickle >=2.0.0",
