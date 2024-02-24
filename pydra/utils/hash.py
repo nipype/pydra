@@ -4,13 +4,13 @@ import os
 
 # import stat
 import struct
+import tempfile
 import typing as ty
+from pathlib import Path
 from collections.abc import Mapping
 from functools import singledispatch
 from hashlib import blake2b
 import logging
-
-# from pathlib import Path
 from typing import (
     Dict,
     Iterator,
@@ -18,7 +18,9 @@ from typing import (
     Sequence,
     Set,
 )
+from filelock import SoftFileLock
 import attrs.exceptions
+from fileformats.core import FileSet
 
 logger = logging.getLogger("pydra")
 
@@ -52,19 +54,109 @@ __all__ = (
 )
 
 Hash = NewType("Hash", bytes)
-Cache = NewType("Cache", Dict[int, Hash])
+CacheKey = NewType("CacheKey", ty.Tuple[ty.Hashable, ty.Hashable])
+
+
+@attrs.define
+class PersistentCache:
+    """Persistent cache in which to store computationally expensive hashes between nodes
+    and workflow/task runs
+
+    Parameters
+    ----------
+    location: Path
+        the directory in which to store the hashes cache
+    """
+
+    location: Path = attrs.field()
+    _hashes: ty.Dict[CacheKey, Hash] = attrs.field(factory=dict)
+
+    @location.validator
+    def location_validator(self, _, location):
+        if not os.path.isdir(location):
+            raise ValueError(
+                f"Persistent cache location '{location}' is not a directory"
+            )
+
+    def get_hash(self, key: CacheKey, calculate_hash: ty.Callable) -> Hash:
+        """Check whether key is present in the persistent cache store and return it if so.
+        Otherwise use `calculate_hash` to generate the hash and save it in the persistent
+        store.
+
+        Parameters
+        ----------
+        key : CacheKey
+            locally unique key (e.g. to the host) used to lookup the corresponding hash
+            in the persistent store
+        calculate_hash : ty.Callable
+            function to calculate the hash if it isn't present in the persistent store
+
+        Returns
+        -------
+        Hash
+            _description_
+        """
+        try:
+            return self._hashes[key]
+        except KeyError:
+            pass
+        key_path = self.location / blake2b(str(key).encode()).hexdigest()
+        with SoftFileLock(key_path.with_suffix(".lock")):
+            if key_path.exists():
+                return Hash(key_path.read_bytes())
+            hsh = calculate_hash()
+            key_path.write_bytes(hsh)
+        return Hash(hsh)
+
+
+def persistent_cache_converter(
+    path: ty.Union[Path, str, PersistentCache, None]
+) -> PersistentCache:
+    if isinstance(path, PersistentCache):
+        return path
+    if path is None:
+        path = tempfile.mkdtemp()
+    return PersistentCache(Path(path))
+
+
+@attrs.define
+class Cache:
+    persistent: ty.Optional[PersistentCache] = attrs.field(
+        default=None,
+        converter=persistent_cache_converter,
+    )
+    _hashes: ty.Dict[int, Hash] = attrs.field(factory=dict)
+
+    def __getitem__(self, object_id: int) -> Hash:
+        return self._hashes[object_id]
+
+    def __setitem__(self, object_id: int, hsh: Hash):
+        self._hashes[object_id] = hsh
+
+    def __contains__(self, object_id):
+        return object_id in self._hashes
 
 
 class UnhashableError(ValueError):
     """Error for objects that cannot be hashed"""
 
 
-def hash_function(obj):
+def hash_function(obj, persistent_cache: ty.Optional[Path] = None):
     """Generate hash of object."""
-    return hash_object(obj).hex()
+    if persistent_cache is None:
+        # FIXME: Ideally the default location would be inside one of the cache_locations
+        # but can't think of a clean way to pass the cache_locations down to this part
+        # of the code, so just dumping in the home directory instead
+        persistent_cache = (Path("~") / ".pydra-hash-cache").expanduser()
+        try:
+            if not persistent_cache.exists():
+                persistent_cache.mkdir()
+        except Exception:
+            persistent_cache = None
+    return hash_object(obj, persistent_cache=persistent_cache).hex()
 
 
-def hash_object(obj: object) -> Hash:
+def hash_object(obj: object, persistent_cache: ty.Optional[Path] = None) -> Hash:
     """Hash an object
 
     Constructs a byte string that uniquely identifies the object,
@@ -74,9 +166,9 @@ def hash_object(obj: object) -> Hash:
     dicts. Custom types can be registered with :func:`register_serializer`.
     """
     try:
-        return hash_single(obj, Cache({}))
+        return hash_single(obj, Cache(persistent=persistent_cache))
     except Exception as e:
-        raise UnhashableError(f"Cannot hash object {obj!r}") from e
+        raise UnhashableError(f"Cannot hash object {obj!r} due to '{e}'") from e
 
 
 def hash_single(obj: object, cache: Cache) -> Hash:
@@ -89,24 +181,31 @@ def hash_single(obj: object, cache: Cache) -> Hash:
     if objid not in cache:
         # Handle recursion by putting a dummy value in the cache
         cache[objid] = Hash(b"\x00")
-        h = blake2b(digest_size=16, person=b"pydra-hash")
         bytes_it = bytes_repr(obj, cache)
+        # Pop first element from the bytes_repr iterator and check whether it is a
+        # "local cache key" (e.g. file-system path + mtime tuple) or the first bytes
+        # chunk
+
+        def calc_hash(first: ty.Optional[bytes] = None) -> Hash:
+            h = blake2b(digest_size=16, person=b"pydra-hash")
+            if first is not None:
+                h.update(first)
+            for chunk in bytes_it:  # NB: bytes_it is in outer scope
+                h.update(chunk)
+            return Hash(h.digest())
+
         first = next(bytes_it)
-        if isinstance(first, str):
-            cache_id = first
-            try:
-                return cache[cache_id]
-            except KeyError:
-                pass
+        if isinstance(first, tuple):
+            tp = type(obj)
+            key = (
+                tp.__module__,
+                tp.__name__,
+            ) + first
+            hsh = cache.persistent.get_hash(key, calc_hash)
         else:
-            h.update(first)
-            cache_id = None
-        for chunk in bytes_it:
-            h.update(chunk)
-        hsh = cache[objid] = Hash(h.digest())
+            hsh = calc_hash(first=first)
         logger.debug("Hash of %s object is %s", obj, hsh)
-        if cache_id is not None:
-            cache[cache_id] = hsh
+        cache[objid] = hsh
     return cache[objid]
 
 
@@ -269,6 +368,18 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
     else:
         yield f"{klass.__module__}.{type_name(klass)}".encode()
     yield b")"
+
+
+@register_serializer(FileSet)
+def bytes_repr_fileset(
+    fileset: FileSet, cache: Cache
+) -> Iterator[ty.Union[CacheKey, bytes]]:
+    fspaths = sorted(fileset.fspaths)
+    yield CacheKey(
+        tuple(repr(p) for p in fspaths)  # type: ignore[arg-type]
+        + tuple(p.lstat().st_mtime for p in fspaths)
+    )
+    yield from fileset.__bytes_repr__(cache)
 
 
 @register_serializer(list)

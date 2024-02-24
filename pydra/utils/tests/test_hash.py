@@ -6,6 +6,7 @@ import attrs
 import pytest
 import typing as ty
 from fileformats.application import Zip, Json
+from fileformats.text import TextFile
 from ..hash import Cache, UnhashableError, bytes_repr, hash_object, register_serializer
 
 
@@ -296,3 +297,26 @@ def test_registration_conflict():
     register_serializer(MyNewClass, _)
 
     assert join_bytes_repr(MyNewClass(1)) == b"serializer"
+
+
+def test_persistent_hash_cache(tmp_path):
+    cache_path = tmp_path / "hash-cache"
+    cache_path.mkdir()
+    text_file_path = tmp_path / "text-file.txt"
+    text_file_path.write_text("foo")
+    text_file = TextFile(text_file_path)
+
+    # Test hash is stable between calls
+    hsh = hash_object(text_file, persistent_cache=cache_path)
+    assert hsh == hash_object(text_file, persistent_cache=cache_path)
+
+    # Test that cached hash has been used
+    cache_files = list(cache_path.iterdir())
+    assert len(cache_files) == 1
+    modified_hash = "modified".encode()
+    cache_files[0].write_bytes(modified_hash)
+    assert hash_object(text_file, persistent_cache=cache_path) == modified_hash
+
+    # Test that changes to the text file result in new hash
+    text_file_path.write_text("bar")
+    assert hash_object(text_file, persistent_cache=cache_path) != modified_hash
