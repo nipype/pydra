@@ -3,7 +3,6 @@ import typing as ty
 import os
 import attrs
 from copy import deepcopy
-from unittest import mock
 import time
 
 from ..specs import (
@@ -165,11 +164,10 @@ def test_input_file_hash_2(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
+    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
-    with mock.patch("time.time") as t:
-        t.return_value = time.time() + 10  # mock mtime to ensure different
-        with open(file_diffcontent, "w") as f:
-            f.write("hi")
+    with open(file_diffcontent, "w") as f:
+        f.write("hi")
     hash3 = inputs(in_file=file_diffcontent).hash
     assert hash1 != hash3
 
@@ -197,12 +195,10 @@ def test_input_file_hash_2a(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
+    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
-    # Ensure that the mtime will be incremented by mocking time.time
-    with mock.patch("time.time") as t:
-        t.return_value = time.time() + 10
-        with open(file_diffcontent, "w") as f:
-            f.write("hi")
+    with open(file_diffcontent, "w") as f:
+        f.write("hi")
     hash3 = inputs(in_file=file_diffcontent).hash
     assert hash1 != hash3
 
@@ -241,10 +237,9 @@ def test_input_file_hash_3(tmp_path):
     # assert id(files_hash1["in_file"][filename]) == id(files_hash2["in_file"][filename])
 
     # recreating the file
-    with mock.patch("time.time") as t:
-        t.return_value = time.time() + 10  # mock mtime to ensure different
-        with open(file, "w") as f:
-            f.write("hello")
+    time.sleep(2)  # ensure mtime is different
+    with open(file, "w") as f:
+        f.write("hello")
 
     hash3 = my_inp.hash
     # files_hash3 = deepcopy(my_inp.files_hash)
@@ -297,11 +292,10 @@ def test_input_file_hash_4(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
+    time.sleep(2)  # need the mtime to be different
     file_diffcontent = tmp_path / "in_file_1.txt"
-    with mock.patch("time.time") as t:
-        t.return_value = time.time() + 10  # mock mtime to ensure different
-        with open(file_diffcontent, "w") as f:
-            f.write("hi")
+    with open(file_diffcontent, "w") as f:
+        f.write("hi")
     hash3 = inputs(in_file=[[file_diffcontent, 3]]).hash
     assert hash1 != hash3
 
@@ -335,11 +329,10 @@ def test_input_file_hash_5(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
+    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
-    with mock.patch("time.time") as t:
-        t.return_value = time.time() + 10  # mock mtime to ensure different
-        with open(file_diffcontent, "w") as f:
-            f.write("hi")
+    with open(file_diffcontent, "w") as f:
+        f.write("hi")
     hash3 = inputs(in_file=[{"file": file_diffcontent, "int": 3}]).hash
     assert hash1 != hash3
 

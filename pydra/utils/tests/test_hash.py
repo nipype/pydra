@@ -3,7 +3,6 @@ import os
 from hashlib import blake2b
 from pathlib import Path
 import time
-from unittest import mock
 import attrs
 import pytest
 import typing as ty

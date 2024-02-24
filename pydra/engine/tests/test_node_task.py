@@ -322,11 +322,10 @@ def test_task_init_7(tmp_path):
     output_dir1 = nn1.output_dir
 
     # changing the content of the file
+    time.sleep(2)  # need the mtime to be different
     file2 = tmp_path / "file2.txt"
-    with mock.patch("time.time") as t:
-        t.return_value = time.time() + 10  # mock mtime to ensure different
-        with open(file2, "w") as f:
-            f.write("from pydra")
+    with open(file2, "w") as f:
+        f.write("from pydra")
 
     nn2 = fun_file_list(name="NA", filename_list=[file1, file2])
     output_dir2 = nn2.output_dir
