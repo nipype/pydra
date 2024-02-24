@@ -1,5 +1,6 @@
 import os
 import itertools
+import sys
 import typing as ty
 from pathlib import Path
 import tempfile
@@ -717,6 +718,7 @@ def test_generic_is_subclass3():
     assert not TypeParser.is_subclass(ty.List[float], ty.List[int])
 
 
+@pytest.mark.skipIf(sys.version_info.minor < 9, "Cannot subscript tuple in < Py3.9")
 def test_generic_is_subclass4():
     class MyTuple(tuple):
         pass
