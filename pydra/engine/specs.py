@@ -985,8 +985,21 @@ class LazyOutField(LazyField[T]):
         if result is None:
             raise RuntimeError(
                 f"Could not find results of '{node.name}' node in a sub-directory "
-                f"named '{node.checksum}' in any of the cache locations:\n"
+                f"named '{node.checksum}' in any of the cache locations.\n"
                 + "\n".join(str(p) for p in set(node.cache_locations))
+                + f"\n\nThis is likely due to hash changes in '{self.name}' node inputs. "
+                f"Current values and hashes: {self.inputs}, "
+                f"{self.inputs._hashes}\n\n"
+                "Set loglevel to 'debug' in order to track hash changes "
+                "throughout the execution of the workflow.\n\n "
+                "These issues may have been caused by `bytes_repr()` methods "
+                "that don't return stable hash values for specific object "
+                "types across multiple processes (see bytes_repr() "
+                '"singledispatch "function in pydra/utils/hash.py).'
+                "You may need to implement a specific `bytes_repr()` "
+                '"singledispatch overload"s or `__bytes_repr__()` '
+                "dunder methods to handle one or more types in "
+                "your interface inputs."
             )
         _, split_depth = TypeParser.strip_splits(self.type)
 

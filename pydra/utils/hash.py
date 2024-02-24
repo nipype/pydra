@@ -64,7 +64,7 @@ def hash_function(obj, cache=None):
     return hash_object(obj, cache=cache).hex()
 
 
-def hash_object(obj: object, cache: Cache | None = None) -> Hash:
+def hash_object(obj: object, cache: ty.Optional[Cache] = None) -> Hash:
     """Hash an object
 
     Constructs a byte string that uniquely identifies the object,

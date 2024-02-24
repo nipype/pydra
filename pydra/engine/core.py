@@ -464,13 +464,25 @@ class TaskBase:
         return res
 
     def _modify_inputs(self):
-        """Update and preserve a Task's original inputs"""
+        """This method modifies the inputs of the task ahead of its execution:
+        - links/copies upstream files and directories into the destination tasks
+          working directory as required select state array values corresponding to
+          state index (it will try to leave them where they are unless specified or
+          they are on different file systems)
+        - resolve template values (e.g. output_file_template)
+        - deepcopy all inputs to guard against in-place changes during the task's
+          execution (they will be replaced after the task's execution with the
+          original inputs to ensure the tasks checksums are consistent)
+        """
         orig_inputs = {
-            k: deepcopy(v) for k, v in attr.asdict(self.inputs, recurse=False).items()
+            k: v
+            for k, v in attr.asdict(self.inputs, recurse=False).items()
+            if not k.startswith("_")
         }
         map_copyfiles = {}
-        for fld in attr_fields(self.inputs):
-            value = getattr(self.inputs, fld.name)
+        input_fields = attr.fields(type(self.inputs))
+        for name, value in orig_inputs.items():
+            fld = getattr(input_fields, name)
             copy_mode, copy_collation = parse_copyfile(
                 fld, default_collation=self.DEFAULT_COPY_COLLATION
             )
@@ -485,11 +497,21 @@ class TaskBase:
                     supported_modes=self.SUPPORTED_COPY_MODES,
                 )
                 if value is not copied_value:
-                    map_copyfiles[fld.name] = copied_value
+                    map_copyfiles[name] = copied_value
         modified_inputs = template_update(
             self.inputs, self.output_dir, map_copyfiles=map_copyfiles
         )
-        for name, value in modified_inputs.items():
+        assert all(m in orig_inputs for m in modified_inputs), (
+            "Modified inputs contain fields not present in original inputs. "
+            "This is likely a bug."
+        )
+        for name, orig_value in orig_inputs.items():
+            try:
+                value = modified_inputs[name]
+            except KeyError:
+                # Ensure we pass a copy not the original just in case inner
+                # attributes are modified during execution
+                value = deepcopy(orig_value)
             setattr(self.inputs, name, value)
         return orig_inputs
 
@@ -550,11 +572,9 @@ class TaskBase:
                 save(output_dir, result=result, task=self)
                 # removing the additional file with the checksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
-                # # function etc. shouldn't change anyway, so removing
                 # Restore original values to inputs
                 for field_name, field_value in orig_inputs.items():
-                    if not field_name.startswith("_"):
-                        setattr(self.inputs, field_name, field_value)
+                    setattr(self.inputs, field_name, field_value)
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
