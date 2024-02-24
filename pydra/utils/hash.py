@@ -59,12 +59,12 @@ class UnhashableError(ValueError):
     """Error for objects that cannot be hashed"""
 
 
-def hash_function(obj):
+def hash_function(obj, cache=None):
     """Generate hash of object."""
-    return hash_object(obj).hex()
+    return hash_object(obj, cache=cache).hex()
 
 
-def hash_object(obj: object) -> Hash:
+def hash_object(obj: object, cache=None) -> Hash:
     """Hash an object
 
     Constructs a byte string that uniquely identifies the object,
@@ -73,8 +73,10 @@ def hash_object(obj: object) -> Hash:
     Base Python types are implemented, including recursive lists and
     dicts. Custom types can be registered with :func:`register_serializer`.
     """
+    if cache is None:
+        cache = Cache({})
     try:
-        return hash_single(obj, Cache({}))
+        return hash_single(obj, cache)
     except Exception as e:
         raise UnhashableError(f"Cannot hash object {obj!r}") from e
 

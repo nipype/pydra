@@ -487,8 +487,8 @@ class TaskBase:
         modified_inputs = template_update(
             self.inputs, self.output_dir, map_copyfiles=map_copyfiles
         )
-        if modified_inputs:
-            self.inputs = attr.evolve(self.inputs, **modified_inputs)
+        for name, value in modified_inputs.items():
+            setattr(self.inputs, name, value)
         return orig_inputs
 
     def _populate_filesystem(self, checksum, output_dir):
@@ -549,12 +549,22 @@ class TaskBase:
                 # removing the additional file with the checksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 # # function etc. shouldn't change anyway, so removing
-                orig_inputs = {
-                    k: v for k, v in orig_inputs.items() if not k.startswith("_")
-                }
-                self.inputs = attr.evolve(self.inputs, **orig_inputs)
+                # Restore original values to inputs
+                for field_name, field_value in orig_inputs.items():
+                    if not field_name.startswith("_"):
+                        setattr(self.inputs, field_name, field_value)
                 os.chdir(cwd)
+        # Check for any changes to the input hashes that have occurred during the execution
+        # of the task
+        hash_changes = self.inputs.hash_changes()
+        if hash_changes:
+            raise RuntimeError(
+                f"Hashes have changed for {hash_changes} input fields during the "
+                f"execution of {self}. Please check all output files/directories are "
+                "typed with `pathlib.Path` instead of `fileformats` classes"
+            )
         self.hooks.post_run(self, result)
+
         return result
 
     def _collect_outputs(self, output_dir):

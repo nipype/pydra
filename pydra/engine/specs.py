@@ -15,7 +15,7 @@ from fileformats.generic import (
 )
 import pydra
 from .helpers_file import template_update_single
-from ..utils.hash import hash_function
+from ..utils.hash import hash_function, Cache
 
 # from ..utils.misc import add_exc_note
 
@@ -73,21 +73,22 @@ class SpecInfo:
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
 
-    # def __attrs_post_init__(self):
-    #     self.files_hash = {
-    #         field.name: {}
-    #         for field in attr_fields(
-    #             self, exclude_names=("_graph_checksums", "bindings", "files_hash")
-    #         )
-    #         if field.metadata.get("output_file_template") is None
-    #     }
-
     def collect_additional_outputs(self, inputs, output_dir, outputs):
         """Get additional outputs."""
         return {}
 
     @property
     def hash(self):
+        hsh, self._hashes = self._compute_hashes()
+        return hsh
+
+    def hash_changes(self):
+        """Detects any changes in the hashed values between the current inputs and the
+        previously calculated values"""
+        _, new_hashes = self._compute_hashes()
+        return [k for k, v in new_hashes.items() if v != self._hashes[k]]
+
+    def _compute_hashes(self) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
         """Compute a basic hash for any given set of fields."""
         inp_dict = {}
         for field in attr_fields(
@@ -101,10 +102,13 @@ class BaseSpec:
             if "container_path" in field.metadata:
                 continue
             inp_dict[field.name] = getattr(self, field.name)
-        inp_hash = hash_function(inp_dict)
+        hash_cache = Cache({})
+        field_hashes = {
+            k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()
+        }
         if hasattr(self, "_graph_checksums"):
-            inp_hash = hash_function((inp_hash, self._graph_checksums))
-        return inp_hash
+            field_hashes["_graph_checksums"] = self._graph_checksums
+        return hash_function(sorted(field_hashes.items())), field_hashes
 
     def retrieve_values(self, wf, state_index: ty.Optional[int] = None):
         """Get values contained by this spec."""
