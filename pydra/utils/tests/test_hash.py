@@ -320,3 +320,4 @@ def test_persistent_hash_cache(tmp_path):
     # Test that changes to the text file result in new hash
     text_file_path.write_text("bar")
     assert hash_object(text_file, persistent_cache=cache_path) != modified_hash
+    assert len(list(cache_path.iterdir())) == 2
