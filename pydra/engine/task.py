@@ -337,8 +337,8 @@ class ShellCommandTask(TaskBase):
             raise NotImplementedError
 
         modified_inputs = template_update(self.inputs, output_dir=self.output_dir)
-        if modified_inputs is not None:
-            self.inputs = attr.evolve(self.inputs, **modified_inputs)
+        for field_name, field_value in modified_inputs.items():
+            setattr(self.inputs, field_name, field_value)
 
         pos_args = []  # list for (position, command arg)
         self._positions_provided = []

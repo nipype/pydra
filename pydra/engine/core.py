@@ -556,10 +556,9 @@ class TaskBase:
                     if not field_name.startswith("_"):
                         setattr(self.inputs, field_name, field_value)
                 os.chdir(cwd)
+        self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the task
-
-        self.hooks.post_run(self, result)
         self._check_for_hash_changes()
         return result
 
