@@ -821,8 +821,8 @@ class TaskBase:
 
         Returns
         -------
-        result :
-
+        result : Result
+            the result of the task
         """
         # TODO: check if result is available in load_result and
         # return a future if not
@@ -894,27 +894,33 @@ class TaskBase:
         details = ""
         for changed in hash_changes:
             field = getattr(attr.fields(type(self.inputs)), changed)
+            val = getattr(self.inputs, changed)
+            field_type = type(val)
             if issubclass(field.type, FileSet):
                 details += (
-                    f"- '{changed}' field is of file-type {field.type}. If it "
-                    "is intended to contain output data then the type of the field in "
-                    "the interface class should be changed to `pathlib.Path`. Otherwise, "
-                    "if the field is intended to be an input field but it gets altered by "
-                    "the task in some way, then the 'copyfile' flag should be set to "
-                    "'copy' in the field metadata of the task interface class so copies of "
-                    "the files/directories in it are passed to the task instead\n"
+                    f"- {changed}: value passed to the {field.type} field is of type "
+                    f"{field_type} ('{val}'). If it is intended to contain output data "
+                    "then the type of the field in the interface class should be changed "
+                    "to `pathlib.Path`. Otherwise, if the field is intended to be an "
+                    "input field but it gets altered by the task in some way, then the "
+                    "'copyfile' flag should be set to 'copy' in the field metadata of "
+                    "the task interface class so copies of the files/directories in it "
+                    "are passed to the task instead.\n"
                 )
             else:
                 details += (
-                    f"- the {field.type} object passed to '{changed}' field appears to "
-                    f"have an unstable hash. The {field.type}.__bytes_repr__() method "
-                    "can be implemented to provide stable hashes for this type. "
-                    "See pydra/utils/hash.py for examples.\n"
+                    f"- {changed}: the {field_type} object passed to the {field.type}"
+                    f"field appears to have an unstable hash. This could be due to "
+                    "a stochastic/non-thread-safe attribute(s) of the object\n\n"
+                    f"The {field.type}.__bytes_repr__() method can be implemented to "
+                    "bespoke hashing methods based only on the stable attributes for "
+                    f"the `{field_type.__module__}.{field_type.__name__}` type. "
+                    f"See pydra/utils/hash.py for examples. Value: {val}\n"
                 )
         if hash_changes:
             raise RuntimeError(
                 f"Input field hashes have changed during the execution of the "
-                f"'{self.name}' {type(self).__name__}.\n{details}"
+                f"'{self.name}' {type(self).__name__}.\n\n{details}"
             )
         logger.debug(
             "Input values and hashes for '%s' %s node:\n%s\n%s",

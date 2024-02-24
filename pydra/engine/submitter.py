@@ -216,6 +216,7 @@ class Submitter:
                                 "You may need to implement a specific `bytes_repr()` "
                                 '"singledispatch overload"s or `__bytes_repr__()` '
                                 "dunder methods to handle one or more types in "
+                                "your interface inputs."
                             )
                         raise RuntimeError(msg)
             for task in tasks:
