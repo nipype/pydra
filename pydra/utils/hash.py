@@ -3,7 +3,6 @@
 import os
 import struct
 from datetime import datetime
-import tempfile
 import typing as ty
 from pathlib import Path
 from collections.abc import Mapping
@@ -58,6 +57,12 @@ Hash = NewType("Hash", bytes)
 CacheKey = NewType("CacheKey", ty.Tuple[ty.Hashable, ty.Hashable])
 
 
+def location_converter(path: ty.Union[Path, str, None]) -> Path:
+    if path is None:
+        path = PersistentCache.location_default()
+    return Path(path)
+
+
 @attrs.define
 class PersistentCache:
     """Persistent cache in which to store computationally expensive hashes between nodes
@@ -69,8 +74,30 @@ class PersistentCache:
         the directory in which to store the hashes cache
     """
 
-    location: Path = attrs.field()
+    location: Path = attrs.field(converter=location_converter)  # type: ignore[misc]
+    cleanup_period: int = attrs.field()
     _hashes: ty.Dict[CacheKey, Hash] = attrs.field(factory=dict)
+
+    # Set the location of the persistent hash cache
+    LOCATION_ENV_VAR = "PYDRA_HASH_CACHE"
+    CLEANUP_ENV_VAR = "PYDRA_HASH_CACHE_CLEANUP_PERIOD"
+
+    @classmethod
+    def location_default(cls):
+        try:
+            location = os.environ[cls.LOCATION_ENV_VAR]
+        except KeyError:
+            location = platformdirs.user_cache_dir(
+                appname="pydra",
+                appauthor="nipype",
+                version=__version__,
+            )
+        return location
+
+    # the default needs to be an instance method
+    @location.default
+    def _location_default(self):
+        return self.location_default()
 
     @location.validator
     def location_validator(self, _, location):
@@ -78,6 +105,10 @@ class PersistentCache:
             raise ValueError(
                 f"Persistent cache location '{location}' is not a directory"
             )
+
+    @cleanup_period.default
+    def cleanup_period_default(self):
+        return int(os.environ.get(self.CLEANUP_ENV_VAR, 30))
 
     def get_or_calculate_hash(self, key: CacheKey, calculate_hash: ty.Callable) -> Hash:
         """Check whether key is present in the persistent cache store and return it if so.
@@ -109,13 +140,12 @@ class PersistentCache:
             key_path.write_bytes(hsh)
         return Hash(hsh)
 
-    @classmethod
-    def clean_up(cls):
+    def clean_up(self):
         """Cleans up old hash caches that haven't been accessed in the last 30 days"""
         now = datetime.now()
-        for path in cls.DEFAULT_LOCATION.iterdir():
+        for path in self.location.iterdir():
             days = (now - datetime.fromtimestamp(path.lstat().st_atime)).days
-            if days > cls.CLEAN_UP_PERIOD:
+            if days > self.cleanup_period:
                 path.unlink()
 
     @classmethod
@@ -124,37 +154,7 @@ class PersistentCache:
     ) -> "PersistentCache":
         if isinstance(path, PersistentCache):
             return path
-        if path is None:
-            path = Path(tempfile.mkdtemp())
-        else:
-            path = Path(path)
-            if not path.exists():
-                try:
-                    Path(path).mkdir(parents=True)
-                except Exception as e:
-                    raise RuntimeError(
-                        f"Could not create cache directory for file hashes at {path}, "
-                        "please use 'PYDRA_HASH_CACHE' environment variable to manually "
-                        "set where it is created"
-                    ) from e
         return PersistentCache(path)
-
-    # FIXME: Ideally the default location would be inside one of the cache_locations
-    # but can't think of a clean way to pass the cache_locations down to this part
-    # of the code, so just dumping in the home directory instead by default. In any case,
-    # this needs to be documented
-    DEFAULT_LOCATION = Path(
-        os.environ.get(
-            "PYDRA_HASH_CACHE",
-            platformdirs.user_cache_dir(
-                appname="pydra",
-                appauthor="nipype",
-                version=__version__,
-            ),
-        )
-    )
-    # Set the period after which old hash cache files are cleaned up in days
-    CLEAN_UP_PERIOD = os.environ.get("PYDRA_HASH_CACHE_CLEANUP_PERIOD", 30)
 
 
 @attrs.define
@@ -185,7 +185,7 @@ def hash_function(obj, **kwargs):
 
 
 def hash_object(
-    obj: object, persistent_cache: ty.Optional[Path] = PersistentCache.DEFAULT_LOCATION
+    obj: object, persistent_cache: ty.Union[PersistentCache, Path, None] = None
 ) -> Hash:
     """Hash an object
 
@@ -195,10 +195,10 @@ def hash_object(
     Base Python types are implemented, including recursive lists and
     dicts. Custom types can be registered with :func:`register_serializer`.
     """
-    try:
-        return hash_single(obj, Cache(persistent=persistent_cache))
-    except Exception as e:
-        raise UnhashableError(f"Cannot hash object {obj!r} due to '{e}'") from e
+    # try:
+    return hash_single(obj, Cache(persistent=persistent_cache))
+    # except Exception as e:
+    #     raise UnhashableError(f"Cannot hash object {obj!r} due to '{e}'") from e
 
 
 def hash_single(obj: object, cache: Cache) -> Hash:
