@@ -1,6 +1,7 @@
 from dateutil import parser
 import re
 import subprocess as sp
+import struct
 import time
 import attrs
 import typing as ty
@@ -575,13 +576,32 @@ def test_sge_no_limit_maxthreads(tmpdir):
     assert job_1_endtime > job_2_starttime
 
 
-def test_hash_changes_in_task_inputs(tmp_path):
+def test_hash_changes_in_task_inputs_file(tmp_path):
     @mark.task
     def output_dir_as_input(out_dir: Directory) -> Directory:
         (out_dir.fspath / "new-file.txt").touch()
         return out_dir
 
     task = output_dir_as_input(out_dir=tmp_path)
+    with pytest.raises(RuntimeError, match="Input field hashes have changed"):
+        task()
+
+
+def test_hash_changes_in_task_inputs_unstable(tmp_path):
+    @attrs.define
+    class Unstable:
+        value: int  # type: ignore
+
+        def __bytes_repr__(self, cache) -> ty.Iterator[bytes]:
+            """Bytes repr based on time-stamp -> inherently unstable"""
+            yield struct.pack("!I", int(time.time()))
+
+    @mark.task
+    def unstable_input(unstable: Unstable) -> int:
+        time.sleep(1)  # Ensure the timestamp changes during the task run
+        return unstable.value
+
+    task = unstable_input(unstable=Unstable(1))
     with pytest.raises(RuntimeError, match="Input field hashes have changed"):
         task()
 
