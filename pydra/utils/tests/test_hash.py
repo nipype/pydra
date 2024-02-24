@@ -341,10 +341,13 @@ def test_persistent_hash_cache(cache_path, text_file):
     assert len(list(cache_path.iterdir())) == 2
 
 
-def test_persistent_hash_cache_cleanup(cache_path, text_file):
+def test_persistent_hash_cache_cleanup1(cache_path, text_file):
     with mock.patch.dict(
         os.environ,
-        {"PYDRA_HASH_CACHE": str(cache_path), "PYDRA_HASH_CACHE_CLEANUP_PERIOD": "-1"},
+        {
+            "PYDRA_HASH_CACHE": str(cache_path),
+            "PYDRA_HASH_CACHE_CLEANUP_PERIOD": "-100",
+        },
     ):
         persistent_cache = PersistentCache()
     hsh = hash_object(text_file, persistent_cache=persistent_cache)
@@ -353,10 +356,11 @@ def test_persistent_hash_cache_cleanup(cache_path, text_file):
     assert len(list(cache_path.iterdir())) == 0
 
 
-def test_persistent_hash_cache_badpath(cache_path, text_file):
-    persistent_cache = PersistentCache(cache_path, cleanup_period=-1)
+def test_persistent_hash_cache_cleanup2(cache_path, text_file):
+    persistent_cache = PersistentCache(cache_path, cleanup_period=-100)
     hsh = hash_object(text_file, persistent_cache=persistent_cache)
     assert len(list(cache_path.iterdir())) == 1
+    time.sleep(2)
     persistent_cache.clean_up()
     assert len(list(cache_path.iterdir())) == 0
 
