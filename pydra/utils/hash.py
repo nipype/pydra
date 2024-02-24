@@ -7,7 +7,7 @@ import typing as ty
 from pathlib import Path
 from collections.abc import Mapping
 from functools import singledispatch
-from hashlib import blake2b
+from hashlib import blake2b, blake2s
 import logging
 from typing import (
     Dict,
@@ -135,7 +135,7 @@ class PersistentCache:
             return self._hashes[key]
         except KeyError:
             pass
-        key_path = self.location / blake2b(str(key).encode()).hexdigest()
+        key_path = self.location / blake2s(str(key).encode()).hexdigest()
         with SoftFileLock(key_path.with_suffix(".lock")):
             if key_path.exists():
                 return Hash(key_path.read_bytes())
@@ -147,6 +147,8 @@ class PersistentCache:
         """Cleans up old hash caches that haven't been accessed in the last 30 days"""
         now = datetime.now()
         for path in self.location.iterdir():
+            if path.endswith(".lock"):
+                continue
             days = (now - datetime.fromtimestamp(path.lstat().st_atime)).days
             if days > self.cleanup_period:
                 path.unlink()
@@ -198,10 +200,10 @@ def hash_object(
     Base Python types are implemented, including recursive lists and
     dicts. Custom types can be registered with :func:`register_serializer`.
     """
-    # try:
-    return hash_single(obj, Cache(persistent=persistent_cache))
-    # except Exception as e:
-    #     raise UnhashableError(f"Cannot hash object {obj!r} due to '{e}'") from e
+    try:
+        return hash_single(obj, Cache(persistent=persistent_cache))
+    except Exception as e:
+        raise UnhashableError(f"Cannot hash object {obj!r} due to '{e}'") from e
 
 
 def hash_single(obj: object, cache: Cache) -> Hash:
