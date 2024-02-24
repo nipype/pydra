@@ -117,6 +117,11 @@ def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     cache : Cache
         a dictionary object used to store a cache of previously cached objects to
         handle circular object references
+
+    Yields
+    -------
+    bytes
+        unique representation of the object in a series of bytes
     """
     cls = obj.__class__
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
