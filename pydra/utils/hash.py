@@ -147,7 +147,7 @@ class PersistentCache:
         """Cleans up old hash caches that haven't been accessed in the last 30 days"""
         now = datetime.now()
         for path in self.location.iterdir():
-            if path.endswith(".lock"):
+            if path.name.endswith(".lock"):
                 continue
             days = (now - datetime.fromtimestamp(path.lstat().st_atime)).days
             if days > self.cleanup_period:
