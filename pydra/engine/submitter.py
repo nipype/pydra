@@ -44,7 +44,7 @@ class Submitter:
         self.loop.run_until_complete(
             self.submit_from_call(runnable, rerun, environment)
         )
-        PersistentCache.clean_up()
+        PersistentCache().clean_up()
         return runnable.result()
 
     async def submit_from_call(self, runnable, rerun, environment):
