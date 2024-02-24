@@ -8,7 +8,7 @@ from pydra import mark
 from ...engine.specs import File, LazyOutField
 from ..typing import TypeParser
 from pydra import Workflow
-from fileformats.application import Json
+from fileformats.application import Json, Yaml, Xml
 from .utils import (
     generic_func_task,
     GenericShellTask,
@@ -609,6 +609,14 @@ def test_type_is_subclass2():
 
 def test_type_is_subclass3():
     assert TypeParser.is_subclass(ty.Type[Json], ty.Type[File])
+
+
+def test_type_is_subclass4():
+    assert TypeParser.is_subclass(ty.Union[Json, Yaml], ty.Union[Json, Yaml, Xml])
+
+
+def test_type_is_subclass5():
+    assert not TypeParser.is_subclass(ty.Union[Json, Yaml, Xml], ty.Union[Json, Yaml])
 
 
 def test_type_is_instance1():

@@ -649,7 +649,7 @@ class TypeParser(ty.Generic[T]):
                     else:
                         candidate_args = [candidate]
                     return all(
-                        any(cls.is_subclass(a, c) for a in args) for c in candidate_args
+                        any(cls.is_subclass(a, c) for c in candidate_args) for a in args
                     )
                 if origin is not None:
                     klass = origin
