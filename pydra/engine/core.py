@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 import typing as ty
-from copy import deepcopy
+from copy import deepcopy, copy
 from uuid import uuid4
 from filelock import SoftFileLock
 import shutil
@@ -286,10 +286,10 @@ class TaskBase:
             ]
 
         if state_index is not None:
-            inputs_copy = deepcopy(self.inputs)
+            inputs_copy = copy(self.inputs)
             for key, ind in self.state.inputs_ind[state_index].items():
                 val = self._extract_input_el(
-                    inputs=inputs_copy, inp_nm=key.split(".")[1], ind=ind
+                    inputs=self.inputs, inp_nm=key.split(".")[1], ind=ind
                 )
                 setattr(inputs_copy, key.split(".")[1], val)
             # setting files_hash again in case it was cleaned by setting specific element
