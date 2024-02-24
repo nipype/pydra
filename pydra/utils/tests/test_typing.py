@@ -717,6 +717,32 @@ def test_generic_is_subclass3():
     assert not TypeParser.is_subclass(ty.List[float], ty.List[int])
 
 
+def test_generic_is_subclass4():
+    class MyTuple(tuple):
+        pass
+
+    class A:
+        pass
+
+    class B(A):
+        pass
+
+    assert TypeParser.is_subclass(MyTuple[A], ty.Tuple[A])
+    assert TypeParser.is_subclass(ty.Tuple[B], ty.Tuple[A])
+    assert TypeParser.is_subclass(MyTuple[B], ty.Tuple[A])
+    assert not TypeParser.is_subclass(ty.Tuple[A], ty.Tuple[B])
+    assert not TypeParser.is_subclass(ty.Tuple[A], MyTuple[A])
+    assert not TypeParser.is_subclass(MyTuple[A], ty.Tuple[B])
+    assert TypeParser.is_subclass(MyTuple[A, int], ty.Tuple[A, int])
+    assert TypeParser.is_subclass(ty.Tuple[B, int], ty.Tuple[A, int])
+    assert TypeParser.is_subclass(MyTuple[B, int], ty.Tuple[A, int])
+    assert TypeParser.is_subclass(MyTuple[int, B], ty.Tuple[int, A])
+    assert not TypeParser.is_subclass(MyTuple[B, int], ty.Tuple[int, A])
+    assert not TypeParser.is_subclass(MyTuple[int, B], ty.Tuple[A, int])
+    assert not TypeParser.is_subclass(MyTuple[B, int], ty.Tuple[A])
+    assert not TypeParser.is_subclass(MyTuple[B], ty.Tuple[A, int])
+
+
 def test_type_is_instance1():
     assert TypeParser.is_instance(File, ty.Type[File])
 
