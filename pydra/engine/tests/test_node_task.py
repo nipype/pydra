@@ -323,9 +323,7 @@ def test_task_init_7(tmp_path):
     # changing the content of the file
     file2 = tmp_path / "file2.txt"
     with mock.patch("time.time") as t:
-        t.return_value = (
-            time.time() + 10
-        )  # mock mtime writing to ensure it is different
+        t.return_value = time.time() + 10  # mock mtime to ensure different
         with open(file2, "w") as f:
             f.write("from pydra")
 

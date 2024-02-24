@@ -167,9 +167,7 @@ def test_input_file_hash_2(tmp_path):
     # checking if different content (the same name) affects the hash
     file_diffcontent = tmp_path / "in_file_1.txt"
     with mock.patch("time.time") as t:
-        t.return_value = (
-            time.time() + 10
-        )  # mock mtime writing to ensure it is different
+        t.return_value = time.time() + 10  # mock mtime to ensure different
         with open(file_diffcontent, "w") as f:
             f.write("hi")
     hash3 = inputs(in_file=file_diffcontent).hash
@@ -244,9 +242,7 @@ def test_input_file_hash_3(tmp_path):
 
     # recreating the file
     with mock.patch("time.time") as t:
-        t.return_value = (
-            time.time() + 10
-        )  # mock mtime writing to ensure it is different
+        t.return_value = time.time() + 10  # mock mtime to ensure different
         with open(file, "w") as f:
             f.write("hello")
 
@@ -303,9 +299,7 @@ def test_input_file_hash_4(tmp_path):
     # checking if different content (the same name) affects the hash
     file_diffcontent = tmp_path / "in_file_1.txt"
     with mock.patch("time.time") as t:
-        t.return_value = (
-            time.time() + 10
-        )  # mock mtime writing to ensure it is different
+        t.return_value = time.time() + 10  # mock mtime to ensure different
         with open(file_diffcontent, "w") as f:
             f.write("hi")
     hash3 = inputs(in_file=[[file_diffcontent, 3]]).hash
@@ -343,9 +337,7 @@ def test_input_file_hash_5(tmp_path):
     # checking if different content (the same name) affects the hash
     file_diffcontent = tmp_path / "in_file_1.txt"
     with mock.patch("time.time") as t:
-        t.return_value = (
-            time.time() + 10
-        )  # mock mtime writing to ensure it is different
+        t.return_value = time.time() + 10  # mock mtime to ensure different
         with open(file_diffcontent, "w") as f:
             f.write("hi")
     hash3 = inputs(in_file=[{"file": file_diffcontent, "int": 3}]).hash
