@@ -164,6 +164,7 @@ def test_input_file_hash_2(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
+    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
@@ -194,6 +195,7 @@ def test_input_file_hash_2a(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
+    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
@@ -235,6 +237,7 @@ def test_input_file_hash_3(tmp_path):
     # assert id(files_hash1["in_file"][filename]) == id(files_hash2["in_file"][filename])
 
     # recreating the file
+    time.sleep(2)  # ensure mtime is different
     with open(file, "w") as f:
         f.write("hello")
 
@@ -326,6 +329,7 @@ def test_input_file_hash_5(tmp_path):
     assert hash1 == hash2
 
     # checking if different content (the same name) affects the hash
+    time.sleep(2)  # ensure mtime is different
     file_diffcontent = tmp_path / "in_file_1.txt"
     with open(file_diffcontent, "w") as f:
         f.write("hi")
