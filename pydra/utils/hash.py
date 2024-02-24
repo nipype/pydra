@@ -90,10 +90,23 @@ def hash_single(obj: object, cache: Cache) -> Hash:
         # Handle recursion by putting a dummy value in the cache
         cache[objid] = Hash(b"\x00")
         h = blake2b(digest_size=16, person=b"pydra-hash")
-        for chunk in bytes_repr(obj, cache):
+        bytes_it = bytes_repr(obj, cache)
+        first = next(bytes_it)
+        if isinstance(first, str):
+            cache_id = first
+            try:
+                return cache[cache_id]
+            except KeyError:
+                pass
+        else:
+            h.update(first)
+            cache_id = None
+        for chunk in bytes_it:
             h.update(chunk)
         hsh = cache[objid] = Hash(h.digest())
         logger.debug("Hash of %s object is %s", obj, hsh)
+        if cache_id is not None:
+            cache[cache_id] = hsh
     return cache[objid]
 
 
