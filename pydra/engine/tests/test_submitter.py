@@ -593,8 +593,8 @@ def test_hash_changes_in_task_inputs_unstable(tmp_path):
         value: int  # type: ignore
 
         def __bytes_repr__(self, cache) -> ty.Iterator[bytes]:
-            """Bytes repr based on time-stamp -> inherently unstable"""
-            yield struct.pack("!I", int(time.time()))
+            """Random 128-bit bytestring"""
+            yield random.randbytes(16)
 
     @mark.task
     def unstable_input(unstable: Unstable) -> int:
