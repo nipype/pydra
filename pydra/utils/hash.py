@@ -18,8 +18,10 @@ from typing import (
     Set,
 )
 from filelock import SoftFileLock
+import platformdirs
 import attrs.exceptions
 from fileformats.core import FileSet
+from pydra._version import __version__
 
 logger = logging.getLogger("pydra")
 
@@ -128,12 +130,12 @@ class PersistentCache:
             path = Path(path)
             if not path.exists():
                 try:
-                    Path(path).mkdir()
+                    Path(path).mkdir(parents=True)
                 except Exception as e:
                     raise RuntimeError(
                         f"Could not create cache directory for file hashes at {path}, "
-                        "please use 'PYDRA_HASH_CACHE' environment variable to control "
-                        "where it is created by default"
+                        "please use 'PYDRA_HASH_CACHE' environment variable to manually "
+                        "set where it is created"
                     ) from e
         return PersistentCache(path)
 
@@ -142,10 +144,17 @@ class PersistentCache:
     # of the code, so just dumping in the home directory instead by default. In any case,
     # this needs to be documented
     DEFAULT_LOCATION = Path(
-        os.environ.get("PYDRA_HASH_CACHE", Path("~").expanduser() / ".pydra-hash-cache")
+        os.environ.get(
+            "PYDRA_HASH_CACHE",
+            platformdirs.user_cache_dir(
+                appname="pydra",
+                appauthor="nipype",
+                version=__version__,
+            ),
+        )
     )
     # Set the period after which old hash cache files are cleaned up in days
-    CLEAN_UP_PERIOD = os.environ.get("PYDRA_HASH_CACHE_CLEAN_UP_PERIOD", 30)
+    CLEAN_UP_PERIOD = os.environ.get("PYDRA_HASH_CACHE_CLEANUP_PERIOD", 30)
 
 
 @attrs.define
