@@ -2,6 +2,7 @@ from dateutil import parser
 import re
 import subprocess as sp
 import time
+import attrs
 import typing as ty
 from random import randint
 import pytest
@@ -600,33 +601,30 @@ def test_hash_changes_in_workflow_inputs(tmp_path):
         wf()
 
 
-@pytest.mark.flaky(
-    reruns=5
-)  # chance of race-condition where alter_x completes before identity
 def test_hash_changes_in_workflow_graph(tmpdir):
     class X:
         """Dummy class with unstable hash (i.e. which isn't altered in a node in which
         it is an input)"""
 
-        # class attribute to change
-        x = 1
+        value = 1
 
         def __bytes_repr__(self, cache):
-            """Bytes representation from class attribute, which will be changed be 'alter_x" node.
+            """Bytes representation from class attribute, which will be changed be
+            'alter_x" node.
 
-            NB: this is a very silly bytes_repr implementation just to trigger the exception,
-            hopefully cases like this will be very rare."""
-            yield bytes(self.x)
+            NB: this is a contrived example where the bytes_repr implementation returns
+            a bytes representation of a class attribute in order to trigger the exception,
+            hopefully cases like this will be very rare"""
+            yield bytes(self.value)
 
     @mark.task
     @mark.annotate({"return": {"x": X, "y": int}})
-    def identity(x) -> ty.Tuple[X, int]:
-        return x, randint(0, 10)
+    def identity(x: X) -> ty.Tuple[X, int]:
+        return x, 99
 
     @mark.task
     def alter_x(y):
-        # time.sleep(10)
-        X.x = 2
+        X.value = 2
         return y
 
     @mark.task
@@ -635,7 +633,7 @@ def test_hash_changes_in_workflow_graph(tmpdir):
 
     wf = Workflow(name="wf_with_blocked_tasks", input_spec=["x", "y"])
     wf.add(identity(name="taska", x=wf.lzin.x))
-    wf.add(alter_x(name="taskb", x=wf.taska.lzout.y))
+    wf.add(alter_x(name="taskb", y=wf.taska.lzout.y))
     wf.add(to_tuple(name="taskc", x=wf.taska.lzout.x, y=wf.taskb.lzout.out))
     wf.set_output([("out", wf.taskc.lzout.out)])
 
@@ -644,7 +642,7 @@ def test_hash_changes_in_workflow_graph(tmpdir):
     wf.cache_dir = tmpdir
 
     with pytest.raises(
-        Exception, match="Graph of 'wf_with_blocked_tasks' workflow is not empty"
+        RuntimeError, match="Graph of 'wf_with_blocked_tasks' workflow is not empty"
     ):
-        with Submitter("serial") as sub:
+        with Submitter("cf") as sub:
             result = sub(wf)

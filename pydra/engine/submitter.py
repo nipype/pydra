@@ -171,34 +171,29 @@ class Submitter:
                     ii += 1
                     # don't block the event loop!
                     await asyncio.sleep(1)
-                    if ii > 60:  # QUESTION: why is this 60?
+                    if ii > 60:
                         msg = (
                             f"Graph of '{wf}' workflow is not empty, but not able to get "
                             "more tasks - something has gone wrong when retrieving the "
                             "results predecessors:\n\n"
                         )
                         # Get blocked tasks and the predecessors they are waiting on
-                        outstanding = [
-                            (
-                                t,
-                                [
-                                    p
-                                    for p in graph_copy.predecessors[t.name]
-                                    if not p.done
-                                ],
-                            )
+                        outstanding = {
+                            t: [
+                                p for p in graph_copy.predecessors[t.name] if not p.done
+                            ]
                             for t in graph_copy.sorted_nodes
-                        ]
+                        }
                         graph_checksums = dict(wf.inputs._graph_checksums)
 
-                        for task, waiting_on in outstanding:
+                        for task, waiting_on in outstanding.items():
                             if not waiting_on:
                                 continue
                             msg += f"- '{task.name}' node blocked due to\n"
                             for pred in waiting_on:
                                 if pred.checksum != graph_checksums[pred.name]:
                                     msg += f"    - hash changes in '{pred.name}' node inputs\n"
-                                else:
+                                elif pred not in outstanding:
                                     msg += (
                                         f"    - undiagnosed issues in '{pred.name}' node "
                                         "(potentially related to the file-system)"
