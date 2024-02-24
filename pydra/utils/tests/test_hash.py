@@ -335,11 +335,9 @@ def test_persistent_hash_cache(cache_path, text_file):
     assert hash_object(text_file, persistent_cache=cache_path) == modified_hash
 
     # Test that changes to the text file result in new hash
+    time.sleep(2)  # Need to ensure that the mtimes will be different
     text_file.fspath.write_text("bar")
-    # Ensure that the mtime will be incremented by mocking time.time
-    with mock.patch("time.time") as t:
-        t.return_value = time.time() + 10
-        assert hash_object(text_file, persistent_cache=cache_path) != modified_hash
+    assert hash_object(text_file, persistent_cache=cache_path) != modified_hash
     assert len(list(cache_path.iterdir())) == 2
 
 
