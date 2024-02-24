@@ -600,9 +600,9 @@ def test_hash_changes_in_workflow_inputs(tmp_path):
         wf()
 
 
-# @pytest.mark.flaky(
-#     reruns=2
-# )  # chance of race-condition where alter_x completes before identity
+@pytest.mark.flaky(
+    reruns=5
+)  # chance of race-condition where alter_x completes before identity
 def test_hash_changes_in_workflow_graph(tmpdir):
     class X:
         """Dummy class with unstable hash (i.e. which isn't altered in a node in which
