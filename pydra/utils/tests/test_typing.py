@@ -611,12 +611,32 @@ def test_type_is_subclass3():
     assert TypeParser.is_subclass(ty.Type[Json], ty.Type[File])
 
 
-def test_type_is_subclass4():
+def test_union_is_subclass1():
     assert TypeParser.is_subclass(ty.Union[Json, Yaml], ty.Union[Json, Yaml, Xml])
 
 
-def test_type_is_subclass5():
+def test_union_is_subclass2():
     assert not TypeParser.is_subclass(ty.Union[Json, Yaml, Xml], ty.Union[Json, Yaml])
+
+
+def test_union_is_subclass3():
+    assert TypeParser.is_subclass(Json, ty.Union[Json, Yaml])
+
+
+def test_union_is_subclass4():
+    assert not TypeParser.is_subclass(ty.Union[Json, Yaml], Json)
+
+
+def test_generic_is_subclass1():
+    assert TypeParser.is_subclass(ty.List[int], list)
+
+
+def test_generic_is_subclass2():
+    assert not TypeParser.is_subclass(list, ty.List[int])
+
+
+def test_generic_is_subclass3():
+    assert not TypeParser.is_subclass(ty.List[float], ty.List[int])
 
 
 def test_type_is_instance1():
