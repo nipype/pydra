@@ -163,7 +163,7 @@ def test_type_check_nested8():
     with pytest.raises(TypeError, match="explicitly excluded"):
         TypeParser(
             ty.Tuple[int, ...],
-            not_coercible=[(ty.Sequence, ty.Tuple), (ty.Sequence, ty.List)],
+            not_coercible=[(ty.Sequence, ty.Tuple)],
         )(lz(ty.List[float]))
 
 
