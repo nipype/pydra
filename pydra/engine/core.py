@@ -1301,8 +1301,6 @@ class Workflow(TaskBase):
         # Check for any changes to the input hashes that have occurred during the execution
         # of the task
         self._check_for_hash_changes()
-        if result is None:
-            raise Exception("This should never happen, please open new issue")
         return result
 
     async def _run_task(self, submitter, rerun=False):
