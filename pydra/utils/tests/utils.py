@@ -1,5 +1,3 @@
-from pathlib import Path
-import typing as ty
 from fileformats.generic import File
 from fileformats.core.mixin import WithSeparateHeader, WithMagicNumber
 from pydra import mark
@@ -24,28 +22,6 @@ class MyOtherFormatX(WithMagicNumber, WithSeparateHeader, File):
     magic_number = b"MYFORMAT"
     ext = ".my"
     header_type = MyHeader
-
-
-@File.generate_sample_data.register
-def my_format_x_generate_sample_data(
-    my_format_x: MyFormatX, dest_dir: Path
-) -> ty.List[Path]:
-    fspath = dest_dir / "file.my"
-    with open(fspath, "wb") as f:
-        f.write(b"MYFORMAT\nsome data goes here")
-    header_fspath = dest_dir / "file.hdr"
-    header_fspath.write_text("a: 1\nb: 2\nc: 3\n")
-    return [fspath, header_fspath]
-
-
-@File.generate_sample_data.register
-def my_other_format_generate_sample_data(
-    my_other_format: MyOtherFormatX, dest_dir: Path
-) -> ty.List[Path]:
-    fspath = dest_dir / "file.my"
-    with open(fspath, "wb") as f:
-        f.write(b"MYFORMAT\nsome data goes here")
-    return [fspath]
 
 
 @mark.task
