@@ -2,9 +2,8 @@ from dateutil import parser
 import re
 import subprocess as sp
 import time
-
 import pytest
-
+from fileformats.generic import Directory
 from .utils import (
     need_sge,
     need_slurm,
@@ -612,3 +611,33 @@ def alter_input(x):
 @mark.task
 def to_tuple(x, y):
     return (x, y)
+
+
+# @pytest.mark.xfail(reason="Not sure")
+def test_hash_changes(tmp_path):
+    task = output_dir_as_input(out_dir=tmp_path)
+    with pytest.raises(RuntimeError, match="Hashes have changed"):
+        task()
+
+
+# @pytest.mark.xfail(reason="Not sure")
+def test_hash_changes_workflow(tmp_path):
+    wf = Workflow(
+        name="test_hash_change", input_spec={"in_dir": Directory}, in_dir=tmp_path
+    )
+    wf.add(output_dir_as_output(out_dir=wf.lzin.in_dir, name="task"))
+    wf.set_output(("out_dir", wf.task.lzout.out))
+    with pytest.raises(RuntimeError, match="Hashes have changed.*workflow\."):
+        wf()
+
+
+@mark.task
+def output_dir_as_output(out_dir: Path) -> Directory:
+    (out_dir / "new-file.txt").touch()
+    return out_dir
+
+
+@mark.task
+def output_dir_as_input(out_dir: Directory) -> Directory:
+    (out_dir.fspath / "new-file.txt").touch()
+    return out_dir

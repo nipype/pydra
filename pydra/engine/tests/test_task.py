@@ -6,7 +6,6 @@ import cloudpickle as cp
 from pathlib import Path
 import json
 import glob as glob
-from fileformats.generic import Directory
 from ... import mark
 from ..core import Workflow
 from ..task import AuditFlag, ShellCommandTask
@@ -1583,16 +1582,3 @@ def test_object_input():
 
     result = testfunc(a=A(x=7))()
     assert result.output.out == 7
-
-
-@mark.task
-def output_dir_as_input(out_dir: Directory) -> Directory:
-    (out_dir.fspath / "new-file.txt").touch()
-    return out_dir
-
-
-# @pytest.mark.xfail(reason="Not sure")
-def test_hash_changes(tmp_path):
-    task = output_dir_as_input(out_dir=tmp_path)
-    with pytest.raises(RuntimeError, match="Hashes have changed"):
-        task()

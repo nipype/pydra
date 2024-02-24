@@ -1266,6 +1266,15 @@ class Workflow(TaskBase):
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
+        # Check for any changes to the input hashes that have occurred during the execution
+        # of the task
+        hash_changes = self.inputs.hash_changes()
+        if hash_changes:
+            raise RuntimeError(
+                f"Hashes have changed for {hash_changes} input fields during the "
+                f"execution of {self} workflow. Please check all output files/directories are "
+                "typed with `pathlib.Path` instead of `fileformats` classes"
+            )
         if result is None:
             raise Exception("This should never happen, please open new issue")
         return result
