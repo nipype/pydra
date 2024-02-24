@@ -909,7 +909,7 @@ class TaskBase:
                     f"- the {field.type} object passed to '{changed}' field appears to "
                     f"have an unstable hash. The {field.type}.__bytes_repr__() method "
                     "can be implemented to provide stable hashes for this type. "
-                    "See pydra/utils.hash.py for examples.\n"
+                    "See pydra/utils/hash.py for examples.\n"
                 )
         if hash_changes:
             raise RuntimeError(

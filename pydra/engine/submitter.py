@@ -186,6 +186,7 @@ class Submitter:
                         }
                         graph_checksums = dict(wf.inputs._graph_checksums)
 
+                        hashes_have_changed = False
                         for task, waiting_on in outstanding.items():
                             if not waiting_on:
                                 continue
@@ -197,13 +198,25 @@ class Submitter:
                                         f"Current values and hashes: {pred.inputs}, "
                                         f"{pred.inputs._hashes}\n"
                                     )
+                                    hashes_have_changed = True
                                 elif pred not in outstanding:
                                     msg += (
-                                        f"    - undiagnosed issues in '{pred.name}' node "
-                                        "(potentially related to the file-system)"
+                                        f"    - undiagnosed issues in '{pred.name}' node, "
+                                        "potentially related to file-system access issues "
                                     )
                             msg += "\n"
-                        msg += "Set loglevel to 'debug' in order to track hash changes"
+                        if hashes_have_changed:
+                            msg += (
+                                "Set loglevel to 'debug' in order to track hash changes "
+                                "throughout the execution of the workflow.\n\n "
+                                "These issues may have been caused by `bytes_repr()` methods "
+                                "that don't return stable hash values for specific object "
+                                "types across multiple processes (see bytes_repr() "
+                                '"singledispatch "function in pydra/utils/hash.py).'
+                                "You may need to implement a specific `bytes_repr()` "
+                                '"singledispatch overload"s or `__bytes_repr__()` '
+                                "dunder methods to handle one or more types in "
+                            )
                         raise RuntimeError(msg)
             for task in tasks:
                 # grab inputs if needed
