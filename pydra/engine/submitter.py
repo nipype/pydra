@@ -192,7 +192,11 @@ class Submitter:
                             msg += f"- '{task.name}' node blocked due to\n"
                             for pred in waiting_on:
                                 if pred.checksum != graph_checksums[pred.name]:
-                                    msg += f"    - hash changes in '{pred.name}' node inputs\n"
+                                    msg += (
+                                        f"    - hash changes in '{pred.name}' node inputs. "
+                                        f"Current values and hashes: {pred.inputs}, "
+                                        f"{pred.inputs._hashes}\n"
+                                    )
                                 elif pred not in outstanding:
                                     msg += (
                                         f"    - undiagnosed issues in '{pred.name}' node "
