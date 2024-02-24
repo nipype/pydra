@@ -915,6 +915,13 @@ class TaskBase:
                 f"Input field hashes have changed during the execution of the "
                 f"'{self.name}' {type(self).__name__}.\n{details}"
             )
+        logger.debug(
+            "Input values and hashes for '%s' %s node:\n%s\n%s",
+            self.name,
+            type(self).__name__,
+            self.inputs,
+            self.inputs._hashes,
+        )
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.any

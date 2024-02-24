@@ -199,6 +199,7 @@ class Submitter:
                                         "(potentially related to the file-system)"
                                     )
                             msg += "\n"
+                        msg += "Set loglevel to 'debug' in order to track hash changes"
                         raise RuntimeError(msg)
             for task in tasks:
                 # grab inputs if needed
