@@ -1,8 +1,7 @@
 from dateutil import parser
-import random
+import secrets
 import re
 import subprocess as sp
-import struct
 import time
 import attrs
 import typing as ty
@@ -595,11 +594,10 @@ def test_hash_changes_in_task_inputs_unstable(tmp_path):
 
         def __bytes_repr__(self, cache) -> ty.Iterator[bytes]:
             """Random 128-bit bytestring"""
-            yield random.randbytes(16)
+            yield secrets.token_bytes(16)
 
     @mark.task
     def unstable_input(unstable: Unstable) -> int:
-        time.sleep(1)  # Ensure the timestamp changes during the task run
         return unstable.value
 
     task = unstable_input(unstable=Unstable(1))
