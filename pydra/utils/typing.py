@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import sys
 import typing as ty
+import logging
 import attr
 from ..engine.specs import (
     LazyField,
@@ -19,6 +20,7 @@ except ImportError:
     # Python < 3.8
     from typing_extensions import get_origin, get_args  # type: ignore
 
+logger = logging.getLogger("pydra")
 
 NO_GENERIC_ISSUBCLASS = sys.version_info.major == 3 and sys.version_info.minor < 10
 
@@ -56,6 +58,9 @@ class TypeParser(ty.Generic[T]):
         the tree of more complex nested container types. Overrides 'coercible' to enable
         you to carve out exceptions, such as TypeParser(list, coercible=[(ty.Iterable, list)],
         not_coercible=[(str, list)])
+    allow_lazy_super : bool
+        Allow lazy fields to pass the type check if their types are superclasses of the
+        specified pattern (instead of matching or being subclasses of the pattern)
     label : str
         the label to be used to identify the type parser in error messages. Especially
         useful when TypeParser is used as a converter in attrs.fields
@@ -64,6 +69,7 @@ class TypeParser(ty.Generic[T]):
     tp: ty.Type[T]
     coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
     not_coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
+    allow_lazy_super: bool
     label: str
 
     COERCIBLE_DEFAULT: ty.Tuple[ty.Tuple[type, type], ...] = (
@@ -107,6 +113,7 @@ class TypeParser(ty.Generic[T]):
         not_coercible: ty.Optional[
             ty.Iterable[ty.Tuple[TypeOrAny, TypeOrAny]]
         ] = NOT_COERCIBLE_DEFAULT,
+        allow_lazy_super: bool = False,
         label: str = "",
     ):
         def expand_pattern(t):
@@ -135,6 +142,7 @@ class TypeParser(ty.Generic[T]):
         )
         self.not_coercible = list(not_coercible) if not_coercible is not None else []
         self.pattern = expand_pattern(tp)
+        self.allow_lazy_super = allow_lazy_super
 
     def __call__(self, obj: ty.Any) -> ty.Union[T, LazyField[T]]:
         """Attempts to coerce the object to the specified type, unless the value is
@@ -161,7 +169,27 @@ class TypeParser(ty.Generic[T]):
         if obj is attr.NOTHING:
             coerced = attr.NOTHING  # type: ignore[assignment]
         elif isinstance(obj, LazyField):
-            self.check_type(obj.type)
+            try:
+                self.check_type(obj.type)
+            except TypeError as e:
+                if self.allow_lazy_super:
+                    try:
+                        # Check whether the type of the lazy field isn't a superclass of
+                        # the type to check against, and if so, allow it due to permissive
+                        # typing rules.
+                        TypeParser(obj.type).check_type(self.tp)
+                    except TypeError:
+                        raise e
+                    else:
+                        logger.info(
+                            "Connecting lazy field %s to %s%s via permissive typing that "
+                            "allows super-to-sub type connections",
+                            obj,
+                            self.tp,
+                            self.label_str,
+                        )
+                else:
+                    raise e
             coerced = obj  # type: ignore
         elif isinstance(obj, StateArray):
             coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]

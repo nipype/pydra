@@ -160,8 +160,20 @@ def test_type_check_nested8():
     with pytest.raises(TypeError, match="explicitly excluded"):
         TypeParser(
             ty.Tuple[int, ...],
-            not_coercible=[(ty.Sequence, ty.Tuple)],
+            not_coercible=[(ty.Sequence, ty.Tuple), (ty.Sequence, ty.List)],
         )(lz(ty.List[float]))
+
+
+def test_type_check_permit_superclass():
+    # Typical case as Json is subclass of File
+    TypeParser(ty.List[File])(lz(ty.List[Json]))
+    # Permissive super class, as File is superclass of Json
+    TypeParser(ty.List[Json], allow_lazy_super=True)(lz(ty.List[File]))
+    with pytest.raises(TypeError, match="Cannot coerce"):
+        TypeParser(ty.List[Json], allow_lazy_super=False)(lz(ty.List[File]))
+    # Fails because Yaml is neither sub or super class of Json
+    with pytest.raises(TypeError, match="Cannot coerce"):
+        TypeParser(ty.List[Json], allow_lazy_super=True)(lz(ty.List[Yaml]))
 
 
 def test_type_check_fail1():
