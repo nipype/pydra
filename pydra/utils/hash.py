@@ -1,9 +1,8 @@
 """Generic object hashing dispatch"""
 
 import os
-
-# import stat
 import struct
+from datetime import datetime
 import tempfile
 import typing as ty
 from pathlib import Path
@@ -78,7 +77,7 @@ class PersistentCache:
                 f"Persistent cache location '{location}' is not a directory"
             )
 
-    def get_hash(self, key: CacheKey, calculate_hash: ty.Callable) -> Hash:
+    def get_or_calculate_hash(self, key: CacheKey, calculate_hash: ty.Callable) -> Hash:
         """Check whether key is present in the persistent cache store and return it if so.
         Otherwise use `calculate_hash` to generate the hash and save it in the persistent
         store.
@@ -108,22 +107,52 @@ class PersistentCache:
             key_path.write_bytes(hsh)
         return Hash(hsh)
 
+    @classmethod
+    def clean_up(cls):
+        """Cleans up old hash caches that haven't been accessed in the last 30 days"""
+        now = datetime.now()
+        for path in cls.DEFAULT_LOCATION.iterdir():
+            days = (now - datetime.fromtimestamp(path.lstat().st_atime)).days
+            if days > cls.CLEAN_UP_PERIOD:
+                path.unlink()
 
-def persistent_cache_converter(
-    path: ty.Union[Path, str, PersistentCache, None]
-) -> PersistentCache:
-    if isinstance(path, PersistentCache):
-        return path
-    if path is None:
-        path = tempfile.mkdtemp()
-    return PersistentCache(Path(path))
+    @classmethod
+    def from_path(
+        cls, path: ty.Union[Path, str, "PersistentCache", None]
+    ) -> "PersistentCache":
+        if isinstance(path, PersistentCache):
+            return path
+        if path is None:
+            path = Path(tempfile.mkdtemp())
+        else:
+            path = Path(path)
+            if not path.exists():
+                try:
+                    Path(path).mkdir()
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Could not create cache directory for file hashes at {path}, "
+                        "please use 'PYDRA_HASH_CACHE' environment variable to control "
+                        "where it is created by default"
+                    ) from e
+        return PersistentCache(path)
+
+    # FIXME: Ideally the default location would be inside one of the cache_locations
+    # but can't think of a clean way to pass the cache_locations down to this part
+    # of the code, so just dumping in the home directory instead by default. In any case,
+    # this needs to be documented
+    DEFAULT_LOCATION = Path(
+        os.environ.get("PYDRA_HASH_CACHE", Path("~").expanduser() / ".pydra-hash-cache")
+    )
+    # Set the period after which old hash cache files are cleaned up in days
+    CLEAN_UP_PERIOD = os.environ.get("PYDRA_HASH_CACHE_CLEAN_UP_PERIOD", 30)
 
 
 @attrs.define
 class Cache:
     persistent: ty.Optional[PersistentCache] = attrs.field(
         default=None,
-        converter=persistent_cache_converter,
+        converter=PersistentCache.from_path,  # type: ignore[misc]
     )
     _hashes: ty.Dict[int, Hash] = attrs.field(factory=dict)
 
@@ -141,22 +170,14 @@ class UnhashableError(ValueError):
     """Error for objects that cannot be hashed"""
 
 
-def hash_function(obj, persistent_cache: ty.Optional[Path] = None):
+def hash_function(obj, **kwargs):
     """Generate hash of object."""
-    if persistent_cache is None:
-        # FIXME: Ideally the default location would be inside one of the cache_locations
-        # but can't think of a clean way to pass the cache_locations down to this part
-        # of the code, so just dumping in the home directory instead
-        persistent_cache = (Path("~") / ".pydra-hash-cache").expanduser()
-        try:
-            if not persistent_cache.exists():
-                persistent_cache.mkdir()
-        except Exception:
-            persistent_cache = None
-    return hash_object(obj, persistent_cache=persistent_cache).hex()
+    return hash_object(obj, **kwargs).hex()
 
 
-def hash_object(obj: object, persistent_cache: ty.Optional[Path] = None) -> Hash:
+def hash_object(
+    obj: object, persistent_cache: ty.Optional[Path] = PersistentCache.DEFAULT_LOCATION
+) -> Hash:
     """Hash an object
 
     Constructs a byte string that uniquely identifies the object,
@@ -201,7 +222,7 @@ def hash_single(obj: object, cache: Cache) -> Hash:
                 tp.__module__,
                 tp.__name__,
             ) + first
-            hsh = cache.persistent.get_hash(key, calc_hash)
+            hsh = cache.persistent.get_or_calculate_hash(key, calc_hash)
         else:
             hsh = calc_hash(first=first)
         logger.debug("Hash of %s object is %s", obj, hsh)
