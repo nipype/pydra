@@ -16,7 +16,7 @@ def hasher():
 
 
 def join_bytes_repr(obj):
-    return b"".join(bytes_repr(obj, Cache({})))
+    return b"".join(bytes_repr(obj, Cache()))
 
 
 def test_bytes_repr_builtins():

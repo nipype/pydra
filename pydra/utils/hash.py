@@ -190,7 +190,7 @@ def hash_single(obj: object, cache: Cache) -> Hash:
             h = blake2b(digest_size=16, person=b"pydra-hash")
             if first is not None:
                 h.update(first)
-            for chunk in bytes_it:  # NB: bytes_it is in outer scope
+            for chunk in bytes_it:  # Note that `bytes_it` is in outer scope
                 h.update(chunk)
             return Hash(h.digest())
 
@@ -406,7 +406,7 @@ def bytes_repr_mapping_contents(mapping: Mapping, cache: Cache) -> Iterator[byte
     .. code-block:: python
 
         >>> from pydra.utils.hash import bytes_repr_mapping_contents, Cache
-        >>> generator = bytes_repr_mapping_contents({"a": 1, "b": 2}, Cache({}))
+        >>> generator = bytes_repr_mapping_contents({"a": 1, "b": 2}, Cache())
         >>> b''.join(generator)
         b'str:1:a=...str:1:b=...'
     """
@@ -424,7 +424,7 @@ def bytes_repr_sequence_contents(seq: Sequence, cache: Cache) -> Iterator[bytes]
     .. code-block:: python
 
         >>> from pydra.utils.hash import bytes_repr_sequence_contents, Cache
-        >>> generator = bytes_repr_sequence_contents([1, 2], Cache({}))
+        >>> generator = bytes_repr_sequence_contents([1, 2], Cache())
         >>> list(generator)
         [b'\x6d...', b'\xa3...']
     """
