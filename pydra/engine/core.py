@@ -896,12 +896,13 @@ class TaskBase:
             field = getattr(attr.fields(type(self.inputs)), changed)
             if issubclass(field.type, FileSet):
                 details += (
-                    f"- '{changed}' field is of type {field.type}. If it is intended to "
-                    "contain output data then the type of the field it should be changed to "
-                    "`pathlib.Path`. Otherwise, if it is an input field that gets "
-                    "altered by the task, the 'copyfile' flag should be set to 'copy' "
-                    "in the task interface metadata to ensure a copy of "
-                    "the files/directories are created before the task is run\n"
+                    f"- '{changed}' field is of file-type {field.type}. If it "
+                    "is intended to contain output data then the type of the field in "
+                    "the interface class should be changed to `pathlib.Path`. Otherwise, "
+                    "if the field is intended to be an input field but it gets altered by "
+                    "the task in some way, then the 'copyfile' flag should be set to "
+                    "'copy' in the field metadata of the task interface class so copies of "
+                    "the files/directories in it are passed to the task instead\n"
                 )
             else:
                 details += (
