@@ -60,7 +60,9 @@ CacheKey = NewType("CacheKey", ty.Tuple[ty.Hashable, ty.Hashable])
 def location_converter(path: ty.Union[Path, str, None]) -> Path:
     if path is None:
         path = PersistentCache.location_default()
-    return Path(path)
+    path = Path(path)
+    path.mkdir(parents=True)
+    return path
 
 
 @attrs.define
