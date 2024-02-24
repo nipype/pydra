@@ -3,6 +3,7 @@ import shutil
 import attr
 import numpy as np
 import pytest
+import time
 
 from .utils import (
     fun_addtwo,
@@ -320,6 +321,7 @@ def test_task_init_7(tmp_path):
     output_dir1 = nn1.output_dir
 
     # changing the content of the file
+    time.sleep(2)  # need the mtime to be different
     file2 = tmp_path / "file2.txt"
     with open(file2, "w") as f:
         f.write("from pydra")

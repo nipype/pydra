@@ -1,6 +1,7 @@
 import re
 from hashlib import blake2b
 from pathlib import Path
+import time
 
 import attrs
 import pytest
@@ -318,6 +319,7 @@ def test_persistent_hash_cache(tmp_path):
     assert hash_object(text_file, persistent_cache=cache_path) == modified_hash
 
     # Test that changes to the text file result in new hash
+    time.sleep(2)  # Need to ensure that the mtimes will be different
     text_file_path.write_text("bar")
     assert hash_object(text_file, persistent_cache=cache_path) != modified_hash
     assert len(list(cache_path.iterdir())) == 2
