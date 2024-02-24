@@ -1,12 +1,15 @@
+from pathlib import Path
+import typing as ty
 from fileformats.generic import File
-from fileformats.core.mixin import WithSeparateHeader
+from fileformats.core.mixin import WithSeparateHeader, WithMagicNumber
 from pydra import mark
 from pydra.engine.task import ShellCommandTask
 from pydra.engine import specs
 
 
-class MyFormat(File):
+class MyFormat(WithMagicNumber, File):
     ext = ".my"
+    magic_number = b"MYFORMAT"
 
 
 class MyHeader(File):
@@ -15,6 +18,34 @@ class MyHeader(File):
 
 class MyFormatX(WithSeparateHeader, MyFormat):
     header_type = MyHeader
+
+
+class MyOtherFormatX(WithMagicNumber, WithSeparateHeader, File):
+    magic_number = b"MYFORMAT"
+    ext = ".my"
+    header_type = MyHeader
+
+
+@File.generate_sample_data.register
+def my_format_x_generate_sample_data(
+    my_format_x: MyFormatX, dest_dir: Path
+) -> ty.List[Path]:
+    fspath = dest_dir / "file.my"
+    with open(fspath, "wb") as f:
+        f.write(b"MYFORMAT\nsome data goes here")
+    header_fspath = dest_dir / "file.hdr"
+    header_fspath.write_text("a: 1\nb: 2\nc: 3\n")
+    return [fspath, header_fspath]
+
+
+@File.generate_sample_data.register
+def my_other_format_generate_sample_data(
+    my_other_format: MyOtherFormatX, dest_dir: Path
+) -> ty.List[Path]:
+    fspath = dest_dir / "file.my"
+    with open(fspath, "wb") as f:
+        f.write(b"MYFORMAT\nsome data goes here")
+    return [fspath]
 
 
 @mark.task
@@ -117,4 +148,58 @@ specific_shelloutput_spec = specs.SpecInfo(
 class SpecificShellTask(ShellCommandTask):
     input_spec = specific_shell_input_spec
     output_spec = specific_shelloutput_spec
+    executable = "echo"
+
+
+@mark.task
+def other_specific_func_task(in_file: MyOtherFormatX) -> MyOtherFormatX:
+    return in_file
+
+
+other_specific_shell_input_fields = [
+    (
+        "in_file",
+        MyOtherFormatX,
+        {
+            "help_string": "the input file",
+            "argstr": "",
+            "copyfile": "copy",
+            "sep": " ",
+        },
+    ),
+    (
+        "out",
+        str,
+        {
+            "help_string": "output file name",
+            "argstr": "",
+            "position": -1,
+            "output_file_template": "{in_file}",  # Pass through un-altered
+        },
+    ),
+]
+
+other_specific_shell_input_spec = specs.SpecInfo(
+    name="Input", fields=other_specific_shell_input_fields, bases=(specs.ShellSpec,)
+)
+
+other_specific_shell_output_fields = [
+    (
+        "out",
+        MyOtherFormatX,
+        {
+            "help_string": "output file",
+        },
+    ),
+]
+other_specific_shelloutput_spec = specs.SpecInfo(
+    name="Output",
+    fields=other_specific_shell_output_fields,
+    bases=(specs.ShellOutSpec,),
+)
+
+
+class OtherSpecificShellTask(ShellCommandTask):
+    input_spec = other_specific_shell_input_spec
+    output_spec = other_specific_shelloutput_spec
     executable = "echo"

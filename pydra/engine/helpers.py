@@ -264,7 +264,7 @@ def make_klass(spec):
                 )
             checker_label = f"'{name}' field of {spec.name}"
             type_checker = TypeParser[newfield.type](
-                newfield.type, label=checker_label, allow_lazy_super=True
+                newfield.type, label=checker_label, superclass_auto_cast=True
             )
             if newfield.type in (MultiInputObj, MultiInputFile):
                 converter = attr.converters.pipe(ensure_list, type_checker)

@@ -14,7 +14,10 @@ from .utils import (
     GenericShellTask,
     specific_func_task,
     SpecificShellTask,
+    other_specific_func_task,
+    OtherSpecificShellTask,
     MyFormatX,
+    MyOtherFormatX,
     MyHeader,
 )
 
@@ -168,12 +171,12 @@ def test_type_check_permit_superclass():
     # Typical case as Json is subclass of File
     TypeParser(ty.List[File])(lz(ty.List[Json]))
     # Permissive super class, as File is superclass of Json
-    TypeParser(ty.List[Json], allow_lazy_super=True)(lz(ty.List[File]))
+    TypeParser(ty.List[Json], superclass_auto_cast=True)(lz(ty.List[File]))
     with pytest.raises(TypeError, match="Cannot coerce"):
-        TypeParser(ty.List[Json], allow_lazy_super=False)(lz(ty.List[File]))
+        TypeParser(ty.List[Json], superclass_auto_cast=False)(lz(ty.List[File]))
     # Fails because Yaml is neither sub or super class of Json
     with pytest.raises(TypeError, match="Cannot coerce"):
-        TypeParser(ty.List[Json], allow_lazy_super=True)(lz(ty.List[Yaml]))
+        TypeParser(ty.List[Json], superclass_auto_cast=True)(lz(ty.List[Yaml]))
 
 
 def test_type_check_fail1():
@@ -550,7 +553,17 @@ def specific_task(request):
         assert False
 
 
-def test_typing_cast(tmp_path, generic_task, specific_task):
+@pytest.fixture(params=["func", "shell"])
+def other_specific_task(request):
+    if request.param == "func":
+        return other_specific_func_task
+    elif request.param == "shell":
+        return OtherSpecificShellTask
+    else:
+        assert False
+
+
+def test_typing_implicit_cast_from_super(tmp_path, generic_task, specific_task):
     """Check the casting of lazy fields and whether specific file-sets can be recovered
     from generic `File` classes"""
 
@@ -574,18 +587,9 @@ def test_typing_cast(tmp_path, generic_task, specific_task):
         )
     )
 
-    with pytest.raises(TypeError, match="Cannot coerce"):
-        # No cast of generic task output to MyFormatX
-        wf.add(
-            specific_task(
-                in_file=wf.generic.lzout.out,
-                name="specific2",
-            )
-        )
-
     wf.add(
         specific_task(
-            in_file=wf.generic.lzout.out.cast(MyFormatX),
+            in_file=wf.generic.lzout.out,
             name="specific2",
         )
     )
@@ -596,11 +600,73 @@ def test_typing_cast(tmp_path, generic_task, specific_task):
         ]
     )
 
-    my_fspath = tmp_path / "in_file.my"
-    hdr_fspath = tmp_path / "in_file.hdr"
-    my_fspath.write_text("my-format")
-    hdr_fspath.write_text("my-header")
-    in_file = MyFormatX([my_fspath, hdr_fspath])
+    in_file = MyFormatX.sample()
+
+    result = wf(in_file=in_file, plugin="serial")
+
+    out_file: MyFormatX = result.output.out_file
+    assert type(out_file) is MyFormatX
+    assert out_file.parent != in_file.parent
+    assert type(out_file.header) is MyHeader
+    assert out_file.header.parent != in_file.header.parent
+
+
+def test_typing_cast(tmp_path, specific_task, other_specific_task):
+    """Check the casting of lazy fields and whether specific file-sets can be recovered
+    from generic `File` classes"""
+
+    wf = Workflow(
+        name="test",
+        input_spec={"in_file": MyFormatX},
+        output_spec={"out_file": MyFormatX},
+    )
+
+    wf.add(
+        specific_task(
+            in_file=wf.lzin.in_file,
+            name="entry",
+        )
+    )
+
+    with pytest.raises(TypeError, match="Cannot coerce"):
+        # No cast of generic task output to MyFormatX
+        wf.add(  # Generic task
+            other_specific_task(
+                in_file=wf.entry.lzout.out,
+                name="inner",
+            )
+        )
+
+    wf.add(  # Generic task
+        other_specific_task(
+            in_file=wf.entry.lzout.out.cast(MyOtherFormatX),
+            name="inner",
+        )
+    )
+
+    with pytest.raises(TypeError, match="Cannot coerce"):
+        # No cast of generic task output to MyFormatX
+        wf.add(
+            specific_task(
+                in_file=wf.inner.lzout.out,
+                name="exit",
+            )
+        )
+
+    wf.add(
+        specific_task(
+            in_file=wf.inner.lzout.out.cast(MyFormatX),
+            name="exit",
+        )
+    )
+
+    wf.set_output(
+        [
+            ("out_file", wf.exit.lzout.out),
+        ]
+    )
+
+    in_file = MyFormatX.sample()
 
     result = wf(in_file=in_file, plugin="serial")
 

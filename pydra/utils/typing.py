@@ -58,7 +58,7 @@ class TypeParser(ty.Generic[T]):
         the tree of more complex nested container types. Overrides 'coercible' to enable
         you to carve out exceptions, such as TypeParser(list, coercible=[(ty.Iterable, list)],
         not_coercible=[(str, list)])
-    allow_lazy_super : bool
+    superclass_auto_cast : bool
         Allow lazy fields to pass the type check if their types are superclasses of the
         specified pattern (instead of matching or being subclasses of the pattern)
     label : str
@@ -69,7 +69,7 @@ class TypeParser(ty.Generic[T]):
     tp: ty.Type[T]
     coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
     not_coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
-    allow_lazy_super: bool
+    superclass_auto_cast: bool
     label: str
 
     COERCIBLE_DEFAULT: ty.Tuple[ty.Tuple[type, type], ...] = (
@@ -113,7 +113,7 @@ class TypeParser(ty.Generic[T]):
         not_coercible: ty.Optional[
             ty.Iterable[ty.Tuple[TypeOrAny, TypeOrAny]]
         ] = NOT_COERCIBLE_DEFAULT,
-        allow_lazy_super: bool = False,
+        superclass_auto_cast: bool = False,
         label: str = "",
     ):
         def expand_pattern(t):
@@ -142,7 +142,7 @@ class TypeParser(ty.Generic[T]):
         )
         self.not_coercible = list(not_coercible) if not_coercible is not None else []
         self.pattern = expand_pattern(tp)
-        self.allow_lazy_super = allow_lazy_super
+        self.superclass_auto_cast = superclass_auto_cast
 
     def __call__(self, obj: ty.Any) -> ty.Union[T, LazyField[T]]:
         """Attempts to coerce the object to the specified type, unless the value is
@@ -172,7 +172,7 @@ class TypeParser(ty.Generic[T]):
             try:
                 self.check_type(obj.type)
             except TypeError as e:
-                if self.allow_lazy_super:
+                if self.superclass_auto_cast:
                     try:
                         # Check whether the type of the lazy field isn't a superclass of
                         # the type to check against, and if so, allow it due to permissive
@@ -492,7 +492,16 @@ class TypeParser(ty.Generic[T]):
             explicit inclusions and exclusions set in the `coercible` and `not_coercible`
             member attrs
         """
+        # Short-circuit the basic cases where the source and target are the same
         if source is target:
+            return
+        if self.superclass_auto_cast and self.is_subclass(target, type(source)):
+            logger.info(
+                "Attempting to coerce %s into %s due to super-to-sub class coercion "
+                "being permitted",
+                source,
+                target,
+            )
             return
         source_origin = get_origin(source)
         if source_origin is not None:
