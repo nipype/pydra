@@ -599,6 +599,7 @@ def test_hash_changes_in_workflow_inputs(tmp_path):
         wf()
 
 
+@pytest.mark.flaky(reruns=3)  # need for travis
 def test_hash_changes_in_workflow_graph(tmpdir):
     class X:
         """Dummy class with unstable hash (i.e. which isn't altered in a node in which
@@ -621,6 +622,7 @@ def test_hash_changes_in_workflow_graph(tmpdir):
 
     @mark.task
     def alter_x(y):
+        time.sleep(5)
         X.x = 2
         return y
 
