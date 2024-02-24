@@ -184,7 +184,6 @@ class Submitter:
                             ]
                             for t in graph_copy.sorted_nodes
                         }
-                        graph_checksums = dict(wf.inputs._graph_checksums)
 
                         hashes_have_changed = False
                         for task, waiting_on in outstanding.items():
@@ -192,7 +191,10 @@ class Submitter:
                                 continue
                             msg += f"- '{task.name}' node blocked due to\n"
                             for pred in waiting_on:
-                                if pred.checksum != graph_checksums[pred.name]:
+                                if (
+                                    pred.checksum
+                                    != wf.inputs._graph_checksums[pred.name]
+                                ):
                                     msg += (
                                         f"    - hash changes in '{pred.name}' node inputs. "
                                         f"Current values and hashes: {pred.inputs}, "

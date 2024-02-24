@@ -281,9 +281,9 @@ class TaskBase:
 
         """
         if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
-            self.inputs._graph_checksums = [
-                (nd.name, nd.checksum) for nd in self.graph_sorted
-            ]
+            self.inputs._graph_checksums = {
+                nd.name: nd.checksum for nd in self.graph_sorted
+            }
 
         if state_index is not None:
             inputs_copy = copy(self.inputs)
@@ -1142,9 +1142,9 @@ class Workflow(TaskBase):
         """
         # if checksum is called before run the _graph_checksums is not ready
         if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
-            self.inputs._graph_checksums = [
-                (nd.name, nd.checksum) for nd in self.graph_sorted
-            ]
+            self.inputs._graph_checksums = {
+                nd.name: nd.checksum for nd in self.graph_sorted
+            }
 
         input_hash = self.inputs.hash
         if not self.state:
