@@ -107,6 +107,17 @@ class HasBytesRepr(Protocol):
 
 @singledispatch
 def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
+    """Default implementation of hashing for generic objects. Single dispatch is used
+    to provide hooks for class-specific implementations
+
+    Parameters
+    ----------
+    obj: object
+        the object to hash
+    cache : Cache
+        a dictionary object used to store a cache of previously cached objects to
+        handle circular object references
+    """
     cls = obj.__class__
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
     dct: Dict[str, ty.Any]
