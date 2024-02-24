@@ -377,7 +377,7 @@ def bytes_repr_fileset(
     fspaths = sorted(fileset.fspaths)
     yield CacheKey(
         tuple(repr(p) for p in fspaths)  # type: ignore[arg-type]
-        + tuple(p.lstat().st_mtime for p in fspaths)
+        + tuple(p.lstat().st_mtime_ns for p in fspaths)
     )
     yield from fileset.__bytes_repr__(cache)
 
