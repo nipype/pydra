@@ -624,7 +624,7 @@ def test_hash_changes_in_workflow_graph(tmpdir):
 
     @mark.task
     def alter_x(y):
-        time.sleep(2)
+        time.sleep(10)
         X.x = 2
         return y
 
