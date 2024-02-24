@@ -2,6 +2,7 @@ from dateutil import parser
 import re
 import subprocess as sp
 import time
+import typing as ty
 import pytest
 from fileformats.generic import Directory
 from .utils import (
@@ -572,56 +573,23 @@ def test_sge_no_limit_maxthreads(tmpdir):
     assert job_1_endtime > job_2_starttime
 
 
-# @pytest.mark.xfail(reason="Not sure")
-def test_wf_with_blocked_tasks(tmpdir):
-    wf = Workflow(name="wf_with_blocked_tasks", input_spec=["x"])
-    wf.add(identity(name="taska", x=wf.lzin.x))
-    wf.add(alter_input(name="taskb", x=wf.taska.lzout.out))
-    wf.add(to_tuple(name="taskc", x=wf.taska.lzout.out, y=wf.taskb.lzout.out))
-    wf.set_output([("out", wf.taskb.lzout.out)])
+def test_hash_changes_in_task_inputs(tmp_path):
+    @mark.task
+    def output_dir_as_input(out_dir: Directory) -> Directory:
+        (out_dir.fspath / "new-file.txt").touch()
+        return out_dir
 
-    wf.inputs.x = A(1)
-
-    wf.cache_dir = tmpdir
-
-    # with pytest.raises(Exception, match="graph is not empty,"):
-    with Submitter("serial") as sub:
-        sub(wf)
-
-
-class A:
-    def __init__(self, a):
-        self.a = a
-
-    def __bytes_repr__(self, cache):
-        yield bytes(self.a)
-
-
-@mark.task
-def identity(x):
-    return x
-
-
-@mark.task
-def alter_input(x):
-    x.a = 2
-    return x
-
-
-@mark.task
-def to_tuple(x, y):
-    return (x, y)
-
-
-# @pytest.mark.xfail(reason="Not sure")
-def test_hash_changes(tmp_path):
     task = output_dir_as_input(out_dir=tmp_path)
     with pytest.raises(RuntimeError, match="Hashes have changed"):
         task()
 
 
-# @pytest.mark.xfail(reason="Not sure")
-def test_hash_changes_workflow(tmp_path):
+def test_hash_changes_in_workflow_inputs(tmp_path):
+    @mark.task
+    def output_dir_as_output(out_dir: Path) -> Directory:
+        (out_dir / "new-file.txt").touch()
+        return out_dir
+
     wf = Workflow(
         name="test_hash_change", input_spec={"in_dir": Directory}, in_dir=tmp_path
     )
@@ -631,13 +599,47 @@ def test_hash_changes_workflow(tmp_path):
         wf()
 
 
-@mark.task
-def output_dir_as_output(out_dir: Path) -> Directory:
-    (out_dir / "new-file.txt").touch()
-    return out_dir
+def test_hash_changes_in_workflow_graph(tmpdir):
+    class X:
+        """Dummy class with unstable hash (i.e. which isn't altered in a node in which
+        it is an input)"""
 
+        # class attribute to change
+        x = 1
 
-@mark.task
-def output_dir_as_input(out_dir: Directory) -> Directory:
-    (out_dir.fspath / "new-file.txt").touch()
-    return out_dir
+        def __bytes_repr__(self, cache):
+            """Bytes representation from class attribute, which will be changed be 'alter_x" node.
+
+            NB: this is a very silly bytes_repr implementation just to trigger the exception,
+            hopefully cases like this will be very rare."""
+            yield bytes(self.x)
+
+    @mark.task
+    @mark.annotate({"return": {"x": X, "y": int}})
+    def identity(x) -> ty.Tuple[X, int]:
+        return x, 3
+
+    @mark.task
+    def alter_x(y):
+        X.x = 2
+        return y
+
+    @mark.task
+    def to_tuple(x, y):
+        return (x, y)
+
+    wf = Workflow(name="wf_with_blocked_tasks", input_spec=["x", "y"])
+    wf.add(identity(name="taska", x=wf.lzin.x))
+    wf.add(alter_x(name="taskb", x=wf.taska.lzout.y))
+    wf.add(to_tuple(name="taskc", x=wf.taska.lzout.x, y=wf.taskb.lzout.out))
+    wf.set_output([("out", wf.taskc.lzout.out)])
+
+    wf.inputs.x = X()
+
+    wf.cache_dir = tmpdir
+
+    with pytest.raises(
+        Exception, match="Graph of 'wf_with_blocked_tasks' workflow is not empty"
+    ):
+        with Submitter("serial") as sub:
+            result = sub(wf)
