@@ -17,6 +17,7 @@ from ..submitter import Submitter
 from ... import mark
 from pathlib import Path
 from datetime import datetime
+from ..task import ShellCommandTask
 
 
 @mark.task
@@ -612,3 +613,19 @@ def alter_input(x):
 @mark.task
 def to_tuple(x, y):
     return (x, y)
+
+
+def test_serial_with_untriggered_timeout():
+    sleeper = ShellCommandTask(name="sleeper", executable=["sleep", "0.5"])
+    with Submitter(plugin="with-timeout", timeout=1) as sub:
+        result = sleeper(submitter=sub)
+
+    assert result.output.return_code == 0
+
+
+def test_serial_with_triggered_timeout():
+    sleeper = ShellCommandTask(name="sleeper", executable=["sleep", "1.5"])
+    with Submitter(plugin="with-timeout", timeout=1) as sub:
+        result = sleeper(submitter=sub)
+
+    assert result is None

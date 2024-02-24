@@ -7,6 +7,7 @@ import re
 from tempfile import gettempdir
 from pathlib import Path
 from shutil import copyfile, which
+from .specs import Result
 
 import concurrent.futures as cf
 
@@ -130,6 +131,7 @@ class SerialWorker(Worker):
 
     def __init__(self, **kwargs):
         """Initialize worker."""
+        super().__init__()
         logger.debug("Initialize SerialWorker")
 
     def run_el(self, interface, rerun=False, environment=None, **kwargs):
@@ -149,9 +151,6 @@ class SerialWorker(Worker):
     async def fetch_finished(self, futures):
         await asyncio.gather(*futures)
         return set()
-
-    # async def fetch_finished(self, futures):
-    #     return await asyncio.wait(futures)
 
 
 class ConcurrentFuturesWorker(Worker):
@@ -1039,12 +1038,41 @@ class PsijWorker(Worker):
         pass
 
 
+class WithTimeoutWorker(ConcurrentFuturesWorker):
+    """A worker used to test the start-up phase of long running tasks. Tasks are initiated
+    and run up until a specified timeout.
+
+    If the task completes before the timeout then results are returned as normal, if not,
+    then None is returned instead"""
+
+    def __init__(self, timeout=10, **kwargs):
+        """Initialize Worker."""
+        super().__init__(n_procs=1)
+        self.timeout = timeout
+        # self.loop = asyncio.get_event_loop()
+        logger.debug("Initialize worker with a timeout")
+
+    def run_el(self, runnable, rerun=False, **kwargs):
+        """Run a task."""
+        return self.exec_with_timeout(runnable, rerun=rerun)
+
+    async def exec_with_timeout(self, runnable, rerun=False):
+        try:
+            result = await asyncio.wait_for(
+                self.exec_as_coro(runnable, rerun=rerun), timeout=self.timeout
+            )
+        except asyncio.TimeoutError:
+            result = Result(output=None, runtime=None, errored=False)
+        return result
+
+
 WORKERS = {
     "serial": SerialWorker,
     "cf": ConcurrentFuturesWorker,
     "slurm": SlurmWorker,
     "dask": DaskWorker,
     "sge": SGEWorker,
+    "with-timeout": WithTimeoutWorker,
     **{
         "psij-" + subtype: lambda subtype=subtype: PsijWorker(subtype=subtype)
         for subtype in ["local", "slurm"]
