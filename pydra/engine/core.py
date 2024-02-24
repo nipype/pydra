@@ -558,15 +558,9 @@ class TaskBase:
                 os.chdir(cwd)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the task
-        hash_changes = self.inputs.hash_changes()
-        if hash_changes:
-            raise RuntimeError(
-                f"Hashes have changed for {hash_changes} input fields during the "
-                f"execution of {self}. Please check all output files/directories are "
-                "typed with `pathlib.Path` instead of `fileformats` classes"
-            )
-        self.hooks.post_run(self, result)
 
+        self.hooks.post_run(self, result)
+        self._check_for_hash_changes()
         return result
 
     def _collect_outputs(self, output_dir):
@@ -895,6 +889,33 @@ class TaskBase:
         if is_workflow(self):
             for task in self.graph.nodes:
                 task._reset()
+
+    def _check_for_hash_changes(self):
+        hash_changes = self.inputs.hash_changes()
+        details = ""
+        for changed in hash_changes:
+            field = getattr(attr.fields(type(self.inputs)), changed)
+            if issubclass(field.type, FileSet):
+                details += (
+                    f"- '{changed}' field is of type {field.type}. If it is intended to "
+                    "contain output data then the type of the field it should be changed to "
+                    "`pathlib.Path`. Otherwise, if it is an input field that gets "
+                    "altered by the task, the 'copyfile' flag should be set to 'copy' "
+                    "in the task interface metadata to ensure a copy of "
+                    "the files/directories are created before the task is run\n"
+                )
+            else:
+                details += (
+                    f"- the {field.type} object passed to '{changed}' field appears to "
+                    f"have an unstable hash. The {field.type}.__bytes_repr__() method "
+                    "can be implemented to provide stable hashes for this type. "
+                    "See pydra/utils.hash.py for examples.\n"
+                )
+        if hash_changes:
+            raise RuntimeError(
+                f"Input field hashes have changed during the execution of the "
+                f"'{self.name}' {type(self).__name__}.\n{details}"
+            )
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.any
@@ -1272,13 +1293,7 @@ class Workflow(TaskBase):
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the task
-        hash_changes = self.inputs.hash_changes()
-        if hash_changes:
-            raise RuntimeError(
-                f"Hashes have changed for {hash_changes} input fields during the "
-                f"execution of {self} workflow. Please check all output files/directories are "
-                "typed with `pathlib.Path` instead of `fileformats` classes"
-            )
+        self._check_for_hash_changes()
         if result is None:
             raise Exception("This should never happen, please open new issue")
         return result

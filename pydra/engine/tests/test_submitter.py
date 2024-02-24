@@ -580,7 +580,7 @@ def test_hash_changes_in_task_inputs(tmp_path):
         return out_dir
 
     task = output_dir_as_input(out_dir=tmp_path)
-    with pytest.raises(RuntimeError, match="Hashes have changed"):
+    with pytest.raises(RuntimeError, match="Input field hashes have changed"):
         task()
 
 
@@ -595,7 +595,7 @@ def test_hash_changes_in_workflow_inputs(tmp_path):
     )
     wf.add(output_dir_as_output(out_dir=wf.lzin.in_dir, name="task"))
     wf.set_output(("out_dir", wf.task.lzout.out))
-    with pytest.raises(RuntimeError, match="Hashes have changed.*workflow\."):
+    with pytest.raises(RuntimeError, match="Input field hashes have changed.*Workflow"):
         wf()
 
 
