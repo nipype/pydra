@@ -658,6 +658,12 @@ def test_byo_worker():
     assert result.output.out == 2
 
 
+def test_bad_builtin_worker():
+
+    with pytest.raises(NotImplementedError, match="No worker for 'bad-worker' plugin"):
+        Submitter(plugin="bad-worker")
+
+
 def test_bad_byo_worker():
 
     class BadWorker:

@@ -37,7 +37,7 @@ class Submitter:
             try:
                 worker_cls = WORKERS[self.plugin]
             except KeyError:
-                raise NotImplementedError(f"No worker for {self.plugin}")
+                raise NotImplementedError(f"No worker for '{self.plugin}' plugin")
         else:
             try:
                 self.plugin = plugin.plugin_name
