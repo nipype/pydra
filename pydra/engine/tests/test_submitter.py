@@ -617,14 +617,18 @@ def to_tuple(x, y):
     return (x, y)
 
 
-class BYOAdd10Worker(SerialWorker):
+class BYOAddVarWorker(SerialWorker):
     """A dummy worker that adds 1 to the output of the task"""
 
     plugin_name = "byo_add_env_var"
 
+    def __init__(self, add_var, **kwargs):
+        super().__init__(**kwargs)
+        self.add_var = add_var
+
     async def exec_serial(self, runnable, rerun=False, environment=None):
         if isinstance(runnable, TaskBase):
-            with patch.dict(os.environ, {"BYO_ADD_VAR": "10"}):
+            with patch.dict(os.environ, {"BYO_ADD_VAR": str(self.add_var)}):
                 result = runnable._run(rerun, environment=environment)
             return result
         else:  # it could be tuple that includes pickle files with tasks and inputs
@@ -644,7 +648,7 @@ def test_byo_worker():
 
     task1 = add_env_var_task(x=1)
 
-    with Submitter(plugin=BYOAdd10Worker()) as sub:
+    with Submitter(plugin=BYOAddVarWorker, add_var=10) as sub:
         assert sub.plugin == "byo_add_env_var"
         result = task1(submitter=sub)
 
@@ -656,3 +660,14 @@ def test_byo_worker():
         result = task2(submitter=sub)
 
     assert result.output.out == 2
+
+
+def test_bad_byo_worker():
+
+    class BadWorker:
+        pass
+
+    with pytest.raises(
+        ValueError, match="Worker class must have a 'plugin_name' str attribute"
+    ):
+        Submitter(plugin=BadWorker)
