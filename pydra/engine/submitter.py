@@ -1,9 +1,10 @@
 """Handle execution backends."""
 
 import asyncio
+import typing as ty
 import pickle
 from uuid import uuid4
-from .workers import WORKERS
+from .workers import Worker, WORKERS
 from .core import is_workflow
 from .helpers import get_open_loop, load_and_run_async
 
@@ -16,24 +17,31 @@ logger = logging.getLogger("pydra.submitter")
 class Submitter:
     """Send a task to the execution backend."""
 
-    def __init__(self, plugin="cf", **kwargs):
+    def __init__(self, plugin: ty.Union[str, Worker] = "cf", **kwargs):
         """
         Initialize task submission.
 
         Parameters
         ----------
-        plugin : :obj:`str`
-            The identifier of the execution backend.
+        plugin : :obj:`str` or :obj:`pydra.engine.core.Worker`
+            Either the identifier of the execution backend or the backend itself.
             Default is ``cf`` (Concurrent Futures).
 
         """
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
-        self.plugin = plugin
-        try:
-            self.worker = WORKERS[self.plugin](**kwargs)
-        except KeyError:
-            raise NotImplementedError(f"No worker for {self.plugin}")
+        if isinstance(plugin, Worker):
+            try:
+                self.plugin = plugin.plugin_name
+            except AttributeError:
+                raise ValueError("Worker must have a 'plugin_name' str attribute")
+            self.worker = plugin
+        else:
+            self.plugin = plugin
+            try:
+                self.worker = WORKERS[self.plugin](**kwargs)
+            except KeyError:
+                raise NotImplementedError(f"No worker for {self.plugin}")
         self.worker.loop = self.loop
 
     def __call__(self, runnable, cache_locations=None, rerun=False, environment=None):

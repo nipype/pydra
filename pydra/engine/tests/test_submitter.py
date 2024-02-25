@@ -2,6 +2,8 @@ from dateutil import parser
 import re
 import subprocess as sp
 import time
+import os
+from unittest.mock import patch
 
 import pytest
 
@@ -12,8 +14,9 @@ from .utils import (
     gen_basic_wf_with_threadcount,
     gen_basic_wf_with_threadcount_concurrent,
 )
-from ..core import Workflow
+from ..core import Workflow, TaskBase
 from ..submitter import Submitter
+from ..workers import SerialWorker
 from ... import mark
 from pathlib import Path
 from datetime import datetime
@@ -612,3 +615,44 @@ def alter_input(x):
 @mark.task
 def to_tuple(x, y):
     return (x, y)
+
+
+class BYOAdd10Worker(SerialWorker):
+    """A dummy worker that adds 1 to the output of the task"""
+
+    plugin_name = "byo_add_env_var"
+
+    async def exec_serial(self, runnable, rerun=False, environment=None):
+        if isinstance(runnable, TaskBase):
+            with patch.dict(os.environ, {"BYO_ADD_VAR": "10"}):
+                result = runnable._run(rerun, environment=environment)
+            return result
+        else:  # it could be tuple that includes pickle files with tasks and inputs
+            return super().exec_serial(runnable, rerun, environment)
+
+
+@mark.task
+def add_env_var_task(x: int) -> int:
+    try:
+        var = int(os.environ["BYO_ADD_VAR"])
+    except KeyError:
+        var = 0
+    return x + var
+
+
+def test_byo_worker():
+
+    task1 = add_env_var_task(x=1)
+
+    with Submitter(plugin=BYOAdd10Worker()) as sub:
+        assert sub.plugin == "byo_add_env_var"
+        result = task1(submitter=sub)
+
+    assert result.output.out == 11
+
+    task2 = add_env_var_task(x=2)
+
+    with Submitter(plugin="serial") as sub:
+        result = task2(submitter=sub)
+
+    assert result.output.out == 2
