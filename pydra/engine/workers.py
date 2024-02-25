@@ -907,7 +907,7 @@ class DaskWorker(Worker):
 class PsijWorker(Worker):
     """A worker to execute tasks using PSI/J."""
 
-    def __init__(self, subtype, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize PsijWorker.
 
@@ -923,15 +923,6 @@ class PsijWorker(Worker):
             raise
         logger.debug("Initialize PsijWorker")
         self.psij = psij
-
-        # Check if the provided subtype is valid
-        valid_subtypes = ["local", "slurm"]
-        if subtype not in valid_subtypes:
-            raise ValueError(
-                f"Invalid 'subtype' provided. Available options: {', '.join(valid_subtypes)}"
-            )
-
-        self.subtype = subtype
 
     def run_el(self, interface, rerun=False, **kwargs):
         """Run a task."""
@@ -1051,21 +1042,15 @@ class PsijWorker(Worker):
 class PsijLocalWorker(PsijWorker):
     """A worker to execute tasks using PSI/J on the local machine."""
 
-    plugin_name = "psij-local"
-
-    def __init__(self, **kwargs):
-        """Initialize PsijLocalWorker."""
-        super().__init__(subtype="local", **kwargs)
+    subtype = "local"
+    plugin_name = f"psij-{subtype}"
 
 
 class PsijSlurmWorker(PsijWorker):
     """A worker to execute tasks using PSI/J using SLURM."""
 
-    plugin_name = "psij-slurm"
-
-    def __init__(self, **kwargs):
-        """Initialize PsijSlurmWorker."""
-        super().__init__(subtype="local", **kwargs)
+    subtype = "slurm"
+    plugin_name = f"psij-{subtype}"
 
 
 WORKERS = {
