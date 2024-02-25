@@ -523,7 +523,7 @@ def test_matches_type_tuple_ellipsis3():
 
 
 def test_matches_type_tuple_ellipsis4():
-    assert not TypeParser.matches_type(ty.Tuple[int, ...], ty.Tuple[int])
+    assert TypeParser.matches_type(ty.Tuple[int, ...], ty.Tuple[int])
 
 
 def test_matches_type_tuple_ellipsis5():
