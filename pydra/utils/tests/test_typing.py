@@ -156,8 +156,12 @@ def test_type_check_nested6():
 
 
 def test_type_check_nested7():
+    TypeParser(ty.Tuple[float, float, float])(lz(ty.List[int]))
+
+
+def test_type_check_nested7a():
     with pytest.raises(TypeError, match="Wrong number of type arguments"):
-        TypeParser(ty.Tuple[float, float, float])(lz(ty.List[int]))
+        TypeParser(ty.Tuple[float, float, float])(lz(ty.Tuple[int]))
 
 
 def test_type_check_nested8():
@@ -506,14 +510,29 @@ def test_matches_type_tuple():
     assert not TypeParser.matches_type(ty.Tuple[int], ty.Tuple[int, int])
 
 
-def test_matches_type_tuple_ellipsis():
+def test_matches_type_tuple_ellipsis1():
     assert TypeParser.matches_type(ty.Tuple[int], ty.Tuple[int, ...])
+
+
+def test_matches_type_tuple_ellipsis2():
     assert TypeParser.matches_type(ty.Tuple[int, int], ty.Tuple[int, ...])
+
+
+def test_matches_type_tuple_ellipsis3():
     assert not TypeParser.matches_type(ty.Tuple[int, float], ty.Tuple[int, ...])
+
+
+def test_matches_type_tuple_ellipsis4():
     assert not TypeParser.matches_type(ty.Tuple[int, ...], ty.Tuple[int])
+
+
+def test_matches_type_tuple_ellipsis5():
     assert TypeParser.matches_type(
         ty.Tuple[int], ty.List[int], coercible=[(tuple, list)]
     )
+
+
+def test_matches_type_tuple_ellipsis6():
     assert TypeParser.matches_type(
         ty.Tuple[int, ...], ty.List[int], coercible=[(tuple, list)]
     )
