@@ -637,11 +637,7 @@ class BYOAddVarWorker(SerialWorker):
 
 @mark.task
 def add_env_var_task(x: int) -> int:
-    try:
-        var = int(os.environ["BYO_ADD_VAR"])
-    except KeyError:
-        var = 0
-    return x + var
+    return x + int(os.environ.get("BYO_ADD_VAR", 0))
 
 
 def test_byo_worker():
