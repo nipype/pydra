@@ -133,21 +133,7 @@ def test_task_init_3a(
 
 
 def test_task_init_4():
-    """task with interface and inputs. splitter set using split method"""
-    nn = fun_addtwo(name="NA")
-    nn.split(splitter="a", a=[3, 5])
-    assert np.allclose(nn.inputs.a, [3, 5])
-
-    assert nn.state.splitter == "NA.a"
-    assert nn.state.splitter_rpn == ["NA.a"]
-
-    nn.state.prepare_states(nn.inputs)
-    assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
-    assert nn.state.states_val == [{"NA.a": 3}, {"NA.a": 5}]
-
-
-def test_task_init_4a():
-    """task with a splitter and inputs set in the split method"""
+    """task with interface splitter and inputs set in the split method"""
     nn = fun_addtwo(name="NA")
     nn.split(splitter="a", a=[3, 5])
     assert np.allclose(nn.inputs.a, [3, 5])

@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import sys
 import typing as ty
+import logging
 import attr
 from ..engine.specs import (
     LazyField,
@@ -19,6 +20,7 @@ except ImportError:
     # Python < 3.8
     from typing_extensions import get_origin, get_args  # type: ignore
 
+logger = logging.getLogger("pydra")
 
 NO_GENERIC_ISSUBCLASS = sys.version_info.major == 3 and sys.version_info.minor < 10
 
@@ -56,6 +58,9 @@ class TypeParser(ty.Generic[T]):
         the tree of more complex nested container types. Overrides 'coercible' to enable
         you to carve out exceptions, such as TypeParser(list, coercible=[(ty.Iterable, list)],
         not_coercible=[(str, list)])
+    superclass_auto_cast : bool
+        Allow lazy fields to pass the type check if their types are superclasses of the
+        specified pattern (instead of matching or being subclasses of the pattern)
     label : str
         the label to be used to identify the type parser in error messages. Especially
         useful when TypeParser is used as a converter in attrs.fields
@@ -64,6 +69,7 @@ class TypeParser(ty.Generic[T]):
     tp: ty.Type[T]
     coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
     not_coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
+    superclass_auto_cast: bool
     label: str
 
     COERCIBLE_DEFAULT: ty.Tuple[ty.Tuple[type, type], ...] = (
@@ -107,6 +113,7 @@ class TypeParser(ty.Generic[T]):
         not_coercible: ty.Optional[
             ty.Iterable[ty.Tuple[TypeOrAny, TypeOrAny]]
         ] = NOT_COERCIBLE_DEFAULT,
+        superclass_auto_cast: bool = False,
         label: str = "",
     ):
         def expand_pattern(t):
@@ -135,6 +142,7 @@ class TypeParser(ty.Generic[T]):
         )
         self.not_coercible = list(not_coercible) if not_coercible is not None else []
         self.pattern = expand_pattern(tp)
+        self.superclass_auto_cast = superclass_auto_cast
 
     def __call__(self, obj: ty.Any) -> ty.Union[T, LazyField[T]]:
         """Attempts to coerce the object to the specified type, unless the value is
@@ -161,7 +169,27 @@ class TypeParser(ty.Generic[T]):
         if obj is attr.NOTHING:
             coerced = attr.NOTHING  # type: ignore[assignment]
         elif isinstance(obj, LazyField):
-            self.check_type(obj.type)
+            try:
+                self.check_type(obj.type)
+            except TypeError as e:
+                if self.superclass_auto_cast:
+                    try:
+                        # Check whether the type of the lazy field isn't a superclass of
+                        # the type to check against, and if so, allow it due to permissive
+                        # typing rules.
+                        TypeParser(obj.type).check_type(self.tp)
+                    except TypeError:
+                        raise e
+                    else:
+                        logger.info(
+                            "Connecting lazy field %s to %s%s via permissive typing that "
+                            "allows super-to-sub type connections",
+                            obj,
+                            self.tp,
+                            self.label_str,
+                        )
+                else:
+                    raise e
             coerced = obj  # type: ignore
         elif isinstance(obj, StateArray):
             coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]
@@ -421,6 +449,10 @@ class TypeParser(ty.Generic[T]):
                 for arg in tp_args:
                     expand_and_check(arg, pattern_args[0])
                 return
+            elif tp_args[-1] is Ellipsis:
+                for pattern_arg in pattern_args:
+                    expand_and_check(tp_args[0], pattern_arg)
+                return
             if len(tp_args) != len(pattern_args):
                 raise TypeError(
                     f"Wrong number of type arguments in tuple {tp_args}  compared to pattern "
@@ -464,7 +496,16 @@ class TypeParser(ty.Generic[T]):
             explicit inclusions and exclusions set in the `coercible` and `not_coercible`
             member attrs
         """
+        # Short-circuit the basic cases where the source and target are the same
         if source is target:
+            return
+        if self.superclass_auto_cast and self.is_subclass(target, type(source)):
+            logger.info(
+                "Attempting to coerce %s into %s due to super-to-sub class coercion "
+                "being permitted",
+                source,
+                target,
+            )
             return
         source_origin = get_origin(source)
         if source_origin is not None:
@@ -562,7 +603,7 @@ class TypeParser(ty.Generic[T]):
     def is_instance(
         cls,
         obj: object,
-        candidates: ty.Union[ty.Type[ty.Any], ty.Iterable[ty.Type[ty.Any]]],
+        candidates: ty.Union[ty.Type[ty.Any], ty.Sequence[ty.Type[ty.Any]]],
     ) -> bool:
         """Checks whether the object is an instance of cls or that cls is typing.Any,
         extending the built-in isinstance to check nested type args
@@ -574,7 +615,7 @@ class TypeParser(ty.Generic[T]):
         candidates : type or ty.Iterable[type]
             the candidate types to check the object against
         """
-        if not isinstance(candidates, (tuple, list)):
+        if not isinstance(candidates, ty.Sequence):
             candidates = [candidates]
         for candidate in candidates:
             if candidate is ty.Any:
@@ -600,7 +641,7 @@ class TypeParser(ty.Generic[T]):
     def is_subclass(
         cls,
         klass: ty.Type[ty.Any],
-        candidates: ty.Union[ty.Type[ty.Any], ty.Iterable[ty.Type[ty.Any]]],
+        candidates: ty.Union[ty.Type[ty.Any], ty.Sequence[ty.Type[ty.Any]]],
         any_ok: bool = False,
     ) -> bool:
         """Checks whether the class a is either the same as b, a subclass of b or b is
@@ -617,16 +658,23 @@ class TypeParser(ty.Generic[T]):
         """
         if not isinstance(candidates, ty.Sequence):
             candidates = [candidates]
+        if ty.Any in candidates:
+            return True
+        if klass is ty.Any:
+            return any_ok
+
+        origin = get_origin(klass)
+        args = get_args(klass)
 
         for candidate in candidates:
+            candidate_origin = get_origin(candidate)
+            candidate_args = get_args(candidate)
             # Handle ty.Type[*] types in klass and candidates
-            if ty.get_origin(klass) is type and (
-                candidate is type or ty.get_origin(candidate) is type
-            ):
+            if origin is type and (candidate is type or candidate_origin is type):
                 if candidate is type:
                     return True
-                return cls.is_subclass(ty.get_args(klass)[0], ty.get_args(candidate)[0])
-            elif ty.get_origin(klass) is type or ty.get_origin(candidate) is type:
+                return cls.is_subclass(args[0], candidate_args[0])
+            elif origin is type or candidate_origin is type:
                 return False
             if NO_GENERIC_ISSUBCLASS:
                 if klass is type and candidate is not type:
@@ -636,27 +684,29 @@ class TypeParser(ty.Generic[T]):
                 ):
                     return True
             else:
-                if klass is ty.Any:
-                    if ty.Any in candidates:  # type: ignore
-                        return True
-                    else:
-                        return any_ok
-                origin = get_origin(klass)
                 if origin is ty.Union:
-                    args = get_args(klass)
-                    if get_origin(candidate) is ty.Union:
-                        candidate_args = get_args(candidate)
-                    else:
-                        candidate_args = [candidate]
-                    return all(
-                        any(cls.is_subclass(a, c) for a in args) for c in candidate_args
+                    union_args = (
+                        candidate_args if candidate_origin is ty.Union else (candidate,)
                     )
-                if origin is not None:
-                    klass = origin
-                if klass is candidate or candidate is ty.Any:
-                    return True
-                if issubclass(klass, candidate):
-                    return True
+                    matches = all(
+                        any(cls.is_subclass(a, c) for c in union_args) for a in args
+                    )
+                    if matches:
+                        return True
+                else:
+                    if candidate_args and candidate_origin is not ty.Union:
+                        if (
+                            origin
+                            and issubclass(origin, candidate_origin)  # type: ignore[arg-type]
+                            and len(args) == len(candidate_args)
+                            and all(
+                                issubclass(a, c) for a, c in zip(args, candidate_args)
+                            )
+                        ):
+                            return True
+                    else:
+                        if issubclass(origin if origin else klass, candidate):
+                            return True
         return False
 
     @classmethod
