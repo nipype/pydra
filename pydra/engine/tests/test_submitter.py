@@ -8,6 +8,7 @@ import pytest
 from .utils import (
     need_sge,
     need_slurm,
+    need_oar,
     gen_basic_wf,
     gen_basic_wf_with_threadcount,
     gen_basic_wf_with_threadcount_concurrent,
@@ -571,6 +572,85 @@ def test_sge_no_limit_maxthreads(tmpdir):
         out_job2_dict["start_time"][0], "%a %b %d %H:%M:%S %Y"
     )
     assert job_1_endtime > job_2_starttime
+
+
+@need_oar
+def test_oar_wf(tmpdir):
+    wf = gen_basic_wf()
+    wf.cache_dir = tmpdir
+    # submit workflow and every task as oar job
+    with Submitter("oar") as sub:
+        sub(wf)
+
+    res = wf.result()
+    assert res.output.out == 9
+    script_dir = tmpdir / "OarWorker_scripts"
+    assert script_dir.exists()
+    # ensure each task was executed with oar
+    assert len([sd for sd in script_dir.listdir() if sd.isdir()]) == 2
+
+
+@need_oar
+def test_oar_wf_cf(tmpdir):
+    # submit entire workflow as single job executing with cf worker
+    wf = gen_basic_wf()
+    wf.cache_dir = tmpdir
+    wf.plugin = "cf"
+    with Submitter("oar") as sub:
+        sub(wf)
+    res = wf.result()
+    assert res.output.out == 9
+    script_dir = tmpdir / "OarWorker_scripts"
+    assert script_dir.exists()
+    # ensure only workflow was executed with oar
+    sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
+    assert len(sdirs) == 1
+    # oar scripts should be in the dirs that are using uid in the name
+    assert sdirs[0].basename == wf.uid
+
+
+@need_oar
+def test_oar_wf_state(tmpdir):
+    wf = gen_basic_wf()
+    wf.split("x", x=[5, 6])
+    wf.cache_dir = tmpdir
+    with Submitter("oar") as sub:
+        sub(wf)
+    res = wf.result()
+    assert res[0].output.out == 9
+    assert res[1].output.out == 10
+    script_dir = tmpdir / "OarWorker_scripts"
+    assert script_dir.exists()
+    sdirs = [sd for sd in script_dir.listdir() if sd.isdir()]
+    assert len(sdirs) == 2 * len(wf.inputs.x)
+
+
+@need_oar
+def test_oar_args_1(tmpdir):
+    """testing sbatch_args provided to the submitter"""
+    task = sleep_add_one(x=1)
+    task.cache_dir = tmpdir
+    # submit workflow and every task as oar job
+    with Submitter("oar", oarsub_args="-l nodes=2") as sub:
+        sub(task)
+
+    res = task.result()
+    assert res.output.out == 2
+    script_dir = tmpdir / "OarWorker_scripts"
+    assert script_dir.exists()
+
+
+@need_oar
+def test_oar_args_2(tmpdir):
+    """testing oarsub_args provided to the submitter
+    exception should be raised for invalid options
+    """
+    task = sleep_add_one(x=1)
+    task.cache_dir = tmpdir
+    # submit workflow and every task as oar job
+    with pytest.raises(RuntimeError, match="Error returned from oarsub:"):
+        with Submitter("oar", oarsub_args="-l nodes=2 --invalid") as sub:
+            sub(task)
 
 
 # @pytest.mark.xfail(reason="Not sure")

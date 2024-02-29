@@ -33,6 +33,10 @@ need_sge = pytest.mark.skipif(
     not (bool(shutil.which("qsub")) and bool(shutil.which("qacct"))),
     reason="sge not available",
 )
+need_oar = pytest.mark.skipif(
+    not (bool(shutil.which("oarsub")) and bool(shutil.which("oarstat"))),
+    reason="oar not available",
+)
 
 
 def result_no_submitter(shell_task, plugin=None):
