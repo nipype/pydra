@@ -224,13 +224,32 @@ def hash_single(obj: object, cache: Cache) -> Hash:
         # chunk
 
         def calc_hash(first: ty.Optional[bytes] = None) -> Hash:
+            """
+            Calculate the hash of the object
+
+            Parameters
+            ----------
+            first : ty.Optional[bytes]
+                the first bytes chunk from the bytes_repr iterator, passed if the first
+                chunk wasn't a local cache key
+            """
             h = blake2b(digest_size=16, person=b"pydra-hash")
+            # We want to use the first chunk that was popped to check for a cache-key
+            # if present
             if first is not None:
                 h.update(first)
             for chunk in bytes_it:  # Note that `bytes_it` is in outer scope
                 h.update(chunk)
             return Hash(h.digest())
 
+        # Read the first chunk of the bytes_repr iterator, check to see whether it returns
+        # a "cache-key" tuple instead of a bytes chunk for the type of the object to cache
+        # (i.e. file objects). If it does use that key to check the persistent cache for
+        # a precomputed hash and otherwise calculate the hash and store it in the
+        # persistent cache with that key.
+
+        # If the first chunk is a bytes chunk (i.e. the object type doesn't have an associated
+        # 'cache-key'), then simply calculate the hash of the object.
         first = next(bytes_it)
         if isinstance(first, tuple):
             tp = type(obj)

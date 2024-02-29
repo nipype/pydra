@@ -323,11 +323,18 @@ def text_file(tmp_path):
 
 
 def test_persistent_hash_cache(cache_path, text_file):
+    """
+    Test the persistent hash cache with a text file
+
+    The cache is used to store the hash of the text file, and the hash is
+    retrieved from the cache when the file is unchanged.
+    """
     # Test hash is stable between calls
     hsh = hash_object(text_file, persistent_cache=cache_path)
     assert hsh == hash_object(text_file, persistent_cache=cache_path)
 
-    # Test that cached hash has been used
+    # Test that cached hash has been used by explicitly modifying it and seeing that the
+    # hash is the same as the modified hash
     cache_files = list(cache_path.iterdir())
     assert len(cache_files) == 1
     modified_hash = "modified".encode()
@@ -342,6 +349,10 @@ def test_persistent_hash_cache(cache_path, text_file):
 
 
 def test_persistent_hash_cache_cleanup1(cache_path, text_file):
+    """
+    Test the persistent hash is cleaned up after use if the periods between cleanups
+    is greater than the environment variable PYDRA_HASH_CACHE_CLEANUP_PERIOD
+    """
     with mock.patch.dict(
         os.environ,
         {
@@ -350,15 +361,19 @@ def test_persistent_hash_cache_cleanup1(cache_path, text_file):
         },
     ):
         persistent_cache = PersistentCache()
-    hsh = hash_object(text_file, persistent_cache=persistent_cache)
+    hash_object(text_file, persistent_cache=persistent_cache)
     assert len(list(cache_path.iterdir())) == 1
     persistent_cache.clean_up()
     assert len(list(cache_path.iterdir())) == 0
 
 
 def test_persistent_hash_cache_cleanup2(cache_path, text_file):
+    """
+    Test the persistent hash is cleaned up after use if the periods between cleanups
+    is greater than the explicitly provided cleanup_period
+    """
     persistent_cache = PersistentCache(cache_path, cleanup_period=-100)
-    hsh = hash_object(text_file, persistent_cache=persistent_cache)
+    hash_object(text_file, persistent_cache=persistent_cache)
     assert len(list(cache_path.iterdir())) == 1
     time.sleep(2)
     persistent_cache.clean_up()
@@ -366,5 +381,8 @@ def test_persistent_hash_cache_cleanup2(cache_path, text_file):
 
 
 def test_persistent_hash_cache_not_dir(text_file):
+    """
+    Test that an error is raised if the provided cache path is not a directory
+    """
     with pytest.raises(ValueError, match="is not a directory"):
         PersistentCache(text_file.fspath)
