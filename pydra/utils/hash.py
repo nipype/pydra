@@ -242,12 +242,12 @@ def hash_single(obj: object, cache: Cache) -> Hash:
                 h.update(chunk)
             return Hash(h.digest())
 
-        # Read the first item of the bytes_repr iterator, check to see whether it returns
+        # Read the first item of the bytes_repr iterator and check to see whether it returns
         # a "cache-key" tuple instead of a bytes chunk for the type of the object to be cached
-        # (i.e. file objects). If it does use that key to check the persistent cache for
-        # a precomputed hash and return it if it is, otherwise calculate the hash and
-        # store it in the persistent cache with that hash of that key (not to be confused
-        # with the hash of the object that is saved/retrieved).
+        # (e.g. fileformats.core.FileSet objects). If it does use that key to check the
+        # persistent cache for a precomputed hash and return it if it is, otherwise
+        # calculate the hash and store it in the persistent cache with that hash of
+        # that key (not to be confused with the hash of the object that is saved/retrieved).
         first = next(bytes_it)
         if isinstance(first, tuple):
             tp = type(obj)
