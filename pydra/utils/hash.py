@@ -242,14 +242,12 @@ def hash_single(obj: object, cache: Cache) -> Hash:
                 h.update(chunk)
             return Hash(h.digest())
 
-        # Read the first chunk of the bytes_repr iterator, check to see whether it returns
-        # a "cache-key" tuple instead of a bytes chunk for the type of the object to cache
+        # Read the first item of the bytes_repr iterator, check to see whether it returns
+        # a "cache-key" tuple instead of a bytes chunk for the type of the object to be cached
         # (i.e. file objects). If it does use that key to check the persistent cache for
-        # a precomputed hash and otherwise calculate the hash and store it in the
-        # persistent cache with that key.
-
-        # If the first chunk is a bytes chunk (i.e. the object type doesn't have an associated
-        # 'cache-key'), then simply calculate the hash of the object.
+        # a precomputed hash and return it if it is, otherwise calculate the hash and
+        # store it in the persistent cache with that hash of that key (not to be confused
+        # with the hash of the object that is saved/retrieved).
         first = next(bytes_it)
         if isinstance(first, tuple):
             tp = type(obj)
@@ -259,6 +257,10 @@ def hash_single(obj: object, cache: Cache) -> Hash:
             ) + first
             hsh = cache.persistent.get_or_calculate_hash(key, calc_hash)
         else:
+            # If the first item is a bytes chunk (i.e. the object type doesn't have an
+            # associated 'cache-key'), then simply calculate the hash of the object,
+            # passing the first chunk to the `calc_hash` function so it can be included
+            # in the hash calculation
             hsh = calc_hash(first=first)
         logger.debug("Hash of %s object is %s", obj, hsh)
         cache[objid] = hsh
