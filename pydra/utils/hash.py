@@ -129,7 +129,8 @@ class PersistentCache:
         Returns
         -------
         Hash
-            _description_
+            the hash corresponding to the key, which is either retrieved from the persistent
+            store or calculated using `calculate_hash` if not present
         """
         try:
             return self._hashes[key]
@@ -141,6 +142,7 @@ class PersistentCache:
                 return Hash(key_path.read_bytes())
             hsh = calculate_hash()
             key_path.write_bytes(hsh)
+            self._hashes[key] = Hash(hsh)
         return Hash(hsh)
 
     def clean_up(self):
