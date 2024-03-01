@@ -128,6 +128,8 @@ class DistributedWorker(Worker):
 class SerialWorker(Worker):
     """A worker to execute linearly."""
 
+    plugin_name = "serial"
+
     def __init__(self, **kwargs):
         """Initialize worker."""
         logger.debug("Initialize SerialWorker")
@@ -156,6 +158,8 @@ class SerialWorker(Worker):
 
 class ConcurrentFuturesWorker(Worker):
     """A worker to execute in parallel using Python's concurrent futures."""
+
+    plugin_name = "cf"
 
     def __init__(self, n_procs=None):
         """Initialize Worker."""
@@ -192,6 +196,7 @@ class ConcurrentFuturesWorker(Worker):
 class SlurmWorker(DistributedWorker):
     """A worker to execute tasks on SLURM systems."""
 
+    plugin_name = "slurm"
     _cmd = "sbatch"
     _sacct_re = re.compile(
         "(?P<jobid>\\d*) +(?P<status>\\w*)\\+? +" "(?P<exit_code>\\d+):\\d+"
@@ -366,6 +371,8 @@ class SlurmWorker(DistributedWorker):
 
 class SGEWorker(DistributedWorker):
     """A worker to execute tasks on SLURM systems."""
+
+    plugin_name = "sge"
 
     _cmd = "qsub"
     _sacct_re = re.compile(
@@ -860,6 +867,8 @@ class DaskWorker(Worker):
     This is an experimental implementation with limited testing.
     """
 
+    plugin_name = "dask"
+
     def __init__(self, **kwargs):
         """Initialize Worker."""
         super().__init__()
@@ -898,7 +907,7 @@ class DaskWorker(Worker):
 class PsijWorker(Worker):
     """A worker to execute tasks using PSI/J."""
 
-    def __init__(self, subtype, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize PsijWorker.
 
@@ -914,15 +923,6 @@ class PsijWorker(Worker):
             raise
         logger.debug("Initialize PsijWorker")
         self.psij = psij
-
-        # Check if the provided subtype is valid
-        valid_subtypes = ["local", "slurm"]
-        if subtype not in valid_subtypes:
-            raise ValueError(
-                f"Invalid 'subtype' provided. Available options: {', '.join(valid_subtypes)}"
-            )
-
-        self.subtype = subtype
 
     def run_el(self, interface, rerun=False, **kwargs):
         """Run a task."""
@@ -1039,14 +1039,29 @@ class PsijWorker(Worker):
         pass
 
 
+class PsijLocalWorker(PsijWorker):
+    """A worker to execute tasks using PSI/J on the local machine."""
+
+    subtype = "local"
+    plugin_name = f"psij-{subtype}"
+
+
+class PsijSlurmWorker(PsijWorker):
+    """A worker to execute tasks using PSI/J using SLURM."""
+
+    subtype = "slurm"
+    plugin_name = f"psij-{subtype}"
+
+
 WORKERS = {
-    "serial": SerialWorker,
-    "cf": ConcurrentFuturesWorker,
-    "slurm": SlurmWorker,
-    "dask": DaskWorker,
-    "sge": SGEWorker,
-    **{
-        "psij-" + subtype: lambda subtype=subtype: PsijWorker(subtype=subtype)
-        for subtype in ["local", "slurm"]
-    },
+    w.plugin_name: w
+    for w in (
+        SerialWorker,
+        ConcurrentFuturesWorker,
+        SlurmWorker,
+        DaskWorker,
+        SGEWorker,
+        PsijLocalWorker,
+        PsijSlurmWorker,
+    )
 }
