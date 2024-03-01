@@ -458,8 +458,6 @@ class ShellOutSpec:
                             input_value
                         )
                         additional_out[fld.name] = input_value
-                else:
-                    additional_out[fld.name] = input_value
             elif (
                 fld.default is None or fld.default == attr.NOTHING
             ) and not fld.metadata:  # TODO: is it right?
