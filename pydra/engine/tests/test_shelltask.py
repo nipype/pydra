@@ -4347,6 +4347,102 @@ def test_fsl(data_tests_dir):
     # res = shelly(plugin="cf")
 
 
+def test_shell_cmd_optional_output_file1(tmp_path):
+    """
+    Test to see that 'unused' doesn't complain about not having an output passed to it
+    """
+    my_cp_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "input",
+                attr.ib(
+                    type=File, metadata={"argstr": "", "help_string": "input file"}
+                ),
+            ),
+            (
+                "output",
+                attr.ib(
+                    type=Path,
+                    metadata={
+                        "argstr": "",
+                        "output_file_template": "out.txt",
+                        "help_string": "output file",
+                    },
+                ),
+            ),
+            (
+                "unused",
+                attr.ib(
+                    type=ty.Union[Path, bool],
+                    default=False,
+                    metadata={
+                        "argstr": "--not-used",
+                        "output_file_template": "out.txt",
+                        "help_string": "dummy output",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_cp = ShellCommandTask(
+        name="my_cp",
+        executable="cp",
+        input_spec=my_cp_spec,
+    )
+    file1 = tmp_path / "file1.txt"
+    file1.write_text("foo")
+    result = my_cp(input=file1, unused=False)
+    assert result.output.output.fspath.read_text() == "foo"
+
+
+def test_shell_cmd_optional_output_file2(tmp_path):
+    """
+    Test to see that 'unused' doesn't complain about not having an output passed to it
+    """
+    my_cp_spec = SpecInfo(
+        name="Input",
+        fields=[
+            (
+                "input",
+                attr.ib(
+                    type=File, metadata={"argstr": "", "help_string": "input file"}
+                ),
+            ),
+            (
+                "output",
+                attr.ib(
+                    type=ty.Union[Path, bool],
+                    default=False,
+                    metadata={
+                        "argstr": "",
+                        "output_file_template": "out.txt",
+                        "help_string": "dummy output",
+                    },
+                ),
+            ),
+        ],
+        bases=(ShellSpec,),
+    )
+
+    my_cp = ShellCommandTask(
+        name="my_cp",
+        executable="cp",
+        input_spec=my_cp_spec,
+    )
+    file1 = tmp_path / "file1.txt"
+    file1.write_text("foo")
+    result = my_cp(input=file1, output=True)
+    assert result.output.output.fspath.read_text() == "foo"
+
+    file2 = tmp_path / "file2.txt"
+    file2.write_text("bar")
+    with pytest.raises(RuntimeError):
+        my_cp(input=file2, output=False)
+
+
 def test_shell_cmd_non_existing_outputs_1(tmp_path):
     """Checking that non existing output files do not return a phantom path,
     but return NOTHING instead"""

@@ -452,9 +452,12 @@ class ShellOutSpec:
             input_value = getattr(inputs, fld.name, attr.NOTHING)
             if input_value is not attr.NOTHING:
                 if TypeParser.contains_type(FileSet, fld.type):
-                    label = f"output field '{fld.name}' of {self}"
-                    input_value = TypeParser(fld.type, label=label).coerce(input_value)
-                additional_out[fld.name] = input_value
+                    if input_value is not False:
+                        label = f"output field '{fld.name}' of {self}"
+                        input_value = TypeParser(fld.type, label=label).coerce(
+                            input_value
+                        )
+                        additional_out[fld.name] = input_value
             elif (
                 fld.default is None or fld.default == attr.NOTHING
             ) and not fld.metadata:  # TODO: is it right?
