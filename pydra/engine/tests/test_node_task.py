@@ -352,15 +352,14 @@ def test_odir_init():
 # Tests for tasks without state (i.e. no splitter)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
-def test_task_nostate_1(plugin_dask_opt, tmp_path):
+def test_task_nostate_1(plugin, tmp_path):
     """task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
     nn.cache_dir = tmp_path
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -393,15 +392,14 @@ def test_task_nostate_1_call():
     assert nn.output_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
-def test_task_nostate_1_call_subm(plugin_dask_opt, tmp_path):
+def test_task_nostate_1_call_subm(plugin, tmp_path):
     """task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
     nn.cache_dir = tmp_path
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         nn(submitter=sub)
 
     # checking the results
@@ -411,15 +409,14 @@ def test_task_nostate_1_call_subm(plugin_dask_opt, tmp_path):
     assert nn.output_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
-def test_task_nostate_1_call_plug(plugin_dask_opt, tmp_path):
+def test_task_nostate_1_call_plug(plugin, tmp_path):
     """task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
     nn.cache_dir = tmp_path
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    nn(plugin=plugin_dask_opt)
+    nn(plugin=plugin)
 
     # checking the results
     results = nn.result()
@@ -543,8 +540,7 @@ def test_task_nostate_7():
 # Testing caching for tasks without states
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
-def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
+def test_task_nostate_cachedir(plugin, tmp_path):
     """task with provided cache_dir using pytest tmp_path"""
     cache_dir = tmp_path / "test_task_nostate"
     cache_dir.mkdir()
@@ -552,7 +548,7 @@ def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -560,8 +556,7 @@ def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
     assert results.output.out == 5
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
-def test_task_nostate_cachedir_relativepath(tmp_path, plugin_dask_opt):
+def test_task_nostate_cachedir_relativepath(tmp_path, plugin):
     """task with provided cache_dir as relative path"""
     os.chdir(tmp_path)
     cache_dir = "test_task_nostate"
@@ -571,7 +566,7 @@ def test_task_nostate_cachedir_relativepath(tmp_path, plugin_dask_opt):
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -581,8 +576,7 @@ def test_task_nostate_cachedir_relativepath(tmp_path, plugin_dask_opt):
     shutil.rmtree(cache_dir)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
-def test_task_nostate_cachelocations(plugin_dask_opt, tmp_path):
+def test_task_nostate_cachelocations(plugin, tmp_path):
     """
     Two identical tasks with provided cache_dir;
     the second task has cache_locations and should not recompute the results
@@ -593,11 +587,11 @@ def test_task_nostate_cachelocations(plugin_dask_opt, tmp_path):
     cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(nn)
 
     nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(nn2)
 
     # checking the results
@@ -723,9 +717,8 @@ def test_task_nostate_cachelocations_updated(plugin, tmp_path):
 # Tests for tasks with states (i.e. with splitter)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 @pytest.mark.parametrize("input_type", ["list", "array"])
-def test_task_state_1(plugin_dask_opt, input_type, tmp_path):
+def test_task_state_1(plugin, input_type, tmp_path):
     """task with the simplest splitter"""
     a_in = [3, 5]
     if input_type == "array":
@@ -738,7 +731,7 @@ def test_task_state_1(plugin_dask_opt, input_type, tmp_path):
     assert nn.state.splitter_rpn == ["NA.a"]
     assert (nn.inputs.a == np.array([3, 5])).all()
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -1068,8 +1061,7 @@ def test_task_state_6a(plugin, tmp_path):
         assert odir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
-def test_task_state_comb_1(plugin_dask_opt, tmp_path):
+def test_task_state_comb_1(plugin, tmp_path):
     """task with the simplest splitter and combiner"""
     nn = fun_addtwo(name="NA").split(a=[3, 5], splitter="a").combine(combiner="a")
     nn.cache_dir = tmp_path
@@ -1082,7 +1074,7 @@ def test_task_state_comb_1(plugin_dask_opt, tmp_path):
     assert nn.state.splitter_final is None
     assert nn.state.splitter_rpn_final == []
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(nn)
 
     assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
@@ -1445,8 +1437,7 @@ def test_task_state_comb_contdim_2(tmp_path):
 # Testing caching for tasks with states
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
-def test_task_state_cachedir(plugin_dask_opt, tmp_path):
+def test_task_state_cachedir(plugin, tmp_path):
     """task with a state and provided cache_dir using pytest tmp_path"""
     cache_dir = tmp_path / "test_task_nostate"
     cache_dir.mkdir()
@@ -1455,7 +1446,7 @@ def test_task_state_cachedir(plugin_dask_opt, tmp_path):
     assert nn.state.splitter == "NA.a"
     assert (nn.inputs.a == np.array([3, 5])).all()
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(nn)
 
     # checking the results

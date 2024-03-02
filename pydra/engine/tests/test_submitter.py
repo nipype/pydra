@@ -131,8 +131,7 @@ def test_wf_in_wf(plugin, tmpdir):
     assert res.output.out == 7
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
-def test_wf2(plugin_dask_opt, tmpdir):
+def test_wf2(plugin, tmpdir):
     """workflow as a node
     workflow-node with one task and no splitter
     """
@@ -146,15 +145,14 @@ def test_wf2(plugin_dask_opt, tmpdir):
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     res = wf.result()
     assert res.output.out == 3
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
-def test_wf_with_state(plugin_dask_opt, tmpdir):
+def test_wf_with_state(plugin, tmpdir):
     wf = Workflow(name="wf_with_state", input_spec=["x"])
     wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
     wf.add(sleep_add_one(name="taskb", x=wf.taska.lzout.out))
@@ -163,7 +161,7 @@ def test_wf_with_state(plugin_dask_opt, tmpdir):
     wf.set_output([("out", wf.taskb.lzout.out)])
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(plugin=plugin) as sub:
         sub(wf)
 
     res = wf.result()
