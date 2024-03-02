@@ -669,6 +669,7 @@ def test_hash_changes_in_workflow_graph(tmpdir):
         with Submitter("cf") as sub:
             result = sub(wf)
 
+
 @mark.task
 def to_tuple(x, y):
     return (x, y)
