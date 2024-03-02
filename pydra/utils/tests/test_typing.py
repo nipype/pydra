@@ -1,5 +1,6 @@
 import os
 import itertools
+import sys
 import typing as ty
 from pathlib import Path
 import tempfile
@@ -8,13 +9,16 @@ from pydra import mark
 from ...engine.specs import File, LazyOutField
 from ..typing import TypeParser
 from pydra import Workflow
-from fileformats.application import Json
+from fileformats.application import Json, Yaml, Xml
 from .utils import (
     generic_func_task,
     GenericShellTask,
     specific_func_task,
     SpecificShellTask,
+    other_specific_func_task,
+    OtherSpecificShellTask,
     MyFormatX,
+    MyOtherFormatX,
     MyHeader,
 )
 
@@ -152,8 +156,12 @@ def test_type_check_nested6():
 
 
 def test_type_check_nested7():
+    TypeParser(ty.Tuple[float, float, float])(lz(ty.List[int]))
+
+
+def test_type_check_nested7a():
     with pytest.raises(TypeError, match="Wrong number of type arguments"):
-        TypeParser(ty.Tuple[float, float, float])(lz(ty.List[int]))
+        TypeParser(ty.Tuple[float, float, float])(lz(ty.Tuple[int]))
 
 
 def test_type_check_nested8():
@@ -162,6 +170,18 @@ def test_type_check_nested8():
             ty.Tuple[int, ...],
             not_coercible=[(ty.Sequence, ty.Tuple)],
         )(lz(ty.List[float]))
+
+
+def test_type_check_permit_superclass():
+    # Typical case as Json is subclass of File
+    TypeParser(ty.List[File])(lz(ty.List[Json]))
+    # Permissive super class, as File is superclass of Json
+    TypeParser(ty.List[Json], superclass_auto_cast=True)(lz(ty.List[File]))
+    with pytest.raises(TypeError, match="Cannot coerce"):
+        TypeParser(ty.List[Json], superclass_auto_cast=False)(lz(ty.List[File]))
+    # Fails because Yaml is neither sub or super class of Json
+    with pytest.raises(TypeError, match="Cannot coerce"):
+        TypeParser(ty.List[Json], superclass_auto_cast=True)(lz(ty.List[Yaml]))
 
 
 def test_type_check_fail1():
@@ -490,14 +510,29 @@ def test_matches_type_tuple():
     assert not TypeParser.matches_type(ty.Tuple[int], ty.Tuple[int, int])
 
 
-def test_matches_type_tuple_ellipsis():
+def test_matches_type_tuple_ellipsis1():
     assert TypeParser.matches_type(ty.Tuple[int], ty.Tuple[int, ...])
+
+
+def test_matches_type_tuple_ellipsis2():
     assert TypeParser.matches_type(ty.Tuple[int, int], ty.Tuple[int, ...])
+
+
+def test_matches_type_tuple_ellipsis3():
     assert not TypeParser.matches_type(ty.Tuple[int, float], ty.Tuple[int, ...])
-    assert not TypeParser.matches_type(ty.Tuple[int, ...], ty.Tuple[int])
+
+
+def test_matches_type_tuple_ellipsis4():
+    assert TypeParser.matches_type(ty.Tuple[int, ...], ty.Tuple[int])
+
+
+def test_matches_type_tuple_ellipsis5():
     assert TypeParser.matches_type(
         ty.Tuple[int], ty.List[int], coercible=[(tuple, list)]
     )
+
+
+def test_matches_type_tuple_ellipsis6():
     assert TypeParser.matches_type(
         ty.Tuple[int, ...], ty.List[int], coercible=[(tuple, list)]
     )
@@ -538,7 +573,17 @@ def specific_task(request):
         assert False
 
 
-def test_typing_cast(tmp_path, generic_task, specific_task):
+@pytest.fixture(params=["func", "shell"])
+def other_specific_task(request):
+    if request.param == "func":
+        return other_specific_func_task
+    elif request.param == "shell":
+        return OtherSpecificShellTask
+    else:
+        assert False
+
+
+def test_typing_implicit_cast_from_super(tmp_path, generic_task, specific_task):
     """Check the casting of lazy fields and whether specific file-sets can be recovered
     from generic `File` classes"""
 
@@ -562,18 +607,9 @@ def test_typing_cast(tmp_path, generic_task, specific_task):
         )
     )
 
-    with pytest.raises(TypeError, match="Cannot coerce"):
-        # No cast of generic task output to MyFormatX
-        wf.add(
-            specific_task(
-                in_file=wf.generic.lzout.out,
-                name="specific2",
-            )
-        )
-
     wf.add(
         specific_task(
-            in_file=wf.generic.lzout.out.cast(MyFormatX),
+            in_file=wf.generic.lzout.out,
             name="specific2",
         )
     )
@@ -584,11 +620,73 @@ def test_typing_cast(tmp_path, generic_task, specific_task):
         ]
     )
 
-    my_fspath = tmp_path / "in_file.my"
-    hdr_fspath = tmp_path / "in_file.hdr"
-    my_fspath.write_text("my-format")
-    hdr_fspath.write_text("my-header")
-    in_file = MyFormatX([my_fspath, hdr_fspath])
+    in_file = MyFormatX.sample()
+
+    result = wf(in_file=in_file, plugin="serial")
+
+    out_file: MyFormatX = result.output.out_file
+    assert type(out_file) is MyFormatX
+    assert out_file.parent != in_file.parent
+    assert type(out_file.header) is MyHeader
+    assert out_file.header.parent != in_file.header.parent
+
+
+def test_typing_cast(tmp_path, specific_task, other_specific_task):
+    """Check the casting of lazy fields and whether specific file-sets can be recovered
+    from generic `File` classes"""
+
+    wf = Workflow(
+        name="test",
+        input_spec={"in_file": MyFormatX},
+        output_spec={"out_file": MyFormatX},
+    )
+
+    wf.add(
+        specific_task(
+            in_file=wf.lzin.in_file,
+            name="entry",
+        )
+    )
+
+    with pytest.raises(TypeError, match="Cannot coerce"):
+        # No cast of generic task output to MyFormatX
+        wf.add(  # Generic task
+            other_specific_task(
+                in_file=wf.entry.lzout.out,
+                name="inner",
+            )
+        )
+
+    wf.add(  # Generic task
+        other_specific_task(
+            in_file=wf.entry.lzout.out.cast(MyOtherFormatX),
+            name="inner",
+        )
+    )
+
+    with pytest.raises(TypeError, match="Cannot coerce"):
+        # No cast of generic task output to MyFormatX
+        wf.add(
+            specific_task(
+                in_file=wf.inner.lzout.out,
+                name="exit",
+            )
+        )
+
+    wf.add(
+        specific_task(
+            in_file=wf.inner.lzout.out.cast(MyFormatX),
+            name="exit",
+        )
+    )
+
+    wf.set_output(
+        [
+            ("out_file", wf.exit.lzout.out),
+        ]
+    )
+
+    in_file = MyFormatX.sample()
 
     result = wf(in_file=in_file, plugin="serial")
 
@@ -609,6 +707,63 @@ def test_type_is_subclass2():
 
 def test_type_is_subclass3():
     assert TypeParser.is_subclass(ty.Type[Json], ty.Type[File])
+
+
+def test_union_is_subclass1():
+    assert TypeParser.is_subclass(ty.Union[Json, Yaml], ty.Union[Json, Yaml, Xml])
+
+
+def test_union_is_subclass2():
+    assert not TypeParser.is_subclass(ty.Union[Json, Yaml, Xml], ty.Union[Json, Yaml])
+
+
+def test_union_is_subclass3():
+    assert TypeParser.is_subclass(Json, ty.Union[Json, Yaml])
+
+
+def test_union_is_subclass4():
+    assert not TypeParser.is_subclass(ty.Union[Json, Yaml], Json)
+
+
+def test_generic_is_subclass1():
+    assert TypeParser.is_subclass(ty.List[int], list)
+
+
+def test_generic_is_subclass2():
+    assert not TypeParser.is_subclass(list, ty.List[int])
+
+
+def test_generic_is_subclass3():
+    assert not TypeParser.is_subclass(ty.List[float], ty.List[int])
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Cannot subscript tuple in < Py3.9"
+)
+def test_generic_is_subclass4():
+    class MyTuple(tuple):
+        pass
+
+    class A:
+        pass
+
+    class B(A):
+        pass
+
+    assert TypeParser.is_subclass(MyTuple[A], ty.Tuple[A])
+    assert TypeParser.is_subclass(ty.Tuple[B], ty.Tuple[A])
+    assert TypeParser.is_subclass(MyTuple[B], ty.Tuple[A])
+    assert not TypeParser.is_subclass(ty.Tuple[A], ty.Tuple[B])
+    assert not TypeParser.is_subclass(ty.Tuple[A], MyTuple[A])
+    assert not TypeParser.is_subclass(MyTuple[A], ty.Tuple[B])
+    assert TypeParser.is_subclass(MyTuple[A, int], ty.Tuple[A, int])
+    assert TypeParser.is_subclass(ty.Tuple[B, int], ty.Tuple[A, int])
+    assert TypeParser.is_subclass(MyTuple[B, int], ty.Tuple[A, int])
+    assert TypeParser.is_subclass(MyTuple[int, B], ty.Tuple[int, A])
+    assert not TypeParser.is_subclass(MyTuple[B, int], ty.Tuple[int, A])
+    assert not TypeParser.is_subclass(MyTuple[int, B], ty.Tuple[A, int])
+    assert not TypeParser.is_subclass(MyTuple[B, int], ty.Tuple[A])
+    assert not TypeParser.is_subclass(MyTuple[B], ty.Tuple[A, int])
 
 
 def test_type_is_instance1():
