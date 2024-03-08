@@ -7,7 +7,7 @@ import typing as ty
 from pathlib import Path
 from collections.abc import Mapping
 from functools import singledispatch
-from hashlib import blake2b, blake2s
+from hashlib import blake2b
 import logging
 from typing import (
     Dict,
@@ -136,7 +136,7 @@ class PersistentCache:
             return self._hashes[key]
         except KeyError:
             pass
-        key_path = self.location / blake2s(str(key).encode()).hexdigest()
+        key_path = self.location / blake2b(str(key).encode()).hexdigest()
         with SoftFileLock(key_path.with_suffix(".lock")):
             if key_path.exists():
                 return Hash(key_path.read_bytes())
