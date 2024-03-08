@@ -192,7 +192,9 @@ def hash_function(obj, **kwargs):
 
 
 def hash_object(
-    obj: object, cache: ty.Optional[Cache] = None, persistent_cache: ty.Union[PersistentCache, Path, None] = None
+    obj: object,
+    cache: ty.Optional[Cache] = None,
+    persistent_cache: ty.Union[PersistentCache, Path, None] = None,
 ) -> Hash:
     """Hash an object
 
