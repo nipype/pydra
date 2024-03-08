@@ -1563,3 +1563,39 @@ def test_task_state_cachelocations_updated(plugin, tmp_path):
     # both workflows should be run
     assert all([dir.exists() for dir in nn.output_dir])
     assert all([dir.exists() for dir in nn2.output_dir])
+
+
+def test_task_files_cachelocations(plugin_dask_opt, tmp_path):
+    """
+    Two identical tasks with provided cache_dir that use file as an input;
+    the second task has cache_locations and should not recompute the results
+    """
+    cache_dir = tmp_path / "test_task_nostate"
+    cache_dir.mkdir()
+    cache_dir2 = tmp_path / "test_task_nostate2"
+    cache_dir2.mkdir()
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+
+    input1 = input_dir / "input1.txt"
+    input1.write_text("test")
+    input2 = input_dir / "input2.txt"
+    input2.write_text("test")
+
+    nn = fun_file(name="NA", filename=input1, cache_dir=cache_dir)
+    with Submitter(plugin=plugin_dask_opt) as sub:
+        sub(nn)
+
+    nn2 = fun_file(
+        name="NA", filename=input2, cache_dir=cache_dir2, cache_locations=cache_dir
+    )
+    with Submitter(plugin=plugin_dask_opt) as sub:
+        sub(nn2)
+
+    # checking the results
+    results2 = nn2.result()
+    assert results2.output.out == "test"
+
+    # checking if the second task didn't run the interface again
+    assert nn.output_dir.exists()
+    assert not nn2.output_dir.exists()
