@@ -69,7 +69,16 @@ def location_converter(path: ty.Union[Path, str, None]) -> Path:
 @attrs.define
 class PersistentCache:
     """Persistent cache in which to store computationally expensive hashes between nodes
-    and workflow/task runs
+    and workflow/task runs. It does this in via the `get_or_calculate_hash` method, which
+    takes a locally unique key (e.g. file-system path + mtime) and a function to
+    calculate the hash if it isn't present in the persistent store.
+
+    The locally unique key is hashed (cheaply) using hashlib cryptography and this
+    "local hash" is use to name the entry of the (potentially expensive) hash of the
+    object itself (e.g. the contents of a file). This entry is saved as a text file
+    within a user-specific cache directory (see `platformdirs.user_cache_dir`), with
+    the name of the file being the "local hash" of the key and the contents of the
+    file being the "globally unique hash" of the object itself.
 
     Parameters
     ----------
@@ -166,6 +175,17 @@ class PersistentCache:
 
 @attrs.define
 class Cache:
+    """Cache for hashing objects, used to avoid infinite recursion caused by circular
+    references between objects, and to store hashes of objects that have already been
+    hashed to avoid recomputation.
+
+    This concept is extended to persistent caching of hashes for certain object types,
+    for which calculating the hash is a potentially expensive operation (e.g.
+    File/Directory types). For these classes the `bytes_repr` override function yields a
+    "locally unique cache key" (e.g. file-system path + mtime) as the first item of its
+    iterator.
+    """
+
     persistent: ty.Optional[PersistentCache] = attrs.field(
         default=None,
         converter=PersistentCache.from_path,  # type: ignore[misc]
