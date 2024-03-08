@@ -59,12 +59,12 @@ class UnhashableError(ValueError):
     """Error for objects that cannot be hashed"""
 
 
-def hash_function(obj):
+def hash_function(obj, cache=None):
     """Generate hash of object."""
-    return hash_object(obj).hex()
+    return hash_object(obj, cache=cache).hex()
 
 
-def hash_object(obj: object) -> Hash:
+def hash_object(obj: object, cache: ty.Optional[Cache] = None) -> Hash:
     """Hash an object
 
     Constructs a byte string that uniquely identifies the object,
@@ -73,8 +73,10 @@ def hash_object(obj: object) -> Hash:
     Base Python types are implemented, including recursive lists and
     dicts. Custom types can be registered with :func:`register_serializer`.
     """
+    if cache is None:
+        cache = Cache({})
     try:
-        return hash_single(obj, Cache({}))
+        return hash_single(obj, cache)
     except Exception as e:
         raise UnhashableError(f"Cannot hash object {obj!r}") from e
 
@@ -105,6 +107,22 @@ class HasBytesRepr(Protocol):
 
 @singledispatch
 def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
+    """Default implementation of hashing for generic objects. Single dispatch is used
+    to provide hooks for class-specific implementations
+
+    Parameters
+    ----------
+    obj: object
+        the object to hash
+    cache : Cache
+        a dictionary object used to store a cache of previously cached objects to
+        handle circular object references
+
+    Yields
+    -------
+    bytes
+        unique representation of the object in a series of bytes
+    """
     cls = obj.__class__
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
     dct: Dict[str, ty.Any]

@@ -1,12 +1,15 @@
 from dateutil import parser
+import secrets
 import re
 import subprocess as sp
 import time
+import attrs
+import typing as ty
+from random import randint
 import os
 from unittest.mock import patch
-
 import pytest
-
+from fileformats.generic import Directory
 from .utils import (
     need_sge,
     need_slurm,
@@ -576,40 +579,95 @@ def test_sge_no_limit_maxthreads(tmpdir):
     assert job_1_endtime > job_2_starttime
 
 
-# @pytest.mark.xfail(reason="Not sure")
-def test_wf_with_blocked_tasks(tmpdir):
-    wf = Workflow(name="wf_with_blocked_tasks", input_spec=["x"])
-    wf.add(identity(name="taska", x=wf.lzin.x))
-    wf.add(alter_input(name="taskb", x=wf.taska.lzout.out))
-    wf.add(to_tuple(name="taskc", x=wf.taska.lzout.out, y=wf.taskb.lzout.out))
-    wf.set_output([("out", wf.taskb.lzout.out)])
+def test_hash_changes_in_task_inputs_file(tmp_path):
+    @mark.task
+    def output_dir_as_input(out_dir: Directory) -> Directory:
+        (out_dir.fspath / "new-file.txt").touch()
+        return out_dir
 
-    wf.inputs.x = A(1)
+    task = output_dir_as_input(out_dir=tmp_path)
+    with pytest.raises(RuntimeError, match="Input field hashes have changed"):
+        task()
+
+
+def test_hash_changes_in_task_inputs_unstable(tmp_path):
+    @attrs.define
+    class Unstable:
+        value: int  # type: ignore
+
+        def __bytes_repr__(self, cache) -> ty.Iterator[bytes]:
+            """Random 128-bit bytestring"""
+            yield secrets.token_bytes(16)
+
+    @mark.task
+    def unstable_input(unstable: Unstable) -> int:
+        return unstable.value
+
+    task = unstable_input(unstable=Unstable(1))
+    with pytest.raises(RuntimeError, match="Input field hashes have changed"):
+        task()
+
+
+def test_hash_changes_in_workflow_inputs(tmp_path):
+    @mark.task
+    def output_dir_as_output(out_dir: Path) -> Directory:
+        (out_dir / "new-file.txt").touch()
+        return out_dir
+
+    wf = Workflow(
+        name="test_hash_change", input_spec={"in_dir": Directory}, in_dir=tmp_path
+    )
+    wf.add(output_dir_as_output(out_dir=wf.lzin.in_dir, name="task"))
+    wf.set_output(("out_dir", wf.task.lzout.out))
+    with pytest.raises(RuntimeError, match="Input field hashes have changed.*Workflow"):
+        wf()
+
+
+def test_hash_changes_in_workflow_graph(tmpdir):
+    class X:
+        """Dummy class with unstable hash (i.e. which isn't altered in a node in which
+        it is an input)"""
+
+        value = 1
+
+        def __bytes_repr__(self, cache):
+            """Bytes representation from class attribute, which will be changed be
+            'alter_x" node.
+
+            NB: this is a contrived example where the bytes_repr implementation returns
+            a bytes representation of a class attribute in order to trigger the exception,
+            hopefully cases like this will be very rare"""
+            yield bytes(self.value)
+
+    @mark.task
+    @mark.annotate({"return": {"x": X, "y": int}})
+    def identity(x: X) -> ty.Tuple[X, int]:
+        return x, 99
+
+    @mark.task
+    def alter_x(y):
+        X.value = 2
+        return y
+
+    @mark.task
+    def to_tuple(x, y):
+        return (x, y)
+
+    wf = Workflow(name="wf_with_blocked_tasks", input_spec=["x", "y"])
+    wf.add(identity(name="taska", x=wf.lzin.x))
+    wf.add(alter_x(name="taskb", y=wf.taska.lzout.y))
+    wf.add(to_tuple(name="taskc", x=wf.taska.lzout.x, y=wf.taskb.lzout.out))
+    wf.set_output([("out", wf.taskc.lzout.out)])
+
+    wf.inputs.x = X()
 
     wf.cache_dir = tmpdir
 
-    # with pytest.raises(Exception, match="graph is not empty,"):
-    with Submitter("serial") as sub:
-        sub(wf)
-
-
-class A:
-    def __init__(self, a):
-        self.a = a
-
-    def __bytes_repr__(self, cache):
-        yield bytes(self.a)
-
-
-@mark.task
-def identity(x):
-    return x
-
-
-@mark.task
-def alter_input(x):
-    x.a = 2
-    return x
+    with pytest.raises(
+        RuntimeError, match="Graph of 'wf_with_blocked_tasks' workflow is not empty"
+    ):
+        with Submitter("cf") as sub:
+            result = sub(wf)
 
 
 @mark.task

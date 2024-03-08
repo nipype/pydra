@@ -5,6 +5,7 @@ import pytest
 import cloudpickle as cp
 from pathlib import Path
 import json
+import glob as glob
 from ... import mark
 from ..core import Workflow
 from ..task import AuditFlag, ShellCommandTask

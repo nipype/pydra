@@ -183,24 +183,55 @@ class Submitter:
                     # don't block the event loop!
                     await asyncio.sleep(1)
                     if ii > 60:
-                        blocked = _list_blocked_tasks(graph_copy)
-                        # get_runnable_tasks(graph_copy)  # Uncomment to debug `get_runnable_tasks`
-                        raise Exception(
-                            "graph is not empty, but not able to get more tasks "
-                            "- something may have gone wrong when retrieving the results "
-                            "of predecessor tasks. This could be caused by a file-system "
-                            "error or a bug in the internal workflow logic, but is likely "
-                            "to be caused by the hash of an upstream node being unstable."
-                            " \n\nHash instability can be caused by an input of the node being "
-                            "modified in place, or by psuedo-random ordering of `set` or "
-                            "`frozenset` inputs (or nested attributes of inputs) in the hash "
-                            "calculation. To ensure that sets are hashed consistently you can "
-                            "you can try set the environment variable PYTHONHASHSEED=0 for "
-                            "all processes, but it is best to try to identify where the set "
-                            "objects are occurring and manually hash their sorted elements. "
-                            "(or use list objects instead)"
-                            "\n\nBlocked tasks\n-------------\n" + "\n".join(blocked)
+                        msg = (
+                            f"Graph of '{wf}' workflow is not empty, but not able to get "
+                            "more tasks - something has gone wrong when retrieving the "
+                            "results predecessors:\n\n"
                         )
+                        # Get blocked tasks and the predecessors they are waiting on
+                        outstanding = {
+                            t: [
+                                p for p in graph_copy.predecessors[t.name] if not p.done
+                            ]
+                            for t in graph_copy.sorted_nodes
+                        }
+
+                        hashes_have_changed = False
+                        for task, waiting_on in outstanding.items():
+                            if not waiting_on:
+                                continue
+                            msg += f"- '{task.name}' node blocked due to\n"
+                            for pred in waiting_on:
+                                if (
+                                    pred.checksum
+                                    != wf.inputs._graph_checksums[pred.name]
+                                ):
+                                    msg += (
+                                        f"    - hash changes in '{pred.name}' node inputs. "
+                                        f"Current values and hashes: {pred.inputs}, "
+                                        f"{pred.inputs._hashes}\n"
+                                    )
+                                    hashes_have_changed = True
+                                elif pred not in outstanding:
+                                    msg += (
+                                        f"    - undiagnosed issues in '{pred.name}' node, "
+                                        "potentially related to file-system access issues "
+                                    )
+                            msg += "\n"
+                        if hashes_have_changed:
+                            msg += (
+                                "Set loglevel to 'debug' in order to track hash changes "
+                                "throughout the execution of the workflow.\n\n "
+                                "These issues may have been caused by `bytes_repr()` methods "
+                                "that don't return stable hash values for specific object "
+                                "types across multiple processes (see bytes_repr() "
+                                '"singledispatch "function in pydra/utils/hash.py).'
+                                "You may need to implement a specific `bytes_repr()` "
+                                '"singledispatch overload"s or `__bytes_repr__()` '
+                                "dunder methods to handle one or more types in "
+                                "your interface inputs."
+                            )
+                        raise RuntimeError(msg)
             for task in tasks:
                 # grab inputs if needed
                 logger.debug(f"Retrieving inputs for {task}")
