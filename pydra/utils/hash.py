@@ -524,39 +524,3 @@ if HAVE_NUMPY:
 
 
 NUMPY_CHUNK_LEN = 8192
-
-
-# class MtimeCachingHash:
-#     """Hashing object that stores a cache of hash values for PathLikes
-
-#     The cache only stores values for PathLikes pointing to existing files,
-#     and the mtime is checked to validate the cache. If the mtime differs,
-#     the old hash is discarded and a new mtime-tagged hash is stored.
-
-#     The cache can grow without bound; we may want to consider using an LRU
-#     cache.
-#     """
-
-#     def __init__(self) -> None:
-#         self.cache: ty.Dict[os.PathLike, ty.Tuple[float, Hash]] = {}
-
-#     def __call__(self, obj: object) -> Hash:
-#         if isinstance(obj, os.PathLike):
-#             path = Path(obj)
-#             try:
-#                 stat_res = path.stat()
-#                 mode, mtime = stat_res.st_mode, stat_res.st_mtime
-#             except FileNotFoundError:
-#                 # Only attempt to cache existing files
-#                 pass
-#             else:
-#                 if stat.S_ISREG(mode) and obj in self.cache:
-#                     # Cache (and hash) the actual object, as different pathlikes will have
-#                     # different serializations
-#                     save_mtime, save_hash = self.cache[obj]
-#                     if mtime == save_mtime:
-#                         return save_hash
-#                     new_hash = hash_object(obj)
-#                     self.cache[obj] = (mtime, new_hash)
-#                     return new_hash
-#         return hash_object(obj)
