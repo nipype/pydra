@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 import typing as ty
-from copy import deepcopy
+from copy import deepcopy, copy
 from uuid import uuid4
 from filelock import SoftFileLock
 import shutil
@@ -281,13 +281,15 @@ class TaskBase:
 
         """
         if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
-            self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
+            self.inputs._graph_checksums = {
+                nd.name: nd.checksum for nd in self.graph_sorted
+            }
 
         if state_index is not None:
-            inputs_copy = deepcopy(self.inputs)
+            inputs_copy = copy(self.inputs)
             for key, ind in self.state.inputs_ind[state_index].items():
                 val = self._extract_input_el(
-                    inputs=inputs_copy, inp_nm=key.split(".")[1], ind=ind
+                    inputs=self.inputs, inp_nm=key.split(".")[1], ind=ind
                 )
                 setattr(inputs_copy, key.split(".")[1], val)
             # setting files_hash again in case it was cleaned by setting specific element
@@ -462,13 +464,25 @@ class TaskBase:
         return res
 
     def _modify_inputs(self):
-        """Update and preserve a Task's original inputs"""
+        """This method modifies the inputs of the task ahead of its execution:
+        - links/copies upstream files and directories into the destination tasks
+          working directory as required select state array values corresponding to
+          state index (it will try to leave them where they are unless specified or
+          they are on different file systems)
+        - resolve template values (e.g. output_file_template)
+        - deepcopy all inputs to guard against in-place changes during the task's
+          execution (they will be replaced after the task's execution with the
+          original inputs to ensure the tasks checksums are consistent)
+        """
         orig_inputs = {
-            k: deepcopy(v) for k, v in attr.asdict(self.inputs, recurse=False).items()
+            k: v
+            for k, v in attr.asdict(self.inputs, recurse=False).items()
+            if not k.startswith("_")
         }
         map_copyfiles = {}
-        for fld in attr_fields(self.inputs):
-            value = getattr(self.inputs, fld.name)
+        input_fields = attr.fields(type(self.inputs))
+        for name, value in orig_inputs.items():
+            fld = getattr(input_fields, name)
             copy_mode, copy_collation = parse_copyfile(
                 fld, default_collation=self.DEFAULT_COPY_COLLATION
             )
@@ -483,12 +497,22 @@ class TaskBase:
                     supported_modes=self.SUPPORTED_COPY_MODES,
                 )
                 if value is not copied_value:
-                    map_copyfiles[fld.name] = copied_value
+                    map_copyfiles[name] = copied_value
         modified_inputs = template_update(
             self.inputs, self.output_dir, map_copyfiles=map_copyfiles
         )
-        if modified_inputs:
-            self.inputs = attr.evolve(self.inputs, **modified_inputs)
+        assert all(m in orig_inputs for m in modified_inputs), (
+            "Modified inputs contain fields not present in original inputs. "
+            "This is likely a bug."
+        )
+        for name, orig_value in orig_inputs.items():
+            try:
+                value = modified_inputs[name]
+            except KeyError:
+                # Ensure we pass a copy not the original just in case inner
+                # attributes are modified during execution
+                value = deepcopy(orig_value)
+            setattr(self.inputs, name, value)
         return orig_inputs
 
     def _populate_filesystem(self, checksum, output_dir):
@@ -548,13 +572,14 @@ class TaskBase:
                 save(output_dir, result=result, task=self)
                 # removing the additional file with the checksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
-                # # function etc. shouldn't change anyway, so removing
-                orig_inputs = {
-                    k: v for k, v in orig_inputs.items() if not k.startswith("_")
-                }
-                self.inputs = attr.evolve(self.inputs, **orig_inputs)
+                # Restore original values to inputs
+                for field_name, field_value in orig_inputs.items():
+                    setattr(self.inputs, field_name, field_value)
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
+        # Check for any changes to the input hashes that have occurred during the execution
+        # of the task
+        self._check_for_hash_changes()
         return result
 
     def _collect_outputs(self, output_dir):
@@ -816,8 +841,8 @@ class TaskBase:
 
         Returns
         -------
-        result :
-
+        result : Result
+            the result of the task
         """
         # TODO: check if result is available in load_result and
         # return a future if not
@@ -883,6 +908,47 @@ class TaskBase:
         if is_workflow(self):
             for task in self.graph.nodes:
                 task._reset()
+
+    def _check_for_hash_changes(self):
+        hash_changes = self.inputs.hash_changes()
+        details = ""
+        for changed in hash_changes:
+            field = getattr(attr.fields(type(self.inputs)), changed)
+            val = getattr(self.inputs, changed)
+            field_type = type(val)
+            if issubclass(field.type, FileSet):
+                details += (
+                    f"- {changed}: value passed to the {field.type} field is of type "
+                    f"{field_type} ('{val}'). If it is intended to contain output data "
+                    "then the type of the field in the interface class should be changed "
+                    "to `pathlib.Path`. Otherwise, if the field is intended to be an "
+                    "input field but it gets altered by the task in some way, then the "
+                    "'copyfile' flag should be set to 'copy' in the field metadata of "
+                    "the task interface class so copies of the files/directories in it "
+                    "are passed to the task instead.\n"
+                )
+            else:
+                details += (
+                    f"- {changed}: the {field_type} object passed to the {field.type}"
+                    f"field appears to have an unstable hash. This could be due to "
+                    "a stochastic/non-thread-safe attribute(s) of the object\n\n"
+                    f"The {field.type}.__bytes_repr__() method can be implemented to "
+                    "bespoke hashing methods based only on the stable attributes for "
+                    f"the `{field_type.__module__}.{field_type.__name__}` type. "
+                    f"See pydra/utils/hash.py for examples. Value: {val}\n"
+                )
+        if hash_changes:
+            raise RuntimeError(
+                f"Input field hashes have changed during the execution of the "
+                f"'{self.name}' {type(self).__name__}.\n\n{details}"
+            )
+        logger.debug(
+            "Input values and hashes for '%s' %s node:\n%s\n%s",
+            self.name,
+            type(self).__name__,
+            self.inputs,
+            self.inputs._hashes,
+        )
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.any
@@ -1076,7 +1142,9 @@ class Workflow(TaskBase):
         """
         # if checksum is called before run the _graph_checksums is not ready
         if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
-            self.inputs._graph_checksums = [nd.checksum for nd in self.graph_sorted]
+            self.inputs._graph_checksums = {
+                nd.name: nd.checksum for nd in self.graph_sorted
+            }
 
         input_hash = self.inputs.hash
         if not self.state:
@@ -1256,8 +1324,9 @@ class Workflow(TaskBase):
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
-        if result is None:
-            raise Exception("This should never happen, please open new issue")
+        # Check for any changes to the input hashes that have occurred during the execution
+        # of the task
+        self._check_for_hash_changes()
         return result
 
     async def _run_task(self, submitter, rerun=False):

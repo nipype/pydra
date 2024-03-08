@@ -192,7 +192,7 @@ def hash_function(obj, **kwargs):
 
 
 def hash_object(
-    obj: object, persistent_cache: ty.Union[PersistentCache, Path, None] = None
+    obj: object, cache: ty.Optional[Cache] = None, persistent_cache: ty.Union[PersistentCache, Path, None] = None
 ) -> Hash:
     """Hash an object
 
@@ -202,8 +202,10 @@ def hash_object(
     Base Python types are implemented, including recursive lists and
     dicts. Custom types can be registered with :func:`register_serializer`.
     """
+    if cache is None:
+        cache = Cache(persistent=persistent_cache)
     try:
-        return hash_single(obj, Cache(persistent=persistent_cache))
+        return hash_single(obj, cache)
     except Exception as e:
         raise UnhashableError(f"Cannot hash object {obj!r} due to '{e}'") from e
 
@@ -276,6 +278,22 @@ class HasBytesRepr(Protocol):
 
 @singledispatch
 def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
+    """Default implementation of hashing for generic objects. Single dispatch is used
+    to provide hooks for class-specific implementations
+
+    Parameters
+    ----------
+    obj: object
+        the object to hash
+    cache : Cache
+        a dictionary object used to store a cache of previously cached objects to
+        handle circular object references
+
+    Yields
+    -------
+    bytes
+        unique representation of the object in a series of bytes
+    """
     cls = obj.__class__
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
     dct: Dict[str, ty.Any]

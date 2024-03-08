@@ -15,7 +15,7 @@ from fileformats.generic import (
 )
 import pydra
 from .helpers_file import template_update_single
-from ..utils.hash import hash_function
+from ..utils.hash import hash_function, Cache
 
 # from ..utils.misc import add_exc_note
 
@@ -73,21 +73,22 @@ class SpecInfo:
 class BaseSpec:
     """The base dataclass specs for all inputs and outputs."""
 
-    # def __attrs_post_init__(self):
-    #     self.files_hash = {
-    #         field.name: {}
-    #         for field in attr_fields(
-    #             self, exclude_names=("_graph_checksums", "bindings", "files_hash")
-    #         )
-    #         if field.metadata.get("output_file_template") is None
-    #     }
-
     def collect_additional_outputs(self, inputs, output_dir, outputs):
         """Get additional outputs."""
         return {}
 
     @property
     def hash(self):
+        hsh, self._hashes = self._compute_hashes()
+        return hsh
+
+    def hash_changes(self):
+        """Detects any changes in the hashed values between the current inputs and the
+        previously calculated values"""
+        _, new_hashes = self._compute_hashes()
+        return [k for k, v in new_hashes.items() if v != self._hashes[k]]
+
+    def _compute_hashes(self) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
         """Compute a basic hash for any given set of fields."""
         inp_dict = {}
         for field in attr_fields(
@@ -101,10 +102,13 @@ class BaseSpec:
             if "container_path" in field.metadata:
                 continue
             inp_dict[field.name] = getattr(self, field.name)
-        inp_hash = hash_function(inp_dict)
+        hash_cache = Cache({})
+        field_hashes = {
+            k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()
+        }
         if hasattr(self, "_graph_checksums"):
-            inp_hash = hash_function((inp_hash, self._graph_checksums))
-        return inp_hash
+            field_hashes["_graph_checksums"] = self._graph_checksums
+        return hash_function(sorted(field_hashes.items())), field_hashes
 
     def retrieve_values(self, wf, state_index: ty.Optional[int] = None):
         """Get values contained by this spec."""
@@ -445,16 +449,19 @@ class ShellOutSpec:
                 ),
             ):
                 raise TypeError(
-                    f"Support for {fld.type} type, required for {fld.name} in {self}, "
+                    f"Support for {fld.type} type, required for '{fld.name}' in {self}, "
                     "has not been implemented in collect_additional_output"
                 )
             # assuming that field should have either default or metadata, but not both
             input_value = getattr(inputs, fld.name, attr.NOTHING)
             if input_value is not attr.NOTHING:
                 if TypeParser.contains_type(FileSet, fld.type):
-                    label = f"output field '{fld.name}' of {self}"
-                    input_value = TypeParser(fld.type, label=label).coerce(input_value)
-                additional_out[fld.name] = input_value
+                    if input_value is not False:
+                        label = f"output field '{fld.name}' of {self}"
+                        input_value = TypeParser(fld.type, label=label).coerce(
+                            input_value
+                        )
+                        additional_out[fld.name] = input_value
             elif (
                 fld.default is None or fld.default == attr.NOTHING
             ) and not fld.metadata:  # TODO: is it right?
@@ -981,8 +988,21 @@ class LazyOutField(LazyField[T]):
         if result is None:
             raise RuntimeError(
                 f"Could not find results of '{node.name}' node in a sub-directory "
-                f"named '{node.checksum}' in any of the cache locations:\n"
+                f"named '{node.checksum}' in any of the cache locations.\n"
                 + "\n".join(str(p) for p in set(node.cache_locations))
+                + f"\n\nThis is likely due to hash changes in '{self.name}' node inputs. "
+                f"Current values and hashes: {self.inputs}, "
+                f"{self.inputs._hashes}\n\n"
+                "Set loglevel to 'debug' in order to track hash changes "
+                "throughout the execution of the workflow.\n\n "
+                "These issues may have been caused by `bytes_repr()` methods "
+                "that don't return stable hash values for specific object "
+                "types across multiple processes (see bytes_repr() "
+                '"singledispatch "function in pydra/utils/hash.py).'
+                "You may need to implement a specific `bytes_repr()` "
+                '"singledispatch overload"s or `__bytes_repr__()` '
+                "dunder methods to handle one or more types in "
+                "your interface inputs."
             )
         _, split_depth = TypeParser.strip_splits(self.type)
 
