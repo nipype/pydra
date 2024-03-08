@@ -102,7 +102,7 @@ class BaseSpec:
             if "container_path" in field.metadata:
                 continue
             inp_dict[field.name] = getattr(self, field.name)
-        hash_cache = Cache({})
+        hash_cache = Cache()
         field_hashes = {
             k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()
         }
