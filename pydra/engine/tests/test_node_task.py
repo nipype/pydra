@@ -1,10 +1,15 @@
 import os
 import shutil
 import attr
+import typing as ty
 import numpy as np
+import time
 from unittest import mock
+from pathlib import Path
 import pytest
 import time
+from fileformats.generic import File
+import pydra.mark
 
 from .utils import (
     fun_addtwo,
@@ -1599,3 +1604,62 @@ def test_task_files_cachelocations(plugin_dask_opt, tmp_path):
     # checking if the second task didn't run the interface again
     assert nn.output_dir.exists()
     assert not nn2.output_dir.exists()
+
+
+class OverriddenContentsFile(File):
+    """A class for testing purposes, to that enables you to override the contents
+    of the file to allow you to check whether the persistent cache is used."""
+
+    def __init__(
+        self,
+        fspaths: ty.Iterator[Path],
+        contents: ty.Optional[bytes] = None,
+        metadata: ty.Dict[str, ty.Any] = None,
+    ):
+        super().__init__(fspaths, metadata=metadata)
+        self._contents = contents
+
+    def byte_chunks(self, **kwargs) -> ty.Generator[ty.Tuple[str, bytes], None, None]:
+        if self._contents is not None:
+            yield (str(self.fspath), iter([self._contents]))
+        else:
+            yield from super().byte_chunks(**kwargs)
+
+    @property
+    def contents(self):
+        if self._contents is not None:
+            return self._contents
+        return super().contents
+
+
+def test_task_files_persistentcache(tmp_path):
+    """
+    Two identical tasks with provided cache_dir that use file as an input;
+    the second task has cache_locations and should not recompute the results
+    """
+    test_file_path = tmp_path / "test_file.txt"
+    test_file_path.write_bytes(b"foo")
+    cache_dir = tmp_path / "cache-dir"
+    cache_dir.mkdir()
+    test_file = OverriddenContentsFile(test_file_path)
+
+    @pydra.mark.task
+    def read_contents(x: OverriddenContentsFile) -> bytes:
+        return x.contents
+
+    assert (
+        read_contents(x=test_file, cache_dir=cache_dir)(plugin="serial").output.out
+        == b"foo"
+    )
+    test_file._contents = b"bar"
+    # should return result from the first run using the persistent cache
+    assert (
+        read_contents(x=test_file, cache_dir=cache_dir)(plugin="serial").output.out
+        == b"foo"
+    )
+    time.sleep(2)  # Windows has a 2-second resolution for mtime
+    test_file_path.touch()  # update the mtime to invalidate the persistent cache value
+    assert (
+        read_contents(x=test_file, cache_dir=cache_dir)(plugin="serial").output.out
+        == b"bar"
+    )  # returns the overridden value
