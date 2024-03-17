@@ -1,12 +1,22 @@
 import re
+import os
 from hashlib import blake2b
 from pathlib import Path
-
+import time
+from unittest import mock
 import attrs
 import pytest
 import typing as ty
 from fileformats.application import Zip, Json
-from ..hash import Cache, UnhashableError, bytes_repr, hash_object, register_serializer
+from fileformats.text import TextFile
+from ..hash import (
+    Cache,
+    UnhashableError,
+    bytes_repr,
+    hash_object,
+    register_serializer,
+    PersistentCache,
+)
 
 
 @pytest.fixture
@@ -15,7 +25,7 @@ def hasher():
 
 
 def join_bytes_repr(obj):
-    return b"".join(bytes_repr(obj, Cache({})))
+    return b"".join(bytes_repr(obj, Cache()))
 
 
 def test_bytes_repr_builtins():
@@ -296,3 +306,83 @@ def test_registration_conflict():
     register_serializer(MyNewClass, _)
 
     assert join_bytes_repr(MyNewClass(1)) == b"serializer"
+
+
+@pytest.fixture
+def cache_path(tmp_path):
+    cache_path = tmp_path / "hash-cache"
+    cache_path.mkdir()
+    return cache_path
+
+
+@pytest.fixture
+def text_file(tmp_path):
+    text_file_path = tmp_path / "text-file.txt"
+    text_file_path.write_text("foo")
+    return TextFile(text_file_path)
+
+
+def test_persistent_hash_cache(cache_path, text_file):
+    """
+    Test the persistent hash cache with a text file
+
+    The cache is used to store the hash of the text file, and the hash is
+    retrieved from the cache when the file is unchanged.
+    """
+    # Test hash is stable between calls
+    hsh = hash_object(text_file, persistent_cache=cache_path)
+    assert hsh == hash_object(text_file, persistent_cache=cache_path)
+
+    # Test that cached hash has been used by explicitly modifying it and seeing that the
+    # hash is the same as the modified hash
+    cache_files = list(cache_path.iterdir())
+    assert len(cache_files) == 1
+    modified_hash = "modified".encode()
+    cache_files[0].write_bytes(modified_hash)
+    assert hash_object(text_file, persistent_cache=cache_path) == modified_hash
+
+    # Test that changes to the text file result in new hash
+    time.sleep(2)  # Need to ensure that the mtimes will be different
+    text_file.fspath.write_text("bar")
+    assert hash_object(text_file, persistent_cache=cache_path) != modified_hash
+    assert len(list(cache_path.iterdir())) == 2
+
+
+def test_persistent_hash_cache_cleanup1(cache_path, text_file):
+    """
+    Test the persistent hash is cleaned up after use if the periods between cleanups
+    is greater than the environment variable PYDRA_HASH_CACHE_CLEANUP_PERIOD
+    """
+    with mock.patch.dict(
+        os.environ,
+        {
+            "PYDRA_HASH_CACHE": str(cache_path),
+            "PYDRA_HASH_CACHE_CLEANUP_PERIOD": "-100",
+        },
+    ):
+        persistent_cache = PersistentCache()
+    hash_object(text_file, persistent_cache=persistent_cache)
+    assert len(list(cache_path.iterdir())) == 1
+    persistent_cache.clean_up()
+    assert len(list(cache_path.iterdir())) == 0
+
+
+def test_persistent_hash_cache_cleanup2(cache_path, text_file):
+    """
+    Test the persistent hash is cleaned up after use if the periods between cleanups
+    is greater than the explicitly provided cleanup_period
+    """
+    persistent_cache = PersistentCache(cache_path, cleanup_period=-100)
+    hash_object(text_file, persistent_cache=persistent_cache)
+    assert len(list(cache_path.iterdir())) == 1
+    time.sleep(2)
+    persistent_cache.clean_up()
+    assert len(list(cache_path.iterdir())) == 0
+
+
+def test_persistent_hash_cache_not_dir(text_file):
+    """
+    Test that an error is raised if the provided cache path is not a directory
+    """
+    with pytest.raises(ValueError, match="is not a directory"):
+        PersistentCache(text_file.fspath)

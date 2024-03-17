@@ -14,6 +14,7 @@ dependencies = [
     "filelock >=3.0.0",
     "fileformats >=0.8",
     "importlib_resources >=5.7; python_version < '3.11'",
+    "platformdirs >=2",
     "typing_extensions >=4.6.3; python_version < '3.10'",
     "typing_utils >=0.1.0; python_version < '3.10'",
 ]
