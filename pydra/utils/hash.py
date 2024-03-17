@@ -17,10 +17,9 @@ from typing import (
     Set,
 )
 from filelock import SoftFileLock
-import platformdirs
 import attrs.exceptions
 from fileformats.core import FileSet
-from pydra._version import __version__
+from . import user_cache_dir
 
 logger = logging.getLogger("pydra")
 
@@ -99,11 +98,7 @@ class PersistentCache:
         try:
             location = os.environ[cls.LOCATION_ENV_VAR]
         except KeyError:
-            location = platformdirs.user_cache_dir(
-                appname="pydra",
-                appauthor="nipype",
-                version=__version__,
-            )
+            location = user_cache_dir / "hash_cache"
         return location
 
     # the default needs to be an instance method
