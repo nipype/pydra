@@ -105,13 +105,6 @@ class PersistentCache:
     def _location_default(self):
         return self.location_default()
 
-    @location.validator
-    def location_validator(self, _, location):
-        if not os.path.isdir(location):
-            raise ValueError(
-                f"Persistent cache location '{location}' is not a directory"
-            )
-
     @cleanup_period.default
     def cleanup_period_default(self):
         return int(os.environ.get(self.CLEANUP_ENV_VAR, 30))
