@@ -1,6 +1,6 @@
 from pathlib import Path
 import platformdirs
-from pydra import __version__
+from pydra._version import __version__
 
 user_cache_dir = Path(
     platformdirs.user_cache_dir(
