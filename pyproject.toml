@@ -84,6 +84,9 @@ test = [
     "boutiques",
     "pympler",
 ]
+jupyter = [
+    "nest_asyncio"
+]
 # Aliases
 tests = ["pydra[test]"]
 docs = ["pydra[doc]"]
