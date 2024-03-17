@@ -60,8 +60,7 @@ def location_converter(path: ty.Union[Path, str, None]) -> Path:
     if path is None:
         path = PersistentCache.location_default()
     path = Path(path)
-    if not path.exists():
-        path.mkdir(parents=True)
+    path.mkdir(parents=True, exist_ok=True)
     return path
 
 
