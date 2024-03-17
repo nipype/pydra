@@ -11,7 +11,6 @@ from fileformats.application import Zip, Json
 from fileformats.text import TextFile
 from ..hash import (
     Cache,
-    UnhashableError,
     bytes_repr,
     hash_object,
     register_serializer,
