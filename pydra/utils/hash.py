@@ -60,7 +60,12 @@ def location_converter(path: ty.Union[Path, str, None]) -> Path:
     if path is None:
         path = PersistentCache.location_default()
     path = Path(path)
-    path.mkdir(parents=True, exist_ok=True)
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except FileExistsError:
+        raise ValueError(
+            f"provided path to persistent cache {path} is a file not a directory"
+        ) from None
     return path
 
 
