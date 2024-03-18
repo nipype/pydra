@@ -384,5 +384,5 @@ def test_persistent_hash_cache_not_dir(text_file):
     """
     Test that an error is raised if the provided cache path is not a directory
     """
-    with pytest.raises(ValueError, match="is not a directory"):
+    with pytest.raises(ValueError, match="not a directory"):
         PersistentCache(text_file.fspath)

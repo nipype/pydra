@@ -60,8 +60,12 @@ def location_converter(path: ty.Union[Path, str, None]) -> Path:
     if path is None:
         path = PersistentCache.location_default()
     path = Path(path)
-    if not path.exists():
-        path.mkdir(parents=True)
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except FileExistsError:
+        raise ValueError(
+            f"provided path to persistent cache {path} is a file not a directory"
+        ) from None
     return path
 
 
@@ -105,13 +109,6 @@ class PersistentCache:
     @location.default
     def _location_default(self):
         return self.location_default()
-
-    @location.validator
-    def location_validator(self, _, location):
-        if not os.path.isdir(location):
-            raise ValueError(
-                f"Persistent cache location '{location}' is not a directory"
-            )
 
     @cleanup_period.default
     def cleanup_period_default(self):
