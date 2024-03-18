@@ -220,7 +220,16 @@ def hash_object(
     try:
         return hash_single(obj, cache)
     except Exception as e:
-        add_exc_note(e, f"Therefore cannot hash object {obj!r}")
+        tp = type(obj)
+        add_exc_note(
+            e,
+            (
+                f"and therefore cannot hash `{obj!r}` of type "
+                f"`{tp.__module__}.{tp.__name__}`. Consider implementing a "
+                "specific `bytes_repr()`(see pydra.utils.hash.register_serializer) "
+                "or a `__bytes_repr__()` dunder methods for this type"
+            ),
+        )
         raise e
 
 

@@ -385,3 +385,28 @@ def test_persistent_hash_cache_not_dir(text_file):
     """
     with pytest.raises(ValueError, match="is not a directory"):
         PersistentCache(text_file.fspath)
+
+
+def test_unhashable():
+    """
+    Test that an error is raised if an unhashable object is provided
+    """
+
+    class A:
+
+        def __bytes_repr__(self, cache: Cache) -> ty.Generator[bytes, None, None]:
+            raise TypeError("unhashable")
+
+        def __repr__(self):
+            return "A()"
+
+    # hash_object(A())
+
+    with pytest.raises(
+        TypeError,
+        match=(
+            "unhashable\nand therefore cannot hash `A\(\)` of type "
+            "`pydra.utils.tests.test_hash.A`"
+        ),
+    ):
+        hash_object(A())
