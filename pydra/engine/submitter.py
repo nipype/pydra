@@ -228,10 +228,10 @@ class Submitter:
                                 "that don't return stable hash values for specific object "
                                 "types across multiple processes (see bytes_repr() "
                                 '"singledispatch "function in pydra/utils/hash.py).'
-                                "You may need to implement a specific `bytes_repr()` "
-                                '"singledispatch overload"s or `__bytes_repr__()` '
-                                "dunder methods to handle one or more types in "
-                                "your interface inputs."
+                                "You may need to write specific `bytes_repr()` "
+                                "implementations (see `pydra.utils.hash.register_serializer`) "
+                                "or `__bytes_repr__()` dunder methods to handle one "
+                                "or more types in your interface inputs."
                             )
                         raise RuntimeError(msg)
             for task in tasks:

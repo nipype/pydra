@@ -19,7 +19,7 @@ from typing import (
 from filelock import SoftFileLock
 import attrs.exceptions
 from fileformats.core import FileSet
-from . import user_cache_dir
+from . import user_cache_dir, add_exc_note
 
 logger = logging.getLogger("pydra")
 
@@ -194,10 +194,6 @@ class Cache:
         return object_id in self._hashes
 
 
-class UnhashableError(ValueError):
-    """Error for objects that cannot be hashed"""
-
-
 def hash_function(obj, **kwargs):
     """Generate hash of object."""
     return hash_object(obj, **kwargs).hex()
@@ -221,7 +217,17 @@ def hash_object(
     try:
         return hash_single(obj, cache)
     except Exception as e:
-        raise UnhashableError(f"Cannot hash object {obj!r} due to '{e}'") from e
+        tp = type(obj)
+        add_exc_note(
+            e,
+            (
+                f"and therefore cannot hash `{obj!r}` of type "
+                f"`{tp.__module__}.{tp.__name__}`. Consider implementing a "
+                "specific `bytes_repr()`(see pydra.utils.hash.register_serializer) "
+                "or a `__bytes_repr__()` dunder methods for this type"
+            ),
+        )
+        raise e
 
 
 def hash_single(obj: object, cache: Cache) -> Hash:
