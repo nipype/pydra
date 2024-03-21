@@ -6,10 +6,6 @@ on:
     branches:
       - master
 
-env:
-  # Pin to v10.28.0, which (as of 2021-05-25) is the latest version with assets
-  AUTO_VERSION: v10.29.3
-
 jobs:
   auto-release:
     runs-on: ubuntu-latest
@@ -33,7 +29,7 @@ jobs:
 
       - name: Download auto
         run: |
-          auto_download_url="$(curl -fsSL https://api.github.com/repos/intuit/auto/releases/tags/$AUTO_VERSION | jq -r '.assets[] | select(.name == "auto-linux.gz") | .browser_download_url')"
+          auto_download_url="$(curl -fsSL https://api.github.com/repos/intuit/auto/releases/latest | jq -r '.assets[] | select(.name == "auto-linux.gz") | .browser_download_url')"
           wget -O- "$auto_download_url" | gunzip > ~/auto
           chmod a+x ~/auto
 
@@ -41,4 +37,4 @@ jobs:
         run: |
           ~/auto shipit -vv
         env:
-          GH_TOKEN: ${{ secrets.AUTO_USER_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
