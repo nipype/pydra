@@ -380,7 +380,7 @@ class TaskBase:
         return self._can_resume
 
     @abc.abstractmethod
-    def _run_task(self):
+    def _run_task(self, environment=None):
         pass
 
     @property
@@ -1329,7 +1329,7 @@ class Workflow(TaskBase):
         self._check_for_hash_changes()
         return result
 
-    async def _run_task(self, submitter, rerun=False):
+    async def _run_task(self, submitter, rerun=False, environment=None):
         if not submitter:
             raise Exception("Submitter should already be set.")
         for nd in self.graph.nodes:
