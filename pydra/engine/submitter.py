@@ -90,7 +90,6 @@ class Submitter:
             # 2
             if runnable.state is None:
                 # run_el should always return a coroutine
-                print("in SUBM", environment)
                 await self.worker.run_el(runnable, rerun=rerun, environment=environment)
             # 3
             else:
