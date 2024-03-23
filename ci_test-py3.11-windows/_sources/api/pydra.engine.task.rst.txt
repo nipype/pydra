@@ -1,0 +1,7 @@
+pydra.engine.task module
+========================
+
+.. automodule:: pydra.engine.task
+   :members:
+   :undoc-members:
+   :show-inheritance:

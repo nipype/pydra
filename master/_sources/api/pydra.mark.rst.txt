@@ -1,0 +1,15 @@
+pydra.mark package
+==================
+
+.. automodule:: pydra.mark
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   pydra.mark.functions
