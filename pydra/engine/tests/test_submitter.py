@@ -582,7 +582,7 @@ def test_sge_no_limit_maxthreads(tmpdir):
 def test_hash_changes_in_task_inputs_file(tmp_path):
     @mark.task
     def output_dir_as_input(out_dir: Directory) -> Directory:
-        (out_dir.fspath / "new-file.txt").touch()
+        (out_dir.fspath / "new-file.txt").write_text("foo")
         return out_dir
 
     task = output_dir_as_input(out_dir=tmp_path)
