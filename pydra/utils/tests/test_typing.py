@@ -737,6 +737,46 @@ def test_generic_is_subclass3():
     assert not TypeParser.is_subclass(ty.List[float], ty.List[int])
 
 
+def test_none_is_subclass1():
+    assert TypeParser.is_subclass(None, ty.Union[int, None])
+
+
+def test_none_is_subclass2():
+    assert not TypeParser.is_subclass(None, ty.Union[int, float])
+
+
+def test_none_is_subclass3():
+    assert TypeParser.is_subclass(ty.Tuple[int, None], ty.Tuple[int, None])
+
+
+def test_none_is_subclass4():
+    assert TypeParser.is_subclass(None, None)
+
+
+def test_none_is_subclass5():
+    assert not TypeParser.is_subclass(None, int)
+
+
+def test_none_is_subclass6():
+    assert not TypeParser.is_subclass(int, None)
+
+
+def test_none_is_subclass7():
+    assert TypeParser.is_subclass(None, type(None))
+
+
+def test_none_is_subclass8():
+    assert TypeParser.is_subclass(type(None), None)
+
+
+def test_none_is_subclass9():
+    assert TypeParser.is_subclass(type(None), type(None))
+
+
+def test_none_is_subclass10():
+    assert TypeParser.is_subclass(type(None), type(None))
+
+
 @pytest.mark.skipif(
     sys.version_info < (3, 9), reason="Cannot subscript tuple in < Py3.9"
 )
@@ -780,3 +820,35 @@ def test_type_is_instance3():
 
 def test_type_is_instance4():
     assert TypeParser.is_instance(Json, type)
+
+
+def test_type_is_instance5():
+    assert TypeParser.is_instance(None, None)
+
+
+def test_type_is_instance6():
+    assert TypeParser.is_instance(None, type(None))
+
+
+def test_type_is_instance7():
+    assert not TypeParser.is_instance(None, int)
+
+
+def test_type_is_instance8():
+    assert not TypeParser.is_instance(1, None)
+
+
+def test_type_is_instance9():
+    assert TypeParser.is_instance(None, ty.Union[int, None])
+
+
+def test_type_is_instance10():
+    assert TypeParser.is_instance(1, ty.Union[int, None])
+
+
+def test_type_is_instance11():
+    assert not TypeParser.is_instance(None, ty.Union[int, str])
+
+
+def test_type_is_instance12():
+    assert not TypeParser.is_instance((1, None), ty.Tuple[int, None])

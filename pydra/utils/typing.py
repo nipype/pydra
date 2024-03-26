@@ -603,7 +603,7 @@ class TypeParser(ty.Generic[T]):
     def is_instance(
         cls,
         obj: object,
-        candidates: ty.Union[ty.Type[ty.Any], ty.Sequence[ty.Type[ty.Any]]],
+        candidates: ty.Union[ty.Type[ty.Any], ty.Sequence[ty.Type[ty.Any]], None],
     ) -> bool:
         """Checks whether the object is an instance of cls or that cls is typing.Any,
         extending the built-in isinstance to check nested type args
@@ -615,6 +615,8 @@ class TypeParser(ty.Generic[T]):
         candidates : type or ty.Iterable[type]
             the candidate types to check the object against
         """
+        if candidates is None:
+            candidates = [type(None)]
         if not isinstance(candidates, ty.Sequence):
             candidates = [candidates]
         for candidate in candidates:
@@ -656,6 +658,9 @@ class TypeParser(ty.Generic[T]):
         any_ok : bool
             whether klass=typing.Any should return True or False
         """
+        if klass is None:
+            # Implicitly convert None to NoneType, like in other typing
+            klass = type(None)
         if not isinstance(candidates, ty.Sequence):
             candidates = [candidates]
         if ty.Any in candidates:
