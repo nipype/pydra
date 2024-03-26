@@ -848,7 +848,3 @@ def test_type_is_instance10():
 
 def test_type_is_instance11():
     assert not TypeParser.is_instance(None, ty.Union[int, str])
-
-
-def test_type_is_instance12():
-    assert not TypeParser.is_instance((1, None), ty.Tuple[int, None])

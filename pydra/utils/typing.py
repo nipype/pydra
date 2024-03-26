@@ -672,6 +672,8 @@ class TypeParser(ty.Generic[T]):
         args = get_args(klass)
 
         for candidate in candidates:
+            if candidate is None:
+                candidate = type(None)
             candidate_origin = get_origin(candidate)
             candidate_args = get_args(candidate)
             # Handle ty.Type[*] types in klass and candidates
