@@ -7,6 +7,7 @@ import re
 import os
 from copy import copy
 from glob import glob
+import logging
 import attr
 from fileformats.core import FileSet
 from fileformats.generic import (
@@ -16,6 +17,8 @@ from fileformats.generic import (
 import pydra
 from .helpers_file import template_update_single
 from ..utils.hash import hash_function, Cache
+
+logger = logging.getLogger("pydra")
 
 # from ..utils.misc import add_exc_note
 
@@ -106,6 +109,7 @@ class BaseSpec:
         field_hashes = {
             k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()
         }
+        logger.debug("Input hashes %s", field_hashes)
         if hasattr(self, "_graph_checksums"):
             field_hashes["_graph_checksums"] = self._graph_checksums
         return hash_function(sorted(field_hashes.items())), field_hashes

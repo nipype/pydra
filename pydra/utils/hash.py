@@ -285,7 +285,6 @@ def hash_single(obj: object, cache: Cache) -> Hash:
             # passing the first chunk to the `calc_hash` function so it can be included
             # in the hash calculation
             hsh = calc_hash(first=first)
-        logger.debug("Hash of %s object is %s", obj, hsh)
         cache[objid] = hsh
     return cache[objid]
 
