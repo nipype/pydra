@@ -8,19 +8,19 @@ from pydra.mark import annotate, task
 
 # Producer of T1w images
 @task
-@annotate({"return": {"t1w_images": list[Path]}})
-def read_t1w_images(bids_dir: Directory) -> list[Path]:
-    return list(bids_dir.rglob("*T1w.nii.gz"))
+@annotate({"return": {"t1w_images": list[NiftiGz]}})
+def read_t1w_images(bids_dir: Directory) -> list[NiftiGz]:
+    return list(bids_dir.fspath.rglob("*T1w.nii.gz"))
 
 
 # Mapped to each T1w image
 @task
-@annotate({"return": {"smoothed_image": Path}})
-def smooth_image(input_image: NiftiGz, smoothed_image: Path) -> Path:
+@annotate({"return": {"smoothed_image": NiftiGz}})
+def smooth_image(input_image: NiftiGz, smoothed_image: Path) -> NiftiGz:
     from nilearn.image import load_img, smooth_img
 
     smoothed_image = smoothed_image or Path.cwd() / (
-        input_image.name.split(".", maxsplit=1)[0] + "_smoothed.nii.gz"
+        input_image.fspath.name.split(".", maxsplit=1)[0] + "_smoothed.nii.gz"
     )
 
     smooth_img(load_img(input_image), fwhm=3).to_filename(smoothed_image)

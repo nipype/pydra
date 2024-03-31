@@ -109,6 +109,7 @@ class BaseSpec:
         field_hashes = {
             k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()
         }
+
         logger.debug("Input hashes %s", field_hashes)
         if hasattr(self, "_graph_checksums"):
             field_hashes["_graph_checksums"] = self._graph_checksums
