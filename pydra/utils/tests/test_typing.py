@@ -490,7 +490,7 @@ def test_type_coercion_realistic():
     TypeParser(ty.List[str])(task.lzout.a)  # pylint: disable=no-member
     with pytest.raises(
         TypeError,
-        match="Cannot coerce <class 'fileformats.generic.file.File'> into <class 'int'>",
+        match="Cannot coerce <class 'fileformats\.generic.*\.File'> into <class 'int'>",
     ):
         TypeParser(ty.List[int])(task.lzout.a)  # pylint: disable=no-member
 
