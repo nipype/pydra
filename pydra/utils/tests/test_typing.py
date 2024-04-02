@@ -120,11 +120,24 @@ def test_type_check_basic15():
     TypeParser(ty.Union[Path, File, float])(lz(int))
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_type_check_basic15a():
+    TypeParser(Path | File | float)(lz(int))
+
+
 def test_type_check_basic16():
     with pytest.raises(
         TypeError, match="Cannot coerce <class 'float'> to any of the union types"
     ):
         TypeParser(ty.Union[Path, File, bool, int])(lz(float))
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_type_check_basic16a():
+    with pytest.raises(
+        TypeError, match="Cannot coerce <class 'float'> to any of the union types"
+    ):
+        TypeParser(Path | File | bool | int)(lz(float))
 
 
 def test_type_check_basic17():
@@ -192,6 +205,12 @@ def test_type_check_fail1():
 def test_type_check_fail2():
     with pytest.raises(TypeError, match="to any of the union types"):
         TypeParser(ty.Union[Path, File])(lz(int))
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_type_check_fail2a():
+    with pytest.raises(TypeError, match="to any of the union types"):
+        TypeParser(Path | File)(lz(int))
 
 
 def test_type_check_fail3():
@@ -312,10 +331,29 @@ def test_type_coercion_basic12():
     assert TypeParser(ty.Union[Path, File, int], coercible=[(ty.Any, ty.Any)])(1.0) == 1
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_type_coercion_basic12a():
+    with pytest.raises(TypeError, match="explicitly excluded"):
+        TypeParser(
+            list,
+            coercible=[(ty.Sequence, ty.Sequence)],
+            not_coercible=[(str, ty.Sequence)],
+        )("a-string")
+
+    assert TypeParser(Path | File | int, coercible=[(ty.Any, ty.Any)])(1.0) == 1
+
+
 def test_type_coercion_basic13():
     assert (
         TypeParser(ty.Union[Path, File, bool, int], coercible=[(ty.Any, ty.Any)])(1.0)
         is True
+    )
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_type_coercion_basic13a():
+    assert (
+        TypeParser(Path | File | bool | int, coercible=[(ty.Any, ty.Any)])(1.0) is True
     )
 
 
@@ -404,6 +442,12 @@ def test_type_coercion_fail2():
         TypeParser(ty.Union[Path, File], coercible=[(ty.Any, ty.Any)])(1)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_type_coercion_fail2a():
+    with pytest.raises(TypeError, match="to any of the union types"):
+        TypeParser(Path | File, coercible=[(ty.Any, ty.Any)])(1)
+
+
 def test_type_coercion_fail3():
     with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
         TypeParser(ty.Sequence, coercible=[(ty.Sequence, ty.Sequence)])(
@@ -446,7 +490,7 @@ def test_type_coercion_realistic():
     TypeParser(ty.List[str])(task.lzout.a)  # pylint: disable=no-member
     with pytest.raises(
         TypeError,
-        match="Cannot coerce <class 'fileformats.generic.File'> into <class 'int'>",
+        match="Cannot coerce <class 'fileformats.generic.file.File'> into <class 'int'>",
     ):
         TypeParser(ty.List[int])(task.lzout.a)  # pylint: disable=no-member
 
@@ -467,6 +511,27 @@ def test_matches_type_union():
     assert TypeParser.matches_type(ty.Union[int, bool, str], ty.Union[int, bool, str])
     assert TypeParser.matches_type(ty.Union[int, bool], ty.Union[int, bool, str])
     assert not TypeParser.matches_type(ty.Union[int, bool, str], ty.Union[int, bool])
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_matches_type_union_a():
+    assert TypeParser.matches_type(int | bool | str, int | bool | str)
+    assert TypeParser.matches_type(int | bool, int | bool | str)
+    assert not TypeParser.matches_type(int | bool | str, int | bool)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_matches_type_union_b():
+    assert TypeParser.matches_type(int | bool | str, ty.Union[int, bool, str])
+    assert TypeParser.matches_type(int | bool, ty.Union[int, bool, str])
+    assert not TypeParser.matches_type(int | bool | str, ty.Union[int, bool])
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_matches_type_union_c():
+    assert TypeParser.matches_type(ty.Union[int, bool, str], int | bool | str)
+    assert TypeParser.matches_type(ty.Union[int, bool], int | bool | str)
+    assert not TypeParser.matches_type(ty.Union[int, bool, str], int | bool)
 
 
 def test_matches_type_dict():
@@ -713,16 +778,59 @@ def test_union_is_subclass1():
     assert TypeParser.is_subclass(ty.Union[Json, Yaml], ty.Union[Json, Yaml, Xml])
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_union_is_subclass1a():
+    assert TypeParser.is_subclass(Json | Yaml, Json | Yaml | Xml)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_union_is_subclass1b():
+    assert TypeParser.is_subclass(Json | Yaml, ty.Union[Json, Yaml, Xml])
+
+
+## Up to here!
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_union_is_subclass1c():
+    assert TypeParser.is_subclass(ty.Union[Json, Yaml], Json | Yaml | Xml)
+
+
 def test_union_is_subclass2():
     assert not TypeParser.is_subclass(ty.Union[Json, Yaml, Xml], ty.Union[Json, Yaml])
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_union_is_subclass2a():
+    assert not TypeParser.is_subclass(Json | Yaml | Xml, Json | Yaml)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_union_is_subclass2b():
+    assert not TypeParser.is_subclass(ty.Union[Json, Yaml, Xml], Json | Yaml)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_union_is_subclass2c():
+    assert not TypeParser.is_subclass(Json | Yaml | Xml, ty.Union[Json, Yaml])
 
 
 def test_union_is_subclass3():
     assert TypeParser.is_subclass(Json, ty.Union[Json, Yaml])
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_union_is_subclass3a():
+    assert TypeParser.is_subclass(Json, Json | Yaml)
+
+
 def test_union_is_subclass4():
     assert not TypeParser.is_subclass(ty.Union[Json, Yaml], Json)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_union_is_subclass4a():
+    assert not TypeParser.is_subclass(Json | Yaml, Json)
 
 
 def test_generic_is_subclass1():
@@ -741,8 +849,18 @@ def test_none_is_subclass1():
     assert TypeParser.is_subclass(None, ty.Union[int, None])
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_none_is_subclass1a():
+    assert TypeParser.is_subclass(None, int | None)
+
+
 def test_none_is_subclass2():
     assert not TypeParser.is_subclass(None, ty.Union[int, float])
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_none_is_subclass2a():
+    assert not TypeParser.is_subclass(None, int | float)
 
 
 def test_none_is_subclass3():
@@ -842,9 +960,24 @@ def test_type_is_instance9():
     assert TypeParser.is_instance(None, ty.Union[int, None])
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_type_is_instance9a():
+    assert TypeParser.is_instance(None, int | None)
+
+
 def test_type_is_instance10():
     assert TypeParser.is_instance(1, ty.Union[int, None])
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_type_is_instance10a():
+    assert TypeParser.is_instance(1, int | None)
+
+
 def test_type_is_instance11():
     assert not TypeParser.is_instance(None, ty.Union[int, str])
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
+def test_type_is_instance11a():
+    assert not TypeParser.is_instance(None, int | str)

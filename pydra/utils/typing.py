@@ -3,6 +3,7 @@ import inspect
 from pathlib import Path
 import os
 import sys
+import types
 import typing as ty
 import logging
 import attr
@@ -19,6 +20,11 @@ try:
 except ImportError:
     # Python < 3.8
     from typing_extensions import get_origin, get_args  # type: ignore
+
+try:
+    UNION_TYPES = (ty.Union, types.UnionType)
+except AttributeError:
+    UNION_TYPES = (ty.Union,)  # Python < 3.10
 
 logger = logging.getLogger("pydra")
 
@@ -128,7 +134,9 @@ class TypeParser(ty.Generic[T]):
                 # If no args were provided, or those arguments were an ellipsis
                 assert isinstance(origin, type)
                 return origin
-            if origin not in (ty.Union, type) and not issubclass(origin, ty.Iterable):
+            if origin not in UNION_TYPES + (type,) and not issubclass(
+                origin, ty.Iterable
+            ):
                 raise TypeError(
                     f"TypeParser doesn't know how to handle args ({args}) for {origin} "
                     f"types{self.label_str}"
@@ -209,7 +217,7 @@ class TypeParser(ty.Generic[T]):
             if not isinstance(pattern, tuple):
                 return coerce_basic(obj, pattern)
             origin, pattern_args = pattern
-            if origin is ty.Union:
+            if origin in UNION_TYPES:
                 return coerce_union(obj, pattern_args)
             if origin is type:
                 return coerce_type(obj, pattern_args)
@@ -370,7 +378,7 @@ class TypeParser(ty.Generic[T]):
             if not isinstance(pattern, tuple):
                 return check_basic(tp, pattern)
             pattern_origin, pattern_args = pattern
-            if pattern_origin is ty.Union:
+            if pattern_origin in UNION_TYPES:
                 return check_union(tp, pattern_args)
             tp_origin = get_origin(tp)
             if tp_origin is None:
@@ -402,7 +410,7 @@ class TypeParser(ty.Generic[T]):
                 self.check_coercible(tp, target)
 
         def check_union(tp, pattern_args):
-            if get_origin(tp) is ty.Union:
+            if get_origin(tp) in UNION_TYPES:
                 for tp_arg in get_args(tp):
                     reasons = []
                     for pattern_arg in pattern_args:
@@ -691,9 +699,11 @@ class TypeParser(ty.Generic[T]):
                 ):
                     return True
             else:
-                if origin is ty.Union:
+                if origin in UNION_TYPES:
                     union_args = (
-                        candidate_args if candidate_origin is ty.Union else (candidate,)
+                        candidate_args
+                        if candidate_origin in UNION_TYPES
+                        else (candidate,)
                     )
                     matches = all(
                         any(cls.is_subclass(a, c) for c in union_args) for a in args
@@ -701,7 +711,7 @@ class TypeParser(ty.Generic[T]):
                     if matches:
                         return True
                 else:
-                    if candidate_args and candidate_origin is not ty.Union:
+                    if candidate_args and candidate_origin not in UNION_TYPES:
                         if (
                             origin
                             and issubclass(origin, candidate_origin)  # type: ignore[arg-type]
@@ -735,7 +745,7 @@ class TypeParser(ty.Generic[T]):
         if not type_args:
             return False
         type_origin = get_origin(type_)
-        if type_origin is ty.Union:
+        if type_origin in UNION_TYPES:
             for type_arg in type_args:
                 if cls.contains_type(target, type_arg):
                     return True
@@ -858,7 +868,7 @@ class TypeParser(ty.Generic[T]):
         while cls.is_subclass(type_, StateArray) and not cls.is_subclass(type_, str):
             origin = get_origin(type_)
             # If type is a union, pick the first sequence type in the union
-            if origin is ty.Union:
+            if origin in UNION_TYPES:
                 for tp in get_args(type_):
                     if cls.is_subclass(tp, ty.Sequence):
                         type_ = tp
