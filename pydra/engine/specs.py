@@ -991,8 +991,8 @@ class LazyOutField(LazyField[T]):
                 f"named '{node.checksum}' in any of the cache locations.\n"
                 + "\n".join(str(p) for p in set(node.cache_locations))
                 + f"\n\nThis is likely due to hash changes in '{self.name}' node inputs. "
-                f"Current values and hashes: {self.inputs}, "
-                f"{self.inputs._hashes}\n\n"
+                f"Current values and hashes: {node.inputs}, "
+                f"{node.inputs._hashes}\n\n"
                 "Set loglevel to 'debug' in order to track hash changes "
                 "throughout the execution of the workflow.\n\n "
                 "These issues may have been caused by `bytes_repr()` methods "
