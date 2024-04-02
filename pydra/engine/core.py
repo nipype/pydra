@@ -531,6 +531,8 @@ class TaskBase:
         if not self.can_resume and output_dir.exists():
             shutil.rmtree(output_dir)
         output_dir.mkdir(parents=False, exist_ok=self.can_resume)
+        with open(output_dir / "_hashes.json", "w") as jsonfile:
+            json.dump(self.inputs._hashes, jsonfile)
 
     def _run(self, rerun=False, environment=None, **kwargs):
         self.inputs = attr.evolve(self.inputs, **kwargs)
