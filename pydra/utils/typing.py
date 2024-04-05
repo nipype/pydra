@@ -21,10 +21,10 @@ except ImportError:
     # Python < 3.8
     from typing_extensions import get_origin, get_args  # type: ignore
 
-try:
+if sys.version_info >= (3, 10):
     UNION_TYPES = (ty.Union, types.UnionType)
-except AttributeError:
-    UNION_TYPES = (ty.Union,)  # Python < 3.10
+else:
+    UNION_TYPES = (ty.Union,)
 
 logger = logging.getLogger("pydra")
 
