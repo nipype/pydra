@@ -225,15 +225,14 @@ class Audit:
             "Label": label,
             "Command": command,
             "StartedAtTime": now(),
-            "AssociatedWith": 
-                {
-                    "@id": self.aid,
-                    # YC: need to add Label, which should be 
-                    # the software name in a shellcommand task
-                    # the function's package in a function task
-                    # else be python
-                    "Version": version_cmd
-                 },
+            "AssociatedWith": {
+                "@id": self.aid,
+                # YC: need to add Label, which should be
+                # the software name in a shellcommand task
+                # the function's package in a function task
+                # else be python
+                "Version": version_cmd,
+            },
         }
 
         self.audit_message(start_message, AuditFlag.PROV)
