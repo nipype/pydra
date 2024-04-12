@@ -36,6 +36,15 @@
         "@id": "pydra:cpu_peak_percent",
         "@type": "xsd:float"
       },
+      "wasStartedBy": {
+        "@id": "uid"
+      },
+      "wasEndedBy": {
+        "@id": "uid"
+      },
+      "hadActivity": {
+        "@id": "uid"
+      },
       "errored": {
         "@id": "pydra:errored",
         "@type": "xsd:boolean"
