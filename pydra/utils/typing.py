@@ -64,6 +64,8 @@ class TypeParser(ty.Generic[T]):
     label : str
         the label to be used to identify the type parser in error messages. Especially
         useful when TypeParser is used as a converter in attrs.fields
+    match_any_of_union : bool
+        match if any of the options in the union are a subclass (but not necessarily all)
     """
 
     tp: ty.Type[T]
@@ -71,6 +73,7 @@ class TypeParser(ty.Generic[T]):
     not_coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
     superclass_auto_cast: bool
     label: str
+    match_any_of_union: bool
 
     COERCIBLE_DEFAULT: ty.Tuple[ty.Tuple[type, type], ...] = (
         (
@@ -115,6 +118,7 @@ class TypeParser(ty.Generic[T]):
         ] = NOT_COERCIBLE_DEFAULT,
         superclass_auto_cast: bool = False,
         label: str = "",
+        match_any_of_union: bool = False,
     ):
         def expand_pattern(t):
             """Recursively expand the type arguments of the target type in nested tuples"""
@@ -143,6 +147,7 @@ class TypeParser(ty.Generic[T]):
         self.not_coercible = list(not_coercible) if not_coercible is not None else []
         self.pattern = expand_pattern(tp)
         self.superclass_auto_cast = superclass_auto_cast
+        self.match_any_of_union = match_any_of_union
 
     def __call__(self, obj: ty.Any) -> ty.Union[T, LazyField[T]]:
         """Attempts to coerce the object to the specified type, unless the value is
@@ -177,9 +182,15 @@ class TypeParser(ty.Generic[T]):
                         # Check whether the type of the lazy field isn't a superclass of
                         # the type to check against, and if so, allow it due to permissive
                         # typing rules.
-                        TypeParser(obj.type).check_type(self.tp)
+                        TypeParser(obj.type, match_any_of_union=True).check_type(
+                            self.tp
+                        )
                     except TypeError:
-                        raise e
+                        raise TypeError(
+                            f"Incorrect type for lazy field{self.label_str}: {obj.type!r} "
+                            f"is not a subclass or superclass of {self.tp} (and will not "
+                            "be able to be coerced to one that is)"
+                        ) from e
                     else:
                         logger.info(
                             "Connecting lazy field %s to %s%s via permissive typing that "
@@ -189,12 +200,22 @@ class TypeParser(ty.Generic[T]):
                             self.label_str,
                         )
                 else:
-                    raise e
+                    raise TypeError(
+                        f"Incorrect type for lazy field{self.label_str}: {obj.type!r} "
+                        f"is not a subclass of {self.tp} (and will not be able to be "
+                        "coerced to one that is)"
+                    ) from e
             coerced = obj  # type: ignore
         elif isinstance(obj, StateArray):
             coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]
         else:
-            coerced = self.coerce(obj)
+            try:
+                coerced = self.coerce(obj)
+            except TypeError as e:
+                raise TypeError(
+                    f"Incorrect type for field{self.label_str}: {obj!r} is not of type "
+                    f"{self.tp} (and cannot be coerced to it)"
+                ) from e
         return coerced
 
     def coerce(self, object_: ty.Any) -> T:
@@ -398,12 +419,31 @@ class TypeParser(ty.Generic[T]):
             # Note that we are deliberately more permissive than typical type-checking
             # here, allowing parents of the target type as well as children,
             # to avoid users having to cast from loosely typed tasks to strict ones
+            if self.match_any_of_union and get_origin(tp) is ty.Union:
+                reasons = []
+                tp_args = get_args(tp)
+                for tp_arg in tp_args:
+                    if self.is_subclass(tp_arg, target):
+                        return
+                    try:
+                        self.check_coercible(tp_arg, target)
+                    except TypeError as e:
+                        reasons.append(e)
+                    else:
+                        return
+                if reasons:
+                    raise TypeError(
+                        f"Cannot coerce any union args {tp_arg} to {target}"
+                        f"{self.label_str}:\n\n"
+                        + "\n\n".join(f"{a} -> {e}" for a, e in zip(tp_args, reasons))
+                    )
             if not self.is_subclass(tp, target):
                 self.check_coercible(tp, target)
 
         def check_union(tp, pattern_args):
             if get_origin(tp) is ty.Union:
-                for tp_arg in get_args(tp):
+                tp_args = get_args(tp)
+                for tp_arg in tp_args:
                     reasons = []
                     for pattern_arg in pattern_args:
                         try:
@@ -413,11 +453,15 @@ class TypeParser(ty.Generic[T]):
                         else:
                             reasons = None
                             break
+                    if self.match_any_of_union and len(reasons) < len(tp_args):
+                        # Just need one of the union args to match
+                        return
                     if reasons:
+                        determiner = "any" if self.match_any_of_union else "all"
                         raise TypeError(
-                            f"Cannot coerce {tp} to "
-                            f"ty.Union[{', '.join(str(a) for a in pattern_args)}]{self.label_str}, "
-                            f"because {tp_arg} cannot be coerced to any of its args:\n\n"
+                            f"Cannot coerce {tp} to ty.Union["
+                            f"{', '.join(str(a) for a in pattern_args)}]{self.label_str}, "
+                            f"because {tp_arg} cannot be coerced to {determiner} of its args:\n\n"
                             + "\n\n".join(
                                 f"{a} -> {e}" for a, e in zip(pattern_args, reasons)
                             )
