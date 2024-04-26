@@ -1,5 +1,6 @@
 import re
 import os
+import sys
 from hashlib import blake2b
 from pathlib import Path
 import time
@@ -200,6 +201,14 @@ def test_bytes_special_form1():
     assert obj_repr == b"type:(typing.Union[type:(builtins.int)type:(builtins.float)])"
 
 
+@pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
+def test_bytes_special_form1a():
+    obj_repr = join_bytes_repr(int | float)
+    assert (
+        obj_repr == b"type:(types.UnionType[type:(builtins.int)type:(builtins.float)])"
+    )
+
+
 def test_bytes_special_form2():
     obj_repr = join_bytes_repr(ty.Any)
     assert re.match(rb"type:\(typing.Any\)", obj_repr)
@@ -209,6 +218,15 @@ def test_bytes_special_form3():
     obj_repr = join_bytes_repr(ty.Optional[Path])
     assert (
         obj_repr == b"type:(typing.Union[type:(pathlib.Path)type:(builtins.NoneType)])"
+    )
+
+
+@pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
+def test_bytes_special_form3a():
+    obj_repr = join_bytes_repr(Path | None)
+    assert (
+        obj_repr
+        == b"type:(types.UnionType[type:(pathlib.Path)type:(builtins.NoneType)])"
     )
 
 

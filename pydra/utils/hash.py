@@ -1,9 +1,11 @@
 """Generic object hashing dispatch"""
 
+import sys
 import os
 import struct
 from datetime import datetime
 import typing as ty
+import types
 from pathlib import Path
 from collections.abc import Mapping
 from functools import singledispatch
@@ -465,6 +467,10 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
     else:
         yield f"{klass.__module__}.{type_name(klass)}".encode()
     yield b")"
+
+
+if sys.version_info >= (3, 10):
+    register_serializer(types.UnionType)(bytes_repr_type)
 
 
 @register_serializer(FileSet)
