@@ -694,7 +694,8 @@ class LazyInterface:
             raise AttributeError(f"{name} hasn't been set yet")
         if name not in self._field_names:
             raise AttributeError(
-                f"Task {self._task.name} has no {self._attr_type} attribute {name}"
+                f"Task '{self._task.name}' has no {self._attr_type} attribute '{name}', "
+                "available: '" + "', '".join(self._field_names) + "'"
             )
         type_ = self._get_type(name)
         splits = self._get_task_splits()
