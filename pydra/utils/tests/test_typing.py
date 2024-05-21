@@ -1,7 +1,6 @@
 import os
 import itertools
 import sys
-import re
 import typing as ty
 from pathlib import Path
 import tempfile
@@ -22,22 +21,12 @@ from .utils import (
     MyOtherFormatX,
     MyHeader,
 )
+from pydra.utils import exc_info_matches
 
 
 def lz(tp: ty.Type):
     """convenience method for creating a LazyField of type 'tp'"""
     return LazyOutField(name="foo", field="boo", type=tp)
-
-
-def exc_info_matches(exc_info, match, regex=False):
-    if exc_info.value.__cause__ is not None:
-        msg = str(exc_info.value.__cause__)
-    else:
-        msg = str(exc_info.value)
-    if regex:
-        return re.match(".*" + match, msg)
-    else:
-        return match in msg
 
 
 PathTypes = ty.Union[str, os.PathLike]
@@ -154,7 +143,8 @@ def test_type_check_basic16():
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
 def test_type_check_basic16a():
     with pytest.raises(
-        TypeError, match="Cannot coerce <class 'float'> to any of the union types"
+        TypeError,
+        match="Incorrect type for lazy field: <class 'float'> is not a subclass of",
     ):
         TypeParser(Path | File | bool | int)(lz(float))
 
@@ -234,7 +224,7 @@ def test_type_check_fail2():
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
 def test_type_check_fail2a():
-    with pytest.raises(TypeError, match="to any of the union types"):
+    with pytest.raises(TypeError, match="Incorrect type for lazy field: <class 'int'>"):
         TypeParser(Path | File)(lz(int))
 
 
@@ -249,7 +239,10 @@ def test_type_check_fail3():
 def test_type_check_fail4():
     with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Sequence)(lz(ty.Dict[str, int]))
-    assert exc_info_matches(exc_info, "Cannot coerce .*(d|D)ict.* into")
+    assert exc_info_matches(
+        exc_info,
+        "Cannot coerce typing.Dict[str, int] into <class 'collections.abc.Sequence'>",
+    )
 
 
 def test_type_check_fail5():
@@ -366,13 +359,13 @@ def test_type_coercion_basic12():
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
 def test_type_coercion_basic12a():
-    with pytest.raises(TypeError, match="explicitly excluded"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(
             list,
             coercible=[(ty.Sequence, ty.Sequence)],
             not_coercible=[(str, ty.Sequence)],
         )("a-string")
-
+    assert exc_info_matches(exc_info, "explicitly excluded")
     assert TypeParser(Path | File | int, coercible=[(ty.Any, ty.Any)])(1.0) == 1
 
 
@@ -480,8 +473,9 @@ def test_type_coercion_fail2():
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
 def test_type_coercion_fail2a():
-    with pytest.raises(TypeError, match="to any of the union types"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(Path | File, coercible=[(ty.Any, ty.Any)])(1)
+    assert exc_info_matches(exc_info, "to any of the union types")
 
 
 def test_type_coercion_fail3():
