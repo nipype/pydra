@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import pytest
 from pydra import mark
-from ...engine.specs import File, LazyOutField
+from ...engine.specs import File, LazyOutField, MultiInputObj
 from ..typing import TypeParser
 from pydra import Workflow
 from fileformats.application import Json, Yaml, Xml
@@ -249,7 +249,7 @@ def test_type_check_fail3():
 def test_type_check_fail4():
     with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Sequence)(lz(ty.Dict[str, int]))
-    assert exc_info_matches(exc_info, "Cannot coerce <class 'dict'> into")
+    assert exc_info_matches(exc_info, "Cannot coerce .*(d|D)ict.* into")
 
 
 def test_type_check_fail5():
@@ -1043,3 +1043,63 @@ def test_type_is_instance11():
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
 def test_type_is_instance11a():
     assert not TypeParser.is_instance(None, int | str)
+
+
+def test_multi_input_obj_coerce1():
+    assert TypeParser(MultiInputObj[str])("a") == ["a"]
+
+
+def test_multi_input_obj_coerce2():
+    assert TypeParser(MultiInputObj[str])(["a"]) == ["a"]
+
+
+def test_multi_input_obj_coerce3():
+    assert TypeParser(MultiInputObj[ty.List[str]])(["a"]) == [["a"]]
+
+
+def test_multi_input_obj_coerce3a():
+    assert TypeParser(MultiInputObj[ty.Union[int, ty.List[str]]])(["a"]) == [["a"]]
+
+
+def test_multi_input_obj_coerce3b():
+    assert TypeParser(MultiInputObj[ty.Union[int, ty.List[str]]])([["a"]]) == [["a"]]
+
+
+def test_multi_input_obj_coerce4():
+    assert TypeParser(MultiInputObj[ty.Union[int, ty.List[str]]])([1]) == [1]
+
+
+def test_multi_input_obj_coerce4a():
+    with pytest.raises(TypeError):
+        TypeParser(MultiInputObj[ty.Union[int, ty.List[str]]])([[1]])
+
+
+def test_multi_input_obj_check_type1():
+    TypeParser(MultiInputObj[str])(lz(str))
+
+
+def test_multi_input_obj_check_type2():
+    TypeParser(MultiInputObj[str])(lz(ty.List[str]))
+
+
+def test_multi_input_obj_check_type3():
+    TypeParser(MultiInputObj[ty.List[str]])(lz(ty.List[str]))
+
+
+def test_multi_input_obj_check_type3a():
+    TypeParser(MultiInputObj[ty.Union[int, ty.List[str]]])(lz(ty.List[str]))
+
+
+def test_multi_input_obj_check_type3b():
+    TypeParser(MultiInputObj[ty.Union[int, ty.List[str]]])(lz(ty.List[ty.List[str]]))
+
+
+def test_multi_input_obj_check_type4():
+    TypeParser(MultiInputObj[ty.Union[int, ty.List[str]]])(lz(ty.List[int]))
+
+
+def test_multi_input_obj_check_type4a():
+    with pytest.raises(TypeError):
+        TypeParser(MultiInputObj[ty.Union[int, ty.List[str]]])(
+            lz(ty.List[ty.List[int]])
+        )
