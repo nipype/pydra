@@ -1,6 +1,7 @@
 import os
 import itertools
 import sys
+import re
 import typing as ty
 from pathlib import Path
 import tempfile
@@ -28,6 +29,17 @@ def lz(tp: ty.Type):
     return LazyOutField(name="foo", field="boo", type=tp)
 
 
+def exc_info_matches(exc_info, match, regex=False):
+    if exc_info.value.__cause__ is not None:
+        msg = str(exc_info.value.__cause__)
+    else:
+        msg = str(exc_info.value)
+    if regex:
+        return re.match(".*" + match, msg)
+    else:
+        return match in msg
+
+
 PathTypes = ty.Union[str, os.PathLike]
 
 
@@ -36,8 +48,9 @@ def test_type_check_basic1():
 
 
 def test_type_check_basic2():
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(int, coercible=[(int, float)])(lz(float))
+    assert exc_info_matches(exc_info, "doesn't match any of the explicit inclusion")
 
 
 def test_type_check_basic3():
@@ -45,8 +58,9 @@ def test_type_check_basic3():
 
 
 def test_type_check_basic4():
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(int, coercible=[(ty.Any, float)])(lz(float))
+    assert exc_info_matches(exc_info, "doesn't match any of the explicit inclusion")
 
 
 def test_type_check_basic5():
@@ -54,8 +68,9 @@ def test_type_check_basic5():
 
 
 def test_type_check_basic6():
-    with pytest.raises(TypeError, match="explicitly excluded"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(int, coercible=None, not_coercible=[(float, int)])(lz(float))
+    assert exc_info_matches(exc_info, "explicitly excluded")
 
 
 def test_type_check_basic7():
@@ -63,8 +78,10 @@ def test_type_check_basic7():
 
     path_coercer(lz(Path))
 
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
+    with pytest.raises(TypeError) as exc_info:
         path_coercer(lz(str))
+
+    assert exc_info_matches(exc_info, "doesn't match any of the explicit inclusion")
 
 
 def test_type_check_basic8():
@@ -74,7 +91,6 @@ def test_type_check_basic8():
 
 def test_type_check_basic9():
     file_coercer = TypeParser(File, coercible=[(PathTypes, File)])
-
     file_coercer(lz(Path))
     file_coercer(lz(str))
 
@@ -82,8 +98,9 @@ def test_type_check_basic9():
 def test_type_check_basic10():
     impotent_str_coercer = TypeParser(str, coercible=[(PathTypes, File)])
 
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
+    with pytest.raises(TypeError) as exc_info:
         impotent_str_coercer(lz(File))
+    assert exc_info_matches(exc_info, "doesn't match any of the explicit inclusion")
 
 
 def test_type_check_basic11():
@@ -108,12 +125,13 @@ def test_type_check_basic13():
 
 
 def test_type_check_basic14():
-    with pytest.raises(TypeError, match="explicitly excluded"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(
             list,
             coercible=[(ty.Sequence, ty.Sequence)],
             not_coercible=[(str, ty.Sequence)],
         )(lz(str))
+    assert exc_info_matches(exc_info, match="explicitly excluded")
 
 
 def test_type_check_basic15():
@@ -126,10 +144,11 @@ def test_type_check_basic15a():
 
 
 def test_type_check_basic16():
-    with pytest.raises(
-        TypeError, match="Cannot coerce <class 'float'> to any of the union types"
-    ):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Union[Path, File, bool, int])(lz(float))
+    assert exc_info_matches(
+        exc_info, match="Cannot coerce <class 'float'> to any of the union types"
+    )
 
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
@@ -173,16 +192,18 @@ def test_type_check_nested7():
 
 
 def test_type_check_nested7a():
-    with pytest.raises(TypeError, match="Wrong number of type arguments"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Tuple[float, float, float])(lz(ty.Tuple[int]))
+    assert exc_info_matches(exc_info, "Wrong number of type arguments")
 
 
 def test_type_check_nested8():
-    with pytest.raises(TypeError, match="explicitly excluded"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(
             ty.Tuple[int, ...],
             not_coercible=[(ty.Sequence, ty.Tuple)],
         )(lz(ty.List[float]))
+    assert exc_info_matches(exc_info, "explicitly excluded")
 
 
 def test_type_check_permit_superclass():
@@ -190,21 +211,25 @@ def test_type_check_permit_superclass():
     TypeParser(ty.List[File])(lz(ty.List[Json]))
     # Permissive super class, as File is superclass of Json
     TypeParser(ty.List[Json], superclass_auto_cast=True)(lz(ty.List[File]))
-    with pytest.raises(TypeError, match="Cannot coerce"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.List[Json], superclass_auto_cast=False)(lz(ty.List[File]))
+    assert exc_info_matches(exc_info, "Cannot coerce")
     # Fails because Yaml is neither sub or super class of Json
-    with pytest.raises(TypeError, match="Cannot coerce"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.List[Json], superclass_auto_cast=True)(lz(ty.List[Yaml]))
+    assert exc_info_matches(exc_info, "Cannot coerce")
 
 
 def test_type_check_fail1():
-    with pytest.raises(TypeError, match="Wrong number of type arguments in tuple"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Tuple[int, int, int])(lz(ty.Tuple[float, float, float, float]))
+    assert exc_info_matches(exc_info, "Wrong number of type arguments in tuple")
 
 
 def test_type_check_fail2():
-    with pytest.raises(TypeError, match="to any of the union types"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Union[Path, File])(lz(int))
+    assert exc_info_matches(exc_info, "to any of the union types")
 
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
@@ -214,25 +239,29 @@ def test_type_check_fail2a():
 
 
 def test_type_check_fail3():
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Sequence, coercible=[(ty.Sequence, ty.Sequence)])(
             lz(ty.Dict[str, int])
         )
+    assert exc_info_matches(exc_info, "doesn't match any of the explicit inclusion")
 
 
 def test_type_check_fail4():
-    with pytest.raises(TypeError, match="Cannot coerce <class 'dict'> into"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Sequence)(lz(ty.Dict[str, int]))
+    assert exc_info_matches(exc_info, "Cannot coerce <class 'dict'> into")
 
 
 def test_type_check_fail5():
-    with pytest.raises(TypeError, match="<class 'int'> doesn't match pattern"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.List[int])(lz(int))
+    assert exc_info_matches(exc_info, "<class 'int'> doesn't match pattern")
 
 
 def test_type_check_fail6():
-    with pytest.raises(TypeError, match="<class 'int'> doesn't match pattern"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.List[ty.Dict[str, str]])(lz(ty.Tuple[int, int, int]))
+    assert exc_info_matches(exc_info, "<class 'int'> doesn't match pattern")
 
 
 def test_type_coercion_basic():
@@ -240,8 +269,9 @@ def test_type_coercion_basic():
 
 
 def test_type_coercion_basic1():
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(float, coercible=[(ty.Any, int)])(1)
+    assert exc_info_matches(exc_info, "doesn't match any of the explicit inclusion")
 
 
 def test_type_coercion_basic2():
@@ -254,8 +284,9 @@ def test_type_coercion_basic2():
 
 
 def test_type_coercion_basic3():
-    with pytest.raises(TypeError, match="explicitly excluded"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(int, coercible=[(ty.Any, ty.Any)], not_coercible=[(float, int)])(1.0)
+    assert exc_info_matches(exc_info, "explicitly excluded")
 
 
 def test_type_coercion_basic4():
@@ -263,8 +294,9 @@ def test_type_coercion_basic4():
 
     assert path_coercer(Path("/a/path")) == Path("/a/path")
 
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
+    with pytest.raises(TypeError) as exc_info:
         path_coercer("/a/path")
+    assert exc_info_matches(exc_info, "doesn't match any of the explicit inclusion")
 
 
 def test_type_coercion_basic5():
@@ -296,8 +328,9 @@ def test_type_coercion_basic7(a_file):
 def test_type_coercion_basic8(a_file):
     impotent_str_coercer = TypeParser(str, coercible=[(PathTypes, File)])
 
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
+    with pytest.raises(TypeError) as exc_info:
         impotent_str_coercer(File(a_file))
+    assert exc_info_matches(exc_info, "doesn't match any of the explicit inclusion")
 
 
 def test_type_coercion_basic9(a_file):
@@ -321,13 +354,13 @@ def test_type_coercion_basic11():
 
 
 def test_type_coercion_basic12():
-    with pytest.raises(TypeError, match="explicitly excluded"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(
             list,
             coercible=[(ty.Sequence, ty.Sequence)],
             not_coercible=[(str, ty.Sequence)],
         )("a-string")
-
+    assert exc_info_matches(exc_info, "explicitly excluded")
     assert TypeParser(ty.Union[Path, File, int], coercible=[(ty.Any, ty.Any)])(1.0) == 1
 
 
@@ -422,24 +455,27 @@ def test_type_coercion_nested7():
 
 
 def test_type_coercion_nested8():
-    with pytest.raises(TypeError, match="explicitly excluded"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(
             ty.Tuple[int, ...],
             coercible=[(ty.Any, ty.Any)],
             not_coercible=[(ty.Sequence, ty.Tuple)],
         )([1.0, 2.0, 3.0])
+    assert exc_info_matches(exc_info, "explicitly excluded")
 
 
 def test_type_coercion_fail1():
-    with pytest.raises(TypeError, match="Incorrect number of items"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Tuple[int, int, int], coercible=[(ty.Any, ty.Any)])(
             [1.0, 2.0, 3.0, 4.0]
         )
+    assert exc_info_matches(exc_info, "Incorrect number of items")
 
 
 def test_type_coercion_fail2():
-    with pytest.raises(TypeError, match="to any of the union types"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Union[Path, File], coercible=[(ty.Any, ty.Any)])(1)
+    assert exc_info_matches(exc_info, "to any of the union types")
 
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="No UnionType < Py3.10")
@@ -449,25 +485,29 @@ def test_type_coercion_fail2a():
 
 
 def test_type_coercion_fail3():
-    with pytest.raises(TypeError, match="doesn't match any of the explicit inclusion"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Sequence, coercible=[(ty.Sequence, ty.Sequence)])(
             {"a": 1, "b": 2}
         )
+    assert exc_info_matches(exc_info, "doesn't match any of the explicit inclusion")
 
 
 def test_type_coercion_fail4():
-    with pytest.raises(TypeError, match="Cannot coerce {'a': 1} into"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.Sequence, coercible=[(ty.Any, ty.Any)])({"a": 1})
+    assert exc_info_matches(exc_info, "Cannot coerce {'a': 1} into")
 
 
 def test_type_coercion_fail5():
-    with pytest.raises(TypeError, match="as 1 is not iterable"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.List[int], coercible=[(ty.Any, ty.Any)])(1)
+    assert exc_info_matches(exc_info, "as 1 is not iterable")
 
 
 def test_type_coercion_fail6():
-    with pytest.raises(TypeError, match="is not a mapping type"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.List[ty.Dict[str, str]], coercible=[(ty.Any, ty.Any)])((1, 2, 3))
+    assert exc_info_matches(exc_info, "is not a mapping type")
 
 
 def test_type_coercion_realistic():
@@ -490,21 +530,29 @@ def test_type_coercion_realistic():
     TypeParser(ty.List[str])(task.lzout.a)  # pylint: disable=no-member
     with pytest.raises(
         TypeError,
-        match="Cannot coerce <class 'fileformats\.generic.*\.File'> into <class 'int'>",
-    ):
+    ) as exc_info:
         TypeParser(ty.List[int])(task.lzout.a)  # pylint: disable=no-member
+    assert exc_info_matches(
+        exc_info,
+        match=r"Cannot coerce <class 'fileformats\.generic.*\.File'> into <class 'int'>",
+        regex=True,
+    )
 
-    with pytest.raises(
-        TypeError, match="Cannot coerce 'bad-value' into <class 'list'>"
-    ):
+    with pytest.raises(TypeError) as exc_info:
         task.inputs.x = "bad-value"
+    assert exc_info_matches(
+        exc_info, match="Cannot coerce 'bad-value' into <class 'list'>"
+    )
 
 
 def test_check_missing_type_args():
-    with pytest.raises(TypeError, match="wasn't declared with type args required"):
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.List[int]).check_type(list)
-    with pytest.raises(TypeError, match="doesn't match pattern"):
+    assert exc_info_matches(exc_info, "wasn't declared with type args required")
+
+    with pytest.raises(TypeError) as exc_info:
         TypeParser(ty.List[int]).check_type(dict)
+    assert exc_info_matches(exc_info, "doesn't match pattern")
 
 
 def test_matches_type_union():
@@ -610,6 +658,18 @@ def test_contains_type_in_dict():
     )
 
 
+def test_any_union():
+    """Check that the superclass auto-cast matches if any of the union args match instead
+    of all"""
+    TypeParser(File, match_any_of_union=True).check_type(ty.Union[ty.List[File], Json])
+
+
+def test_union_superclass_check_type():
+    """Check that the superclass auto-cast matches if any of the union args match instead
+    of all"""
+    TypeParser(ty.Union[ty.List[File], Json], superclass_auto_cast=True)(lz(File))
+
+
 def test_type_matches():
     assert TypeParser.matches([1, 2, 3], ty.List[int])
     assert TypeParser.matches((1, 2, 3), ty.Tuple[int, ...])
@@ -713,7 +773,7 @@ def test_typing_cast(tmp_path, specific_task, other_specific_task):
         )
     )
 
-    with pytest.raises(TypeError, match="Cannot coerce"):
+    with pytest.raises(TypeError) as exc_info:
         # No cast of generic task output to MyFormatX
         wf.add(  # Generic task
             other_specific_task(
@@ -721,6 +781,7 @@ def test_typing_cast(tmp_path, specific_task, other_specific_task):
                 name="inner",
             )
         )
+    assert exc_info_matches(exc_info, "Cannot coerce")
 
     wf.add(  # Generic task
         other_specific_task(
@@ -729,7 +790,7 @@ def test_typing_cast(tmp_path, specific_task, other_specific_task):
         )
     )
 
-    with pytest.raises(TypeError, match="Cannot coerce"):
+    with pytest.raises(TypeError) as exc_info:
         # No cast of generic task output to MyFormatX
         wf.add(
             specific_task(
@@ -737,6 +798,7 @@ def test_typing_cast(tmp_path, specific_task, other_specific_task):
                 name="exit",
             )
         )
+    assert exc_info_matches(exc_info, "Cannot coerce")
 
     wf.add(
         specific_task(
