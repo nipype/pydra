@@ -4,6 +4,7 @@ from pathlib import Path
 import random
 import platform
 import pytest
+import attrs
 import cloudpickle as cp
 from unittest.mock import Mock
 from fileformats.generic import Directory, File
@@ -15,9 +16,9 @@ from ..helpers import (
     load_and_run,
     position_sort,
     parse_copyfile,
+    argstr_formatting,
 )
 from ...utils.hash import hash_function
-from .. import helpers_file
 from ..core import Workflow
 
 
@@ -311,3 +312,21 @@ def test_parse_copyfile():
         parse_copyfile(mock_field((1, 2)))
     with pytest.raises(TypeError, match="Unrecognised type for collation copyfile"):
         parse_copyfile(mock_field((Mode.copy, 2)))
+
+
+def test_argstr_formatting():
+    @attrs.define
+    class Inputs:
+        a1_field: str
+        b2_field: float
+        c3_field: dict[str, str]
+        d4_field: list[str]
+
+    inputs = Inputs("1", 2.0, {"c": "3"}, ["4"])
+    assert (
+        argstr_formatting(
+            "{a1_field} {b2_field:02f} -test {c3_field[c]} -me {d4_field[0]}",
+            inputs,
+        )
+        == "1 2.000000 -test 3 -me 4"
+    )
