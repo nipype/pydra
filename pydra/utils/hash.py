@@ -20,7 +20,7 @@ from typing import (
 )
 from filelock import SoftFileLock
 import attrs.exceptions
-from fileformats.core import FileSet
+from fileformats.core.fileset import FileSet, MockMixin
 from . import user_cache_dir, add_exc_note
 
 logger = logging.getLogger("pydra")
@@ -483,6 +483,13 @@ def bytes_repr_fileset(
         + tuple(p.lstat().st_mtime_ns for p in fspaths)
     )
     yield from fileset.__bytes_repr__(cache)
+
+
+@register_serializer(MockMixin)
+def bytes_repr_mock_fileset(
+    mock_fileset: MockMixin, cache: Cache
+) -> Iterator[ty.Union[CacheKey, bytes]]:
+    yield from mock_fileset.__bytes_repr__(cache)
 
 
 @register_serializer(list)
