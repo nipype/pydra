@@ -319,8 +319,8 @@ def test_argstr_formatting():
     class Inputs:
         a1_field: str
         b2_field: float
-        c3_field: dict[str, str]
-        d4_field: list[str]
+        c3_field: ty.Dict[str, str]
+        d4_field: ty.List[str]
 
     inputs = Inputs("1", 2.0, {"c": "3"}, ["4"])
     assert (
