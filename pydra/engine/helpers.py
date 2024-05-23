@@ -649,7 +649,7 @@ def argstr_formatting(argstr, inputs, value_updates=None):
     if value_updates:
         inputs_dict.update(value_updates)
     # getting all fields that should be formatted, i.e. {field_name}, ...
-    inp_fields = re.findall(r"{(\w+)(?::[0-9.]+f|\[[\w]+\])?}", argstr)
+    inp_fields = parse_format_string(argstr)
     val_dict = {}
     for fld_name in inp_fields:
         fld_value = inputs_dict[fld_name]
