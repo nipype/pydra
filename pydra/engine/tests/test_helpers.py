@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 import random
 import platform
+import typing as ty
 import pytest
 import attrs
 import cloudpickle as cp
@@ -17,6 +18,7 @@ from ..helpers import (
     position_sort,
     parse_copyfile,
     argstr_formatting,
+    parse_format_string,
 )
 from ...utils.hash import hash_function
 from ..core import Workflow
@@ -51,7 +53,7 @@ def test_hash_file(tmpdir):
     with open(outdir / "test.file", "w") as fp:
         fp.write("test")
     assert (
-        hash_function(File(outdir / "test.file")) == "37fcc546dce7e59585f3217bb4c30299"
+        hash_function(File(outdir / "test.file")) == "f32ab20c4a86616e32bf2504e1ac5a22"
     )
 
 
@@ -330,3 +332,33 @@ def test_argstr_formatting():
         )
         == "1 2.000000 -test 3 -me 4"
     )
+
+
+def test_parse_format_string1():
+    assert parse_format_string("{a}") == {"a"}
+
+
+def test_parse_format_string2():
+    assert parse_format_string("{abc}") == {"abc"}
+
+
+def test_parse_format_string3():
+    assert parse_format_string("{a:{b}}") == {"a", "b"}
+
+
+def test_parse_format_string4():
+    assert parse_format_string("{a:{b[2]}}") == {"a", "b"}
+
+
+def test_parse_format_string5():
+    assert parse_format_string("{a.xyz[somekey].abc:{b[a][b].d[0]}}") == {"a", "b"}
+
+
+def test_parse_format_string6():
+    assert parse_format_string("{a:05{b[a 2][b].e}}") == {"a", "b"}
+
+
+def test_parse_format_string7():
+    assert parse_format_string(
+        "{a1_field} {b2_field:02f} -test {c3_field[c]} -me {d4_field[0]}"
+    ) == {"a1_field", "b2_field", "c3_field", "d4_field"}
