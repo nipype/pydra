@@ -140,7 +140,7 @@ def test_input_file_hash_1(tmp_path):
     fields = [("in_file", File)]
     input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
     inputs = make_klass(input_spec)
-    assert inputs(in_file=outfile).hash == "0e9306e5cae1de1b4dff1f27cca03bce"
+    assert inputs(in_file=outfile).hash == "02fa5f6f1bbde7f25349f54335e1adaf"
 
 
 def test_input_file_hash_2(tmp_path):
@@ -154,7 +154,7 @@ def test_input_file_hash_2(tmp_path):
 
     # checking specific hash value
     hash1 = inputs(in_file=file).hash
-    assert hash1 == "17e4e2b4d8ce8f36bf3fd65804958dbb"
+    assert hash1 == "aaa50d60ed33d3a316d58edc882a34c3"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
@@ -185,7 +185,7 @@ def test_input_file_hash_2a(tmp_path):
 
     # checking specific hash value
     hash1 = inputs(in_file=file).hash
-    assert hash1 == "17e4e2b4d8ce8f36bf3fd65804958dbb"
+    assert hash1 == "aaa50d60ed33d3a316d58edc882a34c3"
 
     # checking if different name doesn't affect the hash
     file_diffname = tmp_path / "in_file_2.txt"
@@ -204,7 +204,7 @@ def test_input_file_hash_2a(tmp_path):
 
     # checking if string is also accepted
     hash4 = inputs(in_file=str(file)).hash
-    assert hash4 == "aee7c7ae25509fb4c92a081d58d17a67"
+    assert hash4 == "800af2b5b334c9e3e5c40c0e49b7ffb5"
 
 
 def test_input_file_hash_3(tmp_path):
@@ -278,7 +278,7 @@ def test_input_file_hash_4(tmp_path):
 
     # checking specific hash value
     hash1 = inputs(in_file=[[file, 3]]).hash
-    assert hash1 == "11b7e9c90bc8d9dc5ccfc8d4526ba091"
+    assert hash1 == "0693adbfac9f675af87e900065b1de00"
 
     # the same file, but int field changes
     hash1a = inputs(in_file=[[file, 5]]).hash
@@ -315,7 +315,7 @@ def test_input_file_hash_5(tmp_path):
 
     # checking specific hash value
     hash1 = inputs(in_file=[{"file": file, "int": 3}]).hash
-    assert hash1 == "5fd53b79e55bbf62a4bb3027eb753a2c"
+    assert hash1 == "56e6e2c9f3bdf0cd5bd3060046dea480"
 
     # the same file, but int field changes
     hash1a = inputs(in_file=[{"file": file, "int": 5}]).hash
