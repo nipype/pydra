@@ -649,12 +649,9 @@ def argstr_formatting(argstr, inputs, value_updates=None):
     if value_updates:
         inputs_dict.update(value_updates)
     # getting all fields that should be formatted, i.e. {field_name}, ...
-    inp_fields = re.findall(r"{\w+}", argstr)
-    inp_fields_float = re.findall(r"{\w+:[0-9.]+f}", argstr)
-    inp_fields += [re.sub(":[0-9.]+f", "", el) for el in inp_fields_float]
+    inp_fields = parse_format_string(argstr)
     val_dict = {}
-    for fld in inp_fields:
-        fld_name = fld[1:-1]  # extracting the name form {field_name}
+    for fld_name in inp_fields:
         fld_value = inputs_dict[fld_name]
         fld_attr = getattr(attrs.fields(type(inputs)), fld_name)
         if fld_value is attr.NOTHING or (
@@ -738,3 +735,22 @@ def parse_copyfile(fld: attr.Attribute, default_collation=FileSet.CopyCollation.
             f"Unrecognised type for collation copyfile metadata of {fld}, {collation}"
         )
     return mode, collation
+
+
+def parse_format_string(fmtstr):
+    """Parse a argstr format string and return all keywords used in it."""
+    identifier = r"[a-zA-Z_]\w*"
+    attribute = rf"\.{identifier}"
+    item = r"\[\w+\]"
+    # Example: var.attr[key][0].attr2 (capture "var")
+    field_with_lookups = (
+        f"({identifier})(?:{attribute}|{item})*"  # Capture only the keyword
+    )
+    conversion = "(?:!r|!s)"
+    nobrace = "[^{}]*"
+    # Example: 0{pads[hex]}x (capture "pads")
+    fmtspec = f"{nobrace}(?:{{({identifier}){nobrace}}}{nobrace})?"  # Capture keywords in spec
+    full_field = f"{{{field_with_lookups}{conversion}?(?::{fmtspec})?}}"
+
+    all_keywords = re.findall(full_field, fmtstr)
+    return set().union(*all_keywords) - {""}
