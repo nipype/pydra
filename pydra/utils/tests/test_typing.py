@@ -1039,28 +1039,19 @@ def test_type_is_instance11a():
     assert not TypeParser.is_instance(None, int | str)
 
 
-def test_multi_input_obj_coerce1():
-    assert TypeParser(MultiInputObj[str])("a") == ["a"]
-
-
-def test_multi_input_obj_coerce2():
-    assert TypeParser(MultiInputObj[str])(["a"]) == ["a"]
-
-
-def test_multi_input_obj_coerce3():
-    assert TypeParser(MultiInputObj[ty.List[str]])(["a"]) == [["a"]]
-
-
-def test_multi_input_obj_coerce3a():
-    assert TypeParser(MultiInputObj[ty.Union[int, ty.List[str]]])(["a"]) == [["a"]]
-
-
-def test_multi_input_obj_coerce3b():
-    assert TypeParser(MultiInputObj[ty.Union[int, ty.List[str]]])([["a"]]) == [["a"]]
-
-
-def test_multi_input_obj_coerce4():
-    assert TypeParser(MultiInputObj[ty.Union[int, ty.List[str]]])([1]) == [1]
+@pytest.mark.parametrize(
+    ("typ", "obj", "result"),
+    [
+        (MultiInputObj[str], "a", ["a"]),
+        (MultiInputObj[str], ["a"], ["a"]),
+        (MultiInputObj[ty.List[str]], ["a"],  [["a"]]),
+        (MultiInputObj[ty.Union[int, ty.List[str]]], ["a"], [["a"]]),
+        (MultiInputObj[ty.Union[int, ty.List[str]]], [["a"]], [["a"]]),
+        (MultiInputObj[ty.Union[int, ty.List[str]]], [1], [1]),
+    ]
+)
+def test_multi_input_obj_coerce(typ, obj, result):
+    assert TypeParser(typ)(obj) == result
 
 
 def test_multi_input_obj_coerce4a():
