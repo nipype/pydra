@@ -551,21 +551,20 @@ class TypeParser(ty.Generic[T]):
             return expand_and_check(type_, self.pattern)
         except TypeError as e:
             # Special handling for MultiInputObjects (which are annoying)
-            if isinstance(self.pattern, tuple) and self.pattern[0] == MultiInputObj:
-                # Attempt to coerce the object into arg type of the MultiInputObj first,
-                # and if that fails, try to coerce it into a list of the arg type
-                inner_type_parser = copy(self)
-                inner_type_parser.pattern = self.pattern[1][0]
-                try:
-                    inner_type_parser.check_type(type_)
-                except TypeError:
-                    add_exc_note(
-                        e,
-                        "Also failed to coerce to the arg-type of the MultiInputObj "
-                        f"({self.pattern[1][0]})",
-                    )
-                    raise e
-            else:
+            if not isinstance(self.pattern, tuple) or self.pattern[0] != MultiInputObj:
+                raise e
+            # Attempt to coerce the object into arg type of the MultiInputObj first,
+            # and if that fails, try to coerce it into a list of the arg type
+            inner_type_parser = copy(self)
+            inner_type_parser.pattern = self.pattern[1][0]
+            try:
+                inner_type_parser.check_type(type_)
+            except TypeError:
+                add_exc_note(
+                    e,
+                    "Also failed to coerce to the arg-type of the MultiInputObj "
+                    f"({self.pattern[1][0]})",
+                )
                 raise e
 
     def check_coercible(self, source: ty.Any, target: ty.Union[type, ty.Any]):
