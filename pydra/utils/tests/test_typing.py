@@ -1044,11 +1044,11 @@ def test_type_is_instance11a():
     [
         (MultiInputObj[str], "a", ["a"]),
         (MultiInputObj[str], ["a"], ["a"]),
-        (MultiInputObj[ty.List[str]], ["a"],  [["a"]]),
+        (MultiInputObj[ty.List[str]], ["a"], [["a"]]),
         (MultiInputObj[ty.Union[int, ty.List[str]]], ["a"], [["a"]]),
         (MultiInputObj[ty.Union[int, ty.List[str]]], [["a"]], [["a"]]),
         (MultiInputObj[ty.Union[int, ty.List[str]]], [1], [1]),
-    ]
+    ],
 )
 def test_multi_input_obj_coerce(typ, obj, result):
     assert TypeParser(typ)(obj) == result
