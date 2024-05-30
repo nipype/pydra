@@ -20,7 +20,7 @@ from typing import (
 )
 from filelock import SoftFileLock
 import attrs.exceptions
-from fileformats.core import FileSet
+from fileformats.core.fileset import FileSet, MockMixin
 from . import user_cache_dir, add_exc_note
 
 logger = logging.getLogger("pydra")
@@ -55,7 +55,7 @@ __all__ = (
 )
 
 Hash = NewType("Hash", bytes)
-CacheKey = NewType("CacheKey", ty.Tuple[ty.Hashable, ty.Hashable])
+CacheKey = NewType("CacheKey", ty.Tuple[ty.Hashable, ...])
 
 
 def location_converter(path: ty.Union[Path, str, None]) -> Path:
@@ -478,11 +478,29 @@ def bytes_repr_fileset(
     fileset: FileSet, cache: Cache
 ) -> Iterator[ty.Union[CacheKey, bytes]]:
     fspaths = sorted(fileset.fspaths)
+    # Yield the cache key for the fileset, which is a tuple of the file-system paths
+    # and their mtime. Is used to store persistent cache of the fileset hashes
+    # to avoid recomputation between calls
     yield CacheKey(
         tuple(repr(p) for p in fspaths)  # type: ignore[arg-type]
         + tuple(p.lstat().st_mtime_ns for p in fspaths)
     )
-    yield from fileset.__bytes_repr__(cache)
+    cls = type(fileset)
+    yield f"{cls.__module__}.{cls.__name__}:".encode()
+    for key, chunk_iter in fileset.byte_chunks():
+        yield (",'" + key + "'=").encode()
+        yield from chunk_iter
+
+
+# Need to disable the mtime cache key for mocked filesets. Used in doctests
+@register_serializer(MockMixin)
+def bytes_repr_mock_fileset(
+    mock_fileset: MockMixin, cache: Cache
+) -> Iterator[ty.Union[CacheKey, bytes]]:
+    cls = type(mock_fileset)
+    yield f"{cls.__module__}.{cls.__name__}:".encode()
+    for key, _ in mock_fileset.byte_chunks():
+        yield (",'" + key + "'").encode()
 
 
 @register_serializer(list)
