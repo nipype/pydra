@@ -2,6 +2,7 @@ import itertools
 import inspect
 from pathlib import Path
 import os
+from copy import copy
 import sys
 import types
 import typing as ty
@@ -13,6 +14,7 @@ from ..engine.specs import (
     MultiInputObj,
     MultiOutputObj,
 )
+from ..utils import add_exc_note
 from fileformats import field
 
 try:
@@ -70,6 +72,8 @@ class TypeParser(ty.Generic[T]):
     label : str
         the label to be used to identify the type parser in error messages. Especially
         useful when TypeParser is used as a converter in attrs.fields
+    match_any_of_union : bool
+        match if any of the options in the union are a subclass (but not necessarily all)
     """
 
     tp: ty.Type[T]
@@ -77,6 +81,7 @@ class TypeParser(ty.Generic[T]):
     not_coercible: ty.List[ty.Tuple[TypeOrAny, TypeOrAny]]
     superclass_auto_cast: bool
     label: str
+    match_any_of_union: bool
 
     COERCIBLE_DEFAULT: ty.Tuple[ty.Tuple[type, type], ...] = (
         (
@@ -121,6 +126,7 @@ class TypeParser(ty.Generic[T]):
         ] = NOT_COERCIBLE_DEFAULT,
         superclass_auto_cast: bool = False,
         label: str = "",
+        match_any_of_union: bool = False,
     ):
         def expand_pattern(t):
             """Recursively expand the type arguments of the target type in nested tuples"""
@@ -151,6 +157,7 @@ class TypeParser(ty.Generic[T]):
         self.not_coercible = list(not_coercible) if not_coercible is not None else []
         self.pattern = expand_pattern(tp)
         self.superclass_auto_cast = superclass_auto_cast
+        self.match_any_of_union = match_any_of_union
 
     def __call__(self, obj: ty.Any) -> ty.Union[T, LazyField[T]]:
         """Attempts to coerce the object to the specified type, unless the value is
@@ -185,9 +192,15 @@ class TypeParser(ty.Generic[T]):
                         # Check whether the type of the lazy field isn't a superclass of
                         # the type to check against, and if so, allow it due to permissive
                         # typing rules.
-                        TypeParser(obj.type).check_type(self.tp)
+                        TypeParser(obj.type, match_any_of_union=True).check_type(
+                            self.tp
+                        )
                     except TypeError:
-                        raise e
+                        raise TypeError(
+                            f"Incorrect type for lazy field{self.label_str}: {obj.type!r} "
+                            f"is not a subclass or superclass of {self.tp} (and will not "
+                            "be able to be coerced to one that is)"
+                        ) from e
                     else:
                         logger.info(
                             "Connecting lazy field %s to %s%s via permissive typing that "
@@ -197,12 +210,22 @@ class TypeParser(ty.Generic[T]):
                             self.label_str,
                         )
                 else:
-                    raise e
+                    raise TypeError(
+                        f"Incorrect type for lazy field{self.label_str}: {obj.type!r} "
+                        f"is not a subclass of {self.tp} (and will not be able to be "
+                        "coerced to one that is)"
+                    ) from e
             coerced = obj  # type: ignore
         elif isinstance(obj, StateArray):
             coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]
         else:
-            coerced = self.coerce(obj)
+            try:
+                coerced = self.coerce(obj)
+            except TypeError as e:
+                raise TypeError(
+                    f"Incorrect type for field{self.label_str}: {obj!r} is not of type "
+                    f"{self.tp} (and cannot be coerced to it)"
+                ) from e
         return coerced
 
     def coerce(self, object_: ty.Any) -> T:
@@ -345,7 +368,26 @@ class TypeParser(ty.Generic[T]):
                     f"Cannot coerce {obj!r} into {type_}{msg}{self.label_str}"
                 ) from e
 
-        return expand_and_coerce(object_, self.pattern)
+        try:
+            return expand_and_coerce(object_, self.pattern)
+        except TypeError as e:
+            # Special handling for MultiInputObjects (which are annoying)
+            if isinstance(self.pattern, tuple) and self.pattern[0] == MultiInputObj:
+                # Attempt to coerce the object into arg type of the MultiInputObj first,
+                # and if that fails, try to coerce it into a list of the arg type
+                inner_type_parser = copy(self)
+                inner_type_parser.pattern = self.pattern[1][0]
+                try:
+                    return [inner_type_parser.coerce(object_)]
+                except TypeError:
+                    add_exc_note(
+                        e,
+                        "Also failed to coerce to the arg-type of the MultiInputObj "
+                        f"({self.pattern[1][0]})",
+                    )
+                    raise e
+            else:
+                raise e
 
     def check_type(self, type_: ty.Type[ty.Any]):
         """Checks the given type to see whether it matches or is a subtype of the
@@ -392,7 +434,7 @@ class TypeParser(ty.Generic[T]):
                     f"{self.pattern}{self.label_str}"
                 )
             tp_args = get_args(tp)
-            self.check_coercible(tp_origin, pattern_origin)
+            self.check_type_coercible(tp_origin, pattern_origin)
             if issubclass(pattern_origin, ty.Mapping):
                 return check_mapping(tp_args, pattern_args)
             if issubclass(pattern_origin, tuple):
@@ -406,12 +448,31 @@ class TypeParser(ty.Generic[T]):
             # Note that we are deliberately more permissive than typical type-checking
             # here, allowing parents of the target type as well as children,
             # to avoid users having to cast from loosely typed tasks to strict ones
+            if self.match_any_of_union and get_origin(tp) is ty.Union:
+                reasons = []
+                tp_args = get_args(tp)
+                for tp_arg in tp_args:
+                    if self.is_subclass(tp_arg, target):
+                        return
+                    try:
+                        self.check_coercible(tp_arg, target)
+                    except TypeError as e:
+                        reasons.append(e)
+                    else:
+                        return
+                if reasons:
+                    raise TypeError(
+                        f"Cannot coerce any union args {tp_arg} to {target}"
+                        f"{self.label_str}:\n\n"
+                        + "\n\n".join(f"{a} -> {e}" for a, e in zip(tp_args, reasons))
+                    )
             if not self.is_subclass(tp, target):
-                self.check_coercible(tp, target)
+                self.check_type_coercible(tp, target)
 
         def check_union(tp, pattern_args):
             if get_origin(tp) in UNION_TYPES:
-                for tp_arg in get_args(tp):
+                tp_args = get_args(tp)
+                for tp_arg in tp_args:
                     reasons = []
                     for pattern_arg in pattern_args:
                         try:
@@ -421,11 +482,15 @@ class TypeParser(ty.Generic[T]):
                         else:
                             reasons = None
                             break
+                    if self.match_any_of_union and len(reasons) < len(tp_args):
+                        # Just need one of the union args to match
+                        return
                     if reasons:
+                        determiner = "any" if self.match_any_of_union else "all"
                         raise TypeError(
-                            f"Cannot coerce {tp} to "
-                            f"ty.Union[{', '.join(str(a) for a in pattern_args)}]{self.label_str}, "
-                            f"because {tp_arg} cannot be coerced to any of its args:\n\n"
+                            f"Cannot coerce {tp} to ty.Union["
+                            f"{', '.join(str(a) for a in pattern_args)}]{self.label_str}, "
+                            f"because {tp_arg} cannot be coerced to {determiner} of its args:\n\n"
                             + "\n\n".join(
                                 f"{a} -> {e}" for a, e in zip(pattern_args, reasons)
                             )
@@ -482,19 +547,59 @@ class TypeParser(ty.Generic[T]):
             for arg in tp_args:
                 expand_and_check(arg, pattern_args[0])
 
-        return expand_and_check(type_, self.pattern)
+        try:
+            return expand_and_check(type_, self.pattern)
+        except TypeError as e:
+            # Special handling for MultiInputObjects (which are annoying)
+            if not isinstance(self.pattern, tuple) or self.pattern[0] != MultiInputObj:
+                raise e
+            # Attempt to coerce the object into arg type of the MultiInputObj first,
+            # and if that fails, try to coerce it into a list of the arg type
+            inner_type_parser = copy(self)
+            inner_type_parser.pattern = self.pattern[1][0]
+            try:
+                inner_type_parser.check_type(type_)
+            except TypeError:
+                add_exc_note(
+                    e,
+                    "Also failed to coerce to the arg-type of the MultiInputObj "
+                    f"({self.pattern[1][0]})",
+                )
+                raise e
 
-    def check_coercible(
-        self, source: ty.Union[object, type], target: ty.Union[type, ty.Any]
+    def check_coercible(self, source: ty.Any, target: ty.Union[type, ty.Any]):
+        """Checks whether the source object is coercible to the target type given the coercion
+        rules defined in the `coercible` and `not_coercible` attrs
+
+        Parameters
+        ----------
+        source : object
+            the object to be coerced
+        target : type or typing.Any
+            the target type for the object to be coerced to
+
+        Raises
+        ------
+        TypeError
+            If the object cannot be coerced into the target type depending on the explicit
+            inclusions and exclusions set in the `coercible` and `not_coercible` member attrs
+        """
+        self.check_type_coercible(type(source), target, source_repr=repr(source))
+
+    def check_type_coercible(
+        self,
+        source: ty.Union[type, ty.Any],
+        target: ty.Union[type, ty.Any],
+        source_repr: ty.Optional[str] = None,
     ):
-        """Checks whether the source object or type is coercible to the target type
+        """Checks whether the source type is coercible to the target type
         given the coercion rules defined in the `coercible` and `not_coercible` attrs
 
         Parameters
         ----------
-        source : object or type
-            source object or type to be coerced
-        target : type or ty.Any
+        source : type or typing.Any
+            source type to be coerced
+        target : type or typing.Any
             target type for the source to be coerced to
 
         Raises
@@ -504,10 +609,12 @@ class TypeParser(ty.Generic[T]):
             explicit inclusions and exclusions set in the `coercible` and `not_coercible`
             member attrs
         """
+        if source_repr is None:
+            source_repr = repr(source)
         # Short-circuit the basic cases where the source and target are the same
         if source is target:
             return
-        if self.superclass_auto_cast and self.is_subclass(target, type(source)):
+        if self.superclass_auto_cast and self.is_subclass(target, source):
             logger.info(
                 "Attempting to coerce %s into %s due to super-to-sub class coercion "
                 "being permitted",
@@ -519,13 +626,11 @@ class TypeParser(ty.Generic[T]):
         if source_origin is not None:
             source = source_origin
 
-        source_check = self.is_subclass if inspect.isclass(source) else self.is_instance
-
         def matches_criteria(criteria):
             return [
                 (src, tgt)
                 for src, tgt in criteria
-                if source_check(source, src) and self.is_subclass(target, tgt)
+                if self.is_subclass(source, src) and self.is_subclass(target, tgt)
             ]
 
         def type_name(t):
@@ -536,7 +641,7 @@ class TypeParser(ty.Generic[T]):
 
         if not matches_criteria(self.coercible):
             raise TypeError(
-                f"Cannot coerce {repr(source)} into {target}{self.label_str} as the "
+                f"Cannot coerce {source_repr} into {target}{self.label_str} as the "
                 "coercion doesn't match any of the explicit inclusion criteria: "
                 + ", ".join(
                     f"{type_name(s)} -> {type_name(t)}" for s, t in self.coercible
@@ -545,7 +650,7 @@ class TypeParser(ty.Generic[T]):
         matches_not_coercible = matches_criteria(self.not_coercible)
         if matches_not_coercible:
             raise TypeError(
-                f"Cannot coerce {repr(source)} into {target}{self.label_str} as it is explicitly "
+                f"Cannot coerce {source_repr} into {target}{self.label_str} as it is explicitly "
                 "excluded by the following coercion criteria: "
                 + ", ".join(
                     f"{type_name(s)} -> {type_name(t)}"
@@ -639,7 +744,7 @@ class TypeParser(ty.Generic[T]):
                 if inspect.isclass(obj):
                     return candidate is type
                 if issubtype(type(obj), candidate) or (
-                    type(obj) is dict and candidate is ty.Mapping
+                    type(obj) is dict and candidate is ty.Mapping  # noqa: E721
                 ):
                     return True
             else:

@@ -37,6 +37,7 @@ from ..submitter import Submitter
 from ..core import Workflow
 from ... import mark
 from ..specs import SpecInfo, BaseSpec, ShellSpec
+from pydra.utils import exc_info_matches
 
 
 def test_wf_no_input_spec():
@@ -102,13 +103,15 @@ def test_wf_dict_input_and_output_spec():
     wf.inputs.a = "any-string"
     wf.inputs.b = {"foo": 1, "bar": False}
 
-    with pytest.raises(TypeError, match="Cannot coerce 1.0 into <class 'str'>"):
+    with pytest.raises(TypeError) as exc_info:
         wf.inputs.a = 1.0
-    with pytest.raises(
-        TypeError,
-        match=("Could not coerce object, 'bad-value', to any of the union types "),
-    ):
+    assert exc_info_matches(exc_info, "Cannot coerce 1.0 into <class 'str'>")
+
+    with pytest.raises(TypeError) as exc_info:
         wf.inputs.b = {"foo": 1, "bar": "bad-value"}
+    assert exc_info_matches(
+        exc_info, "Could not coerce object, 'bad-value', to any of the union types"
+    )
 
     result = wf()
     assert result.output.a == "any-string"
@@ -5002,14 +5005,13 @@ def test_wf_input_output_typing():
         output_spec={"alpha": int, "beta": ty.List[int]},
     )
 
-    with pytest.raises(
-        TypeError, match="Cannot coerce <class 'list'> into <class 'int'>"
-    ):
+    with pytest.raises(TypeError) as exc_info:
         list_mult_sum(
             scalar=wf.lzin.y,
             in_list=wf.lzin.y,
             name="A",
         )
+    exc_info_matches(exc_info, "Cannot coerce <class 'list'> into <class 'int'>")
 
     wf.add(  # Split over workflow input "x" on "scalar" input
         list_mult_sum(

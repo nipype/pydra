@@ -124,7 +124,10 @@ def test_lazy_getvale():
     lf = LazyIn(task=tn)
     with pytest.raises(Exception) as excinfo:
         lf.inp_c
-    assert str(excinfo.value) == "Task tn has no input attribute inp_c"
+    assert (
+        str(excinfo.value)
+        == "Task 'tn' has no input attribute 'inp_c', available: 'inp_a', 'inp_b'"
+    )
 
 
 def test_input_file_hash_1(tmp_path):
