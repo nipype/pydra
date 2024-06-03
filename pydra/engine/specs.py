@@ -454,31 +454,20 @@ class ShellOutSpec:
                 )
             # assuming that field should have either default or metadata, but not both
             input_value = getattr(inputs, fld.name, attr.NOTHING)
-            if input_value is not attr.NOTHING:
-                if TypeParser.contains_type(FileSet, fld.type):
-                    if input_value is not False:
-                        label = f"output field '{fld.name}' of {self}"
-                        input_value = TypeParser(fld.type, label=label).coerce(
-                            input_value
-                        )
-                        additional_out[fld.name] = input_value
-            elif (
-                fld.default is None or fld.default == attr.NOTHING
-            ) and not fld.metadata:  # TODO: is it right?
-                raise AttributeError("File has to have default value or metadata")
+            if fld.metadata and "callable" in fld.metadata:
+                fld_out = self._field_metadata(fld, inputs, output_dir, outputs)
+            elif fld.type in [int, float, bool, str, list]:
+                raise AttributeError(f"{fld.type} has to have a callable in metadata")
+            elif input_value:  # Map input value through to output
+                fld_out = input_value
             elif fld.default != attr.NOTHING:
-                additional_out[fld.name] = self._field_defaultvalue(fld, output_dir)
-            elif fld.metadata:
-                if (
-                    fld.type in [int, float, bool, str, list]
-                    and "callable" not in fld.metadata
-                ):
-                    raise AttributeError(
-                        f"{fld.type} has to have a callable in metadata"
-                    )
-                additional_out[fld.name] = self._field_metadata(
-                    fld, inputs, output_dir, outputs
-                )
+                fld_out = self._field_defaultvalue(fld, output_dir)
+            else:
+                raise AttributeError("File has to have default value or metadata")
+            if TypeParser.contains_type(FileSet, fld.type):
+                label = f"output field '{fld.name}' of {self}"
+                fld_out = TypeParser(fld.type, label=label).coerce(fld_out)
+            additional_out[fld.name] = fld_out
         return additional_out
 
     def generated_output_names(self, inputs, output_dir):
