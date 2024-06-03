@@ -1,0 +1,7 @@
+pydra.engine.specs module
+=========================
+
+.. automodule:: pydra.engine.specs
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -1,0 +1,7 @@
+pydra.utils.profiler module
+===========================
+
+.. automodule:: pydra.utils.profiler
+   :members:
+   :undoc-members:
+   :show-inheritance:
