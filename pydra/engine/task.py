@@ -468,7 +468,7 @@ class ShellCommandTask(TaskBase):
             cmd_el_str = cmd_el_str.strip().replace("  ", " ")
             if cmd_el_str != "":
                 cmd_add += split_cmd(cmd_el_str)
-        elif field.type is bool:
+        elif field.type is bool and "{" not in argstr:
             # if value is simply True the original argstr is used,
             # if False, nothing is added to the command.
             if value is True:
