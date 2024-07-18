@@ -585,6 +585,7 @@ if HAVE_NUMPY:
         else:
             yield obj.tobytes(order="C")
 
+
 if HAVE_PYTORCH:
 
     @register_serializer(torch.Tensor)
@@ -607,5 +608,6 @@ if HAVE_PANDAS:
     def bytes_repr_pandas(obj: pandas.DataFrame, cache: Cache) -> Iterator[bytes]:
         yield f"{obj.__class__.__module__}{obj.__class__.__name__}:".encode()
         yield from bytes_repr_numpy(obj.to_numpy(), cache)
+
 
 NUMPY_CHUNK_LEN = 8192
