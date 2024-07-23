@@ -21,6 +21,7 @@ def shell_arg(
     keep_extension: bool = True,
     readonly: bool = False,
     formatter: ty.Callable = None,
+    **kwargs,
 ):
     """
     Returns an attrs field with appropriate metadata for it to be added as an argument in
@@ -78,6 +79,8 @@ def shell_arg(
         function can take field (this input field will be passed to the function),
         inputs (entire inputs will be passed) or any input field name (a specific input
         field will be sent).
+    **kwargs
+        remaining keyword arguments are passed onto the underlying attrs.field function
     """
 
     metadata = {
@@ -99,7 +102,9 @@ def shell_arg(
     }
 
     return attrs.field(
-        default=default, metadata={k: v for k, v in metadata.items() if v is not None}
+        default=default,
+        metadata={k: v for k, v in metadata.items() if v is not None},
+        **kwargs,
     )
 
 
@@ -111,6 +116,7 @@ def shell_out(
     keep_extension: bool = True,
     requires: list = None,
     callable: ty.Callable = None,
+    **kwargs,
 ):
     """Returns an attrs field with appropriate metadata for it to be added as an output of
     a Pydra shell command task definition
@@ -142,6 +148,8 @@ def shell_out(
         to the function), output_dir (task output_dir will be used), stdout, stderr
         (stdout and stderr of the task will be sent) inputs (entire inputs will be
         passed) or any input field name (a specific input field will be sent).
+    **kwargs
+        remaining keyword arguments are passed onto the underlying attrs.field function
     """
     metadata = {
         "help_string": help_string,
@@ -153,4 +161,6 @@ def shell_out(
         "callable": callable,
     }
 
-    return attrs.field(metadata={k: v for k, v in metadata.items() if v is not None})
+    return attrs.field(
+        metadata={k: v for k, v in metadata.items() if v is not None}, **kwargs
+    )
