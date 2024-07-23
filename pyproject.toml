@@ -1,6 +1,6 @@
 [build-system]
-requires = ["flit_scm"]
-build-backend = "flit_scm:buildapi"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "pydra"
@@ -18,19 +18,12 @@ dependencies = [
     "typing_extensions >=4.6.3; python_version < '3.10'",
     "typing_utils >=0.1.0; python_version < '3.10'",
 ]
-license = {file = "LICENSE"}
-authors = [
-    {name = "Nipype developers", email = "neuroimaging@python.org"},
-]
+license = { file = "LICENSE" }
+authors = [{ name = "Nipype developers", email = "neuroimaging@python.org" }]
 maintainers = [
-    {name = "Nipype developers", email = "neuroimaging@python.org"},
+    { name = "Nipype developers", email = "neuroimaging@python.org" },
 ]
-keywords = [
-    "brainweb",
-    "dataflow",
-    "neuroimaging",
-    "pydra",
-]
+keywords = ["brainweb", "dataflow", "neuroimaging", "pydra"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -39,28 +32,19 @@ classifiers = [
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
 ]
 dynamic = ["version"]
 
 [project.optional-dependencies]
-psij = [
-    "psij-python",
-]
-dask = [
-    "dask",
-    "distributed",
-]
-dev = [
-    "black",
-    "pre-commit",
-    "pydra[test]",
-]
+psij = ["psij-python"]
+dask = ["dask", "distributed"]
+dev = ["black", "pre-commit", "pydra[test]"]
 doc = [
     "packaging",
     "sphinx ==6.2.1",
@@ -84,9 +68,7 @@ test = [
     "boutiques",
     "pympler",
 ]
-jupyter = [
-    "nest_asyncio"
-]
+jupyter = ["nest_asyncio"]
 # Aliases
 tests = ["pydra[test]"]
 docs = ["pydra[doc]"]
@@ -97,18 +79,23 @@ documentation = "https://nipype.github.io/pydra/"
 homepage = "https://nipype.github.io/pydra/"
 repository = "https://github.com/nipype/pydra.git"
 
-[tool.flit.module]
-name = "pydra"
+[tool.hatch.build]
+packages = ["pydra"]
+exclude = ["tests"]
+include = ["./pydra"]
 
-[tool.flit.sdist]
-exclude = [".gitignore"]
+[tool.hatch.version]
+source = "vcs"
 
-[tool.setuptools_scm]
-write_to = "pydra/_version.py"
+[tool.hatch.build.hooks.vcs]
+version-file = "pydra/engine/_version.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.black]
-target-version = ['py37', 'py38']
-exclude = "pydra/_version.py"
+target-version = ['py38']
+exclude = "pydra/engine/_version.py"
 
 [tool.codespell]
 ignore-words-list = "nd,afile,inpt"
