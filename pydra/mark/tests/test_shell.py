@@ -226,6 +226,53 @@ def A(request):
     return A
 
 
+def test_shell_output_file_template(A):
+    assert "y" in [a.name for a in attrs.fields(A.Outputs)]
+
+
+def test_shell_output_field_name_static():
+    @shell_task
+    class A:
+        executable = "cp"
+
+        class Inputs:
+            x: os.PathLike = shell_arg(
+                help_string="an input file", argstr="", position=0
+            )
+            y: str = shell_arg(
+                help_string="path of output file",
+                output_file_template="{x}_out",
+                output_field_name="y_out",
+                argstr="",
+            )
+
+    assert "y_out" in [a.name for a in attrs.fields(A.Outputs)]
+
+
+def test_shell_output_field_name_dynamic():
+    A = shell_task(
+        "A",
+        executable="cp",
+        input_fields={
+            "x": {
+                "type": os.PathLike,
+                "help_string": "an input file",
+                "argstr": "",
+                "position": 0,
+            },
+            "y": {
+                "type": str,
+                "help_string": "path of output file",
+                "argstr": "",
+                "output_field_name": "y_out",
+                "output_file_template": "{x}_out",
+            },
+        },
+    )
+
+    assert "y_out" in [a.name for a in attrs.fields(A.Outputs)]
+
+
 def get_file_size(y: Path):
     result = os.stat(y)
     return result.st_size
@@ -357,3 +404,64 @@ def test_shell_inputs_outputs_bases_static(tmpdir):
 
     result = b()
     assert result.output.entries == [".", "..", ".hidden"]
+
+
+def test_shell_missing_executable_static():
+    with pytest.raises(RuntimeError, match="should contain an `executable`"):
+
+        @shell_task
+        class A:
+            class Inputs:
+                directory: os.PathLike = shell_arg(
+                    help_string="input directory", argstr="", position=-1
+                )
+
+            class Outputs:
+                entries: list = shell_out(
+                    help_string="list of entries returned by ls command",
+                    callable=list_entries,
+                )
+
+
+def test_shell_missing_executable_dynamic():
+    with pytest.raises(RuntimeError, match="should contain an `executable`"):
+        A = shell_task(
+            "A",
+            executable=None,
+            input_fields={
+                "directory": {
+                    "type": os.PathLike,
+                    "help_string": "input directory",
+                    "argstr": "",
+                    "position": -1,
+                }
+            },
+            output_fields={
+                "entries": {
+                    "type": list,
+                    "help_string": "list of entries returned by ls command",
+                    "callable": list_entries,
+                }
+            },
+        )
+
+
+def test_shell_missing_inputs_static():
+    with pytest.raises(RuntimeError, match="should contain an `Inputs`"):
+
+        @shell_task
+        class A:
+            executable = "ls"
+
+            class Outputs:
+                entries: list = shell_out(
+                    help_string="list of entries returned by ls command",
+                    callable=list_entries,
+                )
+
+
+def test_shell_decorator_misuse(A):
+    with pytest.raises(
+        RuntimeError, match=("`shell_task` should not be provided any other arguments")
+    ):
+        shell_task(A, executable="cp")
