@@ -656,6 +656,7 @@ def argstr_formatting(argstr, inputs, value_updates=None):
         fld_attr = getattr(attrs.fields(type(inputs)), fld_name)
         if fld_value is attr.NOTHING or (
             fld_value is False
+            and fld_attr.type is not bool
             and TypeParser.matches_type(fld_attr.type, ty.Union[Path, bool])
         ):
             # if value is NOTHING, nothing should be added to the command
