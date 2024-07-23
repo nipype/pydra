@@ -3,10 +3,10 @@ import tempfile
 from pathlib import Path
 import attrs
 import pydra.engine
-from pydra.mark import shell_arg, shell_out
+from pydra.mark import shell_task, shell_arg, shell_out
 
 
-def test_shell_cmd():
+def test_shell_task_full():
     @attrs.define(kw_only=True, slots=False)
     class LsInputSpec(pydra.specs.ShellSpec):
         directory: os.PathLike = shell_arg(
