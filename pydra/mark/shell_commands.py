@@ -57,16 +57,45 @@ def shell_task(
                 "input_field arguments"
             )
         name = klass_or_name
+
         if output_fields is None:
             output_fields = {}
-        if bases is None:
-            bases = [pydra.engine.task.ShellCommandTask]
-        if input_bases is None:
-            input_bases = [pydra.engine.specs.ShellSpec]
-        if output_bases is None:
-            output_bases = [pydra.engine.specs.ShellOutSpec]
-        Inputs = type("Inputs", tuple(input_bases), input_fields)
-        Outputs = type("Outputs", tuple(output_bases), output_fields)
+
+        # Ensure bases are lists and can be modified
+        bases = list(bases) if bases is not None else []
+        input_bases = list(input_bases) if input_bases is not None else []
+        output_bases = list(output_bases) if output_bases is not None else []
+
+        # Ensure base classes included somewhere in MRO
+        def ensure_base_of(base_class: type, bases_list: list[type]):
+            if not any(issubclass(b, base_class) for b in bases_list):
+                bases_list.append(base_class)
+
+        ensure_base_of(pydra.engine.task.ShellCommandTask, bases)
+        ensure_base_of(pydra.engine.specs.ShellSpec, input_bases)
+        ensure_base_of(pydra.engine.specs.ShellOutSpec, output_bases)
+
+        def convert_to_attrs(fields: dict[str, dict[str, ty.Any]], attrs_func):
+            annotations = {}
+            attrs_dict = {"__annotations__": annotations}
+            for name, dct in fields.items():
+                kwargs = dict(dct)  # copy to avoid modifying input to outer function
+                annotations[name] = kwargs.pop("type")
+                attrs_dict[name] = attrs_func(**kwargs)
+            return attrs_dict
+
+        Inputs = attrs.define(kw_only=True, slots=False)(
+            type(
+                "Inputs", tuple(input_bases), convert_to_attrs(input_fields, shell_arg)
+            )
+        )
+        Outputs = attrs.define(kw_only=True, slots=False)(
+            type(
+                "Outputs",
+                tuple(output_bases),
+                convert_to_attrs(output_fields, shell_out),
+            )
+        )
     else:
         if (
             executable,
@@ -96,39 +125,43 @@ def shell_task(
                 "Classes decorated by `shell_task` should contain an `Inputs` class attribute "
                 "specifying the inputs to the shell tool"
             )
-        if not issubclass(Inputs, pydra.engine.specs.ShellSpec):
-            Inputs = type("Inputs", (Inputs, pydra.engine.specs.ShellSpec), {})
+
         try:
             Outputs = klass.Outputs
         except KeyError:
             Outputs = type("Outputs", (pydra.engine.specs.ShellOutSpec,))
+
+        Inputs = attrs.define(kw_only=True, slots=False)(Inputs)
+        Outputs = attrs.define(kw_only=True, slots=False)(Outputs)
+
+        if not issubclass(Inputs, pydra.engine.specs.ShellSpec):
+            Inputs = attrs.define(kw_only=True, slots=False)(
+                type("Inputs", (Inputs, pydra.engine.specs.ShellSpec), {})
+            )
+
+        if not issubclass(Outputs, pydra.engine.specs.ShellOutSpec):
+            Outputs = attrs.define(kw_only=True, slots=False)(
+                type("Outputs", (Outputs, pydra.engine.specs.ShellOutSpec), {})
+            )
+
         bases = [klass]
         if not issubclass(klass, pydra.engine.task.ShellCommandTask):
             bases.append(pydra.engine.task.ShellCommandTask)
 
-    Inputs = attrs.define(kw_only=True, slots=False)(Inputs)
-    Outputs = attrs.define(kw_only=True, slots=False)(Outputs)
-
     dct = {
         "executable": executable,
-        "Inputs": Outputs,
-        "Outputs": Inputs,
-        "inputs": attrs.field(factory=Inputs),
-        "outputs": attrs.field(factory=Outputs),
+        "Inputs": Inputs,
+        "Outputs": Outputs,
         "__annotations__": {
             "executable": str,
             "inputs": Inputs,
             "outputs": Outputs,
+            "Inputs": type,
+            "Outputs": type,
         },
     }
 
-    return attrs.define(kw_only=True, slots=False)(
-        type(
-            name,
-            tuple(bases),
-            dct,
-        )
-    )
+    return type(name, tuple(bases), dct)
 
 
 def shell_arg(
