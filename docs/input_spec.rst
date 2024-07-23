@@ -175,7 +175,7 @@ In the example we used multiple keys in the metadata dictionary including `help_
 
 
 `shell_arg` Function
-------------------
+--------------------
 
 For convenience, there is a function in `pydra.mark` called `shell_arg()`, which will
 takes the above metadata values as arguments and inserts them into the metadata passed
