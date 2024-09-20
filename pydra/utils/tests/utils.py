@@ -1,16 +1,16 @@
-from fileformats.generic import File
+from fileformats.generic import BinaryFile, File
 from fileformats.core.mixin import WithSeparateHeader, WithMagicNumber
 from pydra import mark
 from pydra.engine.task import ShellCommandTask
 from pydra.engine import specs
 
 
-class MyFormat(WithMagicNumber, File):
+class MyFormat(WithMagicNumber, BinaryFile):
     ext = ".my"
     magic_number = b"MYFORMAT"
 
 
-class MyHeader(File):
+class MyHeader(BinaryFile):
     ext = ".hdr"
 
 
@@ -18,7 +18,7 @@ class MyFormatX(WithSeparateHeader, MyFormat):
     header_type = MyHeader
 
 
-class MyOtherFormatX(WithMagicNumber, WithSeparateHeader, File):
+class MyOtherFormatX(WithMagicNumber, WithSeparateHeader, BinaryFile):
     magic_number = b"MYFORMAT"
     ext = ".my"
     header_type = MyHeader
