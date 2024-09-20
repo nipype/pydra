@@ -4,11 +4,9 @@ import attr
 import typing as ty
 import numpy as np
 import time
-from unittest import mock
 from pathlib import Path
 import pytest
-import time
-from fileformats.generic import File
+from fileformats.generic import BinaryFile
 import pydra.mark
 
 from .utils import (
@@ -1606,7 +1604,7 @@ def test_task_files_cachelocations(plugin_dask_opt, tmp_path):
     assert not nn2.output_dir.exists()
 
 
-class OverriddenContentsFile(File):
+class OverriddenContentsFile(BinaryFile):
     """A class for testing purposes, to that enables you to override the contents
     of the file to allow you to check whether the persistent cache is used."""
 
@@ -1614,22 +1612,22 @@ class OverriddenContentsFile(File):
         self,
         fspaths: ty.Iterator[Path],
         contents: ty.Optional[bytes] = None,
-        metadata: ty.Dict[str, ty.Any] = None,
+        metadata: ty.Optional[ty.Dict[str, ty.Any]] = None,
     ):
         super().__init__(fspaths, metadata=metadata)
         self._contents = contents
 
-    def byte_chunks(self, **kwargs) -> ty.Generator[ty.Tuple[str, bytes], None, None]:
+    def byte_chunks(self, **kwargs) -> ty.Generator[ty.Tuple[str, ty.Iterator[bytes]], None, None]:  # type: ignore[override]
         if self._contents is not None:
             yield (str(self.fspath), iter([self._contents]))
         else:
             yield from super().byte_chunks(**kwargs)
 
     @property
-    def contents(self):
+    def raw_contents(self) -> bytes:  # type: ignore[override]
         if self._contents is not None:
             return self._contents
-        return super().contents
+        return super().raw_contents
 
 
 def test_task_files_persistentcache(tmp_path):
@@ -1645,7 +1643,7 @@ def test_task_files_persistentcache(tmp_path):
 
     @pydra.mark.task
     def read_contents(x: OverriddenContentsFile) -> bytes:
-        return x.contents
+        return x.raw_contents
 
     assert (
         read_contents(x=test_file, cache_dir=cache_dir)(plugin="serial").output.out
