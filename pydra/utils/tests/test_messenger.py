@@ -35,7 +35,7 @@ def test_file_messenger(tmpdir):
     assert len(glob(str(tmpdir / "messages" / "*.jsonld"))) == 2
 
 
-@pytest.mark.flaky(reruns=3)
+@pytest.mark.flaky(max_runs=3)
 def test_collect_messages(tmpdir):
     tmpdir.chdir()
 

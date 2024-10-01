@@ -358,7 +358,7 @@ def test_odir_init():
 # Tests for tasks without state (i.e. no splitter)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_1(plugin_dask_opt, tmp_path):
     """task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
@@ -399,7 +399,7 @@ def test_task_nostate_1_call():
     assert nn.output_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_1_call_subm(plugin_dask_opt, tmp_path):
     """task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
@@ -417,7 +417,7 @@ def test_task_nostate_1_call_subm(plugin_dask_opt, tmp_path):
     assert nn.output_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_1_call_plug(plugin_dask_opt, tmp_path):
     """task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
@@ -549,7 +549,7 @@ def test_task_nostate_7():
 # Testing caching for tasks without states
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
     """task with provided cache_dir using pytest tmp_path"""
     cache_dir = tmp_path / "test_task_nostate"
@@ -566,7 +566,7 @@ def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
     assert results.output.out == 5
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_cachedir_relativepath(tmp_path, plugin_dask_opt):
     """task with provided cache_dir as relative path"""
     os.chdir(tmp_path)
@@ -587,7 +587,7 @@ def test_task_nostate_cachedir_relativepath(tmp_path, plugin_dask_opt):
     shutil.rmtree(cache_dir)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_cachelocations(plugin_dask_opt, tmp_path):
     """
     Two identical tasks with provided cache_dir;
@@ -729,7 +729,7 @@ def test_task_nostate_cachelocations_updated(plugin, tmp_path):
 # Tests for tasks with states (i.e. with splitter)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 @pytest.mark.parametrize("input_type", ["list", "array"])
 def test_task_state_1(plugin_dask_opt, input_type, tmp_path):
     """task with the simplest splitter"""
@@ -1074,7 +1074,7 @@ def test_task_state_6a(plugin, tmp_path):
         assert odir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_state_comb_1(plugin_dask_opt, tmp_path):
     """task with the simplest splitter and combiner"""
     nn = fun_addtwo(name="NA").split(a=[3, 5], splitter="a").combine(combiner="a")
@@ -1451,7 +1451,7 @@ def test_task_state_comb_contdim_2(tmp_path):
 # Testing caching for tasks with states
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_state_cachedir(plugin_dask_opt, tmp_path):
     """task with a state and provided cache_dir using pytest tmp_path"""
     cache_dir = tmp_path / "test_task_nostate"

@@ -21,7 +21,7 @@ pytestmark = pytest.mark.skip()
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=3)  # need for travis
+@pytest.mark.flaky(max_runs=3)  # need for travis
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
@@ -45,7 +45,7 @@ def test_boutiques_1(maskfile, plugin, results_function, tmpdir, data_tests_dir)
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=3)
+@pytest.mark.flaky(max_runs=3)
 def test_boutiques_spec_1(data_tests_dir):
     """testing spec: providing input/output fields names"""
     btask = BoshTask(
@@ -70,7 +70,7 @@ def test_boutiques_spec_1(data_tests_dir):
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=3)
+@pytest.mark.flaky(max_runs=3)
 def test_boutiques_spec_2(data_tests_dir):
     """testing spec: providing partial input/output fields names"""
     btask = BoshTask(
@@ -93,7 +93,7 @@ def test_boutiques_spec_2(data_tests_dir):
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=3)
+@pytest.mark.flaky(max_runs=3)
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
 )
@@ -125,7 +125,7 @@ def test_boutiques_wf_1(maskfile, plugin, tmpdir, infile):
 
 @no_win
 @need_bosh_docker
-@pytest.mark.flaky(reruns=3)
+@pytest.mark.flaky(max_runs=3)
 @pytest.mark.xfail(reason="issues with bosh for 4472771")
 @pytest.mark.parametrize(
     "maskfile", ["test_brain.nii.gz", "test_brain", "test_brain.nii"]
