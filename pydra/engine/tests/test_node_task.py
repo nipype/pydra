@@ -4,11 +4,9 @@ import attr
 import typing as ty
 import numpy as np
 import time
-from unittest import mock
 from pathlib import Path
 import pytest
-import time
-from fileformats.generic import File
+from fileformats.generic import BinaryFile
 import pydra.mark
 
 from .utils import (
@@ -360,7 +358,7 @@ def test_odir_init():
 # Tests for tasks without state (i.e. no splitter)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_1(plugin_dask_opt, tmp_path):
     """task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
@@ -401,7 +399,7 @@ def test_task_nostate_1_call():
     assert nn.output_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_1_call_subm(plugin_dask_opt, tmp_path):
     """task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
@@ -419,7 +417,7 @@ def test_task_nostate_1_call_subm(plugin_dask_opt, tmp_path):
     assert nn.output_dir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_1_call_plug(plugin_dask_opt, tmp_path):
     """task without splitter"""
     nn = fun_addtwo(name="NA", a=3)
@@ -551,7 +549,7 @@ def test_task_nostate_7():
 # Testing caching for tasks without states
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
     """task with provided cache_dir using pytest tmp_path"""
     cache_dir = tmp_path / "test_task_nostate"
@@ -568,7 +566,7 @@ def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
     assert results.output.out == 5
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_cachedir_relativepath(tmp_path, plugin_dask_opt):
     """task with provided cache_dir as relative path"""
     os.chdir(tmp_path)
@@ -589,7 +587,7 @@ def test_task_nostate_cachedir_relativepath(tmp_path, plugin_dask_opt):
     shutil.rmtree(cache_dir)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_nostate_cachelocations(plugin_dask_opt, tmp_path):
     """
     Two identical tasks with provided cache_dir;
@@ -731,7 +729,7 @@ def test_task_nostate_cachelocations_updated(plugin, tmp_path):
 # Tests for tasks with states (i.e. with splitter)
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 @pytest.mark.parametrize("input_type", ["list", "array"])
 def test_task_state_1(plugin_dask_opt, input_type, tmp_path):
     """task with the simplest splitter"""
@@ -1076,7 +1074,7 @@ def test_task_state_6a(plugin, tmp_path):
         assert odir.exists()
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_state_comb_1(plugin_dask_opt, tmp_path):
     """task with the simplest splitter and combiner"""
     nn = fun_addtwo(name="NA").split(a=[3, 5], splitter="a").combine(combiner="a")
@@ -1453,7 +1451,7 @@ def test_task_state_comb_contdim_2(tmp_path):
 # Testing caching for tasks with states
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_task_state_cachedir(plugin_dask_opt, tmp_path):
     """task with a state and provided cache_dir using pytest tmp_path"""
     cache_dir = tmp_path / "test_task_nostate"
@@ -1606,7 +1604,7 @@ def test_task_files_cachelocations(plugin_dask_opt, tmp_path):
     assert not nn2.output_dir.exists()
 
 
-class OverriddenContentsFile(File):
+class OverriddenContentsFile(BinaryFile):
     """A class for testing purposes, to that enables you to override the contents
     of the file to allow you to check whether the persistent cache is used."""
 
@@ -1614,22 +1612,22 @@ class OverriddenContentsFile(File):
         self,
         fspaths: ty.Iterator[Path],
         contents: ty.Optional[bytes] = None,
-        metadata: ty.Dict[str, ty.Any] = None,
+        metadata: ty.Optional[ty.Dict[str, ty.Any]] = None,
     ):
         super().__init__(fspaths, metadata=metadata)
         self._contents = contents
 
-    def byte_chunks(self, **kwargs) -> ty.Generator[ty.Tuple[str, bytes], None, None]:
+    def byte_chunks(self, **kwargs) -> ty.Generator[ty.Tuple[str, ty.Iterator[bytes]], None, None]:  # type: ignore[override]
         if self._contents is not None:
             yield (str(self.fspath), iter([self._contents]))
         else:
             yield from super().byte_chunks(**kwargs)
 
     @property
-    def contents(self):
+    def raw_contents(self) -> bytes:  # type: ignore[override]
         if self._contents is not None:
             return self._contents
-        return super().contents
+        return super().raw_contents
 
 
 def test_task_files_persistentcache(tmp_path):
@@ -1645,7 +1643,7 @@ def test_task_files_persistentcache(tmp_path):
 
     @pydra.mark.task
     def read_contents(x: OverriddenContentsFile) -> bytes:
-        return x.contents
+        return x.raw_contents
 
     assert (
         read_contents(x=test_file, cache_dir=cache_dir)(plugin="serial").output.out

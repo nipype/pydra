@@ -18,19 +18,12 @@ dependencies = [
     "typing_extensions >=4.6.3; python_version < '3.10'",
     "typing_utils >=0.1.0; python_version < '3.10'",
 ]
-license = {file = "LICENSE"}
-authors = [
-    {name = "Nipype developers", email = "neuroimaging@python.org"},
-]
+license = { file = "LICENSE" }
+authors = [{ name = "Nipype developers", email = "neuroimaging@python.org" }]
 maintainers = [
-    {name = "Nipype developers", email = "neuroimaging@python.org"},
+    { name = "Nipype developers", email = "neuroimaging@python.org" },
 ]
-keywords = [
-    "brainweb",
-    "dataflow",
-    "neuroimaging",
-    "pydra",
-]
+keywords = ["brainweb", "dataflow", "neuroimaging", "pydra"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -49,18 +42,9 @@ classifiers = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-psij = [
-    "psij-python",
-]
-dask = [
-    "dask",
-    "distributed",
-]
-dev = [
-    "black",
-    "pre-commit",
-    "pydra[test]",
-]
+psij = ["psij-python"]
+dask = ["dask", "distributed"]
+dev = ["black", "pre-commit", "pydra[test]"]
 doc = [
     "packaging",
     "sphinx ==6.2.1",
@@ -69,10 +53,13 @@ doc = [
     "sphinxcontrib-versioning",
 ]
 test = [
+    "flaky",
+    "pympler",
+    "pyld",
     "pytest >=6.2.5",
     "pytest-cov",
     "pytest-env",
-    "pytest-xdist <2.0",
+    "pytest-xdist",
     "pytest-rerunfailures",
     "pytest-timeout",
     "codecov",
@@ -84,9 +71,7 @@ test = [
     "boutiques",
     "pympler",
 ]
-jupyter = [
-    "nest_asyncio"
-]
+jupyter = ["nest_asyncio"]
 # Aliases
 tests = ["pydra[test]"]
 docs = ["pydra[doc]"]

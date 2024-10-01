@@ -134,7 +134,7 @@ def test_wf_in_wf(plugin, tmpdir):
     assert res.output.out == 7
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_wf2(plugin_dask_opt, tmpdir):
     """workflow as a node
     workflow-node with one task and no splitter
@@ -156,7 +156,7 @@ def test_wf2(plugin_dask_opt, tmpdir):
     assert res.output.out == 3
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
+@pytest.mark.flaky(max_runs=2)  # when dask
 def test_wf_with_state(plugin_dask_opt, tmpdir):
     wf = Workflow(name="wf_with_state", input_spec=["x"])
     wf.add(sleep_add_one(name="taska", x=wf.lzin.x))
@@ -235,7 +235,7 @@ def test_slurm_wf_state(tmpdir):
 
 
 @need_slurm
-@pytest.mark.flaky(reruns=3)
+@pytest.mark.flaky(max_runs=3)
 def test_slurm_max_jobs(tmpdir):
     wf = Workflow("new_wf", input_spec=["x", "y"], cache_dir=tmpdir)
     wf.inputs.x = 5
@@ -338,7 +338,7 @@ def cancel(job_name_part):
     return proc.stderr.decode("utf-8").strip()
 
 
-@pytest.mark.flaky(reruns=1)
+@pytest.mark.flaky(max_runs=1)
 @need_slurm
 def test_slurm_cancel_rerun_1(tmpdir):
     """testing that tasks run with slurm is re-queue
@@ -371,7 +371,7 @@ def test_slurm_cancel_rerun_1(tmpdir):
     assert script_dir.exists()
 
 
-@pytest.mark.flaky(reruns=1)
+@pytest.mark.flaky(max_runs=1)
 @need_slurm
 def test_slurm_cancel_rerun_2(tmpdir):
     """testing that tasks run with slurm that has --no-requeue
