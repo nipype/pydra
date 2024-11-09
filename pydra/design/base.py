@@ -403,7 +403,7 @@ def extract_inputs_and_outputs_from_function(
             ]
             if all(re.match(r"^\w+$", o) for o in implicit_outputs):
                 outputs = implicit_outputs
-    if isinstance(outputs, list) and len(outputs) > 1:
+    if len(outputs) > 1:
         if return_type is not ty.Any:
             if ty.get_origin(return_type) is not tuple:
                 raise ValueError(
@@ -416,18 +416,24 @@ def extract_inputs_and_outputs_from_function(
                 f"Length of the outputs ({outputs}) does not match that "
                 f"of the return types ({return_types})"
             )
-        outputs = dict(zip(outputs, return_types))
-    elif not isinstance(outputs, dict):
-        if outputs:
-            if not isinstance(outputs, list):
-                raise ValueError(
-                    f"Unrecognised format for outputs ({outputs}), should be a list "
-                    "or dict"
-                )
-            output_name = outputs[0]
+        output_types = dict(zip(outputs, return_types))
+        if isinstance(outputs, dict):
+            for output_name, output in outputs.items():
+                if isinstance(output, Out) and output.type is ty.Any:
+                    output.type = output_types[output_name]
         else:
-            output_name = "out"
-        outputs = {output_name: return_type}
+            outputs = output_types
+
+    elif outputs:
+        output_name, output = next(iter(outputs.items()))
+        if isinstance(output, Out):
+            if output.type is ty.Any:
+                output.type = return_type
+        elif output is ty.Any:
+            output = return_type
+        outputs = {output_name: output}
+    else:
+        outputs = {"out": return_type}
     return inputs, outputs
 
 
