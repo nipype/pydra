@@ -1,6 +1,6 @@
 from ..core import Workflow
 from ..helpers import load_task
-from ... import mark
+from pydra import mark
 
 import numpy as np
 from pympler import asizeof

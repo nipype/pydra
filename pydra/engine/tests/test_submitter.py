@@ -17,10 +17,10 @@ from .utils import (
     gen_basic_wf_with_threadcount,
     gen_basic_wf_with_threadcount_concurrent,
 )
-from ..core import Workflow, TaskBase
+from ..core import Workflow, Task
 from ..submitter import Submitter
 from ..workers import SerialWorker
-from ... import mark
+from pydra import mark
 from pathlib import Path
 from datetime import datetime
 
@@ -685,7 +685,7 @@ class BYOAddVarWorker(SerialWorker):
         self.add_var = add_var
 
     async def exec_serial(self, runnable, rerun=False, environment=None):
-        if isinstance(runnable, TaskBase):
+        if isinstance(runnable, Task):
             with patch.dict(os.environ, {"BYO_ADD_VAR": str(self.add_var)}):
                 result = runnable._run(rerun, environment=environment)
             return result

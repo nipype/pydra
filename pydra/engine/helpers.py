@@ -7,13 +7,11 @@ import os
 import sys
 from uuid import uuid4
 import getpass
-import typing as ty
 import subprocess as sp
 import re
 from time import strftime
 from traceback import format_exception
 import attr
-import attrs  # New defaults
 from filelock import SoftFileLock, Timeout
 import cloudpickle as cp
 from .specs import (
@@ -21,46 +19,12 @@ from .specs import (
     attr_fields,
     Result,
     LazyField,
-    File,
 )
 from .helpers_file import copy_nested_files
-from ..utils.typing import TypeParser
 from fileformats.core import FileSet
-from .specs import MultiInputFile, MultiInputObj, MultiOutputObj, MultiOutputFile
 
 
-def ensure_list(obj, tuple2list=False):
-    """
-    Return a list whatever the input object is.
-
-    Examples
-    --------
-    >>> ensure_list(list("abc"))
-    ['a', 'b', 'c']
-    >>> ensure_list("abc")
-    ['abc']
-    >>> ensure_list(tuple("abc"))
-    [('a', 'b', 'c')]
-    >>> ensure_list(tuple("abc"), tuple2list=True)
-    ['a', 'b', 'c']
-    >>> ensure_list(None)
-    []
-    >>> ensure_list(5.0)
-    [5.0]
-
-    """
-    if obj is attr.NOTHING:
-        return attr.NOTHING
-    if obj is None:
-        return []
-    # list or numpy.array (this might need some extra flag in case an array has to be converted)
-    elif isinstance(obj, list) or hasattr(obj, "__array__"):
-        return obj
-    elif tuple2list and isinstance(obj, tuple):
-        return list(obj)
-    elif isinstance(obj, LazyField):
-        return obj
-    return [obj]
+# from .specs import MultiInputFile, MultiInputObj, MultiOutputObj, MultiOutputFile
 
 
 def from_list_if_single(obj):
@@ -78,10 +42,9 @@ def from_list_if_single(obj):
 def print_help(obj):
     """Visit a task object and print its input/output interface."""
     lines = [f"Help for {obj.__class__.__name__}"]
-    input_klass = make_klass(obj.input_spec)
-    if attr.fields(input_klass):
+    if attr.fields(obj.interface):
         lines += ["Input Parameters:"]
-    for f in attr.fields(input_klass):
+    for f in attr.fields(obj.interface):
         default = ""
         if f.default != attr.NOTHING and not f.name.startswith("_"):
             default = f" (default: {f.default})"
@@ -90,7 +53,7 @@ def print_help(obj):
         except AttributeError:
             name = str(f.type)
         lines += [f"- {f.name}: {name}{default}"]
-    output_klass = make_klass(obj.output_spec)
+    output_klass = obj.interface.Outputs
     if attr.fields(output_klass):
         lines += ["Output Parameters:"]
     for f in attr.fields(output_klass):
@@ -212,95 +175,6 @@ def gather_runtime_info(fname):
     }
     """
     return runtime
-
-
-def make_klass(spec):
-    """
-    Create a data class given a spec.
-
-    Parameters
-    ----------
-    spec :
-        TODO
-
-    """
-    if spec is None:
-        return None
-    fields = spec.fields
-    if fields:
-        newfields = {}
-        for item in fields:
-            if len(item) == 2:
-                name = item[0]
-                if isinstance(item[1], attr._make._CountingAttr):
-                    newfield = item[1]
-                else:
-                    newfield = attr.ib(type=item[1])
-            else:
-                if (
-                    any([isinstance(ii, attr._make._CountingAttr) for ii in item])
-                    or len(item) > 4
-                ):
-                    raise ValueError(
-                        "syntax not valid, you can use (name, attr), "
-                        "(name, type, default), (name, type, default, metadata)"
-                        "or (name, type, metadata)"
-                    )
-                kwargs = {}
-                if len(item) == 3:
-                    name, tp = item[:2]
-                    if isinstance(item[-1], dict) and "help_string" in item[-1]:
-                        mdata = item[-1]
-                        kwargs["metadata"] = mdata
-                    else:
-                        kwargs["default"] = item[-1]
-                elif len(item) == 4:
-                    name, tp, dflt, mdata = item
-                    kwargs["default"] = dflt
-                    kwargs["metadata"] = mdata
-                newfield = attr.ib(
-                    type=tp,
-                    **kwargs,
-                )
-            checker_label = f"'{name}' field of {spec.name}"
-            type_checker = TypeParser[newfield.type](
-                newfield.type, label=checker_label, superclass_auto_cast=True
-            )
-            if newfield.type in (MultiInputObj, MultiInputFile):
-                converter = attr.converters.pipe(ensure_list, type_checker)
-            elif newfield.type in (MultiOutputObj, MultiOutputFile):
-                converter = attr.converters.pipe(from_list_if_single, type_checker)
-            else:
-                converter = type_checker
-            newfield.converter = converter
-            newfield.on_setattr = attr.setters.convert
-            if "allowed_values" in newfield.metadata:
-                if newfield._validator is None:
-                    newfield._validator = allowed_values_validator
-                elif isinstance(newfield._validator, ty.Iterable):
-                    if allowed_values_validator not in newfield._validator:
-                        newfield._validator.append(allowed_values_validator)
-                elif newfield._validator is not allowed_values_validator:
-                    newfield._validator = [
-                        newfield._validator,
-                        allowed_values_validator,
-                    ]
-            newfields[name] = newfield
-        fields = newfields
-    return attrs.make_class(
-        spec.name, fields, bases=spec.bases, kw_only=True, on_setattr=None
-    )
-
-
-def allowed_values_validator(_, attribute, value):
-    """checking if the values is in allowed_values"""
-    allowed = attribute.metadata["allowed_values"]
-    if value is attr.NOTHING or isinstance(value, LazyField):
-        pass
-    elif value not in allowed:
-        raise ValueError(
-            f"value of {attribute.name} has to be from {allowed}, but {value} provided"
-        )
 
 
 async def read_stream_and_display(stream, display):
@@ -482,36 +356,36 @@ def get_open_loop():
     return loop
 
 
-def output_from_inputfields(output_spec, input_spec):
-    """
-    Collect values from output from input fields.
-    If names_only is False, the output_spec is updated,
-    if names_only is True only the names are returned
+# def output_from_inputfields(interface: "Interface"):
+#     """
+#     Collect values from output from input fields.
+#     If names_only is False, the output_spec is updated,
+#     if names_only is True only the names are returned
 
-    Parameters
-    ----------
-    output_spec :
-        TODO
-    input_spec :
-        TODO
+#     Parameters
+#     ----------
+#     output_spec :
+#         TODO
+#     input_spec :
+#         TODO
 
-    """
-    current_output_spec_names = [f.name for f in attr.fields(make_klass(output_spec))]
-    new_fields = []
-    for fld in attr.fields(make_klass(input_spec)):
-        if "output_file_template" in fld.metadata:
-            if "output_field_name" in fld.metadata:
-                field_name = fld.metadata["output_field_name"]
-            else:
-                field_name = fld.name
-            # not adding if the field already in the output_spec
-            if field_name not in current_output_spec_names:
-                # TODO: should probably remove some of the keys
-                new_fields.append(
-                    (field_name, attr.ib(type=File, metadata=fld.metadata))
-                )
-    output_spec.fields += new_fields
-    return output_spec
+#     """
+#     current_output_spec_names = [f.name for f in attr.fields(interface.Outputs)]
+#     new_fields = []
+#     for fld in attr.fields(interface):
+#         if "output_file_template" in fld.metadata:
+#             if "output_field_name" in fld.metadata:
+#                 field_name = fld.metadata["output_field_name"]
+#             else:
+#                 field_name = fld.name
+#             # not adding if the field already in the output_spec
+#             if field_name not in current_output_spec_names:
+#                 # TODO: should probably remove some of the keys
+#                 new_fields.append(
+#                     (field_name, attr.ib(type=File, metadata=fld.metadata))
+#                 )
+#     output_spec.fields += new_fields
+#     return output_spec
 
 
 def get_available_cpus():
@@ -640,43 +514,6 @@ def position_sort(args):
     return [arg for _, arg in pos] + none + [arg for _, arg in neg]
 
 
-def argstr_formatting(argstr, inputs, value_updates=None):
-    """formatting argstr that have form {field_name},
-    using values from inputs and updating with value_update if provided
-    """
-    inputs_dict = attr.asdict(inputs, recurse=False)
-    # if there is a value that has to be updated (e.g. single value from a list)
-    if value_updates:
-        inputs_dict.update(value_updates)
-    # getting all fields that should be formatted, i.e. {field_name}, ...
-    inp_fields = parse_format_string(argstr)
-    val_dict = {}
-    for fld_name in inp_fields:
-        fld_value = inputs_dict[fld_name]
-        fld_attr = getattr(attrs.fields(type(inputs)), fld_name)
-        if fld_value is attr.NOTHING or (
-            fld_value is False
-            and fld_attr.type is not bool
-            and TypeParser.matches_type(fld_attr.type, ty.Union[Path, bool])
-        ):
-            # if value is NOTHING, nothing should be added to the command
-            val_dict[fld_name] = ""
-        else:
-            val_dict[fld_name] = fld_value
-
-    # formatting string based on the val_dict
-    argstr_formatted = argstr.format(**val_dict)
-    # removing extra commas and spaces after removing the field that have NOTHING
-    argstr_formatted = (
-        argstr_formatted.replace("[ ", "[")
-        .replace(" ]", "]")
-        .replace("[,", "[")
-        .replace(",]", "]")
-        .strip()
-    )
-    return argstr_formatted
-
-
 class PydraFileLock:
     """Wrapper for filelock's SoftFileLock that makes it work with asyncio."""
 
@@ -755,3 +592,37 @@ def parse_format_string(fmtstr):
 
     all_keywords = re.findall(full_field, fmtstr)
     return set().union(*all_keywords) - {""}
+
+
+def ensure_list(obj, tuple2list=False):
+    """
+    Return a list whatever the input object is.
+
+    Examples
+    --------
+    >>> ensure_list(list("abc"))
+    ['a', 'b', 'c']
+    >>> ensure_list("abc")
+    ['abc']
+    >>> ensure_list(tuple("abc"))
+    [('a', 'b', 'c')]
+    >>> ensure_list(tuple("abc"), tuple2list=True)
+    ['a', 'b', 'c']
+    >>> ensure_list(None)
+    []
+    >>> ensure_list(5.0)
+    [5.0]
+
+    """
+    if obj is attr.NOTHING:
+        return attr.NOTHING
+    if obj is None:
+        return []
+    # list or numpy.array (this might need some extra flag in case an array has to be converted)
+    elif isinstance(obj, list) or hasattr(obj, "__array__"):
+        return obj
+    elif tuple2list and isinstance(obj, tuple):
+        return list(obj)
+    elif isinstance(obj, LazyField):
+        return obj
+    return [obj]

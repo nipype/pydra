@@ -44,35 +44,36 @@ from __future__ import annotations
 import platform
 import re
 import attr
+import attrs
+import warnings
 import inspect
 import typing as ty
 import shlex
 from pathlib import Path
-import warnings
 import cloudpickle as cp
 from fileformats.core import FileSet, DataType
-from .core import TaskBase, is_lazy
-from ..utils.messenger import AuditFlag
+from .core import Task, is_lazy
+from pydra.utils.messenger import AuditFlag
 from .specs import (
     BaseSpec,
     SpecInfo,
-    ShellSpec,
-    ShellOutSpec,
+    # ShellSpec,
+    # ShellOutSpec,
     attr_fields,
 )
 from .helpers import (
-    ensure_list,
+    parse_format_string,
     position_sort,
-    argstr_formatting,
-    output_from_inputfields,
+    ensure_list,
+    # output_from_inputfields,
     parse_copyfile,
 )
 from .helpers_file import template_update
-from ..utils.typing import TypeParser
+from pydra.utils.typing import TypeParser
 from .environments import Native
 
 
-class FunctionTask(TaskBase):
+class FunctionTask(Task):
     """Wrap a Python callable as a task element."""
 
     def __init__(
@@ -200,7 +201,7 @@ class FunctionTask(TaskBase):
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
-        output_names = [el[0] for el in self.output_spec.fields]
+        output_names = [f.name for f in attr.fields(self.interface.Outputs)]
         if output is None:
             self.output_ = {nm: None for nm in output_names}
         elif len(output_names) == 1:
@@ -217,7 +218,7 @@ class FunctionTask(TaskBase):
             )
 
 
-class ShellCommandTask(TaskBase):
+class ShellCommandTask(Task):
     """Wrap a shell command as a task element."""
 
     input_spec = None
@@ -269,18 +270,18 @@ class ShellCommandTask(TaskBase):
         if name is None:
             name = "ShellTask_noname"
 
-        # using provided spec, class attribute or setting the default SpecInfo
-        self.input_spec = (
-            input_spec
-            or self.input_spec
-            or SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
-        )
-        self.output_spec = (
-            output_spec
-            or self.output_spec
-            or SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
-        )
-        self.output_spec = output_from_inputfields(self.output_spec, self.input_spec)
+        # # using provided spec, class attribute or setting the default SpecInfo
+        # self.input_spec = (
+        #     input_spec
+        #     or self.input_spec
+        #     or SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
+        # )
+        # self.output_spec = (
+        #     output_spec
+        #     or self.output_spec
+        #     or SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
+        # )
+        # self.output_spec = output_from_inputfields(self.output_spec, self.input_spec)
 
         for special_inp in ["executable", "args"]:
             if hasattr(self, special_inp):
@@ -590,3 +591,40 @@ def split_cmd(cmd: str):
         else:
             cmd_args.append(arg)
     return cmd_args
+
+
+def argstr_formatting(argstr, inputs, value_updates=None):
+    """formatting argstr that have form {field_name},
+    using values from inputs and updating with value_update if provided
+    """
+    inputs_dict = attr.asdict(inputs, recurse=False)
+    # if there is a value that has to be updated (e.g. single value from a list)
+    if value_updates:
+        inputs_dict.update(value_updates)
+    # getting all fields that should be formatted, i.e. {field_name}, ...
+    inp_fields = parse_format_string(argstr)
+    val_dict = {}
+    for fld_name in inp_fields:
+        fld_value = inputs_dict[fld_name]
+        fld_attr = getattr(attrs.fields(type(inputs)), fld_name)
+        if fld_value is attr.NOTHING or (
+            fld_value is False
+            and fld_attr.type is not bool
+            and TypeParser.matches_type(fld_attr.type, ty.Union[Path, bool])
+        ):
+            # if value is NOTHING, nothing should be added to the command
+            val_dict[fld_name] = ""
+        else:
+            val_dict[fld_name] = fld_value
+
+    # formatting string based on the val_dict
+    argstr_formatted = argstr.format(**val_dict)
+    # removing extra commas and spaces after removing the field that have NOTHING
+    argstr_formatted = (
+        argstr_formatted.replace("[ ", "[")
+        .replace(" ]", "]")
+        .replace("[,", "[")
+        .replace(",]", "]")
+        .strip()
+    )
+    return argstr_formatted

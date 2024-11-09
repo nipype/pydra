@@ -10,7 +10,7 @@ from shutil import copyfile, which
 
 import concurrent.futures as cf
 
-from .core import TaskBase
+from .core import Task
 from .helpers import (
     get_available_cpus,
     read_and_display_async,
@@ -142,7 +142,7 @@ class SerialWorker(Worker):
         """Return whether the task is finished."""
 
     async def exec_serial(self, runnable, rerun=False, environment=None):
-        if isinstance(runnable, TaskBase):
+        if isinstance(runnable, Task):
             return runnable._run(rerun, environment=environment)
         else:  # it could be tuple that includes pickle files with tasks and inputs
             ind, task_main_pkl, _ = runnable
@@ -177,7 +177,7 @@ class ConcurrentFuturesWorker(Worker):
 
     async def exec_as_coro(self, runnable, rerun=False, environment=None):
         """Run a task (coroutine wrapper)."""
-        if isinstance(runnable, TaskBase):
+        if isinstance(runnable, Task):
             res = await self.loop.run_in_executor(
                 self.pool, runnable._run, rerun, environment
             )
@@ -228,7 +228,7 @@ class SlurmWorker(DistributedWorker):
         script_dir, batch_script = self._prepare_runscripts(runnable, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
-        if isinstance(runnable, TaskBase):
+        if isinstance(runnable, Task):
             cache_dir = runnable.cache_dir
             name = runnable.name
             uid = runnable.uid
@@ -240,7 +240,7 @@ class SlurmWorker(DistributedWorker):
         return self._submit_job(batch_script, name=name, uid=uid, cache_dir=cache_dir)
 
     def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
-        if isinstance(task, TaskBase):
+        if isinstance(task, Task):
             cache_dir = task.cache_dir
             ind = None
             uid = task.uid
@@ -465,7 +465,7 @@ class SGEWorker(DistributedWorker):
         ) = self._prepare_runscripts(runnable, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
-        if isinstance(runnable, TaskBase):
+        if isinstance(runnable, Task):
             cache_dir = runnable.cache_dir
             name = runnable.name
             uid = runnable.uid
@@ -486,7 +486,7 @@ class SGEWorker(DistributedWorker):
         )
 
     def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
-        if isinstance(task, TaskBase):
+        if isinstance(task, Task):
             cache_dir = task.cache_dir
             ind = None
             uid = task.uid
@@ -890,7 +890,7 @@ class DaskWorker(Worker):
         from dask.distributed import Client
 
         async with Client(**self.client_args, asynchronous=True) as client:
-            if isinstance(runnable, TaskBase):
+            if isinstance(runnable, Task):
                 future = client.submit(runnable._run, rerun)
                 result = await future
             else:  # it could be tuple that includes pickle files with tasks and inputs
@@ -989,7 +989,7 @@ class PsijWorker(Worker):
         jex = self.psij.JobExecutor.get_instance(self.subtype)
         absolute_path = Path(__file__).parent
 
-        if isinstance(runnable, TaskBase):
+        if isinstance(runnable, Task):
             cache_dir = runnable.cache_dir
             file_path = cache_dir / "runnable_function.pkl"
             with open(file_path, "wb") as file:

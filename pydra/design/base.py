@@ -1,0 +1,548 @@
+import typing as ty
+import types
+import inspect
+import re
+import enum
+from copy import copy
+import attrs.validators
+from fileformats.generic import File
+from pydra.utils.typing import TypeParser
+from pydra.engine.helpers import from_list_if_single, ensure_list
+from pydra.engine.specs import (
+    LazyField,
+    MultiInputObj,
+    MultiInputFile,
+    MultiOutputObj,
+    MultiOutputFile,
+)
+from pydra.engine.core import Task, AuditFlag
+
+__all__ = [
+    "Field",
+    "Arg",
+    "Out",
+    "Interface",
+    "collate_fields",
+    "make_interface",
+    "fields",
+]
+
+
+class _Empty(enum.Enum):
+
+    EMPTY = enum.auto()
+
+    def __repr__(self):
+        return "EMPTY"
+
+    def __bool__(self):
+        return False
+
+
+EMPTY = _Empty.EMPTY  # To provide a blank placeholder for the default field
+
+
+def is_type(_, __, val: ty.Any) -> bool:
+    """check that the value is a type or generic"""
+    return inspect.isclass(val) or ty.get_origin(val)
+
+
+@attrs.define(kw_only=True)
+class Field:
+    help_string: str = ""
+    mandatory: bool = False
+    name: str | None = None
+    type: ty.Type[ty.Any] | None = attrs.field(validator=is_type, default=ty.Any)
+
+
+@attrs.define(kw_only=True)
+class Arg(Field):
+    default: ty.Any = EMPTY
+    allowed_values: list = None
+    requires: list = None
+    xor: list = None
+    copy_mode: File.CopyMode = File.CopyMode.any
+    copy_collation: File.CopyCollation = File.CopyCollation.any
+    copy_ext_decomp: File.ExtensionDecomposition = File.ExtensionDecomposition.single
+    readonly: bool = False
+
+
+@attrs.define(kw_only=True)
+class Out(Field):
+    requires: list = None
+    callable: ty.Callable = None
+
+
+OutputType = ty.TypeVar("OutputType")
+
+
+class Interface(ty.Generic[OutputType]):
+
+    Task: ty.Type[Task]
+
+    def __call__(
+        self,
+        interface,
+        name: str | None = None,
+        audit_flags: AuditFlag = AuditFlag.NONE,
+        cache_dir=None,
+        cache_locations=None,
+        inputs: ty.Text | File | dict[str, ty.Any] | None = None,
+        cont_dim=None,
+        messenger_args=None,
+        messengers=None,
+        rerun=False,
+        **kwargs,
+    ):
+        task = self.Task(
+            self,
+            interface,
+            name=name,
+            audit_flags=audit_flags,
+            cache_dir=cache_dir,
+            cache_locations=cache_locations,
+            inputs=inputs,
+            cont_dim=cont_dim,
+            messenger_args=messenger_args,
+            messengers=messengers,
+            rerun=rerun,
+        )
+        return task(**kwargs)
+
+
+def collate_fields(
+    arg_type: type[Arg],
+    out_type: type[Out],
+    doc_string: str | None = None,
+    inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
+    outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
+    input_helps: dict[str, str] | None = None,
+    output_helps: dict[str, str] | None = None,
+) -> tuple[dict[str, Arg], dict[str, Out]]:
+
+    if inputs is None:
+        inputs = []
+    elif isinstance(inputs, list):
+        inputs = [
+            a if isinstance(a, Arg) else arg_type(a, help_string=input_helps.get(a, ""))
+            for a in inputs
+        ]
+    elif isinstance(inputs, dict):
+        inputs_list = []
+        for input_name, arg in inputs.items():
+            if isinstance(arg, Arg):
+                if arg.name is None:
+                    arg.name = input_name
+                elif arg.name != input_name:
+                    raise ValueError(
+                        "Name of the argument must be the same as the key in the "
+                        f"dictionary. The argument name is {arg.name} and the key "
+                        f"is {input_name}"
+                    )
+                else:
+                    arg.name = input_name
+                if not arg.help_string:
+                    arg.help_string = input_helps.get(input_name, "")
+            else:
+                arg = arg_type(
+                    type=arg,
+                    name=input_name,
+                    help_string=input_helps.get(input_name, ""),
+                )
+            inputs_list.append(arg)
+        inputs = inputs_list
+
+    if outputs is None:
+        outputs = []
+    elif isinstance(outputs, list):
+        outputs = [
+            (
+                o
+                if isinstance(o, Out)
+                else out_type(name=o, type=ty.Any, help_string=output_helps.get(o, ""))
+            )
+            for o in outputs
+        ]
+    elif isinstance(outputs, dict):
+        for output_name, out in outputs.items():
+            if isinstance(out, Out):
+                if out.name is None:
+                    out.name = output_name
+                elif out.name != output_name:
+                    raise ValueError(
+                        "Name of the argument must be the same as the key in the "
+                        f"dictionary. The argument name is {out.name} and the key "
+                        f"is {output_name}"
+                    )
+                else:
+                    out.name = output_name
+                if not out.help_string:
+                    out.help_string = output_helps.get(output_name, "")
+        outputs = [
+            (
+                o
+                if isinstance(o, out_type)
+                else out_type(name=n, type=o, help_string=output_helps.get(n, ""))
+            )
+            for n, o in outputs.items()
+        ]
+
+    return inputs, outputs
+
+
+def get_fields_from_class(
+    klass: type,
+    arg_type: type[Arg],
+    out_type: type[Out],
+    auto_attribs: bool,
+) -> tuple[list[Field], list[Field]]:
+    """Parse the input and output fields from a class"""
+
+    input_helps, _ = parse_doc_string(klass.__doc__)
+
+    def get_fields(klass, field_type, auto_attribs, helps) -> list[Field]:
+        """Get the fields from a class"""
+        fields_dict = {}
+        for atr_name in dir(klass):
+            if atr_name.startswith("__"):
+                continue
+            try:
+                atr = getattr(klass, atr_name)
+            except Exception:
+                continue
+            if isinstance(atr, field_type):
+                atr.name = atr_name
+                fields_dict[atr_name] = atr
+        for atr_name, type_ in klass.__annotations__.items():
+            try:
+                fields_dict[atr_name].type = type_
+            except KeyError:
+                if auto_attribs:
+                    fields_dict[atr_name] = field_type(name=atr_name, type=type_)
+        for atr_name, help in helps.items():
+            try:
+                fields_dict[atr_name].help_string = help
+            except KeyError:
+                pass
+        return fields_dict.values()
+
+    inputs = get_fields(klass, arg_type, auto_attribs, input_helps)
+
+    outputs_klass = get_outputs_class(klass)
+    output_helps, _ = parse_doc_string(outputs_klass.__doc__)
+    if outputs_klass is None:
+        raise ValueError(f"Nested Outputs class not found in {klass.__name__}")
+    outputs = get_fields(outputs_klass, out_type, auto_attribs, output_helps)
+
+    return inputs, outputs
+
+
+def get_outputs_class(klass: type | None = None) -> type | None:
+    if klass is None:
+        return None
+    try:
+        outputs_klass = klass.Outputs
+    except AttributeError:
+        try:
+            interface_class = next(
+                b for b in klass.__mro__ if ty.get_origin(b) is Interface
+            )
+        except StopIteration:
+            outputs_klass = None
+        else:
+            outputs_klass = ty.get_args(interface_class)[0]
+    return outputs_klass
+
+
+def make_interface(
+    task_type: type[Task],
+    inputs: list[Arg],
+    outputs: list[Out],
+    klass: type | None = None,
+    name: str | None = None,
+):
+    if name is None and klass is not None:
+        name = klass.__name__
+    outputs_klass = get_outputs_class(klass)
+    if outputs_klass is None:
+        outputs_klass = type("Outputs", (), {})
+    else:
+        # Ensure that the class has it's own annotaitons dict so we can modify it without
+        # messing up other classes
+        outputs_klass.__annotations__ = copy(outputs_klass.__annotations__)
+    # Now that we have saved the attributes in lists to be
+    for out in outputs:
+        setattr(
+            outputs_klass,
+            out.name,
+            attrs.field(
+                converter=get_converter(out, outputs_klass.__name__),
+                metadata={PYDRA_ATTR_METADATA: out},
+                on_setattr=attrs.setters.convert,
+            ),
+        )
+        outputs_klass.__annotations__[out.name] = out.type
+    outputs_klass = attrs.define(auto_attribs=False)(outputs_klass)
+
+    if klass is None or not issubclass(klass, Interface):
+        if name is None:
+            raise ValueError("name must be provided if klass is not")
+        klass = types.new_class(
+            name=name,
+            bases=(Interface[outputs_klass],),
+            kwds={},
+            exec_body=lambda ns: ns.update(
+                {"Task": task_type, "Outputs": outputs_klass}
+            ),
+        )
+    else:
+        # Ensure that the class has it's own annotaitons dict so we can modify it without
+        # messing up other classes
+        klass.__annotations__ = copy(klass.__annotations__)
+    # Now that we have saved the attributes in lists to be
+    for arg in inputs:
+        setattr(
+            klass,
+            arg.name,
+            attrs.field(
+                default=arg.default if arg.default is not EMPTY else attrs.NOTHING,
+                converter=get_converter(arg, klass.__name__),
+                validator=get_validator(arg, klass.__name__),
+                metadata={PYDRA_ATTR_METADATA: arg},
+                on_setattr=attrs.setters.convert,
+            ),
+        )
+        klass.__annotations__[arg.name] = arg.type
+
+    # Create class using attrs package, will create attributes for all columns and
+    # parameters
+    attrs_klass = attrs.define(auto_attribs=False)(klass)
+
+    return attrs_klass
+
+
+def get_converter(field: Field, interface_name: str):
+    checker_label = f"'{field.name}' field of {interface_name} interface"
+    type_checker = TypeParser[field.type](
+        field.type, label=checker_label, superclass_auto_cast=True
+    )
+    if field.type in (MultiInputObj, MultiInputFile):
+        converter = attrs.converters.pipe(ensure_list, type_checker)
+    elif field.type in (MultiOutputObj, MultiOutputFile):
+        converter = attrs.converters.pipe(from_list_if_single, type_checker)
+    else:
+        converter = type_checker
+    return converter
+
+
+def get_validator(field: Field, interface_name: str):
+    if field.allowed_values:
+        if field._validator is None:
+            field._validator = allowed_values_validator
+        elif isinstance(field._validator, ty.Iterable):
+            if allowed_values_validator not in field._validator:
+                field._validator.append(allowed_values_validator)
+        elif field._validator is not allowed_values_validator:
+            field._validator = [
+                field._validator,
+                allowed_values_validator,
+            ]
+
+
+def allowed_values_validator(_, attribute, value):
+    """checking if the values is in allowed_values"""
+    allowed = attribute.metadata[PYDRA_ATTR_METADATA].allowed_values
+    if value is attrs.NOTHING or isinstance(value, LazyField):
+        pass
+    elif value not in allowed:
+        raise ValueError(
+            f"value of {attribute.name} has to be from {allowed}, but {value} provided"
+        )
+
+
+def extract_inputs_and_outputs_from_function(
+    function: ty.Callable,
+    inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
+    outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
+) -> tuple[dict[str, type | Arg], dict[str, type | Out]]:
+    """Extract input output types and output names from the function source if they
+    aren't explicitly"""
+    sig = inspect.signature(function)
+    input_types = {
+        p.name: (p.annotation if p.annotation is not inspect._empty else ty.Any)
+        for p in sig.parameters.values()
+    }
+    if inputs:
+        if not isinstance(inputs, dict):
+            raise ValueError(
+                f"Input names ({inputs}) should not be provided when "
+                "wrapping/decorating a function as "
+            )
+        for inpt_name, type_ in input_types.items():
+            try:
+                inpt = inputs[inpt_name]
+            except KeyError:
+                inputs[inpt_name] = type_
+            else:
+                if isinstance(inpt, Arg) and inpt.type is ty.Any:
+                    inpt.type = type_
+    else:
+        inputs = input_types
+    return_type = (
+        sig.return_annotation if sig.return_annotation is not inspect._empty else ty.Any
+    )
+    if outputs is None:
+        src = inspect.getsource(function).strip()
+        return_lines = re.findall(r"\n\s+return .*$", src)
+        if len(return_lines) == 1 and src.endswith(return_lines[0]):
+            implicit_outputs = [
+                o.strip()
+                for o in re.match(r"\s*return\s+(.*)", return_lines[0])
+                .group(1)
+                .split(",")
+            ]
+            if all(re.match(r"^\w+$", o) for o in implicit_outputs):
+                outputs = implicit_outputs
+    if isinstance(outputs, list) and len(outputs) > 1:
+        if return_type is not ty.Any:
+            if ty.get_origin(return_type) is not tuple:
+                raise ValueError(
+                    f"Multiple outputs specified ({outputs}) but non-tuple "
+                    f"return value {return_type}"
+                )
+            return_types = ty.get_args(return_type)
+        if len(return_types) != len(outputs):
+            raise ValueError(
+                f"Length of the outputs ({outputs}) does not match that "
+                f"of the return types ({return_types})"
+            )
+        outputs = dict(zip(outputs, return_types))
+    elif not isinstance(outputs, dict):
+        if outputs:
+            if not isinstance(outputs, list):
+                raise ValueError(
+                    f"Unrecognised format for outputs ({outputs}), should be a list "
+                    "or dict"
+                )
+            output_name = outputs[0]
+        else:
+            output_name = "out"
+        outputs = {output_name: return_type}
+    return inputs, outputs
+
+
+def parse_doc_string(doc_str: str) -> tuple[dict[str, str], dict[str, str] | list[str]]:
+    """Parse the docstring to pull out the description of the parameters/args and returns
+
+    Parameters
+    -----------
+    doc_string
+        the doc string to parse
+
+    Returns
+    -------
+    input_helps
+        the documentation for each of the parameter/args of the class/function
+    output_helps
+        the documentation for each of the return values of the class function, if no
+        names are provided then the help strings are returned as a list
+    """
+    input_helps = {}
+    output_helps = {}
+    if doc_str is None:
+        return input_helps, output_helps
+    for param, param_help in re.findall(r":param (\w+): (.*)", doc_str):
+        input_helps[param] = param_help
+    for return_val, return_help in re.findall(r":return (\w+): (.*)", doc_str):
+        output_helps[return_val] = return_help
+    google_args_match = re.match(
+        r".*\n\s+Args:\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
+    )
+    google_returns_match = re.match(
+        r".*\n\s+Returns:\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
+    )
+    if google_args_match:
+        args_str = google_args_match.group(1)
+        for arg_str in split_block(args_str):
+            arg_name, arg_help = arg_str.split(":", maxsplit=1)
+            arg_name = arg_name.strip()
+            arg_help = white_space_re.sub(" ", arg_help).strip()
+            input_helps[arg_name] = arg_help
+    if google_returns_match:
+        returns_str = google_returns_match.group(1)
+        for return_str in split_block(returns_str):
+            return_name, return_help = return_str.split(":", maxsplit=1)
+            return_name = return_name.strip()
+            return_help = white_space_re.sub(" ", return_help).strip()
+            output_helps[return_name] = return_help
+    numpy_args_match = re.match(
+        r".*\n\s+Parameters\n\s*---------- *\n(.*)",
+        doc_str,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    numpy_returns_match = re.match(
+        r".*\n\s+Returns\n\s+------- *\n(.*)", doc_str, flags=re.DOTALL | re.MULTILINE
+    )
+    if numpy_args_match:
+        args_str = numpy_args_match.group(1)
+        for arg_str in split_block(args_str):
+            arg_decl, arg_help = arg_str.split("\n", maxsplit=1)
+            arg_name = arg_decl.split(":")[0].strip()
+            arg_help = white_space_re.sub(" ", arg_help).strip()
+            input_helps[arg_name] = arg_help
+    if numpy_returns_match:
+        returns_str = numpy_returns_match.group(1)
+        for return_str in split_block(returns_str):
+            return_decl, return_help = return_str.split("\n", maxsplit=1)
+            return_name = return_decl.split(":")[0].strip()
+            return_help = white_space_re.sub(" ", return_help).strip()
+            output_helps[return_name] = return_help
+    return input_helps, output_helps
+
+
+def split_block(string: str) -> ty.Generator[str, None, None]:
+    """Split a block of text into groups lines"""
+    indent_re = re.compile(r"^\s*")
+    leading_indent = indent_re.match(string).group()
+    leading_indent_len = len(leading_indent)
+    block = ""
+    for line in string.split("\n"):
+        if not line.strip():
+            break
+        indent_len = len(indent_re.match(line).group())
+        if block and indent_len == leading_indent_len:
+            yield block.strip()
+            block = ""
+        block += line + "\n"
+        if indent_len < leading_indent_len:
+            raise ValueError(
+                f"Indentation block is not consistent in docstring:\n{string}"
+            )
+    if block:
+        yield block.strip()
+
+
+def fields(interface: Interface) -> list[Field]:
+    return [
+        f.metadata[PYDRA_ATTR_METADATA]
+        for f in attrs.fields(interface)
+        if PYDRA_ATTR_METADATA in f.metadata
+    ]
+
+
+def check_explicit_fields_are_none(klass, inputs, outputs):
+    if inputs is not None:
+        raise ValueError(
+            f"inputs should not be provided to `python.task` ({inputs}) "
+            f"explicitly when decorated a class ({klass})"
+        )
+    if outputs is not None:
+        raise ValueError(
+            f"outputs should not be provided to `python.task` ({outputs}) "
+            f"explicitly when decorated a class ({klass})"
+        )
+
+
+white_space_re = re.compile(r"\s+")
+
+PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"

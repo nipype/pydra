@@ -6,9 +6,9 @@ from pathlib import Path
 import tempfile
 import pytest
 from pydra import mark
-from ...engine.specs import File, LazyOutField, MultiInputObj
+from pydra.engine.specs import File, LazyOutField, MultiInputObj
 from ..typing import TypeParser
-from pydra import Workflow
+from pydra.engine import Workflow
 from fileformats.application import Json, Yaml, Xml
 from .utils import (
     generic_func_task,

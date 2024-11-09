@@ -7,7 +7,7 @@ from uuid import uuid4
 from .workers import Worker, WORKERS
 from .core import is_workflow
 from .helpers import get_open_loop, load_and_run_async
-from ..utils.hash import PersistentCache
+from pydra.utils.hash import PersistentCache
 
 import logging
 

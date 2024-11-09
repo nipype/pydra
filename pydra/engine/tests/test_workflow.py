@@ -35,7 +35,7 @@ from .utils import (
 )
 from ..submitter import Submitter
 from ..core import Workflow
-from ... import mark
+from pydra import mark
 from ..specs import SpecInfo, BaseSpec, ShellSpec
 from pydra.utils import exc_info_matches
 

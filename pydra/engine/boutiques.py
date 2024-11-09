@@ -5,9 +5,9 @@ from urllib.request import urlretrieve
 from pathlib import Path
 from functools import reduce
 
-from ..utils.messenger import AuditFlag
-from ..engine import ShellCommandTask
-from ..engine.specs import SpecInfo, ShellSpec, ShellOutSpec, File, attr_fields
+from pydra.utils.messenger import AuditFlag
+from pydra.engine.task import ShellCommandTask
+from pydra.engine.specs import SpecInfo, ShellSpec, ShellOutSpec, File, attr_fields
 from .helpers_file import is_local_file
 
 

@@ -72,7 +72,7 @@ def copy_nested_files(
     **kwargs
         passed directly onto FileSet.copy()
     """
-    from ..utils.typing import TypeParser  # noqa
+    from pydra.utils.typing import TypeParser  # noqa
 
     cache: ty.Dict[FileSet, FileSet] = {}
 
@@ -150,7 +150,7 @@ def template_update_single(
     """
     # if input_dict_st with state specific value is not available,
     # the dictionary will be created from inputs object
-    from ..utils.typing import TypeParser  # noqa
+    from pydra.utils.typing import TypeParser  # noqa
     from pydra.engine.specs import LazyField, OUTPUT_TEMPLATE_TYPES
 
     if inputs_dict_st is None:
@@ -329,7 +329,7 @@ def _element_formatting(template, values_template_dict, file_template, keep_exte
 
 
 def is_local_file(f):
-    from ..utils.typing import TypeParser
+    from pydra.utils.typing import TypeParser
 
     return "container_path" not in f.metadata and TypeParser.contains_type(
         FileSet, f.type

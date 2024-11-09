@@ -1,15 +1,16 @@
 import typing as ty
-import os, sys
+import os
+import sys
 import attr
 import pytest
 import cloudpickle as cp
 from pathlib import Path
 import json
 import glob as glob
-from ... import mark
+from pydra import mark
+from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from ..core import Workflow
-from ..task import AuditFlag, ShellCommandTask
-from ...utils.messenger import FileMessenger, PrintMessenger, collect_messages
+from ..task import AuditFlag, ShellCommandTask, argstr_formatting
 from .utils import gen_basic_wf
 from ..specs import (
     MultiInputObj,
@@ -20,7 +21,7 @@ from ..specs import (
     ShellSpec,
     File,
 )
-from ...utils.hash import hash_function
+from pydra.utils.hash import hash_function
 
 
 no_win = pytest.mark.skipif(
@@ -1582,3 +1583,21 @@ def test_object_input():
 
     result = testfunc(a=A(x=7))()
     assert result.output.out == 7
+
+
+def test_argstr_formatting():
+    @attr.define
+    class Inputs:
+        a1_field: str
+        b2_field: float
+        c3_field: ty.Dict[str, str]
+        d4_field: ty.List[str]
+
+    inputs = Inputs("1", 2.0, {"c": "3"}, ["4"])
+    assert (
+        argstr_formatting(
+            "{a1_field} {b2_field:02f} -test {c3_field[c]} -me {d4_field[0]}",
+            inputs,
+        )
+        == "1 2.000000 -test 3 -me 4"
+    )

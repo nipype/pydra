@@ -185,7 +185,7 @@ def out(
     )
 
 
-def task(
+def interface(
     klass_or_name: ty.Union[type, str],
     executable: ty.Optional[str] = None,
     input_fields: ty.Optional[dict[str, dict]] = None,
@@ -232,7 +232,6 @@ def task(
 
     annotations = {
         "executable": str,
-        "Inputs": type,
         "Outputs": type,
     }
     dct = {"__annotations__": annotations}

@@ -6,7 +6,7 @@ import typing as ty
 
 from ..submitter import Submitter
 from ..core import Workflow
-from ... import mark
+from pydra import mark
 from ..specs import File, Directory
 
 

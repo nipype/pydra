@@ -8,13 +8,13 @@ import types
 import typing as ty
 import logging
 import attr
-from ..engine.specs import (
+from pydra.engine.specs import (
     LazyField,
     StateArray,
     MultiInputObj,
     MultiOutputObj,
 )
-from ..utils import add_exc_note
+from pydra.utils import add_exc_note
 from fileformats import field
 
 try:

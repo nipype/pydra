@@ -40,7 +40,7 @@ def task(func):
     ...     return a ** 2.0
 
     """
-    from ..engine.task import FunctionTask
+    from pydra.engine.task import FunctionTask
 
     @wraps(func)
     def decorate(**kwargs):

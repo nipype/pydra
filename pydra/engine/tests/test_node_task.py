@@ -24,7 +24,7 @@ from .utils import (
     op_4var,
 )
 
-from ..core import TaskBase
+from ..core import Task
 from ..specs import StateArray
 from ..submitter import Submitter
 
@@ -46,7 +46,7 @@ def change_dir(request):
 def test_task_init_1():
     """task with mandatory arguments only"""
     nn = fun_addtwo()
-    assert isinstance(nn, TaskBase)
+    assert isinstance(nn, Task)
     assert nn.name == "fun_addtwo"
     assert hasattr(nn, "__call__")
 

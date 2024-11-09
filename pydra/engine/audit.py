@@ -3,8 +3,8 @@
 import os
 import json
 import attr
-from ..utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
-from ..utils.hash import hash_function
+from pydra.utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
+from pydra.utils.hash import hash_function
 from .helpers import ensure_list, gather_runtime_info
 from .specs import attr_fields
 from fileformats.core import FileSet
@@ -70,7 +70,7 @@ class Audit:
         if self.audit_check(AuditFlag.PROV):
             self.audit_message(start_message, AuditFlag.PROV)
         if self.audit_check(AuditFlag.RESOURCE):
-            from ..utils.profiler import ResourceMonitor
+            from pydra.utils.profiler import ResourceMonitor
 
             self.resource_monitor = ResourceMonitor(os.getpid(), logdir=self.odir)
 

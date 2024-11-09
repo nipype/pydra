@@ -33,7 +33,7 @@ from .specs import (
     StateArray,
 )
 from .helpers import (
-    make_klass,
+    # make_klass,
     create_checksum,
     print_help,
     load_result,
@@ -43,12 +43,11 @@ from .helpers import (
     PydraFileLock,
     parse_copyfile,
 )
-from ..utils.hash import hash_function
+from pydra.utils.hash import hash_function
 from .helpers_file import copy_nested_files, template_update
 from .graph import DiGraph
 from .audit import Audit
-from ..utils.messenger import AuditFlag
-from ..utils.typing import TypeParser
+from pydra.utils.messenger import AuditFlag
 from fileformats.core import FileSet
 
 logger = logging.getLogger("pydra")
@@ -56,7 +55,7 @@ logger = logging.getLogger("pydra")
 develop = False
 
 
-class TaskBase:
+class Task:
     """
     A base structure for the nodes in the processing graph.
 
@@ -86,7 +85,8 @@ class TaskBase:
 
     def __init__(
         self,
-        name: str,
+        interface,
+        name: str | None = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
@@ -135,28 +135,28 @@ class TaskBase:
         """
         from .. import check_latest_version
 
-        if TaskBase._etelemetry_version_data is None:
-            TaskBase._etelemetry_version_data = check_latest_version()
+        if Task._etelemetry_version_data is None:
+            Task._etelemetry_version_data = check_latest_version()
 
+        self.interface = interface
         # raise error if name is same as of attributes
         if name in dir(self):
             raise ValueError("Cannot use names of attributes or methods as task name")
         self.name = name
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
-        klass = make_klass(self.input_spec)
 
-        self.inputs = klass(
+        self.inputs = self.interface(
             **{
                 # in attrs names that starts with "_" could be set when name provided w/o "_"
                 (f.name[1:] if f.name.startswith("_") else f.name): f.default
-                for f in attr.fields(klass)
+                for f in attr.fields(self.interface)
             }
         )
 
         self.input_names = [
             field.name
-            for field in attr.fields(klass)
+            for field in attr.fields(self.interface)
             if field.name not in ["_func", "_graph_checksums"]
         ]
 
@@ -215,8 +215,7 @@ class TaskBase:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state["input_spec"] = cp.dumps(state["input_spec"])
-        state["output_spec"] = cp.dumps(state["output_spec"])
+        state["interface"] = cp.dumps(state["interface"])
         inputs = {}
         for k, v in attr.asdict(state["inputs"], recurse=False).items():
             if k.startswith("_"):
@@ -226,9 +225,8 @@ class TaskBase:
         return state
 
     def __setstate__(self, state):
-        state["input_spec"] = cp.loads(state["input_spec"])
-        state["output_spec"] = cp.loads(state["output_spec"])
-        state["inputs"] = make_klass(state["input_spec"])(**state["inputs"])
+        state["interface"] = cp.loads(state["interface"])
+        state["inputs"] = self.interface(**state["inputs"])
         self.__dict__.update(state)
 
     @cached_property
@@ -348,7 +346,7 @@ class TaskBase:
         """Get the names of the outputs from the task's output_spec
         (not everything has to be generated, see generated_output_names).
         """
-        return [f.name for f in attr.fields(make_klass(self.output_spec))]
+        return [f.name for f in attr.fields(self.interface.Outputs)]
 
     @property
     def generated_output_names(self):
@@ -357,7 +355,7 @@ class TaskBase:
         it uses output_names.
         The results depends on the input provided to the task
         """
-        output_klass = make_klass(self.output_spec)
+        output_klass = self.interface.Outputs
         if hasattr(output_klass, "generated_output_names"):
             output = output_klass(
                 **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
@@ -474,6 +472,8 @@ class TaskBase:
           execution (they will be replaced after the task's execution with the
           original inputs to ensure the tasks checksums are consistent)
         """
+        from pydra.utils.typing import TypeParser
+
         orig_inputs = {
             k: v
             for k, v in attr.asdict(self.inputs, recurse=False).items()
@@ -583,7 +583,7 @@ class TaskBase:
         return result
 
     def _collect_outputs(self, output_dir):
-        output_klass = make_klass(self.output_spec)
+        output_klass = self.interface.Outputs
         output = output_klass(
             **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
         )
@@ -1030,7 +1030,7 @@ def _sanitize_spec(
         raise ValueError(f'Empty "{spec_name}" spec provided to Workflow {wf_name}.')
 
 
-class Workflow(TaskBase):
+class Workflow(Task):
     """A composite task with structure of computational graph."""
 
     def __init__(
@@ -1353,7 +1353,7 @@ class Workflow(TaskBase):
             single or list of tuples linking the name of the output to a lazy output
             of a task in the workflow.
         """
-        from ..utils.typing import TypeParser
+        from pydra.utils.typing import TypeParser
 
         if self._connections is None:
             self._connections = []
@@ -1372,9 +1372,7 @@ class Workflow(TaskBase):
         # checking if a new output name is already in the connections
         connection_names = [name for name, _ in self._connections]
         if self.output_spec:
-            output_types = {
-                a.name: a.type for a in attr.fields(make_klass(self.output_spec))
-            }
+            output_types = {a.name: a.type for a in attr.fields(self.interface.Outputs)}
         else:
             output_types = {}
         # Check for type matches with explicitly defined outputs
@@ -1409,12 +1407,12 @@ class Workflow(TaskBase):
                 help_string = f"all outputs from {task_nm}"
                 fields.append((wf_out_nm, dict, {"help_string": help_string}))
             else:
-                from ..utils.typing import TypeParser
+                from pydra.utils.typing import TypeParser
 
                 # getting information about the output field from the task output_spec
                 # providing proper type and some help string
                 task_output_spec = getattr(self, task_nm).output_spec
-                out_fld = attr.fields_dict(make_klass(task_output_spec))[task_out_nm]
+                out_fld = attr.fields_dict(task_output_spec)[task_out_nm]
                 help_string = (
                     f"{out_fld.metadata.get('help_string', '')} (from {task_nm})"
                 )
@@ -1427,7 +1425,7 @@ class Workflow(TaskBase):
         logger.info("Added %s to %s", self.output_spec, self)
 
     def _collect_outputs(self):
-        output_klass = make_klass(self.output_spec)
+        output_klass = self.interface.Outputs
         output = output_klass(
             **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
         )

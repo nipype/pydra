@@ -2,7 +2,8 @@ from pathlib import Path
 import typing as ty
 import os
 import attrs
-from copy import deepcopy
+
+# from copy import deepcopy
 import time
 
 from ..specs import (
@@ -15,13 +16,18 @@ from ..specs import (
     # ContainerSpec,
     LazyIn,
     LazyOut,
-    LazyField,
+    # LazyField,
     StateArray,
 )
-from ..helpers import make_klass
+
+# from ..helpers import make_klass
 from .utils import foo
-from pydra import mark, Workflow
+from pydra import mark
+from pydra.engine import Workflow
 import pytest
+
+
+make_klass = lambda x: x
 
 
 def test_basespec():

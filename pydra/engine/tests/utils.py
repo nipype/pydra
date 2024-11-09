@@ -11,7 +11,7 @@ from fileformats.generic import File
 
 from ..core import Workflow
 from ..submitter import Submitter
-from ... import mark
+from pydra import mark
 
 
 need_docker = pytest.mark.skipif(

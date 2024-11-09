@@ -3,7 +3,7 @@ import random
 import typing as ty
 
 from ..functions import task, annotate
-from ...engine.task import FunctionTask
+from pydra.engine.task import FunctionTask
 
 
 def test_task_equivalence():

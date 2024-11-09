@@ -4,7 +4,7 @@ import attrs
 from pathlib import Path
 import pytest
 import cloudpickle as cp
-from pydra.design import shell
+from pydra.design import shell, Interface
 
 
 def list_entries(stdout):
@@ -20,62 +20,61 @@ def tmpdir():
 def Ls(request):
     if request.param == "static":
 
-        @shell
+        @shell.interface
         class Ls:
             executable = "ls"
 
-            class Inputs:
-                directory: os.PathLike = shell.arg(
-                    help_string="the directory to list the contents of",
-                    argstr="",
-                    mandatory=True,
-                    position=-1,
-                )
-                hidden: bool = shell.arg(
-                    help_string=("display hidden FS objects"),
-                    argstr="-a",
-                    default=False,
-                )
-                long_format: bool = shell.arg(
-                    help_string=(
-                        "display properties of FS object, such as permissions, size and "
-                        "timestamps "
-                    ),
-                    default=False,
-                    argstr="-l",
-                )
-                human_readable: bool = shell_arg(
-                    help_string="display file sizes in human readable form",
-                    argstr="-h",
-                    default=False,
-                    requires=["long_format"],
-                )
-                complete_date: bool = shell_arg(
-                    help_string="Show complete date in long format",
-                    argstr="-T",
-                    default=False,
-                    requires=["long_format"],
-                    xor=["date_format_str"],
-                )
-                date_format_str: str = shell_arg(
-                    help_string="format string for ",
-                    argstr="-D",
-                    default=attrs.NOTHING,
-                    requires=["long_format"],
-                    xor=["complete_date"],
-                )
+            directory: os.PathLike = shell.arg(
+                help_string="the directory to list the contents of",
+                argstr="",
+                mandatory=True,
+                position=-1,
+            )
+            hidden: bool = shell.arg(
+                help_string=("display hidden FS objects"),
+                argstr="-a",
+                default=False,
+            )
+            long_format: bool = shell.arg(
+                help_string=(
+                    "display properties of FS object, such as permissions, size and "
+                    "timestamps "
+                ),
+                default=False,
+                argstr="-l",
+            )
+            human_readable: bool = shell.arg(
+                help_string="display file sizes in human readable form",
+                argstr="-h",
+                default=False,
+                requires=["long_format"],
+            )
+            complete_date: bool = shell.arg(
+                help_string="Show complete date in long format",
+                argstr="-T",
+                default=False,
+                requires=["long_format"],
+                xor=["date_format_str"],
+            )
+            date_format_str: str = shell.arg(
+                help_string="format string for ",
+                argstr="-D",
+                default=attrs.NOTHING,
+                requires=["long_format"],
+                xor=["complete_date"],
+            )
 
             class Outputs:
-                entries: list = shell_out(
+                entries: list = shell.out(
                     help_string="list of entries returned by ls command",
                     callable=list_entries,
                 )
 
     elif request.param == "dynamic":
-        Ls = shell_task(
+        Ls = shell.task(
             "Ls",
             executable="ls",
-            input_fields={
+            inputs={
                 "directory": {
                     "type": os.PathLike,
                     "help_string": "the directory to list the contents of",
@@ -117,7 +116,7 @@ def Ls(request):
                     "xor": ["complete_date"],
                 },
             },
-            output_fields={
+            outputs={
                 "entries": {
                     "type": list,
                     "help_string": "list of entries returned by ls command",

@@ -15,9 +15,9 @@ from fileformats.generic import (
 )
 import pydra
 from .helpers_file import template_update_single
-from ..utils.hash import hash_function, Cache
+from pydra.utils.hash import hash_function, Cache
 
-# from ..utils.misc import add_exc_note
+# from pydra.utils.misc import add_exc_note
 
 
 T = ty.TypeVar("T")
@@ -356,7 +356,7 @@ class ShellSpec(BaseSpec):
         Also sets the default values when available and needed.
 
         """
-        from ..utils.typing import TypeParser
+        from pydra.utils.typing import TypeParser
 
         supported_keys = {
             "allowed_values",
@@ -431,7 +431,7 @@ class ShellOutSpec:
     """The process' standard input."""
 
     def collect_additional_outputs(self, inputs, output_dir, outputs):
-        from ..utils.typing import TypeParser
+        from pydra.utils.typing import TypeParser
 
         """Collect additional outputs from shelltask output_spec."""
         additional_out = {}
@@ -675,7 +675,7 @@ class ShellOutSpec:
 
 @attr.s
 class LazyInterface:
-    _task: "core.TaskBase" = attr.ib()
+    _task: "core.Task" = attr.ib()
     _attr_type: str
 
     def __getattr__(self, name):
@@ -853,7 +853,9 @@ class LazyField(ty.Generic[T]):
         splitter : str or ty.Tuple[str, ...] or ty.List[str]
             the splitter to append to the list of splitters
         """
-        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
+        from pydra.utils.typing import (
+            TypeParser,
+        )  # pylint: disable=import-outside-toplevel
 
         splits = self.splits | set([LazyField.sanitize_splitter(splitter)])
         # Check to see whether the field has already been split over the given splitter
@@ -935,7 +937,9 @@ class LazyInField(LazyField[T]):
         value : Any
             the resolved value of the lazy-field
         """
-        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
+        from pydra.utils.typing import (
+            TypeParser,
+        )  # pylint: disable=import-outside-toplevel
 
         value = getattr(wf.inputs, self.field)
         if TypeParser.is_subclass(self.type, StateArray) and not wf._pre_split:
@@ -971,7 +975,9 @@ class LazyOutField(LazyField[T]):
         value : Any
             the resolved value of the lazy-field
         """
-        from ..utils.typing import TypeParser  # pylint: disable=import-outside-toplevel
+        from pydra.utils.typing import (
+            TypeParser,
+        )  # pylint: disable=import-outside-toplevel
 
         node = getattr(wf, self.name)
         result = node.result(state_index=state_index)
