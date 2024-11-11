@@ -5,6 +5,7 @@ import re
 import enum
 from copy import copy
 import attrs.validators
+from attrs.converters import default_if_none
 from fileformats.generic import File
 from pydra.utils.typing import TypeParser
 from pydra.engine.helpers import from_list_if_single, ensure_list
@@ -24,7 +25,7 @@ __all__ = [
     "Interface",
     "collate_fields",
     "make_interface",
-    "fields",
+    "list_fields",
 ]
 
 
@@ -49,18 +50,77 @@ def is_type(_, __, val: ty.Any) -> bool:
 
 @attrs.define(kw_only=True)
 class Field:
+    """Base class for input and output fields to Pydra tasks
+
+    Parameters
+    ----------
+    name: str, optional
+        The name of the field, used when specifying a list of fields instead of a mapping
+        from name to field, by default it is None
+    type: type, optional
+        The type of the field, by default it is Any
+    help_string: str, optional
+        A short description of the input field.
+    mandatory: bool, optional
+        If True user has to provide a value for the field, by default it is False
+    requires: list, optional
+        List of field names that are required together with the field.
+    converter: callable, optional
+        The converter for the field passed through to the attrs.field, by default it is None
+    validator: callable | iterable[callable], optional
+        The validator(s) for the field passed through to the attrs.field, by default it is None
+    """
+
+    name: str | None = None
+    type: ty.Type[ty.Any] = attrs.field(
+        validator=is_type, default=ty.Any, converter=default_if_none(ty.Any)
+    )
     help_string: str = ""
     mandatory: bool = False
-    name: str | None = None
-    type: ty.Type[ty.Any] | None = attrs.field(validator=is_type, default=ty.Any)
+    requires: list | None = None
+    converter: ty.Callable | None = None
+    validator: ty.Callable | None = None
 
 
 @attrs.define(kw_only=True)
 class Arg(Field):
+    """Base class for input fields to Pydra tasks
+
+    Parameters
+    ----------
+    help_string: str
+        A short description of the input field.
+    default : Any, optional
+        the default value for the argument
+    mandatory: bool, optional
+        If True user has to provide a value for the field, by default it is False
+    allowed_values: list, optional
+        List of allowed values for the field.
+    requires: list, optional
+        List of field names that are required together with the field.
+    xor: list, optional
+        List of field names that are mutually exclusive with the field.
+    copy_mode: File.CopyMode, optional
+        The mode of copying the file, by default it is File.CopyMode.any
+    copy_collation: File.CopyCollation, optional
+        The collation of the file, by default it is File.CopyCollation.any
+    copy_ext_decomp: File.ExtensionDecomposition, optional
+        The extension decomposition of the file, by default it is
+        File.ExtensionDecomposition.single
+    readonly: bool, optional
+        If True the input field can’t be provided by the user but it aggregates other
+        input fields (for example the fields with argstr: -o {fldA} {fldB}), by default
+        it is False
+    type: type, optional
+        The type of the field, by default it is Any
+    name: str, optional
+        The name of the field, used when specifying a list of fields instead of a mapping
+        from name to field, by default it is None
+    """
+
     default: ty.Any = EMPTY
-    allowed_values: list = None
-    requires: list = None
-    xor: list = None
+    allowed_values: list | None = None
+    xor: list | None = None
     copy_mode: File.CopyMode = File.CopyMode.any
     copy_collation: File.CopyCollation = File.CopyCollation.any
     copy_ext_decomp: File.ExtensionDecomposition = File.ExtensionDecomposition.single
@@ -69,8 +129,7 @@ class Arg(Field):
 
 @attrs.define(kw_only=True)
 class Out(Field):
-    requires: list = None
-    callable: ty.Callable = None
+    pass
 
 
 OutputType = ty.TypeVar("OutputType")
@@ -118,7 +177,7 @@ def collate_fields(
     outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
     input_helps: dict[str, str] | None = None,
     output_helps: dict[str, str] | None = None,
-) -> tuple[dict[str, Arg], dict[str, Out]]:
+) -> tuple[list[Arg], list[Out]]:
 
     if inputs is None:
         inputs = []
@@ -210,7 +269,7 @@ def get_fields_from_class(
                 atr = getattr(klass, atr_name)
             except Exception:
                 continue
-            if isinstance(atr, field_type):
+            if isinstance(atr, Field):
                 atr.name = atr_name
                 fields_dict[atr_name] = atr
         for atr_name, type_ in klass.__annotations__.items():
@@ -224,7 +283,7 @@ def get_fields_from_class(
                 fields_dict[atr_name].help_string = help
             except KeyError:
                 pass
-        return fields_dict.values()
+        return list(fields_dict.values())
 
     inputs = get_fields(klass, arg_type, auto_attribs, input_helps)
 
@@ -261,13 +320,15 @@ def make_interface(
     klass: type | None = None,
     name: str | None = None,
 ):
+    assert isinstance(inputs, list)
+    assert isinstance(outputs, list)
     if name is None and klass is not None:
         name = klass.__name__
     outputs_klass = get_outputs_class(klass)
     if outputs_klass is None:
         outputs_klass = type("Outputs", (), {})
     else:
-        # Ensure that the class has it's own annotaitons dict so we can modify it without
+        # Ensure that the class has it's own annotations dict so we can modify it without
         # messing up other classes
         outputs_klass.__annotations__ = copy(outputs_klass.__annotations__)
     # Now that we have saved the attributes in lists to be
@@ -282,7 +343,7 @@ def make_interface(
             ),
         )
         outputs_klass.__annotations__[out.name] = out.type
-    outputs_klass = attrs.define(auto_attribs=False)(outputs_klass)
+    outputs_klass = attrs.define(auto_attribs=False, kw_only=True)(outputs_klass)
 
     if klass is None or not issubclass(klass, Interface):
         if name is None:
@@ -299,6 +360,8 @@ def make_interface(
         # Ensure that the class has it's own annotaitons dict so we can modify it without
         # messing up other classes
         klass.__annotations__ = copy(klass.__annotations__)
+        klass.Task = task_type
+        klass.Outputs = outputs_klass
     # Now that we have saved the attributes in lists to be
     for arg in inputs:
         setattr(
@@ -316,7 +379,7 @@ def make_interface(
 
     # Create class using attrs package, will create attributes for all columns and
     # parameters
-    attrs_klass = attrs.define(auto_attribs=False)(klass)
+    attrs_klass = attrs.define(auto_attribs=False, kw_only=True)(klass)
 
     return attrs_klass
 
@@ -326,27 +389,34 @@ def get_converter(field: Field, interface_name: str):
     type_checker = TypeParser[field.type](
         field.type, label=checker_label, superclass_auto_cast=True
     )
+    converters = []
     if field.type in (MultiInputObj, MultiInputFile):
-        converter = attrs.converters.pipe(ensure_list, type_checker)
+        converters.append(ensure_list)
     elif field.type in (MultiOutputObj, MultiOutputFile):
-        converter = attrs.converters.pipe(from_list_if_single, type_checker)
+        converters.append(from_list_if_single)
+    if field.converter:
+        converters.append(field.converter)
+    if converters:
+        converters.append(type_checker)
+        converter = attrs.converters.pipe(*converters)
     else:
         converter = type_checker
     return converter
 
 
 def get_validator(field: Field, interface_name: str):
+    validators = []
     if field.allowed_values:
-        if field._validator is None:
-            field._validator = allowed_values_validator
-        elif isinstance(field._validator, ty.Iterable):
-            if allowed_values_validator not in field._validator:
-                field._validator.append(allowed_values_validator)
-        elif field._validator is not allowed_values_validator:
-            field._validator = [
-                field._validator,
-                allowed_values_validator,
-            ]
+        validators.append(allowed_values_validator)
+    if isinstance(field.validator, ty.Iterable):
+        validators.extend(field.validator)
+    elif field.validator:
+        validators.append(field.validator)
+    if len(validators) > 1:
+        return validators
+    elif validators:
+        return validators[0]
+    return None
 
 
 def allowed_values_validator(_, attribute, value):
@@ -528,7 +598,7 @@ def split_block(string: str) -> ty.Generator[str, None, None]:
         yield block.strip()
 
 
-def fields(interface: Interface) -> list[Field]:
+def list_fields(interface: Interface) -> list[Field]:
     return [
         f.metadata[PYDRA_ATTR_METADATA]
         for f in attrs.fields(interface)

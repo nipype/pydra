@@ -1,6 +1,6 @@
-from .base import Interface, fields
+from .base import Interface, list_fields
 from . import python
 from . import shell
 
 
-__all__ = ["Interface", "fields", "python", "shell"]
+__all__ = ["Interface", "list_fields", "python", "shell"]

@@ -1,6 +1,7 @@
 from operator import attrgetter
 import pytest
 from pydra import design
+from decimal import Decimal
 from pydra.design.python import arg, out, interface
 from pydra.engine.task import FunctionTask
 
@@ -13,17 +14,19 @@ def test_interface_wrap_function():
     SampleInterface = interface(
         sample_interface,
         inputs={"a": arg(help_string="The argument to be doubled")},
-        outputs={"b": out(help_string="the doubled output")},
+        outputs={"b": out(help_string="the doubled output", type=Decimal)},
     )
 
     assert issubclass(SampleInterface, design.Interface)
-    inputs = sorted(design.fields(SampleInterface), key=attrgetter("name"))
-    outputs = sorted(design.fields(SampleInterface.Outputs), key=attrgetter("name"))
+    inputs = sorted(design.list_fields(SampleInterface), key=attrgetter("name"))
+    outputs = sorted(
+        design.list_fields(SampleInterface.Outputs), key=attrgetter("name")
+    )
     assert inputs == [
         arg(name="a", type=int, help_string="The argument to be doubled"),
     ]
     assert outputs == [
-        out(name="b", type=float, help_string="the doubled output"),
+        out(name="b", type=Decimal, help_string="the doubled output"),
     ]
 
 
@@ -39,8 +42,10 @@ def test_interface_wrap_function_type():
     )
 
     assert issubclass(SampleInterface, design.Interface)
-    inputs = sorted(design.fields(SampleInterface), key=attrgetter("name"))
-    outputs = sorted(design.fields(SampleInterface.Outputs), key=attrgetter("name"))
+    inputs = sorted(design.list_fields(SampleInterface), key=attrgetter("name"))
+    outputs = sorted(
+        design.list_fields(SampleInterface.Outputs), key=attrgetter("name")
+    )
     assert inputs == [arg(name="a", type=float)]
     assert outputs == [out(name="b", type=float)]
 
@@ -53,8 +58,10 @@ def test_decorated_function_interface():
 
     assert issubclass(SampleInterface, design.Interface)
     assert SampleInterface.Task is FunctionTask
-    inputs = sorted(design.fields(SampleInterface), key=attrgetter("name"))
-    outputs = sorted(design.fields(SampleInterface.Outputs), key=attrgetter("name"))
+    inputs = sorted(design.list_fields(SampleInterface), key=attrgetter("name"))
+    outputs = sorted(
+        design.list_fields(SampleInterface.Outputs), key=attrgetter("name")
+    )
     assert inputs == [
         arg(name="a", type=int),
         arg(name="b", type=float),
@@ -75,8 +82,10 @@ def test_interface_with_function_implicit_outputs_from_return_stmt():
         return c, d
 
     assert SampleInterface.Task is FunctionTask
-    inputs = sorted(design.fields(SampleInterface), key=attrgetter("name"))
-    outputs = sorted(design.fields(SampleInterface.Outputs), key=attrgetter("name"))
+    inputs = sorted(design.list_fields(SampleInterface), key=attrgetter("name"))
+    outputs = sorted(
+        design.list_fields(SampleInterface.Outputs), key=attrgetter("name")
+    )
     assert inputs == [
         arg(name="a", type=int),
         arg(name="b", type=float),
@@ -101,8 +110,10 @@ def test_interface_with_function_docstr():
         return a + b, a * b
 
     assert SampleInterface.Task is FunctionTask
-    inputs = sorted(design.fields(SampleInterface), key=attrgetter("name"))
-    outputs = sorted(design.fields(SampleInterface.Outputs), key=attrgetter("name"))
+    inputs = sorted(design.list_fields(SampleInterface), key=attrgetter("name"))
+    outputs = sorted(
+        design.list_fields(SampleInterface.Outputs), key=attrgetter("name")
+    )
     assert inputs == [
         arg(name="a", type=int, help_string="First input to be inputted"),
         arg(name="b", type=float, help_string="Second input"),
@@ -131,8 +142,10 @@ def test_interface_with_function_google_docstr():
         return a + b, a * b
 
     assert SampleInterface.Task is FunctionTask
-    inputs = sorted(design.fields(SampleInterface), key=attrgetter("name"))
-    outputs = sorted(design.fields(SampleInterface.Outputs), key=attrgetter("name"))
+    inputs = sorted(design.list_fields(SampleInterface), key=attrgetter("name"))
+    outputs = sorted(
+        design.list_fields(SampleInterface.Outputs), key=attrgetter("name")
+    )
     assert inputs == [
         arg(name="a", type=int, help_string="First input to be inputted"),
         arg(name="b", type=float, help_string="Second input"),
@@ -169,8 +182,10 @@ def test_interface_with_function_numpy_docstr():
         return a + b, a * b
 
     assert SampleInterface.Task is FunctionTask
-    inputs = sorted(design.fields(SampleInterface), key=attrgetter("name"))
-    outputs = sorted(design.fields(SampleInterface.Outputs), key=attrgetter("name"))
+    inputs = sorted(design.list_fields(SampleInterface), key=attrgetter("name"))
+    outputs = sorted(
+        design.list_fields(SampleInterface.Outputs), key=attrgetter("name")
+    )
     assert inputs == [
         arg(name="a", type=int, help_string="First input to be inputted"),
         arg(name="b", type=float, help_string="Second input"),
@@ -212,8 +227,10 @@ def test_interface_with_class():
 
     assert issubclass(SampleInterface, design.Interface)
     assert SampleInterface.Task is FunctionTask
-    inputs = sorted(design.fields(SampleInterface), key=attrgetter("name"))
-    outputs = sorted(design.fields(SampleInterface.Outputs), key=attrgetter("name"))
+    inputs = sorted(design.list_fields(SampleInterface), key=attrgetter("name"))
+    outputs = sorted(
+        design.list_fields(SampleInterface.Outputs), key=attrgetter("name")
+    )
     assert inputs == [
         arg(name="a", type=int, help_string="First input to be inputted"),
         arg(name="b", type=float, help_string="Second input"),
@@ -275,8 +292,10 @@ def test_interface_with_class_no_auto_attribs():
             return a + b, a * b
 
     assert SampleInterface.Task is FunctionTask
-    inputs = sorted(design.fields(SampleInterface), key=attrgetter("name"))
-    outputs = sorted(design.fields(SampleInterface.Outputs), key=attrgetter("name"))
+    inputs = sorted(design.list_fields(SampleInterface), key=attrgetter("name"))
+    outputs = sorted(
+        design.list_fields(SampleInterface.Outputs), key=attrgetter("name")
+    )
     assert inputs == [
         arg(name="a", type=int, help_string="First input to be inputted"),
         arg(name="b", type=float, help_string="Second input"),

@@ -1,10 +1,12 @@
 import os
 import tempfile
-import attrs
+from operator import attrgetter
 from pathlib import Path
+import attrs
 import pytest
 import cloudpickle as cp
-from pydra.design import shell, Interface
+from pydra.design import shell, Interface, list_fields
+from fileformats.generic import File, Directory
 
 
 def list_entries(stdout):
@@ -21,10 +23,10 @@ def Ls(request):
     if request.param == "static":
 
         @shell.interface
-        class Ls:
+        class Ls(Interface["Ls.Outputs"]):
             executable = "ls"
 
-            directory: os.PathLike = shell.arg(
+            directory: Directory = shell.arg(
                 help_string="the directory to list the contents of",
                 argstr="",
                 mandatory=True,
@@ -71,23 +73,22 @@ def Ls(request):
                 )
 
     elif request.param == "dynamic":
-        Ls = shell.task(
-            "Ls",
-            executable="ls",
+        Ls = shell.interface(
+            "ls",
             inputs={
-                "directory": {
-                    "type": os.PathLike,
-                    "help_string": "the directory to list the contents of",
-                    "argstr": "",
-                    "mandatory": True,
-                    "position": -1,
-                },
-                "hidden": {
-                    "type": bool,
-                    "help_string": "display hidden FS objects",
-                    "argstr": "-a",
-                },
-                "long_format": {
+                "directory": shell.arg(
+                    type=File,
+                    help_string="the directory to list the contents of",
+                    argstr="",
+                    mandatory=True,
+                    position=-1,
+                ),
+                "hidden": shell.arg(
+                    type=bool,
+                    help_string="display hidden FS objects",
+                    argstr="-a",
+                ),
+                "long_format": {  # Mix it up with a full dictionary based definition
                     "type": bool,
                     "help_string": (
                         "display properties of FS object, such as permissions, size and "
@@ -95,34 +96,35 @@ def Ls(request):
                     ),
                     "argstr": "-l",
                 },
-                "human_readable": {
-                    "type": bool,
-                    "help_string": "display file sizes in human readable form",
-                    "argstr": "-h",
-                    "requires": ["long_format"],
-                },
-                "complete_date": {
-                    "type": bool,
-                    "help_string": "Show complete date in long format",
-                    "argstr": "-T",
-                    "requires": ["long_format"],
-                    "xor": ["date_format_str"],
-                },
-                "date_format_str": {
-                    "type": str,
-                    "help_string": "format string for ",
-                    "argstr": "-D",
-                    "requires": ["long_format"],
-                    "xor": ["complete_date"],
-                },
+                "human_readable": shell.arg(
+                    type=bool,
+                    help_string="display file sizes in human readable form",
+                    argstr="-h",
+                    requires=["long_format"],
+                ),
+                "complete_date": shell.arg(
+                    type=bool,
+                    help_string="Show complete date in long format",
+                    argstr="-T",
+                    requires=["long_format"],
+                    xor=["date_format_str"],
+                ),
+                "date_format_str": shell.arg(
+                    type=str,
+                    help_string="format string for ",
+                    argstr="-D",
+                    requires=["long_format"],
+                    xor=["complete_date"],
+                ),
             },
             outputs={
-                "entries": {
-                    "type": list,
-                    "help_string": "list of entries returned by ls command",
-                    "callable": list_entries,
-                }
+                "entries": shell.out(
+                    type=list,
+                    help_string="list of entries returned by ls command",
+                    callable=list_entries,
+                )
             },
+            name="Ls",
         )
 
     else:
@@ -132,23 +134,19 @@ def Ls(request):
 
 
 def test_shell_fields(Ls):
-    assert [a.name for a in attrs.fields(Ls.Inputs)] == [
-        "executable",
-        "args",
-        "directory",
-        "hidden",
-        "long_format",
-        "human_readable",
-        "complete_date",
-        "date_format_str",
-    ]
+    assert sorted([a.name for a in list_fields(Ls)]) == sorted(
+        [
+            "executable",
+            "directory",
+            "hidden",
+            "long_format",
+            "human_readable",
+            "complete_date",
+            "date_format_str",
+        ]
+    )
 
-    assert [a.name for a in attrs.fields(Ls.Outputs)] == [
-        "return_code",
-        "stdout",
-        "stderr",
-        "entries",
-    ]
+    assert [a.name for a in list_fields(Ls.Outputs)] == ["entries"]
 
 
 def test_shell_pickle_roundtrip(Ls, tmpdir):
@@ -186,37 +184,37 @@ def test_shell_run(Ls, tmpdir):
 def A(request):
     if request.param == "static":
 
-        @shell_task
+        @shell.interface
         class A:
             executable = "cp"
 
-            class Inputs:
-                x: os.PathLike = shell_arg(
-                    help_string="an input file", argstr="", position=0
-                )
-                y: str = shell_arg(
+            x: File = shell.arg(help_string="an input file", argstr="", position=0)
+
+            class Outputs:
+                y: File = shell.outarg(
                     help_string="path of output file",
-                    output_file_template="{x}_out",
-                    argstr="",
+                    file_template="{x}_out",
                 )
 
     elif request.param == "dynamic":
-        A = shell_task(
+        A = shell.interface(
             "A",
             executable="cp",
-            input_fields={
-                "x": {
-                    "type": os.PathLike,
-                    "help_string": "an input file",
-                    "argstr": "",
-                    "position": 0,
-                },
-                "y": {
-                    "type": str,
-                    "help_string": "path of output file",
-                    "argstr": "",
-                    "output_file_template": "{x}_out",
-                },
+            inputs={
+                "x": shell.arg(
+                    type=File,
+                    help_string="an input file",
+                    argstr="",
+                    position=0,
+                ),
+            },
+            outputs={
+                "y": shell.outarg(
+                    type=File,
+                    help_string="path of output file",
+                    argstr="",
+                    output_file_template="{x}_out",
+                ),
             },
         )
     else:
@@ -230,46 +228,86 @@ def test_shell_output_file_template(A):
 
 
 def test_shell_output_field_name_static():
-    @shell_task
+    @shell.interface
     class A:
+        """Copy a file"""
+
         executable = "cp"
 
-        class Inputs:
-            x: os.PathLike = shell_arg(
-                help_string="an input file", argstr="", position=0
-            )
-            y: str = shell_arg(
-                help_string="path of output file",
-                output_file_template="{x}_out",
-                output_field_name="y_out",
+        x: File = shell.arg(help_string="an input file", argstr="", position=1)
+
+        class Outputs:
+            y: File = shell.outarg(
+                help_string="the output file",
+                file_template="{x}_out",
                 argstr="",
+                position=-1,
             )
 
-    assert "y_out" in [a.name for a in attrs.fields(A.Outputs)]
+    assert sorted([a.name for a in attrs.fields(A)]) == ["executable", "x", "y"]
+    assert [a.name for a in attrs.fields(A.Outputs)] == ["y"]
+    inputs = sorted(list_fields(A), key=attrgetter("name"))
+    outputs = sorted(list_fields(A.Outputs), key=attrgetter("name"))
+    assert inputs == [
+        shell.arg(
+            name="executable",
+            default="cp",
+            type=str,
+            argstr="",
+            position=0,
+        ),
+        shell.arg(
+            name="x",
+            type=File,
+            help_string="an input file",
+            argstr="",
+            position=1,
+        ),
+        shell.outarg(
+            name="y",
+            type=File,
+            help_string="the output file",
+            file_template="{x}_out",
+            argstr="",
+            position=-1,
+        ),
+    ]
+    assert outputs == [
+        shell.outarg(
+            name="y",
+            type=File,
+            help_string="the output file",
+            file_template="{x}_out",
+            argstr="",
+            position=-1,
+        )
+    ]
 
 
 def test_shell_output_field_name_dynamic():
-    A = shell_task(
-        "A",
-        executable="cp",
-        input_fields={
-            "x": {
-                "type": os.PathLike,
-                "help_string": "an input file",
-                "argstr": "",
-                "position": 0,
-            },
-            "y": {
-                "type": str,
-                "help_string": "path of output file",
-                "argstr": "",
-                "output_field_name": "y_out",
-                "output_file_template": "{x}_out",
-            },
+    A = shell.interface(
+        "cp",
+        name="A",
+        inputs={
+            "x": shell.arg(
+                type=File,
+                help_string="an input file",
+                argstr="",
+                position=1,
+            ),
+        },
+        outputs={
+            "y": shell.outarg(
+                type=File,
+                help_string="path of output file",
+                argstr="",
+                template_field="y_out",
+                file_template="{x}_out",
+            ),
         },
     )
 
-    assert "y_out" in [a.name for a in attrs.fields(A.Outputs)]
+    assert "y" in [a.name for a in attrs.fields(A.Outputs)]
 
 
 def get_file_size(y: Path):
@@ -278,9 +316,9 @@ def get_file_size(y: Path):
 
 
 def test_shell_bases_dynamic(A, tmpdir):
-    B = shell_task(
+    B = shell.interface(
         "B",
-        output_fields={
+        outputs={
             "out_file_size": {
                 "type": int,
                 "help_string": "size of the output directory",
@@ -303,10 +341,10 @@ def test_shell_bases_dynamic(A, tmpdir):
 
 
 def test_shell_bases_static(A, tmpdir):
-    @shell_task
+    @shell.interface
     class B(A):
         class Outputs:
-            out_file_size: int = shell_out(
+            out_file_size: int = shell.out(
                 help_string="size of the output directory", callable=get_file_size
             )
 
@@ -323,38 +361,37 @@ def test_shell_bases_static(A, tmpdir):
 
 
 def test_shell_inputs_outputs_bases_dynamic(tmpdir):
-    A = shell_task(
-        "A",
+    A = shell.interface(
         "ls",
-        input_fields={
-            "directory": {
-                "type": os.PathLike,
-                "help_string": "input directory",
-                "argstr": "",
-                "position": -1,
-            }
+        name="A",
+        inputs={
+            "directory": shell.arg(
+                type=File,
+                help_string="input directory",
+                argstr="",
+                position=-1,
+            )
         },
-        output_fields={
-            "entries": {
-                "type": list,
-                "help_string": "list of entries returned by ls command",
-                "callable": list_entries,
-            }
+        outputs={
+            "entries": shell.out(
+                type=list,
+                help_string="list of entries returned by ls command",
+                callable=list_entries,
+            )
         },
     )
-    B = shell_task(
-        "B",
+    B = shell.interface(
         "ls",
-        input_fields={
-            "hidden": {
-                "type": bool,
-                "argstr": "-a",
-                "help_string": "show hidden files",
-                "default": False,
-            }
+        name="B",
+        inputs={
+            "hidden": shell.arg(
+                type=bool,
+                argstr="-a",
+                help_string="show hidden files",
+                default=False,
+            )
         },
         bases=[A],
-        inputs_bases=[A.Inputs],
     )
 
     Path.touch(tmpdir / ".hidden")
@@ -370,25 +407,25 @@ def test_shell_inputs_outputs_bases_dynamic(tmpdir):
 
 
 def test_shell_inputs_outputs_bases_static(tmpdir):
-    @shell_task
+    @shell.interface
     class A:
         executable = "ls"
 
         class Inputs:
-            directory: os.PathLike = shell_arg(
+            directory: Directory = shell.arg(
                 help_string="input directory", argstr="", position=-1
             )
 
         class Outputs:
-            entries: list = shell_out(
+            entries: list = shell.out(
                 help_string="list of entries returned by ls command",
                 callable=list_entries,
             )
 
-    @shell_task
+    @shell.interface
     class B(A):
         class Inputs(A.Inputs):
-            hidden: bool = shell_arg(
+            hidden: bool = shell.arg(
                 help_string="show hidden files",
                 argstr="-a",
                 default=False,
@@ -408,15 +445,14 @@ def test_shell_inputs_outputs_bases_static(tmpdir):
 def test_shell_missing_executable_static():
     with pytest.raises(RuntimeError, match="should contain an `executable`"):
 
-        @shell_task
+        @shell.interface
         class A:
-            class Inputs:
-                directory: os.PathLike = shell_arg(
-                    help_string="input directory", argstr="", position=-1
-                )
+            directory: Directory = shell.arg(
+                help_string="input directory", argstr="", position=-1
+            )
 
             class Outputs:
-                entries: list = shell_out(
+                entries: list = shell.out(
                     help_string="list of entries returned by ls command",
                     callable=list_entries,
                 )
@@ -424,23 +460,23 @@ def test_shell_missing_executable_static():
 
 def test_shell_missing_executable_dynamic():
     with pytest.raises(RuntimeError, match="should contain an `executable`"):
-        A = shell_task(
+        shell.interface(
             "A",
             executable=None,
-            input_fields={
-                "directory": {
-                    "type": os.PathLike,
-                    "help_string": "input directory",
-                    "argstr": "",
-                    "position": -1,
-                }
+            inputs={
+                "directory": shell.arg(
+                    type=Directory,
+                    help_string="input directory",
+                    argstr="",
+                    position=-1,
+                ),
             },
-            output_fields={
-                "entries": {
-                    "type": list,
-                    "help_string": "list of entries returned by ls command",
-                    "callable": list_entries,
-                }
+            outputs={
+                "entries": shell.out(
+                    type=list,
+                    help_string="list of entries returned by ls command",
+                    callable=list_entries,
+                )
             },
         )
 
@@ -448,12 +484,12 @@ def test_shell_missing_executable_dynamic():
 def test_shell_missing_inputs_static():
     with pytest.raises(RuntimeError, match="should contain an `Inputs`"):
 
-        @shell_task
+        @shell.interface
         class A:
             executable = "ls"
 
             class Outputs:
-                entries: list = shell_out(
+                entries: list = shell.out(
                     help_string="list of entries returned by ls command",
                     callable=list_entries,
                 )
@@ -461,6 +497,7 @@ def test_shell_missing_inputs_static():
 
 def test_shell_decorator_misuse(A):
     with pytest.raises(
-        RuntimeError, match=("`shell_task` should not be provided any other arguments")
+        RuntimeError,
+        match=("`shell.interface` should not be provided any other arguments"),
     ):
-        shell_task(A, executable="cp")
+        shell.interface(A, executable="cp")
