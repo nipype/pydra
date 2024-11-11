@@ -29,17 +29,28 @@ class out(Out):
 
 
 def interface(
-    wrapped: ty.Callable | None = None,
+    wrapped: type | ty.Callable | None = None,
     /,
     inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
     outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
     auto_attribs: bool = True,
 ) -> Interface:
+    """
+    Create an interface for a function or a class.
 
-    def make(
-        wrapped: ty.Callable | type | None = None,
-    ) -> Interface:
+    Parameters
+    ----------
+    wrapped : type | callable | None
+        The function or class to create an interface for.
+    inputs : list[str | Arg] | dict[str, Arg | type] | None
+        The inputs to the function or class.
+    outputs : list[str | Out] | dict[str, Out | type] | type | None
+        The outputs of the function or class.
+    auto_attribs : bool
+        Whether to use auto_attribs mode when creating the class.
+    """
 
+    def make(wrapped: ty.Callable | type) -> Interface:
         if inspect.isclass(wrapped):
             klass = wrapped
             function = klass.function
@@ -49,6 +60,10 @@ def interface(
                 klass, arg, out, auto_attribs
             )
         else:
+            if not inspect.isfunction(wrapped):
+                raise ValueError(
+                    f"wrapped must be a class or a function, not {wrapped!r}"
+                )
             klass = None
             function = wrapped
             input_helps, output_helps = parse_doc_string(function.__doc__)
@@ -73,7 +88,7 @@ def interface(
         return interface
 
     if wrapped is not None:
-        if not isinstance(wrapped, ty.Callable):
-            raise ValueError(f"wrapped must be a callable, not {wrapped!r}")
+        if not isinstance(wrapped, (ty.Callable, type)):
+            raise ValueError(f"wrapped must be a class or a callable, not {wrapped!r}")
         return make(wrapped)
     return make
