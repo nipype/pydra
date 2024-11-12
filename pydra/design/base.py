@@ -297,6 +297,8 @@ def get_fields_from_class(
 
 
 def get_outputs_class(klass: type | None = None) -> type | None:
+    """Get the Outputs class from the nested "Outputs" class or from the Interface class
+    args"""
     if klass is None:
         return None
     try:
@@ -319,14 +321,17 @@ def make_interface(
     outputs: list[Out],
     klass: type | None = None,
     name: str | None = None,
+    bases: ty.Sequence[type] = (),
+    outputs_bases: ty.Sequence[type] = (),
 ):
     assert isinstance(inputs, list)
     assert isinstance(outputs, list)
     if name is None and klass is not None:
         name = klass.__name__
     outputs_klass = get_outputs_class(klass)
+
     if outputs_klass is None:
-        outputs_klass = type("Outputs", (), {})
+        outputs_klass = type("Outputs", tuple(outputs_bases), {})
     else:
         # Ensure that the class has it's own annotations dict so we can modify it without
         # messing up other classes
@@ -348,9 +353,14 @@ def make_interface(
     if klass is None or not issubclass(klass, Interface):
         if name is None:
             raise ValueError("name must be provided if klass is not")
+        bases = tuple(bases)
+        if not any(issubclass(b, Interface) for b in bases):
+            bases = bases + (Interface,)
+        if klass is not None:
+            bases += tuple(c for c in klass.__mro__ if c not in bases + (object,))
         klass = types.new_class(
             name=name,
-            bases=(Interface[outputs_klass],),
+            bases=bases,
             kwds={},
             exec_body=lambda ns: ns.update(
                 {"Task": task_type, "Outputs": outputs_klass}

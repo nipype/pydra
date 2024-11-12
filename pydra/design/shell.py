@@ -176,6 +176,8 @@ def interface(
     /,
     inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
     outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
+    bases: ty.Sequence[type] = (),
+    outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
     args_last: bool = False,
     name: str | None = None,
@@ -257,6 +259,8 @@ def interface(
             parsed_outputs,
             name=class_name,
             klass=klass,
+            bases=bases,
+            outputs_bases=outputs_bases,
         )
         return interface
 

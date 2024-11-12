@@ -33,6 +33,8 @@ def interface(
     /,
     inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
     outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
+    bases: ty.Sequence[type] = (),
+    outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
 ) -> Interface:
     """
@@ -81,7 +83,13 @@ def interface(
                 output_helps=output_helps,
             )
         interface = make_interface(
-            FunctionTask, parsed_inputs, parsed_outputs, name=name, klass=klass
+            FunctionTask,
+            parsed_inputs,
+            parsed_outputs,
+            name=name,
+            klass=klass,
+            bases=bases,
+            outputs_bases=outputs_bases,
         )
         # Set the function in the created class
         interface.function = function
