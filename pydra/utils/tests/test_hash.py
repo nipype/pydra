@@ -423,7 +423,7 @@ def test_unhashable():
     with pytest.raises(
         TypeError,
         match=(
-            "unhashable\nand therefore cannot hash `A\(\)` of type "
+            "unhashable\nand therefore cannot hash `A()` of type "
             "`pydra.utils.tests.test_hash.A`"
         ),
     ):

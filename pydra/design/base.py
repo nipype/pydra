@@ -448,10 +448,10 @@ def extract_inputs_and_outputs_from_function(
     """Extract input output types and output names from the function source if they
     aren't explicitly"""
     sig = inspect.signature(function)
-    input_types = {
-        p.name: (p.annotation if p.annotation is not inspect._empty else ty.Any)
-        for p in sig.parameters.values()
-    }
+    type_hints = ty.get_type_hints(function)
+    input_types = {}
+    for p in sig.parameters.values():
+        input_types[p.name] = type_hints.get(p.name, ty.Any)
     if inputs:
         if not isinstance(inputs, dict):
             raise ValueError(
@@ -468,9 +468,7 @@ def extract_inputs_and_outputs_from_function(
                     inpt.type = type_
     else:
         inputs = input_types
-    return_type = (
-        sig.return_annotation if sig.return_annotation is not inspect._empty else ty.Any
-    )
+    return_type = type_hints.get("return", ty.Any)
     if outputs is None:
         src = inspect.getsource(function).strip()
         return_lines = re.findall(r"\n\s+return .*$", src)
@@ -481,9 +479,11 @@ def extract_inputs_and_outputs_from_function(
                 .group(1)
                 .split(",")
             ]
-            if all(re.match(r"^\w+$", o) for o in implicit_outputs):
+            if len(implicit_outputs) > 1 and all(
+                re.match(r"^\w+$", o) for o in implicit_outputs
+            ):
                 outputs = implicit_outputs
-    if len(outputs) > 1:
+    if outputs and len(outputs) > 1:
         if return_type is not ty.Any:
             if ty.get_origin(return_type) is not tuple:
                 raise ValueError(
@@ -505,7 +505,11 @@ def extract_inputs_and_outputs_from_function(
             outputs = output_types
 
     elif outputs:
-        output_name, output = next(iter(outputs.items()))
+        if isinstance(outputs, dict):
+            output_name, output = next(iter(outputs.items()))
+        elif isinstance(outputs, list):
+            output_name = outputs[0]
+            output = ty.Any
         if isinstance(output, Out):
             if output.type is ty.Any:
                 output.type = return_type

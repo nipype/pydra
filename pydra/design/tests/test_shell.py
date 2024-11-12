@@ -457,7 +457,7 @@ def test_shell_missing_executable_static():
 
 
 def test_shell_missing_executable_dynamic():
-    with pytest.raises(RuntimeError, match="should contain an `executable`"):
+    with pytest.raises(AttributeError, match="should contain an `executable`"):
         shell.interface(
             "A",
             executable=None,
@@ -480,11 +480,10 @@ def test_shell_missing_executable_dynamic():
 
 
 def test_shell_missing_inputs_static():
-    with pytest.raises(RuntimeError, match="should contain an `Inputs`"):
+    with pytest.raises(AttributeError, match="should contain an `Inputs`"):
 
         @shell.interface
         class A:
-            executable = "ls"
 
             class Outputs:
                 entries: list = shell.out(

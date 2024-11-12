@@ -133,7 +133,7 @@ class Task:
         messengers :
             TODO
         """
-        from .. import check_latest_version
+        from . import check_latest_version
 
         if Task._etelemetry_version_data is None:
             Task._etelemetry_version_data = check_latest_version()
@@ -150,13 +150,13 @@ class Task:
             **{
                 # in attrs names that starts with "_" could be set when name provided w/o "_"
                 (f.name[1:] if f.name.startswith("_") else f.name): f.default
-                for f in attr.fields(self.interface)
+                for f in attr.fields(type(self.interface))
             }
         )
 
         self.input_names = [
             field.name
-            for field in attr.fields(self.interface)
+            for field in attr.fields(type(self.interface))
             if field.name not in ["_func", "_graph_checksums"]
         ]
 
