@@ -58,9 +58,10 @@ class arg(Arg):
         from name to field, by default it is None
     argstr: str, optional
         A flag or string that is used in the command before the value, e.g. -v or
-        -v {inp_field}, but it could be and empty string, “”. If … are used, e.g. -v…,
-        the flag is used before every element if a list is provided as a value. If no
-        argstr is used the field is not part of the command.
+        -v {inp_field}, but it could be and empty string, “”, in which case the value is
+        just printed to the command line. If … are used, e.g. -v…,
+        the flag is used before every element if a list is provided as a value. If the
+        argstr is None, the field is not part of the command.
     position: int, optional
         Position of the field in the command, could be nonnegative or negative integer.
         If nothing is provided the field will be inserted between all fields with
@@ -78,7 +79,7 @@ class arg(Arg):
         field will be sent).
     """
 
-    argstr: str | None = None
+    argstr: str | None = ""
     position: int | None = None
     sep: str | None = None
     allowed_values: list | None = None
@@ -207,8 +208,18 @@ def interface(
 
         if inspect.isclass(wrapped):
             klass = wrapped
-            executable = klass.executable
-            class_name = klass.__name__ if not name else name
+            executable: str
+            try:
+                executable = attrs.fields(klass).executable.default
+            except (AttributeError, attrs.exceptions.NotAnAttrsClassError):
+                try:
+                    executable = klass.executable
+                except AttributeError:
+                    raise AttributeError(
+                        f"Shell task class {wrapped} must have an `executable` "
+                        "attribute that specifies the command to run"
+                    ) from None
+            class_name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = get_fields_from_class(
                 klass, arg, out, auto_attribs
@@ -238,20 +249,20 @@ def interface(
             )
             class_name = executable if not name else name
 
-        parsed_inputs.append(
-            arg(name="executable", type=str, argstr="", position=0, default=executable)
+        # Update the inputs (overriding inputs from base classes) with the executable
+        # and the output argument fields
+        inputs_dict = {i.name: i for i in parsed_inputs}
+        inputs_dict.update({o.name: o for o in parsed_outputs if isinstance(o, arg)})
+        inputs_dict["executable"] = arg(
+            name="executable", type=str, argstr="", position=0, default=executable
         )
-        # Copy the outputs into the inputs if they are outargs
-        parsed_inputs.extend(o for o in parsed_outputs if isinstance(o, arg))
+        parsed_inputs = list(inputs_dict.values())
 
-        # Check position values are unique
-        positions = defaultdict(list)
+        # Set positions for the remaining inputs that don't have an explicit position
+        position_stack = list(reversed(remaining_positions(parsed_inputs)))
         for inpt in parsed_inputs:
-            positions[inpt.position].append(inpt.name)
-        if multiple_positions := {k: v for k, v in positions.items() if len(v) > 1}:
-            raise ValueError(
-                f"Multiple fields have the same position: {multiple_positions}"
-            )
+            if inpt.position is None:
+                inpt.position = position_stack.pop()
 
         interface = make_interface(
             ShellCommandTask,
@@ -264,6 +275,27 @@ def interface(
         )
         return interface
 
+    # If a name is provided (and hence not being used as a decorator), check to see if
+    # we are extending from a class that already defines an executable
+    if wrapped is None and name is not None:
+        for base in bases:
+            try:
+                wrapped = attrs.fields(base).executable.default
+            except (AttributeError, attrs.exceptions.NotAnAttrsClassError):
+                try:
+                    wrapped = base.executable
+                except AttributeError:
+                    pass
+            if wrapped:
+                break
+        if wrapped is None:
+            raise ValueError(
+                f"name ({name!r}) can only be provided when creating a class "
+                "dynamically, i.e. not using it as a decorator. Check to see "
+                "whether you have forgotten to provide the command line template"
+            )
+    # If wrapped is provided (i.e. this is not being used as a decorator), return the
+    # interface class
     if wrapped is not None:
         if not isinstance(wrapped, (type, str)):
             raise ValueError(f"wrapped must be a class or a string, not {wrapped!r}")
@@ -417,6 +449,45 @@ def parse_command_line_template(
             inferred_inputs.append(argument)
 
     return executable, inferred_inputs, inferred_outputs
+
+
+def remaining_positions(args: list[Arg], num_args: int | None = None) -> ty.List[int]:
+    """Get the remaining positions for input fields
+
+    Parameters
+    ----------
+    args : list[Arg]
+        The list of input fields
+    num_args : int, optional
+        The number of arguments, by default it is the length of the args
+
+    Returns
+    -------
+    list[int]
+        The list of remaining positions
+
+    Raises
+    ------
+    ValueError
+        If multiple fields have the same position
+    """
+    if num_args is None:
+        num_args = len(args)
+    # Check for multiple positions
+    positions = defaultdict(list)
+    for arg in args:
+        if arg.position is not None:
+            if arg.position >= 0:
+                positions[arg.position].append(arg)
+            else:
+                positions[num_args + arg.position].append(arg)
+    if multiple_positions := {
+        k: f"{v.name}({v.position})" for k, v in positions.items() if len(v) > 1
+    }:
+        raise ValueError(
+            f"Multiple fields have the overlapping positions: {multiple_positions}"
+        )
+    return [i for i in range(num_args) if i not in positions]
 
 
 # def interface(

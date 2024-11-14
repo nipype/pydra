@@ -262,8 +262,11 @@ def get_fields_from_class(
     def get_fields(klass, field_type, auto_attribs, helps) -> list[Field]:
         """Get the fields from a class"""
         fields_dict = {}
+        # Get fields defined in base classes if present
+        for field in list_fields(klass):
+            fields_dict[field.name] = field
         for atr_name in dir(klass):
-            if atr_name.startswith("__"):
+            if atr_name in fields_dict or atr_name.startswith("__"):
                 continue
             try:
                 atr = getattr(klass, atr_name)
@@ -328,26 +331,18 @@ def make_interface(
     assert isinstance(outputs, list)
     if name is None and klass is not None:
         name = klass.__name__
-    outputs_klass = get_outputs_class(klass)
-
-    if outputs_klass is None:
-        outputs_klass = type("Outputs", tuple(outputs_bases), {})
-    else:
-        # Ensure that the class has it's own annotations dict so we can modify it without
-        # messing up other classes
-        outputs_klass.__annotations__ = copy(outputs_klass.__annotations__)
-    # Now that we have saved the attributes in lists to be
-    for out in outputs:
-        setattr(
-            outputs_klass,
-            out.name,
-            attrs.field(
-                converter=get_converter(out, outputs_klass.__name__),
-                metadata={PYDRA_ATTR_METADATA: out},
-                on_setattr=attrs.setters.convert,
-            ),
-        )
-        outputs_klass.__annotations__[out.name] = out.type
+    outputs_klass = type(
+        "Outputs",
+        tuple(outputs_bases),
+        {
+            o.name: attrs.field(
+                converter=get_converter(o, f"{name}.Outputs"),
+                metadata={PYDRA_ATTR_METADATA: o},
+            )
+            for o in outputs
+        },
+    )
+    outputs_klass.__annotations__.update((o.name, o.type) for o in outputs)
     outputs_klass = attrs.define(auto_attribs=False, kw_only=True)(outputs_klass)
 
     if klass is None or not issubclass(klass, Interface):
@@ -613,6 +608,8 @@ def split_block(string: str) -> ty.Generator[str, None, None]:
 
 
 def list_fields(interface: Interface) -> list[Field]:
+    if not attrs.has(interface):
+        return []
     return [
         f.metadata[PYDRA_ATTR_METADATA]
         for f in attrs.fields(interface)
