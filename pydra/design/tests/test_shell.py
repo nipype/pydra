@@ -11,6 +11,23 @@ from fileformats import field
 
 def test_interface_template():
 
+    SampleInterface = shell.interface("cp <in_path> <out|out_path>")
+
+    assert issubclass(SampleInterface, Interface)
+    inputs = sorted(list_fields(SampleInterface), key=inp_sort_key)
+    outputs = sorted(list_fields(SampleInterface.Outputs), key=out_sort_key)
+    assert inputs == [
+        shell.arg(name="executable", default="cp", type=str, position=0),
+        shell.arg(name="in_path", type=FsObject, position=1),
+        shell.outarg(name="out_path", type=FsObject, position=2),
+    ]
+    assert outputs == [
+        shell.outarg(name="out_path", type=FsObject, position=2),
+    ]
+
+
+def test_interface_template_more_complex():
+
     SampleInterface = shell.interface(
         (
             "cp <in_paths:fs-object+set-of> <out|out_path> -R<recursive> -v<verbose> "
@@ -23,7 +40,8 @@ def test_interface_template():
     inputs = sorted(list_fields(SampleInterface), key=inp_sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=out_sort_key)
     assert inputs == [
-        shell.arg(name="in_paths", type=SetOf[FsObject], position=1),
+        shell.arg(name="executable", default="cp", type=str, position=0),
+        shell.arg(name="in_paths", type=SetOf[FsObject], position=1, sep=" "),
         shell.outarg(name="out_path", type=FsObject, position=2),
         shell.arg(name="recursive", type=bool, position=3),
         shell.arg(name="verbose", type=bool, position=4),
@@ -57,7 +75,8 @@ def test_interface_template_with_overrides():
     inputs = sorted(list_fields(SampleInterface), key=inp_sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=out_sort_key)
     assert inputs == [
-        shell.arg(name="in_paths", type=SetOf[FsObject], position=1),
+        shell.arg(name="executable", default="cp", type=str, position=0),
+        shell.arg(name="in_paths", type=SetOf[FsObject], position=1, sep=" "),
         shell.arg(name="recursive", type=bool, help_string=RECURSIVE_HELP, position=2),
         shell.arg(name="verbose", type=bool, position=3),
         shell.arg(name="text_arg", type=field.Text, position=4),
@@ -85,7 +104,7 @@ def test_interface_template_with_type_overrides():
     inputs = sorted(list_fields(SampleInterface), key=inp_sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=out_sort_key)
     assert inputs == [
-        shell.arg(name="in_paths", type=SetOf[FsObject], position=1),
+        shell.arg(name="in_paths", type=SetOf[FsObject], position=1, sep=" "),
         shell.arg(name="recursive", type=bool, position=2),
         shell.arg(name="verbose", type=bool, position=3),
         shell.arg(name="text_arg", type=str, position=4),

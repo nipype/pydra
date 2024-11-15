@@ -371,7 +371,6 @@ def parse_command_line_template(
     arguments = []
     options = []
     option = None
-    position = 1
 
     def merge_or_create_field(name, field_type, type):
         """Merge the typing information with an existing field if it exists"""
@@ -425,13 +424,11 @@ def parse_command_line_template(
             type_ = from_mime(type_str) if type_str is not None else ty.Any
             if option is None:
                 arguments.append(merge_or_create_field(name, field_type, type_))
-                position += 1
             else:
                 option[1].append((name, type_))
         elif match := opt_re.match(token):
             if option is not None:
                 add_option(option)
-                position += 1
             option = (match.group(1), field_type, [])
     if option is not None:
         add_option(option)
