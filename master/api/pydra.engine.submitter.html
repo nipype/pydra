@@ -1,0 +1,259 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pydra.engine.submitter module &mdash; Pydra: A simple dataflow engine with scalable semantics 0.24 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/banner.css" />
+
+  
+      <script src="../_static/jquery.js"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+      <script src="../_static/doctools.js"></script>
+      <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="pydra.engine.task module" href="pydra.engine.task.html" />
+    <link rel="prev" title="pydra.engine.state module" href="pydra.engine.state.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Pydra: A simple dataflow engine with scalable semantics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../user_guide.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changes.html">Release Notes</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api.html">Library API (application programmer interface)</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../api.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="pydra.engine.html">pydra.engine package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="pydra.engine.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.mark.html">pydra.mark package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.tasks.html">pydra.tasks package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.utils.html">pydra.utils package</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Pydra: A simple dataflow engine with scalable semantics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../api.html">Library API (application programmer interface)</a></li>
+          <li class="breadcrumb-item"><a href="pydra.engine.html">pydra.engine package</a></li>
+      <li class="breadcrumb-item active">pydra.engine.submitter module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/pydra.engine.submitter.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+
+
+
+
+
+<section id="module-pydra.engine.submitter">
+<span id="pydra-engine-submitter-module"></span><h1>pydra.engine.submitter module<a class="headerlink" href="#module-pydra.engine.submitter" title="Permalink to this heading"></a></h1>
+<p>Handle execution backends.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.engine.submitter.Submitter">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.engine.submitter.</span></span><span class="sig-name descname"><span class="pre">Submitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plugin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Type" title="(in Python v3.13)"><span class="pre">Type</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="pydra.engine.workers.html#pydra.engine.workers.Worker" title="pydra.engine.workers.Worker"><span class="pre">Worker</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cf'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.submitter.Submitter" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Send a task to the execution backend.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.submitter.Submitter.close">
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.submitter.Submitter.close" title="Permalink to this definition"></a></dt>
+<dd><p>Close submitter.</p>
+<p>Do not close previously running loop.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.submitter.Submitter.expand_runnable">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">expand_runnable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runnable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wait</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rerun</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.submitter.Submitter.expand_runnable" title="Permalink to this definition"></a></dt>
+<dd><p>This coroutine handles state expansion.</p>
+<p>Removes any states from <cite>runnable</cite>. If <cite>wait</cite> is
+set to False (default), aggregates all worker
+execution coroutines and returns them. If <cite>wait</cite> is
+True, waits for all coroutines to complete / error
+and returns None.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>runnable</strong> (<em>pydra Task</em>) – Task instance (<cite>Task</cite>, <cite>Workflow</cite>)</p></li>
+<li><p><strong>wait</strong> (<em>bool (False)</em>) – Await all futures before completing</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>futures</strong> – Coroutines for <a class="reference internal" href="pydra.engine.core.html#pydra.engine.core.TaskBase" title="pydra.engine.core.TaskBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TaskBase</span></code></a> execution.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#set" title="(in Python v3.13)">set</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.submitter.Submitter.expand_workflow">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">expand_workflow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rerun</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.submitter.Submitter.expand_workflow" title="Permalink to this definition"></a></dt>
+<dd><p>Expand and execute a stateless <a class="reference internal" href="pydra.engine.core.html#pydra.engine.core.Workflow" title="pydra.engine.core.Workflow"><code class="xref py py-class docutils literal notranslate"><span class="pre">Workflow</span></code></a>.
+This method is only reached by <cite>Workflow._run_task</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>wf</strong> (<a class="reference internal" href="pydra.engine.core.html#pydra.engine.core.Workflow" title="pydra.engine.core.Workflow"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Workflow</span></code></a>) – Workflow Task object</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>wf</strong> – The computed workflow</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="pydra.engine.core.html#pydra.engine.core.Workflow" title="pydra.engine.core.Workflow"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pydra.engine.core.Workflow</span></code></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.submitter.Submitter.submit_from_call">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">submit_from_call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runnable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rerun</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">environment</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.submitter.Submitter.submit_from_call" title="Permalink to this definition"></a></dt>
+<dd><p>This coroutine should only be called once per Submitter call,
+and serves as the bridge between sync/async lands.</p>
+<p>There are 4 potential paths based on the type of runnable:
+0) Workflow has a different plugin than a submitter
+1) Workflow without State
+2) Task without State
+3) (Workflow or Task) with State</p>
+<p>Once Python 3.10 is the minimum, this should probably be refactored into using
+structural pattern matching.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.submitter.get_runnable_tasks">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.submitter.</span></span><span class="sig-name descname"><span class="pre">get_runnable_tasks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">graph</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.submitter.get_runnable_tasks" title="Permalink to this definition"></a></dt>
+<dd><p>Parse a graph and return all runnable tasks.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.submitter.is_runnable">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.submitter.</span></span><span class="sig-name descname"><span class="pre">is_runnable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">graph</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obj</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.submitter.is_runnable" title="Permalink to this definition"></a></dt>
+<dd><p>Check if a task within a graph is runnable.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.submitter.prepare_runnable_with_state">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.engine.submitter.</span></span><span class="sig-name descname"><span class="pre">prepare_runnable_with_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runnable</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.submitter.prepare_runnable_with_state" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="pydra.engine.state.html" class="btn btn-neutral float-left" title="pydra.engine.state module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="pydra.engine.task.html" class="btn btn-neutral float-right" title="pydra.engine.task module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019 - 2020, The Nipype Developers team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  
+<div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+        <span class="fa fa-book"> Other Versions</span>
+        v: master
+        <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+        <dl>
+            <dt>Tags</dt>
+            <dd><a href="../../0.21/api/pydra.engine.submitter.html">0.21</a></dd>
+            <dd><a href="../../0.22/api/pydra.engine.submitter.html">0.22</a></dd>
+            <dd><a href="../../0.23/api/pydra.engine.submitter.html">0.23</a></dd>
+            <dd><a href="../../0.23.0-alpha/api/pydra.engine.submitter.html">0.23.0-alpha</a></dd>
+            <dd><a href="../../0.24/api/pydra.engine.submitter.html">0.24</a></dd>
+            <dd><a href="../../0.25/api/pydra.engine.submitter.html">0.25</a></dd>
+        </dl>
+        <dl>
+            <dt>Branches</dt>
+            <dd><a href="../../ci_test-py3.11-windows/api/pydra.engine.submitter.html">ci/test-py3.11-windows</a></dd>
+            <dd><a href="../../debugging-hashing/api/pydra.engine.submitter.html">debugging-hashing</a></dd>
+            <dd><a href="../../effigies_input-spec-suggestions/api/pydra.engine.submitter.html">effigies/input-spec-suggestions</a></dd>
+            <dd><a href="pydra.engine.submitter.html">master</a></dd>
+            <dd><a href="../../mriqc-hacking/api/pydra.engine.submitter.html">mriqc-hacking</a></dd>
+            <dd><a href="../../new-syntax/index.html">new-syntax</a></dd>
+            <dd><a href="../../pre-commit-ci-update-config/api/pydra.engine.submitter.html">pre-commit-ci-update-config</a></dd>
+            <dd><a href="../../unittest-fixes/api/pydra.engine.submitter.html">unittest-fixes</a></dd>
+        </dl>
+    </div>
+</div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

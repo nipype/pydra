@@ -1,0 +1,7 @@
+mark.shell module
+=================
+
+.. automodule:: mark.shell
+   :members:
+   :undoc-members:
+   :show-inheritance:

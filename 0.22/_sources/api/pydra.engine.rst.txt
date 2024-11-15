@@ -1,0 +1,26 @@
+pydra.engine package
+====================
+
+.. automodule:: pydra.engine
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   pydra.engine.audit
+   pydra.engine.boutiques
+   pydra.engine.core
+   pydra.engine.graph
+   pydra.engine.helpers
+   pydra.engine.helpers_file
+   pydra.engine.helpers_state
+   pydra.engine.specs
+   pydra.engine.state
+   pydra.engine.submitter
+   pydra.engine.task
+   pydra.engine.workers

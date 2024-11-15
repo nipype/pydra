@@ -1,0 +1,304 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pydra.engine.environments module &mdash; Pydra: A simple dataflow engine with scalable semantics 0.24 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/banner.css" />
+
+  
+      <script src="../_static/jquery.js"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+      <script src="../_static/doctools.js"></script>
+      <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="pydra.engine.graph module" href="pydra.engine.graph.html" />
+    <link rel="prev" title="pydra.engine.core module" href="pydra.engine.core.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Pydra: A simple dataflow engine with scalable semantics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../user_guide.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changes.html">Release Notes</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api.html">Library API (application programmer interface)</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../api.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="pydra.engine.html">pydra.engine package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="pydra.engine.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.mark.html">pydra.mark package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.tasks.html">pydra.tasks package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.utils.html">pydra.utils package</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Pydra: A simple dataflow engine with scalable semantics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../api.html">Library API (application programmer interface)</a></li>
+          <li class="breadcrumb-item"><a href="pydra.engine.html">pydra.engine package</a></li>
+      <li class="breadcrumb-item active">pydra.engine.environments module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/pydra.engine.environments.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+
+
+    
+    
+
+
+
+    <p class="scv-banner scv-sphinx_rtd_theme"><a href="../../master/api/pydra.engine.environments.html"><b>Warning:</b> This document is for an old version of Pydra: A simple dataflow engine with scalable semantics. The main version is master.</a></p>
+<section id="module-pydra.engine.environments">
+<span id="pydra-engine-environments-module"></span><h1>pydra.engine.environments module<a class="headerlink" href="#module-pydra.engine.environments" title="Permalink to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.engine.environments.Container">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.engine.environments.</span></span><span class="sig-name descname"><span class="pre">Container</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'latest'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/mnt/pydra'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.environments.Container" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pydra.engine.environments.Environment" title="pydra.engine.environments.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></p>
+<p>Base class for container environments used by Docker and Singularity.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image</strong> (<em>str</em>) – Name of the container image</p></li>
+<li><p><strong>tag</strong> (<em>str</em>) – Tag of the container image</p></li>
+<li><p><strong>root</strong> (<em>str</em>) – Base path for mounting host directories into the container</p></li>
+<li><p><strong>xargs</strong> (<em>Union[str, List[str]]</em>) – Extra arguments to be passed to the container</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.environments.Container.bind">
+<span class="sig-name descname"><span class="pre">bind</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">loc</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'ro'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.environments.Container.bind" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.engine.environments.Docker">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.engine.environments.</span></span><span class="sig-name descname"><span class="pre">Docker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'latest'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/mnt/pydra'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.environments.Docker" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pydra.engine.environments.Container" title="pydra.engine.environments.Container"><code class="xref py py-class docutils literal notranslate"><span class="pre">Container</span></code></a></p>
+<p>Docker environment.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.environments.Docker.execute">
+<span class="sig-name descname"><span class="pre">execute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.environments.Docker.execute" title="Permalink to this definition"></a></dt>
+<dd><p>Execute the task in the environment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>task</strong> (<em>TaskBase</em>) – the task to execute</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Output of the task.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>output</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.engine.environments.Environment">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.engine.environments.</span></span><span class="sig-name descname"><span class="pre">Environment</span></span><a class="headerlink" href="#pydra.engine.environments.Environment" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Base class for environments that are used to execute tasks.
+Right now it is assumed that the environment, including container images,
+are available and are not removed at the end
+TODO: add setup and teardown methods</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.environments.Environment.execute">
+<span class="sig-name descname"><span class="pre">execute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.environments.Environment.execute" title="Permalink to this definition"></a></dt>
+<dd><p>Execute the task in the environment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>task</strong> (<em>TaskBase</em>) – the task to execute</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Output of the task.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>output</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.environments.Environment.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.environments.Environment.setup" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.environments.Environment.teardown">
+<span class="sig-name descname"><span class="pre">teardown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.environments.Environment.teardown" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.engine.environments.Native">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.engine.environments.</span></span><span class="sig-name descname"><span class="pre">Native</span></span><a class="headerlink" href="#pydra.engine.environments.Native" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pydra.engine.environments.Environment" title="pydra.engine.environments.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></p>
+<p>Native environment, i.e. the tasks are executed in the current python environment.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.environments.Native.execute">
+<span class="sig-name descname"><span class="pre">execute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.environments.Native.execute" title="Permalink to this definition"></a></dt>
+<dd><p>Execute the task in the environment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>task</strong> (<em>TaskBase</em>) – the task to execute</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Output of the task.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>output</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.engine.environments.Singularity">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.engine.environments.</span></span><span class="sig-name descname"><span class="pre">Singularity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'latest'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/mnt/pydra'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.environments.Singularity" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pydra.engine.environments.Container" title="pydra.engine.environments.Container"><code class="xref py py-class docutils literal notranslate"><span class="pre">Container</span></code></a></p>
+<p>Singularity environment.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.environments.Singularity.execute">
+<span class="sig-name descname"><span class="pre">execute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.environments.Singularity.execute" title="Permalink to this definition"></a></dt>
+<dd><p>Execute the task in the environment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>task</strong> (<em>TaskBase</em>) – the task to execute</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Output of the task.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>output</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="pydra.engine.core.html" class="btn btn-neutral float-left" title="pydra.engine.core module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="pydra.engine.graph.html" class="btn btn-neutral float-right" title="pydra.engine.graph module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019 - 2020, The Nipype Developers team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  
+<div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+        <span class="fa fa-book"> Other Versions</span>
+        v: 0.25
+        <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+        <dl>
+            <dt>Tags</dt>
+            <dd><a href="../../0.21/index.html">0.21</a></dd>
+            <dd><a href="../../0.22/index.html">0.22</a></dd>
+            <dd><a href="../../0.23/api/pydra.engine.environments.html">0.23</a></dd>
+            <dd><a href="../../0.23.0-alpha/index.html">0.23.0-alpha</a></dd>
+            <dd><a href="../../0.24/api/pydra.engine.environments.html">0.24</a></dd>
+            <dd><a href="pydra.engine.environments.html">0.25</a></dd>
+        </dl>
+        <dl>
+            <dt>Branches</dt>
+            <dd><a href="../../ci_test-py3.11-windows/index.html">ci/test-py3.11-windows</a></dd>
+            <dd><a href="../../debugging-hashing/api/pydra.engine.environments.html">debugging-hashing</a></dd>
+            <dd><a href="../../effigies_input-spec-suggestions/index.html">effigies/input-spec-suggestions</a></dd>
+            <dd><a href="../../master/api/pydra.engine.environments.html">master</a></dd>
+            <dd><a href="../../mriqc-hacking/api/pydra.engine.environments.html">mriqc-hacking</a></dd>
+            <dd><a href="../../new-syntax/index.html">new-syntax</a></dd>
+            <dd><a href="../../pre-commit-ci-update-config/api/pydra.engine.environments.html">pre-commit-ci-update-config</a></dd>
+            <dd><a href="../../unittest-fixes/api/pydra.engine.environments.html">unittest-fixes</a></dd>
+        </dl>
+    </div>
+</div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

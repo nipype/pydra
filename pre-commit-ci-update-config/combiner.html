@@ -1,0 +1,205 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grouping Task’s Output &mdash; Pydra: A simple dataflow engine with scalable semantics 0.24 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="_static/banner.css" />
+
+  
+      <script src="_static/jquery.js"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+      <script src="_static/doctools.js"></script>
+      <script src="_static/sphinx_highlight.js"></script>
+      <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Input Specification" href="input_spec.html" />
+    <link rel="prev" title="State and Nested Loops over Input" href="state.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Pydra: A simple dataflow engine with scalable semantics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="user_guide.html">User Guide</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="components.html">Dataflows Components: Task and Workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="state.html">State and Nested Loops over Input</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Grouping Task’s Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="input_spec.html">Input Specification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output_spec.html">Output Specification</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">Release Notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Library API (application programmer interface)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Pydra: A simple dataflow engine with scalable semantics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="user_guide.html">User Guide</a></li>
+      <li class="breadcrumb-item active">Grouping Task’s Output</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/combiner.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+
+
+    
+    
+
+
+
+    <p class="scv-banner scv-sphinx_rtd_theme"><a href="../master/combiner.html"><b>Warning:</b> This document is for the development version of Pydra: A simple dataflow engine with scalable semantics. The main version is master.</a></p>
+<section id="grouping-task-s-output">
+<h1>Grouping Task’s Output<a class="headerlink" href="#grouping-task-s-output" title="Permalink to this heading"></a></h1>
+<p>In addition to the splitting the input, <em>Pydra</em> supports grouping
+or combining the output resulting from the splits.
+In order to achieve this for a <em>Task</em>, a user can specify a <em>combiner</em>.
+This can be set by calling <code class="docutils literal notranslate"><span class="pre">combine</span></code> method.
+Note, the <em>combiner</em> only makes sense when a <em>splitter</em> is
+set first. When <em>combiner=x</em>, all values are combined together within one list,
+and each element of the list represents an output of the <em>Task</em> for the specific
+value of the input <em>x</em>. Splitting and combining for this example can be written
+as follows:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}S = x &amp;:&amp; ~x=[x_1, x_2, ..., x_n] \mapsto x=x_1, x=x_2, ..., x=x_n, \\
+C = x &amp;:&amp; ~out(x_1), ...,out(x_n) \mapsto out_{comb}=[out(x_1), ...out(x_n)],\end{split}\]</div>
+<p>where <cite>S</cite> represents the <em>splitter</em>, <em>C</em> represents the <em>combiner</em>, <span class="math notranslate nohighlight">\(x\)</span> is the input field,
+<span class="math notranslate nohighlight">\(out(x_i)\)</span> represents the output of the <em>Task</em> for <span class="math notranslate nohighlight">\(x_i\)</span>, and <span class="math notranslate nohighlight">\(out_{comb}\)</span>
+is the final output after applying the <em>combiner</em>.</p>
+<p>In the situation where input has multiple fields and an <em>outer splitter</em> is used,
+there are various ways of combining the output.
+Taking as an example the task from the previous section,
+user might want to combine all the outputs for one specific value of <span class="math notranslate nohighlight">\(x_i\)</span> and
+all the values of <span class="math notranslate nohighlight">\(y\)</span>.
+In this situation, the combined output would be a two dimensional list, each
+inner list for each value of <span class="math notranslate nohighlight">\(x\)</span>. This can be written as follow:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}C = y &amp;:&amp; ~out(x_1, y1), out(x_1, y2), ...out(x_n, y_m) \\
+&amp;\longmapsto&amp; ~[[out(x_1, y_1), ..., out(x_1, y_m)], \\
+&amp;&amp; ~..., \\
+&amp;&amp; ~[out(x_n, y_1), ..., out(x_n, y_m)]].\end{split}\]</div>
+<figure class="h align-default">
+<a class="reference internal image-reference" href="_images/nd_spl_3_comb1.png"><img alt="_images/nd_spl_3_comb1.png" src="_images/nd_spl_3_comb1.png" style="width: 351.75px; height: 261.75px;" /></a>
+</figure>
+<p>However, for the same task the user might want to combine
+all values of <span class="math notranslate nohighlight">\(x\)</span> for specific values of <span class="math notranslate nohighlight">\(y\)</span>.
+One may also need to combine all the values together.
+This can be achieved by providing a list of fields, <span class="math notranslate nohighlight">\([x, y]\)</span> to the combiner.
+When a full combiner is set, i.e. all the fields from
+the splitter are also in the combiner, the output is a one dimensional list:</p>
+<div class="math notranslate nohighlight">
+\[C = [x, y] : out(x_1, y1), ...out(x_n, y_m) \longmapsto [out(x_1, y_1), ..., out(x_n, y_m)].\]</div>
+<figure class="h align-default">
+<a class="reference internal image-reference" href="_images/nd_spl_3_comb3.png"><img alt="_images/nd_spl_3_comb3.png" src="_images/nd_spl_3_comb3.png" style="width: 349.5px; height: 261.75px;" /></a>
+</figure>
+<p>These are the basic examples of the <em>Pydra</em>’s <em>splitter-combiner</em> concept. It
+is important to note, that <em>Pydra</em> allows for mixing <em>splitters</em> and <em>combiners</em>
+on various levels of a dataflow. They can be set on a single <em>Task</em> or a <em>Workflow</em>.
+They can be passed from one <em>Task</em> to following <em>Tasks</em> within the <em>Workflow</em>.</p>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="state.html" class="btn btn-neutral float-left" title="State and Nested Loops over Input" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="input_spec.html" class="btn btn-neutral float-right" title="Input Specification" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019 - 2020, The Nipype Developers team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  
+<div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+        <span class="fa fa-book"> Other Versions</span>
+        v: pre-commit-ci-update-config
+        <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+        <dl>
+            <dt>Tags</dt>
+            <dd><a href="../0.21/combiner.html">0.21</a></dd>
+            <dd><a href="../0.22/combiner.html">0.22</a></dd>
+            <dd><a href="../0.23/combiner.html">0.23</a></dd>
+            <dd><a href="../0.23.0-alpha/combiner.html">0.23.0-alpha</a></dd>
+            <dd><a href="../0.24/combiner.html">0.24</a></dd>
+            <dd><a href="../0.25/combiner.html">0.25</a></dd>
+        </dl>
+        <dl>
+            <dt>Branches</dt>
+            <dd><a href="../ci_test-py3.11-windows/combiner.html">ci/test-py3.11-windows</a></dd>
+            <dd><a href="../debugging-hashing/combiner.html">debugging-hashing</a></dd>
+            <dd><a href="../effigies_input-spec-suggestions/combiner.html">effigies/input-spec-suggestions</a></dd>
+            <dd><a href="../master/combiner.html">master</a></dd>
+            <dd><a href="../mriqc-hacking/combiner.html">mriqc-hacking</a></dd>
+            <dd><a href="../new-syntax/combiner.html">new-syntax</a></dd>
+            <dd><a href="combiner.html">pre-commit-ci-update-config</a></dd>
+            <dd><a href="../unittest-fixes/combiner.html">unittest-fixes</a></dd>
+        </dl>
+    </div>
+</div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

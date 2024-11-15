@@ -1,0 +1,242 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pydra.engine.audit module &mdash; Pydra: A simple dataflow engine with scalable semantics 0.24 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/banner.css" />
+
+  
+      <script src="../_static/jquery.js"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+      <script src="../_static/doctools.js"></script>
+      <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="pydra.engine.boutiques module" href="pydra.engine.boutiques.html" />
+    <link rel="prev" title="pydra.engine package" href="pydra.engine.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Pydra: A simple dataflow engine with scalable semantics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../user_guide.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changes.html">Release Notes</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api.html">Library API (application programmer interface)</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../api.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="pydra.engine.html">pydra.engine package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="pydra.engine.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.mark.html">pydra.mark package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.tasks.html">pydra.tasks package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.utils.html">pydra.utils package</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Pydra: A simple dataflow engine with scalable semantics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../api.html">Library API (application programmer interface)</a></li>
+          <li class="breadcrumb-item"><a href="pydra.engine.html">pydra.engine package</a></li>
+      <li class="breadcrumb-item active">pydra.engine.audit module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/pydra.engine.audit.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+
+
+    
+    
+
+
+
+    <p class="scv-banner scv-sphinx_rtd_theme"><a href="../../master/api/pydra.engine.audit.html"><b>Warning:</b> This document is for the development version of Pydra: A simple dataflow engine with scalable semantics. The main version is master.</a></p>
+<section id="module-pydra.engine.audit">
+<span id="pydra-engine-audit-module"></span><h1>pydra.engine.audit module<a class="headerlink" href="#module-pydra.engine.audit" title="Permalink to this heading"></a></h1>
+<p>Module to keep track of provenance information.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.engine.audit.Audit">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.engine.audit.</span></span><span class="sig-name descname"><span class="pre">Audit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">audit_flags</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">messengers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">messenger_args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">develop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.audit.Audit" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Handle provenance tracking and resource utilization.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.audit.Audit.audit_check">
+<span class="sig-name descname"><span class="pre">audit_check</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flag</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.audit.Audit.audit_check" title="Permalink to this definition"></a></dt>
+<dd><p>Determine whether auditing is enabled for a particular flag.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>flag</strong> (:obj: <cite>bool</cite>) – The flag that is checked.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Boolean AND for self.oudit_flags and flag</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)">bool</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.audit.Audit.audit_message">
+<span class="sig-name descname"><span class="pre">audit_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flags</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.audit.Audit.audit_message" title="Permalink to this definition"></a></dt>
+<dd><p>Send auditing message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>message</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dict</span></code></a>) – A message in Pydra is a JSON-LD message object.</p></li>
+<li><p><strong>flags</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bool</span></code></a>, optional) – If True and self.audit_flag, the message is sent.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.audit.Audit.audit_task">
+<span class="sig-name descname"><span class="pre">audit_task</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.audit.Audit.audit_task" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.audit.Audit.finalize_audit">
+<span class="sig-name descname"><span class="pre">finalize_audit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.audit.Audit.finalize_audit" title="Permalink to this definition"></a></dt>
+<dd><p>End auditing.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.audit.Audit.monitor">
+<span class="sig-name descname"><span class="pre">monitor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.audit.Audit.monitor" title="Permalink to this definition"></a></dt>
+<dd><p>Start resource monitoring.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.engine.audit.Audit.start_audit">
+<span class="sig-name descname"><span class="pre">start_audit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">odir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.audit.Audit.start_audit" title="Permalink to this definition"></a></dt>
+<dd><p>Start recording provenance.</p>
+<p>Monitored information is not sent until directory is created,
+in case message directory is inside task output directory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>odir</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">os.pathlike</span></code>) – Message output directory.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="pydra.engine.html" class="btn btn-neutral float-left" title="pydra.engine package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="pydra.engine.boutiques.html" class="btn btn-neutral float-right" title="pydra.engine.boutiques module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019 - 2020, The Nipype Developers team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  
+<div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+        <span class="fa fa-book"> Other Versions</span>
+        v: pre-commit-ci-update-config
+        <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+        <dl>
+            <dt>Tags</dt>
+            <dd><a href="../../0.21/api/pydra.engine.audit.html">0.21</a></dd>
+            <dd><a href="../../0.22/api/pydra.engine.audit.html">0.22</a></dd>
+            <dd><a href="../../0.23/api/pydra.engine.audit.html">0.23</a></dd>
+            <dd><a href="../../0.23.0-alpha/api/pydra.engine.audit.html">0.23.0-alpha</a></dd>
+            <dd><a href="../../0.24/api/pydra.engine.audit.html">0.24</a></dd>
+            <dd><a href="../../0.25/api/pydra.engine.audit.html">0.25</a></dd>
+        </dl>
+        <dl>
+            <dt>Branches</dt>
+            <dd><a href="../../ci_test-py3.11-windows/api/pydra.engine.audit.html">ci/test-py3.11-windows</a></dd>
+            <dd><a href="../../debugging-hashing/api/pydra.engine.audit.html">debugging-hashing</a></dd>
+            <dd><a href="../../effigies_input-spec-suggestions/api/pydra.engine.audit.html">effigies/input-spec-suggestions</a></dd>
+            <dd><a href="../../master/api/pydra.engine.audit.html">master</a></dd>
+            <dd><a href="../../mriqc-hacking/api/pydra.engine.audit.html">mriqc-hacking</a></dd>
+            <dd><a href="../../new-syntax/index.html">new-syntax</a></dd>
+            <dd><a href="pydra.engine.audit.html">pre-commit-ci-update-config</a></dd>
+            <dd><a href="../../unittest-fixes/api/pydra.engine.audit.html">unittest-fixes</a></dd>
+        </dl>
+    </div>
+</div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

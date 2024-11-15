@@ -1,0 +1,7 @@
+design.shell module
+===================
+
+.. automodule:: design.shell
+   :members:
+   :undoc-members:
+   :show-inheritance:

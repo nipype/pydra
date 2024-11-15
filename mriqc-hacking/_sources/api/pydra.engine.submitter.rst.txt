@@ -1,0 +1,7 @@
+pydra.engine.submitter module
+=============================
+
+.. automodule:: pydra.engine.submitter
+   :members:
+   :undoc-members:
+   :show-inheritance:

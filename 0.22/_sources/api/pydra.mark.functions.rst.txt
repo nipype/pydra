@@ -1,0 +1,7 @@
+pydra.mark.functions module
+===========================
+
+.. automodule:: pydra.mark.functions
+   :members:
+   :undoc-members:
+   :show-inheritance:

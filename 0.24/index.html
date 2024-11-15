@@ -1,0 +1,244 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to Pydra: A simple dataflow engine with scalable semantics’s documentation! &mdash; Pydra: A simple dataflow engine with scalable semantics 0.24 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="_static/banner.css" />
+
+  
+      <script src="_static/jquery.js"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+      <script src="_static/doctools.js"></script>
+      <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="User Guide" href="user_guide.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            Pydra: A simple dataflow engine with scalable semantics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="user_guide.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">Release Notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Library API (application programmer interface)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">Pydra: A simple dataflow engine with scalable semantics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Welcome to Pydra: A simple dataflow engine with scalable semantics’s documentation!</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+
+
+    
+    
+
+
+
+    <p class="scv-banner scv-sphinx_rtd_theme"><a href="../master/index.html"><b>Warning:</b> This document is for an old version of Pydra: A simple dataflow engine with scalable semantics. The main version is master.</a></p>
+<section id="welcome-to-pydra-a-simple-dataflow-engine-with-scalable-semantics-s-documentation">
+<h1>Welcome to Pydra: A simple dataflow engine with scalable semantics’s documentation!<a class="headerlink" href="#welcome-to-pydra-a-simple-dataflow-engine-with-scalable-semantics-s-documentation" title="Permalink to this heading"></a></h1>
+<p>Pydra is a new lightweight dataflow engine written in Python.
+Pydra is developed as an open-source project in the neuroimaging community,
+but it is designed as a general-purpose dataflow engine to support any scientific domain.</p>
+<p>Scientific workflows often require sophisticated analyses that encompass a large collection
+of algorithms.
+The algorithms, that were originally not necessarily designed to work together,
+and were written by different authors.
+Some may be written in Python, while others might require calling external programs.
+It is a common practice to create semi-manual workflows that require the scientists
+to handle the files and interact with partial results from algorithms and external tools.
+This approach is conceptually simple and easy to implement, but the resulting workflow
+is often time consuming, error-prone and difficult to share with others.
+Consistency, reproducibility and scalability demand scientific workflows
+to be organized into fully automated pipelines.
+This was the motivation behind Pydra - a new dataflow engine written in Python.</p>
+<p>The Pydra package is a part of the second generation of the <a class="reference external" href="https://nipype.readthedocs.io/en/latest/">Nipype</a> ecosystem
+— an open-source framework that provides a uniform interface to existing neuroimaging
+software and facilitates interaction between different software components.
+The Nipype project was born in the neuroimaging community, and has been helping scientists
+build workflows for a decade, providing a uniform interface to such neuroimaging packages
+as <a class="reference external" href="https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL">FSL</a>, <a class="reference external" href="http://stnava.github.io/ANTs/">ANTs</a>, <a class="reference external" href="https://afni.nimh.nih.gov/">AFNI</a>, <a class="reference external" href="https://surfer.nmr.mgh.harvard.edu/">FreeSurfer</a> and <a class="reference external" href="https://www.fil.ion.ucl.ac.uk/spm/">SPM</a>.
+This flexibility has made it an ideal basis for popular preprocessing tools,
+such as <a class="reference external" href="https://fmriprep.org/en/stable/">fMRIPrep</a> and <a class="reference external" href="https://fcp-indi.github.io/docs/latest/index">C-PAC</a>.
+The second generation of Nipype ecosystem is meant to provide additional flexibility
+and is being developed with reproducibility, ease of use, and scalability in mind.
+Pydra itself is a standalone project and is designed as a general-purpose dataflow engine
+to support any scientific domain.</p>
+<p>The goal of Pydra is to provide a lightweight dataflow engine for computational graph construction,
+manipulation, and distributed execution, as well as ensuring reproducibility of scientific pipelines.
+In Pydra, a dataflow is represented as a directed acyclic graph, where each node represents a Python
+function, execution of an external tool, or another reusable dataflow.
+The combination of several key features makes Pydra a customizable and powerful dataflow engine:</p>
+<ul class="simple">
+<li><p>Composable dataflows: Any node of a dataflow graph can be another dataflow, allowing for nested
+dataflows of arbitrary depths and encouraging creating reusable dataflows.</p></li>
+<li><p>Flexible semantics for creating nested loops over input sets: Any Task or dataflow can be run
+over input parameter sets and the outputs can be recombined (similar concept to <a class="reference external" href="https://en.wikipedia.org/wiki/MapReduce">Map-Reduce</a> model,
+but Pydra extends this to graphs with nested dataflows).</p></li>
+<li><p>A content-addressable global cache: Hash values are computed for each graph and each Task.
+This supports reusing of previously computed and stored dataflows and Tasks.</p></li>
+<li><p>Support for Python functions and external (shell) commands: Pydra can decorate and use existing
+functions in Python libraries alongside external command line tools, allowing easy integration
+of existing code and software.</p></li>
+<li><p>Native container execution support: Any dataflow or Task can be executed in an associated container
+(via Docker or Singularity) enabling greater consistency for reproducibility.</p></li>
+<li><p>Auditing and provenance tracking: Pydra provides a simple JSON-LD-based message passing mechanism
+to capture the dataflow execution activities as a provenance graph. These messages track inputs
+and outputs of each task in a dataflow, and the resources consumed by the task.</p></li>
+</ul>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="user_guide.html">User Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="components.html">Dataflows Components: Task and Workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="state.html">State and Nested Loops over Input</a></li>
+<li class="toctree-l2"><a class="reference internal" href="combiner.html">Grouping Task’s Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="input_spec.html">Input Specification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output_spec.html">Output Specification</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">Release Notes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id1">0.8.0</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id2">0.7.0</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id3">0.6.2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id4">0.6.1</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id5">0.6</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id6">0.5</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id7">0.4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id8">0.3.1</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id9">0.3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id10">0.2.2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id11">0.2.1</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id12">0.2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id13">0.1</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#id14">0.0.1</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Library API (application programmer interface)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api.html#pydra.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#pydra.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#pydra.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#pydra.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#subpackages">Subpackages</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this heading"></a></h1>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
+<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+</ul>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="user_guide.html" class="btn btn-neutral float-right" title="User Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019 - 2020, The Nipype Developers team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  
+<div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+        <span class="fa fa-book"> Other Versions</span>
+        v: 0.24
+        <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+        <dl>
+            <dt>Tags</dt>
+            <dd><a href="../0.21/index.html">0.21</a></dd>
+            <dd><a href="../0.22/index.html">0.22</a></dd>
+            <dd><a href="../0.23/index.html">0.23</a></dd>
+            <dd><a href="../0.23.0-alpha/index.html">0.23.0-alpha</a></dd>
+            <dd><a href="index.html">0.24</a></dd>
+            <dd><a href="../0.25/index.html">0.25</a></dd>
+        </dl>
+        <dl>
+            <dt>Branches</dt>
+            <dd><a href="../ci_test-py3.11-windows/index.html">ci/test-py3.11-windows</a></dd>
+            <dd><a href="../debugging-hashing/index.html">debugging-hashing</a></dd>
+            <dd><a href="../effigies_input-spec-suggestions/index.html">effigies/input-spec-suggestions</a></dd>
+            <dd><a href="../master/index.html">master</a></dd>
+            <dd><a href="../mriqc-hacking/index.html">mriqc-hacking</a></dd>
+            <dd><a href="../new-syntax/index.html">new-syntax</a></dd>
+            <dd><a href="../pre-commit-ci-update-config/index.html">pre-commit-ci-update-config</a></dd>
+            <dd><a href="../unittest-fixes/index.html">unittest-fixes</a></dd>
+        </dl>
+    </div>
+</div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

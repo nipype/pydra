@@ -1,0 +1,442 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pydra.engine.helpers_file module &mdash; Pydra: A simple dataflow engine with scalable semantics 0.24 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/banner.css" />
+
+  
+      <script src="../_static/jquery.js"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+      <script src="../_static/doctools.js"></script>
+      <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="pydra.engine.helpers_state module" href="pydra.engine.helpers_state.html" />
+    <link rel="prev" title="pydra.engine.helpers module" href="pydra.engine.helpers.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Pydra: A simple dataflow engine with scalable semantics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../user_guide.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changes.html">Release Notes</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api.html">Library API (application programmer interface)</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.check_latest_version"><code class="docutils literal notranslate"><span class="pre">check_latest_version()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.set_input_validator"><code class="docutils literal notranslate"><span class="pre">set_input_validator()</span></code></a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../api.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="pydra.engine.html">pydra.engine package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.DockerTask"><code class="docutils literal notranslate"><span class="pre">DockerTask</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="pydra.engine.html#pydra.engine.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="pydra.engine.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.mark.html">pydra.mark package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.tasks.html">pydra.tasks package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.utils.html">pydra.utils package</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Pydra: A simple dataflow engine with scalable semantics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../api.html">Library API (application programmer interface)</a></li>
+          <li class="breadcrumb-item"><a href="pydra.engine.html">pydra.engine package</a></li>
+      <li class="breadcrumb-item active">pydra.engine.helpers_file module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/pydra.engine.helpers_file.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+
+
+    
+    
+
+
+
+    <p class="scv-banner scv-sphinx_rtd_theme"><a href="../../master/api/pydra.engine.helpers_file.html"><b>Warning:</b> This document is for an old version of Pydra: A simple dataflow engine with scalable semantics. The main version is master.</a></p>
+<section id="module-pydra.engine.helpers_file">
+<span id="pydra-engine-helpers-file-module"></span><h1>pydra.engine.helpers_file module<a class="headerlink" href="#module-pydra.engine.helpers_file" title="Permalink to this heading"></a></h1>
+<p>Functions ported from Nipype 1, after removing parts that were related to py2.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.copyfile">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">copyfile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">originalfile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">newfile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">create_new</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_hardlink</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_related_files</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.copyfile" title="Permalink to this definition"></a></dt>
+<dd><p>Copy or link files.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">use_hardlink</span></code> is True, and the file can be hard-linked, then a
+link is created, instead of copying the file.</p>
+<p>If a hard link is not created and <code class="docutils literal notranslate"><span class="pre">copy</span></code> is False, then a symbolic
+link is created.</p>
+<div class="admonition-copy-options-for-existing-files admonition">
+<p class="admonition-title">Copy options for existing files</p>
+<ul>
+<li><p>symlink</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>to regular file originalfile            (keep if symlinking)</p></li>
+<li><p>to same dest as symlink originalfile    (keep if symlinking)</p></li>
+<li><p>to other file                           (unlink)</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>regular file</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>hard link to originalfile               (keep)</p></li>
+<li><p>copy of file (same hash)                (keep)</p></li>
+<li><p>different file (diff hash)              (unlink)</p></li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+</div>
+<div class="admonition-copy-options-for-new-files admonition">
+<p class="admonition-title">Copy options for new files</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">use_hardlink</span></code> &amp; <code class="docutils literal notranslate"><span class="pre">can_hardlink</span></code> =&gt; hardlink</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">~hardlink</span></code> &amp; <code class="docutils literal notranslate"><span class="pre">~copy</span></code> &amp; <code class="docutils literal notranslate"><span class="pre">can_symlink</span></code> =&gt; symlink</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">~hardlink</span></code> &amp; <code class="docutils literal notranslate"><span class="pre">~symlink</span></code> =&gt; copy</p></li>
+</ul>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>originalfile</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – full path to original file</p></li>
+<li><p><strong>newfile</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – full path to new file</p></li>
+<li><p><strong>copy</strong> (<em>Bool</em>) – specifies whether to copy or symlink files
+(default=False) but only for POSIX systems</p></li>
+<li><p><strong>use_hardlink</strong> (<em>Bool</em>) – specifies whether to hard-link files, when able
+(Default=False), taking precedence over copy</p></li>
+<li><p><strong>copy_related_files</strong> (<em>Bool</em>) – specifies whether to also operate on related files, as defined in
+<code class="docutils literal notranslate"><span class="pre">related_filetype_sets</span></code></p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.copyfile_input">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">copyfile_input</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.copyfile_input" title="Permalink to this definition"></a></dt>
+<dd><p>Implement the base class method.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.copyfiles">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">copyfiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filelist</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dest</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">create_new</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.copyfiles" title="Permalink to this definition"></a></dt>
+<dd><p>Copy or symlink files in <code class="docutils literal notranslate"><span class="pre">filelist</span></code> to <code class="docutils literal notranslate"><span class="pre">dest</span></code> directory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>filelist</strong> (<em>list</em>) – List of files to copy.</p></li>
+<li><p><strong>dest</strong> (<em>path/files</em>) – full path to destination. If it is a list of length greater
+than 1, then it assumes that these are the names of the new
+files.</p></li>
+<li><p><strong>copy</strong> (<em>Bool</em>) – specifies whether to copy or symlink files
+(default=False) but only for posix systems</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.ensure_list">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">ensure_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.ensure_list" title="Permalink to this definition"></a></dt>
+<dd><p>Return a list given either a string or a list.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.fname_presuffix">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">fname_presuffix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fname</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">suffix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">newpath</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_ext</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.fname_presuffix" title="Permalink to this definition"></a></dt>
+<dd><p>Manipulate path and name of input filename.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fname</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – A filename (may or may not include path)</p></li>
+<li><p><strong>prefix</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – Characters to prepend to the filename</p></li>
+<li><p><strong>suffix</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – Characters to append to the filename</p></li>
+<li><p><strong>newpath</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – Path to replace the path of the input fname</p></li>
+<li><p><strong>use_ext</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bool</span></code></a>) – If True (default), appends the extension of the original file
+to the output name.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>path</strong> – Absolute path of the modified filename</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a></p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">pytest</span><span class="o">,</span> <span class="nn">sys</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">platform</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;win&#39;</span><span class="p">):</span> <span class="n">pytest</span><span class="o">.</span><span class="n">skip</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">pydra.engine.helpers_file</span> <span class="kn">import</span> <span class="n">fname_presuffix</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">fname</span> <span class="o">=</span> <span class="s1">&#39;foo.nii.gz&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">fname_presuffix</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span><span class="s1">&#39;pre&#39;</span><span class="p">,</span><span class="s1">&#39;post&#39;</span><span class="p">,</span><span class="s1">&#39;/tmp&#39;</span><span class="p">)</span>
+<span class="go">&#39;/tmp/prefoopost.nii.gz&#39;</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.get_related_files">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">get_related_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_this_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.get_related_files" title="Permalink to this definition"></a></dt>
+<dd><p>Return a list of related files.</p>
+<p>As defined in <a class="reference internal" href="#pydra.engine.helpers_file.related_filetype_sets" title="pydra.engine.helpers_file.related_filetype_sets"><code class="xref py py-attr docutils literal notranslate"><span class="pre">related_filetype_sets</span></code></a>, for a filename
+(e.g., Nifti-Pair, Analyze (SPM), and AFNI files).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – File name to find related filetypes of.</p></li>
+<li><p><strong>include_this_file</strong> (<em>bool</em>) – If true, output includes the input filename.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.hash_dir">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">hash_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dirpath</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crypto=&lt;built-in</span> <span class="pre">function</span> <span class="pre">openssl_sha256&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_hidden_files=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_hidden_dirs=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raise_notfound=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">precalculated=None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.hash_dir" title="Permalink to this definition"></a></dt>
+<dd><p>Compute hash of directory contents.</p>
+<p>This function computes the hash of every file in directory <cite>dirpath</cite> and then
+computes the hash of that list of hashes to return a single hash value. The
+directory is traversed recursively.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dirpath</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – Path to directory.</p></li>
+<li><p><strong>crypto</strong> (:obj: <cite>function</cite>) – cryptographic hash functions</p></li>
+<li><p><strong>ignore_hidden_files</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bool</span></code></a>) – If <cite>True</cite>, ignore filenames that begin with <cite>.</cite>.</p></li>
+<li><p><strong>ignore_hidden_dirs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bool</span></code></a>) – If <cite>True</cite>, ignore files in directories that begin with <cite>.</cite>.</p></li>
+<li><p><strong>raise_notfound</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bool</span></code></a>) – If <cite>True</cite> and <cite>dirpath</cite> does not exist, raise <cite>FileNotFound</cite> exception. If
+<cite>False</cite> and <cite>dirpath</cite> does not exist, return <cite>None</cite>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>hash</strong> – Hash of the directory contents.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.hash_file">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">hash_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">afile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_len=8192</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crypto=&lt;built-in</span> <span class="pre">function</span> <span class="pre">openssl_sha256&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raise_notfound=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">precalculated=None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.hash_file" title="Permalink to this definition"></a></dt>
+<dd><p>Compute hash of a file using ‘crypto’ module.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.is_container">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">is_container</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.is_container" title="Permalink to this definition"></a></dt>
+<dd><p>Check if item is a container (list, tuple, dict, set).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>item</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">object</span></code></a>) – Input object to check.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>output</strong> – <code class="docutils literal notranslate"><span class="pre">True</span></code> if container <code class="docutils literal notranslate"><span class="pre">False</span></code> otherwise.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bool</span></code></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.is_existing_file">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">is_existing_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.is_existing_file" title="Permalink to this definition"></a></dt>
+<dd><p>checking if an object is an existing file</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.is_local_file">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">is_local_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.is_local_file" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.on_cifs">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">on_cifs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fname</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.on_cifs" title="Permalink to this definition"></a></dt>
+<dd><p>Check whether a file path is on a CIFS filesystem mounted in a POSIX host.</p>
+<p>POSIX hosts are assumed to have the <code class="docutils literal notranslate"><span class="pre">mount</span></code> command.</p>
+<p>On Windows, Docker mounts host directories into containers through CIFS
+shares, which has support for Minshall+French symlinks, or text files that
+the CIFS driver exposes to the OS as symlinks.
+We have found that under concurrent access to the filesystem, this feature
+can result in failures to create or read recently-created symlinks,
+leading to inconsistent behavior and <code class="docutils literal notranslate"><span class="pre">FileNotFoundError</span></code> errors.</p>
+<p>This check is written to support disabling symlinks on CIFS shares.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.related_filetype_sets">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">related_filetype_sets</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[('.hdr',</span> <span class="pre">'.img',</span> <span class="pre">'.mat'),</span> <span class="pre">('.nii',</span> <span class="pre">'.mat'),</span> <span class="pre">('.BRIK',</span> <span class="pre">'.HEAD')]</span></em><a class="headerlink" href="#pydra.engine.helpers_file.related_filetype_sets" title="Permalink to this definition"></a></dt>
+<dd><p>List of neuroimaging file types that are to be interpreted together.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.split_filename">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">split_filename</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fname</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.split_filename" title="Permalink to this definition"></a></dt>
+<dd><p>Split a filename into parts: path, base filename and extension.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>fname</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – file or path name</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>pth</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – base path from fname</p></li>
+<li><p><strong>fname</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – filename from fname, without extension</p></li>
+<li><p><strong>ext</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">str</span></code></a>) – file extension from fname</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">pth</span><span class="p">,</span> <span class="n">fname</span><span class="p">,</span> <span class="n">ext</span> <span class="o">=</span> <span class="n">split_filename</span><span class="p">(</span><span class="s1">&#39;/home/data/subject.nii.gz&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">pth</span>
+<span class="go">&#39;/home/data&#39;</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">fname</span>
+<span class="go">&#39;subject&#39;</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ext</span>
+<span class="go">&#39;.nii.gz&#39;</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.template_update">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">template_update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_ind</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">map_copyfiles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.template_update" title="Permalink to this definition"></a></dt>
+<dd><p>Update all templates that are present in the input spec.</p>
+<p>Should be run when all inputs used in the templates are already set.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.engine.helpers_file.template_update_single">
+<span class="sig-prename descclassname"><span class="pre">pydra.engine.helpers_file.</span></span><span class="sig-name descname"><span class="pre">template_update_single</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inputs_dict_st</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spec_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'input'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.engine.helpers_file.template_update_single" title="Permalink to this definition"></a></dt>
+<dd><p>Update a single template from the input_spec or output_spec
+based on the value from inputs_dict
+(checking the types of the fields, that have “output_file_template)”</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="pydra.engine.helpers.html" class="btn btn-neutral float-left" title="pydra.engine.helpers module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="pydra.engine.helpers_state.html" class="btn btn-neutral float-right" title="pydra.engine.helpers_state module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019 - 2020, The Nipype Developers team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  
+<div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+        <span class="fa fa-book"> Other Versions</span>
+        v: 0.22
+        <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+        <dl>
+            <dt>Tags</dt>
+            <dd><a href="../../0.21/api/pydra.engine.helpers_file.html">0.21</a></dd>
+            <dd><a href="pydra.engine.helpers_file.html">0.22</a></dd>
+            <dd><a href="../../0.23/api/pydra.engine.helpers_file.html">0.23</a></dd>
+            <dd><a href="../../0.23.0-alpha/api/pydra.engine.helpers_file.html">0.23.0-alpha</a></dd>
+            <dd><a href="../../0.24/api/pydra.engine.helpers_file.html">0.24</a></dd>
+            <dd><a href="../../0.25/api/pydra.engine.helpers_file.html">0.25</a></dd>
+        </dl>
+        <dl>
+            <dt>Branches</dt>
+            <dd><a href="../../ci_test-py3.11-windows/api/pydra.engine.helpers_file.html">ci/test-py3.11-windows</a></dd>
+            <dd><a href="../../debugging-hashing/api/pydra.engine.helpers_file.html">debugging-hashing</a></dd>
+            <dd><a href="../../effigies_input-spec-suggestions/api/pydra.engine.helpers_file.html">effigies/input-spec-suggestions</a></dd>
+            <dd><a href="../../master/api/pydra.engine.helpers_file.html">master</a></dd>
+            <dd><a href="../../mriqc-hacking/api/pydra.engine.helpers_file.html">mriqc-hacking</a></dd>
+            <dd><a href="../../new-syntax/index.html">new-syntax</a></dd>
+            <dd><a href="../../pre-commit-ci-update-config/api/pydra.engine.helpers_file.html">pre-commit-ci-update-config</a></dd>
+            <dd><a href="../../unittest-fixes/api/pydra.engine.helpers_file.html">unittest-fixes</a></dd>
+        </dl>
+    </div>
+</div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,269 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pydra.utils.hash module &mdash; Pydra: A simple dataflow engine with scalable semantics 0.24 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/banner.css" />
+
+  
+      <script src="../_static/jquery.js"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+      <script src="../_static/doctools.js"></script>
+      <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="pydra.utils.messenger module" href="pydra.utils.messenger.html" />
+    <link rel="prev" title="pydra.utils package" href="pydra.utils.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Pydra: A simple dataflow engine with scalable semantics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../user_guide.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changes.html">Release Notes</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api.html">Library API (application programmer interface)</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#pydra.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../api.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="pydra.engine.html">pydra.engine package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.mark.html">pydra.mark package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pydra.tasks.html">pydra.tasks package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="pydra.utils.html">pydra.utils package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="pydra.utils.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Pydra: A simple dataflow engine with scalable semantics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../api.html">Library API (application programmer interface)</a></li>
+          <li class="breadcrumb-item"><a href="pydra.utils.html">pydra.utils package</a></li>
+      <li class="breadcrumb-item active">pydra.utils.hash module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/pydra.utils.hash.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+
+
+    
+    
+
+
+
+    <p class="scv-banner scv-sphinx_rtd_theme"><a href="../master/api/pydra.utils.hash.html"><b>Warning:</b> This document is for an old version of Pydra: A simple dataflow engine with scalable semantics. The main version is master.</a></p>
+<section id="module-pydra.utils.hash">
+<span id="pydra-utils-hash-module"></span><h1>pydra.utils.hash module<a class="headerlink" href="#module-pydra.utils.hash" title="Permalink to this heading"></a></h1>
+<p>Generic object hashing dispatch</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.utils.hash.Cache">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.utils.hash.</span></span><span class="sig-name descname"><span class="pre">Cache</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">persistent</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">PersistentCache</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hashes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.13)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Hash</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_Nothing.NOTHING</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.utils.hash.Cache" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Cache for hashing objects, used to avoid infinite recursion caused by circular
+references between objects, and to store hashes of objects that have already been
+hashed to avoid recomputation.</p>
+<p>This concept is extended to persistent caching of hashes for certain object types,
+for which calculating the hash is a potentially expensive operation (e.g.
+File/Directory types). For these classes the <cite>bytes_repr</cite> override function yields a
+“locally unique cache key” (e.g. file-system path + mtime) as the first item of its
+iterator.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pydra.utils.hash.Cache.persistent">
+<span class="sig-name descname"><span class="pre">persistent</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">PersistentCache</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><span class="pre">None</span></a></em><a class="headerlink" href="#pydra.utils.hash.Cache.persistent" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.utils.hash.bytes_repr_mapping_contents">
+<span class="sig-prename descclassname"><span class="pre">pydra.utils.hash.</span></span><span class="sig-name descname"><span class="pre">bytes_repr_mapping_contents</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mapping</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.13)"><span class="pre">Mapping</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#pydra.utils.hash.Cache" title="pydra.utils.hash.Cache"><span class="pre">Cache</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Iterator" title="(in Python v3.13)"><span class="pre">Iterator</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.13)"><span class="pre">bytes</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#pydra.utils.hash.bytes_repr_mapping_contents" title="Permalink to this definition"></a></dt>
+<dd><p>Serialize the contents of a mapping</p>
+<p>Concatenates byte-serialized keys and hashed values.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">pydra.utils.hash</span> <span class="kn">import</span> <span class="n">bytes_repr_mapping_contents</span><span class="p">,</span> <span class="n">Cache</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">generator</span> <span class="o">=</span> <span class="n">bytes_repr_mapping_contents</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">},</span> <span class="n">Cache</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="sa">b</span><span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">generator</span><span class="p">)</span>
+<span class="go">b&#39;str:1:a=...str:1:b=...&#39;</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.utils.hash.bytes_repr_sequence_contents">
+<span class="sig-prename descclassname"><span class="pre">pydra.utils.hash.</span></span><span class="sig-name descname"><span class="pre">bytes_repr_sequence_contents</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.13)"><span class="pre">Sequence</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#pydra.utils.hash.Cache" title="pydra.utils.hash.Cache"><span class="pre">Cache</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Iterator" title="(in Python v3.13)"><span class="pre">Iterator</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.13)"><span class="pre">bytes</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#pydra.utils.hash.bytes_repr_sequence_contents" title="Permalink to this definition"></a></dt>
+<dd><p>Serialize the contents of a sequence</p>
+<p>Concatenates hashed values.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">pydra.utils.hash</span> <span class="kn">import</span> <span class="n">bytes_repr_sequence_contents</span><span class="p">,</span> <span class="n">Cache</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">generator</span> <span class="o">=</span> <span class="n">bytes_repr_sequence_contents</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">Cache</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">generator</span><span class="p">)</span>
+<span class="go">[b&#39;m...&#39;, b&#39;£...&#39;]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.utils.hash.hash_function">
+<span class="sig-prename descclassname"><span class="pre">pydra.utils.hash.</span></span><span class="sig-name descname"><span class="pre">hash_function</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.utils.hash.hash_function" title="Permalink to this definition"></a></dt>
+<dd><p>Generate hash of object.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.utils.hash.hash_object">
+<span class="sig-prename descclassname"><span class="pre">pydra.utils.hash.</span></span><span class="sig-name descname"><span class="pre">hash_object</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><span class="pre">object</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#pydra.utils.hash.Cache" title="pydra.utils.hash.Cache"><span class="pre">Cache</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">persistent_cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PersistentCache</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Hash</span></span></span><a class="headerlink" href="#pydra.utils.hash.hash_object" title="Permalink to this definition"></a></dt>
+<dd><p>Hash an object</p>
+<p>Constructs a byte string that uniquely identifies the object,
+and returns the hash of that string.</p>
+<p>Base Python types are implemented, including recursive lists and
+dicts. Custom types can be registered with <a class="reference internal" href="#pydra.utils.hash.register_serializer" title="pydra.utils.hash.register_serializer"><code class="xref py py-func docutils literal notranslate"><span class="pre">register_serializer()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.utils.hash.hash_single">
+<span class="sig-prename descclassname"><span class="pre">pydra.utils.hash.</span></span><span class="sig-name descname"><span class="pre">hash_single</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><span class="pre">object</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#pydra.utils.hash.Cache" title="pydra.utils.hash.Cache"><span class="pre">Cache</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Hash</span></span></span><a class="headerlink" href="#pydra.utils.hash.hash_single" title="Permalink to this definition"></a></dt>
+<dd><p>Single object-scoped hash</p>
+<p>Uses a local cache to prevent infinite recursion. This cache is unsafe
+to reuse across multiple objects, so this function should not be used directly.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pydra.utils.hash.register_serializer">
+<span class="sig-prename descclassname"><span class="pre">pydra.utils.hash.</span></span><span class="sig-name descname"><span class="pre">register_serializer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cls</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">func</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.utils.hash.register_serializer" title="Permalink to this definition"></a></dt>
+<dd><p>Register a custom serializer for a type</p>
+<p>The generator function should yield byte strings that will be hashed
+to produce the final hash. A recommended convention is to yield a
+qualified type prefix (e.g. <code class="docutils literal notranslate"><span class="pre">f&quot;{module}.{class}&quot;</span></code>),
+followed by a colon, followed by the serialized value.</p>
+<p>If serializing an iterable, an open and close bracket may be yielded
+to identify the start and end of the iterable.</p>
+<p>Consider using <a class="reference internal" href="#pydra.utils.hash.bytes_repr_mapping_contents" title="pydra.utils.hash.bytes_repr_mapping_contents"><code class="xref py py-func docutils literal notranslate"><span class="pre">bytes_repr_mapping_contents()</span></code></a> and
+<a class="reference internal" href="#pydra.utils.hash.bytes_repr_sequence_contents" title="pydra.utils.hash.bytes_repr_sequence_contents"><code class="xref py py-func docutils literal notranslate"><span class="pre">bytes_repr_sequence_contents()</span></code></a> to serialize the contents of a mapping
+or sequence. These do not include the prefix or brackets, so they can be
+reused as part of a custom serializer.</p>
+<p>As an example, the following example is the default serializer for user-defined
+classes:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@register_serializer</span>
+<span class="k">def</span> <span class="nf">bytes_repr</span><span class="p">(</span><span class="n">obj</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">cache</span><span class="p">:</span> <span class="n">Cache</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]:</span>
+    <span class="bp">cls</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="vm">__class__</span>
+    <span class="k">yield</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">:</span><span class="se">{{</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+    <span class="k">yield from</span> <span class="n">bytes_repr_mapping_contents</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">,</span> <span class="n">cache</span><span class="p">)</span>
+    <span class="k">yield</span> <span class="sa">b</span><span class="s2">&quot;}&quot;</span>
+</pre></div>
+</div>
+<p>Serializers must accept a <code class="docutils literal notranslate"><span class="pre">cache</span></code> argument, which is a dictionary that
+permits caching of hashes for recursive objects. If the hash of sub-objects
+is used to create an object serialization, the <a class="reference internal" href="#pydra.utils.hash.hash_single" title="pydra.utils.hash.hash_single"><code class="xref py py-func docutils literal notranslate"><span class="pre">hash_single()</span></code></a> function
+should be called with the same cache object.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="pydra.utils.html" class="btn btn-neutral float-left" title="pydra.utils package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="pydra.utils.messenger.html" class="btn btn-neutral float-right" title="pydra.utils.messenger module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019 - 2020, The Nipype Developers team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  
+<div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+        <span class="fa fa-book"> Other Versions</span>
+        v: 0.25
+        <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+        <dl>
+            <dt>Tags</dt>
+            <dd><a href="../0.21/index.html">0.21</a></dd>
+            <dd><a href="../0.22/index.html">0.22</a></dd>
+            <dd><a href="../0.23/api/pydra.utils.hash.html">0.23</a></dd>
+            <dd><a href="../0.23.0-alpha/api/pydra.utils.hash.html">0.23.0-alpha</a></dd>
+            <dd><a href="../0.24/api/pydra.utils.hash.html">0.24</a></dd>
+            <dd><a href="../0.25/api/pydra.utils.hash.html">0.25</a></dd>
+        </dl>
+        <dl>
+            <dt>Branches</dt>
+            <dd><a href="../ci_test-py3.11-windows/index.html">ci/test-py3.11-windows</a></dd>
+            <dd><a href="../debugging-hashing/api/pydra.utils.hash.html">debugging-hashing</a></dd>
+            <dd><a href="../effigies_input-spec-suggestions/index.html">effigies/input-spec-suggestions</a></dd>
+            <dd><a href="../master/api/pydra.utils.hash.html">master</a></dd>
+            <dd><a href="../mriqc-hacking/api/pydra.utils.hash.html">mriqc-hacking</a></dd>
+            <dd><a href="../new-syntax/index.html">new-syntax</a></dd>
+            <dd><a href="../pre-commit-ci-update-config/api/pydra.utils.hash.html">pre-commit-ci-update-config</a></dd>
+            <dd><a href="../unittest-fixes/api/pydra.utils.hash.html">unittest-fixes</a></dd>
+        </dl>
+    </div>
+</div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

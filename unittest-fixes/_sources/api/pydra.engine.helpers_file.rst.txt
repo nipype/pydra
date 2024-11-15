@@ -1,0 +1,7 @@
+pydra.engine.helpers\_file module
+=================================
+
+.. automodule:: pydra.engine.helpers_file
+   :members:
+   :undoc-members:
+   :show-inheritance:

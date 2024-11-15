@@ -1,0 +1,7 @@
+utils.typing module
+===================
+
+.. automodule:: utils.typing
+   :members:
+   :undoc-members:
+   :show-inheritance:

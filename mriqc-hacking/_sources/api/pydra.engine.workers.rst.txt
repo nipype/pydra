@@ -1,0 +1,7 @@
+pydra.engine.workers module
+===========================
+
+.. automodule:: pydra.engine.workers
+   :members:
+   :undoc-members:
+   :show-inheritance:

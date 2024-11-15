@@ -1,0 +1,308 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Input Specification &mdash; Pydra: A simple dataflow engine with scalable semantics 0.24 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="_static/banner.css" />
+
+  
+      <script src="_static/jquery.js"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+      <script src="_static/doctools.js"></script>
+      <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Output Specification" href="output_spec.html" />
+    <link rel="prev" title="Grouping Task’s Output" href="combiner.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Pydra: A simple dataflow engine with scalable semantics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="user_guide.html">User Guide</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="components.html">Dataflows Components: Task and Workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="state.html">State and Nested Loops over Input</a></li>
+<li class="toctree-l2"><a class="reference internal" href="combiner.html">Grouping Task’s Output</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Input Specification</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#adding-a-new-field-to-the-spec">Adding a New Field to the Spec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#types">Types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#metadata">Metadata</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#validators">Validators</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="output_spec.html">Output Specification</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">Release Notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Library API (application programmer interface)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Pydra: A simple dataflow engine with scalable semantics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="user_guide.html">User Guide</a></li>
+      <li class="breadcrumb-item active">Input Specification</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/input_spec.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+
+
+    
+    
+
+
+
+    <p class="scv-banner scv-sphinx_rtd_theme"><a href="../master/input_spec.html"><b>Warning:</b> This document is for the development version of Pydra: A simple dataflow engine with scalable semantics. The main version is master.</a></p>
+<section id="input-specification">
+<span id="input-specification-section"></span><h1>Input Specification<a class="headerlink" href="#input-specification" title="Permalink to this heading"></a></h1>
+<p>As it was mentioned in <a class="reference internal" href="components.html#shell-command-task"><span class="std std-ref">Shell Command Tasks</span></a>, the user can customize the input and output
+for the <cite>ShellCommandTask</cite>.
+In this section, more examples of the input specification will be provided.</p>
+<p>Let’s start from the previous example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">bet_input_spec</span> <span class="o">=</span> <span class="n">SpecInfo</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Input&quot;</span><span class="p">,</span>
+    <span class="n">fields</span><span class="o">=</span><span class="p">[</span>
+    <span class="p">(</span> <span class="s2">&quot;in_file&quot;</span><span class="p">,</span> <span class="n">File</span><span class="p">,</span>
+      <span class="p">{</span> <span class="s2">&quot;help_string&quot;</span><span class="p">:</span> <span class="s2">&quot;input file ...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;position&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;mandatory&quot;</span><span class="p">:</span> <span class="kc">True</span> <span class="p">}</span> <span class="p">),</span>
+    <span class="p">(</span> <span class="s2">&quot;out_file&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span>
+      <span class="p">{</span> <span class="s2">&quot;help_string&quot;</span><span class="p">:</span> <span class="s2">&quot;name of output ...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;position&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="s2">&quot;output_file_template&quot;</span><span class="p">:</span>
+                          <span class="s2">&quot;</span><span class="si">{in_file}</span><span class="s2">_br&quot;</span> <span class="p">}</span> <span class="p">),</span>
+    <span class="p">(</span> <span class="s2">&quot;mask&quot;</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span>
+      <span class="p">{</span> <span class="s2">&quot;help_string&quot;</span><span class="p">:</span> <span class="s2">&quot;create binary mask&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;argstr&quot;</span><span class="p">:</span> <span class="s2">&quot;-m&quot;</span><span class="p">,</span> <span class="p">}</span> <span class="p">)</span> <span class="p">],</span>
+    <span class="n">bases</span><span class="o">=</span><span class="p">(</span><span class="n">ShellSpec</span><span class="p">,)</span> <span class="p">)</span>
+
+<span class="n">ShellCommandTask</span><span class="p">(</span><span class="n">executable</span><span class="o">=</span><span class="s2">&quot;bet&quot;</span><span class="p">,</span>
+                 <span class="n">input_spec</span><span class="o">=</span><span class="n">bet_input_spec</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>In order to create an input specification, a new <cite>SpecInfo</cite> object has to be created.
+The field <cite>name</cite> specifies the type of the spec and it should be always “Input” for
+the input specification.
+The field <cite>bases</cite> specifies the “base specification” you want to use (can think about it as a
+<cite>parent class</cite>) and it will usually contains <cite>ShellSpec</cite> only, unless you want to build on top of
+your other specification (this will not be cover in this section).
+The part that should be always customised is the <cite>fields</cite> part.
+Each element of the <cite>fields</cite> is a separate input field that is added to the specification.
+In this example, three-elements tuples - with name, type and dictionary with additional
+information - are used.
+But this is only one of the supported syntax, more options will be described below.</p>
+<section id="adding-a-new-field-to-the-spec">
+<h2>Adding a New Field to the Spec<a class="headerlink" href="#adding-a-new-field-to-the-spec" title="Permalink to this heading"></a></h2>
+<p>Pydra uses <cite>attr</cite> classes to represent the input specification, and the full syntax for each field
+is:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">field1</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;field1_name&quot;</span><span class="p">,</span> <span class="n">attr</span><span class="o">.</span><span class="n">ib</span><span class="p">(</span><span class="nb">type</span><span class="o">=&lt;</span><span class="s1">&#39;field1_type&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=&lt;</span><span class="s1">&#39;dictionary with metadata&#39;</span><span class="o">&gt;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>However, we allow for shorter syntax, that does not include <cite>attr.ib</cite>:</p>
+<ul class="simple">
+<li><p>providing only name and the type</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">field1</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;field1_name&quot;</span><span class="p">,</span> <span class="o">&lt;</span><span class="s1">&#39;field1_type&#39;</span><span class="o">&gt;</span><span class="p">)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>providing name, type and metadata (as in the example above)</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">field1</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;field1_name&quot;</span><span class="p">,</span> <span class="o">&lt;</span><span class="s1">&#39;field1_type&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="s1">&#39;dictionary with metadata&#39;</span><span class="o">&gt;</span><span class="p">))</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>providing name, type and default value</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">field1</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;field1_name&quot;</span><span class="p">,</span> <span class="o">&lt;</span><span class="s1">&#39;field1_type&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="s1">&#39;default value&#39;</span><span class="o">&gt;</span><span class="p">)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>providing name, type, default value and metadata</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">field1</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;field1_name&quot;</span><span class="p">,</span> <span class="o">&lt;</span><span class="s1">&#39;field1_type&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="s1">&#39;default value&#39;</span><span class="p">,</span> <span class="o">&lt;</span><span class="s1">&#39;dictionary with metadata&#39;</span><span class="o">&gt;</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>Each of the shorter versions will be converted to the <cite>(name, attr.ib(…)</cite>.</p>
+</section>
+<section id="types">
+<h2>Types<a class="headerlink" href="#types" title="Permalink to this heading"></a></h2>
+<p>Type can be provided as a simple python type (e.g. <cite>str</cite>, <cite>int</cite>, <cite>float</cite>, etc.)
+or can be more complex by using <cite>typing.List</cite>, <cite>typing.Dict</cite> and <cite>typing.Union</cite>.</p>
+<p>There are also special types provided by Pydra:</p>
+<ul class="simple">
+<li><p><cite>File</cite> and <cite>Directory</cite> - should be used in <cite>input_spec</cite> if the field is an existing file
+or directory.
+Pydra checks if the file or directory exists, and returns an error if it doesn’t exist.</p></li>
+<li><p><cite>MultiInputObj</cite> - a special type that takes a any value and if the value is not a list it
+converts value to a 1-element list (it could be used together with <cite>MultiOutputObj</cite>
+in the <cite>output_spec</cite> to reverse the conversion of the output values).</p></li>
+</ul>
+</section>
+<section id="metadata">
+<h2>Metadata<a class="headerlink" href="#metadata" title="Permalink to this heading"></a></h2>
+<p>In the example we used multiple keys in the metadata dictionary including <cite>help_string</cite>,
+<cite>position</cite>, etc. In this section all allowed key will be described:</p>
+<dl class="simple">
+<dt><cite>help_string</cite> (<cite>str</cite>, mandatory):</dt><dd><p>A short description of the input field.</p>
+</dd>
+<dt><cite>mandatory</cite> (<cite>bool</cite>, default: <cite>False</cite>):</dt><dd><p>If <cite>True</cite> user has to provide a value for the field.</p>
+</dd>
+<dt><cite>sep</cite> (<cite>str</cite>):</dt><dd><p>A separator if a list is provided as a value.</p>
+</dd>
+<dt><cite>argstr</cite> (<cite>str</cite>):</dt><dd><p>A flag or string that is used in the command before the value, e.g. <cite>-v</cite> or <cite>-v {inp_field}</cite>,
+but it could be and empty string, <cite>“”</cite>.
+If <cite>…</cite> are used, e.g. <cite>-v…</cite>, the flag is used before every element if a list is provided
+as a value.
+If no <cite>argstr</cite> is used the field is not part of the command.</p>
+</dd>
+<dt><cite>position</cite> (<cite>int</cite>):</dt><dd><p>Position of the field in the command, could be nonnegative or negative integer.
+If nothing is provided the field will be inserted between all fields with nonnegative positions
+and fields with negative positions.</p>
+</dd>
+<dt><cite>allowed_values</cite> (<cite>list</cite>):</dt><dd><p>List of allowed values for the field.</p>
+</dd>
+<dt><cite>requires</cite> (<cite>list</cite>):</dt><dd><p>List of field names that are required together with the field.</p>
+</dd>
+<dt><cite>xor</cite> (<cite>list</cite>):</dt><dd><p>List of field names that are mutually exclusive with the field.</p>
+</dd>
+<dt><cite>copyfile</cite> (<cite>bool</cite>, default: <cite>False</cite>):</dt><dd><p>If <cite>True</cite>, a hard link is created for the input file in the output directory.
+If hard link not possible, the file is copied to the output directory.</p>
+</dd>
+<dt><cite>container_path</cite> (<cite>bool</cite>, default: <cite>False</cite>, only for <cite>ContainerTask</cite>):</dt><dd><p>If <cite>True</cite> a path will be consider as a path inside the container (and not as a local path).</p>
+</dd>
+<dt><cite>output_file_template</cite> (<cite>str</cite>):</dt><dd><p>If provided, the field is treated also as an output field and it is added to the output spec.
+The template can use other fields, e.g. <cite>{file1}</cite>.
+Used in order to create an output specification.</p>
+</dd>
+<dt><cite>output_field_name</cite> (<cite>str</cite>, used together with <cite>output_file_template</cite>)</dt><dd><p>If provided the field is added to the output spec with changed name.
+Used in order to create an output specification.</p>
+</dd>
+<dt><cite>keep_extension</cite> (<cite>bool</cite>, default: <cite>True</cite>):</dt><dd><p>A flag that specifies if the file extension should be removed from the field value.
+Used in order to create an output specification.</p>
+</dd>
+<dt><cite>readonly</cite> (<cite>bool</cite>, default: <cite>False</cite>):</dt><dd><p>If <cite>True</cite> the input field can’t be provided by the user but it aggregates other input fields
+(for example the fields with <cite>argstr: -o {fldA} {fldB}</cite>).</p>
+</dd>
+<dt><cite>formatter</cite> (<cite>function</cite>):</dt><dd><p>If provided the <cite>argstr</cite> of the field is created using the function. This function can for example
+be used to combine several inputs into one command argument.
+The function can take <cite>field</cite> (this input field will be passed to the function),
+<cite>inputs</cite> (entire <cite>inputs</cite> will be passed) or any input field name
+(a specific input field will be sent).</p>
+</dd>
+</dl>
+</section>
+<section id="validators">
+<h2>Validators<a class="headerlink" href="#validators" title="Permalink to this heading"></a></h2>
+<p>Pydra allows for using simple validator for types and <cite>allowev_values</cite>.
+The validators are disabled by default, but can be enabled by calling
+<cite>pydra.set_input_validator(flag=True)</cite>.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="combiner.html" class="btn btn-neutral float-left" title="Grouping Task’s Output" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="output_spec.html" class="btn btn-neutral float-right" title="Output Specification" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019 - 2020, The Nipype Developers team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  
+<div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+        <span class="fa fa-book"> Other Versions</span>
+        v: debugging-hashing
+        <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+        <dl>
+            <dt>Tags</dt>
+            <dd><a href="../0.21/input_spec.html">0.21</a></dd>
+            <dd><a href="../0.22/input_spec.html">0.22</a></dd>
+            <dd><a href="../0.23/input_spec.html">0.23</a></dd>
+            <dd><a href="../0.23.0-alpha/input_spec.html">0.23.0-alpha</a></dd>
+            <dd><a href="../0.24/input_spec.html">0.24</a></dd>
+            <dd><a href="../0.25/input_spec.html">0.25</a></dd>
+        </dl>
+        <dl>
+            <dt>Branches</dt>
+            <dd><a href="../ci_test-py3.11-windows/input_spec.html">ci/test-py3.11-windows</a></dd>
+            <dd><a href="input_spec.html">debugging-hashing</a></dd>
+            <dd><a href="../effigies_input-spec-suggestions/input_spec.html">effigies/input-spec-suggestions</a></dd>
+            <dd><a href="../master/input_spec.html">master</a></dd>
+            <dd><a href="../mriqc-hacking/input_spec.html">mriqc-hacking</a></dd>
+            <dd><a href="../new-syntax/input_spec.html">new-syntax</a></dd>
+            <dd><a href="../pre-commit-ci-update-config/input_spec.html">pre-commit-ci-update-config</a></dd>
+            <dd><a href="../unittest-fixes/input_spec.html">unittest-fixes</a></dd>
+        </dl>
+    </div>
+</div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

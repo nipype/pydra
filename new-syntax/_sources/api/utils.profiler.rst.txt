@@ -1,0 +1,7 @@
+utils.profiler module
+=====================
+
+.. automodule:: utils.profiler
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -1,0 +1,7 @@
+utils.hash module
+=================
+
+.. automodule:: utils.hash
+   :members:
+   :undoc-members:
+   :show-inheritance:

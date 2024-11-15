@@ -1,0 +1,1017 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Library API (application programmer interface) &mdash; Pydra: A simple dataflow engine with scalable semantics 0.24 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="_static/banner.css" />
+
+  
+      <script src="_static/jquery.js"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+      <script src="_static/doctools.js"></script>
+      <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pydra.engine package" href="api/pydra.engine.html" />
+    <link rel="prev" title="Release Notes" href="changes.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Pydra: A simple dataflow engine with scalable semantics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="user_guide.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">Release Notes</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Library API (application programmer interface)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#pydra.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.AuditFlag.ALL"><code class="docutils literal notranslate"><span class="pre">AuditFlag.ALL</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.AuditFlag.NONE"><code class="docutils literal notranslate"><span class="pre">AuditFlag.NONE</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.AuditFlag.PROV"><code class="docutils literal notranslate"><span class="pre">AuditFlag.PROV</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.AuditFlag.RESOURCE"><code class="docutils literal notranslate"><span class="pre">AuditFlag.RESOURCE</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#pydra.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.ShellCommandTask.DEFAULT_COPY_COLLATION"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.DEFAULT_COPY_COLLATION</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.ShellCommandTask.cmdline"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.cmdline</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.ShellCommandTask.command_args"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.command_args()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.ShellCommandTask.get_bindings"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.get_bindings()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.ShellCommandTask.input_spec"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.input_spec</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.ShellCommandTask.output_spec"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.output_spec</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#pydra.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Submitter.close"><code class="docutils literal notranslate"><span class="pre">Submitter.close()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Submitter.expand_runnable"><code class="docutils literal notranslate"><span class="pre">Submitter.expand_runnable()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Submitter.expand_workflow"><code class="docutils literal notranslate"><span class="pre">Submitter.expand_workflow()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Submitter.submit_from_call"><code class="docutils literal notranslate"><span class="pre">Submitter.submit_from_call()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#pydra.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Workflow.add"><code class="docutils literal notranslate"><span class="pre">Workflow.add()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Workflow.checksum"><code class="docutils literal notranslate"><span class="pre">Workflow.checksum</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Workflow.create_connections"><code class="docutils literal notranslate"><span class="pre">Workflow.create_connections()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Workflow.create_dotfile"><code class="docutils literal notranslate"><span class="pre">Workflow.create_dotfile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Workflow.graph_sorted"><code class="docutils literal notranslate"><span class="pre">Workflow.graph_sorted</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Workflow.lzin"><code class="docutils literal notranslate"><span class="pre">Workflow.lzin</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Workflow.nodes"><code class="docutils literal notranslate"><span class="pre">Workflow.nodes</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pydra.Workflow.set_output"><code class="docutils literal notranslate"><span class="pre">Workflow.set_output()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#subpackages">Subpackages</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html">pydra.engine package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.mark.html">pydra.mark package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.tasks.html">pydra.tasks package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.utils.html">pydra.utils package</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Pydra: A simple dataflow engine with scalable semantics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Library API (application programmer interface)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/api.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+
+
+    
+    
+
+
+
+    <p class="scv-banner scv-sphinx_rtd_theme"><a href="../master/api.html"><b>Warning:</b> This document is for an old version of Pydra: A simple dataflow engine with scalable semantics. The main version is master.</a></p>
+<section id="module-pydra">
+<span id="library-api-application-programmer-interface"></span><h1>Library API (application programmer interface)<a class="headerlink" href="#module-pydra" title="Permalink to this heading"></a></h1>
+<p>The Pydra workflow engine.</p>
+<p>Pydra is a rewrite of the Nipype engine with mapping and joining as
+first-class operations. It forms the core of the Nipype 2.0 ecosystem.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.AuditFlag">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.</span></span><span class="sig-name descname"><span class="pre">AuditFlag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qualname</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.AuditFlag" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.Flag" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Flag</span></code></a></p>
+<p>Auditing flags.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pydra.AuditFlag.ALL">
+<span class="sig-name descname"><span class="pre">ALL</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3</span></em><a class="headerlink" href="#pydra.AuditFlag.ALL" title="Permalink to this definition"></a></dt>
+<dd><p>Track provenance and resource utilization.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pydra.AuditFlag.NONE">
+<span class="sig-name descname"><span class="pre">NONE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#pydra.AuditFlag.NONE" title="Permalink to this definition"></a></dt>
+<dd><p>Do not track provenance or monitor resources.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pydra.AuditFlag.PROV">
+<span class="sig-name descname"><span class="pre">PROV</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#pydra.AuditFlag.PROV" title="Permalink to this definition"></a></dt>
+<dd><p>Track provenance only.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pydra.AuditFlag.RESOURCE">
+<span class="sig-name descname"><span class="pre">RESOURCE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2</span></em><a class="headerlink" href="#pydra.AuditFlag.RESOURCE" title="Permalink to this definition"></a></dt>
+<dd><p>Monitor resource utilization only.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.ShellCommandTask">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.</span></span><span class="sig-name descname"><span class="pre">ShellCommandTask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">audit_flags:</span> <span class="pre">~pydra.utils.messenger.AuditFlag</span> <span class="pre">=</span> <span class="pre">AuditFlag.NONE</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_spec:</span> <span class="pre">~pydra.engine.specs.SpecInfo</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cont_dim=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">messenger_args=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">messengers=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_spec:</span> <span class="pre">~pydra.engine.specs.SpecInfo</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rerun=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strip=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">environment=&lt;pydra.engine.environments.Native</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.ShellCommandTask" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase" title="pydra.engine.core.TaskBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TaskBase</span></code></a></p>
+<p>Wrap a shell command as a task element.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pydra.ShellCommandTask.DEFAULT_COPY_COLLATION">
+<span class="sig-name descname"><span class="pre">DEFAULT_COPY_COLLATION</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2</span></em><a class="headerlink" href="#pydra.ShellCommandTask.DEFAULT_COPY_COLLATION" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pydra.ShellCommandTask.cmdline">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">cmdline</span></span><a class="headerlink" href="#pydra.ShellCommandTask.cmdline" title="Permalink to this definition"></a></dt>
+<dd><p>Get the actual command line that will be submitted
+Returns a list if the task has a state.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.ShellCommandTask.command_args">
+<span class="sig-name descname"><span class="pre">command_args</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.ShellCommandTask.command_args" title="Permalink to this definition"></a></dt>
+<dd><p>Get command line arguments</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.ShellCommandTask.get_bindings">
+<span class="sig-name descname"><span class="pre">get_bindings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#pydra.ShellCommandTask.get_bindings" title="Permalink to this definition"></a></dt>
+<dd><p>Return bindings necessary to run task in an alternative root.</p>
+<p>This is primarily intended for contexts when a task is going
+to be run in a container with mounted volumes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>root</strong> (<em>str</em>)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>bindings</strong> – Mapping from paths in the host environment to the target environment</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pydra.ShellCommandTask.input_spec">
+<span class="sig-name descname"><span class="pre">input_spec</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#pydra.ShellCommandTask.input_spec" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pydra.ShellCommandTask.output_spec">
+<span class="sig-name descname"><span class="pre">output_spec</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#pydra.ShellCommandTask.output_spec" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.Submitter">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.</span></span><span class="sig-name descname"><span class="pre">Submitter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plugin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Type" title="(in Python v3.13)"><span class="pre">Type</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.Worker" title="pydra.engine.workers.Worker"><span class="pre">Worker</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cf'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.Submitter" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Send a task to the execution backend.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.Submitter.close">
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pydra.Submitter.close" title="Permalink to this definition"></a></dt>
+<dd><p>Close submitter.</p>
+<p>Do not close previously running loop.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.Submitter.expand_runnable">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">expand_runnable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runnable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wait</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rerun</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.Submitter.expand_runnable" title="Permalink to this definition"></a></dt>
+<dd><p>This coroutine handles state expansion.</p>
+<p>Removes any states from <cite>runnable</cite>. If <cite>wait</cite> is
+set to False (default), aggregates all worker
+execution coroutines and returns them. If <cite>wait</cite> is
+True, waits for all coroutines to complete / error
+and returns None.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>runnable</strong> (<em>pydra Task</em>) – Task instance (<cite>Task</cite>, <cite>Workflow</cite>)</p></li>
+<li><p><strong>wait</strong> (<em>bool (False)</em>) – Await all futures before completing</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>futures</strong> – Coroutines for <a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase" title="pydra.engine.core.TaskBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TaskBase</span></code></a> execution.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#set" title="(in Python v3.13)">set</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.Submitter.expand_workflow">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">expand_workflow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rerun</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.Submitter.expand_workflow" title="Permalink to this definition"></a></dt>
+<dd><p>Expand and execute a stateless <a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow" title="pydra.engine.core.Workflow"><code class="xref py py-class docutils literal notranslate"><span class="pre">Workflow</span></code></a>.
+This method is only reached by <cite>Workflow._run_task</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>wf</strong> (<a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow" title="pydra.engine.core.Workflow"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Workflow</span></code></a>) – Workflow Task object</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>wf</strong> – The computed workflow</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow" title="pydra.engine.core.Workflow"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pydra.engine.core.Workflow</span></code></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.Submitter.submit_from_call">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">submit_from_call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runnable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rerun</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">environment</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.Submitter.submit_from_call" title="Permalink to this definition"></a></dt>
+<dd><p>This coroutine should only be called once per Submitter call,
+and serves as the bridge between sync/async lands.</p>
+<p>There are 4 potential paths based on the type of runnable:
+0) Workflow has a different plugin than a submitter
+1) Workflow without State
+2) Task without State
+3) (Workflow or Task) with State</p>
+<p>Once Python 3.10 is the minimum, this should probably be refactored into using
+structural pattern matching.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pydra.Workflow">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pydra.</span></span><span class="sig-name descname"><span class="pre">Workflow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">audit_flags</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.AuditFlag" title="pydra.utils.messenger.AuditFlag"><span class="pre">AuditFlag</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">AuditFlag.NONE</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_locations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.13)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Type" title="(in Python v3.13)"><span class="pre">Type</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.SpecInfo" title="pydra.engine.specs.SpecInfo"><span class="pre">SpecInfo</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cont_dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">messenger_args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">messengers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.13)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#type" title="(in Python v3.13)"><span class="pre">type</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.SpecInfo" title="pydra.engine.specs.SpecInfo"><span class="pre">SpecInfo</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.BaseSpec" title="pydra.engine.specs.BaseSpec"><span class="pre">BaseSpec</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rerun</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">propagate_rerun</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.Workflow" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase" title="pydra.engine.core.TaskBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TaskBase</span></code></a></p>
+<p>A composite task with structure of computational graph.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.Workflow.add">
+<span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.Workflow.add" title="Permalink to this definition"></a></dt>
+<dd><p>Add a task to the workflow.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>task</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">TaskBase</span></code>) – The task to be added.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pydra.Workflow.checksum">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">checksum</span></span><a class="headerlink" href="#pydra.Workflow.checksum" title="Permalink to this definition"></a></dt>
+<dd><p>Calculates the unique checksum of the task.
+Used to create specific directory name for task that are run;
+and to create nodes checksums needed for graph checksums
+(before the tasks have inputs etc.)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.Workflow.create_connections">
+<span class="sig-name descname"><span class="pre">create_connections</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detailed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.Workflow.create_connections" title="Permalink to this definition"></a></dt>
+<dd><p>Add and connect a particular task to existing nodes in the workflow.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>task</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">TaskBase</span></code>) – The task to be added.</p></li>
+<li><p><strong>detailed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bool</span></code></a>) – If True, <cite>add_edges_description</cite> is run for self.graph to add
+a detailed descriptions of the connections (input/output fields names)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.Workflow.create_dotfile">
+<span class="sig-name descname"><span class="pre">create_dotfile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'simple'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">export</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.Workflow.create_dotfile" title="Permalink to this definition"></a></dt>
+<dd><p>creating a graph - dotfile and optionally exporting to other formats</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pydra.Workflow.graph_sorted">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">graph_sorted</span></span><a class="headerlink" href="#pydra.Workflow.graph_sorted" title="Permalink to this definition"></a></dt>
+<dd><p>Get a sorted graph representation of the workflow.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pydra.Workflow.lzin">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">lzin</span></span><a class="headerlink" href="#pydra.Workflow.lzin" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pydra.Workflow.nodes">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">nodes</span></span><a class="headerlink" href="#pydra.Workflow.nodes" title="Permalink to this definition"></a></dt>
+<dd><p>Get the list of node names.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pydra.Workflow.set_output">
+<span class="sig-name descname"><span class="pre">set_output</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">connections</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyField" title="pydra.engine.specs.LazyField"><span class="pre">LazyField</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyField" title="pydra.engine.specs.LazyField"><span class="pre">LazyField</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pydra.Workflow.set_output" title="Permalink to this definition"></a></dt>
+<dd><p>Set outputs of the workflow by linking them with lazy outputs of tasks</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>connections</strong> (<em>tuple[str, LazyField] or list[tuple[str, LazyField]] or None</em>) – single or list of tuples linking the name of the output to a lazy output
+of a task in the workflow.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Permalink to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/pydra.engine.html">pydra.engine package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.AuditFlag.ALL"><code class="docutils literal notranslate"><span class="pre">AuditFlag.ALL</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.AuditFlag.NONE"><code class="docutils literal notranslate"><span class="pre">AuditFlag.NONE</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.AuditFlag.PROV"><code class="docutils literal notranslate"><span class="pre">AuditFlag.PROV</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.AuditFlag.RESOURCE"><code class="docutils literal notranslate"><span class="pre">AuditFlag.RESOURCE</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.ShellCommandTask.DEFAULT_COPY_COLLATION"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.DEFAULT_COPY_COLLATION</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.ShellCommandTask.cmdline"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.cmdline</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.ShellCommandTask.command_args"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.command_args()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.ShellCommandTask.get_bindings"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.get_bindings()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.ShellCommandTask.input_spec"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.input_spec</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.ShellCommandTask.output_spec"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.output_spec</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Submitter.close"><code class="docutils literal notranslate"><span class="pre">Submitter.close()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Submitter.expand_runnable"><code class="docutils literal notranslate"><span class="pre">Submitter.expand_runnable()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Submitter.expand_workflow"><code class="docutils literal notranslate"><span class="pre">Submitter.expand_workflow()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Submitter.submit_from_call"><code class="docutils literal notranslate"><span class="pre">Submitter.submit_from_call()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Workflow.add"><code class="docutils literal notranslate"><span class="pre">Workflow.add()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Workflow.checksum"><code class="docutils literal notranslate"><span class="pre">Workflow.checksum</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Workflow.create_connections"><code class="docutils literal notranslate"><span class="pre">Workflow.create_connections()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Workflow.create_dotfile"><code class="docutils literal notranslate"><span class="pre">Workflow.create_dotfile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Workflow.graph_sorted"><code class="docutils literal notranslate"><span class="pre">Workflow.graph_sorted</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Workflow.lzin"><code class="docutils literal notranslate"><span class="pre">Workflow.lzin</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Workflow.nodes"><code class="docutils literal notranslate"><span class="pre">Workflow.nodes</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.html#pydra.engine.Workflow.set_output"><code class="docutils literal notranslate"><span class="pre">Workflow.set_output()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="api/pydra.engine.html#submodules">Submodules</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.audit.html">pydra.engine.audit module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.audit.html#pydra.engine.audit.Audit"><code class="docutils literal notranslate"><span class="pre">Audit</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.audit.html#pydra.engine.audit.Audit.audit_check"><code class="docutils literal notranslate"><span class="pre">Audit.audit_check()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.audit.html#pydra.engine.audit.Audit.audit_message"><code class="docutils literal notranslate"><span class="pre">Audit.audit_message()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.audit.html#pydra.engine.audit.Audit.audit_task"><code class="docutils literal notranslate"><span class="pre">Audit.audit_task()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.audit.html#pydra.engine.audit.Audit.finalize_audit"><code class="docutils literal notranslate"><span class="pre">Audit.finalize_audit()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.audit.html#pydra.engine.audit.Audit.monitor"><code class="docutils literal notranslate"><span class="pre">Audit.monitor()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.audit.html#pydra.engine.audit.Audit.start_audit"><code class="docutils literal notranslate"><span class="pre">Audit.start_audit()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.boutiques.html">pydra.engine.boutiques module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.boutiques.html#pydra.engine.boutiques.BoshTask"><code class="docutils literal notranslate"><span class="pre">BoshTask</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.core.html">pydra.engine.core module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase"><code class="docutils literal notranslate"><span class="pre">TaskBase</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.DEFAULT_COPY_COLLATION"><code class="docutils literal notranslate"><span class="pre">TaskBase.DEFAULT_COPY_COLLATION</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.SUPPORTED_COPY_MODES"><code class="docutils literal notranslate"><span class="pre">TaskBase.SUPPORTED_COPY_MODES</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.audit_flags"><code class="docutils literal notranslate"><span class="pre">TaskBase.audit_flags</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.cache_dir"><code class="docutils literal notranslate"><span class="pre">TaskBase.cache_dir</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.cache_locations"><code class="docutils literal notranslate"><span class="pre">TaskBase.cache_locations</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.can_resume"><code class="docutils literal notranslate"><span class="pre">TaskBase.can_resume</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.checksum"><code class="docutils literal notranslate"><span class="pre">TaskBase.checksum</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.checksum_states"><code class="docutils literal notranslate"><span class="pre">TaskBase.checksum_states()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.combine"><code class="docutils literal notranslate"><span class="pre">TaskBase.combine()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.cont_dim"><code class="docutils literal notranslate"><span class="pre">TaskBase.cont_dim</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.done"><code class="docutils literal notranslate"><span class="pre">TaskBase.done</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.errored"><code class="docutils literal notranslate"><span class="pre">TaskBase.errored</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.generated_output_names"><code class="docutils literal notranslate"><span class="pre">TaskBase.generated_output_names</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.get_input_el"><code class="docutils literal notranslate"><span class="pre">TaskBase.get_input_el()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.help"><code class="docutils literal notranslate"><span class="pre">TaskBase.help()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.lzout"><code class="docutils literal notranslate"><span class="pre">TaskBase.lzout</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.output_dir"><code class="docutils literal notranslate"><span class="pre">TaskBase.output_dir</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.output_names"><code class="docutils literal notranslate"><span class="pre">TaskBase.output_names</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.pickle_task"><code class="docutils literal notranslate"><span class="pre">TaskBase.pickle_task()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.result"><code class="docutils literal notranslate"><span class="pre">TaskBase.result()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.set_state"><code class="docutils literal notranslate"><span class="pre">TaskBase.set_state()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.split"><code class="docutils literal notranslate"><span class="pre">TaskBase.split()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.uid"><code class="docutils literal notranslate"><span class="pre">TaskBase.uid</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.TaskBase.version"><code class="docutils literal notranslate"><span class="pre">TaskBase.version</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow.add"><code class="docutils literal notranslate"><span class="pre">Workflow.add()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow.checksum"><code class="docutils literal notranslate"><span class="pre">Workflow.checksum</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow.create_connections"><code class="docutils literal notranslate"><span class="pre">Workflow.create_connections()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow.create_dotfile"><code class="docutils literal notranslate"><span class="pre">Workflow.create_dotfile()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow.graph_sorted"><code class="docutils literal notranslate"><span class="pre">Workflow.graph_sorted</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow.lzin"><code class="docutils literal notranslate"><span class="pre">Workflow.lzin</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow.nodes"><code class="docutils literal notranslate"><span class="pre">Workflow.nodes</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.Workflow.set_output"><code class="docutils literal notranslate"><span class="pre">Workflow.set_output()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.is_lazy"><code class="docutils literal notranslate"><span class="pre">is_lazy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.is_task"><code class="docutils literal notranslate"><span class="pre">is_task()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.core.html#pydra.engine.core.is_workflow"><code class="docutils literal notranslate"><span class="pre">is_workflow()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.environments.html">pydra.engine.environments module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Container"><code class="docutils literal notranslate"><span class="pre">Container</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Container.bind"><code class="docutils literal notranslate"><span class="pre">Container.bind()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Docker"><code class="docutils literal notranslate"><span class="pre">Docker</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Docker.execute"><code class="docutils literal notranslate"><span class="pre">Docker.execute()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Environment"><code class="docutils literal notranslate"><span class="pre">Environment</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Environment.execute"><code class="docutils literal notranslate"><span class="pre">Environment.execute()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Environment.setup"><code class="docutils literal notranslate"><span class="pre">Environment.setup()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Environment.teardown"><code class="docutils literal notranslate"><span class="pre">Environment.teardown()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Native"><code class="docutils literal notranslate"><span class="pre">Native</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Native.execute"><code class="docutils literal notranslate"><span class="pre">Native.execute()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Singularity"><code class="docutils literal notranslate"><span class="pre">Singularity</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.environments.html#pydra.engine.environments.Singularity.execute"><code class="docutils literal notranslate"><span class="pre">Singularity.execute()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.graph.html">pydra.engine.graph module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph"><code class="docutils literal notranslate"><span class="pre">DiGraph</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.add_edges"><code class="docutils literal notranslate"><span class="pre">DiGraph.add_edges()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.add_edges_description"><code class="docutils literal notranslate"><span class="pre">DiGraph.add_edges_description()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.add_nodes"><code class="docutils literal notranslate"><span class="pre">DiGraph.add_nodes()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.calculate_max_paths"><code class="docutils literal notranslate"><span class="pre">DiGraph.calculate_max_paths()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.copy"><code class="docutils literal notranslate"><span class="pre">DiGraph.copy()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.create_dotfile_detailed"><code class="docutils literal notranslate"><span class="pre">DiGraph.create_dotfile_detailed()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.create_dotfile_nested"><code class="docutils literal notranslate"><span class="pre">DiGraph.create_dotfile_nested()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.create_dotfile_simple"><code class="docutils literal notranslate"><span class="pre">DiGraph.create_dotfile_simple()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.edges"><code class="docutils literal notranslate"><span class="pre">DiGraph.edges</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.edges_names"><code class="docutils literal notranslate"><span class="pre">DiGraph.edges_names</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.export_graph"><code class="docutils literal notranslate"><span class="pre">DiGraph.export_graph()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.nodes"><code class="docutils literal notranslate"><span class="pre">DiGraph.nodes</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.nodes_details"><code class="docutils literal notranslate"><span class="pre">DiGraph.nodes_details</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.nodes_names_map"><code class="docutils literal notranslate"><span class="pre">DiGraph.nodes_names_map</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.remove_nodes"><code class="docutils literal notranslate"><span class="pre">DiGraph.remove_nodes()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.remove_nodes_connections"><code class="docutils literal notranslate"><span class="pre">DiGraph.remove_nodes_connections()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.remove_previous_connections"><code class="docutils literal notranslate"><span class="pre">DiGraph.remove_previous_connections()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.remove_successors_nodes"><code class="docutils literal notranslate"><span class="pre">DiGraph.remove_successors_nodes()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.sorted_nodes"><code class="docutils literal notranslate"><span class="pre">DiGraph.sorted_nodes</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.sorted_nodes_names"><code class="docutils literal notranslate"><span class="pre">DiGraph.sorted_nodes_names</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.graph.html#pydra.engine.graph.DiGraph.sorting"><code class="docutils literal notranslate"><span class="pre">DiGraph.sorting()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.helpers.html">pydra.engine.helpers module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.PydraFileLock"><code class="docutils literal notranslate"><span class="pre">PydraFileLock</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.allowed_values_validator"><code class="docutils literal notranslate"><span class="pre">allowed_values_validator()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.argstr_formatting"><code class="docutils literal notranslate"><span class="pre">argstr_formatting()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.copyfile_workflow"><code class="docutils literal notranslate"><span class="pre">copyfile_workflow()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.create_checksum"><code class="docutils literal notranslate"><span class="pre">create_checksum()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.ensure_list"><code class="docutils literal notranslate"><span class="pre">ensure_list()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.execute"><code class="docutils literal notranslate"><span class="pre">execute()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.from_list_if_single"><code class="docutils literal notranslate"><span class="pre">from_list_if_single()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.gather_runtime_info"><code class="docutils literal notranslate"><span class="pre">gather_runtime_info()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.get_available_cpus"><code class="docutils literal notranslate"><span class="pre">get_available_cpus()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.get_open_loop"><code class="docutils literal notranslate"><span class="pre">get_open_loop()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.load_and_run"><code class="docutils literal notranslate"><span class="pre">load_and_run()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.load_and_run_async"><code class="docutils literal notranslate"><span class="pre">load_and_run_async()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.load_result"><code class="docutils literal notranslate"><span class="pre">load_result()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.load_task"><code class="docutils literal notranslate"><span class="pre">load_task()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.make_klass"><code class="docutils literal notranslate"><span class="pre">make_klass()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.output_from_inputfields"><code class="docutils literal notranslate"><span class="pre">output_from_inputfields()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.parse_copyfile"><code class="docutils literal notranslate"><span class="pre">parse_copyfile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.parse_format_string"><code class="docutils literal notranslate"><span class="pre">parse_format_string()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.position_sort"><code class="docutils literal notranslate"><span class="pre">position_sort()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.print_help"><code class="docutils literal notranslate"><span class="pre">print_help()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.read_and_display"><code class="docutils literal notranslate"><span class="pre">read_and_display()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.read_and_display_async"><code class="docutils literal notranslate"><span class="pre">read_and_display_async()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.read_stream_and_display"><code class="docutils literal notranslate"><span class="pre">read_stream_and_display()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.record_error"><code class="docutils literal notranslate"><span class="pre">record_error()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers.html#pydra.engine.helpers.save"><code class="docutils literal notranslate"><span class="pre">save()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.helpers_file.html">pydra.engine.helpers_file module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.MountIndentifier"><code class="docutils literal notranslate"><span class="pre">MountIndentifier</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.MountIndentifier.generate_cifs_table"><code class="docutils literal notranslate"><span class="pre">MountIndentifier.generate_cifs_table()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.MountIndentifier.get_mount"><code class="docutils literal notranslate"><span class="pre">MountIndentifier.get_mount()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.MountIndentifier.get_mount_table"><code class="docutils literal notranslate"><span class="pre">MountIndentifier.get_mount_table()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.MountIndentifier.on_cifs"><code class="docutils literal notranslate"><span class="pre">MountIndentifier.on_cifs()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.MountIndentifier.on_same_mount"><code class="docutils literal notranslate"><span class="pre">MountIndentifier.on_same_mount()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.MountIndentifier.parse_mount_table"><code class="docutils literal notranslate"><span class="pre">MountIndentifier.parse_mount_table()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.MountIndentifier.patch_table"><code class="docutils literal notranslate"><span class="pre">MountIndentifier.patch_table()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.copy_nested_files"><code class="docutils literal notranslate"><span class="pre">copy_nested_files()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.ensure_list"><code class="docutils literal notranslate"><span class="pre">ensure_list()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.is_container"><code class="docutils literal notranslate"><span class="pre">is_container()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.is_local_file"><code class="docutils literal notranslate"><span class="pre">is_local_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.template_update"><code class="docutils literal notranslate"><span class="pre">template_update()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_file.html#pydra.engine.helpers_file.template_update_single"><code class="docutils literal notranslate"><span class="pre">template_update_single()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.helpers_state.html">pydra.engine.helpers_state module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.PydraStateError"><code class="docutils literal notranslate"><span class="pre">PydraStateError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.add_name_combiner"><code class="docutils literal notranslate"><span class="pre">add_name_combiner()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.add_name_splitter"><code class="docutils literal notranslate"><span class="pre">add_name_splitter()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.combine_final_groups"><code class="docutils literal notranslate"><span class="pre">combine_final_groups()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.converter_groups_to_input"><code class="docutils literal notranslate"><span class="pre">converter_groups_to_input()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.flatten"><code class="docutils literal notranslate"><span class="pre">flatten()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.input_shape"><code class="docutils literal notranslate"><span class="pre">input_shape()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.inputs_types_to_dict"><code class="docutils literal notranslate"><span class="pre">inputs_types_to_dict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.iter_splits"><code class="docutils literal notranslate"><span class="pre">iter_splits()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.map_splits"><code class="docutils literal notranslate"><span class="pre">map_splits()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.remove_inp_from_splitter_rpn"><code class="docutils literal notranslate"><span class="pre">remove_inp_from_splitter_rpn()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.rpn2splitter"><code class="docutils literal notranslate"><span class="pre">rpn2splitter()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.splits_groups"><code class="docutils literal notranslate"><span class="pre">splits_groups()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.splitter2rpn"><code class="docutils literal notranslate"><span class="pre">splitter2rpn()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.helpers_state.html#pydra.engine.helpers_state.unwrap_splitter"><code class="docutils literal notranslate"><span class="pre">unwrap_splitter()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.run_pickled.html">pydra.engine.run_pickled module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.run_pickled.html#pydra.engine.run_pickled.run_pickled"><code class="docutils literal notranslate"><span class="pre">run_pickled()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.specs.html">pydra.engine.specs module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.BaseSpec"><code class="docutils literal notranslate"><span class="pre">BaseSpec</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.BaseSpec.check_fields_input_spec"><code class="docutils literal notranslate"><span class="pre">BaseSpec.check_fields_input_spec()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.BaseSpec.check_metadata"><code class="docutils literal notranslate"><span class="pre">BaseSpec.check_metadata()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.BaseSpec.collect_additional_outputs"><code class="docutils literal notranslate"><span class="pre">BaseSpec.collect_additional_outputs()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.BaseSpec.copyfile_input"><code class="docutils literal notranslate"><span class="pre">BaseSpec.copyfile_input()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.BaseSpec.hash"><code class="docutils literal notranslate"><span class="pre">BaseSpec.hash</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.BaseSpec.hash_changes"><code class="docutils literal notranslate"><span class="pre">BaseSpec.hash_changes()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.BaseSpec.retrieve_values"><code class="docutils literal notranslate"><span class="pre">BaseSpec.retrieve_values()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.BaseSpec.template_update"><code class="docutils literal notranslate"><span class="pre">BaseSpec.template_update()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.FunctionSpec"><code class="docutils literal notranslate"><span class="pre">FunctionSpec</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.FunctionSpec.check_metadata"><code class="docutils literal notranslate"><span class="pre">FunctionSpec.check_metadata()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyField"><code class="docutils literal notranslate"><span class="pre">LazyField</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyField.cast"><code class="docutils literal notranslate"><span class="pre">LazyField.cast()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyField.cast_from"><code class="docutils literal notranslate"><span class="pre">LazyField.cast_from</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyField.field"><code class="docutils literal notranslate"><span class="pre">LazyField.field</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyField.name"><code class="docutils literal notranslate"><span class="pre">LazyField.name</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyField.sanitize_splitter"><code class="docutils literal notranslate"><span class="pre">LazyField.sanitize_splitter()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyField.split"><code class="docutils literal notranslate"><span class="pre">LazyField.split()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyField.splits"><code class="docutils literal notranslate"><span class="pre">LazyField.splits</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyField.type"><code class="docutils literal notranslate"><span class="pre">LazyField.type</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyIn"><code class="docutils literal notranslate"><span class="pre">LazyIn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyInField"><code class="docutils literal notranslate"><span class="pre">LazyInField</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyInField.attr_type"><code class="docutils literal notranslate"><span class="pre">LazyInField.attr_type</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyInField.get_value"><code class="docutils literal notranslate"><span class="pre">LazyInField.get_value()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyInterface"><code class="docutils literal notranslate"><span class="pre">LazyInterface</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyOut"><code class="docutils literal notranslate"><span class="pre">LazyOut</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyOutField"><code class="docutils literal notranslate"><span class="pre">LazyOutField</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyOutField.attr_type"><code class="docutils literal notranslate"><span class="pre">LazyOutField.attr_type</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.LazyOutField.get_value"><code class="docutils literal notranslate"><span class="pre">LazyOutField.get_value()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.MultiInputObj"><code class="docutils literal notranslate"><span class="pre">MultiInputObj</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.MultiOutputType"><code class="docutils literal notranslate"><span class="pre">MultiOutputType</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.Result"><code class="docutils literal notranslate"><span class="pre">Result</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.Result.errored"><code class="docutils literal notranslate"><span class="pre">Result.errored</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.Result.get_output_field"><code class="docutils literal notranslate"><span class="pre">Result.get_output_field()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.Result.output"><code class="docutils literal notranslate"><span class="pre">Result.output</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.Result.runtime"><code class="docutils literal notranslate"><span class="pre">Result.runtime</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.Runtime"><code class="docutils literal notranslate"><span class="pre">Runtime</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.Runtime.cpu_peak_percent"><code class="docutils literal notranslate"><span class="pre">Runtime.cpu_peak_percent</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.Runtime.rss_peak_gb"><code class="docutils literal notranslate"><span class="pre">Runtime.rss_peak_gb</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.Runtime.vms_peak_gb"><code class="docutils literal notranslate"><span class="pre">Runtime.vms_peak_gb</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.RuntimeSpec"><code class="docutils literal notranslate"><span class="pre">RuntimeSpec</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.RuntimeSpec.container"><code class="docutils literal notranslate"><span class="pre">RuntimeSpec.container</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.RuntimeSpec.network"><code class="docutils literal notranslate"><span class="pre">RuntimeSpec.network</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.RuntimeSpec.outdir"><code class="docutils literal notranslate"><span class="pre">RuntimeSpec.outdir</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.ShellOutSpec"><code class="docutils literal notranslate"><span class="pre">ShellOutSpec</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.ShellOutSpec.collect_additional_outputs"><code class="docutils literal notranslate"><span class="pre">ShellOutSpec.collect_additional_outputs()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.ShellOutSpec.generated_output_names"><code class="docutils literal notranslate"><span class="pre">ShellOutSpec.generated_output_names()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.ShellOutSpec.return_code"><code class="docutils literal notranslate"><span class="pre">ShellOutSpec.return_code</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.ShellOutSpec.stderr"><code class="docutils literal notranslate"><span class="pre">ShellOutSpec.stderr</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.ShellOutSpec.stdout"><code class="docutils literal notranslate"><span class="pre">ShellOutSpec.stdout</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.ShellSpec"><code class="docutils literal notranslate"><span class="pre">ShellSpec</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.ShellSpec.args"><code class="docutils literal notranslate"><span class="pre">ShellSpec.args</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.ShellSpec.check_metadata"><code class="docutils literal notranslate"><span class="pre">ShellSpec.check_metadata()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.ShellSpec.executable"><code class="docutils literal notranslate"><span class="pre">ShellSpec.executable</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.ShellSpec.retrieve_values"><code class="docutils literal notranslate"><span class="pre">ShellSpec.retrieve_values()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.SpecInfo"><code class="docutils literal notranslate"><span class="pre">SpecInfo</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.SpecInfo.bases"><code class="docutils literal notranslate"><span class="pre">SpecInfo.bases</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.SpecInfo.fields"><code class="docutils literal notranslate"><span class="pre">SpecInfo.fields</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.SpecInfo.name"><code class="docutils literal notranslate"><span class="pre">SpecInfo.name</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.StateArray"><code class="docutils literal notranslate"><span class="pre">StateArray</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.TaskHook"><code class="docutils literal notranslate"><span class="pre">TaskHook</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.TaskHook.post_run"><code class="docutils literal notranslate"><span class="pre">TaskHook.post_run</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.TaskHook.post_run_task"><code class="docutils literal notranslate"><span class="pre">TaskHook.post_run_task</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.TaskHook.pre_run"><code class="docutils literal notranslate"><span class="pre">TaskHook.pre_run</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.TaskHook.pre_run_task"><code class="docutils literal notranslate"><span class="pre">TaskHook.pre_run_task</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.TaskHook.reset"><code class="docutils literal notranslate"><span class="pre">TaskHook.reset()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.attr_fields"><code class="docutils literal notranslate"><span class="pre">attr_fields()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.donothing"><code class="docutils literal notranslate"><span class="pre">donothing()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.specs.html#pydra.engine.specs.path_to_string"><code class="docutils literal notranslate"><span class="pre">path_to_string()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.state.html">pydra.engine.state module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State"><code class="docutils literal notranslate"><span class="pre">State</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.name"><code class="docutils literal notranslate"><span class="pre">State.name</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.splitter"><code class="docutils literal notranslate"><span class="pre">State.splitter</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.splitter_rpn_compact"><code class="docutils literal notranslate"><span class="pre">State.splitter_rpn_compact</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.splitter_rpn"><code class="docutils literal notranslate"><span class="pre">State.splitter_rpn</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.combiner"><code class="docutils literal notranslate"><span class="pre">State.combiner</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.splitter_final"><code class="docutils literal notranslate"><span class="pre">State.splitter_final</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.other_states"><code class="docutils literal notranslate"><span class="pre">State.other_states</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.inner_inputs"><code class="docutils literal notranslate"><span class="pre">State.inner_inputs</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.states_ind"><code class="docutils literal notranslate"><span class="pre">State.states_ind</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.states_val"><code class="docutils literal notranslate"><span class="pre">State.states_val</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.inputs_ind"><code class="docutils literal notranslate"><span class="pre">State.inputs_ind</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.group_for_inputs"><code class="docutils literal notranslate"><span class="pre">State.group_for_inputs</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.group_for_inputs_final"><code class="docutils literal notranslate"><span class="pre">State.group_for_inputs_final</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.groups_stack_final"><code class="docutils literal notranslate"><span class="pre">State.groups_stack_final</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.final_combined_ind_mapping"><code class="docutils literal notranslate"><span class="pre">State.final_combined_ind_mapping</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#id0"><code class="docutils literal notranslate"><span class="pre">State.combiner</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.combiner_validation"><code class="docutils literal notranslate"><span class="pre">State.combiner_validation()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.current_combiner"><code class="docutils literal notranslate"><span class="pre">State.current_combiner</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.current_combiner_all"><code class="docutils literal notranslate"><span class="pre">State.current_combiner_all</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.current_splitter"><code class="docutils literal notranslate"><span class="pre">State.current_splitter</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.current_splitter_rpn"><code class="docutils literal notranslate"><span class="pre">State.current_splitter_rpn</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#id1"><code class="docutils literal notranslate"><span class="pre">State.inner_inputs</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#id2"><code class="docutils literal notranslate"><span class="pre">State.other_states</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.prepare_inputs"><code class="docutils literal notranslate"><span class="pre">State.prepare_inputs()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.prepare_states"><code class="docutils literal notranslate"><span class="pre">State.prepare_states()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.prepare_states_combined_ind"><code class="docutils literal notranslate"><span class="pre">State.prepare_states_combined_ind()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.prepare_states_ind"><code class="docutils literal notranslate"><span class="pre">State.prepare_states_ind()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.prepare_states_val"><code class="docutils literal notranslate"><span class="pre">State.prepare_states_val()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.prev_state_combiner"><code class="docutils literal notranslate"><span class="pre">State.prev_state_combiner</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.prev_state_combiner_all"><code class="docutils literal notranslate"><span class="pre">State.prev_state_combiner_all</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.prev_state_splitter"><code class="docutils literal notranslate"><span class="pre">State.prev_state_splitter</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.prev_state_splitter_rpn"><code class="docutils literal notranslate"><span class="pre">State.prev_state_splitter_rpn</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.prev_state_splitter_rpn_compact"><code class="docutils literal notranslate"><span class="pre">State.prev_state_splitter_rpn_compact</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.set_input_groups"><code class="docutils literal notranslate"><span class="pre">State.set_input_groups()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.splits"><code class="docutils literal notranslate"><span class="pre">State.splits()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#id3"><code class="docutils literal notranslate"><span class="pre">State.splitter</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#id4"><code class="docutils literal notranslate"><span class="pre">State.splitter_final</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#id5"><code class="docutils literal notranslate"><span class="pre">State.splitter_rpn</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#id6"><code class="docutils literal notranslate"><span class="pre">State.splitter_rpn_compact</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.splitter_rpn_final"><code class="docutils literal notranslate"><span class="pre">State.splitter_rpn_final</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.splitter_validation"><code class="docutils literal notranslate"><span class="pre">State.splitter_validation()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.state.html#pydra.engine.state.State.update_connections"><code class="docutils literal notranslate"><span class="pre">State.update_connections()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.submitter.html">pydra.engine.submitter module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.submitter.html#pydra.engine.submitter.Submitter"><code class="docutils literal notranslate"><span class="pre">Submitter</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.submitter.html#pydra.engine.submitter.Submitter.close"><code class="docutils literal notranslate"><span class="pre">Submitter.close()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.submitter.html#pydra.engine.submitter.Submitter.expand_runnable"><code class="docutils literal notranslate"><span class="pre">Submitter.expand_runnable()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.submitter.html#pydra.engine.submitter.Submitter.expand_workflow"><code class="docutils literal notranslate"><span class="pre">Submitter.expand_workflow()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.submitter.html#pydra.engine.submitter.Submitter.submit_from_call"><code class="docutils literal notranslate"><span class="pre">Submitter.submit_from_call()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.submitter.html#pydra.engine.submitter.get_runnable_tasks"><code class="docutils literal notranslate"><span class="pre">get_runnable_tasks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.submitter.html#pydra.engine.submitter.is_runnable"><code class="docutils literal notranslate"><span class="pre">is_runnable()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.submitter.html#pydra.engine.submitter.prepare_runnable_with_state"><code class="docutils literal notranslate"><span class="pre">prepare_runnable_with_state()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.task.html">pydra.engine.task module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.task.html#pydra.engine.task.FunctionTask"><code class="docutils literal notranslate"><span class="pre">FunctionTask</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.task.html#pydra.engine.task.ShellCommandTask"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.task.html#pydra.engine.task.ShellCommandTask.DEFAULT_COPY_COLLATION"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.DEFAULT_COPY_COLLATION</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.task.html#pydra.engine.task.ShellCommandTask.cmdline"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.cmdline</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.task.html#pydra.engine.task.ShellCommandTask.command_args"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.command_args()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.task.html#pydra.engine.task.ShellCommandTask.get_bindings"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.get_bindings()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.task.html#pydra.engine.task.ShellCommandTask.input_spec"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.input_spec</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.task.html#pydra.engine.task.ShellCommandTask.output_spec"><code class="docutils literal notranslate"><span class="pre">ShellCommandTask.output_spec</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.task.html#pydra.engine.task.split_cmd"><code class="docutils literal notranslate"><span class="pre">split_cmd()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.engine.workers.html">pydra.engine.workers module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.ConcurrentFuturesWorker"><code class="docutils literal notranslate"><span class="pre">ConcurrentFuturesWorker</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.ConcurrentFuturesWorker.close"><code class="docutils literal notranslate"><span class="pre">ConcurrentFuturesWorker.close()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.ConcurrentFuturesWorker.exec_as_coro"><code class="docutils literal notranslate"><span class="pre">ConcurrentFuturesWorker.exec_as_coro()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.ConcurrentFuturesWorker.plugin_name"><code class="docutils literal notranslate"><span class="pre">ConcurrentFuturesWorker.plugin_name</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.ConcurrentFuturesWorker.run_el"><code class="docutils literal notranslate"><span class="pre">ConcurrentFuturesWorker.run_el()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.DaskWorker"><code class="docutils literal notranslate"><span class="pre">DaskWorker</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.DaskWorker.close"><code class="docutils literal notranslate"><span class="pre">DaskWorker.close()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.DaskWorker.exec_dask"><code class="docutils literal notranslate"><span class="pre">DaskWorker.exec_dask()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.DaskWorker.plugin_name"><code class="docutils literal notranslate"><span class="pre">DaskWorker.plugin_name</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.DaskWorker.run_el"><code class="docutils literal notranslate"><span class="pre">DaskWorker.run_el()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.DistributedWorker"><code class="docutils literal notranslate"><span class="pre">DistributedWorker</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.DistributedWorker.fetch_finished"><code class="docutils literal notranslate"><span class="pre">DistributedWorker.fetch_finished()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.DistributedWorker.max_jobs"><code class="docutils literal notranslate"><span class="pre">DistributedWorker.max_jobs</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijLocalWorker"><code class="docutils literal notranslate"><span class="pre">PsijLocalWorker</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijLocalWorker.plugin_name"><code class="docutils literal notranslate"><span class="pre">PsijLocalWorker.plugin_name</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijLocalWorker.subtype"><code class="docutils literal notranslate"><span class="pre">PsijLocalWorker.subtype</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijSlurmWorker"><code class="docutils literal notranslate"><span class="pre">PsijSlurmWorker</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijSlurmWorker.plugin_name"><code class="docutils literal notranslate"><span class="pre">PsijSlurmWorker.plugin_name</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijSlurmWorker.subtype"><code class="docutils literal notranslate"><span class="pre">PsijSlurmWorker.subtype</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijWorker"><code class="docutils literal notranslate"><span class="pre">PsijWorker</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijWorker.close"><code class="docutils literal notranslate"><span class="pre">PsijWorker.close()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijWorker.exec_psij"><code class="docutils literal notranslate"><span class="pre">PsijWorker.exec_psij()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijWorker.make_job"><code class="docutils literal notranslate"><span class="pre">PsijWorker.make_job()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijWorker.make_spec"><code class="docutils literal notranslate"><span class="pre">PsijWorker.make_spec()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.PsijWorker.run_el"><code class="docutils literal notranslate"><span class="pre">PsijWorker.run_el()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SGEWorker"><code class="docutils literal notranslate"><span class="pre">SGEWorker</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SGEWorker.check_for_results_files"><code class="docutils literal notranslate"><span class="pre">SGEWorker.check_for_results_files()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SGEWorker.get_output_by_task_pkl"><code class="docutils literal notranslate"><span class="pre">SGEWorker.get_output_by_task_pkl()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SGEWorker.get_tasks_to_run"><code class="docutils literal notranslate"><span class="pre">SGEWorker.get_tasks_to_run()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SGEWorker.plugin_name"><code class="docutils literal notranslate"><span class="pre">SGEWorker.plugin_name</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SGEWorker.run_el"><code class="docutils literal notranslate"><span class="pre">SGEWorker.run_el()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SGEWorker.submit_array_job"><code class="docutils literal notranslate"><span class="pre">SGEWorker.submit_array_job()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SerialWorker"><code class="docutils literal notranslate"><span class="pre">SerialWorker</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SerialWorker.close"><code class="docutils literal notranslate"><span class="pre">SerialWorker.close()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SerialWorker.exec_serial"><code class="docutils literal notranslate"><span class="pre">SerialWorker.exec_serial()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SerialWorker.fetch_finished"><code class="docutils literal notranslate"><span class="pre">SerialWorker.fetch_finished()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SerialWorker.plugin_name"><code class="docutils literal notranslate"><span class="pre">SerialWorker.plugin_name</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SerialWorker.run_el"><code class="docutils literal notranslate"><span class="pre">SerialWorker.run_el()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SlurmWorker"><code class="docutils literal notranslate"><span class="pre">SlurmWorker</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SlurmWorker.plugin_name"><code class="docutils literal notranslate"><span class="pre">SlurmWorker.plugin_name</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.SlurmWorker.run_el"><code class="docutils literal notranslate"><span class="pre">SlurmWorker.run_el()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.Worker"><code class="docutils literal notranslate"><span class="pre">Worker</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.Worker.close"><code class="docutils literal notranslate"><span class="pre">Worker.close()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.Worker.fetch_finished"><code class="docutils literal notranslate"><span class="pre">Worker.fetch_finished()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.engine.workers.html#pydra.engine.workers.Worker.run_el"><code class="docutils literal notranslate"><span class="pre">Worker.run_el()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/pydra.mark.html">pydra.mark package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/pydra.mark.html#pydra.mark.annotate"><code class="docutils literal notranslate"><span class="pre">annotate()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pydra.mark.html#pydra.mark.task"><code class="docutils literal notranslate"><span class="pre">task()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pydra.mark.html#submodules">Submodules</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.mark.functions.html">pydra.mark.functions module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.mark.functions.html#pydra.mark.functions.annotate"><code class="docutils literal notranslate"><span class="pre">annotate()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.mark.functions.html#pydra.mark.functions.task"><code class="docutils literal notranslate"><span class="pre">task()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/pydra.tasks.html">pydra.tasks package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/pydra.utils.html">pydra.utils package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/pydra.utils.html#submodules">Submodules</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.utils.hash.html">pydra.utils.hash module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.hash.html#pydra.utils.hash.Cache"><code class="docutils literal notranslate"><span class="pre">Cache</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.hash.html#pydra.utils.hash.Cache.persistent"><code class="docutils literal notranslate"><span class="pre">Cache.persistent</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.hash.html#pydra.utils.hash.bytes_repr_mapping_contents"><code class="docutils literal notranslate"><span class="pre">bytes_repr_mapping_contents()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.hash.html#pydra.utils.hash.bytes_repr_sequence_contents"><code class="docutils literal notranslate"><span class="pre">bytes_repr_sequence_contents()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.hash.html#pydra.utils.hash.hash_function"><code class="docutils literal notranslate"><span class="pre">hash_function()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.hash.html#pydra.utils.hash.hash_object"><code class="docutils literal notranslate"><span class="pre">hash_object()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.hash.html#pydra.utils.hash.hash_single"><code class="docutils literal notranslate"><span class="pre">hash_single()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.hash.html#pydra.utils.hash.register_serializer"><code class="docutils literal notranslate"><span class="pre">register_serializer()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.utils.messenger.html">pydra.utils.messenger module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.AuditFlag"><code class="docutils literal notranslate"><span class="pre">AuditFlag</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.AuditFlag.ALL"><code class="docutils literal notranslate"><span class="pre">AuditFlag.ALL</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.AuditFlag.NONE"><code class="docutils literal notranslate"><span class="pre">AuditFlag.NONE</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.AuditFlag.PROV"><code class="docutils literal notranslate"><span class="pre">AuditFlag.PROV</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.AuditFlag.RESOURCE"><code class="docutils literal notranslate"><span class="pre">AuditFlag.RESOURCE</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.FileMessenger"><code class="docutils literal notranslate"><span class="pre">FileMessenger</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.FileMessenger.send"><code class="docutils literal notranslate"><span class="pre">FileMessenger.send()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.Messenger"><code class="docutils literal notranslate"><span class="pre">Messenger</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.Messenger.send"><code class="docutils literal notranslate"><span class="pre">Messenger.send()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.PrintMessenger"><code class="docutils literal notranslate"><span class="pre">PrintMessenger</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.PrintMessenger.send"><code class="docutils literal notranslate"><span class="pre">PrintMessenger.send()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.RemoteRESTMessenger"><code class="docutils literal notranslate"><span class="pre">RemoteRESTMessenger</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.RemoteRESTMessenger.send"><code class="docutils literal notranslate"><span class="pre">RemoteRESTMessenger.send()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.RuntimeHooks"><code class="docutils literal notranslate"><span class="pre">RuntimeHooks</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.RuntimeHooks.resource_monitor_post_stop"><code class="docutils literal notranslate"><span class="pre">RuntimeHooks.resource_monitor_post_stop</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.RuntimeHooks.resource_monitor_pre_start"><code class="docutils literal notranslate"><span class="pre">RuntimeHooks.resource_monitor_pre_start</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.RuntimeHooks.task_execute_post_exit"><code class="docutils literal notranslate"><span class="pre">RuntimeHooks.task_execute_post_exit</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.RuntimeHooks.task_execute_pre_entry"><code class="docutils literal notranslate"><span class="pre">RuntimeHooks.task_execute_pre_entry</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.RuntimeHooks.task_run_entry"><code class="docutils literal notranslate"><span class="pre">RuntimeHooks.task_run_entry</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.RuntimeHooks.task_run_exit"><code class="docutils literal notranslate"><span class="pre">RuntimeHooks.task_run_exit</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.collect_messages"><code class="docutils literal notranslate"><span class="pre">collect_messages()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.gen_uuid"><code class="docutils literal notranslate"><span class="pre">gen_uuid()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.make_message"><code class="docutils literal notranslate"><span class="pre">make_message()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.now"><code class="docutils literal notranslate"><span class="pre">now()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.messenger.html#pydra.utils.messenger.send_message"><code class="docutils literal notranslate"><span class="pre">send_message()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.utils.misc.html">pydra.utils.misc module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.misc.html#pydra.utils.misc.add_exc_note"><code class="docutils literal notranslate"><span class="pre">add_exc_note()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.misc.html#pydra.utils.misc.exc_info_matches"><code class="docutils literal notranslate"><span class="pre">exc_info_matches()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.utils.profiler.html">pydra.utils.profiler module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.profiler.html#pydra.utils.profiler.ResourceMonitor"><code class="docutils literal notranslate"><span class="pre">ResourceMonitor</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.profiler.html#pydra.utils.profiler.ResourceMonitor.fname"><code class="docutils literal notranslate"><span class="pre">ResourceMonitor.fname</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.profiler.html#pydra.utils.profiler.ResourceMonitor.run"><code class="docutils literal notranslate"><span class="pre">ResourceMonitor.run()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.profiler.html#pydra.utils.profiler.ResourceMonitor.stop"><code class="docutils literal notranslate"><span class="pre">ResourceMonitor.stop()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.profiler.html#pydra.utils.profiler.get_max_resources_used"><code class="docutils literal notranslate"><span class="pre">get_max_resources_used()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.profiler.html#pydra.utils.profiler.get_system_total_memory_gb"><code class="docutils literal notranslate"><span class="pre">get_system_total_memory_gb()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.profiler.html#pydra.utils.profiler.log_nodes_cb"><code class="docutils literal notranslate"><span class="pre">log_nodes_cb()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="api/pydra.utils.typing.html">pydra.utils.typing module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser"><code class="docutils literal notranslate"><span class="pre">TypeParser</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.COERCIBLE_DEFAULT"><code class="docutils literal notranslate"><span class="pre">TypeParser.COERCIBLE_DEFAULT</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.NOT_COERCIBLE_DEFAULT"><code class="docutils literal notranslate"><span class="pre">TypeParser.NOT_COERCIBLE_DEFAULT</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.apply_to_instances"><code class="docutils literal notranslate"><span class="pre">TypeParser.apply_to_instances()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.check_coercible"><code class="docutils literal notranslate"><span class="pre">TypeParser.check_coercible()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.check_type"><code class="docutils literal notranslate"><span class="pre">TypeParser.check_type()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.check_type_coercible"><code class="docutils literal notranslate"><span class="pre">TypeParser.check_type_coercible()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.coerce"><code class="docutils literal notranslate"><span class="pre">TypeParser.coerce()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.coercible"><code class="docutils literal notranslate"><span class="pre">TypeParser.coercible</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.contains_type"><code class="docutils literal notranslate"><span class="pre">TypeParser.contains_type()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.get_args"><code class="docutils literal notranslate"><span class="pre">TypeParser.get_args()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.get_item_type"><code class="docutils literal notranslate"><span class="pre">TypeParser.get_item_type()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.get_origin"><code class="docutils literal notranslate"><span class="pre">TypeParser.get_origin()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.is_instance"><code class="docutils literal notranslate"><span class="pre">TypeParser.is_instance()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.is_subclass"><code class="docutils literal notranslate"><span class="pre">TypeParser.is_subclass()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.label"><code class="docutils literal notranslate"><span class="pre">TypeParser.label</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.label_str"><code class="docutils literal notranslate"><span class="pre">TypeParser.label_str</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.match_any_of_union"><code class="docutils literal notranslate"><span class="pre">TypeParser.match_any_of_union</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.matches"><code class="docutils literal notranslate"><span class="pre">TypeParser.matches()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.matches_type"><code class="docutils literal notranslate"><span class="pre">TypeParser.matches_type()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.not_coercible"><code class="docutils literal notranslate"><span class="pre">TypeParser.not_coercible</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.strip_splits"><code class="docutils literal notranslate"><span class="pre">TypeParser.strip_splits()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.superclass_auto_cast"><code class="docutils literal notranslate"><span class="pre">TypeParser.superclass_auto_cast</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/pydra.utils.typing.html#pydra.utils.typing.TypeParser.tp"><code class="docutils literal notranslate"><span class="pre">TypeParser.tp</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="changes.html" class="btn btn-neutral float-left" title="Release Notes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api/pydra.engine.html" class="btn btn-neutral float-right" title="pydra.engine package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019 - 2020, The Nipype Developers team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  
+<div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+        <span class="fa fa-book"> Other Versions</span>
+        v: 0.25
+        <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+        <dl>
+            <dt>Tags</dt>
+            <dd><a href="../0.21/api.html">0.21</a></dd>
+            <dd><a href="../0.22/api.html">0.22</a></dd>
+            <dd><a href="../0.23/api.html">0.23</a></dd>
+            <dd><a href="../0.23.0-alpha/api.html">0.23.0-alpha</a></dd>
+            <dd><a href="../0.24/api.html">0.24</a></dd>
+            <dd><a href="api.html">0.25</a></dd>
+        </dl>
+        <dl>
+            <dt>Branches</dt>
+            <dd><a href="../ci_test-py3.11-windows/api.html">ci/test-py3.11-windows</a></dd>
+            <dd><a href="../debugging-hashing/api.html">debugging-hashing</a></dd>
+            <dd><a href="../effigies_input-spec-suggestions/api.html">effigies/input-spec-suggestions</a></dd>
+            <dd><a href="../master/api.html">master</a></dd>
+            <dd><a href="../mriqc-hacking/api.html">mriqc-hacking</a></dd>
+            <dd><a href="../new-syntax/api.html">new-syntax</a></dd>
+            <dd><a href="../pre-commit-ci-update-config/api.html">pre-commit-ci-update-config</a></dd>
+            <dd><a href="../unittest-fixes/api.html">unittest-fixes</a></dd>
+        </dl>
+    </div>
+</div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

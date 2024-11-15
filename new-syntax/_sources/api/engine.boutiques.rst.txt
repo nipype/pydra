@@ -1,0 +1,7 @@
+engine.boutiques module
+=======================
+
+.. automodule:: engine.boutiques
+   :members:
+   :undoc-members:
+   :show-inheritance:
