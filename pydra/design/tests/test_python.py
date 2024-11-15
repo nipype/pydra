@@ -30,7 +30,7 @@ def test_interface_wrap_function():
     ]
 
 
-def test_interface_wrap_function_type():
+def test_interface_wrap_function_types():
     def sample_interface(a: int) -> int:
         """Sample function with inputs and outputs"""
         return a * 2

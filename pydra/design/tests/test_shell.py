@@ -1,21 +1,101 @@
 import os
-import tempfile
 from operator import attrgetter
 from pathlib import Path
 import attrs
 import pytest
 import cloudpickle as cp
 from pydra.design import shell, Interface, list_fields
-from fileformats.generic import File, Directory
+from fileformats.generic import File, Directory, FsObject, SetOf
+from fileformats import field
 
 
-def list_entries(stdout):
-    return stdout.split("\n")[:-1]
+def test_interface_template():
+
+    SampleInterface = shell.interface(
+        (
+            "cp <in_paths:fs-object+set-of> <out|out_path> -R<recursive> -v<verbose> "
+            "--text-arg <text_arg> --int-arg <int_arg:integer> "
+            # "--tuple-arg <tuple_arg:tuple[integer,text]> "
+        ),
+    )
+
+    assert issubclass(SampleInterface, Interface)
+    inputs = sorted(list_fields(SampleInterface), key=inp_sort_key)
+    outputs = sorted(list_fields(SampleInterface.Outputs), key=out_sort_key)
+    assert inputs == [
+        shell.arg(name="in_paths", type=SetOf[FsObject], position=1),
+        shell.outarg(name="out_path", type=FsObject, position=2),
+        shell.arg(name="recursive", type=bool, position=3),
+        shell.arg(name="verbose", type=bool, position=4),
+        shell.arg(name="text_arg", type=field.Text, position=5),
+        shell.arg(name="int_arg", type=field.Integer, position=6),
+        # shell.arg(name="tuple_arg", type=tuple[field.Integer,field.Text], position=6),
+    ]
+    assert outputs == [
+        shell.outarg(name="out_path", type=FsObject, position=2),
+    ]
 
 
-@pytest.fixture
-def tmpdir():
-    return Path(tempfile.mkdtemp())
+def test_interface_template_with_overrides():
+
+    RECURSIVE_HELP = (
+        "If source_file designates a directory, cp copies the directory and the entire "
+        "subtree connected at that point."
+    )
+
+    SampleInterface = shell.interface(
+        (
+            "cp <in_paths:fs-object+set-of> <out|out_path> -R<recursive> -v<verbose> "
+            "--text-arg <text_arg> --int-arg <int_arg:integer> "
+            # "--tuple-arg <tuple_arg:tuple[integer,text]> "
+        ),
+        inputs={"recursive": shell.arg(help_string=RECURSIVE_HELP)},
+        outputs={"out_path": shell.outarg(position=-1)},
+    )
+
+    assert issubclass(SampleInterface, Interface)
+    inputs = sorted(list_fields(SampleInterface), key=inp_sort_key)
+    outputs = sorted(list_fields(SampleInterface.Outputs), key=out_sort_key)
+    assert inputs == [
+        shell.arg(name="in_paths", type=SetOf[FsObject], position=1),
+        shell.arg(name="recursive", type=bool, help_string=RECURSIVE_HELP, position=2),
+        shell.arg(name="verbose", type=bool, position=3),
+        shell.arg(name="text_arg", type=field.Text, position=4),
+        shell.arg(name="int_arg", type=field.Integer, position=5),
+        # shell.arg(name="tuple_arg", type=tuple[field.Integer,field.Text], position=6),
+        shell.outarg(name="out_path", type=FsObject, position=-1),
+    ]
+    assert outputs == [
+        shell.outarg(name="out_path", type=FsObject, position=-1),
+    ]
+
+
+def test_interface_template_with_type_overrides():
+
+    SampleInterface = shell.interface(
+        (
+            "cp <in_paths:fs-object+set-of> <out|out_path> -R<recursive> -v<verbose> "
+            "--text-arg <text_arg> --int-arg <int_arg> "
+            # "--tuple-arg <tuple_arg:tuple[integer,text]> "
+        ),
+        inputs={"text_arg": str, "int_arg": int},
+    )
+
+    assert issubclass(SampleInterface, Interface)
+    inputs = sorted(list_fields(SampleInterface), key=inp_sort_key)
+    outputs = sorted(list_fields(SampleInterface.Outputs), key=out_sort_key)
+    assert inputs == [
+        shell.arg(name="in_paths", type=SetOf[FsObject], position=1),
+        shell.arg(name="recursive", type=bool, position=2),
+        shell.arg(name="verbose", type=bool, position=3),
+        shell.arg(name="text_arg", type=str, position=4),
+        shell.arg(name="int_arg", type=int, position=5),
+        # shell.arg(name="tuple_arg", type=tuple[field.Integer,field.Text], position=6),
+        shell.outarg(name="out_path", type=FsObject, position=-1),
+    ]
+    assert outputs == [
+        shell.outarg(name="out_path", type=FsObject, position=-1),
+    ]
 
 
 @pytest.fixture(params=["static", "dynamic"])
@@ -149,8 +229,8 @@ def test_shell_fields(Ls):
     assert [a.name for a in list_fields(Ls.Outputs)] == ["entries"]
 
 
-def test_shell_pickle_roundtrip(Ls, tmpdir):
-    pkl_file = tmpdir / "ls.pkl"
+def test_shell_pickle_roundtrip(Ls, tmp_path):
+    pkl_file = tmp_path / "ls.pkl"
     with open(pkl_file, "wb") as f:
         cp.dump(Ls, f)
 
@@ -161,21 +241,21 @@ def test_shell_pickle_roundtrip(Ls, tmpdir):
 
 
 @pytest.mark.xfail(reason="Still need to update tasks to use new shell interface")
-def test_shell_run(Ls, tmpdir):
-    Path.touch(tmpdir / "a")
-    Path.touch(tmpdir / "b")
-    Path.touch(tmpdir / "c")
+def test_shell_run(Ls, tmp_path):
+    Path.touch(tmp_path / "a")
+    Path.touch(tmp_path / "b")
+    Path.touch(tmp_path / "c")
 
-    ls = Ls(directory=tmpdir, long_format=True)
+    ls = Ls(directory=tmp_path, long_format=True)
 
     # Test cmdline
-    assert ls.inputs.directory == tmpdir
+    assert ls.inputs.directory == tmp_path
     assert not ls.inputs.hidden
     assert ls.inputs.long_format
-    assert ls.cmdline == f"ls -l {tmpdir}"
+    assert ls.cmdline == f"ls -l {tmp_path}"
 
     # Drop Long format flag to make output simpler
-    ls = Ls(directory=tmpdir)
+    ls = Ls(directory=tmp_path)
     result = ls()
 
     assert result.output.entries == ["a", "b", "c"]
@@ -328,7 +408,7 @@ def get_file_size(y: Path):
     return result.st_size
 
 
-def test_shell_bases_dynamic(A, tmpdir):
+def test_shell_bases_dynamic(A, tmp_path):
     B = shell.interface(
         name="B",
         inputs={
@@ -344,8 +424,8 @@ def test_shell_bases_dynamic(A, tmpdir):
         bases=[A],
     )
 
-    xpath = tmpdir / "x.txt"
-    ypath = tmpdir / "y.txt"
+    xpath = tmp_path / "x.txt"
+    ypath = tmp_path / "y.txt"
     Path.touch(xpath)
     Path.touch(ypath)
 
@@ -358,7 +438,7 @@ def test_shell_bases_dynamic(A, tmpdir):
     # assert result.output.y == str(ypath)
 
 
-def test_shell_bases_static(A, tmpdir):
+def test_shell_bases_static(A, tmp_path):
     @shell.interface
     class B(A):
 
@@ -369,8 +449,8 @@ def test_shell_bases_static(A, tmpdir):
                 help_string="size of the output directory", callable=get_file_size
             )
 
-    xpath = tmpdir / "x.txt"
-    ypath = tmpdir / "y.txt"
+    xpath = tmp_path / "x.txt"
+    ypath = tmp_path / "y.txt"
     Path.touch(xpath)
     Path.touch(ypath)
 
@@ -383,7 +463,7 @@ def test_shell_bases_static(A, tmpdir):
     # assert result.output.y == str(ypath)
 
 
-def test_shell_inputs_outputs_bases_dynamic(tmpdir):
+def test_shell_inputs_outputs_bases_dynamic(tmp_path):
     A = shell.interface(
         "ls",
         name="A",
@@ -417,19 +497,19 @@ def test_shell_inputs_outputs_bases_dynamic(tmpdir):
         bases=[A],
     )
 
-    hidden = File.sample(tmpdir, stem=".hidden")
+    hidden = File.sample(tmp_path, stem=".hidden")
 
-    b = B(directory=tmpdir, hidden=True)
+    b = B(directory=tmp_path, hidden=True)
 
-    assert b.directory == Directory(tmpdir)
+    assert b.directory == Directory(tmp_path)
     assert b.hidden
 
     # result = b()
-    # assert result.runner.cmdline == f"ls -a {tmpdir}"
+    # assert result.runner.cmdline == f"ls -a {tmp_path}"
     # assert result.output.entries == [".", "..", ".hidden"]
 
 
-def test_shell_inputs_outputs_bases_static(tmpdir):
+def test_shell_inputs_outputs_bases_static(tmp_path):
     @shell.interface
     class A:
         executable = "ls"
@@ -452,11 +532,11 @@ def test_shell_inputs_outputs_bases_static(tmpdir):
             default=False,
         )
 
-    Path.touch(tmpdir / ".hidden")
+    Path.touch(tmp_path / ".hidden")
 
-    b = B(directory=tmpdir, hidden=True)
+    b = B(directory=tmp_path, hidden=True)
 
-    assert b.directory == Directory(tmpdir)
+    assert b.directory == Directory(tmp_path)
     assert b.hidden
 
     # result = b()
@@ -502,3 +582,22 @@ def test_shell_missing_executable_dynamic():
                 )
             },
         )
+
+
+def list_entries(stdout):
+    return stdout.split("\n")[:-1]
+
+
+inp_sort_key = attrgetter("position")
+
+
+def out_sort_key(out: shell.out) -> int:
+    LARGE_NUMBER = 1000000
+    try:
+        pos = out.position
+    except AttributeError:
+        pos = LARGE_NUMBER
+    else:
+        if pos < 0:
+            pos = LARGE_NUMBER + pos
+    return pos
