@@ -265,8 +265,12 @@ def get_fields_from_class(
         # Get fields defined in base classes if present
         for field in list_fields(klass):
             fields_dict[field.name] = field
+        type_hints = ty.get_type_hints(klass)
         for atr_name in dir(klass):
-            if atr_name in fields_dict or atr_name.startswith("__"):
+            if atr_name in list(fields_dict) + [
+                "Task",
+                "Outputs",
+            ] or atr_name.startswith("__"):
                 continue
             try:
                 atr = getattr(klass, atr_name)
@@ -275,47 +279,37 @@ def get_fields_from_class(
             if isinstance(atr, Field):
                 atr.name = atr_name
                 fields_dict[atr_name] = atr
-        for atr_name, type_ in klass.__annotations__.items():
-            try:
-                fields_dict[atr_name].type = type_
-            except KeyError:
-                if auto_attribs:
-                    fields_dict[atr_name] = field_type(name=atr_name, type=type_)
-        for atr_name, help in helps.items():
-            try:
-                fields_dict[atr_name].help_string = help
-            except KeyError:
-                pass
+                if atr_name in type_hints:
+                    atr.type = type_hints[atr_name]
+                if not atr.help_string:
+                    atr.help_string = helps.get(atr_name, "")
+            elif atr_name in type_hints and auto_attribs:
+                fields_dict[atr_name] = field_type(
+                    name=atr_name,
+                    type=type_hints[atr_name],
+                    default=atr,
+                    help_string=helps.get(atr_name, ""),
+                )
+        if auto_attribs:
+            for atr_name, type_ in type_hints.items():
+                if atr_name not in list(fields_dict) + ["Task", "Outputs"]:
+                    fields_dict[atr_name] = field_type(
+                        name=atr_name, type=type_, help_string=helps.get(atr_name, "")
+                    )
         return list(fields_dict.values())
 
     inputs = get_fields(klass, arg_type, auto_attribs, input_helps)
 
-    outputs_klass = get_outputs_class(klass)
-    output_helps, _ = parse_doc_string(outputs_klass.__doc__)
-    if outputs_klass is None:
-        raise ValueError(f"Nested Outputs class not found in {klass.__name__}")
-    outputs = get_fields(outputs_klass, out_type, auto_attribs, output_helps)
-
-    return inputs, outputs
-
-
-def get_outputs_class(klass: type | None = None) -> type | None:
-    """Get the Outputs class from the nested "Outputs" class or from the Interface class
-    args"""
-    if klass is None:
-        return None
     try:
         outputs_klass = klass.Outputs
     except AttributeError:
-        try:
-            interface_class = next(
-                b for b in klass.__mro__ if ty.get_origin(b) is Interface
-            )
-        except StopIteration:
-            outputs_klass = None
-        else:
-            outputs_klass = ty.get_args(interface_class)[0]
-    return outputs_klass
+        raise AttributeError(
+            f"Nested Outputs class not found in {klass.__name__}"
+        ) from None
+    output_helps, _ = parse_doc_string(outputs_klass.__doc__)
+    outputs = get_fields(outputs_klass, out_type, auto_attribs, output_helps)
+
+    return inputs, outputs
 
 
 def make_interface(
@@ -437,6 +431,7 @@ def allowed_values_validator(_, attribute, value):
 
 def extract_inputs_and_outputs_from_function(
     function: ty.Callable,
+    arg_type: type[Arg],
     inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
     outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
 ) -> tuple[dict[str, type | Arg], dict[str, type | Out]]:
@@ -445,8 +440,11 @@ def extract_inputs_and_outputs_from_function(
     sig = inspect.signature(function)
     type_hints = ty.get_type_hints(function)
     input_types = {}
+    input_defaults = {}
     for p in sig.parameters.values():
         input_types[p.name] = type_hints.get(p.name, ty.Any)
+        if p.default is not inspect.Parameter.empty:
+            input_defaults[p.name] = p.default
     if inputs:
         if not isinstance(inputs, dict):
             raise ValueError(
@@ -463,6 +461,12 @@ def extract_inputs_and_outputs_from_function(
                     inpt.type = type_
     else:
         inputs = input_types
+    for inpt_name, default in input_defaults.items():
+        inpt = inputs[inpt_name]
+        if isinstance(inpt, arg_type) and inpt.default is EMPTY:
+            inpt.default = default
+        else:
+            inputs[inpt_name] = arg_type(type=inpt, default=default)
     return_type = type_hints.get("return", ty.Any)
     if outputs is None:
         src = inspect.getsource(function).strip()

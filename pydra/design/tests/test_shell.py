@@ -32,7 +32,7 @@ def test_interface_template_more_complex():
         (
             "cp <in_paths:fs-object+set-of> <out|out_path> -R<recursive> -v<verbose> "
             "--text-arg <text_arg> --int-arg <int_arg:integer> "
-            # "--tuple-arg <tuple_arg:tuple[integer,text]> "
+            "--tuple-arg <tuple_arg:integer> <:text> "
         ),
     )
 
@@ -47,7 +47,7 @@ def test_interface_template_more_complex():
         shell.arg(name="verbose", type=bool, position=4),
         shell.arg(name="text_arg", type=field.Text, position=5),
         shell.arg(name="int_arg", type=field.Integer, position=6),
-        # shell.arg(name="tuple_arg", type=tuple[field.Integer,field.Text], position=6),
+        shell.arg(name="tuple_arg", type=tuple[field.Integer, field.Text], position=6),
     ]
     assert outputs == [
         shell.outarg(name="out_path", type=FsObject, position=2),
@@ -65,7 +65,7 @@ def test_interface_template_with_overrides():
         (
             "cp <in_paths:fs-object+set-of> <out|out_path> -R<recursive> -v<verbose> "
             "--text-arg <text_arg> --int-arg <int_arg:integer> "
-            # "--tuple-arg <tuple_arg:tuple[integer,text]> "
+            "--tuple-arg <tuple_arg:integer> <tuple_arg:text> "
         ),
         inputs={"recursive": shell.arg(help_string=RECURSIVE_HELP)},
         outputs={"out_path": shell.outarg(position=-1)},
@@ -81,7 +81,7 @@ def test_interface_template_with_overrides():
         shell.arg(name="verbose", type=bool, position=3),
         shell.arg(name="text_arg", type=field.Text, position=4),
         shell.arg(name="int_arg", type=field.Integer, position=5),
-        # shell.arg(name="tuple_arg", type=tuple[field.Integer,field.Text], position=6),
+        shell.arg(name="tuple_arg", type=tuple[field.Integer, field.Text], position=6),
         shell.outarg(name="out_path", type=FsObject, position=-1),
     ]
     assert outputs == [
@@ -95,7 +95,7 @@ def test_interface_template_with_type_overrides():
         (
             "cp <in_paths:fs-object+set-of> <out|out_path> -R<recursive> -v<verbose> "
             "--text-arg <text_arg> --int-arg <int_arg> "
-            # "--tuple-arg <tuple_arg:tuple[integer,text]> "
+            "--tuple-arg <tuple_arg:integer> <tuple_arg:text> "
         ),
         inputs={"text_arg": str, "int_arg": int},
     )
@@ -109,7 +109,7 @@ def test_interface_template_with_type_overrides():
         shell.arg(name="verbose", type=bool, position=3),
         shell.arg(name="text_arg", type=str, position=4),
         shell.arg(name="int_arg", type=int, position=5),
-        # shell.arg(name="tuple_arg", type=tuple[field.Integer,field.Text], position=6),
+        shell.arg(name="tuple_arg", type=tuple[field.Integer, field.Text], position=6),
         shell.outarg(name="out_path", type=FsObject, position=-1),
     ]
     assert outputs == [
