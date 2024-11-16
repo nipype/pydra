@@ -113,6 +113,7 @@ def test_decorated_function_interface():
         python.out(name="c", type=float),
         python.out(name="d", type=float),
     ]
+    assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
 
 
 def test_interface_with_function_implicit_outputs_from_return_stmt():
@@ -139,6 +140,7 @@ def test_interface_with_function_implicit_outputs_from_return_stmt():
         python.out(name="c", type=float),
         python.out(name="d", type=float),
     ]
+    assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
 
 
 def test_interface_with_function_docstr():
@@ -169,6 +171,7 @@ def test_interface_with_function_docstr():
         python.out(name="c", type=float, help_string="Sum of a and b"),
         python.out(name="d", type=float, help_string="product of a and b"),
     ]
+    assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
 
 
 def test_interface_with_function_google_docstr():
@@ -203,6 +206,7 @@ def test_interface_with_function_google_docstr():
         python.out(name="c", type=float, help_string="Sum of a and b"),
         python.out(name="d", type=float, help_string="Product of a and b"),
     ]
+    assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
 
 
 def test_interface_with_function_numpy_docstr():
@@ -245,6 +249,7 @@ def test_interface_with_function_numpy_docstr():
         python.out(name="c", type=float, help_string="Sum of a and b"),
         python.out(name="d", type=float, help_string="Product of a and b"),
     ]
+    assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
 
 
 def test_interface_with_class():

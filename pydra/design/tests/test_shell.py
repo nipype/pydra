@@ -1,12 +1,11 @@
 import os
-from operator import attrgetter
 from pathlib import Path
 import attrs
 import pytest
 import cloudpickle as cp
 from pydra.design import shell, Interface, list_fields
 from fileformats.generic import File, Directory, FsObject, SetOf
-from fileformats import field
+from fileformats import field, text, image
 
 
 def test_interface_template():
@@ -14,44 +13,90 @@ def test_interface_template():
     SampleInterface = shell.interface("cp <in_path> <out|out_path>")
 
     assert issubclass(SampleInterface, Interface)
-    inputs = sorted(list_fields(SampleInterface), key=inp_sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=out_sort_key)
-    assert inputs == [
+    output = shell.outarg(
+        name="out_path",
+        path_template="out_path",
+        default=True,
+        type=FsObject,
+        position=2,
+    )
+    assert list_fields(SampleInterface) == [
         shell.arg(name="executable", default="cp", type=str, position=0),
         shell.arg(name="in_path", type=FsObject, position=1),
-        shell.outarg(name="out_path", type=FsObject, position=2),
+        output,
     ]
-    assert outputs == [
-        shell.outarg(name="out_path", type=FsObject, position=2),
+    assert list_fields(SampleInterface.Outputs) == [output]
+    intf = SampleInterface(in_path=File.mock("in-path.txt"))
+    assert intf.executable == "cp"
+    SampleInterface(in_path=File.mock("in-path.txt"), out_path=Path("./out-path.txt"))
+    SampleInterface.Outputs(out_path=File.mock("in-path.txt"))
+
+
+def test_interface_template_w_types_and_path_template_ext():
+
+    SampleInterface = shell.interface(
+        "trim-png <in_image:image/png> <out|out_image.png:image/png>"
+    )
+
+    assert issubclass(SampleInterface, Interface)
+    output = shell.outarg(
+        name="out_image",
+        path_template="out_image.png",
+        default=True,
+        type=image.Png,
+        position=2,
+    )
+    assert list_fields(SampleInterface) == [
+        shell.arg(name="executable", default="trim-png", type=str, position=0),
+        shell.arg(name="in_image", type=image.Png, position=1),
+        output,
     ]
+    assert list_fields(SampleInterface.Outputs) == [output]
+    SampleInterface(in_image=image.Png.mock())
+    SampleInterface(in_image=image.Png.mock(), out_image=Path("./new_image.png"))
+    SampleInterface.Outputs(out_image=image.Png.mock())
 
 
 def test_interface_template_more_complex():
 
     SampleInterface = shell.interface(
         (
-            "cp <in_paths:fs-object+set-of> <out|out_path> -R<recursive> -v<verbose> "
+            "cp <in_fs_objects:fs-object+set-of> <out|out_dir:directory> "
+            "-R<recursive> "
             "--text-arg <text_arg> --int-arg <int_arg:integer> "
-            "--tuple-arg <tuple_arg:integer> <:text> "
+            "--tuple-arg <tuple_arg:integer,text> "
         ),
     )
 
     assert issubclass(SampleInterface, Interface)
-    inputs = sorted(list_fields(SampleInterface), key=inp_sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=out_sort_key)
-    assert inputs == [
+    output = shell.outarg(
+        name="out_dir",
+        type=Directory,
+        path_template="out_dir",
+        position=2,
+        default=True,
+    )
+    assert sorted(list_fields(SampleInterface), key=pos_key) == [
         shell.arg(name="executable", default="cp", type=str, position=0),
-        shell.arg(name="in_paths", type=SetOf[FsObject], position=1, sep=" "),
-        shell.outarg(name="out_path", type=FsObject, position=2),
-        shell.arg(name="recursive", type=bool, position=3),
-        shell.arg(name="verbose", type=bool, position=4),
-        shell.arg(name="text_arg", type=field.Text, position=5),
-        shell.arg(name="int_arg", type=field.Integer, position=6),
-        shell.arg(name="tuple_arg", type=tuple[field.Integer, field.Text], position=6),
+        shell.arg(name="in_fs_objects", type=SetOf[FsObject], position=1, sep=" "),
+        output,
+        shell.arg(name="recursive", arg_str="-R", type=bool, position=3),
+        shell.arg(
+            name="text_arg", arg_str="--text-arg", type=field.Text | None, position=5
+        ),
+        shell.arg(
+            name="int_arg", arg_str="--int-arg", type=field.Integer | None, position=6
+        ),
+        shell.arg(
+            name="tuple_arg",
+            arg_str="--tuple-arg",
+            type=tuple[field.Integer, field.Text] | None,
+            position=6,
+        ),
     ]
-    assert outputs == [
-        shell.outarg(name="out_path", type=FsObject, position=2),
-    ]
+    assert list_fields(SampleInterface.Outputs) == [output]
+    SampleInterface(in_fs_objects=[File.sample(), File.sample(seed=1)])
+    SampleInterface.Outputs(out_path=File.sample())
 
 
 def test_interface_template_with_overrides():
@@ -63,58 +108,84 @@ def test_interface_template_with_overrides():
 
     SampleInterface = shell.interface(
         (
-            "cp <in_paths:fs-object+set-of> <out|out_path> -R<recursive> -v<verbose> "
+            "cp <in_fs_objects:fs-object+set-of> <out|out_dir:directory> "
+            "-R<recursive> "
             "--text-arg <text_arg> --int-arg <int_arg:integer> "
             "--tuple-arg <tuple_arg:integer> <tuple_arg:text> "
         ),
         inputs={"recursive": shell.arg(help_string=RECURSIVE_HELP)},
-        outputs={"out_path": shell.outarg(position=-1)},
+        outputs={"out_dir": shell.outarg(position=-1)},
     )
 
     assert issubclass(SampleInterface, Interface)
-    inputs = sorted(list_fields(SampleInterface), key=inp_sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=out_sort_key)
-    assert inputs == [
+    output = shell.outarg(
+        name="out_dir",
+        type=Directory,
+        path_template="out_dir",
+        position=-1,
+        default=True,
+    )
+    assert list_fields(SampleInterface) == [
         shell.arg(name="executable", default="cp", type=str, position=0),
-        shell.arg(name="in_paths", type=SetOf[FsObject], position=1, sep=" "),
-        shell.arg(name="recursive", type=bool, help_string=RECURSIVE_HELP, position=2),
-        shell.arg(name="verbose", type=bool, position=3),
-        shell.arg(name="text_arg", type=field.Text, position=4),
-        shell.arg(name="int_arg", type=field.Integer, position=5),
-        shell.arg(name="tuple_arg", type=tuple[field.Integer, field.Text], position=6),
-        shell.outarg(name="out_path", type=FsObject, position=-1),
+        shell.arg(name="in_fs_objects", type=SetOf[FsObject], position=1, sep=" "),
+        shell.arg(
+            name="recursive",
+            arg_str="-R",
+            type=bool,
+            help_string=RECURSIVE_HELP,
+            position=2,
+        ),
+        shell.arg(
+            name="text_arg", argstr="--text-arg", type=field.Text | None, position=3
+        ),
+        shell.arg(
+            name="int_arg", argstr="--int-arg", type=field.Integer | None, position=4
+        ),
+        shell.arg(
+            name="tuple_arg",
+            argstr="--tuple-arg",
+            type=tuple[field.Integer, field.Text] | None,
+            position=5,
+        ),
+        output,
     ]
-    assert outputs == [
-        shell.outarg(name="out_path", type=FsObject, position=-1),
-    ]
+    assert list_fields(SampleInterface.Outputs) == [output]
 
 
 def test_interface_template_with_type_overrides():
 
     SampleInterface = shell.interface(
         (
-            "cp <in_paths:fs-object+set-of> <out|out_path> -R<recursive> -v<verbose> "
+            "cp <in_fs_objects:fs-object+set-of> <out|out_dir:directory> "
+            "-R<recursive> "
             "--text-arg <text_arg> --int-arg <int_arg> "
             "--tuple-arg <tuple_arg:integer> <tuple_arg:text> "
         ),
-        inputs={"text_arg": str, "int_arg": int},
+        inputs={"text_arg": str | None, "int_arg": int | None},
     )
 
     assert issubclass(SampleInterface, Interface)
-    inputs = sorted(list_fields(SampleInterface), key=inp_sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=out_sort_key)
-    assert inputs == [
-        shell.arg(name="in_paths", type=SetOf[FsObject], position=1, sep=" "),
-        shell.arg(name="recursive", type=bool, position=2),
-        shell.arg(name="verbose", type=bool, position=3),
-        shell.arg(name="text_arg", type=str, position=4),
-        shell.arg(name="int_arg", type=int, position=5),
-        shell.arg(name="tuple_arg", type=tuple[field.Integer, field.Text], position=6),
-        shell.outarg(name="out_path", type=FsObject, position=-1),
+    output = shell.outarg(
+        name="out_dir",
+        type=Directory,
+        path_template="out_dir",
+        position=-1,
+        default=True,
+    )
+    assert list_fields(SampleInterface) == [
+        shell.arg(name="in_fs_objects", type=SetOf[FsObject], position=1, sep=" "),
+        shell.arg(name="recursive", argstr="-R", type=bool, position=2),
+        shell.arg(name="text_arg", argstr="--text-arg", type=str | None, position=4),
+        shell.arg(name="int_arg", argstr="--text-arg", type=int | None, position=5),
+        shell.arg(
+            name="tuple_arg",
+            targstr="--text-arg",
+            ype=tuple[field.Integer, field.Text] | None,
+            position=6,
+        ),
+        output,
     ]
-    assert outputs == [
-        shell.outarg(name="out_path", type=FsObject, position=-1),
-    ]
+    assert list_fields(SampleInterface.Outputs) == [output]
 
 
 @pytest.fixture(params=["static", "dynamic"])
@@ -128,7 +199,6 @@ def Ls(request):
             directory: Directory = shell.arg(
                 help_string="the directory to list the contents of",
                 argstr="",
-                mandatory=True,
                 position=-1,
             )
             hidden: bool = shell.arg(
@@ -157,10 +227,10 @@ def Ls(request):
                 requires=["long_format"],
                 xor=["date_format_str"],
             )
-            date_format_str: str = shell.arg(
+            date_format_str: str | None = shell.arg(
                 help_string="format string for ",
                 argstr="-D",
-                default=attrs.NOTHING,
+                default=None,
                 requires=["long_format"],
                 xor=["complete_date"],
             )
@@ -179,7 +249,6 @@ def Ls(request):
                     type=Directory,
                     help_string="the directory to list the contents of",
                     argstr="",
-                    mandatory=True,
                     position=-1,
                 ),
                 "hidden": shell.arg(
@@ -209,7 +278,7 @@ def Ls(request):
                     xor=["date_format_str"],
                 ),
                 "date_format_str": shell.arg(
-                    type=str,
+                    type=str | None,
                     help_string="format string for ",
                     argstr="-D",
                     requires=["long_format"],
@@ -306,7 +375,7 @@ def A(request):
                 y : File
                     path of output file"""
 
-                y: File = shell.outarg(file_template="{x}_out", position=-1)
+                y: File = shell.outarg(path_template="{x}_out", position=-1)
 
     elif request.param == "dynamic":
         A = shell.interface(
@@ -324,7 +393,7 @@ def A(request):
                     type=File,
                     help_string="path of output file",
                     argstr="",
-                    file_template="{x}_out",
+                    path_template="{x}_out",
                 ),
             },
             name="A",
@@ -335,7 +404,7 @@ def A(request):
     return A
 
 
-def test_shell_output_file_template(A):
+def test_shell_output_path_template(A):
     assert "y" in [a.name for a in attrs.fields(A.Outputs)]
 
 
@@ -351,16 +420,23 @@ def test_shell_output_field_name_static():
         class Outputs:
             y: File = shell.outarg(
                 help_string="the output file",
-                file_template="{x}_out",
+                path_template="{x}_out",
                 argstr="",
                 position=-1,
             )
 
     assert sorted([a.name for a in attrs.fields(A)]) == ["executable", "x", "y"]
     assert [a.name for a in attrs.fields(A.Outputs)] == ["y"]
-    inputs = sorted(list_fields(A), key=attrgetter("name"))
-    outputs = sorted(list_fields(A.Outputs), key=attrgetter("name"))
-    assert inputs == [
+    output = shell.outarg(
+        name="y",
+        type=File,
+        help_string="the output file",
+        path_template="{x}_out",
+        default=True,
+        argstr="",
+        position=-1,
+    )
+    assert sorted(list_fields(A), key=pos_key) == [
         shell.arg(
             name="executable",
             default="cp",
@@ -375,25 +451,9 @@ def test_shell_output_field_name_static():
             argstr="",
             position=1,
         ),
-        shell.outarg(
-            name="y",
-            type=File,
-            help_string="the output file",
-            file_template="{x}_out",
-            argstr="",
-            position=-1,
-        ),
+        output,
     ]
-    assert outputs == [
-        shell.outarg(
-            name="y",
-            type=File,
-            help_string="the output file",
-            file_template="{x}_out",
-            argstr="",
-            position=-1,
-        )
-    ]
+    assert list_fields(A.Outputs) == [output]
 
 
 def test_shell_output_field_name_dynamic():
@@ -413,8 +473,8 @@ def test_shell_output_field_name_dynamic():
                 type=File,
                 help_string="path of output file",
                 argstr="",
-                template_field="y_out",
-                file_template="{x}_out",
+                path_template="{x}_out",
+                default=True,
             ),
         },
     )
@@ -461,22 +521,30 @@ def test_shell_bases_static(A, tmp_path):
     @shell.interface
     class B(A):
 
-        y: File
+        y: text.Plain = shell.arg()  # Override the output arg in A
 
         class Outputs:
-            out_file_size: int = shell.out(
-                help_string="size of the output directory", callable=get_file_size
-            )
+            """
+            Args:
+                out_file_size: size of the output directory
+            """
+
+            out_file_size: int = shell.out(callable=get_file_size)
 
     xpath = tmp_path / "x.txt"
     ypath = tmp_path / "y.txt"
     Path.touch(xpath)
-    Path.touch(ypath)
+    ypath.write_text("Hello, World!")
+
+    a = A(x=xpath, y=ypath)
+    assert a.x == File(xpath)
+    assert a.y == ypath
 
     b = B(x=xpath, y=str(ypath))
-
     assert b.x == File(xpath)
-    assert b.y == File(ypath)
+    # We have overridden the type of y from an output arg with a path_template so it
+    # gets coerced to a text.Plain object
+    assert b.y == text.Plain(ypath)
 
     # result = b()
     # assert result.output.y == str(ypath)
@@ -516,16 +584,15 @@ def test_shell_inputs_outputs_bases_dynamic(tmp_path):
         bases=[A],
     )
 
-    hidden = File.sample(tmp_path, stem=".hidden")
-
     b = B(directory=tmp_path, hidden=True)
 
     assert b.directory == Directory(tmp_path)
     assert b.hidden
 
+    # File.sample(tmp_path, stem=".hidden-file")
     # result = b()
     # assert result.runner.cmdline == f"ls -a {tmp_path}"
-    # assert result.output.entries == [".", "..", ".hidden"]
+    # assert result.output.entries == [".", "..", ".hidden-file"]
 
 
 def test_shell_inputs_outputs_bases_static(tmp_path):
@@ -607,10 +674,7 @@ def list_entries(stdout):
     return stdout.split("\n")[:-1]
 
 
-inp_sort_key = attrgetter("position")
-
-
-def out_sort_key(out: shell.out) -> int:
+def pos_key(out: shell.out) -> int:
     LARGE_NUMBER = 1000000
     try:
         pos = out.position

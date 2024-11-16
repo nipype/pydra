@@ -15,7 +15,7 @@ from pydra.engine.specs import (
     MultiOutputObj,
 )
 from pydra.utils import add_exc_note
-from fileformats import field
+from fileformats import field, core
 
 try:
     from typing import get_origin, get_args
@@ -988,3 +988,21 @@ class TypeParser(ty.Generic[T]):
 
     get_origin = staticmethod(get_origin)
     get_args = staticmethod(get_args)
+
+
+def is_union(type_: type) -> bool:
+    return ty.get_origin(type_) in UNION_TYPES
+
+
+def is_optional(type_: type) -> bool:
+    """Check if the type is Optional"""
+    if is_union(type_):
+        return any(a is type(None) or is_optional(a) for a in ty.get_args(type_))
+    return False
+
+
+def is_fileset_or_union(type_: type) -> bool:
+    """Check if the type is a FileSet or a Union containing a FileSet"""
+    if is_union(type_):
+        return any(is_fileset_or_union(t) for t in ty.get_args(type_))
+    return issubclass(type_, core.FileSet)

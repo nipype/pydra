@@ -3,11 +3,12 @@ import types
 import inspect
 import re
 import enum
+from pathlib import Path
 from copy import copy
 import attrs.validators
 from attrs.converters import default_if_none
 from fileformats.generic import File
-from pydra.utils.typing import TypeParser
+from pydra.utils.typing import TypeParser, is_optional, is_fileset_or_union
 from pydra.engine.helpers import from_list_if_single, ensure_list
 from pydra.engine.specs import (
     LazyField,
@@ -61,10 +62,8 @@ class Field:
         The type of the field, by default it is Any
     help_string: str, optional
         A short description of the input field.
-    mandatory: bool, optional
-        If True user has to provide a value for the field, by default it is False
     requires: list, optional
-        List of field names that are required together with the field.
+        Names of the inputs that are required together with the field.
     converter: callable, optional
         The converter for the field passed through to the attrs.field, by default it is None
     validator: callable | iterable[callable], optional
@@ -76,7 +75,6 @@ class Field:
         validator=is_type, default=ty.Any, converter=default_if_none(ty.Any)
     )
     help_string: str = ""
-    mandatory: bool = False
     requires: list | None = None
     converter: ty.Callable | None = None
     validator: ty.Callable | None = None
@@ -92,14 +90,12 @@ class Arg(Field):
         A short description of the input field.
     default : Any, optional
         the default value for the argument
-    mandatory: bool, optional
-        If True user has to provide a value for the field, by default it is False
     allowed_values: list, optional
         List of allowed values for the field.
     requires: list, optional
-        List of field names that are required together with the field.
+        Names of the inputs that are required together with the field.
     xor: list, optional
-        List of field names that are mutually exclusive with the field.
+        Names of the inputs that are mutually exclusive with the field.
     copy_mode: File.CopyMode, optional
         The mode of copying the file, by default it is File.CopyMode.any
     copy_collation: File.CopyCollation, optional
@@ -240,7 +236,7 @@ def collate_fields(
         outputs = [
             (
                 o
-                if isinstance(o, out_type)
+                if isinstance(o, Out)
                 else out_type(name=n, type=o, help_string=output_helps.get(n, ""))
             )
             for n, o in outputs.items()
@@ -267,10 +263,7 @@ def get_fields_from_class(
             fields_dict[field.name] = field
         type_hints = ty.get_type_hints(klass)
         for atr_name in dir(klass):
-            if atr_name in list(fields_dict) + [
-                "Task",
-                "Outputs",
-            ] or atr_name.startswith("__"):
+            if atr_name in ["Task", "Outputs"] or atr_name.startswith("__"):
                 continue
             try:
                 atr = getattr(klass, atr_name)
@@ -283,13 +276,16 @@ def get_fields_from_class(
                     atr.type = type_hints[atr_name]
                 if not atr.help_string:
                     atr.help_string = helps.get(atr_name, "")
-            elif atr_name in type_hints and auto_attribs:
-                fields_dict[atr_name] = field_type(
-                    name=atr_name,
-                    type=type_hints[atr_name],
-                    default=atr,
-                    help_string=helps.get(atr_name, ""),
-                )
+            elif atr_name in type_hints:
+                if atr_name in fields_dict:
+                    fields_dict[atr_name].type = type_hints[atr_name]
+                elif auto_attribs:
+                    fields_dict[atr_name] = field_type(
+                        name=atr_name,
+                        type=type_hints[atr_name],
+                        default=atr,
+                        help_string=helps.get(atr_name, ""),
+                    )
         if auto_attribs:
             for atr_name, type_ in type_hints.items():
                 if atr_name not in list(fields_dict) + ["Task", "Outputs"]:
@@ -312,6 +308,16 @@ def get_fields_from_class(
     return inputs, outputs
 
 
+def _get_default(field: Field) -> ty.Any:
+    if not hasattr(field, "default"):
+        return attrs.NOTHING
+    if field.default is not EMPTY:
+        return field.default
+    if is_optional(field.type):
+        return None
+    return attrs.NOTHING
+
+
 def make_interface(
     task_type: type[Task],
     inputs: list[Arg],
@@ -332,6 +338,7 @@ def make_interface(
             o.name: attrs.field(
                 converter=get_converter(o, f"{name}.Outputs"),
                 metadata={PYDRA_ATTR_METADATA: o},
+                default=_get_default(o),
             )
             for o in outputs
         },
@@ -363,18 +370,33 @@ def make_interface(
         klass.Outputs = outputs_klass
     # Now that we have saved the attributes in lists to be
     for arg in inputs:
+        # If an outarg input then the field type should be Path not a FileSet
+        if isinstance(arg, Out) and is_fileset_or_union(arg.type):
+            if getattr(arg, "path_template", False):
+                if is_optional(arg.type):
+                    field_type = Path | bool | None
+                    # Will default to None and not be inserted into the command
+                else:
+                    field_type = Path | bool
+                    arg.default = True
+            elif is_optional(arg.type):
+                field_type = Path | None
+            else:
+                field_type = Path
+        else:
+            field_type = arg.type
         setattr(
             klass,
             arg.name,
             attrs.field(
-                default=arg.default if arg.default is not EMPTY else attrs.NOTHING,
-                converter=get_converter(arg, klass.__name__),
+                default=_get_default(arg),
+                converter=get_converter(arg, klass.__name__, field_type),
                 validator=get_validator(arg, klass.__name__),
                 metadata={PYDRA_ATTR_METADATA: arg},
                 on_setattr=attrs.setters.convert,
             ),
         )
-        klass.__annotations__[arg.name] = arg.type
+        klass.__annotations__[arg.name] = field_type
 
     # Create class using attrs package, will create attributes for all columns and
     # parameters
@@ -383,10 +405,12 @@ def make_interface(
     return attrs_klass
 
 
-def get_converter(field: Field, interface_name: str):
+def get_converter(field: Field, interface_name: str, field_type: ty.Type | None = None):
+    if field_type is None:
+        field_type = field.type
     checker_label = f"'{field.name}' field of {interface_name} interface"
-    type_checker = TypeParser[field.type](
-        field.type, label=checker_label, superclass_auto_cast=True
+    type_checker = TypeParser[field_type](
+        field_type, label=checker_label, superclass_auto_cast=True
     )
     converters = []
     if field.type in (MultiInputObj, MultiInputFile):
