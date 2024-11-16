@@ -4,8 +4,9 @@ import attrs
 import pytest
 import cloudpickle as cp
 from pydra.design import shell, Interface, list_fields
-from fileformats.generic import File, Directory, FsObject, SetOf
+from fileformats.generic import File, Directory, FsObject
 from fileformats import field, text, image
+from pydra.engine.specs import MultiInputObj
 
 
 def test_interface_template():
@@ -20,12 +21,12 @@ def test_interface_template():
         type=FsObject,
         position=2,
     )
-    assert list_fields(SampleInterface) == [
+    assert sorted_fields(SampleInterface) == [
         shell.arg(name="executable", default="cp", type=str, position=0),
         shell.arg(name="in_path", type=FsObject, position=1),
         output,
     ]
-    assert list_fields(SampleInterface.Outputs) == [output]
+    assert sorted_fields(SampleInterface.Outputs) == [output]
     intf = SampleInterface(in_path=File.mock("in-path.txt"))
     assert intf.executable == "cp"
     SampleInterface(in_path=File.mock("in-path.txt"), out_path=Path("./out-path.txt"))
@@ -46,12 +47,12 @@ def test_interface_template_w_types_and_path_template_ext():
         type=image.Png,
         position=2,
     )
-    assert list_fields(SampleInterface) == [
+    assert sorted_fields(SampleInterface) == [
         shell.arg(name="executable", default="trim-png", type=str, position=0),
         shell.arg(name="in_image", type=image.Png, position=1),
         output,
     ]
-    assert list_fields(SampleInterface.Outputs) == [output]
+    assert sorted_fields(SampleInterface.Outputs) == [output]
     SampleInterface(in_image=image.Png.mock())
     SampleInterface(in_image=image.Png.mock(), out_image=Path("./new_image.png"))
     SampleInterface.Outputs(out_image=image.Png.mock())
@@ -61,10 +62,11 @@ def test_interface_template_more_complex():
 
     SampleInterface = shell.interface(
         (
-            "cp <in_fs_objects:fs-object+set-of> <out|out_dir:directory> "
+            "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
             "-R<recursive> "
-            "--text-arg <text_arg> --int-arg <int_arg:integer> "
-            "--tuple-arg <tuple_arg:integer,text> "
+            "--text-arg <text_arg> "
+            "--int-arg <int_arg:int> "
+            "--tuple-arg <tuple_arg:int,str> "
         ),
     )
 
@@ -76,27 +78,25 @@ def test_interface_template_more_complex():
         position=2,
         default=True,
     )
-    assert sorted(list_fields(SampleInterface), key=pos_key) == [
+    assert sorted_fields(SampleInterface) == [
         shell.arg(name="executable", default="cp", type=str, position=0),
-        shell.arg(name="in_fs_objects", type=SetOf[FsObject], position=1, sep=" "),
+        shell.arg(
+            name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
+        ),
         output,
-        shell.arg(name="recursive", arg_str="-R", type=bool, position=3),
-        shell.arg(
-            name="text_arg", arg_str="--text-arg", type=field.Text | None, position=5
-        ),
-        shell.arg(
-            name="int_arg", arg_str="--int-arg", type=field.Integer | None, position=6
-        ),
+        shell.arg(name="recursive", argstr="-R", type=bool, default=False, position=3),
+        shell.arg(name="text_arg", argstr="--text-arg", type=str | None, position=4),
+        shell.arg(name="int_arg", argstr="--int-arg", type=int | None, position=5),
         shell.arg(
             name="tuple_arg",
-            arg_str="--tuple-arg",
-            type=tuple[field.Integer, field.Text] | None,
+            argstr="--tuple-arg",
+            type=tuple[int, str] | None,
             position=6,
         ),
     ]
-    assert list_fields(SampleInterface.Outputs) == [output]
+    assert sorted_fields(SampleInterface.Outputs) == [output]
     SampleInterface(in_fs_objects=[File.sample(), File.sample(seed=1)])
-    SampleInterface.Outputs(out_path=File.sample())
+    SampleInterface.Outputs(out_dir=Directory.sample())
 
 
 def test_interface_template_with_overrides():
@@ -108,10 +108,11 @@ def test_interface_template_with_overrides():
 
     SampleInterface = shell.interface(
         (
-            "cp <in_fs_objects:fs-object+set-of> <out|out_dir:directory> "
+            "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
             "-R<recursive> "
-            "--text-arg <text_arg> --int-arg <int_arg:integer> "
-            "--tuple-arg <tuple_arg:integer> <tuple_arg:text> "
+            "--text-arg <text_arg> "
+            "--int-arg <int_arg:int> "
+            "--tuple-arg <tuple_arg:int,str> "
         ),
         inputs={"recursive": shell.arg(help_string=RECURSIVE_HELP)},
         outputs={"out_dir": shell.outarg(position=-1)},
@@ -125,43 +126,43 @@ def test_interface_template_with_overrides():
         position=-1,
         default=True,
     )
-    assert list_fields(SampleInterface) == [
+    assert sorted_fields(SampleInterface) == [
         shell.arg(name="executable", default="cp", type=str, position=0),
-        shell.arg(name="in_fs_objects", type=SetOf[FsObject], position=1, sep=" "),
+        shell.arg(
+            name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
+        ),
         shell.arg(
             name="recursive",
-            arg_str="-R",
+            argstr="-R",
             type=bool,
+            default=False,
             help_string=RECURSIVE_HELP,
             position=2,
         ),
-        shell.arg(
-            name="text_arg", argstr="--text-arg", type=field.Text | None, position=3
-        ),
-        shell.arg(
-            name="int_arg", argstr="--int-arg", type=field.Integer | None, position=4
-        ),
+        shell.arg(name="text_arg", argstr="--text-arg", type=str | None, position=3),
+        shell.arg(name="int_arg", argstr="--int-arg", type=int | None, position=4),
         shell.arg(
             name="tuple_arg",
             argstr="--tuple-arg",
-            type=tuple[field.Integer, field.Text] | None,
+            type=tuple[int, str] | None,
             position=5,
         ),
         output,
     ]
-    assert list_fields(SampleInterface.Outputs) == [output]
+    assert sorted_fields(SampleInterface.Outputs) == [output]
 
 
 def test_interface_template_with_type_overrides():
 
     SampleInterface = shell.interface(
         (
-            "cp <in_fs_objects:fs-object+set-of> <out|out_dir:directory> "
+            "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
             "-R<recursive> "
-            "--text-arg <text_arg> --int-arg <int_arg> "
-            "--tuple-arg <tuple_arg:integer> <tuple_arg:text> "
+            "--text-arg <text_arg> "
+            "--int-arg <int_arg> "
+            "--tuple-arg <tuple_arg:int,str> "
         ),
-        inputs={"text_arg": str | None, "int_arg": int | None},
+        inputs={"text_arg": str, "int_arg": int | None},
     )
 
     assert issubclass(SampleInterface, Interface)
@@ -169,23 +170,26 @@ def test_interface_template_with_type_overrides():
         name="out_dir",
         type=Directory,
         path_template="out_dir",
-        position=-1,
+        position=2,
         default=True,
     )
-    assert list_fields(SampleInterface) == [
-        shell.arg(name="in_fs_objects", type=SetOf[FsObject], position=1, sep=" "),
-        shell.arg(name="recursive", argstr="-R", type=bool, position=2),
-        shell.arg(name="text_arg", argstr="--text-arg", type=str | None, position=4),
-        shell.arg(name="int_arg", argstr="--text-arg", type=int | None, position=5),
+    assert sorted_fields(SampleInterface) == [
+        shell.arg(name="executable", default="cp", type=str, position=0),
         shell.arg(
-            name="tuple_arg",
-            targstr="--text-arg",
-            ype=tuple[field.Integer, field.Text] | None,
-            position=6,
+            name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
         ),
         output,
+        shell.arg(name="recursive", argstr="-R", type=bool, default=False, position=3),
+        shell.arg(name="text_arg", argstr="--text-arg", type=str, position=4),
+        shell.arg(name="int_arg", argstr="--int-arg", type=int | None, position=5),
+        shell.arg(
+            name="tuple_arg",
+            argstr="--tuple-arg",
+            type=tuple[int, str] | None,
+            position=6,
+        ),
     ]
-    assert list_fields(SampleInterface.Outputs) == [output]
+    assert sorted_fields(SampleInterface.Outputs) == [output]
 
 
 @pytest.fixture(params=["static", "dynamic"])
@@ -302,7 +306,7 @@ def Ls(request):
 
 
 def test_shell_fields(Ls):
-    assert sorted([a.name for a in list_fields(Ls)]) == sorted(
+    assert sorted([a.name for a in sorted_fields(Ls)]) == sorted(
         [
             "executable",
             "directory",
@@ -314,7 +318,7 @@ def test_shell_fields(Ls):
         ]
     )
 
-    assert [a.name for a in list_fields(Ls.Outputs)] == ["entries"]
+    assert [a.name for a in sorted_fields(Ls.Outputs)] == ["entries"]
 
 
 def test_shell_pickle_roundtrip(Ls, tmp_path):
@@ -436,7 +440,7 @@ def test_shell_output_field_name_static():
         argstr="",
         position=-1,
     )
-    assert sorted(list_fields(A), key=pos_key) == [
+    assert sorted_fields(A) == [
         shell.arg(
             name="executable",
             default="cp",
@@ -453,7 +457,7 @@ def test_shell_output_field_name_static():
         ),
         output,
     ]
-    assert list_fields(A.Outputs) == [output]
+    assert sorted_fields(A.Outputs) == [output]
 
 
 def test_shell_output_field_name_dynamic():
@@ -674,13 +678,19 @@ def list_entries(stdout):
     return stdout.split("\n")[:-1]
 
 
-def pos_key(out: shell.out) -> int:
-    LARGE_NUMBER = 1000000
-    try:
-        pos = out.position
-    except AttributeError:
-        pos = LARGE_NUMBER
-    else:
+def sorted_fields(interface):
+    fields = list_fields(interface)
+    length = len(fields)
+
+    def pos_key(out: shell.out) -> int:
+        try:
+            pos = out.position
+        except AttributeError:
+            return (length, out.name)
         if pos < 0:
-            pos = LARGE_NUMBER + pos
-    return pos
+            key = length + pos
+        else:
+            key = pos
+        return (key, out.name)
+
+    return sorted(fields, key=pos_key)

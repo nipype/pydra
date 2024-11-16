@@ -7,8 +7,9 @@ from collections import defaultdict
 import inspect
 from copy import copy
 import attrs
+import builtins
 from fileformats.core import from_mime
-from fileformats import generic, field
+from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
 from .base import (
     Arg,
@@ -20,6 +21,7 @@ from .base import (
     make_interface,
     EMPTY,
 )
+from pydra.engine.specs import MultiInputObj
 from pydra.engine.task import ShellCommandTask
 
 
@@ -92,6 +94,7 @@ class arg(Arg):
         if (
             value is not None
             and self.type is not ty.Any
+            and ty.get_origin(self.type) is not MultiInputObj
             and not issubclass(self.type, ty.Iterable)
         ):
             raise ValueError(
@@ -382,14 +385,16 @@ def parse_command_line_template(
     opt_pattern = r"--?[a-zA-Z0-9_]+"
     arg_re = re.compile(arg_pattern)
     opt_re = re.compile(opt_pattern)
-    bool_arg_re = re.compile(f"({opt_pattern})({arg_pattern})")
+    bool_arg_re = re.compile(f"({opt_pattern}){arg_pattern}")
 
     arguments = []
     option = None
 
-    def merge_or_create_field(name, field_type, kwds):
+    def add_arg(name, field_type, kwds, is_option=False):
         """Merge the typing information with an existing field if it exists"""
-        if isinstance(field_type, out):
+        if is_option and kwds["type"] is not bool:
+            kwds["type"] |= None
+        if issubclass(field_type, Out):
             dct = outputs
         else:
             dct = inputs
@@ -400,6 +405,9 @@ def parse_command_line_template(
         else:
             if isinstance(field, dict):
                 field = field_type(**field)
+            elif isinstance(field, type) or ty.get_origin(field):
+                kwds["type"] = field
+                field = field_type(name=name, **kwds)
             elif not isinstance(field, field_type):  # If field type is outarg not out
                 field = field_type(**attrs.asdict(field))
             field.name = name
@@ -408,30 +416,31 @@ def parse_command_line_template(
                 field.type = type_
             for k, v in kwds.items():
                 setattr(field, k, v)
-        return field
-
-    def add_option(opt):
-        name, field_type, kwds = opt
-        if kwds["type"] is not bool:
-            kwds["type"] |= None
-        arguments.append(merge_or_create_field(name, field_type, type_))
+        dct[name] = field
+        arguments.append(field)
 
     def from_type_str(type_str) -> type:
         types = []
         for tp in type_str.split(","):
             if "/" in tp:
                 type_ = from_mime(tp)
+            elif tp == "...":
+                type_ = "..."
             else:
-                try:
-                    type_ = from_mime(f"field/{tp}")
-                except FormatRecognitionError:
+                if tp in ("int", "float", "str", "bool"):
+                    type_ = getattr(builtins, tp)
+                else:
                     try:
                         type_ = from_mime(f"generic/{tp}")
                     except FormatRecognitionError:
-                        raise ValueError(f"Unknown type {tp}")
+                        raise ValueError(
+                            f"Found unknown type, {tp!r}, in command template: {template!r}"
+                        )
             types.append(type_)
-        if len(types) > 1:
-            type_ = tuple[types]
+        if len(types) == 2 and types[1] == "...":
+            type_ = MultiInputObj[types[0]]
+        elif len(types) > 1:
+            type_ = tuple[*types]
         else:
             type_ = types[0]
         return type_
@@ -449,7 +458,9 @@ def parse_command_line_template(
                 name, type_str = name.split(":")
                 type_ = from_type_str(type_str)
             else:
-                type_ = generic.FsObject if option is None else field.Text
+                type_ = generic.FsObject if option is None else str
+            if option is not None:
+                type_ |= None  # Make the arguments optional
             kwds = {"type": type_}
             # If name contains a '.', treat it as a file template and strip it from the name
             if "." in name:
@@ -462,37 +473,35 @@ def parse_command_line_template(
                 name = name.split(".")[0]
             elif field_type is outarg:
                 kwds["path_template"] = name
-
+            if ty.get_origin(type_) is MultiInputObj:
+                kwds["sep"] = " "
             if option is None:
-                arguments.append(merge_or_create_field(name, field_type, kwds))
+                add_arg(name, field_type, kwds)
             else:
-                option[1].append((name, kwds))
-        elif match := opt_re.match(token):
-            if option is not None:
-                add_option(option)
-            option = (match.group(1), field_type, [])
+                kwds["argstr"] = option
+                add_arg(name, field_type, kwds)
         elif match := bool_arg_re.match(token):
-            if option is not None:
-                add_option(option)
-                option = None
-            add_option(match.group(1), arg, [(match.group(2), field.Boolean)])
-    if option is not None:
-        add_option(option)
-
-    inferred_inputs = []
-    inferred_outputs = []
-
-    for i, argument in enumerate(arguments, start=1):
-        argument.position = i
-        if isinstance(argument, outarg):
-            inferred_outputs.append(argument)
+            argstr, var = match.groups()
+            add_arg(var, arg, {"type": bool, "argstr": argstr, "default": False})
+        elif match := opt_re.match(token):
+            option = token
         else:
-            inferred_inputs.append(argument)
+            raise ValueError(
+                f"Found unknown token '{token}' in command line template: {template}"
+            )
 
-    return executable, inferred_inputs, inferred_outputs
+    remaining_pos = remaining_positions(arguments, len(arguments) + 1, 1)
+
+    for argument in arguments:
+        if argument.position is None:
+            argument.position = remaining_pos.pop(0)
+
+    return executable, list(inputs.values()), list(outputs.values())
 
 
-def remaining_positions(args: list[Arg], num_args: int | None = None) -> ty.List[int]:
+def remaining_positions(
+    args: list[Arg], num_args: int | None = None, start: int = 0
+) -> ty.List[int]:
     """Get the remaining positions for input fields
 
     Parameters
@@ -523,9 +532,11 @@ def remaining_positions(args: list[Arg], num_args: int | None = None) -> ty.List
             else:
                 positions[num_args + arg.position].append(arg)
     if multiple_positions := {
-        k: f"{v.name}({v.position})" for k, v in positions.items() if len(v) > 1
+        k: [f"{a.name}({a.position})" for a in v]
+        for k, v in positions.items()
+        if len(v) > 1
     }:
         raise ValueError(
             f"Multiple fields have the overlapping positions: {multiple_positions}"
         )
-    return [i for i in range(num_args) if i not in positions]
+    return [i for i in range(start, num_args) if i not in positions]
