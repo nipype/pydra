@@ -70,7 +70,7 @@ def interface(
             function = wrapped
             input_helps, output_helps = parse_doc_string(function.__doc__)
             inferred_inputs, inferred_outputs = (
-                extract_inputs_and_outputs_from_function(function, inputs, outputs)
+                extract_inputs_and_outputs_from_function(function, arg, inputs, outputs)
             )
             name = function.__name__
 
@@ -82,6 +82,13 @@ def interface(
                 input_helps=input_helps,
                 output_helps=output_helps,
             )
+
+        try:
+            parsed_inputs.remove(next(i for i in parsed_inputs if i.name == "function"))
+        except StopIteration:
+            pass
+        parsed_inputs.append(arg(name="function", type=ty.Callable, default=function))
+
         interface = make_interface(
             FunctionTask,
             parsed_inputs,
@@ -91,8 +98,7 @@ def interface(
             bases=bases,
             outputs_bases=outputs_bases,
         )
-        # Set the function in the created class
-        interface.function = function
+
         return interface
 
     if wrapped is not None:

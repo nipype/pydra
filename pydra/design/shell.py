@@ -365,8 +365,11 @@ def parse_command_line_template(
         return template, inputs, outputs
     executable, args_str = parts
     tokens = re.split(r"\s+", args_str.strip())
-    arg_re = re.compile(r"<([:a-zA-Z0-9\|\-\.\/\+]+)>")
-    opt_re = re.compile(r"--?(\w+)")
+    arg_pattern = r"<([:a-zA-Z0-9_\|\-\.\/\+]+)>"
+    opt_pattern = r"--?[a-zA-Z0-9_]+"
+    arg_re = re.compile(arg_pattern)
+    opt_re = re.compile(opt_pattern)
+    bool_arg_re = re.compile(f"({opt_pattern})({arg_pattern})")
 
     arguments = []
     options = []
@@ -421,7 +424,6 @@ def parse_command_line_template(
                             raise ValueError(f"Unknown type {type_str}")
             else:
                 type_ = generic.FsObject if field_type is arg else field.Text
-            type_ = from_mime(type_str) if type_str is not None else ty.Any
             if option is None:
                 arguments.append(merge_or_create_field(name, field_type, type_))
             else:
@@ -430,6 +432,11 @@ def parse_command_line_template(
             if option is not None:
                 add_option(option)
             option = (match.group(1), field_type, [])
+        elif match := bool_arg_re.match(token):
+            if option is not None:
+                add_option(option)
+                option = None
+            add_option(match.group(1), arg, [(match.group(2), field.Boolean)])
     if option is not None:
         add_option(option)
 
