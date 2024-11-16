@@ -23,9 +23,9 @@ __all__ = [
     "Field",
     "Arg",
     "Out",
-    "Interface",
+    "TaskSpec",
     "collate_fields",
-    "make_interface",
+    "make_task_spec",
     "list_fields",
 ]
 
@@ -131,7 +131,7 @@ class Out(Field):
 OutputType = ty.TypeVar("OutputType")
 
 
-class Interface(ty.Generic[OutputType]):
+class TaskSpec(ty.Generic[OutputType]):
 
     Task: ty.Type[Task]
 
@@ -318,7 +318,7 @@ def _get_default(field: Field) -> ty.Any:
     return attrs.NOTHING
 
 
-def make_interface(
+def make_task_spec(
     task_type: type[Task],
     inputs: list[Arg],
     outputs: list[Out],
@@ -346,12 +346,12 @@ def make_interface(
     outputs_klass.__annotations__.update((o.name, o.type) for o in outputs)
     outputs_klass = attrs.define(auto_attribs=False, kw_only=True)(outputs_klass)
 
-    if klass is None or not issubclass(klass, Interface):
+    if klass is None or not issubclass(klass, TaskSpec):
         if name is None:
             raise ValueError("name must be provided if klass is not")
         bases = tuple(bases)
-        if not any(issubclass(b, Interface) for b in bases):
-            bases = bases + (Interface,)
+        if not any(issubclass(b, TaskSpec) for b in bases):
+            bases = bases + (TaskSpec,)
         if klass is not None:
             bases += tuple(c for c in klass.__mro__ if c not in bases + (object,))
         klass = types.new_class(
@@ -635,7 +635,7 @@ def split_block(string: str) -> ty.Generator[str, None, None]:
         yield block.strip()
 
 
-def list_fields(interface: Interface) -> list[Field]:
+def list_fields(interface: TaskSpec) -> list[Field]:
     if not attrs.has(interface):
         return []
     return [

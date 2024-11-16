@@ -17,8 +17,8 @@ from .base import (
     check_explicit_fields_are_none,
     get_fields_from_class,
     collate_fields,
-    Interface,
-    make_interface,
+    TaskSpec,
+    make_task_spec,
     EMPTY,
 )
 from pydra.engine.specs import MultiInputObj
@@ -191,7 +191,7 @@ class outarg(Out, arg):
             )
 
 
-def interface(
+def define(
     wrapped: type | str | None = None,
     /,
     inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
@@ -200,7 +200,7 @@ def interface(
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
     name: str | None = None,
-) -> Interface:
+) -> TaskSpec:
     """Create a shell command interface
 
     Parameters
@@ -222,7 +222,7 @@ def interface(
 
     def make(
         wrapped: ty.Callable | type | None = None,
-    ) -> Interface:
+    ) -> TaskSpec:
 
         if inspect.isclass(wrapped):
             klass = wrapped
@@ -284,7 +284,7 @@ def interface(
                 inpt.position = position_stack.pop()
         parsed_inputs.sort(key=lambda x: x.position)
 
-        interface = make_interface(
+        interface = make_task_spec(
             ShellCommandTask,
             parsed_inputs,
             parsed_outputs,

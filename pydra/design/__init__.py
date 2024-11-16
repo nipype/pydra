@@ -1,6 +1,6 @@
-from .base import Interface, list_fields
+from .base import TaskSpec, list_fields
 from . import python
 from . import shell
 
 
-__all__ = ["Interface", "list_fields", "python", "shell"]
+__all__ = ["TaskSpec", "list_fields", "python", "shell"]

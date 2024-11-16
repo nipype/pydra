@@ -3,7 +3,7 @@ import typing as ty
 from decimal import Decimal
 import attrs
 import pytest
-from pydra.design import list_fields, Interface
+from pydra.design import list_fields, TaskSpec
 from pydra.design import python
 from pydra.engine.task import FunctionTask
 
@@ -16,9 +16,9 @@ def test_interface_wrap_function():
         """Sample function with inputs and outputs"""
         return a * 2
 
-    SampleInterface = python.interface(func)
+    SampleInterface = python.define(func)
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -37,9 +37,9 @@ def test_interface_wrap_function_with_default():
         """Sample function with inputs and outputs"""
         return a * k
 
-    SampleInterface = python.interface(func)
+    SampleInterface = python.define(func)
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -58,13 +58,13 @@ def test_interface_wrap_function_overrides():
         """Sample function with inputs and outputs"""
         return a * 2
 
-    SampleInterface = python.interface(
+    SampleInterface = python.define(
         func,
         inputs={"a": python.arg(help_string="The argument to be doubled")},
         outputs={"b": python.out(help_string="the doubled output", type=Decimal)},
     )
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -83,13 +83,13 @@ def test_interface_wrap_function_types():
         """Sample function with inputs and outputs"""
         return a * 2
 
-    SampleInterface = python.interface(
+    SampleInterface = python.define(
         func,
         inputs={"a": float},
         outputs={"b": float},
     )
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -104,12 +104,12 @@ def test_interface_wrap_function_types():
 
 
 def test_decorated_function_interface():
-    @python.interface(outputs=["c", "d"])
+    @python.define(outputs=["c", "d"])
     def SampleInterface(a: int, b: float) -> tuple[float, float]:
         """Sample function for testing"""
         return a + b, a * b
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
     assert SampleInterface.Task is FunctionTask
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
@@ -131,7 +131,7 @@ def test_decorated_function_interface():
 
 
 def test_interface_with_function_implicit_outputs_from_return_stmt():
-    @python.interface
+    @python.define
     def SampleInterface(a: int, b: float) -> tuple[float, float]:
         """Sample function for testing"""
         c = a + b
@@ -159,7 +159,7 @@ def test_interface_with_function_implicit_outputs_from_return_stmt():
 
 
 def test_interface_with_function_docstr():
-    @python.interface(outputs=["c", "d"])
+    @python.define(outputs=["c", "d"])
     def SampleInterface(a: int, b: float) -> tuple[float, float]:
         """Sample function for testing
 
@@ -190,7 +190,7 @@ def test_interface_with_function_docstr():
 
 
 def test_interface_with_function_google_docstr():
-    @python.interface(outputs=["c", "d"])
+    @python.define(outputs=["c", "d"])
     def SampleInterface(a: int, b: float) -> tuple[float, float]:
         """Sample function for testing
 
@@ -225,7 +225,7 @@ def test_interface_with_function_google_docstr():
 
 
 def test_interface_with_function_numpy_docstr():
-    @python.interface(
+    @python.define(
         outputs=["c", "d"]
     )  # Could potentiall read output names from doc-string instead
     def SampleInterface(a: int, b: float) -> tuple[float, float]:
@@ -268,7 +268,7 @@ def test_interface_with_function_numpy_docstr():
 
 
 def test_interface_with_class():
-    @python.interface
+    @python.define
     class SampleInterface:
         """Sample class for testing
 
@@ -295,7 +295,7 @@ def test_interface_with_class():
         def function(a, b):
             return a + b, a * b
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
     assert SampleInterface.Task is FunctionTask
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
@@ -319,8 +319,8 @@ def test_interface_with_class():
 
 
 def test_interface_with_inheritance():
-    @python.interface
-    class SampleInterface(Interface["SampleInterface.Outputs"]):
+    @python.define
+    class SampleInterface(TaskSpec["SampleInterface.Outputs"]):
         """Sample class for testing
 
         Args:
@@ -346,11 +346,11 @@ def test_interface_with_inheritance():
         def function(a, b):
             return a + b, a * b
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
 
 
 def test_interface_with_class_no_auto_attribs():
-    @python.interface(auto_attribs=False)
+    @python.define(auto_attribs=False)
     class SampleInterface:
         a: int = python.arg(help_string="First input to be inputted")
         b: float = python.arg(help_string="Second input")
@@ -395,8 +395,8 @@ def test_interface_with_class_no_auto_attribs():
 def test_interface_invalid_wrapped1():
     with pytest.raises(ValueError):
 
-        @python.interface(inputs={"a": python.arg()})
-        class SampleInterface(Interface["SampleInterface.Outputs"]):
+        @python.define(inputs={"a": python.arg()})
+        class SampleInterface(TaskSpec["SampleInterface.Outputs"]):
             a: int
 
             class Outputs:
@@ -410,8 +410,8 @@ def test_interface_invalid_wrapped1():
 def test_interface_invalid_wrapped2():
     with pytest.raises(ValueError):
 
-        @python.interface(outputs={"b": python.out()})
-        class SampleInterface(Interface["SampleInterface.Outputs"]):
+        @python.define(outputs={"b": python.out()})
+        class SampleInterface(TaskSpec["SampleInterface.Outputs"]):
             a: int
 
             class Outputs:

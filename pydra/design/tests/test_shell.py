@@ -3,17 +3,17 @@ from pathlib import Path
 import attrs
 import pytest
 import cloudpickle as cp
-from pydra.design import shell, Interface, list_fields
+from pydra.design import shell, TaskSpec, list_fields
 from fileformats.generic import File, Directory, FsObject
-from fileformats import field, text, image
+from fileformats import text, image
 from pydra.engine.specs import MultiInputObj
 
 
 def test_interface_template():
 
-    SampleInterface = shell.interface("cp <in_path> <out|out_path>")
+    SampleInterface = shell.define("cp <in_path> <out|out_path>")
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
     output = shell.outarg(
         name="out_path",
         path_template="out_path",
@@ -35,11 +35,11 @@ def test_interface_template():
 
 def test_interface_template_w_types_and_path_template_ext():
 
-    SampleInterface = shell.interface(
+    SampleInterface = shell.define(
         "trim-png <in_image:image/png> <out|out_image.png:image/png>"
     )
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
     output = shell.outarg(
         name="out_image",
         path_template="out_image.png",
@@ -60,7 +60,7 @@ def test_interface_template_w_types_and_path_template_ext():
 
 def test_interface_template_more_complex():
 
-    SampleInterface = shell.interface(
+    SampleInterface = shell.define(
         (
             "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
             "-R<recursive> "
@@ -70,7 +70,7 @@ def test_interface_template_more_complex():
         ),
     )
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
@@ -106,7 +106,7 @@ def test_interface_template_with_overrides():
         "subtree connected at that point."
     )
 
-    SampleInterface = shell.interface(
+    SampleInterface = shell.define(
         (
             "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
             "-R<recursive> "
@@ -118,7 +118,7 @@ def test_interface_template_with_overrides():
         outputs={"out_dir": shell.outarg(position=-1)},
     )
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
@@ -154,7 +154,7 @@ def test_interface_template_with_overrides():
 
 def test_interface_template_with_type_overrides():
 
-    SampleInterface = shell.interface(
+    SampleInterface = shell.define(
         (
             "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
             "-R<recursive> "
@@ -165,7 +165,7 @@ def test_interface_template_with_type_overrides():
         inputs={"text_arg": str, "int_arg": int | None},
     )
 
-    assert issubclass(SampleInterface, Interface)
+    assert issubclass(SampleInterface, TaskSpec)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
@@ -196,8 +196,8 @@ def test_interface_template_with_type_overrides():
 def Ls(request):
     if request.param == "static":
 
-        @shell.interface
-        class Ls(Interface["Ls.Outputs"]):
+        @shell.define
+        class Ls(TaskSpec["Ls.Outputs"]):
             executable = "ls"
 
             directory: Directory = shell.arg(
@@ -246,7 +246,7 @@ def Ls(request):
                 )
 
     elif request.param == "dynamic":
-        Ls = shell.interface(
+        Ls = shell.define(
             "ls",
             inputs={
                 "directory": shell.arg(
@@ -357,7 +357,7 @@ def test_shell_run(Ls, tmp_path):
 def A(request):
     if request.param == "static":
 
-        @shell.interface
+        @shell.define
         class A:
             """An example shell interface described in a class
 
@@ -382,7 +382,7 @@ def A(request):
                 y: File = shell.outarg(path_template="{x}_out", position=-1)
 
     elif request.param == "dynamic":
-        A = shell.interface(
+        A = shell.define(
             "cp",
             inputs={
                 "x": shell.arg(
@@ -413,7 +413,7 @@ def test_shell_output_path_template(A):
 
 
 def test_shell_output_field_name_static():
-    @shell.interface
+    @shell.define
     class A:
         """Copy a file"""
 
@@ -461,7 +461,7 @@ def test_shell_output_field_name_static():
 
 
 def test_shell_output_field_name_dynamic():
-    A = shell.interface(
+    A = shell.define(
         "cp",
         name="A",
         inputs={
@@ -492,7 +492,7 @@ def get_file_size(y: Path):
 
 
 def test_shell_bases_dynamic(A, tmp_path):
-    B = shell.interface(
+    B = shell.define(
         name="B",
         inputs={
             "y": shell.arg(type=File, help_string="output file", argstr="", position=-1)
@@ -522,7 +522,7 @@ def test_shell_bases_dynamic(A, tmp_path):
 
 
 def test_shell_bases_static(A, tmp_path):
-    @shell.interface
+    @shell.define
     class B(A):
 
         y: text.Plain = shell.arg()  # Override the output arg in A
@@ -555,7 +555,7 @@ def test_shell_bases_static(A, tmp_path):
 
 
 def test_shell_inputs_outputs_bases_dynamic(tmp_path):
-    A = shell.interface(
+    A = shell.define(
         "ls",
         name="A",
         inputs={
@@ -574,7 +574,7 @@ def test_shell_inputs_outputs_bases_dynamic(tmp_path):
             )
         },
     )
-    B = shell.interface(
+    B = shell.define(
         "ls",
         name="B",
         inputs={
@@ -600,7 +600,7 @@ def test_shell_inputs_outputs_bases_dynamic(tmp_path):
 
 
 def test_shell_inputs_outputs_bases_static(tmp_path):
-    @shell.interface
+    @shell.define
     class A:
         executable = "ls"
 
@@ -614,7 +614,7 @@ def test_shell_inputs_outputs_bases_static(tmp_path):
                 callable=list_entries,
             )
 
-    @shell.interface
+    @shell.define
     class B(A):
         hidden: bool = shell.arg(
             help_string="show hidden files",
@@ -636,7 +636,7 @@ def test_shell_inputs_outputs_bases_static(tmp_path):
 def test_shell_missing_executable_static():
     with pytest.raises(AttributeError, match="must have an `executable` attribute"):
 
-        @shell.interface
+        @shell.define
         class A:
             directory: Directory = shell.arg(
                 help_string="input directory", argstr="", position=-1
@@ -654,7 +654,7 @@ def test_shell_missing_executable_dynamic():
         ValueError,
         match=r"name \('A'\) can only be provided when creating a class dynamically",
     ):
-        shell.interface(
+        shell.define(
             name="A",
             inputs={
                 "directory": shell.arg(

@@ -6,8 +6,8 @@ from .base import (
     Arg,
     Out,
     collate_fields,
-    make_interface,
-    Interface,
+    make_task_spec,
+    TaskSpec,
     parse_doc_string,
     extract_inputs_and_outputs_from_function,
     check_explicit_fields_are_none,
@@ -15,7 +15,7 @@ from .base import (
 )
 
 
-__all__ = ["arg", "out", "interface"]
+__all__ = ["arg", "out", "define"]
 
 
 @attrs.define
@@ -28,7 +28,7 @@ class out(Out):
     pass
 
 
-def interface(
+def define(
     wrapped: type | ty.Callable | None = None,
     /,
     inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
@@ -36,7 +36,7 @@ def interface(
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
-) -> Interface:
+) -> TaskSpec:
     """
     Create an interface for a function or a class.
 
@@ -52,7 +52,7 @@ def interface(
         Whether to use auto_attribs mode when creating the class.
     """
 
-    def make(wrapped: ty.Callable | type) -> Interface:
+    def make(wrapped: ty.Callable | type) -> TaskSpec:
         if inspect.isclass(wrapped):
             klass = wrapped
             function = klass.function
@@ -89,7 +89,7 @@ def interface(
             pass
         parsed_inputs.append(arg(name="function", type=ty.Callable, default=function))
 
-        interface = make_interface(
+        interface = make_task_spec(
             FunctionTask,
             parsed_inputs,
             parsed_outputs,
