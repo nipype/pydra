@@ -26,6 +26,10 @@ def test_interface_wrap_function():
         python.arg(name="function", type=ty.Callable, default=func),
     ]
     assert outputs == [python.out(name="out", type=float)]
+    SampleInterface(a=1)
+    SampleInterface.Outputs(out=2.0)
+    with pytest.raises(TypeError):
+        SampleInterface(a=1.5)
 
 
 def test_interface_wrap_function_with_default():
@@ -44,6 +48,9 @@ def test_interface_wrap_function_with_default():
         python.arg(name="k", type=float, default=2.0),
     ]
     assert outputs == [python.out(name="out", type=float)]
+    SampleInterface(a=1)
+    SampleInterface(a=10, k=3.0)
+    SampleInterface.Outputs(out=2.0)
 
 
 def test_interface_wrap_function_overrides():
@@ -67,6 +74,8 @@ def test_interface_wrap_function_overrides():
     assert outputs == [
         python.out(name="b", type=Decimal, help_string="the doubled output"),
     ]
+    outputs = SampleInterface.Outputs(b=Decimal(2.0))
+    assert isinstance(outputs.b, Decimal)
 
 
 def test_interface_wrap_function_types():
@@ -88,6 +97,10 @@ def test_interface_wrap_function_types():
         python.arg(name="function", type=ty.Callable, default=func),
     ]
     assert outputs == [python.out(name="b", type=float)]
+    intf = SampleInterface(a=1)
+    assert isinstance(intf.a, float)
+    outputs = SampleInterface.Outputs(b=2.0)
+    assert isinstance(outputs.b, float)
 
 
 def test_decorated_function_interface():
@@ -114,6 +127,7 @@ def test_decorated_function_interface():
         python.out(name="d", type=float),
     ]
     assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
+    SampleInterface.Outputs(c=1.0, d=2.0)
 
 
 def test_interface_with_function_implicit_outputs_from_return_stmt():
@@ -141,6 +155,7 @@ def test_interface_with_function_implicit_outputs_from_return_stmt():
         python.out(name="d", type=float),
     ]
     assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
+    SampleInterface.Outputs(c=1.0, d=2.0)
 
 
 def test_interface_with_function_docstr():
@@ -298,6 +313,9 @@ def test_interface_with_class():
         python.out(name="d", type=float, help_string="Product of a and b"),
     ]
     assert SampleInterface.function.__name__ == "function"
+    SampleInterface(a=1)
+    SampleInterface(a=1, b=2.0)
+    SampleInterface.Outputs(c=1.0, d=2.0)
 
 
 def test_interface_with_inheritance():
@@ -366,6 +384,12 @@ def test_interface_with_class_no_auto_attribs():
         python.out(name="d", type=float, help_string="Product of a and b"),
     ]
     assert SampleInterface.function.__name__ == "function"
+    SampleInterface(a=1, b=2.0)
+    SampleInterface.Outputs(c=1.0, d=2.0)
+    with pytest.raises(TypeError):
+        SampleInterface(a=1, b=2.0, x=3)
+    with pytest.raises(TypeError):
+        SampleInterface.Outputs(c=1.0, d=2.0, y="hello")
 
 
 def test_interface_invalid_wrapped1():
