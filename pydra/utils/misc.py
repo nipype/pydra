@@ -48,7 +48,9 @@ def exc_info_matches(exc_info, match, regex=False):
         return match in msg
 
 
-def get_undefined_symbols(func, exclude_signature_type_hints: bool = False):
+def get_undefined_symbols(
+    func, exclude_signature_type_hints: bool = False, ignore_decorator: bool = False
+):
     """
     Check the source code of a function and detect any symbols that aren't defined in its scope.
 
@@ -64,6 +66,17 @@ def get_undefined_symbols(func, exclude_signature_type_hints: bool = False):
     """
     # Get the source code of the function
     source = inspect.getsource(func)
+
+    # De-indent the source code if required
+    indent = re.match(r"^\s*", source).group()
+    source = ("\n" + source).replace("\n" + indent, "\n")
+
+    if ignore_decorator:
+        # Remove the decorator from the source code, i.e. everything before the first
+        # unindented 'def ' keyword.
+        source = re.match(
+            r"(.*\n)(def .*)", "\n" + source, flags=re.MULTILINE | re.DOTALL
+        ).group(2)
 
     # Parse the source code into an AST
     tree = ast.parse(source)

@@ -52,7 +52,7 @@ def is_type(_, __, val: ty.Any) -> bool:
 
 @attrs.define(kw_only=True)
 class Field:
-    """Base class for input and output fields to Pydra tasks
+    """Base class for input and output fields to task specifications
 
     Parameters
     ----------
@@ -83,7 +83,7 @@ class Field:
 
 @attrs.define(kw_only=True)
 class Arg(Field):
-    """Base class for input fields to Pydra tasks
+    """Base class for input fields of task specifications
 
     Parameters
     ----------
@@ -126,7 +126,7 @@ class Arg(Field):
 
 @attrs.define(kw_only=True)
 class Out(Field):
-    """Base class for input and output fields to Pydra tasks
+    """Base class for output fields of task specifications
 
     Parameters
     ----------
@@ -152,6 +152,7 @@ OutputType = ty.TypeVar("OutputType")
 
 
 class TaskSpec(ty.Generic[OutputType]):
+    """Base class for all task specifications"""
 
     Task: ty.Type[Task]
 
@@ -181,62 +182,6 @@ class TaskSpec(ty.Generic[OutputType]):
             rerun=rerun,
         )
         return task(**kwargs)
-
-
-def collate_with_helps(
-    arg_type: type[Arg],
-    out_type: type[Out],
-    doc_string: str | None = None,
-    inputs: dict[str, Arg | type] | None = None,
-    outputs: dict[str, Out | type] | None = None,
-    input_helps: dict[str, str] | None = None,
-    output_helps: dict[str, str] | None = None,
-) -> tuple[dict[str, Arg], dict[str, Out]]:
-    """"""
-
-    for input_name, arg in list(inputs.items()):
-        if isinstance(arg, Arg):
-            if arg.name is None:
-                arg.name = input_name
-            elif arg.name != input_name:
-                raise ValueError(
-                    "Name of the argument must be the same as the key in the "
-                    f"dictionary. The argument name is {arg.name} and the key "
-                    f"is {input_name}"
-                )
-            else:
-                arg.name = input_name
-            if not arg.help_string:
-                arg.help_string = input_helps.get(input_name, "")
-        else:
-            inputs[input_name] = arg_type(
-                type=arg,
-                name=input_name,
-                help_string=input_helps.get(input_name, ""),
-            )
-
-    for output_name, out in list(outputs.items()):
-        if isinstance(out, Out):
-            if out.name is None:
-                out.name = output_name
-            elif out.name != output_name:
-                raise ValueError(
-                    "Name of the argument must be the same as the key in the "
-                    f"dictionary. The argument name is {out.name} and the key "
-                    f"is {output_name}"
-                )
-            else:
-                out.name = output_name
-            if not out.help_string:
-                out.help_string = output_helps.get(output_name, "")
-        else:
-            outputs[output_name] = out_type(
-                type=out,
-                name=output_name,
-                help_string=output_helps.get(output_name, ""),
-            )
-
-    return inputs, outputs
 
 
 def get_fields_from_class(
@@ -328,7 +273,7 @@ def make_task_spec(
         tuple(outputs_bases),
         {
             o.name: attrs.field(
-                converter=get_converter(o, f"{name}.Outputs"),
+                converter=make_converter(o, f"{name}.Outputs"),
                 metadata={PYDRA_ATTR_METADATA: o},
                 default=_get_default(o),
             )
@@ -382,8 +327,8 @@ def make_task_spec(
             arg.name,
             attrs.field(
                 default=_get_default(arg),
-                converter=get_converter(arg, klass.__name__, field_type),
-                validator=get_validator(arg, klass.__name__),
+                converter=make_converter(arg, klass.__name__, field_type),
+                validator=make_validator(arg, klass.__name__),
                 metadata={PYDRA_ATTR_METADATA: arg},
                 on_setattr=attrs.setters.convert,
             ),
@@ -397,7 +342,65 @@ def make_task_spec(
     return attrs_klass
 
 
-def get_converter(field: Field, interface_name: str, field_type: ty.Type | None = None):
+def collate_with_helps(
+    arg_type: type[Arg],
+    out_type: type[Out],
+    doc_string: str | None = None,
+    inputs: dict[str, Arg | type] | None = None,
+    outputs: dict[str, Out | type] | None = None,
+    input_helps: dict[str, str] | None = None,
+    output_helps: dict[str, str] | None = None,
+) -> tuple[dict[str, Arg], dict[str, Out]]:
+    """"""
+
+    for input_name, arg in list(inputs.items()):
+        if isinstance(arg, Arg):
+            if arg.name is None:
+                arg.name = input_name
+            elif arg.name != input_name:
+                raise ValueError(
+                    "Name of the argument must be the same as the key in the "
+                    f"dictionary. The argument name is {arg.name} and the key "
+                    f"is {input_name}"
+                )
+            else:
+                arg.name = input_name
+            if not arg.help_string:
+                arg.help_string = input_helps.get(input_name, "")
+        else:
+            inputs[input_name] = arg_type(
+                type=arg,
+                name=input_name,
+                help_string=input_helps.get(input_name, ""),
+            )
+
+    for output_name, out in list(outputs.items()):
+        if isinstance(out, Out):
+            if out.name is None:
+                out.name = output_name
+            elif out.name != output_name:
+                raise ValueError(
+                    "Name of the argument must be the same as the key in the "
+                    f"dictionary. The argument name is {out.name} and the key "
+                    f"is {output_name}"
+                )
+            else:
+                out.name = output_name
+            if not out.help_string:
+                out.help_string = output_helps.get(output_name, "")
+        else:
+            outputs[output_name] = out_type(
+                type=out,
+                name=output_name,
+                help_string=output_helps.get(output_name, ""),
+            )
+
+    return inputs, outputs
+
+
+def make_converter(
+    field: Field, interface_name: str, field_type: ty.Type | None = None
+):
     if field_type is None:
         field_type = field.type
     checker_label = f"'{field.name}' field of {interface_name} interface"
@@ -419,7 +422,7 @@ def get_converter(field: Field, interface_name: str, field_type: ty.Type | None 
     return converter
 
 
-def get_validator(field: Field, interface_name: str):
+def make_validator(field: Field, interface_name: str):
     validators = []
     if field.allowed_values:
         validators.append(allowed_values_validator)
@@ -454,7 +457,7 @@ def extract_function_inputs_and_outputs(
     """Extract input output types and output names from the function source if they
     aren't explicitly"""
     if undefined_symbols := get_undefined_symbols(
-        function, exclude_signature_type_hints=True
+        function, exclude_signature_type_hints=True, ignore_decorator=True
     ):
         raise ValueError(
             f"The following symbols are not defined within the scope of the function "
