@@ -1,6 +1,9 @@
 from pathlib import Path
 import re
+import ast
+import inspect
 import platformdirs
+import builtins
 from pydra._version import __version__
 
 user_cache_dir = Path(
@@ -43,3 +46,85 @@ def exc_info_matches(exc_info, match, regex=False):
         return re.match(".*" + match, msg)
     else:
         return match in msg
+
+
+def get_undefined_symbols(func, exclude_signature_type_hints: bool = False):
+    """
+    Check the source code of a function and detect any symbols that aren't defined in its scope.
+
+    Parameters
+    ----------
+    func : callable
+        The function to analyze.
+
+    Returns
+    -------
+    set
+        A set of undefined symbols.
+    """
+    # Get the source code of the function
+    source = inspect.getsource(func)
+
+    # Parse the source code into an AST
+    tree = ast.parse(source)
+
+    # Define a visitor class to traverse the AST
+    class SymbolVisitor(ast.NodeVisitor):
+
+        def __init__(self):
+            # Initialize sets to track defined and used symbols
+            self.defined_symbols = set()
+            self.used_symbols = set()
+
+        def visit_FunctionDef(self, node):
+            # Add function arguments to defined symbols
+            for arg in node.args.args:
+                self.defined_symbols.add(arg.arg)
+            if exclude_signature_type_hints:
+                # Exclude type hints from the defined symbols
+                type_hints_visitor = SymbolVisitor()
+                if node.returns:
+                    type_hints_visitor.visit(node.returns)
+                for arg in node.args.args:
+                    if arg.annotation:
+                        type_hints_visitor.visit(arg.annotation)
+                type_hint_symbols = type_hints_visitor.used_symbols - self.used_symbols
+            self.generic_visit(node)
+            if exclude_signature_type_hints:
+                # Remove type hints from the used symbols
+                self.used_symbols -= type_hint_symbols
+
+        def visit_Assign(self, node):
+            # Add assigned variables to defined symbols
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    self.defined_symbols.add(target.id)
+            self.generic_visit(node)
+
+        def visit_Name(self, node):
+            # Add all variable names to used symbols
+            if isinstance(node.ctx, ast.Load):
+                self.used_symbols.add(node.id)
+            self.generic_visit(node)
+
+        @property
+        def undefined_symbols(self):
+            return self.used_symbols - self.defined_symbols - get_builtin_type_names()
+
+    # Create a visitor instance and visit the AST
+    visitor = SymbolVisitor()
+    visitor.visit(tree)
+
+    return visitor.undefined_symbols
+
+
+def get_builtin_type_names():
+    """
+    Get a list of built-in object type names in Python.
+
+    Returns
+    -------
+    set
+        A set of built-in object type names.
+    """
+    return set(name for name, obj in vars(builtins).items() if isinstance(obj, type))

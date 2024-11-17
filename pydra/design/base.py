@@ -9,6 +9,7 @@ import attrs.validators
 from attrs.converters import default_if_none
 from fileformats.generic import File
 from pydra.utils.typing import TypeParser, is_optional, is_fileset_or_union
+from pydra.utils.misc import get_undefined_symbols
 from pydra.engine.helpers import from_list_if_single, ensure_list
 from pydra.engine.specs import (
     LazyField,
@@ -24,7 +25,7 @@ __all__ = [
     "Arg",
     "Out",
     "TaskSpec",
-    "collate_fields",
+    "collate_with_helps",
     "make_task_spec",
     "list_fields",
 ]
@@ -156,7 +157,6 @@ class TaskSpec(ty.Generic[OutputType]):
 
     def __call__(
         self,
-        interface,
         name: str | None = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
@@ -170,7 +170,6 @@ class TaskSpec(ty.Generic[OutputType]):
     ):
         task = self.Task(
             self,
-            interface,
             name=name,
             audit_flags=audit_flags,
             cache_dir=cache_dir,
@@ -184,7 +183,7 @@ class TaskSpec(ty.Generic[OutputType]):
         return task(**kwargs)
 
 
-def collate_fields(
+def collate_with_helps(
     arg_type: type[Arg],
     out_type: type[Out],
     doc_string: str | None = None,
@@ -193,68 +192,49 @@ def collate_fields(
     input_helps: dict[str, str] | None = None,
     output_helps: dict[str, str] | None = None,
 ) -> tuple[dict[str, Arg], dict[str, Out]]:
+    """"""
 
-    if inputs is None:
-        inputs = {}
-    elif isinstance(inputs, list):
-        inputs_dict = {}
-        for inpt in inputs:
-            if not isinstance(inpt, Arg):
-                inpt = arg_type(inpt, help_string=input_helps.get(inpt, ""))
-            inputs_dict[inpt.name] = inpt
-        inputs = inputs_dict
-    elif isinstance(inputs, dict):
-        for input_name, arg in list(inputs.items()):
-            if isinstance(arg, Arg):
-                if arg.name is None:
-                    arg.name = input_name
-                elif arg.name != input_name:
-                    raise ValueError(
-                        "Name of the argument must be the same as the key in the "
-                        f"dictionary. The argument name is {arg.name} and the key "
-                        f"is {input_name}"
-                    )
-                else:
-                    arg.name = input_name
-                if not arg.help_string:
-                    arg.help_string = input_helps.get(input_name, "")
-            else:
-                inputs[input_name] = arg_type(
-                    type=arg,
-                    name=input_name,
-                    help_string=input_helps.get(input_name, ""),
+    for input_name, arg in list(inputs.items()):
+        if isinstance(arg, Arg):
+            if arg.name is None:
+                arg.name = input_name
+            elif arg.name != input_name:
+                raise ValueError(
+                    "Name of the argument must be the same as the key in the "
+                    f"dictionary. The argument name is {arg.name} and the key "
+                    f"is {input_name}"
                 )
+            else:
+                arg.name = input_name
+            if not arg.help_string:
+                arg.help_string = input_helps.get(input_name, "")
+        else:
+            inputs[input_name] = arg_type(
+                type=arg,
+                name=input_name,
+                help_string=input_helps.get(input_name, ""),
+            )
 
-    if outputs is None:
-        outputs = {}
-    elif isinstance(outputs, list):
-        outputs_dict = {}
-        for out in outputs:
-            if not isinstance(out, Out):
-                out = out_type(out, type=ty.Any, help_string=output_helps.get(out, ""))
-            outputs_dict[out.name] = out
-        outputs = outputs_dict
-    elif isinstance(outputs, dict):
-        for output_name, out in list(outputs.items()):
-            if isinstance(out, Out):
-                if out.name is None:
-                    out.name = output_name
-                elif out.name != output_name:
-                    raise ValueError(
-                        "Name of the argument must be the same as the key in the "
-                        f"dictionary. The argument name is {out.name} and the key "
-                        f"is {output_name}"
-                    )
-                else:
-                    out.name = output_name
-                if not out.help_string:
-                    out.help_string = output_helps.get(output_name, "")
-            else:
-                outputs[output_name] = out_type(
-                    type=out,
-                    name=output_name,
-                    help_string=output_helps.get(output_name, ""),
+    for output_name, out in list(outputs.items()):
+        if isinstance(out, Out):
+            if out.name is None:
+                out.name = output_name
+            elif out.name != output_name:
+                raise ValueError(
+                    "Name of the argument must be the same as the key in the "
+                    f"dictionary. The argument name is {out.name} and the key "
+                    f"is {output_name}"
                 )
+            else:
+                out.name = output_name
+            if not out.help_string:
+                out.help_string = output_helps.get(output_name, "")
+        else:
+            outputs[output_name] = out_type(
+                type=out,
+                name=output_name,
+                help_string=output_helps.get(output_name, ""),
+            )
 
     return inputs, outputs
 
@@ -465,7 +445,7 @@ def allowed_values_validator(_, attribute, value):
         )
 
 
-def extract_inputs_and_outputs_from_function(
+def extract_function_inputs_and_outputs(
     function: ty.Callable,
     arg_type: type[Arg],
     inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
@@ -473,6 +453,14 @@ def extract_inputs_and_outputs_from_function(
 ) -> tuple[dict[str, type | Arg], dict[str, type | Out]]:
     """Extract input output types and output names from the function source if they
     aren't explicitly"""
+    if undefined_symbols := get_undefined_symbols(
+        function, exclude_signature_type_hints=True
+    ):
+        raise ValueError(
+            f"The following symbols are not defined within the scope of the function "
+            f"{function!r}, {undefined_symbols}. Ensure that all imports are "
+            "defined within the function scope so it is portable"
+        )
     sig = inspect.signature(function)
     type_hints = ty.get_type_hints(function)
     input_types = {}

@@ -6,11 +6,11 @@ from pydra.engine.core import Workflow, AuditFlag
 from .base import (
     Arg,
     Out,
-    collate_fields,
+    collate_with_helps,
     make_task_spec,
     TaskSpec,
     parse_doc_string,
-    extract_inputs_and_outputs_from_function,
+    extract_function_inputs_and_outputs,
     check_explicit_fields_are_none,
     get_fields_from_class,
 )
@@ -127,14 +127,12 @@ def define(
             klass = None
             constructor = wrapped
             input_helps, output_helps = parse_doc_string(constructor.__doc__)
-            inferred_inputs, inferred_outputs = (
-                extract_inputs_and_outputs_from_function(
-                    constructor, arg, inputs, outputs
-                )
+            inferred_inputs, inferred_outputs = extract_function_inputs_and_outputs(
+                constructor, arg, inputs, outputs
             )
             name = constructor.__name__
 
-            parsed_inputs, parsed_outputs = collate_fields(
+            parsed_inputs, parsed_outputs = collate_with_helps(
                 arg_type=arg,
                 out_type=out,
                 inputs=inferred_inputs,

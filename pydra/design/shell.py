@@ -16,7 +16,7 @@ from .base import (
     Out,
     check_explicit_fields_are_none,
     get_fields_from_class,
-    collate_fields,
+    collate_with_helps,
     TaskSpec,
     make_task_spec,
     EMPTY,
@@ -258,7 +258,7 @@ def define(
                 outputs=outputs,
             )
 
-            parsed_inputs, parsed_outputs = collate_fields(
+            parsed_inputs, parsed_outputs = collate_with_helps(
                 arg_type=arg,
                 out_type=out,
                 inputs=inferred_inputs,
