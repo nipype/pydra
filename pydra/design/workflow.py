@@ -2,6 +2,7 @@ import typing as ty
 import inspect
 import attrs
 from pydra.engine.task import FunctionTask
+from pydra.engine.core import Workflow, AuditFlag
 from .base import (
     Arg,
     Out,
@@ -15,12 +16,12 @@ from .base import (
 )
 
 
-__all__ = ["arg", "out", "define"]
+__all__ = ["arg", "out", "define", "this", "add", "Node", "WorkflowSpec"]
 
 
 @attrs.define
 class arg(Arg):
-    """Argument of a Python task spec
+    """Argument of a workflow task spec
 
     Parameters
     ----------
@@ -50,14 +51,17 @@ class arg(Arg):
     name: str, optional
         The name of the field, used when specifying a list of fields instead of a mapping
         from name to field, by default it is None
+    lazy: bool, optional
+        If True the input field is not required at construction time but is passed straight
+        through to the tasks, by default it is False
     """
 
-    pass
+    lazy: bool = False
 
 
 @attrs.define
 class out(Out):
-    """Output of a Python task spec
+    """Output of a workflow task spec
 
     Parameters
     ----------
@@ -86,6 +90,7 @@ def define(
     outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
+    lazy: list[str] | None = None,
     auto_attribs: bool = True,
 ) -> TaskSpec:
     """
@@ -102,11 +107,13 @@ def define(
     auto_attribs : bool
         Whether to use auto_attribs mode when creating the class.
     """
+    if lazy is None:
+        lazy = []
 
     def make(wrapped: ty.Callable | type) -> TaskSpec:
         if inspect.isclass(wrapped):
             klass = wrapped
-            function = klass.function
+            constructor = klass.constructor
             name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = get_fields_from_class(
@@ -118,12 +125,14 @@ def define(
                     f"wrapped must be a class or a function, not {wrapped!r}"
                 )
             klass = None
-            function = wrapped
-            input_helps, output_helps = parse_doc_string(function.__doc__)
+            constructor = wrapped
+            input_helps, output_helps = parse_doc_string(constructor.__doc__)
             inferred_inputs, inferred_outputs = (
-                extract_inputs_and_outputs_from_function(function, arg, inputs, outputs)
+                extract_inputs_and_outputs_from_function(
+                    constructor, arg, inputs, outputs
+                )
             )
-            name = function.__name__
+            name = constructor.__name__
 
             parsed_inputs, parsed_outputs = collate_fields(
                 arg_type=arg,
@@ -134,9 +143,11 @@ def define(
                 output_helps=output_helps,
             )
 
-        parsed_inputs["function"] = arg(
-            name="function", type=ty.Callable, default=function
+        parsed_inputs["constructor"] = arg(
+            name="constructor", type=ty.Callable, default=constructor
         )
+        for inpt_name in lazy:
+            parsed_inputs[inpt_name].lazy = True
 
         interface = make_task_spec(
             FunctionTask,
@@ -155,3 +166,64 @@ def define(
             raise ValueError(f"wrapped must be a class or a callable, not {wrapped!r}")
         return make(wrapped)
     return make
+
+
+OutputType = ty.TypeVar("OutputType")
+
+
+class WorkflowSpec(TaskSpec[OutputType]):
+
+    under_construction: Workflow = None
+
+    def __construct__(
+        self,
+        audit_flags: AuditFlag = AuditFlag.NONE,
+        cache_dir: ty.Any | None = None,
+        cache_locations: ty.Any | None = None,
+        cont_dim: ty.Any | None = None,
+        messenger_args: ty.Any | None = None,
+        messengers: ty.Any | None = None,
+        rerun: bool = False,
+        propagate_rerun: bool = True,
+    ) -> OutputType:
+        wf = self.under_construction = Workflow(
+            name=type(self).__name__,
+            inputs=self,
+            audit_flags=audit_flags,
+            cache_dir=cache_dir,
+            cache_locations=cache_locations,
+            cont_dim=cont_dim,
+            messenger_args=messenger_args,
+            messengers=messengers,
+            rerun=rerun,
+            propagate_rerun=propagate_rerun,
+        )
+
+        try:
+            output_fields = self.construct(**attrs.asdict(self))
+        finally:
+            self.under_construction = None
+
+        wf.outputs = self.Outputs(
+            **dict(
+                zip(
+                    (f.name for f in attrs.fields(self.Outputs)),
+                    output_fields,
+                )
+            )
+        )
+        return wf
+
+
+def this() -> Workflow:
+    return WorkflowSpec.under_construction
+
+
+def add(task_spec: TaskSpec[OutputType]) -> OutputType:
+    return this().add(task_spec)
+
+
+@attrs.define
+class Node:
+    task_spec: TaskSpec
+    splitter: str | list[str] | None = None

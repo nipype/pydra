@@ -125,6 +125,25 @@ class Arg(Field):
 
 @attrs.define(kw_only=True)
 class Out(Field):
+    """Base class for input and output fields to Pydra tasks
+
+    Parameters
+    ----------
+    name: str, optional
+        The name of the field, used when specifying a list of fields instead of a mapping
+        from name to field, by default it is None
+    type: type, optional
+        The type of the field, by default it is Any
+    help_string: str, optional
+        A short description of the input field.
+    requires: list, optional
+        Names of the inputs that are required together with the field.
+    converter: callable, optional
+        The converter for the field passed through to the attrs.field, by default it is None
+    validator: callable | iterable[callable], optional
+        The validator(s) for the field passed through to the attrs.field, by default it is None
+    """
+
     pass
 
 
