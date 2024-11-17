@@ -169,22 +169,23 @@ def collate_fields(
     arg_type: type[Arg],
     out_type: type[Out],
     doc_string: str | None = None,
-    inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
-    outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
+    inputs: dict[str, Arg | type] | None = None,
+    outputs: dict[str, Out | type] | None = None,
     input_helps: dict[str, str] | None = None,
     output_helps: dict[str, str] | None = None,
-) -> tuple[list[Arg], list[Out]]:
+) -> tuple[dict[str, Arg], dict[str, Out]]:
 
     if inputs is None:
-        inputs = []
+        inputs = {}
     elif isinstance(inputs, list):
-        inputs = [
-            a if isinstance(a, Arg) else arg_type(a, help_string=input_helps.get(a, ""))
-            for a in inputs
-        ]
+        inputs_dict = {}
+        for inpt in inputs:
+            if not isinstance(inpt, Arg):
+                inpt = arg_type(inpt, help_string=input_helps.get(inpt, ""))
+            inputs_dict[inpt.name] = inpt
+        inputs = inputs_dict
     elif isinstance(inputs, dict):
-        inputs_list = []
-        for input_name, arg in inputs.items():
+        for input_name, arg in list(inputs.items()):
             if isinstance(arg, Arg):
                 if arg.name is None:
                     arg.name = input_name
@@ -199,27 +200,23 @@ def collate_fields(
                 if not arg.help_string:
                     arg.help_string = input_helps.get(input_name, "")
             else:
-                arg = arg_type(
+                inputs[input_name] = arg_type(
                     type=arg,
                     name=input_name,
                     help_string=input_helps.get(input_name, ""),
                 )
-            inputs_list.append(arg)
-        inputs = inputs_list
 
     if outputs is None:
-        outputs = []
+        outputs = {}
     elif isinstance(outputs, list):
-        outputs = [
-            (
-                o
-                if isinstance(o, Out)
-                else out_type(name=o, type=ty.Any, help_string=output_helps.get(o, ""))
-            )
-            for o in outputs
-        ]
+        outputs_dict = {}
+        for out in outputs:
+            if not isinstance(out, Out):
+                out = out_type(out, type=ty.Any, help_string=output_helps.get(out, ""))
+            outputs_dict[out.name] = out
+        outputs = outputs_dict
     elif isinstance(outputs, dict):
-        for output_name, out in outputs.items():
+        for output_name, out in list(outputs.items()):
             if isinstance(out, Out):
                 if out.name is None:
                     out.name = output_name
@@ -233,14 +230,12 @@ def collate_fields(
                     out.name = output_name
                 if not out.help_string:
                     out.help_string = output_helps.get(output_name, "")
-        outputs = [
-            (
-                o
-                if isinstance(o, Out)
-                else out_type(name=n, type=o, help_string=output_helps.get(n, ""))
-            )
-            for n, o in outputs.items()
-        ]
+            else:
+                outputs[output_name] = out_type(
+                    type=out,
+                    name=output_name,
+                    help_string=output_helps.get(output_name, ""),
+                )
 
     return inputs, outputs
 
@@ -250,12 +245,12 @@ def get_fields_from_class(
     arg_type: type[Arg],
     out_type: type[Out],
     auto_attribs: bool,
-) -> tuple[list[Field], list[Field]]:
+) -> tuple[dict[str, Arg], dict[str, Out]]:
     """Parse the input and output fields from a class"""
 
     input_helps, _ = parse_doc_string(klass.__doc__)
 
-    def get_fields(klass, field_type, auto_attribs, helps) -> list[Field]:
+    def get_fields(klass, field_type, auto_attribs, helps) -> dict[str, Field]:
         """Get the fields from a class"""
         fields_dict = {}
         # Get fields defined in base classes if present
@@ -292,7 +287,7 @@ def get_fields_from_class(
                     fields_dict[atr_name] = field_type(
                         name=atr_name, type=type_, help_string=helps.get(atr_name, "")
                     )
-        return list(fields_dict.values())
+        return fields_dict
 
     inputs = get_fields(klass, arg_type, auto_attribs, input_helps)
 
@@ -320,15 +315,13 @@ def _get_default(field: Field) -> ty.Any:
 
 def make_task_spec(
     task_type: type[Task],
-    inputs: list[Arg],
-    outputs: list[Out],
+    inputs: dict[str, Arg],
+    outputs: dict[str, Out],
     klass: type | None = None,
     name: str | None = None,
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
 ):
-    assert isinstance(inputs, list)
-    assert isinstance(outputs, list)
     if name is None and klass is not None:
         name = klass.__name__
     outputs_klass = type(
@@ -340,10 +333,10 @@ def make_task_spec(
                 metadata={PYDRA_ATTR_METADATA: o},
                 default=_get_default(o),
             )
-            for o in outputs
+            for o in outputs.values()
         },
     )
-    outputs_klass.__annotations__.update((o.name, o.type) for o in outputs)
+    outputs_klass.__annotations__.update((o.name, o.type) for o in outputs.values())
     outputs_klass = attrs.define(auto_attribs=False, kw_only=True)(outputs_klass)
 
     if klass is None or not issubclass(klass, TaskSpec):
@@ -369,7 +362,7 @@ def make_task_spec(
         klass.Task = task_type
         klass.Outputs = outputs_klass
     # Now that we have saved the attributes in lists to be
-    for arg in inputs:
+    for arg in inputs.values():
         # If an outarg input then the field type should be Path not a FileSet
         if isinstance(arg, Out) and is_fileset_or_union(arg.type):
             if getattr(arg, "path_template", False):

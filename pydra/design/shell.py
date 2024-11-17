@@ -24,6 +24,8 @@ from .base import (
 from pydra.engine.specs import MultiInputObj
 from pydra.engine.task import ShellCommandTask
 
+__all__ = ["arg", "out", "outarg", "define"]
+
 
 @attrs.define(kw_only=True)
 class arg(Arg):
@@ -270,19 +272,18 @@ def define(
 
         # Update the inputs (overriding inputs from base classes) with the executable
         # and the output argument fields
-        inputs_dict = {i.name: i for i in parsed_inputs}
-        inputs_dict.update({o.name: o for o in parsed_outputs if isinstance(o, arg)})
-        inputs_dict["executable"] = arg(
+        parsed_inputs.update(
+            {o.name: o for o in parsed_outputs.values() if isinstance(o, arg)}
+        )
+        parsed_inputs["executable"] = arg(
             name="executable", type=str, argstr="", position=0, default=executable
         )
-        parsed_inputs = list(inputs_dict.values())
 
         # Set positions for the remaining inputs that don't have an explicit position
-        position_stack = list(reversed(remaining_positions(parsed_inputs)))
-        for inpt in parsed_inputs:
+        position_stack = remaining_positions(list(parsed_inputs.values()))
+        for inpt in parsed_inputs.values():
             if inpt.position is None:
-                inpt.position = position_stack.pop()
-        parsed_inputs.sort(key=lambda x: x.position)
+                inpt.position = position_stack.pop(0)
 
         interface = make_task_spec(
             ShellCommandTask,
@@ -326,7 +327,7 @@ def define(
 def parse_command_line_template(
     template: str,
     inputs: list[str | Arg] | dict[str, Arg | type] | None = None,
-    outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
+    outputs: list[str | Out] | dict[str, Out | type] | None = None,
 ) -> ty.Tuple[str, dict[str, Arg | type], dict[str, Out | type]]:
     """Parses a command line template into a name and input and output fields. Fields
     are inferred from the template if not provided, where inputs are specified with `<fieldname>`
@@ -369,12 +370,14 @@ def parse_command_line_template(
     elif isinstance(inputs, dict):
         inputs = copy(inputs)  # We don't want to modify the original
     else:
+        assert inputs is None
         inputs = {}
     if isinstance(outputs, list):
         outputs = {out.name: out for out in outputs}
     elif isinstance(outputs, dict):
         outputs = copy(outputs)  # We don't want to modify the original
-    elif not outputs:
+    else:
+        assert outputs is None
         outputs = {}
     parts = template.split(maxsplit=1)
     if len(parts) == 1:
@@ -496,7 +499,7 @@ def parse_command_line_template(
         if argument.position is None:
             argument.position = remaining_pos.pop(0)
 
-    return executable, list(inputs.values()), list(outputs.values())
+    return executable, inputs, outputs
 
 
 def remaining_positions(

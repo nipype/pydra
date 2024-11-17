@@ -83,11 +83,9 @@ def define(
                 output_helps=output_helps,
             )
 
-        try:
-            parsed_inputs.remove(next(i for i in parsed_inputs if i.name == "function"))
-        except StopIteration:
-            pass
-        parsed_inputs.append(arg(name="function", type=ty.Callable, default=function))
+        parsed_inputs["function"] = arg(
+            name="function", type=ty.Callable, default=function
+        )
 
         interface = make_task_spec(
             FunctionTask,
