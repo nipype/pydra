@@ -1030,7 +1030,7 @@ def _sanitize_spec(
         raise ValueError(f'Empty "{spec_name}" spec provided to Workflow {wf_name}.')
 
 
-class Workflow(Task):
+class WorkflowTask(Task):
     """A composite task with structure of computational graph."""
 
     def __init__(
@@ -1534,7 +1534,7 @@ def is_task(obj):
 
 def is_workflow(obj):
     """Check whether an object is a :class:`Workflow` instance."""
-    return isinstance(obj, Workflow)
+    return isinstance(obj, WorkflowTask)
 
 
 def is_lazy(obj):

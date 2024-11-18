@@ -2,7 +2,7 @@ import typing as ty
 import inspect
 import attrs
 from pydra.engine.task import FunctionTask
-from pydra.engine.core import Workflow, AuditFlag
+from pydra.engine.workflow import Workflow
 from .base import (
     Arg,
     Out,
@@ -16,7 +16,7 @@ from .base import (
 )
 
 
-__all__ = ["arg", "out", "define", "this", "add", "Node", "WorkflowSpec"]
+__all__ = ["define", "add", "this", "arg", "out"]
 
 
 @attrs.define
@@ -169,59 +169,11 @@ def define(
 OutputType = ty.TypeVar("OutputType")
 
 
-class WorkflowSpec(TaskSpec[OutputType]):
-
-    under_construction: Workflow = None
-
-    def __construct__(
-        self,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        cache_dir: ty.Any | None = None,
-        cache_locations: ty.Any | None = None,
-        cont_dim: ty.Any | None = None,
-        messenger_args: ty.Any | None = None,
-        messengers: ty.Any | None = None,
-        rerun: bool = False,
-        propagate_rerun: bool = True,
-    ) -> OutputType:
-        wf = self.under_construction = Workflow(
-            name=type(self).__name__,
-            inputs=self,
-            audit_flags=audit_flags,
-            cache_dir=cache_dir,
-            cache_locations=cache_locations,
-            cont_dim=cont_dim,
-            messenger_args=messenger_args,
-            messengers=messengers,
-            rerun=rerun,
-            propagate_rerun=propagate_rerun,
-        )
-
-        try:
-            output_fields = self.construct(**attrs.asdict(self))
-        finally:
-            self.under_construction = None
-
-        wf.outputs = self.Outputs(
-            **dict(
-                zip(
-                    (f.name for f in attrs.fields(self.Outputs)),
-                    output_fields,
-                )
-            )
-        )
-        return wf
-
-
 def this() -> Workflow:
-    return WorkflowSpec.under_construction
+    """Get the workflow currently being constructed."""
+    return Workflow.under_construction
 
 
 def add(task_spec: TaskSpec[OutputType]) -> OutputType:
+    """Add a task to the current workflow."""
     return this().add(task_spec)
-
-
-@attrs.define
-class Node:
-    task_spec: TaskSpec
-    splitter: str | list[str] | None = None

@@ -1,14 +1,12 @@
 """The core of the workflow engine."""
 
 from .submitter import Submitter
-from .core import Workflow
 import __main__
 import logging
 from ._version import __version__
 
 __all__ = [
     "Submitter",
-    "Workflow",
     "logger",
     "check_latest_version",
 ]

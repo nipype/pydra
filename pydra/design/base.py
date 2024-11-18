@@ -9,7 +9,8 @@ import attrs.validators
 from attrs.converters import default_if_none
 from fileformats.generic import File
 from pydra.utils.typing import TypeParser, is_optional, is_fileset_or_union
-from pydra.utils.misc import get_undefined_symbols
+
+# from pydra.utils.misc import get_undefined_symbols
 from pydra.engine.helpers import from_list_if_single, ensure_list
 from pydra.engine.specs import (
     LazyField,
@@ -247,16 +248,6 @@ def get_fields_from_class(
     return inputs, outputs
 
 
-def _get_default(field: Field) -> ty.Any:
-    if not hasattr(field, "default"):
-        return attrs.NOTHING
-    if field.default is not EMPTY:
-        return field.default
-    if is_optional(field.type):
-        return None
-    return attrs.NOTHING
-
-
 def make_task_spec(
     task_type: type[Task],
     inputs: dict[str, Arg],
@@ -275,7 +266,7 @@ def make_task_spec(
             o.name: attrs.field(
                 converter=make_converter(o, f"{name}.Outputs"),
                 metadata={PYDRA_ATTR_METADATA: o},
-                default=_get_default(o),
+                **_get_default(o),
             )
             for o in outputs.values()
         },
@@ -326,11 +317,11 @@ def make_task_spec(
             klass,
             arg.name,
             attrs.field(
-                default=_get_default(arg),
                 converter=make_converter(arg, klass.__name__, field_type),
                 validator=make_validator(arg, klass.__name__),
                 metadata={PYDRA_ATTR_METADATA: arg},
                 on_setattr=attrs.setters.convert,
+                **_get_default(arg),
             ),
         )
         klass.__annotations__[arg.name] = field_type
@@ -351,7 +342,7 @@ def collate_with_helps(
     input_helps: dict[str, str] | None = None,
     output_helps: dict[str, str] | None = None,
 ) -> tuple[dict[str, Arg], dict[str, Out]]:
-    """"""
+    """Assign help strings to the appropriate inputs and outputs"""
 
     for input_name, arg in list(inputs.items()):
         if isinstance(arg, Arg):
@@ -456,14 +447,14 @@ def extract_function_inputs_and_outputs(
 ) -> tuple[dict[str, type | Arg], dict[str, type | Out]]:
     """Extract input output types and output names from the function source if they
     aren't explicitly"""
-    if undefined_symbols := get_undefined_symbols(
-        function, exclude_signature_type_hints=True, ignore_decorator=True
-    ):
-        raise ValueError(
-            f"The following symbols are not defined within the scope of the function "
-            f"{function!r}, {undefined_symbols}. Ensure that all imports are "
-            "defined within the function scope so it is portable"
-        )
+    # if undefined_symbols := get_undefined_symbols(
+    #     function, exclude_signature_type_hints=True, ignore_decorator=True
+    # ):
+    #     raise ValueError(
+    #         f"The following symbols are not defined within the scope of the function "
+    #         f"{function!r}, {undefined_symbols}. Ensure that all imports are "
+    #         "defined within the function scope so it is portable"
+    #     )
     sig = inspect.signature(function)
     type_hints = ty.get_type_hints(function)
     input_types = {}
@@ -659,6 +650,20 @@ def check_explicit_fields_are_none(klass, inputs, outputs):
             f"outputs should not be provided to `python.task` ({outputs}) "
             f"explicitly when decorated a class ({klass})"
         )
+
+
+def _get_default(field: Field) -> dict[str, ty.Any]:
+    if not hasattr(field, "default"):
+        return {"factory": nothing_factory}
+    if field.default is not EMPTY:
+        return {"default": field.default}
+    if is_optional(field.type):
+        return {"default": None}
+    return {"factory": nothing_factory}
+
+
+def nothing_factory():
+    return attrs.NOTHING
 
 
 white_space_re = re.compile(r"\s+")
