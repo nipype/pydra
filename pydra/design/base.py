@@ -477,6 +477,11 @@ def extract_function_inputs_and_outputs(
                 f"Input names ({inputs}) should not be provided when "
                 "wrapping/decorating a function as "
             )
+        if unrecognised := set(inputs) - set(input_types):
+            raise ValueError(
+                f"Unrecognised input names ({unrecognised}) not present in the signature "
+                f"of the function {function!r}"
+            )
         for inpt_name, type_ in input_types.items():
             try:
                 inpt = inputs[inpt_name]
@@ -516,12 +521,12 @@ def extract_function_inputs_and_outputs(
                     f"return value {return_type}"
                 )
             return_types = ty.get_args(return_type)
-        if len(return_types) != len(outputs):
-            raise ValueError(
-                f"Length of the outputs ({outputs}) does not match that "
-                f"of the return types ({return_types})"
-            )
-        output_types = dict(zip(outputs, return_types))
+            if len(return_types) != len(outputs):
+                raise ValueError(
+                    f"Length of the outputs ({outputs}) does not match that "
+                    f"of the return types ({return_types})"
+                )
+            output_types = dict(zip(outputs, return_types))
         if isinstance(outputs, dict):
             for output_name, output in outputs.items():
                 if isinstance(output, Out) and output.type is ty.Any:
