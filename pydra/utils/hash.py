@@ -3,6 +3,7 @@
 import sys
 import os
 import struct
+import inspect
 from datetime import datetime
 import typing as ty
 import types
@@ -517,6 +518,13 @@ def bytes_repr_set(obj: Set, cache: Cache) -> Iterator[bytes]:
     yield f"{obj.__class__.__name__}:{{".encode()
     yield from bytes_repr_sequence_contents(sorted(obj), cache)
     yield b"}"
+
+
+@register_serializer
+def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
+    yield b"function:("
+    yield hash_single(inspect.getsource(obj), cache)
+    yield b")"
 
 
 def bytes_repr_mapping_contents(mapping: Mapping, cache: Cache) -> Iterator[bytes]:
