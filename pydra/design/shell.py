@@ -8,7 +8,7 @@ import inspect
 from copy import copy
 import attrs
 import builtins
-from fileformats.core import from_mime
+from fileformats.core import from_mime, FileSet
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
 from .base import (
@@ -466,16 +466,12 @@ def parse_command_line_template(
                 type_ |= None  # Make the arguments optional
             kwds = {"type": type_}
             # If name contains a '.', treat it as a file template and strip it from the name
-            if "." in name:
-                if field_type is not outarg:
-                    raise ValueError(
-                        f"File template fields (i.e. with '.' in their names) can only "
-                        f"be used with file types, not {type_} and {field_type}"
-                    )
-                kwds["path_template"] = name
-                name = name.split(".")[0]
-            elif field_type is outarg:
-                kwds["path_template"] = name
+            if field_type is outarg:
+                kwds["path_template"] = (
+                    name + type_.ext
+                    if issubclass(type_, FileSet) and type_.ext
+                    else name
+                )
             if ty.get_origin(type_) is MultiInputObj:
                 kwds["sep"] = " "
             if option is None:

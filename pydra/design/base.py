@@ -170,6 +170,7 @@ class TaskSpec(ty.Generic[OutputType]):
         rerun=False,
         **kwargs,
     ):
+        self._check_for_unset_values()
         task = self.Task(
             self,
             name=name,
@@ -183,6 +184,13 @@ class TaskSpec(ty.Generic[OutputType]):
             rerun=rerun,
         )
         return task(**kwargs)
+
+    def _check_for_unset_values(self):
+        if unset := [k for k, v in attrs.asdict(self).items() if v is attrs.NOTHING]:
+            raise ValueError(
+                f"The following values in the {self!r} interface need to be set before it "
+                f"can be executed: {unset}"
+            )
 
 
 def get_fields_from_class(

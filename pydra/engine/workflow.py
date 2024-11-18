@@ -1,4 +1,5 @@
 import typing as ty
+import enum
 from copy import copy
 from operator import itemgetter
 from typing_extensions import Self
@@ -129,7 +130,7 @@ class Workflow(ty.Generic[OutputType]):
                 lazy_spec,
                 lzy_inpt,
                 LazyField(
-                    wf.name,  # This shouldn't be the name of the workflow, but this is currently
+                    WORKFLOW_LZIN,
                     lzy_inpt.name,
                     lzy_inpt.type,
                 ),
@@ -141,9 +142,11 @@ class Workflow(ty.Generic[OutputType]):
         try:
             # Call the user defined constructor to set the outputs
             output_values = constructor(**input_values)
-
+            # Check to see whether any mandatory inputs are not set
+            for node in wf.nodes:
+                node.inputs._check_for_unset_values()
             # Check that the outputs are set correctly, either directly by the constructor
-            # returned values that can be zipped with the output names
+            # or via returned values that can be zipped with the output names
             if output_values:
                 if not isinstance(output_values, (list, tuple)):
                     output_values = [output_values]
@@ -156,11 +159,11 @@ class Workflow(ty.Generic[OutputType]):
                 for outpt, oupt_val in zip(output_fields, output_values):
                     setattr(outputs, outpt.name, oupt_val)
             else:
-                if unset_outputs := {
-                    a: v for a, v in attrs.asdict(outputs).items() if v is attrs.NOTHING
-                }:
+                if unset_outputs := [
+                    a for a, v in attrs.asdict(outputs).items() if v is attrs.NOTHING
+                ]:
                     raise ValueError(
-                        f"Expected outputs {list(unset_outputs)} to be set by the "
+                        f"Expected outputs {unset_outputs} to be set by the "
                         f"constructor of {wf!r}"
                     )
         finally:
@@ -202,3 +205,14 @@ class Workflow(ty.Generic[OutputType]):
 
     _under_construction: "Workflow[ty.Any]" = None
     _constructed: dict[int, "Workflow[ty.Any]"] = {}
+
+
+class _WorkflowLzin(enum.Enum):
+
+    WORKFLOW_LZIN = enum.auto()
+
+    def __repr__(self):
+        return "WORKFLOW_LZIN"
+
+
+WORKFLOW_LZIN = _WorkflowLzin.WORKFLOW_LZIN

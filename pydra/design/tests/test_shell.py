@@ -36,7 +36,7 @@ def test_interface_template():
 def test_interface_template_w_types_and_path_template_ext():
 
     SampleInterface = shell.define(
-        "trim-png <in_image:image/png> <out|out_image.png:image/png>"
+        "trim-png <in_image:image/png> <out|out_image:image/png>"
     )
 
     assert issubclass(SampleInterface, TaskSpec)
