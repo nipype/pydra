@@ -174,6 +174,6 @@ def this() -> Workflow:
     return Workflow.under_construction
 
 
-def add(task_spec: TaskSpec[OutputType]) -> OutputType:
+def add(task_spec: TaskSpec[OutputType], name: str = None) -> OutputType:
     """Add a task to the current workflow."""
-    return this().add(task_spec)
+    return this().add(task_spec, name=name)

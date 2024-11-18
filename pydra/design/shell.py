@@ -8,7 +8,7 @@ import inspect
 from copy import copy
 import attrs
 import builtins
-from fileformats.core import from_mime, FileSet
+from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
 from .base import (
@@ -21,6 +21,7 @@ from .base import (
     make_task_spec,
     EMPTY,
 )
+from pydra.utils.typing import is_fileset_or_union
 from pydra.engine.specs import MultiInputObj
 from pydra.engine.task import ShellCommandTask
 
@@ -467,11 +468,15 @@ def parse_command_line_template(
             kwds = {"type": type_}
             # If name contains a '.', treat it as a file template and strip it from the name
             if field_type is outarg:
-                kwds["path_template"] = (
-                    name + type_.ext
-                    if issubclass(type_, FileSet) and type_.ext
-                    else name
-                )
+                path_template = name
+                if is_fileset_or_union(type_):
+                    if ty.get_origin(type_):
+                        ext_type = next(a for a in ty.get_args(type_) if a is not None)
+                    else:
+                        ext_type = type_
+                    if ext_type.ext is not None:
+                        path_template = name + ext_type.ext
+                kwds["path_template"] = path_template
             if ty.get_origin(type_) is MultiInputObj:
                 kwds["sep"] = " "
             if option is None:
@@ -479,6 +484,7 @@ def parse_command_line_template(
             else:
                 kwds["argstr"] = option
                 add_arg(name, field_type, kwds)
+                option = None
         elif match := bool_arg_re.match(token):
             argstr, var = match.groups()
             add_arg(var, arg, {"type": bool, "argstr": argstr, "default": False})

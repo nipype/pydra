@@ -2,6 +2,7 @@ from pydra.engine.workflow import Workflow
 from pydra.engine.specs import LazyField
 import typing as ty
 from pydra.design import shell, python, workflow, list_fields
+from fileformats import video, image
 
 
 def test_workflow():
@@ -37,6 +38,58 @@ def test_workflow():
     assert wf.inputs.b == 2.0
     assert wf.outputs.out == LazyField(name="Mul", field="out", type=ty.Any)
     assert list(wf.node_names) == ["Add", "Mul"]
+
+
+def test_shell_workflow():
+
+    @workflow.define
+    def MyTestShellWorkflow(input_video: video.Mp4, watermark: image.Png) -> video.Mp4:
+
+        add_watermark = workflow.add(
+            shell.define(
+                "ffmpeg -i <in_video> -i <watermark:image/png> -filter_complex <filter> <out|out_video>"
+            )(in_video=input_video, watermark=watermark, filter="overlay=10:10"),
+            name="add_watermark",
+        )
+        output_video = workflow.add(
+            shell.define(
+                (
+                    "HandBrakeCLI -i <in_video> -o <out|out_video> "
+                    "--width <width:int> --height <height:int>"
+                ),
+                # this specifies that this output is required even though it has a flag,
+                # optional inputs and outputs are of type * | None
+                inputs={"in_video": video.Mp4},
+                outputs={"out_video": video.Mp4},
+            )(in_video=add_watermark.out_video, width=1280, height=720),
+            name="resize",
+        ).out_video
+
+        return output_video  # test implicit detection of output name
+
+    constructor = MyTestShellWorkflow().constructor
+    assert constructor.__name__ == "MyTestShellWorkflow"
+    assert list_fields(MyTestShellWorkflow) == [
+        workflow.arg(name="input_video", type=video.Mp4),
+        workflow.arg(name="watermark", type=image.Png),
+        workflow.arg(name="constructor", type=ty.Callable, default=constructor),
+    ]
+    assert list_fields(MyTestShellWorkflow.Outputs) == [
+        workflow.out(name="output_video", type=video.Mp4),
+    ]
+    input_video = video.Mp4.mock("input.mp4")
+    watermark = image.Png.mock("watermark.png")
+    workflow_spec = MyTestShellWorkflow(
+        input_video=input_video,
+        watermark=watermark,
+    )
+    wf = Workflow.construct(workflow_spec)
+    assert wf.inputs.input_video == input_video
+    assert wf.inputs.watermark == watermark
+    assert wf.outputs.output_video == LazyField(
+        name="resize", field="out_video", type=video.Mp4
+    )
+    assert list(wf.node_names) == ["add_watermark", "resize"]
 
 
 def test_workflow_alt_syntax():
