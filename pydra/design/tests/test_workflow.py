@@ -1,7 +1,7 @@
 from operator import attrgetter
 import pytest
 import attrs
-from pydra.engine.workflow import Workflow
+from pydra.engine.workflow import Workflow, WORKFLOW_LZIN
 from pydra.engine.specs import LazyField
 import typing as ty
 from pydra.design import shell, python, workflow, list_fields, TaskSpec
@@ -115,6 +115,7 @@ def test_shell_workflow():
 
 
 def test_workflow_canonical():
+    """Test class-based workflow definition"""
 
     # NB: We use PascalCase (i.e. class names) as it is translated into a class
 
@@ -175,6 +176,57 @@ def test_workflow_canonical():
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
+
+
+def test_workflow_lazy():
+
+    @workflow.define(lazy=["input_video", "watermark"])
+    def MyTestShellWorkflow(
+        input_video: video.Mp4,
+        watermark: image.Png,
+        watermark_dims: tuple[int, int] = (10, 10),
+    ) -> video.Mp4:
+
+        add_watermark = workflow.add(
+            shell.define(
+                "ffmpeg -i <in_video> -i <watermark:image/png> "
+                "-filter_complex <filter> <out|out_video>"
+            )(
+                in_video=input_video,
+                watermark=watermark,
+                filter="overlay={}:{}".format(*watermark_dims),
+            ),
+            name="add_watermark",
+        )
+        output_video = workflow.add(
+            shell.define(
+                "HandBrakeCLI -i <in_video> -o <out|out_video> "
+                "--width <width:int> --height <height:int>",
+                # By default any input/output specified with a flag (e.g. -i <in_video>)
+                # is considered optional, i.e. of type `FsObject | None`, and therefore
+                # won't be used by default. By overriding this with non-optional types,
+                # the fields are specified as being required.
+                inputs={"in_video": video.Mp4},
+                outputs={"out_video": video.Mp4},
+            )(in_video=add_watermark.out_video, width=1280, height=720),
+            name="resize",
+        ).out_video
+
+        return output_video  # test implicit detection of output name
+
+    input_video = video.Mp4.mock("input.mp4")
+    watermark = image.Png.mock("watermark.png")
+    workflow_spec = MyTestShellWorkflow(
+        input_video=input_video,
+        watermark=watermark,
+    )
+    wf = Workflow.construct(workflow_spec)
+    assert wf["add_watermark"].inputs.in_video == LazyField(
+        name=WORKFLOW_LZIN, field="input_video", type=video.Mp4, type_checked=True
+    )
+    assert wf["add_watermark"].inputs.watermark == LazyField(
+        name=WORKFLOW_LZIN, field="watermark", type=image.Png, type_checked=True
+    )
 
 
 def test_direct_access_of_workflow_object():

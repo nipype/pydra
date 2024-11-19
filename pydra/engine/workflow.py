@@ -319,11 +319,11 @@ class Workflow(ty.Generic[OutputType]):
         for lzy_inpt in lazy_inputs:
             setattr(
                 lazy_spec,
-                lzy_inpt,
+                lzy_inpt.name,
                 LazyField(
-                    WORKFLOW_LZIN,
-                    lzy_inpt.name,
-                    lzy_inpt.type,
+                    name=WORKFLOW_LZIN,
+                    field=lzy_inpt.name,
+                    type=lzy_inpt.type,
                 ),
             )
 
