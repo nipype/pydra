@@ -216,6 +216,7 @@ class TypeParser(ty.Generic[T]):
                         "coerced to one that is)"
                     ) from e
             coerced = obj  # type: ignore
+            obj.type_checked = True  # Used to check whether the type can be changed
         elif isinstance(obj, StateArray):
             coerced = StateArray(self(o) for o in obj)  # type: ignore[assignment]
         else:

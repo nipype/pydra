@@ -186,10 +186,14 @@ class TaskSpec(ty.Generic[OutputType]):
         return task(**kwargs)
 
     def _check_for_unset_values(self):
-        if unset := [k for k, v in attrs.asdict(self).items() if v is attrs.NOTHING]:
+        if unset := [
+            k
+            for k, v in attrs.asdict(self, recurse=False).items()
+            if v is attrs.NOTHING
+        ]:
             raise ValueError(
-                f"The following values in the {self!r} interface need to be set before it "
-                f"can be executed: {unset}"
+                f"The following values {unset} in the {self!r} interface need to be set "
+                "before the workflow can be constructed"
             )
 
 

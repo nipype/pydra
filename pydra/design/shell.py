@@ -413,7 +413,7 @@ def parse_command_line_template(
                 kwds["type"] = field
                 field = field_type(name=name, **kwds)
             elif not isinstance(field, field_type):  # If field type is outarg not out
-                field = field_type(**attrs.asdict(field))
+                field = field_type(**attrs.asdict(field, recurse=False))
             field.name = name
             type_ = kwds.pop("type", field.type)
             if field.type is ty.Any:

@@ -85,7 +85,7 @@ class Task:
 
     def __init__(
         self,
-        interface,
+        spec,
         name: str | None = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
@@ -138,7 +138,7 @@ class Task:
         if Task._etelemetry_version_data is None:
             Task._etelemetry_version_data = check_latest_version()
 
-        self.interface = interface
+        self.interface = spec
         # raise error if name is same as of attributes
         if name in dir(self):
             raise ValueError("Cannot use names of attributes or methods as task name")
@@ -269,7 +269,7 @@ class Task:
     def checksum_states(self, state_index=None):
         """
         Calculate a checksum for the specific state or all of the states of the task.
-        Replaces lists in the inputs fields with a specific values for states.
+        Replaces state-arrays in the inputs fields with a specific values for states.
         Used to recreate names of the task directories,
 
         Parameters

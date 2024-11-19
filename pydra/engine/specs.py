@@ -817,6 +817,7 @@ class LazyField(ty.Generic[T]):
         factory=frozenset, converter=frozenset
     )
     cast_from: ty.Optional[ty.Type[ty.Any]] = None
+    type_checked: bool = False
 
     def __bytes_repr__(self, cache):
         yield type(self).__name__.encode()

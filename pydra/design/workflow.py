@@ -1,7 +1,7 @@
 import typing as ty
 import inspect
 import attrs
-from pydra.engine.task import FunctionTask
+from pydra.engine.core import WorkflowTask
 from pydra.engine.workflow import Workflow
 from .base import (
     Arg,
@@ -148,7 +148,7 @@ def define(
             parsed_inputs[inpt_name].lazy = True
 
         interface = make_task_spec(
-            FunctionTask,
+            WorkflowTask,
             parsed_inputs,
             parsed_outputs,
             name=name,
