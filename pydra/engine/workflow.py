@@ -1,18 +1,18 @@
 import typing as ty
-import enum
 from copy import copy, deepcopy
 from operator import itemgetter
 from typing_extensions import Self
 import attrs
-from pydra.design.base import list_fields, TaskSpec
-from pydra.engine.specs import LazyField, StateArray
+from pydra.design.base import list_fields, TaskSpec, OutputsSpec
+from pydra.engine.specs import LazyField, LazyInField, LazyOutField, StateArray
 from pydra.utils.hash import hash_function
+from pydra.utils.typing import TypeParser
 from . import helpers_state as hlpst
 from .helpers import ensure_list
 from . import state
 
 
-OutputType = ty.TypeVar("OutputType")
+OutputType = ty.TypeVar("OutputType", bound=OutputsSpec)
 
 
 @attrs.define
@@ -29,52 +29,41 @@ class Node(ty.Generic[OutputType]):
 
     name: str
     inputs: TaskSpec[OutputType]
-    _splitter: str | list[str] | tuple[str] | None = None
-    _combiner: list | str = None
     _workflow: "Workflow" = None
     _lzout: OutputType | None = None
     _state: state.State | None = None
-    _cont_dim: dict[str, int] | None = None
+    _cont_dim: dict[str, int] | None = (
+        None  # QUESTION: should this be included in the state?
+    )
 
     @property
     def lzout(self) -> OutputType:
         """The output spec of the node populated with lazy fields"""
         if self._lzout is not None:
             return self._lzout
-        state_array_depth = 0
-        for inpt_name, inpt_val in attrs.asdict(self.inputs).items():
+        combined_splitter = set()
+        for inpt_name, inpt_val in attrs.asdict(self.inputs, recurse=False).items():
             if isinstance(inpt_val, LazyField):
-                tp = inpt_val.type
-                depth = 0
-                while isinstance(tp, StateArray):
-                    tp = ty.get_args(tp)[0]
-                    depth += 1
-                # FIXME: This won't be able to differentiate between state arrays
-                # from different splits and those from the same split, we might need to
-                # keep track of that in the LazyField... (am I right about this??)
-                state_array_depth = max(state_array_depth, depth)
+                combined_splitter.update(inpt_val.splits)
         lazy_fields = {}
         for field in list_fields(self.inputs.Outputs):
-            # TODO: need to reimplement the full spliter/combiner logic here
-            if self._splitter and field.name in self._splitter:
-                if field.name in self._combiner:
-                    type_ = list[field.type]
-                else:
-                    type_ = StateArray(field.type)
-            else:
-                type_ = field.type
-            for _ in range(state_array_depth):
+            type_ = field.type
+            # Wrap types of lazy outputs in StateArray types if the input fields are split
+            # over state values
+            for _ in range(len(combined_splitter)):
                 type_ = StateArray[type_]
-            lazy_fields[field.name] = LazyField(
+            lazy_fields[field.name] = LazyOutField(
                 name=self.name,
                 field=field.name,
                 type=type_,
+                splits=frozenset(iter(combined_splitter)),
             )
         outputs = self.inputs.Outputs(**lazy_fields)
         # Flag the output lazy fields as being not typed checked (i.e. assigned to another
         # node's inputs) yet
         for outpt in attrs.asdict(outputs, recurse=False).values():
             outpt.type_checked = False
+        outputs._node = self
         self._lzout = outputs
         return outputs
 
@@ -107,7 +96,7 @@ class Node(ty.Generic[OutputType]):
 
         Returns
         -------
-        self : TaskBase
+        self : TaskSpec
             a reference to the task
         """
         self._check_if_outputs_have_been_used()
@@ -157,6 +146,16 @@ class Node(ty.Generic[OutputType]):
             self.inputs = attrs.evolve(self.inputs, **new_inputs)
         if not self._state or splitter != self._state.splitter:
             self._set_state(splitter)
+        # Wrap types of lazy outputs in StateArray types
+        split_depth = len(LazyField.normalize_splitter(splitter))
+        outpt_lf: LazyOutField
+        for outpt_lf in attrs.asdict(self.lzout, recurse=False).values():
+            assert not outpt_lf.type_checked
+            outpt_type = outpt_lf.type
+            for d in range(split_depth):
+                outpt_type = StateArray[outpt_type]
+            outpt_lf.type = outpt_type
+            outpt_lf.splits = frozenset(iter(self._state.splitter))
         return self
 
     def combine(
@@ -180,12 +179,19 @@ class Node(ty.Generic[OutputType]):
 
         Returns
         -------
-        self : TaskBase
+        self : TaskSpec
             a reference to the task
         """
         if not isinstance(combiner, (str, list)):
             raise Exception("combiner has to be a string or a list")
         combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
+        if not_split := [
+            c for c in combiner if not any(c in s for s in self._state.splitter)
+        ]:
+            raise ValueError(
+                f"Combiner fields {not_split} for Node {self.name!r} are not in the "
+                f"splitter fields {self._state.splitter}"
+            )
         if (
             self._state
             and self._state.combiner
@@ -204,6 +210,24 @@ class Node(ty.Generic[OutputType]):
             self._state.fut_combiner = combiner
         else:  # self.state and not self.state.combiner
             self._set_state(splitter=self._state.splitter, combiner=combiner)
+        # Wrap types of lazy outputs in StateArray types
+        norm_splitter = LazyField.normalize_splitter(self._state.splitter)
+        remaining_splits = [
+            s for s in norm_splitter if not any(c in s for c in combiner)
+        ]
+        combine_depth = len(norm_splitter) - len(remaining_splits)
+        outpt_lf: LazyOutField
+        for outpt_lf in attrs.asdict(self.lzout, recurse=False).values():
+            assert not outpt_lf.type_checked
+            outpt_type, split_depth = TypeParser.strip_splits(outpt_lf.type)
+            assert split_depth >= combine_depth, (
+                f"Attempting to combine a field that has not been split enough times: "
+                f"{outpt_lf.name} ({outpt_lf.type}), {self._state.splitter} -> {combiner}"
+            )
+            outpt_lf.type = list[outpt_type]
+            for _ in range(split_depth - combine_depth):
+                outpt_lf.type = StateArray[outpt_lf.type]
+            outpt_lf.splits = frozenset(iter(remaining_splits))
         return self
 
     def _set_state(self, splitter, combiner=None):
@@ -242,6 +266,18 @@ class Node(ty.Generic[OutputType]):
             self._cont_dim = {}
         else:
             self._cont_dim = cont_dim
+
+    @property
+    def splitter(self):
+        if not self._state:
+            return None
+        return self._state.splitter
+
+    @property
+    def combiner(self):
+        if not self._state:
+            return None
+        return self._state.combiner
 
     def _check_if_outputs_have_been_used(self):
         used = []
@@ -320,8 +356,7 @@ class Workflow(ty.Generic[OutputType]):
             setattr(
                 lazy_spec,
                 lzy_inpt.name,
-                LazyField(
-                    name=WORKFLOW_LZIN,
+                LazyInField(
                     field=lzy_inpt.name,
                     type=lzy_inpt.type,
                 ),
@@ -332,23 +367,28 @@ class Workflow(ty.Generic[OutputType]):
         cls._under_construction = wf
         try:
             # Call the user defined constructor to set the outputs
-            output_values = constructor(**input_values)
+            output_lazy_fields = constructor(**input_values)
             # Check to see whether any mandatory inputs are not set
             for node in wf.nodes:
                 node.inputs._check_for_unset_values()
             # Check that the outputs are set correctly, either directly by the constructor
             # or via returned values that can be zipped with the output names
-            if output_values:
-                if not isinstance(output_values, (list, tuple)):
-                    output_values = [output_values]
+            if output_lazy_fields:
+                if not isinstance(output_lazy_fields, (list, tuple)):
+                    output_lazy_fields = [output_lazy_fields]
                 output_fields = list_fields(spec.Outputs)
-                if len(output_values) != len(output_fields):
+                if len(output_lazy_fields) != len(output_fields):
                     raise ValueError(
                         f"Expected {len(output_fields)} outputs, got "
-                        f"{len(output_values)} ({output_values})"
+                        f"{len(output_lazy_fields)} ({output_lazy_fields})"
                     )
-                for outpt, oupt_val in zip(output_fields, output_values):
-                    setattr(outputs, outpt.name, oupt_val)
+                for outpt, outpt_lf in zip(output_fields, output_lazy_fields):
+                    if TypeParser.get_origin(outpt_lf.type) is StateArray:
+                        # Automatically combine any uncombined state arrays into lists
+                        tp, _ = TypeParser.strip_splits(outpt_lf.type)
+                        outpt_lf.type = list[tp]
+                        outpt_lf.splits = frozenset()
+                    setattr(outputs, outpt.name, outpt_lf)
             else:
                 if unset_outputs := [
                     a
@@ -398,14 +438,3 @@ class Workflow(ty.Generic[OutputType]):
 
     _under_construction: "Workflow[ty.Any]" = None
     _constructed: dict[int, "Workflow[ty.Any]"] = {}
-
-
-class _WorkflowLzin(enum.Enum):
-
-    WORKFLOW_LZIN = enum.auto()
-
-    def __repr__(self):
-        return "WORKFLOW_LZIN"
-
-
-WORKFLOW_LZIN = _WorkflowLzin.WORKFLOW_LZIN

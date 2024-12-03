@@ -1,8 +1,8 @@
 from operator import attrgetter
 import pytest
 import attrs
-from pydra.engine.workflow import Workflow, WORKFLOW_LZIN
-from pydra.engine.specs import LazyField
+from pydra.engine.workflow import Workflow
+from pydra.engine.specs import LazyInField, LazyOutField
 import typing as ty
 from pydra.design import shell, python, workflow, list_fields, TaskSpec
 from fileformats import video, image
@@ -44,9 +44,7 @@ def test_workflow():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out == LazyField(
-        name="Mul", field="out", type=ty.Any, type_checked=True
-    )
+    assert wf.outputs.out == LazyOutField(name="Mul", field="out", type=ty.Any)
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
@@ -108,8 +106,8 @@ def test_shell_workflow():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.input_video == input_video
     assert wf.inputs.watermark == watermark
-    assert wf.outputs.output_video == LazyField(
-        name="resize", field="out_video", type=video.Mp4, type_checked=True
+    assert wf.outputs.output_video == LazyOutField(
+        name="resize", field="out_video", type=video.Mp4
     )
     assert list(wf.node_names) == ["add_watermark", "resize"]
 
@@ -170,9 +168,7 @@ def test_workflow_canonical():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out == LazyField(
-        name="Mul", field="out", type=ty.Any, type_checked=True
-    )
+    assert wf.outputs.out == LazyOutField(name="Mul", field="out", type=ty.Any)
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
@@ -221,11 +217,11 @@ def test_workflow_lazy():
         watermark=watermark,
     )
     wf = Workflow.construct(workflow_spec)
-    assert wf["add_watermark"].inputs.in_video == LazyField(
-        name=WORKFLOW_LZIN, field="input_video", type=video.Mp4, type_checked=True
+    assert wf["add_watermark"].inputs.in_video == LazyInField(
+        field="input_video", type=video.Mp4
     )
-    assert wf["add_watermark"].inputs.watermark == LazyField(
-        name=WORKFLOW_LZIN, field="watermark", type=image.Png, type_checked=True
+    assert wf["add_watermark"].inputs.watermark == LazyInField(
+        field="watermark", type=image.Png
     )
 
 
@@ -281,11 +277,9 @@ def test_direct_access_of_workflow_object():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out1 == LazyField(
-        name="Mul", field="out", type=float, type_checked=True
-    )
-    assert wf.outputs.out2 == LazyField(
-        name="division", field="divided", type=ty.Any, type_checked=True
+    assert wf.outputs.out1 == LazyOutField(name="Mul", field="out", type=float)
+    assert wf.outputs.out2 == LazyOutField(
+        name="division", field="divided", type=ty.Any
     )
     assert list(wf.node_names) == ["addition", "Mul", "division"]
 
@@ -329,12 +323,8 @@ def test_workflow_set_outputs_directly():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out1 == LazyField(
-        name="Mul", field="out", type=ty.Any, type_checked=True
-    )
-    assert wf.outputs.out2 == LazyField(
-        name="Add", field="out", type=ty.Any, type_checked=True
-    )
+    assert wf.outputs.out1 == LazyOutField(name="Mul", field="out", type=ty.Any)
+    assert wf.outputs.out2 == LazyOutField(name="Add", field="out", type=ty.Any)
     assert list(wf.node_names) == ["Add", "Mul"]
 
 
@@ -350,18 +340,14 @@ def test_workflow_split_combine():
 
     @workflow.define
     def MyTestWorkflow(a: list[int], b: list[float]) -> list[float]:
-
-        wf = workflow.this()
-        mul = wf.add(Mul())
-        # We could avoid having to specify the splitter and combiner on a separate
-        # line by making 'split' and 'combine' reserved keywords for Outputs class attrs
-        wf["Mul"].split(x=a, y=b).combine("a")
-        sum = wf.add(Sum(x=mul.out))
+        mul = workflow.add(Mul()).split(x=a, y=b).combine("x")
+        sum = workflow.add(Sum(x=mul.out))
         return sum.out
 
     wf = Workflow.construct(MyTestWorkflow(a=[1, 2, 3], b=[1.0, 10.0, 100.0]))
-    assert wf["Mul"]._state.splitter == ["x", "y"]
-    assert wf["Mul"]._state.combiner == ["x"]
+    assert wf["Mul"].splitter == ["Mul.x", "Mul.y"]
+    assert wf["Mul"].combiner == ["Mul.x"]
+    assert wf.outputs.out == LazyOutField(name="Sum", field="out", type=list[float])
 
 
 def test_workflow_split_after_access_fail():
@@ -381,10 +367,9 @@ def test_workflow_split_after_access_fail():
     @workflow.define
     def MyTestWorkflow(a: list[int], b: list[float]) -> list[float]:
 
-        wf = workflow.this()
-        add = wf.add(Add())
-        mul = wf.add(Mul(x=add.out, y=2.0))  # << Add.out is accessed here
-        wf["Add"].split(x=a, y=b).combine("x")
+        add = workflow.add(Add())
+        mul = workflow.add(Mul(x=add.out, y=2.0))  # << Add.out is accessed here
+        add.split(x=a, y=b).combine("x")
         return mul.out
 
     with pytest.raises(RuntimeError, match="Outputs .* have already been accessed"):

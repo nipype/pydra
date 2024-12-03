@@ -15,8 +15,8 @@ from .base import (
     Arg,
     Out,
     check_explicit_fields_are_none,
-    get_fields_from_class,
-    collate_with_helps,
+    extract_fields_from_class,
+    ensure_field_objects,
     TaskSpec,
     make_task_spec,
     EMPTY,
@@ -242,7 +242,7 @@ def define(
                     ) from None
             class_name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
-            parsed_inputs, parsed_outputs = get_fields_from_class(
+            parsed_inputs, parsed_outputs = extract_fields_from_class(
                 klass, arg, out, auto_attribs
             )
         else:
@@ -259,7 +259,7 @@ def define(
                 outputs=outputs,
             )
 
-            parsed_inputs, parsed_outputs = collate_with_helps(
+            parsed_inputs, parsed_outputs = ensure_field_objects(
                 arg_type=arg,
                 out_type=out,
                 inputs=inferred_inputs,

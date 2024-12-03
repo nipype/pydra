@@ -960,8 +960,6 @@ class TypeParser(ty.Generic[T]):
         ----------
         type_ : ty.Type[ty.Any]
             the type to list the nested sequences of
-        only_splits : bool, optional
-            whether to only return nested splits, not all sequence types
 
         Returns
         -------

@@ -5,13 +5,13 @@ from pydra.engine.task import FunctionTask
 from .base import (
     Arg,
     Out,
-    collate_with_helps,
+    ensure_field_objects,
     make_task_spec,
     TaskSpec,
     parse_doc_string,
     extract_function_inputs_and_outputs,
     check_explicit_fields_are_none,
-    get_fields_from_class,
+    extract_fields_from_class,
 )
 
 
@@ -109,7 +109,7 @@ def define(
             function = klass.function
             name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
-            parsed_inputs, parsed_outputs = get_fields_from_class(
+            parsed_inputs, parsed_outputs = extract_fields_from_class(
                 klass, arg, out, auto_attribs
             )
         else:
@@ -125,7 +125,7 @@ def define(
             )
             name = function.__name__
 
-            parsed_inputs, parsed_outputs = collate_with_helps(
+            parsed_inputs, parsed_outputs = ensure_field_objects(
                 arg_type=arg,
                 out_type=out,
                 inputs=inferred_inputs,

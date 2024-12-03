@@ -5,6 +5,7 @@ import re
 import enum
 from pathlib import Path
 from copy import copy
+from typing_extensions import Self
 import attrs.validators
 from attrs.converters import default_if_none
 from fileformats.generic import File
@@ -21,15 +22,19 @@ from pydra.engine.specs import (
 )
 from pydra.engine.core import Task, AuditFlag
 
+
 __all__ = [
     "Field",
     "Arg",
     "Out",
     "TaskSpec",
-    "collate_with_helps",
+    "OutputsSpec",
+    "ensure_field_objects",
     "make_task_spec",
     "list_fields",
 ]
+
+RESERVED_OUTPUT_NAMES = ("split", "combine")
 
 
 class _Empty(enum.Enum):
@@ -149,7 +154,73 @@ class Out(Field):
     pass
 
 
-OutputType = ty.TypeVar("OutputType")
+class OutputsSpec:
+    """Base class for all output specifications"""
+
+    def split(
+        self,
+        splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None] = None,
+        /,
+        overwrite: bool = False,
+        cont_dim: ty.Optional[dict] = None,
+        **inputs,
+    ) -> Self:
+        """
+        Run this task parametrically over lists of split inputs.
+
+        Parameters
+        ----------
+        splitter : str or list[str] or tuple[str] or None
+            the fields which to split over. If splitting over multiple fields, lists of
+            fields are interpreted as outer-products and tuples inner-products. If None,
+            then the fields to split are taken from the keyword-arg names.
+        overwrite : bool, optional
+            whether to overwrite an existing split on the node, by default False
+        cont_dim : dict, optional
+            Container dimensions for specific inputs, used in the splitter.
+            If input name is not in cont_dim, it is assumed that the input values has
+            a container dimension of 1, so only the most outer dim will be used for splitting.
+        **inputs
+            fields to split over, will automatically be wrapped in a StateArray object
+            and passed to the node inputs
+
+        Returns
+        -------
+        self : TaskBase
+            a reference to the task
+        """
+        self._node.split(splitter, overwrite=overwrite, cont_dim=cont_dim, **inputs)
+        return self
+
+    def combine(
+        self,
+        combiner: ty.Union[ty.List[str], str],
+        overwrite: bool = False,  # **kwargs
+    ) -> Self:
+        """
+        Combine inputs parameterized by one or more previous tasks.
+
+        Parameters
+        ----------
+        combiner : list[str] or str
+            the field or list of inputs to be combined (i.e. not left split) after the
+            task has been run
+        overwrite : bool
+            whether to overwrite an existing combiner on the node
+        **kwargs : dict[str, Any]
+            values for the task that will be "combined" before they are provided to the
+            node
+
+        Returns
+        -------
+        self : Self
+            a reference to the outputs object
+        """
+        self._node.combine(combiner, overwrite=overwrite)
+        return self
+
+
+OutputType = ty.TypeVar("OutputType", bound=OutputsSpec)
 
 
 class TaskSpec(ty.Generic[OutputType]):
@@ -197,13 +268,33 @@ class TaskSpec(ty.Generic[OutputType]):
             )
 
 
-def get_fields_from_class(
+def extract_fields_from_class(
     klass: type,
     arg_type: type[Arg],
     out_type: type[Out],
     auto_attribs: bool,
 ) -> tuple[dict[str, Arg], dict[str, Out]]:
-    """Parse the input and output fields from a class"""
+    """Extract the input and output fields from an existing class
+
+    Parameters
+    ----------
+    klass : type
+        The class to extract the fields from
+    arg_type : type
+        The type of the input fields
+    out_type : type
+        The type of the output fields
+    auto_attribs : bool
+        Whether to assume that all attribute annotations should be interpreted as
+        fields or not
+
+    Returns
+    -------
+    inputs : dict[str, Arg]
+        The input fields extracted from the class
+    outputs : dict[str, Out]
+        The output fields extracted from the class
+    """
 
     input_helps, _ = parse_doc_string(klass.__doc__)
 
@@ -269,31 +360,50 @@ def make_task_spec(
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
 ):
+    """Create a task specification class and its outputs specification class from the
+    input and output fields provided to the decorator/function.
+
+    Modifies the class so that its attributes are converted from pydra fields to attrs fields
+    and then calls `attrs.define` to create an attrs class (dataclass-like).
+    on
+
+    Parameters
+    ----------
+    task_type : type
+        The type of the task to be created
+    inputs : dict[str, Arg]
+        The input fields of the task
+    outputs : dict[str, Out]
+        The output fields of the task
+    klass : type, optional
+        The class to be decorated, by default None
+    name : str, optional
+        The name of the class, by default
+    bases : ty.Sequence[type], optional
+        The base classes for the task specification class, by default ()
+    outputs_bases : ty.Sequence[type], optional
+        The base classes for the outputs specification class, by default ()
+
+    Returns
+    -------
+    klass : type
+        The class created using the attrs package
+    """
     if name is None and klass is not None:
         name = klass.__name__
-    outputs_klass = type(
-        "Outputs",
-        tuple(outputs_bases),
-        {
-            o.name: attrs.field(
-                converter=make_converter(o, f"{name}.Outputs"),
-                metadata={PYDRA_ATTR_METADATA: o},
-                **_get_default(o),
-            )
-            for o in outputs.values()
-        },
-    )
-    outputs_klass.__annotations__.update((o.name, o.type) for o in outputs.values())
-    outputs_klass = attrs.define(auto_attribs=False, kw_only=True)(outputs_klass)
-
+    outputs_klass = make_outputs_spec(outputs, outputs_bases, name)
     if klass is None or not issubclass(klass, TaskSpec):
         if name is None:
             raise ValueError("name must be provided if klass is not")
         bases = tuple(bases)
+        # Ensure that TaskSpec is a base class
         if not any(issubclass(b, TaskSpec) for b in bases):
             bases = bases + (TaskSpec,)
+        # If building from a decorated class (as opposed to dynamically from a function
+        # or shell-template), add any base classes not already in the bases tuple
         if klass is not None:
             bases += tuple(c for c in klass.__mro__ if c not in bases + (object,))
+        # Create a new class with the TaskSpec as a base class
         klass = types.new_class(
             name=name,
             bases=bases,
@@ -303,7 +413,7 @@ def make_task_spec(
             ),
         )
     else:
-        # Ensure that the class has it's own annotaitons dict so we can modify it without
+        # Ensure that the class has it's own annotations dict so we can modify it without
         # messing up other classes
         klass.__annotations__ = copy(klass.__annotations__)
         klass.Task = task_type
@@ -345,7 +455,53 @@ def make_task_spec(
     return attrs_klass
 
 
-def collate_with_helps(
+def make_outputs_spec(
+    outputs: dict[str, Out], bases: ty.Sequence[type], spec_name: str
+) -> type[OutputsSpec]:
+    """Create an outputs specification class and its outputs specification class from the
+    output fields provided to the decorator/function.
+
+    Creates a new class with attrs fields and then calls `attrs.define` to create an
+    attrs class (dataclass-like).
+
+    Parameters
+    ----------
+    outputs : dict[str, Out]
+        The output fields of the task
+    bases : ty.Sequence[type], optional
+        The base classes for the outputs specification class, by default ()
+    spec_name : str
+        The name of the task specification class the outputs are for
+
+    Returns
+    -------
+    klass : type
+        The class created using the attrs package
+    """
+    if not any(issubclass(b, OutputsSpec) for b in bases):
+        outputs_bases = bases + (OutputsSpec,)
+    if reserved_names := [n for n in outputs if n in RESERVED_OUTPUT_NAMES]:
+        raise ValueError(
+            f"{reserved_names} are reserved and cannot be used for output field names"
+        )
+    outputs_klass = type(
+        spec_name + "Outputs",
+        tuple(outputs_bases),
+        {
+            o.name: attrs.field(
+                converter=make_converter(o, f"{spec_name}.Outputs"),
+                metadata={PYDRA_ATTR_METADATA: o},
+                **_get_default(o),
+            )
+            for o in outputs.values()
+        },
+    )
+    outputs_klass.__annotations__.update((o.name, o.type) for o in outputs.values())
+    outputs_klass = attrs.define(auto_attribs=False, kw_only=True)(outputs_klass)
+    return outputs_klass
+
+
+def ensure_field_objects(
     arg_type: type[Arg],
     out_type: type[Out],
     doc_string: str | None = None,
@@ -354,7 +510,33 @@ def collate_with_helps(
     input_helps: dict[str, str] | None = None,
     output_helps: dict[str, str] | None = None,
 ) -> tuple[dict[str, Arg], dict[str, Out]]:
-    """Assign help strings to the appropriate inputs and outputs"""
+    """Converts dicts containing input/output types into input/output, including any
+    help strings to the appropriate inputs and outputs
+
+    Parameters
+    ----------
+    arg_type : type
+        The type of the input fields
+    out_type : type
+        The type of the output fields
+    doc_string : str, optional
+        The docstring of the function or class
+    inputs : dict[str, Arg | type], optional
+        The inputs to the function or class
+    outputs : dict[str, Out | type], optional
+        The outputs of the function or class
+    input_helps : dict[str, str], optional
+        The help strings for the inputs
+    output_helps : dict[str, str], optional
+        The help strings for the outputs
+
+    Returns
+    -------
+    inputs : dict[str, Arg]
+        The input fields with help strings added
+    outputs : dict[str, Out]
+        The output fields with help strings added
+    """
 
     for input_name, arg in list(inputs.items()):
         if isinstance(arg, Arg):
@@ -403,7 +585,24 @@ def collate_with_helps(
 
 def make_converter(
     field: Field, interface_name: str, field_type: ty.Type | None = None
-):
+) -> ty.Callable[..., ty.Any]:
+    """Makes an attrs converter for the field, combining type checking with any explicit
+    converters
+
+    Parameters
+    ----------
+    field : Field
+        The field to make the converter for
+    interface_name : str
+        The name of the interface the field is part of
+    field_type : type, optional
+        The type of the field, by default None
+
+    Returns
+    -------
+    converter : callable
+        The converter for the field
+    """
     if field_type is None:
         field_type = field.type
     checker_label = f"'{field.name}' field of {interface_name} interface"
@@ -425,7 +624,22 @@ def make_converter(
     return converter
 
 
-def make_validator(field: Field, interface_name: str):
+def make_validator(field: Field, interface_name: str) -> ty.Callable[..., None] | None:
+    """Makes an attrs validator for the field, combining allowed values and any explicit
+    validators
+
+    Parameters
+    ----------
+    field : Field
+        The field to make the validator for
+    interface_name : str
+        The name of the interface the field is part of
+
+    Returns
+    -------
+    validator : callable
+        The validator for the field
+    """
     validators = []
     if field.allowed_values:
         validators.append(allowed_values_validator)
@@ -458,7 +672,28 @@ def extract_function_inputs_and_outputs(
     outputs: list[str | Out] | dict[str, Out | type] | type | None = None,
 ) -> tuple[dict[str, type | Arg], dict[str, type | Out]]:
     """Extract input output types and output names from the function source if they
-    aren't explicitly"""
+    aren't explicitly
+
+    Parameters
+    ----------
+    function : callable
+        The function to extract the inputs and outputs from
+    arg_type : type
+        The type of the input fields
+    out_type : type
+        The type of the output fields
+    inputs : list[str | Arg] | dict[str, Arg | type] | None
+        The inputs to the function
+    outputs : list[str | Out] | dict[str, Out | type] | type | None
+        The outputs of the function
+
+    Returns
+    -------
+    inputs : dict[str, Arg]
+        The input fields extracted from the function
+    outputs : dict[str, Out]
+        The output fields extracted from the function
+    """
     # if undefined_symbols := get_undefined_symbols(
     #     function, exclude_signature_type_hints=True, ignore_decorator=True
     # ):

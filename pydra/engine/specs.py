@@ -8,12 +8,13 @@ import os
 from copy import copy
 from glob import glob
 import attr
+from typing_extensions import Self
 from fileformats.core import FileSet
 from fileformats.generic import (
     File,
     Directory,
 )
-import pydra
+import pydra.engine
 from .helpers_file import template_update_single
 from pydra.utils.hash import hash_function, Cache
 
@@ -694,7 +695,7 @@ class LazyInterface:
             # "_myarbitrarytask"
             combined_upstreams = set()
             if self._task.state:
-                for scalar in LazyField.sanitize_splitter(
+                for scalar in LazyField.normalize_splitter(
                     self._task.state.splitter, strip_previous=False
                 ):
                     for field in scalar:
@@ -742,7 +743,7 @@ class LazyInterface:
         splits = set()
         if splitter:
             # Ensure that splits is of tuple[tuple[str, ...], ...] form
-            splitter = LazyField.sanitize_splitter(splitter)
+            splitter = LazyField.normalize_splitter(splitter)
             if splitter:
                 splits.add(splitter)
         for inpt in attr.asdict(self._task.inputs, recurse=False).values():
@@ -817,14 +818,16 @@ class LazyField(ty.Generic[T]):
         factory=frozenset, converter=frozenset
     )
     cast_from: ty.Optional[ty.Type[ty.Any]] = None
-    type_checked: bool = False
+    # type_checked will be set to False after it is created but defaults to True here for
+    # ease of testing
+    type_checked: bool = True
 
     def __bytes_repr__(self, cache):
         yield type(self).__name__.encode()
         yield self.name.encode()
         yield self.field.encode()
 
-    def cast(self, new_type: TypeOrAny) -> "LazyField":
+    def cast(self, new_type: TypeOrAny) -> Self:
         """ "casts" the lazy field to a new type
 
         Parameters
@@ -845,7 +848,7 @@ class LazyField(ty.Generic[T]):
             cast_from=self.cast_from if self.cast_from else self.type,
         )
 
-    def split(self, splitter: Splitter) -> "LazyField":
+    def split(self, splitter: Splitter) -> Self:
         """ "Splits" the lazy field over an array of nodes by replacing the sequence type
         of the lazy field with StateArray to signify that it will be "split" across
 
@@ -858,7 +861,7 @@ class LazyField(ty.Generic[T]):
             TypeParser,
         )  # pylint: disable=import-outside-toplevel
 
-        splits = self.splits | set([LazyField.sanitize_splitter(splitter)])
+        splits = self.splits | set([LazyField.normalize_splitter(splitter)])
         # Check to see whether the field has already been split over the given splitter
         if splits == self.splits:
             return self
@@ -884,8 +887,10 @@ class LazyField(ty.Generic[T]):
             splits=splits,
         )
 
+    # def combine(self, combiner: str | list[str]) -> Self:
+
     @classmethod
-    def sanitize_splitter(
+    def normalize_splitter(
         cls, splitter: Splitter, strip_previous: bool = True
     ) -> ty.Tuple[ty.Tuple[str, ...], ...]:
         """Converts the splitter spec into a consistent tuple[tuple[str, ...], ...] form
@@ -918,11 +923,14 @@ class LazyField(ty.Generic[T]):
         return value
 
 
+@attr.s(auto_attribs=True, kw_only=True)
 class LazyInField(LazyField[T]):
+
+    name: str = None
     attr_type = "input"
 
     def get_value(
-        self, wf: "pydra.Workflow", state_index: ty.Optional[int] = None
+        self, wf: "pydra.engine.workflow.Workflow", state_index: ty.Optional[int] = None
     ) -> ty.Any:
         """Return the value of a lazy field.
 
