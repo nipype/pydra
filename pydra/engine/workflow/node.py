@@ -13,6 +13,7 @@ from .. import state
 
 
 OutputType = ty.TypeVar("OutputType", bound=OutputsSpec)
+Splitter = ty.Union[str, ty.Tuple[str, ...]]
 
 
 @attrs.define
@@ -186,7 +187,7 @@ class Node(ty.Generic[OutputType]):
         if not self._state or splitter != self._state.splitter:
             self._set_state(splitter)
         # Wrap types of lazy outputs in StateArray types
-        split_depth = len(lazy.LazyField.normalize_splitter(splitter))
+        split_depth = len(self._normalize_splitter(splitter))
         outpt_lf: lazy.LazyOutField
         for outpt_lf in attrs.asdict(self.lzout, recurse=False).values():
             assert not outpt_lf.type_checked
@@ -194,7 +195,6 @@ class Node(ty.Generic[OutputType]):
             for d in range(split_depth):
                 outpt_type = StateArray[outpt_type]
             outpt_lf.type = outpt_type
-            outpt_lf.splits = frozenset(iter(self._state.splitter))
         return self
 
     def combine(
@@ -250,7 +250,7 @@ class Node(ty.Generic[OutputType]):
         else:  # self.state and not self.state.combiner
             self._set_state(splitter=self._state.splitter, combiner=combiner)
         # Wrap types of lazy outputs in StateArray types
-        norm_splitter = lazy.LazyField.normalize_splitter(self._state.splitter)
+        norm_splitter = self._normalize_splitter(self._state.splitter)
         remaining_splits = [
             s for s in norm_splitter if not any(c in s for c in combiner)
         ]
@@ -331,6 +331,29 @@ class Node(ty.Generic[OutputType]):
                 f"Outputs {used} of {self} have already been accessed and therefore "
                 + msg
             )
+
+    @classmethod
+    def _normalize_splitter(
+        cls, splitter: Splitter, strip_previous: bool = True
+    ) -> ty.Tuple[ty.Tuple[str, ...], ...]:
+        """Converts the splitter spec into a consistent tuple[tuple[str, ...], ...] form
+        used in LazyFields"""
+        if isinstance(splitter, str):
+            splitter = (splitter,)
+        if isinstance(splitter, tuple):
+            splitter = (splitter,)  # type: ignore
+        else:
+            assert isinstance(splitter, list)
+            # convert to frozenset to differentiate from tuple, yet still be hashable
+            # (NB: order of fields in list splitters aren't relevant)
+            splitter = tuple((s,) if isinstance(s, str) else s for s in splitter)
+        # Strip out fields starting with "_" designating splits in upstream nodes
+        if strip_previous:
+            stripped = tuple(
+                tuple(f for f in i if not f.startswith("_")) for i in splitter
+            )
+            splitter = tuple(s for s in stripped if s)  # type: ignore
+        return splitter  # type: ignore
 
 
 @attrs.define(auto_attribs=False)

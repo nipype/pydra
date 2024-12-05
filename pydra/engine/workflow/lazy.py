@@ -11,7 +11,6 @@ if ty.TYPE_CHECKING:
 T = ty.TypeVar("T")
 
 TypeOrAny = ty.Union[type, ty.Any]
-Splitter = ty.Union[str, ty.Tuple[str, ...]]
 
 
 @attrs.define(auto_attribs=True, kw_only=True)
@@ -99,29 +98,6 @@ class LazyField(ty.Generic[T]):
     #     )
 
     # # def combine(self, combiner: str | list[str]) -> Self:
-
-    # @classmethod
-    # def normalize_splitter(
-    #     cls, splitter: Splitter, strip_previous: bool = True
-    # ) -> ty.Tuple[ty.Tuple[str, ...], ...]:
-    #     """Converts the splitter spec into a consistent tuple[tuple[str, ...], ...] form
-    #     used in LazyFields"""
-    #     if isinstance(splitter, str):
-    #         splitter = (splitter,)
-    #     if isinstance(splitter, tuple):
-    #         splitter = (splitter,)  # type: ignore
-    #     else:
-    #         assert isinstance(splitter, list)
-    #         # convert to frozenset to differentiate from tuple, yet still be hashable
-    #         # (NB: order of fields in list splitters aren't relevant)
-    #         splitter = tuple((s,) if isinstance(s, str) else s for s in splitter)
-    #     # Strip out fields starting with "_" designating splits in upstream nodes
-    #     if strip_previous:
-    #         stripped = tuple(
-    #             tuple(f for f in i if not f.startswith("_")) for i in splitter
-    #         )
-    #         splitter = tuple(s for s in stripped if s)  # type: ignore
-    #     return splitter  # type: ignore
 
     def _apply_cast(self, value):
         """\"Casts\" the value from the retrieved type if a cast has been applied to
