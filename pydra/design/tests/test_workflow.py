@@ -1,10 +1,12 @@
 from operator import attrgetter
 import pytest
 import attrs
-from pydra.engine.workflow import Workflow
-from pydra.engine.specs import LazyInField, LazyOutField
+from pydra.engine.workflow.base import Workflow
+from pydra.engine.workflow.lazy import LazyInField, LazyOutField
 import typing as ty
-from pydra.design import shell, python, workflow, list_fields, TaskSpec
+from pydra.design import shell, python, workflow
+from pydra.engine.helpers import list_fields
+from pydra.engine.specs import TaskSpec
 from fileformats import video, image
 
 
@@ -44,7 +46,7 @@ def test_workflow():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out == LazyOutField(name="Mul", field="out", type=ty.Any)
+    assert wf.outputs.out == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
@@ -107,7 +109,7 @@ def test_shell_workflow():
     assert wf.inputs.input_video == input_video
     assert wf.inputs.watermark == watermark
     assert wf.outputs.output_video == LazyOutField(
-        name="resize", field="out_video", type=video.Mp4
+        node=wf["resize"], field="out_video", type=video.Mp4
     )
     assert list(wf.node_names) == ["add_watermark", "resize"]
 
@@ -168,7 +170,7 @@ def test_workflow_canonical():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out == LazyOutField(name="Mul", field="out", type=ty.Any)
+    assert wf.outputs.out == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
 
     # Nodes are named after the specs by default
     assert list(wf.node_names) == ["Add", "Mul"]
@@ -218,10 +220,10 @@ def test_workflow_lazy():
     )
     wf = Workflow.construct(workflow_spec)
     assert wf["add_watermark"].inputs.in_video == LazyInField(
-        field="input_video", type=video.Mp4
+        node=wf, field="input_video", type=video.Mp4
     )
     assert wf["add_watermark"].inputs.watermark == LazyInField(
-        field="watermark", type=image.Png
+        node=wf, field="watermark", type=image.Png
     )
 
 
@@ -277,9 +279,9 @@ def test_direct_access_of_workflow_object():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out1 == LazyOutField(name="Mul", field="out", type=float)
+    assert wf.outputs.out1 == LazyOutField(node=wf["Mul"], field="out", type=float)
     assert wf.outputs.out2 == LazyOutField(
-        name="division", field="divided", type=ty.Any
+        node=wf["division"], field="divided", type=ty.Any
     )
     assert list(wf.node_names) == ["addition", "Mul", "division"]
 
@@ -323,12 +325,12 @@ def test_workflow_set_outputs_directly():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out1 == LazyOutField(name="Mul", field="out", type=ty.Any)
-    assert wf.outputs.out2 == LazyOutField(name="Add", field="out", type=ty.Any)
+    assert wf.outputs.out1 == LazyOutField(node=wf["Mul"], field="out", type=ty.Any)
+    assert wf.outputs.out2 == LazyOutField(node=wf["Add"], field="out", type=ty.Any)
     assert list(wf.node_names) == ["Add", "Mul"]
 
 
-def test_workflow_split_combine():
+def test_workflow_split_combine1():
 
     @python.define
     def Mul(x: float, y: float) -> float:
@@ -347,7 +349,35 @@ def test_workflow_split_combine():
     wf = Workflow.construct(MyTestWorkflow(a=[1, 2, 3], b=[1.0, 10.0, 100.0]))
     assert wf["Mul"].splitter == ["Mul.x", "Mul.y"]
     assert wf["Mul"].combiner == ["Mul.x"]
-    assert wf.outputs.out == LazyOutField(name="Sum", field="out", type=list[float])
+    assert wf.outputs.out == LazyOutField(node=wf["Sum"], field="out", type=list[float])
+
+
+def test_workflow_split_combine2():
+
+    @python.define
+    def Mul(x: float, y: float) -> float:
+        return x * y
+
+    @python.define
+    def Add(x: float, y: float) -> float:
+        return x + y
+
+    @python.define
+    def Sum(x: list[float]) -> float:
+        return sum(x)
+
+    @workflow.define
+    def MyTestWorkflow(a: list[int], b: list[float], c: float) -> list[float]:
+        mul = workflow.add(Mul()).split(x=a, y=b)
+        add = workflow.add(Add(x=mul.out, y=c)).combine("Mul.x")
+        sum = workflow.add(Sum(x=add.out))
+        return sum.out
+
+    wf = Workflow.construct(MyTestWorkflow(a=[1, 2, 3], b=[1.0, 10.0, 100.0], c=2.0))
+    assert wf["Mul"].splitter == ["Mul.x", "Mul.y"]
+    assert wf["Mul"].combiner == ["Mul.x"]
+    assert wf["Add"].lzout.out.splits == frozenset(["Mul.x"])
+    assert wf.outputs.out == LazyOutField(node=wf["Sum"], field="out", type=list[float])
 
 
 def test_workflow_split_after_access_fail():

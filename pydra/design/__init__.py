@@ -1,6 +1,6 @@
-from .base import TaskSpec, list_fields
 from . import python
 from . import shell
+from . import workflow
 
 
-__all__ = ["TaskSpec", "list_fields", "python", "shell"]
+__all__ = ["python", "shell", "workflow"]

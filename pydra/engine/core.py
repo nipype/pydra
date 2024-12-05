@@ -21,20 +21,18 @@ from . import state
 from . import helpers_state as hlpst
 from .specs import (
     File,
-    BaseSpec,
+    # BaseSpec,
     RuntimeSpec,
     Result,
-    SpecInfo,
-    LazyIn,
-    LazyOut,
-    LazyField,
+    # SpecInfo,
+    # LazyIn,
+    # LazyOut,
     TaskHook,
-    attr_fields,
-    StateArray,
 )
 from .helpers import (
     # make_klass,
     create_checksum,
+    attr_fields,
     print_help,
     load_result,
     save,
@@ -592,140 +590,6 @@ class Task:
         )
         return attr.evolve(output, **self.output_, **other_output)
 
-    def split(
-        self,
-        splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None] = None,
-        overwrite: bool = False,
-        cont_dim: ty.Optional[dict] = None,
-        **inputs,
-    ):
-        """
-        Run this task parametrically over lists of split inputs.
-
-        Parameters
-        ----------
-        splitter : str or list[str] or tuple[str] or None
-            the fields which to split over. If splitting over multiple fields, lists of
-            fields are interpreted as outer-products and tuples inner-products. If None,
-            then the fields to split are taken from the keyword-arg names.
-        overwrite : bool, optional
-            whether to overwrite an existing split on the node, by default False
-        cont_dim : dict, optional
-            Container dimensions for specific inputs, used in the splitter.
-            If input name is not in cont_dim, it is assumed that the input values has
-            a container dimension of 1, so only the most outer dim will be used for splitting.
-        **split_inputs
-            fields to split over, will automatically be wrapped in a StateArray object
-            and passed to the node inputs
-
-        Returns
-        -------
-        self : TaskBase
-            a reference to the task
-        """
-        if self._lzout:
-            raise RuntimeError(
-                f"Cannot split {self} as its output interface has already been accessed"
-            )
-        if splitter is None and inputs:
-            splitter = list(inputs)
-        elif splitter:
-            missing = set(hlpst.unwrap_splitter(splitter)) - set(inputs)
-            missing = [m for m in missing if not m.startswith("_")]
-            if missing:
-                raise ValueError(
-                    f"Split is missing values for the following fields {list(missing)}"
-                )
-        splitter = hlpst.add_name_splitter(splitter, self.name)
-        # if user want to update the splitter, overwrite has to be True
-        if self.state and not overwrite and self.state.splitter != splitter:
-            raise Exception(
-                "splitter has been already set, "
-                "if you want to overwrite it - use overwrite=True"
-            )
-        if cont_dim:
-            for key, vel in cont_dim.items():
-                self._cont_dim[f"{self.name}.{key}"] = vel
-        if inputs:
-            new_inputs = {}
-            split_inputs = set(
-                f"{self.name}.{n}" if "." not in n else n
-                for n in hlpst.unwrap_splitter(splitter)
-                if not n.startswith("_")
-            )
-            for inpt_name, inpt_val in inputs.items():
-                new_val: ty.Any
-                if f"{self.name}.{inpt_name}" in split_inputs:  # type: ignore
-                    if isinstance(inpt_val, LazyField):
-                        new_val = inpt_val.split(splitter)
-                    elif isinstance(inpt_val, ty.Iterable) and not isinstance(
-                        inpt_val, (ty.Mapping, str)
-                    ):
-                        new_val = StateArray(inpt_val)
-                    else:
-                        raise TypeError(
-                            f"Could not split {inpt_val} as it is not a sequence type"
-                        )
-                else:
-                    new_val = inpt_val
-                new_inputs[inpt_name] = new_val
-            self.inputs = attr.evolve(self.inputs, **new_inputs)
-        if not self.state or splitter != self.state.splitter:
-            self.set_state(splitter)
-        return self
-
-    def combine(
-        self,
-        combiner: ty.Union[ty.List[str], str],
-        overwrite: bool = False,  # **kwargs
-    ):
-        """
-        Combine inputs parameterized by one or more previous tasks.
-
-        Parameters
-        ----------
-        combiner : list[str] or str
-            the
-        overwrite : bool
-            whether to overwrite an existing combiner on the node
-        **kwargs : dict[str, Any]
-            values for the task that will be "combined" before they are provided to the
-            node
-
-        Returns
-        -------
-        self : TaskBase
-            a reference to the task
-        """
-        if self._lzout:
-            raise RuntimeError(
-                f"Cannot combine {self} as its output interface has already been "
-                "accessed"
-            )
-        if not isinstance(combiner, (str, list)):
-            raise Exception("combiner has to be a string or a list")
-        combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
-        if (
-            self.state
-            and self.state.combiner
-            and combiner != self.state.combiner
-            and not overwrite
-        ):
-            raise Exception(
-                "combiner has been already set, "
-                "if you want to overwrite it - use overwrite=True"
-            )
-        if not self.state:
-            self.split(splitter=None)
-            # a task can have a combiner without a splitter
-            # if is connected to one with a splitter;
-            # self.fut_combiner will be used later as a combiner
-            self.fut_combiner = combiner
-        else:  # self.state and not self.state.combiner
-            self.combiner = combiner
-            self.set_state(splitter=self.state.splitter, combiner=self.combiner)
-        return self
-
     def _extract_input_el(self, inputs, inp_nm, ind):
         """
         Extracting element of the inputs taking into account
@@ -955,13 +819,11 @@ class Task:
 
 
 def _sanitize_spec(
-    spec: ty.Union[
-        SpecInfo, ty.List[str], ty.Dict[str, ty.Type[ty.Any]], BaseSpec, None
-    ],
+    spec: ty.Union[ty.List[str], ty.Dict[str, ty.Type[ty.Any]], None],
     wf_name: str,
     spec_name: str,
     allow_empty: bool = False,
-) -> SpecInfo:
+):
     """Makes sure the provided input specifications are valid.
 
     If the input specification is a list of strings, this will
@@ -1040,14 +902,12 @@ class WorkflowTask(Task):
         cache_dir=None,
         cache_locations=None,
         input_spec: ty.Optional[
-            ty.Union[ty.List[ty.Text], ty.Dict[ty.Text, ty.Type[ty.Any]], SpecInfo]
+            ty.Union[ty.List[ty.Text], ty.Dict[ty.Text, ty.Type[ty.Any]]]
         ] = None,
         cont_dim=None,
         messenger_args=None,
         messengers=None,
-        output_spec: ty.Optional[
-            ty.Union[ty.List[str], ty.Dict[str, type], SpecInfo, BaseSpec]
-        ] = None,
+        output_spec: ty.Optional[ty.Union[ty.List[str], ty.Dict[str, type]]] = None,
         rerun=False,
         propagate_rerun=True,
         **kwargs,
@@ -1338,91 +1198,91 @@ class WorkflowTask(Task):
         # at this point Workflow is stateless so this should be fine
         await submitter.expand_workflow(self, rerun=rerun)
 
-    def set_output(
-        self,
-        connections: ty.Union[
-            ty.Tuple[str, LazyField], ty.List[ty.Tuple[str, LazyField]]
-        ],
-    ):
-        """
-        Set outputs of the workflow by linking them with lazy outputs of tasks
+    # def set_output(
+    #     self,
+    #     connections: ty.Union[
+    #         ty.Tuple[str, LazyField], ty.List[ty.Tuple[str, LazyField]]
+    #     ],
+    # ):
+    #     """
+    #     Set outputs of the workflow by linking them with lazy outputs of tasks
 
-        Parameters
-        ----------
-        connections : tuple[str, LazyField] or list[tuple[str, LazyField]] or None
-            single or list of tuples linking the name of the output to a lazy output
-            of a task in the workflow.
-        """
-        from pydra.utils.typing import TypeParser
+    #     Parameters
+    #     ----------
+    #     connections : tuple[str, LazyField] or list[tuple[str, LazyField]] or None
+    #         single or list of tuples linking the name of the output to a lazy output
+    #         of a task in the workflow.
+    #     """
+    #     from pydra.utils.typing import TypeParser
 
-        if self._connections is None:
-            self._connections = []
-        if isinstance(connections, tuple) and len(connections) == 2:
-            new_connections = [connections]
-        elif isinstance(connections, list) and all(
-            [len(el) == 2 for el in connections]
-        ):
-            new_connections = connections
-        elif isinstance(connections, dict):
-            new_connections = list(connections.items())
-        else:
-            raise TypeError(
-                "Connections can be a 2-elements tuple, a list of these tuples, or dictionary"
-            )
-        # checking if a new output name is already in the connections
-        connection_names = [name for name, _ in self._connections]
-        if self.output_spec:
-            output_types = {a.name: a.type for a in attr.fields(self.interface.Outputs)}
-        else:
-            output_types = {}
-        # Check for type matches with explicitly defined outputs
-        conflicting = []
-        type_mismatches = []
-        for conn_name, lazy_field in new_connections:
-            if conn_name in connection_names:
-                conflicting.append(conn_name)
-            try:
-                output_type = output_types[conn_name]
-            except KeyError:
-                pass
-            else:
-                if not TypeParser.matches_type(lazy_field.type, output_type):
-                    type_mismatches.append((conn_name, output_type, lazy_field.type))
-        if conflicting:
-            raise ValueError(f"the output names {conflicting} are already set")
-        if type_mismatches:
-            raise TypeError(
-                f"the types of the following outputs of {self} don't match their declared types: "
-                + ", ".join(
-                    f"{n} (expected: {ex}, provided: {p})"
-                    for n, ex, p in type_mismatches
-                )
-            )
-        self._connections += new_connections
-        fields = []
-        for con in self._connections:
-            wf_out_nm, lf = con
-            task_nm, task_out_nm = lf.name, lf.field
-            if task_out_nm == "all_":
-                help_string = f"all outputs from {task_nm}"
-                fields.append((wf_out_nm, dict, {"help_string": help_string}))
-            else:
-                from pydra.utils.typing import TypeParser
+    #     if self._connections is None:
+    #         self._connections = []
+    #     if isinstance(connections, tuple) and len(connections) == 2:
+    #         new_connections = [connections]
+    #     elif isinstance(connections, list) and all(
+    #         [len(el) == 2 for el in connections]
+    #     ):
+    #         new_connections = connections
+    #     elif isinstance(connections, dict):
+    #         new_connections = list(connections.items())
+    #     else:
+    #         raise TypeError(
+    #             "Connections can be a 2-elements tuple, a list of these tuples, or dictionary"
+    #         )
+    #     # checking if a new output name is already in the connections
+    #     connection_names = [name for name, _ in self._connections]
+    #     if self.output_spec:
+    #         output_types = {a.name: a.type for a in attr.fields(self.interface.Outputs)}
+    #     else:
+    #         output_types = {}
+    #     # Check for type matches with explicitly defined outputs
+    #     conflicting = []
+    #     type_mismatches = []
+    #     for conn_name, lazy_field in new_connections:
+    #         if conn_name in connection_names:
+    #             conflicting.append(conn_name)
+    #         try:
+    #             output_type = output_types[conn_name]
+    #         except KeyError:
+    #             pass
+    #         else:
+    #             if not TypeParser.matches_type(lazy_field.type, output_type):
+    #                 type_mismatches.append((conn_name, output_type, lazy_field.type))
+    #     if conflicting:
+    #         raise ValueError(f"the output names {conflicting} are already set")
+    #     if type_mismatches:
+    #         raise TypeError(
+    #             f"the types of the following outputs of {self} don't match their declared types: "
+    #             + ", ".join(
+    #                 f"{n} (expected: {ex}, provided: {p})"
+    #                 for n, ex, p in type_mismatches
+    #             )
+    #         )
+    #     self._connections += new_connections
+    #     fields = []
+    #     for con in self._connections:
+    #         wf_out_nm, lf = con
+    #         task_nm, task_out_nm = lf.name, lf.field
+    #         if task_out_nm == "all_":
+    #             help_string = f"all outputs from {task_nm}"
+    #             fields.append((wf_out_nm, dict, {"help_string": help_string}))
+    #         else:
+    #             from pydra.utils.typing import TypeParser
 
-                # getting information about the output field from the task output_spec
-                # providing proper type and some help string
-                task_output_spec = getattr(self, task_nm).output_spec
-                out_fld = attr.fields_dict(task_output_spec)[task_out_nm]
-                help_string = (
-                    f"{out_fld.metadata.get('help_string', '')} (from {task_nm})"
-                )
-                if TypeParser.get_origin(lf.type) is StateArray:
-                    type_ = TypeParser.get_item_type(lf.type)
-                else:
-                    type_ = lf.type
-                fields.append((wf_out_nm, type_, {"help_string": help_string}))
-        self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
-        logger.info("Added %s to %s", self.output_spec, self)
+    #             # getting information about the output field from the task output_spec
+    #             # providing proper type and some help string
+    #             task_output_spec = getattr(self, task_nm).output_spec
+    #             out_fld = attr.fields_dict(task_output_spec)[task_out_nm]
+    #             help_string = (
+    #                 f"{out_fld.metadata.get('help_string', '')} (from {task_nm})"
+    #             )
+    #             if TypeParser.get_origin(lf.type) is StateArray:
+    #                 type_ = TypeParser.get_item_type(lf.type)
+    #             else:
+    #                 type_ = lf.type
+    #             fields.append((wf_out_nm, type_, {"help_string": help_string}))
+    #     self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
+    #     logger.info("Added %s to %s", self.output_spec, self)
 
     def _collect_outputs(self):
         output_klass = self.interface.Outputs

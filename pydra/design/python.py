@@ -2,12 +2,12 @@ import typing as ty
 import inspect
 import attrs
 from pydra.engine.task import FunctionTask
+from pydra.engine.specs import TaskSpec
 from .base import (
     Arg,
     Out,
     ensure_field_objects,
     make_task_spec,
-    TaskSpec,
     parse_doc_string,
     extract_function_inputs_and_outputs,
     check_explicit_fields_are_none,

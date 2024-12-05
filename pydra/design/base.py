@@ -5,33 +5,35 @@ import re
 import enum
 from pathlib import Path
 from copy import copy
-from typing_extensions import Self
 import attrs.validators
 from attrs.converters import default_if_none
 from fileformats.generic import File
 from pydra.utils.typing import TypeParser, is_optional, is_fileset_or_union
-
-# from pydra.utils.misc import get_undefined_symbols
-from pydra.engine.helpers import from_list_if_single, ensure_list
-from pydra.engine.specs import (
-    LazyField,
+from pydra.engine.helpers import (
+    from_list_if_single,
+    ensure_list,
+    PYDRA_ATTR_METADATA,
+    list_fields,
+)
+from pydra.utils.typing import (
     MultiInputObj,
     MultiInputFile,
     MultiOutputObj,
     MultiOutputFile,
 )
-from pydra.engine.core import Task, AuditFlag
+from pydra.engine.workflow.lazy import LazyField
 
+
+if ty.TYPE_CHECKING:
+    from pydra.engine.specs import OutputsSpec
+    from pydra.engine.core import Task
 
 __all__ = [
     "Field",
     "Arg",
     "Out",
-    "TaskSpec",
-    "OutputsSpec",
     "ensure_field_objects",
     "make_task_spec",
-    "list_fields",
 ]
 
 RESERVED_OUTPUT_NAMES = ("split", "combine")
@@ -154,120 +156,6 @@ class Out(Field):
     pass
 
 
-class OutputsSpec:
-    """Base class for all output specifications"""
-
-    def split(
-        self,
-        splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None] = None,
-        /,
-        overwrite: bool = False,
-        cont_dim: ty.Optional[dict] = None,
-        **inputs,
-    ) -> Self:
-        """
-        Run this task parametrically over lists of split inputs.
-
-        Parameters
-        ----------
-        splitter : str or list[str] or tuple[str] or None
-            the fields which to split over. If splitting over multiple fields, lists of
-            fields are interpreted as outer-products and tuples inner-products. If None,
-            then the fields to split are taken from the keyword-arg names.
-        overwrite : bool, optional
-            whether to overwrite an existing split on the node, by default False
-        cont_dim : dict, optional
-            Container dimensions for specific inputs, used in the splitter.
-            If input name is not in cont_dim, it is assumed that the input values has
-            a container dimension of 1, so only the most outer dim will be used for splitting.
-        **inputs
-            fields to split over, will automatically be wrapped in a StateArray object
-            and passed to the node inputs
-
-        Returns
-        -------
-        self : TaskBase
-            a reference to the task
-        """
-        self._node.split(splitter, overwrite=overwrite, cont_dim=cont_dim, **inputs)
-        return self
-
-    def combine(
-        self,
-        combiner: ty.Union[ty.List[str], str],
-        overwrite: bool = False,  # **kwargs
-    ) -> Self:
-        """
-        Combine inputs parameterized by one or more previous tasks.
-
-        Parameters
-        ----------
-        combiner : list[str] or str
-            the field or list of inputs to be combined (i.e. not left split) after the
-            task has been run
-        overwrite : bool
-            whether to overwrite an existing combiner on the node
-        **kwargs : dict[str, Any]
-            values for the task that will be "combined" before they are provided to the
-            node
-
-        Returns
-        -------
-        self : Self
-            a reference to the outputs object
-        """
-        self._node.combine(combiner, overwrite=overwrite)
-        return self
-
-
-OutputType = ty.TypeVar("OutputType", bound=OutputsSpec)
-
-
-class TaskSpec(ty.Generic[OutputType]):
-    """Base class for all task specifications"""
-
-    Task: ty.Type[Task]
-
-    def __call__(
-        self,
-        name: str | None = None,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        cache_dir=None,
-        cache_locations=None,
-        inputs: ty.Text | File | dict[str, ty.Any] | None = None,
-        cont_dim=None,
-        messenger_args=None,
-        messengers=None,
-        rerun=False,
-        **kwargs,
-    ):
-        self._check_for_unset_values()
-        task = self.Task(
-            self,
-            name=name,
-            audit_flags=audit_flags,
-            cache_dir=cache_dir,
-            cache_locations=cache_locations,
-            inputs=inputs,
-            cont_dim=cont_dim,
-            messenger_args=messenger_args,
-            messengers=messengers,
-            rerun=rerun,
-        )
-        return task(**kwargs)
-
-    def _check_for_unset_values(self):
-        if unset := [
-            k
-            for k, v in attrs.asdict(self, recurse=False).items()
-            if v is attrs.NOTHING
-        ]:
-            raise ValueError(
-                f"The following values {unset} in the {self!r} interface need to be set "
-                "before the workflow can be constructed"
-            )
-
-
 def extract_fields_from_class(
     klass: type,
     arg_type: type[Arg],
@@ -352,7 +240,7 @@ def extract_fields_from_class(
 
 
 def make_task_spec(
-    task_type: type[Task],
+    task_type: type["Task"],
     inputs: dict[str, Arg],
     outputs: dict[str, Out],
     klass: type | None = None,
@@ -389,6 +277,8 @@ def make_task_spec(
     klass : type
         The class created using the attrs package
     """
+    from pydra.engine.specs import TaskSpec
+
     if name is None and klass is not None:
         name = klass.__name__
     outputs_klass = make_outputs_spec(outputs, outputs_bases, name)
@@ -457,7 +347,7 @@ def make_task_spec(
 
 def make_outputs_spec(
     outputs: dict[str, Out], bases: ty.Sequence[type], spec_name: str
-) -> type[OutputsSpec]:
+) -> type["OutputsSpec"]:
     """Create an outputs specification class and its outputs specification class from the
     output fields provided to the decorator/function.
 
@@ -478,6 +368,8 @@ def make_outputs_spec(
     klass : type
         The class created using the attrs package
     """
+    from pydra.engine.specs import OutputsSpec
+
     if not any(issubclass(b, OutputsSpec) for b in bases):
         outputs_bases = bases + (OutputsSpec,)
     if reserved_names := [n for n in outputs if n in RESERVED_OUTPUT_NAMES]:
@@ -880,16 +772,6 @@ def split_block(string: str) -> ty.Generator[str, None, None]:
         yield block.strip()
 
 
-def list_fields(interface: TaskSpec) -> list[Field]:
-    if not attrs.has(interface):
-        return []
-    return [
-        f.metadata[PYDRA_ATTR_METADATA]
-        for f in attrs.fields(interface)
-        if PYDRA_ATTR_METADATA in f.metadata
-    ]
-
-
 def check_explicit_fields_are_none(klass, inputs, outputs):
     if inputs is not None:
         raise ValueError(
@@ -918,5 +800,3 @@ def nothing_factory():
 
 
 white_space_re = re.compile(r"\s+")
-
-PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"

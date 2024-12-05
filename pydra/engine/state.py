@@ -3,10 +3,11 @@
 from copy import deepcopy
 import itertools
 from functools import reduce
-
+import attrs
 from . import helpers_state as hlpst
 from .helpers import ensure_list
-from .specs import BaseSpec
+
+# from .specs import BaseSpec
 
 # TODO: move to State
 op = {".": zip, "*": itertools.product}
@@ -763,8 +764,8 @@ class State:
             self.cont_dim = cont_dim
         else:
             self.cont_dim = {}
-        if isinstance(inputs, BaseSpec):
-            self.inputs = hlpst.inputs_types_to_dict(self.name, inputs)
+        if attrs.has(inputs):
+            self.inputs = attrs.asdict(inputs, recurse=False)
         else:
             self.inputs = inputs
         if self.other_states:

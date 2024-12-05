@@ -3,7 +3,8 @@ import typing as ty
 from decimal import Decimal
 import attrs
 import pytest
-from pydra.design import list_fields, TaskSpec
+from pydra.engine.helpers import list_fields
+from pydra.engine.specs import TaskSpec
 from pydra.design import python
 from pydra.engine.task import FunctionTask
 

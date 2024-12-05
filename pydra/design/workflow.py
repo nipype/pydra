@@ -2,18 +2,18 @@ import typing as ty
 import inspect
 import attrs
 from pydra.engine.core import WorkflowTask
-from pydra.engine.workflow import Workflow
+from pydra.engine.workflow.base import Workflow
 from .base import (
     Arg,
     Out,
     ensure_field_objects,
     make_task_spec,
-    TaskSpec,
     parse_doc_string,
     extract_function_inputs_and_outputs,
     check_explicit_fields_are_none,
     extract_fields_from_class,
 )
+from pydra.engine.specs import TaskSpec
 
 
 __all__ = ["define", "add", "this", "arg", "out"]
@@ -94,7 +94,8 @@ def define(
     auto_attribs: bool = True,
 ) -> TaskSpec:
     """
-    Create an interface for a function or a class.
+    Create an interface for a function or a class. Can be used either as a decorator on
+    a constructor function or the "canonical" dataclass-form of a task specification.
 
     Parameters
     ----------
@@ -106,6 +107,11 @@ def define(
         The outputs of the function or class.
     auto_attribs : bool
         Whether to use auto_attribs mode when creating the class.
+
+    Returns
+    -------
+    TaskSpec
+        The interface for the function or class.
     """
     if lazy is None:
         lazy = []
@@ -170,10 +176,30 @@ OutputType = ty.TypeVar("OutputType")
 
 
 def this() -> Workflow:
-    """Get the workflow currently being constructed."""
+    """Get the workflow currently being constructed.
+
+    Returns
+    -------
+    Workflow
+        The workflow currently being constructed.
+    """
     return Workflow.under_construction
 
 
 def add(task_spec: TaskSpec[OutputType], name: str = None) -> OutputType:
-    """Add a task to the current workflow."""
+    """Add a node to the workflow currently being constructed
+
+    Parameters
+    ----------
+    task_spec : TaskSpec
+        The specification of the task to add to the workflow as a node
+    name : str, optional
+        The name of the node, by default it will be the name of the task specification
+        class
+
+    Returns
+    -------
+    OutputType
+        The outputs specification of the node
+    """
     return this().add(task_spec, name=name)

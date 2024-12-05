@@ -7,21 +7,37 @@ import os
 import sys
 from uuid import uuid4
 import getpass
+import typing as ty
 import subprocess as sp
 import re
 from time import strftime
 from traceback import format_exception
-import attr
+import attrs
 from filelock import SoftFileLock, Timeout
 import cloudpickle as cp
-from .specs import (
-    Runtime,
-    attr_fields,
-    Result,
-    LazyField,
-)
 from .helpers_file import copy_nested_files
 from fileformats.core import FileSet
+
+if ty.TYPE_CHECKING:
+    from .specs import TaskSpec
+    from pydra.design.base import Field
+
+
+PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
+
+
+def attr_fields(spec, exclude_names=()):
+    return [field for field in spec.__attrs_attrs__ if field.name not in exclude_names]
+
+
+def list_fields(interface: "TaskSpec") -> list["Field"]:
+    if not attrs.has(interface):
+        return []
+    return [
+        f.metadata[PYDRA_ATTR_METADATA]
+        for f in attrs.fields(interface)
+        if PYDRA_ATTR_METADATA in f.metadata
+    ]
 
 
 # from .specs import MultiInputFile, MultiInputObj, MultiOutputObj, MultiOutputFile
@@ -29,7 +45,9 @@ from fileformats.core import FileSet
 
 def from_list_if_single(obj):
     """Converts a list to a single item if it is of length == 1"""
-    if obj is attr.NOTHING:
+    from pydra.engine.workflow.lazy import LazyField
+
+    if obj is attrs.NOTHING:
         return obj
     if isinstance(obj, LazyField):
         return obj
@@ -42,11 +60,11 @@ def from_list_if_single(obj):
 def print_help(obj):
     """Visit a task object and print its input/output interface."""
     lines = [f"Help for {obj.__class__.__name__}"]
-    if attr.fields(obj.interface):
+    if attrs.fields(obj.interface):
         lines += ["Input Parameters:"]
-    for f in attr.fields(obj.interface):
+    for f in attrs.fields(obj.interface):
         default = ""
-        if f.default != attr.NOTHING and not f.name.startswith("_"):
+        if f.default != attrs.NOTHING and not f.name.startswith("_"):
             default = f" (default: {f.default})"
         try:
             name = f.type.__name__
@@ -54,9 +72,9 @@ def print_help(obj):
             name = str(f.type)
         lines += [f"- {f.name}: {name}{default}"]
     output_klass = obj.interface.Outputs
-    if attr.fields(output_klass):
+    if attrs.fields(output_klass):
         lines += ["Output Parameters:"]
-    for f in attr.fields(output_klass):
+    for f in attrs.fields(output_klass):
         try:
             name = f.type.__name__
         except AttributeError:
@@ -154,6 +172,8 @@ def gather_runtime_info(fname):
         A runtime object containing the collected information.
 
     """
+    from .specs import Runtime
+
     runtime = Runtime(rss_peak_gb=None, vms_peak_gb=None, cpu_peak_percent=None)
 
     # Read .prof file in and set runtime values
@@ -370,9 +390,9 @@ def get_open_loop():
 #         TODO
 
 #     """
-#     current_output_spec_names = [f.name for f in attr.fields(interface.Outputs)]
+#     current_output_spec_names = [f.name for f in attrs.fields(interface.Outputs)]
 #     new_fields = []
-#     for fld in attr.fields(interface):
+#     for fld in attrs.fields(interface):
 #         if "output_file_template" in fld.metadata:
 #             if "output_field_name" in fld.metadata:
 #                 field_name = fld.metadata["output_field_name"]
@@ -382,7 +402,7 @@ def get_open_loop():
 #             if field_name not in current_output_spec_names:
 #                 # TODO: should probably remove some of the keys
 #                 new_fields.append(
-#                     (field_name, attr.ib(type=File, metadata=fld.metadata))
+#                     (field_name, attrs.field(type=File, metadata=fld.metadata))
 #                 )
 #     output_spec.fields += new_fields
 #     return output_spec
@@ -423,6 +443,9 @@ def load_and_run(
     loading a task from a pickle file, settings proper input
     and running the task
     """
+
+    from .specs import Result
+
     try:
         task = load_task(task_pkl=task_pkl, ind=ind)
     except Exception:
@@ -470,7 +493,7 @@ def load_task(task_pkl, ind=None):
     task = cp.loads(task_pkl.read_bytes())
     if ind is not None:
         ind_inputs = task.get_input_el(ind)
-        task.inputs = attr.evolve(task.inputs, **ind_inputs)
+        task.inputs = attrs.evolve(task.inputs, **ind_inputs)
         task._pre_split = True
         task.state = None
         # resetting uid for task
@@ -540,7 +563,7 @@ class PydraFileLock:
         return None
 
 
-def parse_copyfile(fld: attr.Attribute, default_collation=FileSet.CopyCollation.any):
+def parse_copyfile(fld: attrs.Attribute, default_collation=FileSet.CopyCollation.any):
     """Gets the copy mode from the 'copyfile' value from a field attribute"""
     copyfile = fld.metadata.get("copyfile", FileSet.CopyMode.any)
     if isinstance(copyfile, tuple):
@@ -580,7 +603,7 @@ def parse_format_string(fmtstr):
     identifier = r"[a-zA-Z_]\w*"
     attribute = rf"\.{identifier}"
     item = r"\[\w+\]"
-    # Example: var.attr[key][0].attr2 (capture "var")
+    # Example: var.attrs[key][0].attr2 (capture "var")
     field_with_lookups = (
         f"({identifier})(?:{attribute}|{item})*"  # Capture only the keyword
     )
@@ -614,8 +637,10 @@ def ensure_list(obj, tuple2list=False):
     [5.0]
 
     """
-    if obj is attr.NOTHING:
-        return attr.NOTHING
+    from pydra.engine.workflow.lazy import LazyField
+
+    if obj is attrs.NOTHING:
+        return attrs.NOTHING
     if obj is None:
         return []
     # list or numpy.array (this might need some extra flag in case an array has to be converted)

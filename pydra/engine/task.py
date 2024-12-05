@@ -55,10 +55,11 @@ from fileformats.core import FileSet, DataType
 from .core import Task, is_lazy
 from pydra.utils.messenger import AuditFlag
 from .specs import (
-    BaseSpec,
-    SpecInfo,
+    # BaseSpec,
+    # SpecInfo,
     # ShellSpec,
     # ShellOutSpec,
+    TaskSpec,
     attr_fields,
 )
 from .helpers import (
@@ -78,16 +79,14 @@ class FunctionTask(Task):
 
     def __init__(
         self,
-        func: ty.Callable,
+        spec: TaskSpec,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
-        input_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
         cont_dim=None,
         messenger_args=None,
         messengers=None,
         name=None,
-        output_spec: ty.Optional[ty.Union[SpecInfo, BaseSpec]] = None,
         rerun=False,
         **kwargs,
     ):
@@ -226,14 +225,13 @@ class ShellCommandTask(Task):
 
     def __init__(
         self,
+        spec: TaskSpec,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
-        input_spec: ty.Optional[SpecInfo] = None,
         cont_dim=None,
         messenger_args=None,
         messengers=None,
         name=None,
-        output_spec: ty.Optional[SpecInfo] = None,
         rerun=False,
         strip=False,
         environment=Native(),

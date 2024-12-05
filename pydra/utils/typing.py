@@ -8,14 +8,8 @@ import types
 import typing as ty
 import logging
 import attr
-from pydra.engine.specs import (
-    LazyField,
-    StateArray,
-    MultiInputObj,
-    MultiOutputObj,
-)
 from pydra.utils import add_exc_note
-from fileformats import field, core
+from fileformats import field, core, generic
 
 try:
     from typing import get_origin, get_args
@@ -44,6 +38,45 @@ else:
 
 T = ty.TypeVar("T")
 TypeOrAny = ty.Union[type, ty.Any]
+
+
+# These are special types that are checked for in the construction of input/output specs
+# and special converters inserted into the attrs fields.
+
+
+class MultiInputObj(list, ty.Generic[T]):
+    pass
+
+
+MultiInputFile = MultiInputObj[generic.File]
+
+
+# Since we can't create a NewType from a type union, we add a dummy type to the union
+# so we can detect the MultiOutput in the input/output spec creation
+class MultiOutputType:
+    pass
+
+
+MultiOutputObj = ty.Union[list, object, MultiOutputType]
+MultiOutputFile = ty.Union[generic.File, ty.List[generic.File], MultiOutputType]
+
+OUTPUT_TEMPLATE_TYPES = (
+    Path,
+    ty.List[Path],
+    ty.Union[Path, bool],
+    ty.Union[ty.List[Path], bool],
+    ty.List[ty.List[Path]],
+)
+
+
+class StateArray(ty.List[T]):
+    """an array of values from, or to be split over in an array of nodes (see TaskBase.split()),
+    multiple nodes of the same task. Used in type-checking to differentiate between list
+    types and values for multiple nodes
+    """
+
+    def __repr__(self):
+        return f"{type(self).__name__}(" + ", ".join(repr(i) for i in self) + ")"
 
 
 class TypeParser(ty.Generic[T]):
@@ -159,7 +192,7 @@ class TypeParser(ty.Generic[T]):
         self.superclass_auto_cast = superclass_auto_cast
         self.match_any_of_union = match_any_of_union
 
-    def __call__(self, obj: ty.Any) -> ty.Union[T, LazyField[T]]:
+    def __call__(self, obj: ty.Any) -> T:
         """Attempts to coerce the object to the specified type, unless the value is
         a LazyField where the type of the field is just checked instead or an
         attrs.NOTHING where it is simply returned.
@@ -180,6 +213,8 @@ class TypeParser(ty.Generic[T]):
             if the coercion is not possible, or not specified by the
             `coercible`/`not_coercible` parameters, then a TypeError is raised
         """
+        from pydra.engine.workflow.lazy import LazyField
+
         coerced: T
         if obj is attr.NOTHING:
             coerced = attr.NOTHING  # type: ignore[assignment]

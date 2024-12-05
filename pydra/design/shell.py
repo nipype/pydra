@@ -11,19 +11,19 @@ import builtins
 from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
+from pydra.engine.specs import TaskSpec
 from .base import (
     Arg,
     Out,
     check_explicit_fields_are_none,
     extract_fields_from_class,
     ensure_field_objects,
-    TaskSpec,
     make_task_spec,
     EMPTY,
 )
-from pydra.utils.typing import is_fileset_or_union
-from pydra.engine.specs import MultiInputObj
+from pydra.utils.typing import is_fileset_or_union, MultiInputObj
 from pydra.engine.task import ShellCommandTask
+
 
 __all__ = ["arg", "out", "outarg", "define"]
 
@@ -180,7 +180,6 @@ class outarg(Out, arg):
         If provided, the field is treated also as an output field and it is added to
         the output spec. The template can use other fields, e.g. {file1}. Used in order
         to create an output specification.
-
     """
 
     path_template: str | None = attrs.field(default=None)
@@ -204,7 +203,35 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
 ) -> TaskSpec:
-    """Create a shell command interface
+    """Create a task specification for a shell command. Can be used either as a decorator on
+    the "canonical" dataclass-form of a task specification or as a function that takes a
+    "shell-command template string" of the form
+
+    ```
+    shell.define("command <input1> <input2> --output <out|output1>")
+    ```
+
+    Fields are inferred from the template if not provided. In the template, inputs are
+    specified with `<fieldname>` and outputs with `<out:fieldname>`.
+
+    ```
+    my_command <myinput> <out|myoutput2>
+    ```
+
+    The types of the fields can be specified using their MIME like (see fileformats.core.from_mime), e.g.
+
+    ```
+    my_command <myinput:text/csv> <out|myoutput2:image/png>
+    ```
+
+    The template can also specify options with `-` or `--` followed by the option name
+    and arguments with `<argname:type>`. The type is optional and will default to
+    `generic/fs-object` if not provided for arguments and `field/text` for
+    options. The file-formats namespace can be dropped for generic and field formats, e.g.
+
+    ```
+    another-command <input1:directory> <input2:int> --output <out|output1:text/csv>
+    ```
 
     Parameters
     ----------
@@ -221,6 +248,11 @@ def define(
         as they appear in the template
     name: str | None
         The name of the returned class
+
+    Returns
+    -------
+    TaskSpec
+        The interface for the shell command
     """
 
     def make(
@@ -331,9 +363,10 @@ def parse_command_line_template(
     outputs: list[str | Out] | dict[str, Out | type] | None = None,
 ) -> ty.Tuple[str, dict[str, Arg | type], dict[str, Out | type]]:
     """Parses a command line template into a name and input and output fields. Fields
-    are inferred from the template if not provided, where inputs are specified with `<fieldname>`
-    and outputs with `<out:fieldname>`. The types of the fields can be specified using their
-    MIME like (see fileformats.core.from_mime), e.g.
+    are inferred from the template if not explicitly provided.
+
+    In the template, inputs are specified with `<fieldname>` and outputs with `<out:fieldname>`.
+    The types of the fields can be specified using their MIME like (see fileformats.core.from_mime), e.g.
 
     ```
     my_command <myinput> <out|myoutput2>
@@ -345,7 +378,7 @@ def parse_command_line_template(
     options. The file-formats namespace can be dropped for generic and field formats, e.g.
 
     ```
-    another-command <input1:directory> <input2:integer> --output <out|output1:text/csv>
+    another-command <input1:directory> <input2:int> --output <out|output1:text/csv>
     ```
 
     Parameters
@@ -365,6 +398,13 @@ def parse_command_line_template(
         The input fields of the command line template
     outputs : dict[str, Out | type]
         The output fields of the command line template
+
+    Raises
+    ------
+    ValueError
+        If an unknown token is found in the command line template
+    TypeError
+        If an unknown type is found in the command line template
     """
     if isinstance(inputs, list):
         inputs = {arg.name: arg for arg in inputs}
@@ -437,9 +477,9 @@ def parse_command_line_template(
                     try:
                         type_ = from_mime(f"generic/{tp}")
                     except FormatRecognitionError:
-                        raise ValueError(
+                        raise TypeError(
                             f"Found unknown type, {tp!r}, in command template: {template!r}"
-                        )
+                        ) from None
             types.append(type_)
         if len(types) == 2 and types[1] == "...":
             type_ = MultiInputObj[types[0]]
