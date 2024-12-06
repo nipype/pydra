@@ -77,7 +77,7 @@ class Workflow(ty.Generic[OutputType]):
                 lazy_spec,
                 lzy_inpt.name,
                 LazyInField(
-                    node=wf,
+                    workflow=wf,
                     field=lzy_inpt.name,
                     type=lzy_inpt.type,
                 ),

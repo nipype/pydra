@@ -9,18 +9,36 @@ from pydra.engine.helpers import list_fields
 from pydra.engine.specs import TaskSpec
 from fileformats import video, image
 
+# NB: We use PascalCase for interfaces and workflow functions as it is translated into a class
+
+
+@python.define
+def Add(a, b):
+    return a + b
+
+
+@python.define
+def Mul(a, b):
+    return a * b
+
+
+@python.define(outputs=["divided"])
+def Divide(x, y):
+    return x / y
+
+
+@python.define
+def Sum(x: list[float]) -> float:
+    return sum(x)
+
+
+def a_converter(value):
+    if value is attrs.NOTHING:
+        return value
+    return float(value)
+
 
 def test_workflow():
-
-    # NB: We use PascalCase (i.e. class names) as it is translated into a class
-
-    @python.define
-    def Add(a, b):
-        return a + b
-
-    @python.define
-    def Mul(a, b):
-        return a * b
 
     @workflow.define
     def MyTestWorkflow(a, b):
@@ -109,7 +127,7 @@ def test_shell_workflow():
     assert wf.inputs.input_video == input_video
     assert wf.inputs.watermark == watermark
     assert wf.outputs.output_video == LazyOutField(
-        node=wf["resize"], field="out_video", type=video.Mp4
+        node=wf["resize"], field="out_video", type=video.Mp4, type_checked=True
     )
     assert list(wf.node_names) == ["add_watermark", "resize"]
 
@@ -118,19 +136,6 @@ def test_workflow_canonical():
     """Test class-based workflow definition"""
 
     # NB: We use PascalCase (i.e. class names) as it is translated into a class
-
-    @python.define
-    def Add(a, b):
-        return a + b
-
-    @python.define
-    def Mul(a, b):
-        return a * b
-
-    def a_converter(value):
-        if value is attrs.NOTHING:
-            return value
-        return float(value)
 
     @workflow.define
     class MyTestWorkflow(TaskSpec["MyTestWorkflow.Outputs"]):
@@ -220,10 +225,10 @@ def test_workflow_lazy():
     )
     wf = Workflow.construct(workflow_spec)
     assert wf["add_watermark"].inputs.in_video == LazyInField(
-        node=wf, field="input_video", type=video.Mp4
+        workflow=wf, field="input_video", type=video.Mp4, type_checked=True
     )
     assert wf["add_watermark"].inputs.watermark == LazyInField(
-        node=wf, field="watermark", type=image.Png
+        workflow=wf, field="watermark", type=image.Png, type_checked=True
     )
 
 
@@ -235,10 +240,6 @@ def test_direct_access_of_workflow_object():
 
     def Mul(x, y):
         return x * y
-
-    @python.define(outputs=["divided"])
-    def Divide(x, y):
-        return x / y
 
     @workflow.define(outputs=["out1", "out2"])
     def MyTestWorkflow(a: int, b: float) -> tuple[float, float]:
@@ -279,7 +280,9 @@ def test_direct_access_of_workflow_object():
     wf = Workflow.construct(workflow_spec)
     assert wf.inputs.a == 1
     assert wf.inputs.b == 2.0
-    assert wf.outputs.out1 == LazyOutField(node=wf["Mul"], field="out", type=float)
+    assert wf.outputs.out1 == LazyOutField(
+        node=wf["Mul"], field="out", type=float, type_checked=True
+    )
     assert wf.outputs.out2 == LazyOutField(
         node=wf["division"], field="divided", type=ty.Any
     )
@@ -287,14 +290,6 @@ def test_direct_access_of_workflow_object():
 
 
 def test_workflow_set_outputs_directly():
-
-    @python.define
-    def Add(a, b):
-        return a + b
-
-    @python.define
-    def Mul(a, b):
-        return a * b
 
     @workflow.define(outputs={"out1": float, "out2": float})
     def MyTestWorkflow(a: int, b: float):
@@ -362,10 +357,6 @@ def test_workflow_split_combine2():
     def Add(x: float, y: float) -> float:
         return x + y
 
-    @python.define
-    def Sum(x: list[float]) -> float:
-        return sum(x)
-
     @workflow.define
     def MyTestWorkflow(a: list[int], b: list[float], c: float) -> list[float]:
         mul = workflow.add(Mul()).split(x=a, y=b)
@@ -387,11 +378,11 @@ def test_workflow_split_after_access_fail():
     """
 
     @python.define
-    def Add(x, y):
+    def Add(x: float, y: float) -> float:
         return x + y
 
     @python.define
-    def Mul(x, y):
+    def Mul(x: float, y: float) -> float:
         return x * y
 
     @workflow.define

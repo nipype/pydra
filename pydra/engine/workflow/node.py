@@ -1,19 +1,24 @@
 import typing as ty
-from copy import copy, deepcopy
-from operator import itemgetter
-from typing_extensions import Self
+from copy import deepcopy
+from enum import Enum
 import attrs
-from pydra.utils.hash import hash_function
 from pydra.utils.typing import TypeParser, StateArray
 from . import lazy
 from ..specs import TaskSpec, OutputsSpec
+from ..helpers import ensure_list
 from .. import helpers_state as hlpst
-from ..helpers import ensure_list, list_fields
-from .. import state
+from ..state import State
+
+if ty.TYPE_CHECKING:
+    from .base import Workflow
 
 
 OutputType = ty.TypeVar("OutputType", bound=OutputsSpec)
 Splitter = ty.Union[str, ty.Tuple[str, ...]]
+
+_not_set = Enum("_not_set", "NOT_SET")
+
+NOT_SET = _not_set.NOT_SET
 
 
 @attrs.define
@@ -34,15 +39,18 @@ class Node(ty.Generic[OutputType]):
     _lzout: OutputType | None = attrs.field(
         init=False, default=None, eq=False, hash=False
     )
-    _state: state.State | None = attrs.field(init=False, default=None)
+    _state: State | None = attrs.field(init=False, default=NOT_SET)
     _cont_dim: dict[str, int] | None = attrs.field(
+        init=False, default=None
+    )  # QUESTION: should this be included in the state?
+    _inner_cont_dim: dict[str, int] | None = attrs.field(
         init=False, default=None
     )  # QUESTION: should this be included in the state?
 
     class Inputs:
         """A class to wrap the inputs of a node and control access to them so lazy fields
-        that will change the downstream state aren't set after the node has been split,
-        combined or its outputs accessed
+        that will change the downstream state (i.e. with new splits) aren't set after
+        the node has been split, combined or its outputs accessed.
         """
 
         _node: "Node"
@@ -55,20 +63,51 @@ class Node(ty.Generic[OutputType]):
 
         def __setattr__(self, name: str, value: ty.Any) -> None:
             if isinstance(value, lazy.LazyField):
-                if self._node.state:
-
-                    raise AttributeError(
-                        "Cannot set inputs on a node that has been split or combined"
+                # Save the current state for comparison later
+                prev_state = self._node.state
+                if value.node.state:
+                    # Reset the state to allow the lazy field to be set
+                    self._node._state = NOT_SET
+                setattr(self._node._spec, name, value)
+                if value.node.state and self._node.state != prev_state:
+                    self._node._check_if_outputs_have_been_used(
+                        f"cannot set {name!r} input to {value} because it changes the "
+                        f"state of the node from {prev_state} to {value.node.state}"
                     )
-            setattr(self._node._spec, name, value)
-
-    @property
-    def state(self):
-        return self._state
 
     @property
     def inputs(self) -> Inputs:
         return self.Inputs(self)
+
+    @property
+    def state(self):
+        if self._state is not NOT_SET:
+            return self._state
+        upstream_states = {}
+        for inpt_name, val in self.input_values:
+            if isinstance(val, lazy.LazyOutField) and val.node.state:
+                node: Node = val.node
+                # variables that are part of inner splitters should be treated as a containers
+                if node.state and f"{node.name}.{inpt_name}" in node.state.splitter:
+                    node._inner_cont_dim[f"{node.name}.{inpt_name}"] = 1
+                # adding task_name: (task.state, [a field from the connection]
+                if node.name not in upstream_states:
+                    upstream_states[node.name] = (node.state, [inpt_name])
+                else:
+                    # if the task already exist in other_state,
+                    # additional field name should be added to the list of fields
+                    upstream_states[node.name][1].append(inpt_name)
+        if upstream_states:
+            state = State(
+                node.name,
+                splitter=None,
+                other_states=upstream_states,
+                combiner=None,
+            )
+        else:
+            state = None
+        self._state = state
+        return state
 
     @property
     def input_values(self) -> tuple[tuple[str, ty.Any]]:
@@ -81,22 +120,12 @@ class Node(ty.Generic[OutputType]):
         """The output spec of the node populated with lazy fields"""
         if self._lzout is not None:
             return self._lzout
-        combined_splitter = set()
-        for inpt_name, inpt_val in self.input_values:
-            if isinstance(inpt_val, lazy.LazyField):
-                combined_splitter.update(inpt_val.splits)
         lazy_fields = {}
         for field in list_fields(self.inputs.Outputs):
-            type_ = field.type
-            # Wrap types of lazy outputs in StateArray types if the input fields are split
-            # over state values
-            for _ in range(len(combined_splitter)):
-                type_ = StateArray[type_]
             lazy_fields[field.name] = lazy.LazyOutField(
                 node=self,
                 field=field.name,
-                type=type_,
-                splits=frozenset(iter(combined_splitter)),
+                type=field.type,
             )
         outputs = self.inputs.Outputs(**lazy_fields)
         # Flag the output lazy fields as being not typed checked (i.e. assigned to another
@@ -105,6 +134,7 @@ class Node(ty.Generic[OutputType]):
             outpt.type_checked = False
         outputs._node = self
         self._lzout = outputs
+        self._wrap_lzout_types_in_state_arrays()
         return outputs
 
     def split(
@@ -187,14 +217,7 @@ class Node(ty.Generic[OutputType]):
         if not self._state or splitter != self._state.splitter:
             self._set_state(splitter)
         # Wrap types of lazy outputs in StateArray types
-        split_depth = len(self._normalize_splitter(splitter))
-        outpt_lf: lazy.LazyOutField
-        for outpt_lf in attrs.asdict(self.lzout, recurse=False).values():
-            assert not outpt_lf.type_checked
-            outpt_type = outpt_lf.type
-            for d in range(split_depth):
-                outpt_type = StateArray[outpt_type]
-            outpt_lf.type = outpt_type
+        self._wrap_lzout_types_in_state_arrays()
         return self
 
     def combine(
@@ -249,24 +272,7 @@ class Node(ty.Generic[OutputType]):
             )
         else:  # self.state and not self.state.combiner
             self._set_state(splitter=self._state.splitter, combiner=combiner)
-        # Wrap types of lazy outputs in StateArray types
-        norm_splitter = self._normalize_splitter(self._state.splitter)
-        remaining_splits = [
-            s for s in norm_splitter if not any(c in s for c in combiner)
-        ]
-        combine_depth = len(norm_splitter) - len(remaining_splits)
-        outpt_lf: lazy.LazyOutField
-        for outpt_lf in attrs.asdict(self.lzout, recurse=False).values():
-            assert not outpt_lf.type_checked
-            outpt_type, split_depth = TypeParser.strip_splits(outpt_lf.type)
-            assert split_depth >= combine_depth, (
-                f"Attempting to combine a field that has not been split enough times: "
-                f"{outpt_lf.name} ({outpt_lf.type}), {self._state.splitter} -> {combiner}"
-            )
-            outpt_lf.type = list[outpt_type]
-            for _ in range(split_depth - combine_depth):
-                outpt_lf.type = StateArray[outpt_lf.type]
-            outpt_lf.splits = frozenset(iter(remaining_splits))
+        self._wrap_lzout_types_in_state_arrays()
         return self
 
     def _set_state(self, splitter, combiner=None):
@@ -284,9 +290,7 @@ class Node(ty.Generic[OutputType]):
             task has been run
         """
         if splitter is not None:
-            self._state = state.State(
-                name=self.name, splitter=splitter, combiner=combiner
-            )
+            self._state = State(name=self.name, splitter=splitter, combiner=combiner)
         else:
             self._state = None
         return self._state
@@ -332,173 +336,40 @@ class Node(ty.Generic[OutputType]):
                 + msg
             )
 
-    @classmethod
-    def _normalize_splitter(
-        cls, splitter: Splitter, strip_previous: bool = True
-    ) -> ty.Tuple[ty.Tuple[str, ...], ...]:
-        """Converts the splitter spec into a consistent tuple[tuple[str, ...], ...] form
-        used in LazyFields"""
-        if isinstance(splitter, str):
-            splitter = (splitter,)
-        if isinstance(splitter, tuple):
-            splitter = (splitter,)  # type: ignore
-        else:
-            assert isinstance(splitter, list)
-            # convert to frozenset to differentiate from tuple, yet still be hashable
-            # (NB: order of fields in list splitters aren't relevant)
-            splitter = tuple((s,) if isinstance(s, str) else s for s in splitter)
-        # Strip out fields starting with "_" designating splits in upstream nodes
-        if strip_previous:
-            stripped = tuple(
-                tuple(f for f in i if not f.startswith("_")) for i in splitter
-            )
-            splitter = tuple(s for s in stripped if s)  # type: ignore
-        return splitter  # type: ignore
+    def _wrap_lzout_types_in_state_arrays(self) -> None:
+        """Wraps a types of the lazy out fields in a number of nested StateArray types
+        based on the number of states the node is split over"""
+        # Unwrap StateArray types from the output types
+        if not self.state:
+            return
+        outpt_lf: lazy.LazyOutField
+        state_depth = len(self.state.splitter_rpn)
+        for outpt_lf in attrs.asdict(self.lzout, recurse=False).values():
+            assert not outpt_lf.type_checked
+            type_, _ = TypeParser.strip_splits(outpt_lf.type)
+            for _ in range(state_depth):
+                type_ = StateArray[type_]
+            outpt_lf.type = type_
 
-
-@attrs.define(auto_attribs=False)
-class Workflow(ty.Generic[OutputType]):
-    """A workflow, constructed from a workflow specification
-
-    Parameters
-    ----------
-    name : str
-        The name of the workflow
-    inputs : TaskSpec
-        The input specification of the workflow
-    outputs : TaskSpec
-        The output specification of the workflow
-    """
-
-    name: str = attrs.field()
-    inputs: TaskSpec[OutputType] = attrs.field()
-    outputs: OutputType = attrs.field()
-    _nodes: dict[str, Node] = attrs.field(factory=dict)
-
-    @classmethod
-    def construct(
-        cls,
-        spec: TaskSpec[OutputType],
-    ) -> Self:
-        """Construct a workflow from a specification, caching the constructed worklow"""
-
-        lazy_inputs = [f for f in list_fields(type(spec)) if f.lazy]
-
-        # Create a cache key by hashing all the non-lazy input values in the spec
-        # and use this to store the constructed workflow in case it is reused or nested
-        # and split over within another workflow
-        lazy_input_names = {f.name for f in lazy_inputs}
-        non_lazy_vals = tuple(
-            sorted(
-                (
-                    i
-                    for i in attrs.asdict(spec, recurse=False).items()
-                    if i[0] not in lazy_input_names
-                ),
-                key=itemgetter(0),
-            )
-        )
-        hash_key = hash_function(non_lazy_vals)
-        if hash_key in cls._constructed:
-            return cls._constructed[hash_key]
-
-        # Initialise the outputs of the workflow
-        outputs = spec.Outputs(
-            **{f.name: attrs.NOTHING for f in attrs.fields(spec.Outputs)}
-        )
-
-        # Initialise the lzin fields
-        lazy_spec = copy(spec)
-        wf = cls.under_construction = Workflow(
-            name=type(spec).__name__,
-            inputs=lazy_spec,
-            outputs=outputs,
-        )
-        for lzy_inpt in lazy_inputs:
-            setattr(
-                lazy_spec,
-                lzy_inpt.name,
-                lazy.LazyInField(
-                    field=lzy_inpt.name,
-                    type=lzy_inpt.type,
-                ),
-            )
-
-        input_values = attrs.asdict(lazy_spec, recurse=False)
-        constructor = input_values.pop("constructor")
-        cls._under_construction = wf
-        try:
-            # Call the user defined constructor to set the outputs
-            output_lazy_fields = constructor(**input_values)
-            # Check to see whether any mandatory inputs are not set
-            for node in wf.nodes:
-                node.inputs._check_for_unset_values()
-            # Check that the outputs are set correctly, either directly by the constructor
-            # or via returned values that can be zipped with the output names
-            if output_lazy_fields:
-                if not isinstance(output_lazy_fields, (list, tuple)):
-                    output_lazy_fields = [output_lazy_fields]
-                output_fields = list_fields(spec.Outputs)
-                if len(output_lazy_fields) != len(output_fields):
-                    raise ValueError(
-                        f"Expected {len(output_fields)} outputs, got "
-                        f"{len(output_lazy_fields)} ({output_lazy_fields})"
-                    )
-                for outpt, outpt_lf in zip(output_fields, output_lazy_fields):
-                    if TypeParser.get_origin(outpt_lf.type) is StateArray:
-                        # Automatically combine any uncombined state arrays into lists
-                        tp, _ = TypeParser.strip_splits(outpt_lf.type)
-                        outpt_lf.type = list[tp]
-                        outpt_lf.splits = frozenset()
-                    setattr(outputs, outpt.name, outpt_lf)
-            else:
-                if unset_outputs := [
-                    a
-                    for a, v in attrs.asdict(outputs, recurse=False).items()
-                    if v is attrs.NOTHING
-                ]:
-                    raise ValueError(
-                        f"Expected outputs {unset_outputs} to be set by the "
-                        f"constructor of {wf!r}"
-                    )
-        finally:
-            cls._under_construction = None
-
-        cls._constructed[hash_key] = wf
-
-        return wf
-
-    def add(self, task_spec: TaskSpec[OutputType], name=None) -> OutputType:
-        if name is None:
-            name = type(task_spec).__name__
-        if name in self._nodes:
-            raise ValueError(f"Node with name {name!r} already exists in the workflow")
-        node = Node[OutputType](name=name, inputs=task_spec, workflow=self)
-        self._nodes[name] = node
-        return node.lzout
-
-    def __getitem__(self, key: str) -> Node:
-        return self._nodes[key]
-
-    @property
-    def nodes(self) -> ty.Iterable[Node]:
-        return self._nodes.values()
-
-    @property
-    def node_names(self) -> list[str]:
-        return list(self._nodes)
-
-    @property
-    @classmethod
-    def under_construction(cls) -> "Workflow[ty.Any]":
-        if cls._under_construction is None:
-            raise ValueError(
-                "pydra.design.workflow.this() can only be called from within a workflow "
-                "constructor function"
-            )
-        return cls._under_construction
-
-    # Used to store the workflow that is currently being constructed
-    _under_construction: "Workflow[ty.Any]" = None
-    # Used to cache the constructed workflows by their hashed input values
-    _constructed: dict[int, "Workflow[ty.Any]"] = {}
+    # @classmethod
+    # def _normalize_splitter(
+    #     cls, splitter: Splitter, strip_previous: bool = True
+    # ) -> ty.Tuple[ty.Tuple[str, ...], ...]:
+    #     """Converts the splitter spec into a consistent tuple[tuple[str, ...], ...] form
+    #     used in LazyFields"""
+    #     if isinstance(splitter, str):
+    #         splitter = (splitter,)
+    #     if isinstance(splitter, tuple):
+    #         splitter = (splitter,)  # type: ignore
+    #     else:
+    #         assert isinstance(splitter, list)
+    #         # convert to frozenset to differentiate from tuple, yet still be hashable
+    #         # (NB: order of fields in list splitters aren't relevant)
+    #         splitter = tuple((s,) if isinstance(s, str) else s for s in splitter)
+    #     # Strip out fields starting with "_" designating splits in upstream nodes
+    #     if strip_previous:
+    #         stripped = tuple(
+    #             tuple(f for f in i if not f.startswith("_")) for i in splitter
+    #         )
+    #         splitter = tuple(s for s in stripped if s)  # type: ignore
+    #     return splitter  # type: ignore
