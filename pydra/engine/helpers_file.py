@@ -10,6 +10,7 @@ import subprocess as sp
 from contextlib import contextmanager
 import attr
 from fileformats.core import FileSet
+from pydra.engine.helpers import is_lazy
 
 
 logger = logging.getLogger("pydra")
@@ -151,7 +152,7 @@ def template_update_single(
     # if input_dict_st with state specific value is not available,
     # the dictionary will be created from inputs object
     from pydra.utils.typing import TypeParser  # noqa
-    from pydra.engine.specs import LazyField, OUTPUT_TEMPLATE_TYPES
+    from pydra.engine.specs import OUTPUT_TEMPLATE_TYPES
 
     if inputs_dict_st is None:
         inputs_dict_st = attr.asdict(inputs, recurse=False)
@@ -162,7 +163,7 @@ def template_update_single(
             raise TypeError(
                 f"type of '{field.name}' is Path, consider using Union[Path, bool]"
             )
-        if inp_val_set is not attr.NOTHING and not isinstance(inp_val_set, LazyField):
+        if inp_val_set is not attr.NOTHING and not is_lazy(inp_val_set):
             inp_val_set = TypeParser(ty.Union[OUTPUT_TEMPLATE_TYPES])(inp_val_set)
     elif spec_type == "output":
         if not TypeParser.contains_type(FileSet, field.type):

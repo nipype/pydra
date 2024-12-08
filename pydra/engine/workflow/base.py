@@ -4,18 +4,19 @@ from operator import itemgetter
 from typing_extensions import Self
 import attrs
 from pydra.engine.helpers import list_fields
-from pydra.engine.specs import TaskSpec, OutputsSpec
+from pydra.engine.specs import TaskSpec, OutSpec, WorkflowOutSpec
 from .lazy import LazyInField
 from pydra.utils.hash import hash_function
 from pydra.utils.typing import TypeParser, StateArray
 from .node import Node
 
 
-OutputType = ty.TypeVar("OutputType", bound=OutputsSpec)
+OutSpecType = ty.TypeVar("OutputType", bound=OutSpec)
+WorkflowOutSpecType = ty.TypeVar("OutputType", bound=WorkflowOutSpec)
 
 
 @attrs.define(auto_attribs=False)
-class Workflow(ty.Generic[OutputType]):
+class Workflow(ty.Generic[WorkflowOutSpecType]):
     """A workflow, constructed from a workflow specification
 
     Parameters
@@ -29,14 +30,14 @@ class Workflow(ty.Generic[OutputType]):
     """
 
     name: str = attrs.field()
-    inputs: TaskSpec[OutputType] = attrs.field()
-    outputs: OutputType = attrs.field()
+    inputs: TaskSpec[WorkflowOutSpecType] = attrs.field()
+    outputs: WorkflowOutSpecType = attrs.field()
     _nodes: dict[str, Node] = attrs.field(factory=dict)
 
     @classmethod
     def construct(
         cls,
-        spec: TaskSpec[OutputType],
+        spec: TaskSpec[WorkflowOutSpecType],
     ) -> Self:
         """Construct a workflow from a specification, caching the constructed worklow"""
 
@@ -104,11 +105,9 @@ class Workflow(ty.Generic[OutputType]):
                         f"{len(output_lazy_fields)} ({output_lazy_fields})"
                     )
                 for outpt, outpt_lf in zip(output_fields, output_lazy_fields):
+                    # Automatically combine any uncombined state arrays into lists
                     if TypeParser.get_origin(outpt_lf.type) is StateArray:
-                        # Automatically combine any uncombined state arrays into lists
-                        tp, _ = TypeParser.strip_splits(outpt_lf.type)
-                        outpt_lf.type = list[tp]
-                        outpt_lf.splits = frozenset()
+                        outpt_lf.type = list[TypeParser.strip_splits(outpt_lf.type)[0]]
                     setattr(outputs, outpt.name, outpt_lf)
             else:
                 if unset_outputs := [
@@ -127,7 +126,7 @@ class Workflow(ty.Generic[OutputType]):
 
         return wf
 
-    def add(self, task_spec: TaskSpec[OutputType], name=None) -> OutputType:
+    def add(self, task_spec: TaskSpec[OutSpecType], name=None) -> OutSpecType:
         """Add a node to the workflow
 
         Parameters
@@ -147,7 +146,7 @@ class Workflow(ty.Generic[OutputType]):
             name = type(task_spec).__name__
         if name in self._nodes:
             raise ValueError(f"Node with name {name!r} already exists in the workflow")
-        node = Node[OutputType](name=name, spec=task_spec, workflow=self)
+        node = Node[OutSpecType](name=name, spec=task_spec, workflow=self)
         self._nodes[name] = node
         return node.lzout
 

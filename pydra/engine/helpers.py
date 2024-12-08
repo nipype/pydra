@@ -45,11 +45,10 @@ def list_fields(interface: "TaskSpec") -> list["Field"]:
 
 def from_list_if_single(obj):
     """Converts a list to a single item if it is of length == 1"""
-    from pydra.engine.workflow.lazy import LazyField
 
     if obj is attrs.NOTHING:
         return obj
-    if isinstance(obj, LazyField):
+    if is_lazy(obj):
         return obj
     obj = list(obj)
     if len(obj) == 1:
@@ -637,7 +636,6 @@ def ensure_list(obj, tuple2list=False):
     [5.0]
 
     """
-    from pydra.engine.workflow.lazy import LazyField
 
     if obj is attrs.NOTHING:
         return attrs.NOTHING
@@ -648,6 +646,19 @@ def ensure_list(obj, tuple2list=False):
         return obj
     elif tuple2list and isinstance(obj, tuple):
         return list(obj)
-    elif isinstance(obj, LazyField):
+    elif is_lazy(obj):
         return obj
     return [obj]
+
+
+def is_lazy(obj):
+    """Check whether an object has any field that is a Lazy Field"""
+    from pydra.engine.workflow.lazy import LazyField
+
+    if is_lazy(obj):
+        return True
+
+    for f in attr_fields(obj):
+        if isinstance(getattr(obj, f.name), LazyField):
+            return True
+    return False

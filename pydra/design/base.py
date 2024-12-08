@@ -14,6 +14,7 @@ from pydra.engine.helpers import (
     ensure_list,
     PYDRA_ATTR_METADATA,
     list_fields,
+    is_lazy,
 )
 from pydra.utils.typing import (
     MultiInputObj,
@@ -21,11 +22,10 @@ from pydra.utils.typing import (
     MultiOutputObj,
     MultiOutputFile,
 )
-from pydra.engine.workflow.lazy import LazyField
 
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import OutputsSpec
+    from pydra.engine.specs import TaskSpec, OutSpec
     from pydra.engine.core import Task
 
 __all__ = [
@@ -84,7 +84,9 @@ class Field:
         validator=is_type, default=ty.Any, converter=default_if_none(ty.Any)
     )
     help_string: str = ""
-    requires: list | None = None
+    requires: list[str] | list[list[str]] = attrs.field(
+        factory=list, converter=ensure_list
+    )
     converter: ty.Callable | None = None
     validator: ty.Callable | None = None
 
@@ -240,6 +242,8 @@ def extract_fields_from_class(
 
 
 def make_task_spec(
+    spec_type: type["TaskSpec"],
+    out_type: type["OutSpec"],
     task_type: type["Task"],
     inputs: dict[str, Arg],
     outputs: dict[str, Out],
@@ -281,14 +285,16 @@ def make_task_spec(
 
     if name is None and klass is not None:
         name = klass.__name__
-    outputs_klass = make_outputs_spec(outputs, outputs_bases, name)
-    if klass is None or not issubclass(klass, TaskSpec):
+    outputs_klass = make_outputs_spec(out_type, outputs, outputs_bases, name)
+    if klass is None or not issubclass(klass, spec_type):
         if name is None:
             raise ValueError("name must be provided if klass is not")
+        if klass is not None and issubclass(klass, TaskSpec):
+            raise ValueError(f"Cannot change type of spec {klass} to {spec_type}")
         bases = tuple(bases)
         # Ensure that TaskSpec is a base class
-        if not any(issubclass(b, TaskSpec) for b in bases):
-            bases = bases + (TaskSpec,)
+        if not any(issubclass(b, spec_type) for b in bases):
+            bases = bases + (spec_type,)
         # If building from a decorated class (as opposed to dynamically from a function
         # or shell-template), add any base classes not already in the bases tuple
         if klass is not None:
@@ -346,8 +352,11 @@ def make_task_spec(
 
 
 def make_outputs_spec(
-    outputs: dict[str, Out], bases: ty.Sequence[type], spec_name: str
-) -> type["OutputsSpec"]:
+    spec_type: type["OutSpec"],
+    outputs: dict[str, Out],
+    bases: ty.Sequence[type],
+    spec_name: str,
+) -> type["OutSpec"]:
     """Create an outputs specification class and its outputs specification class from the
     output fields provided to the decorator/function.
 
@@ -368,10 +377,14 @@ def make_outputs_spec(
     klass : type
         The class created using the attrs package
     """
-    from pydra.engine.specs import OutputsSpec
+    from pydra.engine.specs import OutSpec
 
-    if not any(issubclass(b, OutputsSpec) for b in bases):
-        outputs_bases = bases + (OutputsSpec,)
+    if not any(issubclass(b, spec_type) for b in bases):
+        if out_spec_bases := [b for b in bases if issubclass(b, OutSpec)]:
+            raise ValueError(
+                f"Cannot make {spec_type} output spec from {out_spec_bases} bases"
+            )
+        outputs_bases = bases + (spec_type,)
     if reserved_names := [n for n in outputs if n in RESERVED_OUTPUT_NAMES]:
         raise ValueError(
             f"{reserved_names} are reserved and cannot be used for output field names"
@@ -549,7 +562,7 @@ def make_validator(field: Field, interface_name: str) -> ty.Callable[..., None] 
 def allowed_values_validator(_, attribute, value):
     """checking if the values is in allowed_values"""
     allowed = attribute.metadata[PYDRA_ATTR_METADATA].allowed_values
-    if value is attrs.NOTHING or isinstance(value, LazyField):
+    if value is attrs.NOTHING or is_lazy(value):
         pass
     elif value not in allowed:
         raise ValueError(

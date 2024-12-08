@@ -10,6 +10,7 @@ import logging
 import attr
 from pydra.utils import add_exc_note
 from fileformats import field, core, generic
+from pydra.engine.helpers import is_lazy
 
 try:
     from typing import get_origin, get_args
@@ -213,12 +214,11 @@ class TypeParser(ty.Generic[T]):
             if the coercion is not possible, or not specified by the
             `coercible`/`not_coercible` parameters, then a TypeError is raised
         """
-        from pydra.engine.workflow.lazy import LazyField
 
         coerced: T
         if obj is attr.NOTHING:
             coerced = attr.NOTHING  # type: ignore[assignment]
-        elif isinstance(obj, LazyField):
+        elif is_lazy(obj):
             try:
                 self.check_type(obj.type)
             except TypeError as e:

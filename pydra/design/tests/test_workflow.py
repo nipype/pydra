@@ -344,7 +344,9 @@ def test_workflow_split_combine1():
     wf = Workflow.construct(MyTestWorkflow(a=[1, 2, 3], b=[1.0, 10.0, 100.0]))
     assert wf["Mul"].splitter == ["Mul.x", "Mul.y"]
     assert wf["Mul"].combiner == ["Mul.x"]
-    assert wf.outputs.out == LazyOutField(node=wf["Sum"], field="out", type=list[float])
+    assert wf.outputs.out == LazyOutField(
+        node=wf["Sum"], field="out", type=list[float], type_checked=True
+    )
 
 
 def test_workflow_split_combine2():

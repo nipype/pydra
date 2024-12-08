@@ -2,7 +2,7 @@ import typing as ty
 import inspect
 import attrs
 from pydra.engine.task import FunctionTask
-from pydra.engine.specs import TaskSpec
+from pydra.engine.specs import PythonSpec, PythonOutSpec
 from .base import (
     Arg,
     Out,
@@ -87,7 +87,7 @@ def define(
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
-) -> TaskSpec:
+) -> PythonSpec:
     """
     Create an interface for a function or a class.
 
@@ -103,7 +103,7 @@ def define(
         Whether to use auto_attribs mode when creating the class.
     """
 
-    def make(wrapped: ty.Callable | type) -> TaskSpec:
+    def make(wrapped: ty.Callable | type) -> PythonSpec:
         if inspect.isclass(wrapped):
             klass = wrapped
             function = klass.function
@@ -139,6 +139,8 @@ def define(
         )
 
         interface = make_task_spec(
+            PythonSpec,
+            PythonOutSpec,
             FunctionTask,
             parsed_inputs,
             parsed_outputs,

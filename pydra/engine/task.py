@@ -45,28 +45,22 @@ import platform
 import re
 import attr
 import attrs
-import warnings
 import inspect
 import typing as ty
 import shlex
 from pathlib import Path
 import cloudpickle as cp
-from fileformats.core import FileSet, DataType
+from fileformats.core import FileSet
 from .core import Task, is_lazy
 from pydra.utils.messenger import AuditFlag
 from .specs import (
-    # BaseSpec,
-    # SpecInfo,
-    # ShellSpec,
-    # ShellOutSpec,
-    TaskSpec,
+    ShellSpec,
     attr_fields,
 )
 from .helpers import (
     parse_format_string,
     position_sort,
     ensure_list,
-    # output_from_inputfields,
     parse_copyfile,
 )
 from .helpers_file import template_update
@@ -76,124 +70,6 @@ from .environments import Native
 
 class FunctionTask(Task):
     """Wrap a Python callable as a task element."""
-
-    def __init__(
-        self,
-        spec: TaskSpec,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        cache_dir=None,
-        cache_locations=None,
-        cont_dim=None,
-        messenger_args=None,
-        messengers=None,
-        name=None,
-        rerun=False,
-        **kwargs,
-    ):
-        """
-        Initialize this task.
-
-        Parameters
-        ----------
-        func : :obj:`callable`
-            A Python executable function.
-        audit_flags : :obj:`pydra.utils.messenger.AuditFlag`
-            Auditing configuration
-        cache_dir : :obj:`os.pathlike`
-            Cache directory
-        cache_locations : :obj:`list` of :obj:`os.pathlike`
-            List of alternative cache locations.
-        input_spec : :obj:`pydra.engine.specs.SpecInfo`
-            Specification of inputs.
-        cont_dim : :obj:`dict`, or `None`
-            Container dimensions for input fields,
-            if any of the container should be treated as a container
-        messenger_args :
-            TODO
-        messengers :
-            TODO
-        name : :obj:`str`
-            Name of this task.
-        output_spec : :obj:`pydra.engine.specs.BaseSpec`
-            Specification of inputs.
-
-        """
-        if input_spec is None:
-            fields = []
-            for val in inspect.signature(func).parameters.values():
-                if val.default is not inspect.Signature.empty:
-                    val_dflt = val.default
-                else:
-                    val_dflt = attr.NOTHING
-                if isinstance(val.annotation, ty.TypeVar):
-                    raise NotImplementedError(
-                        "Template types are not currently supported in task signatures "
-                        f"(found in '{val.name}' field of '{name}' task), "
-                        "see https://github.com/nipype/pydra/issues/672"
-                    )
-                fields.append(
-                    (
-                        val.name,
-                        attr.ib(
-                            default=val_dflt,
-                            type=val.annotation,
-                            metadata={
-                                "help_string": f"{val.name} parameter from {func.__name__}"
-                            },
-                        ),
-                    )
-                )
-            fields.append(("_func", attr.ib(default=cp.dumps(func), type=bytes)))
-            input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
-        else:
-            input_spec.fields.append(
-                ("_func", attr.ib(default=cp.dumps(func), type=bytes))
-            )
-        self.input_spec = input_spec
-        if name is None:
-            name = func.__name__
-        super().__init__(
-            name,
-            inputs=kwargs,
-            cont_dim=cont_dim,
-            audit_flags=audit_flags,
-            messengers=messengers,
-            messenger_args=messenger_args,
-            cache_dir=cache_dir,
-            cache_locations=cache_locations,
-            rerun=rerun,
-        )
-        if output_spec is None:
-            name = "Output"
-            fields = [("out", ty.Any)]
-            if "return" in func.__annotations__:
-                return_info = func.__annotations__["return"]
-                # # e.g. python annotation: fun() -> ty.NamedTuple("Output", [("out", float)])
-                # # or pydra decorator: @pydra.mark.annotate({"return": ty.NamedTuple(...)})
-                #
-
-                if (
-                    hasattr(return_info, "__name__")
-                    and getattr(return_info, "__annotations__", None)
-                    and not issubclass(return_info, DataType)
-                ):
-                    name = return_info.__name__
-                    fields = list(return_info.__annotations__.items())
-                # e.g. python annotation: fun() -> {"out": int}
-                # or pydra decorator: @pydra.mark.annotate({"return": {"out": int}})
-                elif isinstance(return_info, dict):
-                    fields = list(return_info.items())
-                # e.g. python annotation: fun() -> (int, int)
-                # or pydra decorator: @pydra.mark.annotate({"return": (int, int)})
-                elif isinstance(return_info, tuple):
-                    fields = [(f"out{i}", t) for i, t in enumerate(return_info, 1)]
-                # e.g. python annotation: fun() -> int
-                # or pydra decorator: @pydra.mark.annotate({"return": int})
-                else:
-                    fields = [("out", return_info)]
-            output_spec = SpecInfo(name=name, fields=fields, bases=(BaseSpec,))
-
-        self.output_spec = output_spec
 
     def _run_task(self, environment=None):
         inputs = attr.asdict(self.inputs, recurse=False)
@@ -220,12 +96,9 @@ class FunctionTask(Task):
 class ShellCommandTask(Task):
     """Wrap a shell command as a task element."""
 
-    input_spec = None
-    output_spec = None
-
     def __init__(
         self,
-        spec: TaskSpec,
+        spec: ShellSpec,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cont_dim=None,
@@ -261,36 +134,7 @@ class ShellCommandTask(Task):
             Specification of inputs.
         strip : :obj:`bool`
             TODO
-
         """
-
-        # using default name for task if no name provided
-        if name is None:
-            name = "ShellTask_noname"
-
-        # # using provided spec, class attribute or setting the default SpecInfo
-        # self.input_spec = (
-        #     input_spec
-        #     or self.input_spec
-        #     or SpecInfo(name="Inputs", fields=[], bases=(ShellSpec,))
-        # )
-        # self.output_spec = (
-        #     output_spec
-        #     or self.output_spec
-        #     or SpecInfo(name="Output", fields=[], bases=(ShellOutSpec,))
-        # )
-        # self.output_spec = output_from_inputfields(self.output_spec, self.input_spec)
-
-        for special_inp in ["executable", "args"]:
-            if hasattr(self, special_inp):
-                if special_inp not in kwargs:
-                    kwargs[special_inp] = getattr(self, special_inp)
-                elif kwargs[special_inp] != getattr(self, special_inp):
-                    warnings.warn(
-                        f"you are changing the executable from {getattr(self, special_inp)} "
-                        f"to {kwargs[special_inp]}"
-                    )
-
         super().__init__(
             name=name,
             inputs=kwargs,

@@ -4,7 +4,7 @@ from enum import Enum
 import attrs
 from pydra.utils.typing import TypeParser, StateArray
 from . import lazy
-from ..specs import TaskSpec, OutputsSpec
+from ..specs import TaskSpec, OutSpec
 from ..helpers import ensure_list
 from .. import helpers_state as hlpst
 from ..state import State
@@ -13,7 +13,7 @@ if ty.TYPE_CHECKING:
     from .base import Workflow
 
 
-OutputType = ty.TypeVar("OutputType", bound=OutputsSpec)
+OutputType = ty.TypeVar("OutputType", bound=OutSpec)
 Splitter = ty.Union[str, ty.Tuple[str, ...]]
 
 _not_set = Enum("_not_set", "NOT_SET")
@@ -43,8 +43,8 @@ class Node(ty.Generic[OutputType]):
     _cont_dim: dict[str, int] | None = attrs.field(
         init=False, default=None
     )  # QUESTION: should this be included in the state?
-    _inner_cont_dim: dict[str, int] | None = attrs.field(
-        init=False, default=None
+    _inner_cont_dim: dict[str, int] = attrs.field(
+        init=False, factory=dict
     )  # QUESTION: should this be included in the state?
 
     class Inputs:
@@ -247,7 +247,9 @@ class Node(ty.Generic[OutputType]):
         if not isinstance(combiner, (str, list)):
             raise Exception("combiner has to be a string or a list")
         combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
-        if not_split := [c for c in combiner if not any(c in s for s in self.splitter)]:
+        if not_split := [
+            c for c in combiner if not any(c in s for s in self.state.splitter)
+        ]:
             raise ValueError(
                 f"Combiner fields {not_split} for Node {self.name!r} are not in the "
                 f"splitter fields {self.splitter}"
@@ -343,7 +345,14 @@ class Node(ty.Generic[OutputType]):
         if not self.state:
             return
         outpt_lf: lazy.LazyOutField
-        state_depth = len(self.state.splitter_rpn)
+        remaining_splits = []
+        for split in self.state.splitter:
+            if isinstance(split, str):
+                if split not in self.state.combiner:
+                    remaining_splits.append(split)
+            elif all(s not in self.state.combiner for s in split):
+                remaining_splits.append(split)
+        state_depth = len(remaining_splits)
         for outpt_lf in attrs.asdict(self.lzout, recurse=False).values():
             assert not outpt_lf.type_checked
             type_, _ = TypeParser.strip_splits(outpt_lf.type)

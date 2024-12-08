@@ -3,8 +3,6 @@
 import abc
 import json
 import logging
-import itertools
-from functools import cached_property
 import os
 import sys
 from pathlib import Path
@@ -21,16 +19,12 @@ from . import state
 from . import helpers_state as hlpst
 from .specs import (
     File,
-    # BaseSpec,
     RuntimeSpec,
     Result,
-    # SpecInfo,
-    # LazyIn,
-    # LazyOut,
     TaskHook,
 )
+from .workflow.lazy import is_lazy
 from .helpers import (
-    # make_klass,
     create_checksum,
     attr_fields,
     print_help,
@@ -138,8 +132,6 @@ class Task:
 
         self.interface = spec
         # raise error if name is same as of attributes
-        if name in dir(self):
-            raise ValueError("Cannot use names of attributes or methods as task name")
         self.name = name
         if not self.input_spec:
             raise Exception("No input_spec in class: %s" % self.__class__.__name__)
@@ -226,10 +218,6 @@ class Task:
         state["interface"] = cp.loads(state["interface"])
         state["inputs"] = self.interface(**state["inputs"])
         self.__dict__.update(state)
-
-    @cached_property
-    def lzout(self):
-        return LazyOut(self)
 
     def help(self, returnhelp=False):
         """Print class help."""
@@ -818,80 +806,6 @@ class Task:
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.any
 
 
-def _sanitize_spec(
-    spec: ty.Union[ty.List[str], ty.Dict[str, ty.Type[ty.Any]], None],
-    wf_name: str,
-    spec_name: str,
-    allow_empty: bool = False,
-):
-    """Makes sure the provided input specifications are valid.
-
-    If the input specification is a list of strings, this will
-    build a proper SpecInfo object out of it.
-
-    Parameters
-    ----------
-    spec : SpecInfo or List[str] or Dict[str, type]
-        Specification to be sanitized.
-    wf_name : str
-        The name of the workflow for which the input specifications
-    spec_name : str
-        name given to generated SpecInfo object
-
-    Returns
-    -------
-    spec : SpecInfo
-        Sanitized specification.
-
-    Raises
-    ------
-    ValueError
-        If provided `spec` is None.
-    """
-    graph_checksum_input = ("_graph_checksums", ty.Any)
-    if spec:
-        if isinstance(spec, SpecInfo):
-            if BaseSpec not in spec.bases:
-                raise ValueError("Provided SpecInfo must have BaseSpec as its base.")
-            if "_graph_checksums" not in {f[0] for f in spec.fields}:
-                spec.fields.insert(0, graph_checksum_input)
-            return spec
-        else:
-            base = BaseSpec
-            if isinstance(spec, list):
-                typed_spec = zip(spec, itertools.repeat(ty.Any))
-            elif isinstance(spec, dict):
-                typed_spec = spec.items()  # type: ignore
-            elif isinstance(spec, BaseSpec):
-                base = spec
-                typed_spec = []
-            else:
-                raise TypeError(
-                    f"Unrecognised spec type, {spec}, should be SpecInfo, list or dict"
-                )
-            return SpecInfo(
-                name=spec_name,
-                fields=[graph_checksum_input]
-                + [
-                    (
-                        nm,
-                        attr.ib(
-                            type=tp,
-                            metadata={
-                                "help_string": f"{nm} input from {wf_name} workflow"
-                            },
-                        ),
-                    )
-                    for nm, tp in typed_spec
-                ],
-                bases=(base,),
-            )
-    elif allow_empty:
-        return None
-    else:
-        raise ValueError(f'Empty "{spec_name}" spec provided to Workflow {wf_name}.')
-
-
 class WorkflowTask(Task):
     """A composite task with structure of computational graph."""
 
@@ -939,10 +853,6 @@ class WorkflowTask(Task):
             TODO
 
         """
-        self.input_spec = _sanitize_spec(input_spec, name, "Inputs")
-        self.output_spec = _sanitize_spec(
-            output_spec, name, "Outputs", allow_empty=True
-        )
 
         if name in dir(self):
             raise ValueError(
@@ -973,10 +883,6 @@ class WorkflowTask(Task):
         self._connections = None
         # propagating rerun if task_rerun=True
         self.propagate_rerun = propagate_rerun
-
-    @cached_property
-    def lzin(self):
-        return LazyIn(self)
 
     def __getattr__(self, name):
         if name in self.name2obj:
@@ -1075,7 +981,7 @@ class WorkflowTask(Task):
         other_states = {}
         for field in attr_fields(task.inputs):
             val = getattr(task.inputs, field.name)
-            if isinstance(val, LazyField):
+            if is_lazy(val):
                 # saving all connections with LazyFields
                 task.inp_lf[field.name] = val
                 # adding an edge to the graph if task id expecting output from a different task
@@ -1292,7 +1198,7 @@ class WorkflowTask(Task):
         # collecting outputs from tasks
         output_wf = {}
         for name, val in self._connections:
-            if not isinstance(val, LazyField):
+            if not is_lazy(val):
                 raise ValueError("all connections must be lazy")
             try:
                 val_out = val.get_value(self)
@@ -1395,11 +1301,3 @@ def is_task(obj):
 def is_workflow(obj):
     """Check whether an object is a :class:`Workflow` instance."""
     return isinstance(obj, WorkflowTask)
-
-
-def is_lazy(obj):
-    """Check whether an object has any field that is a Lazy Field"""
-    for f in attr_fields(obj):
-        if isinstance(getattr(obj, f.name), LazyField):
-            return True
-    return False

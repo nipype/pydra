@@ -11,7 +11,7 @@ import builtins
 from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
-from pydra.engine.specs import TaskSpec
+from pydra.engine.specs import ShellSpec, ShellOutSpec
 from .base import (
     Arg,
     Out,
@@ -177,9 +177,8 @@ class outarg(Out, arg):
         inputs (entire inputs will be passed) or any input field name (a specific input
         field will be sent).
     path_template: str, optional
-        If provided, the field is treated also as an output field and it is added to
-        the output spec. The template can use other fields, e.g. {file1}. Used in order
-        to create an output specification.
+        The template used to specify where the output file will be written to can use
+        other fields, e.g. {file1}. Used in order to create an output specification.
     """
 
     path_template: str | None = attrs.field(default=None)
@@ -202,7 +201,7 @@ def define(
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
     name: str | None = None,
-) -> TaskSpec:
+) -> ShellSpec:
     """Create a task specification for a shell command. Can be used either as a decorator on
     the "canonical" dataclass-form of a task specification or as a function that takes a
     "shell-command template string" of the form
@@ -251,13 +250,13 @@ def define(
 
     Returns
     -------
-    TaskSpec
+    ShellSpec
         The interface for the shell command
     """
 
     def make(
         wrapped: ty.Callable | type | None = None,
-    ) -> TaskSpec:
+    ) -> ShellSpec:
 
         if inspect.isclass(wrapped):
             klass = wrapped
@@ -272,6 +271,14 @@ def define(
                         f"Shell task class {wrapped} must have an `executable` "
                         "attribute that specifies the command to run"
                     ) from None
+            if not isinstance(executable, str) and not (
+                isinstance(executable, ty.Sequence)
+                and all(isinstance(e, str) for e in executable)
+            ):
+                raise ValueError(
+                    "executable must be a string or a sequence of strings"
+                    f", not {executable!r}"
+                )
             class_name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = extract_fields_from_class(
@@ -309,7 +316,15 @@ def define(
             {o.name: o for o in parsed_outputs.values() if isinstance(o, arg)}
         )
         parsed_inputs["executable"] = arg(
-            name="executable", type=str, argstr="", position=0, default=executable
+            name="executable",
+            type=str | ty.Sequence[str],
+            argstr="",
+            position=0,
+            default=executable,
+            help_string=(
+                "the first part of the command, can be a string, "
+                "e.g. 'ls', or a list, e.g. ['ls', '-l', 'dirname']"
+            ),
         )
 
         # Set positions for the remaining inputs that don't have an explicit position
@@ -319,6 +334,8 @@ def define(
                 inpt.position = position_stack.pop(0)
 
         interface = make_task_spec(
+            ShellSpec,
+            ShellOutSpec,
             ShellCommandTask,
             parsed_inputs,
             parsed_outputs,

@@ -13,7 +13,7 @@ from .base import (
     check_explicit_fields_are_none,
     extract_fields_from_class,
 )
-from pydra.engine.specs import TaskSpec
+from pydra.engine.specs import TaskSpec, OutSpec, WorkflowSpec, WorkflowOutSpec
 
 
 __all__ = ["define", "add", "this", "arg", "out"]
@@ -154,6 +154,8 @@ def define(
             parsed_inputs[inpt_name].lazy = True
 
         interface = make_task_spec(
+            WorkflowSpec,
+            WorkflowOutSpec,
             WorkflowTask,
             parsed_inputs,
             parsed_outputs,
@@ -172,9 +174,6 @@ def define(
     return make
 
 
-OutputType = ty.TypeVar("OutputType")
-
-
 def this() -> Workflow:
     """Get the workflow currently being constructed.
 
@@ -186,7 +185,10 @@ def this() -> Workflow:
     return Workflow.under_construction
 
 
-def add(task_spec: TaskSpec[OutputType], name: str = None) -> OutputType:
+OutSpecType = ty.TypeVar("OutSpecType", bound=OutSpec)
+
+
+def add(task_spec: TaskSpec[OutSpecType], name: str = None) -> OutSpecType:
     """Add a node to the workflow currently being constructed
 
     Parameters
@@ -199,7 +201,7 @@ def add(task_spec: TaskSpec[OutputType], name: str = None) -> OutputType:
 
     Returns
     -------
-    OutputType
+    OutSpec
         The outputs specification of the node
     """
     return this().add(task_spec, name=name)
