@@ -28,6 +28,11 @@ if ty.TYPE_CHECKING:
 
 __all__ = ["arg", "out", "outarg", "define"]
 
+EXECUTABLE_HELP_STRING = (
+    "the first part of the command, can be a string, "
+    "e.g. 'ls', or a list, e.g. ['ls', '-l', 'dirname']"
+)
+
 
 @attrs.define(kw_only=True)
 class arg(Arg):
@@ -324,10 +329,7 @@ def define(
             argstr="",
             position=0,
             default=executable,
-            help_string=(
-                "the first part of the command, can be a string, "
-                "e.g. 'ls', or a list, e.g. ['ls', '-l', 'dirname']"
-            ),
+            help_string=EXECUTABLE_HELP_STRING,
         )
 
         # Set positions for the remaining inputs that don't have an explicit position

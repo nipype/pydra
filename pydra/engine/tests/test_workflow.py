@@ -3953,7 +3953,7 @@ def test_workflow_combine2(tmpdir):
     assert result.output.out_iden == [[1, 4], [1, 8]]
 
 
-# testing lzout.all to collect all of the results and let FunctionTask deal with it
+# testing lzout.all to collect all of the results and let PythonTask deal with it
 
 
 def test_wf_lzoutall_1(plugin, tmpdir):

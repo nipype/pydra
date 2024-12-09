@@ -2,25 +2,25 @@ import typing as ty
 import pytest
 
 
-from ..task import ShellCommandTask
-from ..specs import ShellOutSpec, ShellSpec, SpecInfo, File
+from ..task import ShellTask
+from ..specs import ShellOutputs, ShellSpec, SpecInfo, File
 
 interf_input_spec = SpecInfo(
     name="Input", fields=[("test", ty.Any, {"help_string": "test"})], bases=(ShellSpec,)
 )
 interf_output_spec = SpecInfo(
-    name="Output", fields=[("test_out", File, "*.txt")], bases=(ShellOutSpec,)
+    name="Output", fields=[("test_out", File, "*.txt")], bases=(ShellOutputs,)
 )
 
 
-class Interf_1(ShellCommandTask):
+class Interf_1(ShellTask):
     """class with customized input/output specs"""
 
     input_spec = interf_input_spec
     output_spec = interf_output_spec
 
 
-class Interf_2(ShellCommandTask):
+class Interf_2(ShellTask):
     """class with customized input/output specs and executables"""
 
     input_spec = interf_input_spec
@@ -28,7 +28,7 @@ class Interf_2(ShellCommandTask):
     executable = "testing command"
 
 
-class Interf_3(ShellCommandTask):
+class Interf_3(ShellTask):
     """class with customized input and executables"""
 
     input_spec = SpecInfo(
@@ -45,7 +45,7 @@ class Interf_3(ShellCommandTask):
     executable = "testing command"
 
 
-class TouchInterf(ShellCommandTask):
+class TouchInterf(ShellTask):
     """class with customized input and executables"""
 
     input_spec = SpecInfo(
@@ -81,7 +81,7 @@ def test_interface_specs_2():
         bases=(ShellSpec,),
     )
     my_output_spec = SpecInfo(
-        name="Output", fields=[("my_out", File, "*.txt")], bases=(ShellOutSpec,)
+        name="Output", fields=[("my_out", File, "*.txt")], bases=(ShellOutputs,)
     )
     task = Interf_1(input_spec=my_input_spec, output_spec=my_output_spec)
     assert task.input_spec == my_input_spec

@@ -1,11 +1,12 @@
 import os
+import typing as ty
 from pathlib import Path
 import attrs
 import pytest
 import cloudpickle as cp
 from pydra.design import shell
 from pydra.engine.helpers import list_fields
-from pydra.engine.specs import TaskSpec
+from pydra.engine.specs import ShellSpec
 from fileformats.generic import File, Directory, FsObject
 from fileformats import text, image
 from pydra.utils.typing import MultiInputObj
@@ -15,16 +16,21 @@ def test_interface_template():
 
     SampleInterface = shell.define("cp <in_path> <out|out_path>")
 
-    assert issubclass(SampleInterface, TaskSpec)
+    assert issubclass(SampleInterface, ShellSpec)
     output = shell.outarg(
         name="out_path",
         path_template="out_path",
-        default=True,
         type=FsObject,
         position=2,
     )
     assert sorted_fields(SampleInterface) == [
-        shell.arg(name="executable", default="cp", type=str, position=0),
+        shell.arg(
+            name="executable",
+            default="cp",
+            type=str | ty.Sequence[str],
+            position=0,
+            help_string=shell.EXECUTABLE_HELP_STRING,
+        ),
         shell.arg(name="in_path", type=FsObject, position=1),
         output,
     ]
@@ -41,16 +47,21 @@ def test_interface_template_w_types_and_path_template_ext():
         "trim-png <in_image:image/png> <out|out_image:image/png>"
     )
 
-    assert issubclass(SampleInterface, TaskSpec)
+    assert issubclass(SampleInterface, ShellSpec)
     output = shell.outarg(
         name="out_image",
         path_template="out_image.png",
-        default=True,
         type=image.Png,
         position=2,
     )
     assert sorted_fields(SampleInterface) == [
-        shell.arg(name="executable", default="trim-png", type=str, position=0),
+        shell.arg(
+            name="executable",
+            default="trim-png",
+            type=str | ty.Sequence[str],
+            position=0,
+            help_string=shell.EXECUTABLE_HELP_STRING,
+        ),
         shell.arg(name="in_image", type=image.Png, position=1),
         output,
     ]
@@ -72,16 +83,21 @@ def test_interface_template_more_complex():
         ),
     )
 
-    assert issubclass(SampleInterface, TaskSpec)
+    assert issubclass(SampleInterface, ShellSpec)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
         path_template="out_dir",
         position=2,
-        default=True,
     )
     assert sorted_fields(SampleInterface) == [
-        shell.arg(name="executable", default="cp", type=str, position=0),
+        shell.arg(
+            name="executable",
+            default="cp",
+            type=str | ty.Sequence[str],
+            position=0,
+            help_string=shell.EXECUTABLE_HELP_STRING,
+        ),
         shell.arg(
             name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
         ),
@@ -120,16 +136,21 @@ def test_interface_template_with_overrides():
         outputs={"out_dir": shell.outarg(position=-1)},
     )
 
-    assert issubclass(SampleInterface, TaskSpec)
+    assert issubclass(SampleInterface, ShellSpec)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
         path_template="out_dir",
         position=-1,
-        default=True,
     )
     assert sorted_fields(SampleInterface) == [
-        shell.arg(name="executable", default="cp", type=str, position=0),
+        shell.arg(
+            name="executable",
+            default="cp",
+            type=str | ty.Sequence[str],
+            position=0,
+            help_string=shell.EXECUTABLE_HELP_STRING,
+        ),
         shell.arg(
             name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
         ),
@@ -167,16 +188,21 @@ def test_interface_template_with_type_overrides():
         inputs={"text_arg": str, "int_arg": int | None},
     )
 
-    assert issubclass(SampleInterface, TaskSpec)
+    assert issubclass(SampleInterface, ShellSpec)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
         path_template="out_dir",
         position=2,
-        default=True,
     )
     assert sorted_fields(SampleInterface) == [
-        shell.arg(name="executable", default="cp", type=str, position=0),
+        shell.arg(
+            name="executable",
+            default="cp",
+            type=str | ty.Sequence[str],
+            position=0,
+            help_string=shell.EXECUTABLE_HELP_STRING,
+        ),
         shell.arg(
             name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
         ),
@@ -199,7 +225,7 @@ def Ls(request):
     if request.param == "static":
 
         @shell.define
-        class Ls(TaskSpec["Ls.Outputs"]):
+        class Ls(ShellSpec["Ls.Outputs"]):
             executable = "ls"
 
             directory: Directory = shell.arg(
@@ -438,7 +464,6 @@ def test_shell_output_field_name_static():
         type=File,
         help_string="the output file",
         path_template="{x}_out",
-        default=True,
         argstr="",
         position=-1,
     )
@@ -446,9 +471,10 @@ def test_shell_output_field_name_static():
         shell.arg(
             name="executable",
             default="cp",
-            type=str,
+            type=str | ty.Sequence[str],
             argstr="",
             position=0,
+            help_string=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
             name="x",
@@ -480,7 +506,6 @@ def test_shell_output_field_name_dynamic():
                 help_string="path of output file",
                 argstr="",
                 path_template="{x}_out",
-                default=True,
             ),
         },
     )

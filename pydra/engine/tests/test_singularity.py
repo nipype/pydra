@@ -3,10 +3,10 @@ import subprocess as sp
 import pytest
 import attr
 
-from ..task import ShellCommandTask
+from ..task import ShellTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, SpecInfo, File, ShellSpec
+from ..specs import ShellOutputs, SpecInfo, File, ShellSpec
 from ..environments import Singularity
 
 
@@ -30,7 +30,7 @@ def test_singularity_1_nosubm(tmp_path):
     """
     cmd = "pwd"
     image = "docker://alpine"
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         executable=cmd,
         environment=Singularity(image=image),
@@ -52,7 +52,7 @@ def test_singularity_2_nosubm(tmp_path):
     """
     cmd = ["echo", "hail", "pydra"]
     image = "docker://alpine"
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         executable=cmd,
         environment=Singularity(image=image),
@@ -73,7 +73,7 @@ def test_singularity_2(plugin, tmp_path):
     cmd = ["echo", "hail", "pydra"]
     image = "docker://alpine"
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         executable=cmd,
         environment=Singularity(image=image),
@@ -97,7 +97,7 @@ def test_singularity_2a(plugin, tmp_path):
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
     image = "docker://alpine"
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         executable=cmd_exec,
         args=cmd_args,
@@ -123,7 +123,7 @@ def test_singularity_st_1(plugin, tmp_path):
     """
     cmd = ["pwd", "ls"]
     image = "docker://alpine"
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu", environment=Singularity(image=image), cache_dir=tmp_path
     ).split("executable", executable=cmd)
     assert singu.state.splitter == "singu.executable"
@@ -145,7 +145,7 @@ def test_singularity_st_2(tmp_path, n):
     """splitter over args (checking bigger splitters if slurm available)"""
     args_n = list(range(n))
     image = "docker://alpine"
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         executable="echo",
         environment=Singularity(image=image),
@@ -173,9 +173,9 @@ def test_singularity_outputspec_1(plugin, tmp_path):
     my_output_spec = SpecInfo(
         name="Output",
         fields=[("newfile", File, "newfile_tmp.txt")],
-        bases=(ShellOutSpec,),
+        bases=(ShellOutputs,),
     )
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=cmd,
@@ -223,7 +223,7 @@ def test_singularity_inputspec_1(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=cmd,
@@ -264,7 +264,7 @@ def test_singularity_inputspec_1a(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=cmd,
@@ -321,7 +321,7 @@ def test_singularity_inputspec_2(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=cmd,
@@ -381,7 +381,7 @@ def test_singularity_inputspec_2a_except(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=cmd,
@@ -441,7 +441,7 @@ def test_singularity_inputspec_2a(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=cmd,
@@ -498,7 +498,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=cmd,
@@ -554,7 +554,7 @@ def test_singularity_inputspec_state_1(tmp_path):
         bases=(ShellSpec,),
     )
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=cmd,
@@ -604,7 +604,7 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=cmd,
@@ -651,7 +651,7 @@ def test_singularity_wf_inputspec_1(plugin, tmp_path):
     wf.inputs.cmd = cmd
     wf.inputs.file = filename
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=wf.lzin.cmd,
@@ -706,7 +706,7 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
     wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmp_path)
     wf.inputs.cmd = cmd
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=wf.lzin.cmd,
@@ -764,7 +764,7 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
     wf.inputs.cmd = cmd
     wf.inputs.file = filename
 
-    singu = ShellCommandTask(
+    singu = ShellTask(
         name="singu",
         environment=Singularity(image=image),
         executable=wf.lzin.cmd,

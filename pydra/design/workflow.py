@@ -191,10 +191,10 @@ def this() -> "Workflow":
     return Workflow.under_construction
 
 
-OutSpecType = ty.TypeVar("OutSpecType", bound="Outputs")
+OutputsType = ty.TypeVar("OutputsType", bound="Outputs")
 
 
-def add(task_spec: "TaskSpec[OutSpecType]", name: str = None) -> OutSpecType:
+def add(task_spec: "TaskSpec[OutputsType]", name: str = None) -> OutputsType:
     """Add a node to the workflow currently being constructed
 
     Parameters

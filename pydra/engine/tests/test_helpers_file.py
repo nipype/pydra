@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 from fileformats.generic import File
 from ..specs import SpecInfo, ShellSpec
-from ..task import ShellCommandTask
+from ..task import ShellTask
 from ..helpers_file import (
     ensure_list,
     MountIndentifier,
@@ -388,7 +388,7 @@ def test_output_template(tmp_path):
         bases=(ShellSpec,),
     )
 
-    class MyCommand(ShellCommandTask):
+    class MyCommand(ShellTask):
         executable = "my"
         input_spec = my_input_spec
 

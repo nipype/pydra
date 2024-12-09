@@ -4,9 +4,9 @@ from decimal import Decimal
 import attrs
 import pytest
 from pydra.engine.helpers import list_fields
-from pydra.engine.specs import TaskSpec
+from pydra.engine.specs import PythonSpec
 from pydra.design import python
-from pydra.engine.task import FunctionTask
+from pydra.engine.task import PythonTask
 
 
 sort_key = attrgetter("name")
@@ -19,7 +19,7 @@ def test_interface_wrap_function():
 
     SampleInterface = python.define(func)
 
-    assert issubclass(SampleInterface, TaskSpec)
+    assert issubclass(SampleInterface, PythonSpec)
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -40,7 +40,7 @@ def test_interface_wrap_function_with_default():
 
     SampleInterface = python.define(func)
 
-    assert issubclass(SampleInterface, TaskSpec)
+    assert issubclass(SampleInterface, PythonSpec)
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -65,7 +65,7 @@ def test_interface_wrap_function_overrides():
         outputs={"b": python.out(help_string="the doubled output", type=Decimal)},
     )
 
-    assert issubclass(SampleInterface, TaskSpec)
+    assert issubclass(SampleInterface, PythonSpec)
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -90,7 +90,7 @@ def test_interface_wrap_function_types():
         outputs={"b": float},
     )
 
-    assert issubclass(SampleInterface, TaskSpec)
+    assert issubclass(SampleInterface, PythonSpec)
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -110,8 +110,8 @@ def test_decorated_function_interface():
         """Sample function for testing"""
         return a + b, a * b
 
-    assert issubclass(SampleInterface, TaskSpec)
-    assert SampleInterface.Task is FunctionTask
+    assert issubclass(SampleInterface, PythonSpec)
+    assert SampleInterface.Task is PythonTask
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -139,7 +139,7 @@ def test_interface_with_function_implicit_outputs_from_return_stmt():
         d = a * b
         return c, d
 
-    assert SampleInterface.Task is FunctionTask
+    assert SampleInterface.Task is PythonTask
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -171,7 +171,7 @@ def test_interface_with_function_docstr():
         """
         return a + b, a * b
 
-    assert SampleInterface.Task is FunctionTask
+    assert SampleInterface.Task is PythonTask
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -206,7 +206,7 @@ def test_interface_with_function_google_docstr():
         """
         return a + b, a * b
 
-    assert SampleInterface.Task is FunctionTask
+    assert SampleInterface.Task is PythonTask
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -249,7 +249,7 @@ def test_interface_with_function_numpy_docstr():
         """
         return a + b, a * b
 
-    assert SampleInterface.Task is FunctionTask
+    assert SampleInterface.Task is PythonTask
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -296,8 +296,8 @@ def test_interface_with_class():
         def function(a, b):
             return a + b, a * b
 
-    assert issubclass(SampleInterface, TaskSpec)
-    assert SampleInterface.Task is FunctionTask
+    assert issubclass(SampleInterface, PythonSpec)
+    assert SampleInterface.Task is PythonTask
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -321,7 +321,7 @@ def test_interface_with_class():
 
 def test_interface_with_inheritance():
     @python.define
-    class SampleInterface(TaskSpec["SampleInterface.Outputs"]):
+    class SampleInterface(PythonSpec["SampleInterface.Outputs"]):
         """Sample class for testing
 
         Args:
@@ -347,7 +347,7 @@ def test_interface_with_inheritance():
         def function(a, b):
             return a + b, a * b
 
-    assert issubclass(SampleInterface, TaskSpec)
+    assert issubclass(SampleInterface, PythonSpec)
 
 
 def test_interface_with_class_no_auto_attribs():
@@ -368,7 +368,7 @@ def test_interface_with_class_no_auto_attribs():
         def function(a, b):
             return a + b, a * b
 
-    assert SampleInterface.Task is FunctionTask
+    assert SampleInterface.Task is PythonTask
     inputs = sorted(list_fields(SampleInterface), key=sort_key)
     outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
     assert inputs == [
@@ -397,7 +397,7 @@ def test_interface_invalid_wrapped1():
     with pytest.raises(ValueError):
 
         @python.define(inputs={"a": python.arg()})
-        class SampleInterface(TaskSpec["SampleInterface.Outputs"]):
+        class SampleInterface(PythonSpec["SampleInterface.Outputs"]):
             a: int
 
             class Outputs:
@@ -412,7 +412,7 @@ def test_interface_invalid_wrapped2():
     with pytest.raises(ValueError):
 
         @python.define(outputs={"b": python.out()})
-        class SampleInterface(TaskSpec["SampleInterface.Outputs"]):
+        class SampleInterface(PythonSpec["SampleInterface.Outputs"]):
             a: int
 
             class Outputs:

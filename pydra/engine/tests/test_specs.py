@@ -69,14 +69,14 @@ class NodeTesting:
             def __init__(self):
                 self.fields = [("inp_a", int), ("inp_b", int)]
 
-        class OutSpec:
+        class Outputs:
             def __init__(self):
                 self.fields = [("out_a", int)]
 
         self.name = "tn"
         self.inputs = self.Input()
         self.input_spec = InpSpec()
-        self.output_spec = OutSpec()
+        self.output_spec = Outputs()
         self.output_names = ["out_a"]
         self.state = None
 

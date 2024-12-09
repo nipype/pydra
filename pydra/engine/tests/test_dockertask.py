@@ -2,10 +2,10 @@ import typing as ty
 import pytest
 import attr
 
-from ..task import ShellCommandTask
+from ..task import ShellTask
 from ..submitter import Submitter
 from ..core import Workflow
-from ..specs import ShellOutSpec, SpecInfo, File, ShellSpec
+from ..specs import ShellOutputs, SpecInfo, File, ShellSpec
 from ..environments import Docker
 from .utils import no_win, need_docker, result_submitter, result_no_submitter
 
@@ -17,9 +17,7 @@ def test_docker_1_nosubm():
     no submitter
     """
     cmd = "whoami"
-    docky = ShellCommandTask(
-        name="docky", executable=cmd, environment=Docker(image="busybox")
-    )
+    docky = ShellTask(name="docky", executable=cmd, environment=Docker(image="busybox"))
     assert docky.environment.image == "busybox"
     assert docky.environment.tag == "latest"
     assert isinstance(docky.environment, Docker)
@@ -37,9 +35,7 @@ def test_docker_1(plugin):
     using submitter
     """
     cmd = "whoami"
-    docky = ShellCommandTask(
-        name="docky", executable=cmd, environment=Docker(image="busybox")
-    )
+    docky = ShellTask(name="docky", executable=cmd, environment=Docker(image="busybox"))
 
     with Submitter(plugin=plugin) as sub:
         docky(submitter=sub)
@@ -57,9 +53,7 @@ def test_docker_2(results_function, plugin):
     with and without submitter
     """
     cmd = ["echo", "hail", "pydra"]
-    docky = ShellCommandTask(
-        name="docky", executable=cmd, environment=Docker(image="busybox")
-    )
+    docky = ShellTask(name="docky", executable=cmd, environment=Docker(image="busybox"))
     # cmdline doesn't know anything about docker
     assert docky.cmdline == " ".join(cmd)
     res = results_function(docky, plugin)
@@ -77,7 +71,7 @@ def test_docker_2a(results_function, plugin):
     cmd_exec = "echo"
     cmd_args = ["hail", "pydra"]
     # separate command into exec + args
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         executable=cmd_exec,
         args=cmd_args,
@@ -102,7 +96,7 @@ def test_docker_st_1(results_function, plugin):
     splitter = executable
     """
     cmd = ["pwd", "whoami"]
-    docky = ShellCommandTask(name="docky", environment=Docker(image="busybox")).split(
+    docky = ShellTask(name="docky", environment=Docker(image="busybox")).split(
         "executable", executable=cmd
     )
     assert docky.state.splitter == "docky.executable"
@@ -127,9 +121,9 @@ def test_docker_outputspec_1(plugin, tmp_path):
     my_output_spec = SpecInfo(
         name="Output",
         fields=[("newfile", File, "newfile_tmp.txt")],
-        bases=(ShellOutSpec,),
+        bases=(ShellOutputs,),
     )
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="ubuntu"),
         executable=cmd,
@@ -175,7 +169,7 @@ def test_docker_inputspec_1(tmp_path):
         bases=(ShellSpec,),
     )
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=cmd,
@@ -215,7 +209,7 @@ def test_docker_inputspec_1a(tmp_path):
         bases=(ShellSpec,),
     )
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=cmd,
@@ -271,7 +265,7 @@ def test_docker_inputspec_2(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=cmd,
@@ -330,7 +324,7 @@ def test_docker_inputspec_2a_except(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=cmd,
@@ -391,7 +385,7 @@ def test_docker_inputspec_2a(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=cmd,
@@ -434,7 +428,7 @@ def test_docker_inputspec_3(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=cmd,
@@ -492,7 +486,7 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=cmd,
@@ -547,7 +541,7 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=cmd,
@@ -596,7 +590,7 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
         bases=(ShellSpec,),
     )
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=cmd,
@@ -642,7 +636,7 @@ def test_docker_wf_inputspec_1(plugin, tmp_path):
     wf.inputs.cmd = cmd
     wf.inputs.file = filename
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=wf.lzin.cmd,
@@ -697,7 +691,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
     wf.split(file=[str(file_1), str(file_2)])
     wf.inputs.cmd = cmd
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=wf.lzin.cmd,
@@ -752,7 +746,7 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
     wf = Workflow(name="wf", input_spec=["cmd", "file"])
     wf.inputs.cmd = cmd
 
-    docky = ShellCommandTask(
+    docky = ShellTask(
         name="docky",
         environment=Docker(image="busybox"),
         executable=wf.lzin.cmd,

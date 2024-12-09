@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from ..environments import Native, Docker, Singularity
-from ..task import ShellCommandTask
+from ..task import ShellTask
 from ..submitter import Submitter
 from ..specs import (
     ShellSpec,
@@ -25,22 +25,20 @@ def test_native_1(tmp_path):
     newcache = lambda x: makedir(tmp_path, x)
 
     cmd = ["whoami"]
-    shelly = ShellCommandTask(
-        name="shelly", executable=cmd, cache_dir=newcache("shelly")
-    )
+    shelly = ShellTask(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
     assert shelly.cmdline == " ".join(cmd)
 
     env_res = Native().execute(shelly)
     shelly()
     assert env_res == shelly.output_
 
-    shelly_call = ShellCommandTask(
+    shelly_call = ShellTask(
         name="shelly_call", executable=cmd, cache_dir=newcache("shelly_call")
     )
     shelly_call(environment=Native())
     assert env_res == shelly_call.output_
 
-    shelly_subm = ShellCommandTask(
+    shelly_subm = ShellTask(
         name="shelly_subm", executable=cmd, cache_dir=newcache("shelly_subm")
     )
     with Submitter(plugin="cf") as sub:
@@ -56,13 +54,11 @@ def test_docker_1(tmp_path):
 
     cmd = ["whoami"]
     docker = Docker(image="busybox")
-    shelly = ShellCommandTask(
-        name="shelly", executable=cmd, cache_dir=newcache("shelly")
-    )
+    shelly = ShellTask(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
     assert shelly.cmdline == " ".join(cmd)
     env_res = docker.execute(shelly)
 
-    shelly_env = ShellCommandTask(
+    shelly_env = ShellTask(
         name="shelly",
         executable=cmd,
         cache_dir=newcache("shelly_env"),
@@ -71,7 +67,7 @@ def test_docker_1(tmp_path):
     shelly_env()
     assert env_res == shelly_env.output_ == shelly_env.result().output.__dict__
 
-    shelly_call = ShellCommandTask(
+    shelly_call = ShellTask(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
     shelly_call(environment=docker)
@@ -94,13 +90,11 @@ def test_docker_1_subm(tmp_path, docker):
 
     cmd = ["whoami"]
     docker = Docker(image="busybox")
-    shelly = ShellCommandTask(
-        name="shelly", executable=cmd, cache_dir=newcache("shelly")
-    )
+    shelly = ShellTask(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
     assert shelly.cmdline == " ".join(cmd)
     env_res = docker.execute(shelly)
 
-    shelly_env = ShellCommandTask(
+    shelly_env = ShellTask(
         name="shelly",
         executable=cmd,
         cache_dir=newcache("shelly_env"),
@@ -110,7 +104,7 @@ def test_docker_1_subm(tmp_path, docker):
         shelly_env(submitter=sub)
     assert env_res == shelly_env.result().output.__dict__
 
-    shelly_call = ShellCommandTask(
+    shelly_call = ShellTask(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
     with Submitter(plugin="cf") as sub:
@@ -126,13 +120,11 @@ def test_singularity_1(tmp_path):
 
     cmd = ["whoami"]
     sing = Singularity(image="docker://alpine")
-    shelly = ShellCommandTask(
-        name="shelly", executable=cmd, cache_dir=newcache("shelly")
-    )
+    shelly = ShellTask(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
     assert shelly.cmdline == " ".join(cmd)
     env_res = sing.execute(shelly)
 
-    shelly_env = ShellCommandTask(
+    shelly_env = ShellTask(
         name="shelly",
         executable=cmd,
         cache_dir=newcache("shelly_env"),
@@ -141,7 +133,7 @@ def test_singularity_1(tmp_path):
     shelly_env()
     assert env_res == shelly_env.output_ == shelly_env.result().output.__dict__
 
-    shelly_call = ShellCommandTask(
+    shelly_call = ShellTask(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
     shelly_call(environment=sing)
@@ -156,13 +148,11 @@ def test_singularity_1_subm(tmp_path, plugin):
 
     cmd = ["whoami"]
     sing = Singularity(image="docker://alpine")
-    shelly = ShellCommandTask(
-        name="shelly", executable=cmd, cache_dir=newcache("shelly")
-    )
+    shelly = ShellTask(name="shelly", executable=cmd, cache_dir=newcache("shelly"))
     assert shelly.cmdline == " ".join(cmd)
     env_res = sing.execute(shelly)
 
-    shelly_env = ShellCommandTask(
+    shelly_env = ShellTask(
         name="shelly",
         executable=cmd,
         cache_dir=newcache("shelly_env"),
@@ -172,7 +162,7 @@ def test_singularity_1_subm(tmp_path, plugin):
         shelly_env(submitter=sub)
     assert env_res == shelly_env.result().output.__dict__
 
-    shelly_call = ShellCommandTask(
+    shelly_call = ShellTask(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
     with Submitter(plugin=plugin) as sub:
@@ -206,7 +196,7 @@ def create_shelly_inputfile(tempdir, filename, name, executable):
     )
 
     kwargs = {} if filename is None else {"file": filename}
-    shelly = ShellCommandTask(
+    shelly = ShellTask(
         name=name,
         executable=executable,
         cache_dir=makedir(tempdir, name),
@@ -399,7 +389,7 @@ def create_shelly_outputfile(tempdir, filename, name, executable="cp"):
     )
 
     kwargs = {} if filename is None else {"file_orig": filename}
-    shelly = ShellCommandTask(
+    shelly = ShellTask(
         name=name,
         executable=executable,
         cache_dir=makedir(tempdir, name),

@@ -10,7 +10,7 @@ import glob as glob
 from pydra import mark
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from ..core import Workflow
-from ..task import AuditFlag, ShellCommandTask, argstr_formatting
+from ..task import AuditFlag, ShellTask, argstr_formatting
 from .utils import gen_basic_wf
 from ..specs import (
     MultiInputObj,
@@ -67,7 +67,7 @@ def test_checksum():
     nn = funaddtwo(a=3)
     assert (
         nn.checksum
-        == "FunctionTask_abb4e7cc03b13d0e73884b87d142ed5deae6a312275187a9d8df54407317d7d3"
+        == "PythonTask_abb4e7cc03b13d0e73884b87d142ed5deae6a312275187a9d8df54407317d7d3"
     )
 
 
@@ -105,7 +105,7 @@ def test_annotated_func():
 
     help = funky.help(returnhelp=True)
     assert help == [
-        "Help for FunctionTask",
+        "Help for PythonTask",
         "Input Parameters:",
         "- a: int",
         "- b: float (default: 0.1)",
@@ -165,7 +165,7 @@ def test_annotated_func_multreturn():
 
     help = funky.help(returnhelp=True)
     assert help == [
-        "Help for FunctionTask",
+        "Help for PythonTask",
         "Input Parameters:",
         "- a: float",
         "- _func: bytes",
@@ -470,7 +470,7 @@ def test_halfannotated_func():
     help = funky.help(returnhelp=True)
 
     assert help == [
-        "Help for FunctionTask",
+        "Help for PythonTask",
         "Input Parameters:",
         "- a: _empty",
         "- b: _empty",
@@ -511,7 +511,7 @@ def test_halfannotated_func_multreturn():
     help = funky.help(returnhelp=True)
 
     assert help == [
-        "Help for FunctionTask",
+        "Help for PythonTask",
         "Input Parameters:",
         "- a: _empty",
         "- b: _empty",
@@ -811,7 +811,7 @@ def test_input_spec_func_4a():
 
 
 def test_input_spec_func_5():
-    """the FunctionTask with input_spec, a input has MultiInputObj type
+    """the PythonTask with input_spec, a input has MultiInputObj type
     a single value is provided and should be converted to a list
     """
 
@@ -1050,7 +1050,7 @@ def test_audit_task(tmpdir):
 
 def test_audit_shellcommandtask(tmpdir):
     args = "-l"
-    shelly = ShellCommandTask(
+    shelly = ShellTask(
         name="shelly",
         executable="ls",
         args=args,
@@ -1138,7 +1138,7 @@ def test_audit_shellcommandtask_file(tmp_path):
         ],
         bases=(ShellSpec,),
     )
-    shelly = ShellCommandTask(
+    shelly = ShellTask(
         name="shelly",
         in_file=file_in,
         in_file_2=file_in_2,
@@ -1171,7 +1171,7 @@ def test_audit_shellcommandtask_version(tmpdir):
     )
     version_cmd = version_cmd.splitlines()[0]
     cmd = "less"
-    shelly = ShellCommandTask(
+    shelly = ShellTask(
         name="shelly",
         executable=cmd,
         args="test_task.py",
@@ -1312,13 +1312,13 @@ def test_shell_cmd(tmpdir):
     cmd = ["echo", "hail", "pydra"]
 
     # all args given as executable
-    shelly = ShellCommandTask(name="shelly", executable=cmd)
+    shelly = ShellTask(name="shelly", executable=cmd)
     assert shelly.cmdline == " ".join(cmd)
     res = shelly._run()
     assert res.output.stdout == " ".join(cmd[1:]) + "\n"
 
     # separate command into exec + args
-    shelly = ShellCommandTask(executable=cmd[0], args=cmd[1:])
+    shelly = ShellTask(executable=cmd[0], args=cmd[1:])
     assert shelly.inputs.executable == "echo"
     assert shelly.cmdline == " ".join(cmd)
     res = shelly._run()

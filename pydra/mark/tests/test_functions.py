@@ -3,14 +3,14 @@ import random
 import typing as ty
 
 from ..functions import task, annotate
-from pydra.engine.task import FunctionTask
+from pydra.engine.task import PythonTask
 
 
 def test_task_equivalence():
     def add_two(a):
         return a + 2
 
-    canonical = FunctionTask(add_two, a=3)
+    canonical = PythonTask(add_two, a=3)
 
     decorated1 = task(add_two)(a=3)
 

@@ -4,7 +4,7 @@ import attr
 import pytest
 
 from ..core import Workflow
-from ..task import ShellCommandTask
+from ..task import ShellTask
 from ..submitter import Submitter
 from ..boutiques import BoshTask
 from .utils import result_no_submitter, result_submitter, no_win
@@ -151,7 +151,7 @@ def test_boutiques_wf_2(maskfile, plugin, tmpdir, infile):
             name="stat", zenodo_id="4472771", input_file=wf.bet.lzout.outfile, v=True
         )
     )
-    wf.add(ShellCommandTask(name="cat", executable="cat", args=wf.stat.lzout.output))
+    wf.add(ShellTask(name="cat", executable="cat", args=wf.stat.lzout.output))
 
     wf.set_output(
         [

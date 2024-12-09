@@ -88,7 +88,7 @@ class Requirement:
         return not self.allowed_values or value in self.allowed_values
 
     @classmethod
-    def parse(value: ty.Any) -> Self:
+    def parse(cls, value: ty.Any) -> Self:
         if isinstance(value, Requirement):
             return value
         elif isinstance(value, str):
@@ -111,8 +111,10 @@ class Requirement:
 
 def requirements_converter(value: ty.Any) -> list[Requirement]:
     """Ensure the requires field is a list of Requirement objects"""
-    if isinstance(value, (str, tuple, Requirement)):
+    if isinstance(value, Requirement):
         return [value]
+    elif isinstance(value, (str, tuple)):
+        return [Requirement.parse(value)]
     return [Requirement.parse(v) for v in value]
 
 

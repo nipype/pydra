@@ -93,10 +93,10 @@ class Outputs:
         return self
 
 
-OutSpecType = ty.TypeVar("OutputType", bound=Outputs)
+OutputsType = ty.TypeVar("OutputType", bound=Outputs)
 
 
-class TaskSpec(ty.Generic[OutSpecType]):
+class TaskSpec(ty.Generic[OutputsType]):
     """Base class for all task specifications"""
 
     Task: "ty.Type[core.Task]"
@@ -222,8 +222,7 @@ class TaskSpec(ty.Generic[OutSpecType]):
         input_names = set(inputs)
         for field in itertools.chain(inputs.values(), outputs.values()):
             if unrecognised := (
-                set([r.name for s in field.requires for r in s.requirements])
-                - input_names
+                set([r.name for s in field.requires for r in s]) - input_names
             ):
                 raise ValueError(
                     "'Unrecognised' field names in referenced in the requirements "
@@ -318,10 +317,10 @@ class PythonOutputs(Outputs):
     pass
 
 
-PythonOutSpecType = ty.TypeVar("OutputType", bound=PythonOutputs)
+PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 
-class PythonSpec(TaskSpec[PythonOutSpecType]):
+class PythonSpec(TaskSpec[PythonOutputsType]):
     pass
 
 
@@ -329,10 +328,10 @@ class WorkflowOutputs(Outputs):
     pass
 
 
-WorkflowOutSpecType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
+WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 
-class WorkflowSpec(TaskSpec[WorkflowOutSpecType]):
+class WorkflowSpec(TaskSpec[WorkflowOutputsType]):
     pass
 
 
@@ -538,7 +537,10 @@ class ShellOutputs(Outputs):
         return any(rs.satisfied(inputs) for rs in requirements)
 
 
-class ShellSpec(TaskSpec):
+ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
+
+
+class ShellSpec(TaskSpec[ShellOutputsType]):
     pass
 
 

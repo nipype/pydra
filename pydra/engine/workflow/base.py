@@ -11,12 +11,12 @@ from pydra.utils.typing import TypeParser, StateArray
 from .node import Node
 
 
-OutSpecType = ty.TypeVar("OutputType", bound=Outputs)
-WorkflowOutSpecType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
+OutputsType = ty.TypeVar("OutputType", bound=Outputs)
+WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 
 @attrs.define(auto_attribs=False)
-class Workflow(ty.Generic[WorkflowOutSpecType]):
+class Workflow(ty.Generic[WorkflowOutputsType]):
     """A workflow, constructed from a workflow specification
 
     Parameters
@@ -30,14 +30,14 @@ class Workflow(ty.Generic[WorkflowOutSpecType]):
     """
 
     name: str = attrs.field()
-    inputs: TaskSpec[WorkflowOutSpecType] = attrs.field()
-    outputs: WorkflowOutSpecType = attrs.field()
+    inputs: TaskSpec[WorkflowOutputsType] = attrs.field()
+    outputs: WorkflowOutputsType = attrs.field()
     _nodes: dict[str, Node] = attrs.field(factory=dict)
 
     @classmethod
     def construct(
         cls,
-        spec: TaskSpec[WorkflowOutSpecType],
+        spec: TaskSpec[WorkflowOutputsType],
     ) -> Self:
         """Construct a workflow from a specification, caching the constructed worklow"""
 
@@ -120,7 +120,7 @@ class Workflow(ty.Generic[WorkflowOutSpecType]):
 
         return wf
 
-    def add(self, task_spec: TaskSpec[OutSpecType], name=None) -> OutSpecType:
+    def add(self, task_spec: TaskSpec[OutputsType], name=None) -> OutputsType:
         """Add a node to the workflow
 
         Parameters
@@ -140,7 +140,7 @@ class Workflow(ty.Generic[WorkflowOutSpecType]):
             name = type(task_spec).__name__
         if name in self._nodes:
             raise ValueError(f"Node with name {name!r} already exists in the workflow")
-        node = Node[OutSpecType](name=name, spec=task_spec, workflow=self)
+        node = Node[OutputsType](name=name, spec=task_spec, workflow=self)
         self._nodes[name] = node
         return node.lzout
 
