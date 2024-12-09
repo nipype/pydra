@@ -77,9 +77,9 @@ def test_interface_template_more_complex():
         (
             "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
             "-R<recursive> "
-            "--text-arg <text_arg> "
-            "--int-arg <int_arg:int> "
-            "--tuple-arg <tuple_arg:int,str> "
+            "--text-arg <text_arg?> "
+            "--int-arg <int_arg:int?> "
+            "--tuple-arg <tuple_arg:int,str?> "
         ),
     )
 
@@ -129,7 +129,7 @@ def test_interface_template_with_overrides():
             "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
             "-R<recursive> "
             "--text-arg <text_arg> "
-            "--int-arg <int_arg:int> "
+            "--int-arg <int_arg:int?> "
             "--tuple-arg <tuple_arg:int,str> "
         ),
         inputs={"recursive": shell.arg(help_string=RECURSIVE_HELP)},
@@ -162,12 +162,12 @@ def test_interface_template_with_overrides():
             help_string=RECURSIVE_HELP,
             position=2,
         ),
-        shell.arg(name="text_arg", argstr="--text-arg", type=str | None, position=3),
+        shell.arg(name="text_arg", argstr="--text-arg", type=str, position=3),
         shell.arg(name="int_arg", argstr="--int-arg", type=int | None, position=4),
         shell.arg(
             name="tuple_arg",
             argstr="--tuple-arg",
-            type=tuple[int, str] | None,
+            type=tuple[int, str],
             position=5,
         ),
         output,
@@ -213,7 +213,7 @@ def test_interface_template_with_type_overrides():
         shell.arg(
             name="tuple_arg",
             argstr="--tuple-arg",
-            type=tuple[int, str] | None,
+            type=tuple[int, str],
             position=6,
         ),
     ]

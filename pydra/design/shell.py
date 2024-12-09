@@ -461,7 +461,7 @@ def parse_command_line_template(
         return template, inputs, outputs
     executable, args_str = parts
     tokens = re.split(r"\s+", args_str.strip())
-    arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+]+)>"
+    arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+]+\??)>"
     opt_pattern = r"--?[a-zA-Z0-9_]+"
     arg_re = re.compile(arg_pattern)
     opt_re = re.compile(opt_pattern)
@@ -534,12 +534,17 @@ def parse_command_line_template(
             else:
                 field_type = arg
             # Identify type after ':' symbols
+            if name.endswith("?"):
+                name = name[:-1]
+                optional = True
+            else:
+                optional = False
             if ":" in name:
                 name, type_str = name.split(":")
                 type_ = from_type_str(type_str)
             else:
                 type_ = generic.FsObject if option is None else str
-            if option is not None:
+            if optional:
                 type_ |= None  # Make the arguments optional
             kwds = {"type": type_}
             # If name contains a '.', treat it as a file template and strip it from the name
