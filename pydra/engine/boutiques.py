@@ -6,12 +6,12 @@ from pathlib import Path
 from functools import reduce
 
 from pydra.utils.messenger import AuditFlag
-from pydra.engine.task import ShellCommandTask
+from pydra.engine.task import ShellTask
 from pydra.engine.specs import SpecInfo, ShellSpec, ShellOutputs, File, attrs_fields
 from .helpers_file import is_local_file
 
 
-class BoshTask(ShellCommandTask):
+class BoshTask(ShellTask):
     """Shell Command Task based on the Boutiques descriptor"""
 
     def __init__(

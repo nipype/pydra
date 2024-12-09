@@ -1,7 +1,7 @@
 from fileformats.generic import File
 from fileformats.core.mixin import WithSeparateHeader, WithMagicNumber
 from pydra import mark
-from pydra.engine.task import ShellCommandTask
+from pydra.engine.task import ShellTask
 from pydra.engine import specs
 
 
@@ -69,7 +69,7 @@ generic_shelloutput_spec = specs.SpecInfo(
 )
 
 
-class GenericShellTask(ShellCommandTask):
+class GenericShellTask(ShellTask):
     input_spec = generic_shell_input_spec
     output_spec = generic_shelloutput_spec
     executable = "echo"
@@ -121,7 +121,7 @@ specific_shelloutput_spec = specs.SpecInfo(
 )
 
 
-class SpecificShellTask(ShellCommandTask):
+class SpecificShellTask(ShellTask):
     input_spec = specific_shell_input_spec
     output_spec = specific_shelloutput_spec
     executable = "echo"
@@ -175,7 +175,7 @@ other_specific_shelloutput_spec = specs.SpecInfo(
 )
 
 
-class OtherSpecificShellTask(ShellCommandTask):
+class OtherSpecificShellTask(ShellTask):
     input_spec = other_specific_shell_input_spec
     output_spec = other_specific_shelloutput_spec
     executable = "echo"

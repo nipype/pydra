@@ -1,4 +1,4 @@
-"""Decorators and helper functions to create ShellCommandTasks used in Pydra workflows"""
+"""Decorators and helper functions to create ShellTasks used in Pydra workflows"""
 
 from __future__ import annotations
 import typing as ty
@@ -93,7 +93,7 @@ def shell_task(
                     pass
 
         # Ensure bases are lists and can be modified
-        ensure_base_included(pydra.engine.task.ShellCommandTask, bases)
+        ensure_base_included(pydra.engine.task.ShellTask, bases)
         ensure_base_included(pydra.engine.specs.ShellSpec, inputs_bases)
         ensure_base_included(pydra.engine.specs.ShellOutputs, outputs_bases)
 
@@ -140,8 +140,8 @@ def shell_task(
         name = klass.__name__
 
         bases = [klass]
-        if not issubclass(klass, pydra.engine.task.ShellCommandTask):
-            bases.append(pydra.engine.task.ShellCommandTask)
+        if not issubclass(klass, pydra.engine.task.ShellTask):
+            bases.append(pydra.engine.task.ShellTask)
 
         try:
             executable = klass.executable

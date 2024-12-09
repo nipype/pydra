@@ -1,4 +1,4 @@
-"""Decorators and helper functions to create ShellCommandTasks used in Pydra workflows"""
+"""Decorators and helper functions to create ShellTasks used in Pydra workflows"""
 
 from __future__ import annotations
 import typing as ty
@@ -254,7 +254,7 @@ def define(
     ShellSpec
         The interface for the shell command
     """
-    from pydra.engine.task import ShellCommandTask
+    from pydra.engine.task import ShellTask
     from pydra.engine.specs import ShellSpec, ShellOutputs
 
     def make(
@@ -339,7 +339,7 @@ def define(
         interface = make_task_spec(
             ShellSpec,
             ShellOutputs,
-            ShellCommandTask,
+            ShellTask,
             parsed_inputs,
             parsed_outputs,
             name=class_name,

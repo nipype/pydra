@@ -70,7 +70,7 @@ from pydra.utils.typing import TypeParser
 from .environments import Native
 
 
-class FunctionTask(Task):
+class PythonTask(Task):
     """Wrap a Python callable as a task element."""
 
     def _run_task(self, environment=None):
@@ -95,7 +95,7 @@ class FunctionTask(Task):
             )
 
 
-class ShellCommandTask(Task):
+class ShellTask(Task):
     """Wrap a shell command as a task element."""
 
     def __init__(

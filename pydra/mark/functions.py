@@ -30,7 +30,7 @@ def annotate(annotation):
 
 def task(func):
     """
-    Promote a function to a :class:`~pydra.engine.task.FunctionTask`.
+    Promote a function to a :class:`~pydra.engine.task.PythonTask`.
 
     Example
     -------
@@ -40,10 +40,10 @@ def task(func):
     ...     return a ** 2.0
 
     """
-    from pydra.engine.task import FunctionTask
+    from pydra.engine.task import PythonTask
 
     @wraps(func)
     def decorate(**kwargs):
-        return FunctionTask(func=func, **kwargs)
+        return PythonTask(func=func, **kwargs)
 
     return decorate
