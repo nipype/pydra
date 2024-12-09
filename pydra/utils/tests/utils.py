@@ -65,7 +65,7 @@ generic_shell_output_fields = [
     ),
 ]
 generic_shelloutput_spec = specs.SpecInfo(
-    name="Output", fields=generic_shell_output_fields, bases=(specs.ShellOutSpec,)
+    name="Output", fields=generic_shell_output_fields, bases=(specs.ShellOutputs,)
 )
 
 
@@ -117,7 +117,7 @@ specific_shell_output_fields = [
     ),
 ]
 specific_shelloutput_spec = specs.SpecInfo(
-    name="Output", fields=specific_shell_output_fields, bases=(specs.ShellOutSpec,)
+    name="Output", fields=specific_shell_output_fields, bases=(specs.ShellOutputs,)
 )
 
 
@@ -171,7 +171,7 @@ other_specific_shell_output_fields = [
 other_specific_shelloutput_spec = specs.SpecInfo(
     name="Output",
     fields=other_specific_shell_output_fields,
-    bases=(specs.ShellOutSpec,),
+    bases=(specs.ShellOutputs,),
 )
 
 

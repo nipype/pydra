@@ -25,7 +25,7 @@ def is_set(value: ty.Any) -> bool:
     return value is not attrs.NOTHING
 
 
-class OutSpec:
+class Outputs:
     """Base class for all output specifications"""
 
     RESERVED_FIELD_NAMES = ("split", "combine")
@@ -93,7 +93,7 @@ class OutSpec:
         return self
 
 
-OutSpecType = ty.TypeVar("OutputType", bound=OutSpec)
+OutSpecType = ty.TypeVar("OutputType", bound=Outputs)
 
 
 class TaskSpec(ty.Generic[OutSpecType]):
@@ -314,29 +314,29 @@ class RuntimeSpec:
     network: bool = False
 
 
-class PythonOutSpec(OutSpec):
+class PythonOutputs(Outputs):
     pass
 
 
-PythonOutSpecType = ty.TypeVar("OutputType", bound=PythonOutSpec)
+PythonOutSpecType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 
 class PythonSpec(TaskSpec[PythonOutSpecType]):
     pass
 
 
-class WorkflowOutSpec(OutSpec):
+class WorkflowOutputs(Outputs):
     pass
 
 
-WorkflowOutSpecType = ty.TypeVar("OutputType", bound=WorkflowOutSpec)
+WorkflowOutSpecType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 
 class WorkflowSpec(TaskSpec[WorkflowOutSpecType]):
     pass
 
 
-class ShellOutSpec(OutSpec):
+class ShellOutputs(Outputs):
     """Output specification of a generic shell process."""
 
     return_code: int = shell.out()
@@ -373,7 +373,7 @@ class ShellOutSpec(OutSpec):
 
         Returns
         -------
-        outputs : ShellOutSpec
+        outputs : ShellOutputs
             The outputs of the shell process
         """
 

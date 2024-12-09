@@ -95,7 +95,7 @@ def shell_task(
         # Ensure bases are lists and can be modified
         ensure_base_included(pydra.engine.task.ShellCommandTask, bases)
         ensure_base_included(pydra.engine.specs.ShellSpec, inputs_bases)
-        ensure_base_included(pydra.engine.specs.ShellOutSpec, outputs_bases)
+        ensure_base_included(pydra.engine.specs.ShellOutputs, outputs_bases)
 
         def convert_to_attrs(fields: dict[str, dict[str, ty.Any]], attrs_func):
             annotations = {}
@@ -161,7 +161,7 @@ def shell_task(
         try:
             Outputs = klass.Outputs
         except AttributeError:
-            Outputs = type("Outputs", (pydra.engine.specs.ShellOutSpec,), {})
+            Outputs = type("Outputs", (pydra.engine.specs.ShellOutputs,), {})
 
         # Pass Inputs and Outputs in attrs.define if they are present in klass (i.e.
         # not in a base class)
@@ -177,8 +177,8 @@ def shell_task(
 
     template_fields = _gen_output_template_fields(Inputs, Outputs)
 
-    if not issubclass(Outputs, pydra.engine.specs.ShellOutSpec):
-        outputs_bases = (Outputs, pydra.engine.specs.ShellOutSpec)
+    if not issubclass(Outputs, pydra.engine.specs.ShellOutputs):
+        outputs_bases = (Outputs, pydra.engine.specs.ShellOutputs)
         add_base_class = True
     else:
         outputs_bases = (Outputs,)

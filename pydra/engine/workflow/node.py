@@ -4,7 +4,7 @@ from enum import Enum
 import attrs
 from pydra.utils.typing import TypeParser, StateArray
 from . import lazy
-from ..specs import TaskSpec, OutSpec
+from ..specs import TaskSpec, Outputs
 from ..helpers import ensure_list, attrs_values
 from .. import helpers_state as hlpst
 from ..state import State
@@ -13,7 +13,7 @@ if ty.TYPE_CHECKING:
     from .base import Workflow
 
 
-OutputType = ty.TypeVar("OutputType", bound=OutSpec)
+OutputType = ty.TypeVar("OutputType", bound=Outputs)
 Splitter = ty.Union[str, ty.Tuple[str, ...]]
 
 _not_set = Enum("_not_set", "NOT_SET")

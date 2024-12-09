@@ -103,7 +103,7 @@ def define(
         Whether to use auto_attribs mode when creating the class.
     """
     from pydra.engine.task import FunctionTask
-    from pydra.engine.specs import PythonSpec, PythonOutSpec
+    from pydra.engine.specs import PythonSpec, PythonOutputs
 
     def make(wrapped: ty.Callable | type) -> PythonSpec:
         if inspect.isclass(wrapped):
@@ -142,7 +142,7 @@ def define(
 
         interface = make_task_spec(
             PythonSpec,
-            PythonOutSpec,
+            PythonOutputs,
             FunctionTask,
             parsed_inputs,
             parsed_outputs,

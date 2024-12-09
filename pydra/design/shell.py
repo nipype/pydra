@@ -255,7 +255,7 @@ def define(
         The interface for the shell command
     """
     from pydra.engine.task import ShellCommandTask
-    from pydra.engine.specs import ShellSpec, ShellOutSpec
+    from pydra.engine.specs import ShellSpec, ShellOutputs
 
     def make(
         wrapped: ty.Callable | type | None = None,
@@ -338,7 +338,7 @@ def define(
 
         interface = make_task_spec(
             ShellSpec,
-            ShellOutSpec,
+            ShellOutputs,
             ShellCommandTask,
             parsed_inputs,
             parsed_outputs,

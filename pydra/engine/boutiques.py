@@ -7,7 +7,7 @@ from functools import reduce
 
 from pydra.utils.messenger import AuditFlag
 from pydra.engine.task import ShellCommandTask
-from pydra.engine.specs import SpecInfo, ShellSpec, ShellOutSpec, File, attrs_fields
+from pydra.engine.specs import SpecInfo, ShellSpec, ShellOutputs, File, attrs_fields
 from .helpers_file import is_local_file
 
 
@@ -175,7 +175,7 @@ class BoshTask(ShellCommandTask):
 
         if names_subset:
             raise RuntimeError(f"{names_subset} are not in the zenodo output spec")
-        spec = SpecInfo(name="Outputs", fields=fields, bases=(ShellOutSpec,))
+        spec = SpecInfo(name="Outputs", fields=fields, bases=(ShellOutputs,))
         return spec
 
     def _command_args_single(self, state_ind=None, index=None):

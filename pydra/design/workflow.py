@@ -14,7 +14,7 @@ from .base import (
 
 if ty.TYPE_CHECKING:
     from pydra.engine.workflow.base import Workflow
-    from pydra.engine.specs import TaskSpec, OutSpec, WorkflowSpec
+    from pydra.engine.specs import TaskSpec, Outputs, WorkflowSpec
 
 
 __all__ = ["define", "add", "this", "arg", "out"]
@@ -115,7 +115,7 @@ def define(
         The interface for the function or class.
     """
     from pydra.engine.core import WorkflowTask
-    from pydra.engine.specs import TaskSpec, WorkflowSpec, WorkflowOutSpec
+    from pydra.engine.specs import TaskSpec, WorkflowSpec, WorkflowOutputs
 
     if lazy is None:
         lazy = []
@@ -159,7 +159,7 @@ def define(
 
         interface = make_task_spec(
             WorkflowSpec,
-            WorkflowOutSpec,
+            WorkflowOutputs,
             WorkflowTask,
             parsed_inputs,
             parsed_outputs,
@@ -191,7 +191,7 @@ def this() -> "Workflow":
     return Workflow.under_construction
 
 
-OutSpecType = ty.TypeVar("OutSpecType", bound="OutSpec")
+OutSpecType = ty.TypeVar("OutSpecType", bound="Outputs")
 
 
 def add(task_spec: "TaskSpec[OutSpecType]", name: str = None) -> OutSpecType:
@@ -207,7 +207,7 @@ def add(task_spec: "TaskSpec[OutSpecType]", name: str = None) -> OutSpecType:
 
     Returns
     -------
-    OutSpec
+    Outputs
         The outputs specification of the node
     """
     return this().add(task_spec, name=name)
