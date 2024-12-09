@@ -8,7 +8,7 @@ description = "Pydra dataflow engine"
 readme = "README.rst"
 requires-python = ">=3.10"
 dependencies = [
-    "attrs >=19.1.0",
+    "attrs >=24.2.0",
     "cloudpickle >=2.0.0",
     "etelemetry >=0.2.2",
     "filelock >=3.0.0",
