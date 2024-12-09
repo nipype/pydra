@@ -152,6 +152,7 @@ def test_workflow_canonical():
             mul = workflow.add(Mul(a=add.out, b=b))
             return mul.out
 
+        @workflow.outputs
         class Outputs(WorkflowOutputs):
             out: float
 

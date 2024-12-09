@@ -1,5 +1,6 @@
 import typing as ty
 import inspect
+from typing_extensions import dataclass_transform
 import attrs
 from .base import (
     Arg,
@@ -84,6 +85,19 @@ class out(Out):
     pass
 
 
+@dataclass_transform(
+    kw_only_default=True,
+    field_specifiers=(out,),
+)
+def outputs(wrapped):
+    """Decorator to specify the output fields of a shell command is a dataclass-style type"""
+    return wrapped
+
+
+@dataclass_transform(
+    kw_only_default=True,
+    field_specifiers=(arg,),
+)
 def define(
     wrapped: type | ty.Callable | None = None,
     /,

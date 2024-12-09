@@ -8,6 +8,7 @@ import inspect
 from copy import copy
 import attrs
 import builtins
+from typing_extensions import dataclass_transform
 from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
@@ -198,6 +199,19 @@ class outarg(Out, arg):
             )
 
 
+@dataclass_transform(
+    kw_only_default=True,
+    field_specifiers=(out, outarg),
+)
+def outputs(wrapped):
+    """Decorator to specify the output fields of a shell command is a dataclass-style type"""
+    return wrapped
+
+
+@dataclass_transform(
+    kw_only_default=True,
+    field_specifiers=(arg,),
+)
 def define(
     wrapped: type | str | None = None,
     /,

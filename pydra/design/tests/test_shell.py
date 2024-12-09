@@ -6,7 +6,7 @@ import pytest
 import cloudpickle as cp
 from pydra.design import shell
 from pydra.engine.helpers import list_fields
-from pydra.engine.specs import ShellSpec
+from pydra.engine.specs import ShellSpec, ShellOutputs
 from fileformats.generic import File, Directory, FsObject
 from fileformats import text, image
 from pydra.utils.typing import MultiInputObj
@@ -267,7 +267,8 @@ def Ls(request):
                 xor=["complete_date"],
             )
 
-            class Outputs:
+            @shell.outputs
+            class Outputs(ShellOutputs):
                 entries: list = shell.out(
                     help_string="list of entries returned by ls command",
                     callable=list_entries,
@@ -346,7 +347,14 @@ def test_shell_fields(Ls):
         ]
     )
 
-    assert [a.name for a in sorted_fields(Ls.Outputs)] == ["entries"]
+    assert [a.name for a in sorted_fields(Ls.Outputs)] == sorted(
+        [
+            "entries",
+            "stdout",
+            "stderr",
+            "return_code",
+        ]
+    )
 
 
 def test_shell_pickle_roundtrip(Ls, tmp_path):
