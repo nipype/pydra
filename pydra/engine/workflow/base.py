@@ -88,7 +88,7 @@ class Workflow(ty.Generic[WorkflowOutSpecType]):
             output_lazy_fields = constructor(**input_values)
             # Check to see whether any mandatory inputs are not set
             for node in wf.nodes:
-                node.inputs._check_for_unset_values()
+                node._spec._check_rules()
             # Check that the outputs are set correctly, either directly by the constructor
             # or via returned values that can be zipped with the output names
             if output_lazy_fields:

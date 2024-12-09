@@ -5,6 +5,7 @@ import re
 import enum
 from pathlib import Path
 from copy import copy
+from typing_extensions import Self
 import attrs.validators
 from attrs.converters import default_if_none
 from fileformats.generic import File
@@ -58,7 +59,101 @@ def is_type(_, __, val: ty.Any) -> bool:
 
 def convert_default_value(value: ty.Any, self_: "Field") -> ty.Any:
     """Ensure the default value has been coerced into the correct type"""
+    if value is EMPTY:
+        return value
     return TypeParser[self_.type](self_.type, label=self_.name)(value)
+
+
+@attrs.define
+class Requirement:
+    """Define a requirement for a task input field
+
+    Parameters
+    ----------
+    name : str
+        The name of the input field that is required
+    allowed_values : list[str], optional
+        The allowed values for the input field that is required, if not provided any
+        value is allowed
+    """
+
+    name: str
+    allowed_values: list[str] = attrs.field(factory=list, converter=list)
+
+    def satisfied(self, inputs: "TaskSpec") -> bool:
+        """Check if the requirement is satisfied by the inputs"""
+        value = getattr(inputs, self.name)
+        if value is attrs.NOTHING:
+            return False
+        return not self.allowed_values or value in self.allowed_values
+
+    @classmethod
+    def parse(value: ty.Any) -> Self:
+        if isinstance(value, Requirement):
+            return value
+        elif isinstance(value, str):
+            return Requirement(value)
+        else:
+            name, allowed_values = value
+            if isinstance(allowed_values, str) or not isinstance(
+                allowed_values, ty.Collection
+            ):
+                raise ValueError(
+                    f"allowed_values must be a collection of strings, not {allowed_values}"
+                )
+            return Requirement(name, allowed_values)
+
+    def __str__(self):
+        if not self.allowed_values:
+            return self.name
+        return f"{self.name}(" + ",".join(repr(v) for v in self.allowed_values) + ")"
+
+
+def requirements_converter(value: ty.Any) -> list[Requirement]:
+    """Ensure the requires field is a list of Requirement objects"""
+    if isinstance(value, (str, tuple, Requirement)):
+        return [value]
+    return [Requirement.parse(v) for v in value]
+
+
+@attrs.define
+class RequirementSet:
+    """Define a set of requirements for a task input field, all of which must be satisfied"""
+
+    requirements: list[Requirement] = attrs.field(
+        factory=list,
+        converter=requirements_converter,
+    )
+
+    def satisfied(self, inputs: "TaskSpec") -> bool:
+        """Check if all the requirements are satisfied by the inputs"""
+        return all(req.satisfied(inputs) for req in self.requirements)
+
+    def __str__(self):
+        if len(self.requirements) == 1:
+            return str(self.requirements[0])
+        return "+".join(str(r) for r in self.requirements)
+
+    def __iter__(self):
+        return iter(self.requirements)
+
+    def __iadd__(self, other: "RequirementSet | list[Requirement]") -> "RequirementSet":
+        self.requirements.extend(requirements_converter(other))
+        return self
+
+
+def requires_converter(
+    value: (
+        str
+        | ty.Collection[
+            Requirement | str | ty.Collection[str | tuple[str, ty.Collection[ty.Any]]]
+        ]
+    ),
+) -> list[RequirementSet]:
+    """Ensure the requires field is a tuple of tuples"""
+    if isinstance(value, (str, tuple, Requirement)):
+        return [RequirementSet(value)]
+    return [RequirementSet(v) for v in value]
 
 
 @attrs.define(kw_only=True)
@@ -76,8 +171,11 @@ class Field:
         the default value for the field, by default it is EMPTY
     help_string: str, optional
         A short description of the input field.
-    requires: list, optional
-        Names of the inputs that are required together with the field.
+    requires: str | list[str | list[str] | Requirement], optional
+        The input fields that are required to be provided, along with the optional allowed
+        values, that are required together with the field. Can be provided
+        as a single name, a collection of names, a collection of collections of names,
+        or a collection of collection of name/allowed values pairs.
     converter: callable, optional
         The converter for the field passed through to the attrs.field, by default it is None
     validator: callable | iterable[callable], optional
@@ -89,14 +187,18 @@ class Field:
         validator=is_type, default=ty.Any, converter=default_if_none(ty.Any)
     )
     default: ty.Any = attrs.field(
-        default=EMPTY, converter=attrs.Converter(convert_default_value, with_self=True)
+        default=EMPTY, converter=attrs.Converter(convert_default_value, takes_self=True)
     )
     help_string: str = ""
-    requires: list[str] | list[list[str]] = attrs.field(
-        factory=list, converter=ensure_list
+    requires: list[RequirementSet] = attrs.field(
+        factory=list, converter=requires_converter
     )
     converter: ty.Callable | None = None
     validator: ty.Callable | None = None
+
+    def requirements_satisfied(self, inputs: "TaskSpec") -> bool:
+        """Check if all the requirements are satisfied by the inputs"""
+        return any(req.satisfied(inputs) for req in self.requires)
 
 
 @attrs.define(kw_only=True)
@@ -118,7 +220,7 @@ class Arg(Field):
         List of allowed values for the field.
     requires: list, optional
         Names of the inputs that are required together with the field.
-    xor: list, optional
+    xor: list[str], optional
         Names of the inputs that are mutually exclusive with the field.
     copy_mode: File.CopyMode, optional
         The mode of copying the file, by default it is File.CopyMode.any
@@ -133,8 +235,8 @@ class Arg(Field):
         it is False
     """
 
-    allowed_values: list | None = None
-    xor: list | None = None
+    allowed_values: tuple = attrs.field(default=(), converter=tuple)
+    xor: tuple[str] = attrs.field(default=(), converter=tuple)
     copy_mode: File.CopyMode = File.CopyMode.any
     copy_collation: File.CopyCollation = File.CopyCollation.any
     copy_ext_decomp: File.ExtensionDecomposition = File.ExtensionDecomposition.single
@@ -292,6 +394,8 @@ def make_task_spec(
     """
     from pydra.engine.specs import TaskSpec
 
+    spec_type._check_arg_refs(inputs, outputs)
+
     if name is None and klass is not None:
         name = klass.__name__
     outputs_klass = make_outputs_spec(out_type, outputs, outputs_bases, name)
@@ -326,6 +430,7 @@ def make_task_spec(
     # Now that we have saved the attributes in lists to be
     for arg in inputs.values():
         # If an outarg input then the field type should be Path not a FileSet
+        default_kwargs = _get_default(arg)
         if isinstance(arg, Out) and is_fileset_or_union(arg.type):
             if getattr(arg, "path_template", False):
                 if is_optional(arg.type):
@@ -333,7 +438,7 @@ def make_task_spec(
                     # Will default to None and not be inserted into the command
                 else:
                     field_type = Path | bool
-                    arg.default = True
+                    default_kwargs = {"default": True}
             elif is_optional(arg.type):
                 field_type = Path | None
             else:
@@ -348,7 +453,7 @@ def make_task_spec(
                 validator=make_validator(arg, klass.__name__),
                 metadata={PYDRA_ATTR_METADATA: arg},
                 on_setattr=attrs.setters.convert,
-                **_get_default(arg),
+                **default_kwargs,
             ),
         )
         klass.__annotations__[arg.name] = field_type

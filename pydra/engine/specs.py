@@ -4,17 +4,19 @@ import os
 from pathlib import Path
 import re
 import inspect
+import itertools
 import typing as ty
 from glob import glob
+from copy import deepcopy
 from typing_extensions import Self
 import attrs
 from fileformats.generic import File
 from pydra.engine.audit import AuditFlag
 from pydra.utils.typing import TypeParser, MultiOutputObj
-from .helpers import attrs_fields, attrs_values, is_lazy, list_fields, ensure_list
+from .helpers import attrs_fields, attrs_values, is_lazy, list_fields
 from .helpers_file import template_update_single
 from pydra.utils.hash import hash_function, Cache
-from pydra.design.base import Arg, Out
+from pydra.design.base import Field, Arg, Out, RequirementSet
 from pydra.design import shell
 
 
@@ -174,45 +176,65 @@ class TaskSpec(ty.Generic[OutSpecType]):
             value = getattr(self, field.name)
 
             # Collect alternative fields associated with this field.
-            alternative_fields = {
-                name: getattr(self, name) for name in field.xor if name != field.name
-            }
-            set_alternatives = {
-                n: v for n, v in alternative_fields.items() if is_set(v)
-            }
+            if field.xor:
+                alternative_fields = {
+                    name: getattr(self, name)
+                    for name in field.xor
+                    if name != field.name
+                }
+                set_alternatives = {
+                    n: v for n, v in alternative_fields.items() if is_set(v)
+                }
 
-            # Raise error if no field in mandatory alternative group is set.
-            if not is_set(value):
-                if set_alternatives:
-                    continue
-                message = f"{field.name} is mandatory and unset."
-                if alternative_fields:
+                # Raise error if no field in mandatory alternative group is set.
+                if not is_set(value):
+                    if set_alternatives:
+                        continue
+                    message = f"{field.name} is mandatory and unset."
+                    if alternative_fields:
+                        raise AttributeError(
+                            message[:-1]
+                            + f", and no alternative provided in {list(alternative_fields)}."
+                        )
+                    else:
+                        raise AttributeError(message)
+
+                # Raise error if multiple alternatives are set.
+                elif set_alternatives:
                     raise AttributeError(
-                        message[:-1]
-                        + f", and no alternative provided in {list(alternative_fields)}."
+                        f"{field.name} is mutually exclusive with {set_alternatives}"
                     )
-                else:
-                    raise AttributeError(message)
-
-            # Raise error if multiple alternatives are set.
-            elif set_alternatives:
-                raise AttributeError(
-                    f"{field.name} is mutually exclusive with {set_alternatives}"
-                )
-
-            # Collect required fields associated with this field.
-            required_fields = {
-                name: is_set(getattr(self, name))
-                for name in field.requires
-                if name != field.name
-            }
 
             # Raise error if any required field is unset.
-            if not all(required_fields.values()):
-                unset_required_fields = [
-                    name for name, is_set_ in required_fields.items() if not is_set_
-                ]
-                raise AttributeError(f"{field.name} requires {unset_required_fields}")
+            if field.requires and not any(rs.satisfied(self) for rs in field.requires):
+                raise ValueError(
+                    f"{field.name} requires at least one of the requirement sets to be "
+                    f"satisfied: {[str(r) for r in field.requires]}"
+                )
+
+    @classmethod
+    def _check_arg_refs(cls, inputs: list[Arg], outputs: list[Out]) -> None:
+        """
+        Checks if all fields referenced in requirements and xor are present in the inputs
+        are valid field names
+        """
+        field: Field
+        input_names = set(inputs)
+        for field in itertools.chain(inputs.values(), outputs.values()):
+            if unrecognised := (
+                set([r.name for s in field.requires for r in s.requirements])
+                - input_names
+            ):
+                raise ValueError(
+                    "'Unrecognised' field names in referenced in the requirements "
+                    f"of {field} " + str(list(unrecognised))
+                )
+        for inpt in inputs.values():
+            if unrecognised := set(inpt.xor) - input_names:
+                raise ValueError(
+                    "'Unrecognised' field names in referenced in the xor "
+                    f"of {inpt} " + str(list(unrecognised))
+                )
 
 
 @attrs.define(kw_only=True)
@@ -296,7 +318,10 @@ class PythonOutSpec(OutSpec):
     pass
 
 
-class PythonSpec(TaskSpec):
+PythonOutSpecType = ty.TypeVar("OutputType", bound=PythonOutSpec)
+
+
+class PythonSpec(TaskSpec[PythonOutSpecType]):
     pass
 
 
@@ -304,36 +329,57 @@ class WorkflowOutSpec(OutSpec):
     pass
 
 
-class WorkflowSpec(TaskSpec):
+WorkflowOutSpecType = ty.TypeVar("OutputType", bound=WorkflowOutSpec)
+
+
+class WorkflowSpec(TaskSpec[WorkflowOutSpecType]):
     pass
 
 
-@attrs.define(kw_only=True)
 class ShellOutSpec(OutSpec):
     """Output specification of a generic shell process."""
 
-    return_code: int
+    return_code: int = shell.out()
     """The process' exit code."""
-    stdout: str
+    stdout: str = shell.out()
     """The process' standard output."""
-    stderr: str
+    stderr: str = shell.out()
     """The process' standard input."""
-
-    RESERVED_FIELD_NAMES = ("split", "combine", "return_code", "stdout", "stderr")
 
     @classmethod
     def collect_outputs(
-        self,
+        cls,
         inputs: "ShellSpec",
         output_dir: Path,
-        return_code: int,
         stdout: str,
         stderr: str,
+        return_code: int,
     ) -> Self:
+        """Collect the outputs of a shell process from a combination of the provided inputs,
+        the objects in the output directory, and the stdout and stderr of the process.
 
-        outputs = Self(return_code=return_code, stdout=stdout, stderr=stderr)
+        Parameters
+        ----------
+        inputs : ShellSpec
+            The input specification of the shell process.
+        output_dir : Path
+            The directory where the process was run.
+        stdout : str
+            The standard output of the process.
+        stderr : str
+            The standard error of the process.
+        return_code : int
+            The exit code of the process.
+
+        Returns
+        -------
+        outputs : ShellOutSpec
+            The outputs of the shell process
+        """
+
+        outputs = cls(return_code=return_code, stdout=stdout, stderr=stderr)
         fld: shell.out
-        for fld in list_fields(self):
+        for fld in list_fields(cls):
             if not TypeParser.is_subclass(
                 fld.type,
                 (
@@ -347,7 +393,7 @@ class ShellOutSpec(OutSpec):
                 ),
             ):
                 raise TypeError(
-                    f"Support for {fld.type} type, required for '{fld.name}' in {self}, "
+                    f"Support for {fld.type} type, required for '{fld.name}' in {cls}, "
                     "has not been implemented in collect_additional_output"
                 )
             # Get the corresponding value from the inputs if it exists, which will be
@@ -355,21 +401,22 @@ class ShellOutSpec(OutSpec):
             if isinstance(fld, shell.outarg) and is_set(getattr(inputs, fld.name)):
                 resolved_value = getattr(inputs, fld.name)
             elif is_set(fld.default):
-                resolved_value = self._resolve_default_value(fld, output_dir)
+                resolved_value = cls._resolve_default_value(fld, output_dir)
             else:
                 if fld.type in [int, float, bool, str, list] and not fld.callable:
                     raise AttributeError(
                         f"{fld.type} has to have a callable in metadata"
                     )
-                resolved_value = self._generate_implicit_value(
+                resolved_value = cls._generate_implicit_value(
                     fld, inputs, output_dir, outputs, stdout, stderr
                 )
             # Set the resolved value
             setattr(outputs, fld.name, resolved_value)
         return outputs
 
+    @classmethod
     def _generated_output_names(
-        self, inputs: "ShellSpec", output_dir: Path, stdout: str, stderr: str
+        cls, inputs: "ShellSpec", output_dir: Path, stdout: str, stderr: str
     ):
         """Returns a list of all outputs that will be generated by the task.
         Takes into account the task input and the requires list for the output fields.
@@ -378,17 +425,18 @@ class ShellOutSpec(OutSpec):
         # checking the input (if all mandatory fields are provided, etc.)
         inputs._check_rules()
         output_names = ["return_code", "stdout", "stderr"]
-        for fld in list_fields(self):
+        for fld in list_fields(cls):
             # assuming that field should have either default or metadata, but not both
             if is_set(fld.default):
                 output_names.append(fld.name)
             elif is_set(
-                self._generate_implicit_value(fld, inputs, output_dir, stdout, stderr)
+                cls._generate_implicit_value(fld, inputs, output_dir, stdout, stderr)
             ):
                 output_names.append(fld.name)
         return output_names
 
-    def _resolve_default_value(self, fld: shell.out, output_dir: Path) -> ty.Any:
+    @classmethod
+    def _resolve_default_value(cls, fld: shell.out, output_dir: Path) -> ty.Any:
         """Resolve path and glob expr default values relative to the output dir"""
         default = fld.default
         if fld.type is Path:
@@ -410,8 +458,9 @@ class ShellOutSpec(OutSpec):
                     raise AttributeError(f"no file matches {default.name}")
         return default
 
+    @classmethod
     def _generate_implicit_value(
-        self,
+        cls,
         fld: shell.out,
         inputs: "ShellSpec",
         output_dir: Path,
@@ -419,7 +468,7 @@ class ShellOutSpec(OutSpec):
         stderr: str,
     ) -> ty.Any:
         """Collect output file if metadata specified."""
-        if not self._required_fields_set(fld, inputs):
+        if not cls._required_fields_satisfied(fld, inputs):
             return attrs.NOTHING
         elif isinstance(fld, shell.outarg) and fld.path_template:
             return template_update_single(
@@ -460,7 +509,8 @@ class ShellOutSpec(OutSpec):
                 f'("callable", "output_file_template" or "value"): {fld}.'
             )
 
-    def _required_fields_set(self, fld: shell.out, inputs: "ShellSpec") -> bool:
+    @classmethod
+    def _required_fields_satisfied(cls, fld: shell.out, inputs: "ShellSpec") -> bool:
         """checking if all fields from the requires and template are set in the input
         if requires is a list of list, checking if at least one list has all elements set
         """
@@ -468,63 +518,24 @@ class ShellOutSpec(OutSpec):
         if not fld.requires:
             return True
 
-        # if requires is a list of list it is treated as el[0] OR el[1] OR...
-        if all([isinstance(el, list) for el in fld.requires]):
-            field_required_OR = fld.requires
-        # if requires is a list of tuples/strings - I'm creating a 1-el nested list
-        elif all([isinstance(el, (str, tuple)) for el in fld.requires]):
-            field_required_OR = [fld.requires]
+        requirements: list[RequirementSet]
+        if fld.requires:
+            requirements = deepcopy(fld.requires)
         else:
-            raise Exception(
-                f"requires field can be a list of list, or a list "
-                f"of strings/tuples, but {fld.metadata['requires']} "
-                f"provided for {fld.name}"
-            )
+            requirements = [RequirementSet()]
 
-        for field_required in field_required_OR:
-            # if the output has output_file_template field,
-            # adding all input fields from the template to requires
-            if isinstance(fld, shell.outarg) and self.path_template:
-                # if a template is a function it has to be run first with the inputs as the only arg
-                if callable(self.path_template):
-                    template = self.path_template(inputs)
-                inp_fields = re.findall(r"{(\w+)(?:\:[^\}]+)?}", template)
-                field_required += [
-                    el[1:-1] for el in inp_fields if el[1:-1] not in field_required
-                ]
+        # if the output has output_file_template field, add in all input fields from
+        # the template to requires
+        if isinstance(fld, shell.outarg) and fld.path_template:
+            # if a template is a function it has to be run first with the inputs as the only arg
+            if callable(fld.path_template):
+                template = fld.path_template(inputs)
+            inp_fields = re.findall(r"{(\w+)(?:\:[^\}]+)?}", template)
+            for req in requirements:
+                req += inp_fields
 
-        # it's a flag, of the field from the list is not in input it will be changed to False
-        required_found = True
-        for field_required in field_required_OR:
-            required_found = True
-            # checking if the input fields from requires have set values
-            for inp in field_required:
-                if isinstance(inp, str):  # name of the input field
-                    if not hasattr(inputs, inp):
-                        raise Exception(
-                            f"{inp} is not a valid input field, can't be used in requires"
-                        )
-                    elif getattr(inputs, inp) in [attrs.NOTHING, None]:
-                        required_found = False
-                        break
-                elif isinstance(inp, tuple):  # (name, allowed values)
-                    inp, allowed_val = inp[0], ensure_list(inp[1])
-                    if not hasattr(inputs, inp):
-                        raise Exception(
-                            f"{inp} is not a valid input field, can't be used in requires"
-                        )
-                    elif getattr(inputs, inp) not in allowed_val:
-                        required_found = False
-                        break
-                else:
-                    raise Exception(
-                        f"each element of the requires element should be a string or a tuple, "
-                        f"but {inp} is found in {field_required}"
-                    )
-            # if the specific list from field_required_OR has all elements set, no need to check more
-            if required_found:
-                break
-        return required_found
+        # Check to see if any of the requirement sets are satisfied
+        return any(rs.satisfied(inputs) for rs in requirements)
 
 
 class ShellSpec(TaskSpec):

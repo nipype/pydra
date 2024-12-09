@@ -23,7 +23,6 @@ from .specs import (
     Result,
     TaskHook,
 )
-from .workflow.lazy import is_lazy
 from .helpers import (
     create_checksum,
     attrs_fields,
@@ -35,6 +34,7 @@ from .helpers import (
     record_error,
     PydraFileLock,
     parse_copyfile,
+    is_lazy,
 )
 from pydra.utils.hash import hash_function
 from .helpers_file import copy_nested_files, template_update
@@ -626,7 +626,7 @@ class Task:
     def done(self):
         """Check whether the tasks has been finalized and all outputs are stored."""
         # if any of the field is lazy, there is no need to check results
-        if is_lazy(self.inputs):
+        if has_lazy(self.inputs):
             return False
         _result = self.result()
         if self.state:
@@ -1300,3 +1300,11 @@ def is_task(obj):
 def is_workflow(obj):
     """Check whether an object is a :class:`Workflow` instance."""
     return isinstance(obj, WorkflowTask)
+
+
+def has_lazy(obj):
+    """Check whether an object has lazy fields."""
+    for f in attrs_fields(obj):
+        if is_lazy(getattr(obj, f.name)):
+            return True
+    return False

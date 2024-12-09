@@ -4,6 +4,7 @@ import asyncio
 import asyncio.subprocess as asp
 from pathlib import Path
 import os
+import inspect
 import sys
 from uuid import uuid4
 import getpass
@@ -15,7 +16,6 @@ from traceback import format_exception
 import attrs
 from filelock import SoftFileLock, Timeout
 import cloudpickle as cp
-from .helpers_file import copy_nested_files
 from fileformats.core import FileSet
 
 if ty.TYPE_CHECKING:
@@ -36,13 +36,15 @@ def attrs_values(obj, **kwargs) -> dict[str, ty.Any]:
     return attrs.asdict(obj, recurse=False, **kwargs)
 
 
-def list_fields(interface: "TaskSpec") -> list["Field"]:
+def list_fields(spec: "type[TaskSpec] | TaskSpec") -> list["Field"]:
     """List the fields of a task specification"""
-    if not attrs.has(interface):
+    if not inspect.isclass(spec):
+        spec = type(spec)
+    if not attrs.has(spec):
         return []
     return [
         f.metadata[PYDRA_ATTR_METADATA]
-        for f in attrs.fields(interface)
+        for f in attrs.fields(spec)
         if PYDRA_ATTR_METADATA in f.metadata
     ]
 
@@ -154,6 +156,8 @@ def save(task_path: Path, result=None, task=None, name_prefix=None) -> None:
 
 def copyfile_workflow(wf_path: os.PathLike, result):
     """if file in the wf results, the file will be copied to the workflow directory"""
+    from .helpers_file import copy_nested_files
+
     for field in attrs_fields(result.output):
         value = getattr(result.output, field.name)
         # if the field is a path or it can contain a path _copyfile_single_value is run
@@ -627,13 +631,7 @@ def ensure_list(obj, tuple2list=False):
 
 
 def is_lazy(obj):
-    """Check whether an object has any field that is a Lazy Field"""
+    """Check whether an object is a lazy field or has any attribute that is a Lazy Field"""
     from pydra.engine.workflow.lazy import LazyField
 
-    if is_lazy(obj):
-        return True
-
-    for f in attrs_fields(obj):
-        if isinstance(getattr(obj, f.name), LazyField):
-            return True
-    return False
+    return isinstance(obj, LazyField)

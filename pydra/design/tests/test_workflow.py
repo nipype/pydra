@@ -6,7 +6,7 @@ from pydra.engine.workflow.lazy import LazyInField, LazyOutField
 import typing as ty
 from pydra.design import shell, python, workflow
 from pydra.engine.helpers import list_fields
-from pydra.engine.specs import TaskSpec
+from pydra.engine.specs import WorkflowSpec, WorkflowOutSpec
 from fileformats import video, image
 
 # NB: We use PascalCase for interfaces and workflow functions as it is translated into a class
@@ -138,7 +138,7 @@ def test_workflow_canonical():
     # NB: We use PascalCase (i.e. class names) as it is translated into a class
 
     @workflow.define
-    class MyTestWorkflow(TaskSpec["MyTestWorkflow.Outputs"]):
+    class MyTestWorkflow(WorkflowSpec["MyTestWorkflow.Outputs"]):
 
         a: int
         b: float = workflow.arg(
@@ -152,7 +152,7 @@ def test_workflow_canonical():
             mul = workflow.add(Mul(a=add.out, b=b))
             return mul.out
 
-        class Outputs:
+        class Outputs(WorkflowOutSpec):
             out: float
 
     constructor = MyTestWorkflow().constructor

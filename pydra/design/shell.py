@@ -11,7 +11,6 @@ import builtins
 from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
-from pydra.engine.specs import ShellSpec, ShellOutSpec
 from pydra.engine.helpers import attrs_values
 from .base import (
     Arg,
@@ -23,8 +22,9 @@ from .base import (
     EMPTY,
 )
 from pydra.utils.typing import is_fileset_or_union, MultiInputObj
-from pydra.engine.task import ShellCommandTask
 
+if ty.TYPE_CHECKING:
+    from pydra.engine.specs import ShellSpec
 
 __all__ = ["arg", "out", "outarg", "define"]
 
@@ -202,7 +202,7 @@ def define(
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
     name: str | None = None,
-) -> ShellSpec:
+) -> "ShellSpec":
     """Create a task specification for a shell command. Can be used either as a decorator on
     the "canonical" dataclass-form of a task specification or as a function that takes a
     "shell-command template string" of the form
@@ -254,6 +254,8 @@ def define(
     ShellSpec
         The interface for the shell command
     """
+    from pydra.engine.task import ShellCommandTask
+    from pydra.engine.specs import ShellSpec, ShellOutSpec
 
     def make(
         wrapped: ty.Callable | type | None = None,

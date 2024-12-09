@@ -1,8 +1,6 @@
 import typing as ty
 import inspect
 import attrs
-from pydra.engine.task import FunctionTask
-from pydra.engine.specs import PythonSpec, PythonOutSpec
 from .base import (
     Arg,
     Out,
@@ -14,6 +12,8 @@ from .base import (
     extract_fields_from_class,
 )
 
+if ty.TYPE_CHECKING:
+    from pydra.engine.specs import PythonSpec
 
 __all__ = ["arg", "out", "define"]
 
@@ -87,7 +87,7 @@ def define(
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
-) -> PythonSpec:
+) -> "PythonSpec":
     """
     Create an interface for a function or a class.
 
@@ -102,6 +102,8 @@ def define(
     auto_attribs : bool
         Whether to use auto_attribs mode when creating the class.
     """
+    from pydra.engine.task import FunctionTask
+    from pydra.engine.specs import PythonSpec, PythonOutSpec
 
     def make(wrapped: ty.Callable | type) -> PythonSpec:
         if inspect.isclass(wrapped):

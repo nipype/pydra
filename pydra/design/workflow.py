@@ -1,8 +1,6 @@
 import typing as ty
 import inspect
 import attrs
-from pydra.engine.core import WorkflowTask
-from pydra.engine.workflow.base import Workflow
 from .base import (
     Arg,
     Out,
@@ -13,7 +11,10 @@ from .base import (
     check_explicit_fields_are_none,
     extract_fields_from_class,
 )
-from pydra.engine.specs import TaskSpec, OutSpec, WorkflowSpec, WorkflowOutSpec
+
+if ty.TYPE_CHECKING:
+    from pydra.engine.workflow.base import Workflow
+    from pydra.engine.specs import TaskSpec, OutSpec, WorkflowSpec
 
 
 __all__ = ["define", "add", "this", "arg", "out"]
@@ -92,7 +93,7 @@ def define(
     outputs_bases: ty.Sequence[type] = (),
     lazy: list[str] | None = None,
     auto_attribs: bool = True,
-) -> TaskSpec:
+) -> "WorkflowSpec":
     """
     Create an interface for a function or a class. Can be used either as a decorator on
     a constructor function or the "canonical" dataclass-form of a task specification.
@@ -113,6 +114,9 @@ def define(
     TaskSpec
         The interface for the function or class.
     """
+    from pydra.engine.core import WorkflowTask
+    from pydra.engine.specs import TaskSpec, WorkflowSpec, WorkflowOutSpec
+
     if lazy is None:
         lazy = []
 
@@ -174,7 +178,7 @@ def define(
     return make
 
 
-def this() -> Workflow:
+def this() -> "Workflow":
     """Get the workflow currently being constructed.
 
     Returns
@@ -182,13 +186,15 @@ def this() -> Workflow:
     Workflow
         The workflow currently being constructed.
     """
+    from pydra.engine.workflow.base import Workflow
+
     return Workflow.under_construction
 
 
-OutSpecType = ty.TypeVar("OutSpecType", bound=OutSpec)
+OutSpecType = ty.TypeVar("OutSpecType", bound="OutSpec")
 
 
-def add(task_spec: TaskSpec[OutSpecType], name: str = None) -> OutSpecType:
+def add(task_spec: "TaskSpec[OutSpecType]", name: str = None) -> OutSpecType:
     """Add a node to the workflow currently being constructed
 
     Parameters
