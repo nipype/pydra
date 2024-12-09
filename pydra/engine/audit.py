@@ -2,8 +2,8 @@
 
 import os
 import json
-import attr
 from pydra.utils.messenger import send_message, make_message, gen_uuid, now, AuditFlag
+from pydra.engine.helpers import attrs_values
 from fileformats.core import FileSet
 from pydra.utils.hash import hash_function
 
@@ -104,7 +104,7 @@ class Audit:
                 )
                 # audit resources/runtime information
                 self.eid = f"uid:{gen_uuid()}"
-                entity = attr.asdict(result.runtime, recurse=False)
+                entity = attrs_values(result.runtime)
                 entity.update(
                     **{
                         "@id": self.eid,
@@ -180,12 +180,12 @@ class Audit:
 
     def audit_task(self, task):
         import subprocess as sp
-        from .helpers import attr_fields
+        from .helpers import attrs_fields
 
         label = task.name
 
         command = task.cmdline if hasattr(task.inputs, "executable") else None
-        attr_list = attr_fields(task.inputs)
+        attr_list = attrs_fields(task.inputs)
         for attrs in attr_list:
             input_name = attrs.name
             value = getattr(task.inputs, input_name)

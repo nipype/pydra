@@ -1,11 +1,10 @@
 """Additional functions used mostly by the State class."""
 
-import attr
 import itertools
 from copy import deepcopy
 import logging
 import typing as ty
-from .helpers import ensure_list
+from .helpers import ensure_list, attrs_values
 
 logger = logging.getLogger("pydra")
 
@@ -622,9 +621,7 @@ def map_splits(split_iter, inputs, cont_dim=None):
 def inputs_types_to_dict(name, inputs):
     """Convert type.Inputs to dictionary."""
     # dj: any better option?
-    input_names = [
-        field for field in attr.asdict(inputs, recurse=False) if field != "_func"
-    ]
+    input_names = [field for field in attrs_values(inputs) if field != "_func"]
     inputs_dict = {}
     for field in input_names:
         inputs_dict[f"{name}.{field}"] = getattr(inputs, field)

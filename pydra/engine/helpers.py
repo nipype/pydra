@@ -26,11 +26,18 @@ if ty.TYPE_CHECKING:
 PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
 
 
-def attr_fields(spec, exclude_names=()):
+def attrs_fields(spec, exclude_names=()) -> list[attrs.Attribute]:
+    """Get the fields of a spec, excluding some names."""
     return [field for field in spec.__attrs_attrs__ if field.name not in exclude_names]
 
 
+def attrs_values(obj, **kwargs) -> dict[str, ty.Any]:
+    """Get the values of an attrs object."""
+    return attrs.asdict(obj, recurse=False, **kwargs)
+
+
 def list_fields(interface: "TaskSpec") -> list["Field"]:
+    """List the fields of a task specification"""
     if not attrs.has(interface):
         return []
     return [
@@ -43,7 +50,7 @@ def list_fields(interface: "TaskSpec") -> list["Field"]:
 # from .specs import MultiInputFile, MultiInputObj, MultiOutputObj, MultiOutputFile
 
 
-def from_list_if_single(obj):
+def from_list_if_single(obj: ty.Any) -> ty.Any:
     """Converts a list to a single item if it is of length == 1"""
 
     if obj is attrs.NOTHING:
@@ -109,7 +116,7 @@ def load_result(checksum, cache_locations):
     return None
 
 
-def save(task_path: Path, result=None, task=None, name_prefix=None):
+def save(task_path: Path, result=None, task=None, name_prefix=None) -> None:
     """
     Save a :class:`~pydra.engine.core.TaskBase` object and/or results.
 
@@ -147,7 +154,7 @@ def save(task_path: Path, result=None, task=None, name_prefix=None):
 
 def copyfile_workflow(wf_path: os.PathLike, result):
     """if file in the wf results, the file will be copied to the workflow directory"""
-    for field in attr_fields(result.output):
+    for field in attrs_fields(result.output):
         value = getattr(result.output, field.name)
         # if the field is a path or it can contain a path _copyfile_single_value is run
         # to move all files and directories to the workflow directory
@@ -373,38 +380,6 @@ def get_open_loop():
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
     return loop
-
-
-# def output_from_inputfields(interface: "Interface"):
-#     """
-#     Collect values from output from input fields.
-#     If names_only is False, the output_spec is updated,
-#     if names_only is True only the names are returned
-
-#     Parameters
-#     ----------
-#     output_spec :
-#         TODO
-#     input_spec :
-#         TODO
-
-#     """
-#     current_output_spec_names = [f.name for f in attrs.fields(interface.Outputs)]
-#     new_fields = []
-#     for fld in attrs.fields(interface):
-#         if "output_file_template" in fld.metadata:
-#             if "output_field_name" in fld.metadata:
-#                 field_name = fld.metadata["output_field_name"]
-#             else:
-#                 field_name = fld.name
-#             # not adding if the field already in the output_spec
-#             if field_name not in current_output_spec_names:
-#                 # TODO: should probably remove some of the keys
-#                 new_fields.append(
-#                     (field_name, attrs.field(type=File, metadata=fld.metadata))
-#                 )
-#     output_spec.fields += new_fields
-#     return output_spec
 
 
 def get_available_cpus():
@@ -658,7 +633,7 @@ def is_lazy(obj):
     if is_lazy(obj):
         return True
 
-    for f in attr_fields(obj):
+    for f in attrs_fields(obj):
         if isinstance(getattr(obj, f.name), LazyField):
             return True
     return False

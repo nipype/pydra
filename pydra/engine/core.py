@@ -26,7 +26,8 @@ from .specs import (
 from .workflow.lazy import is_lazy
 from .helpers import (
     create_checksum,
-    attr_fields,
+    attrs_fields,
+    attrs_values,
     print_help,
     load_result,
     save,
@@ -342,7 +343,7 @@ class Task:
         The results depends on the input provided to the task
         """
         output_klass = self.interface.Outputs
-        if hasattr(output_klass, "generated_output_names"):
+        if hasattr(output_klass, "_generated_output_names"):
             output = output_klass(
                 **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
             )
@@ -352,7 +353,7 @@ class Task:
             if modified_inputs:
                 _inputs = attr.evolve(_inputs, **modified_inputs)
 
-            return output.generated_output_names(
+            return output._generated_output_names(
                 inputs=_inputs, output_dir=self.output_dir
             )
         else:
@@ -461,9 +462,7 @@ class Task:
         from pydra.utils.typing import TypeParser
 
         orig_inputs = {
-            k: v
-            for k, v in attr.asdict(self.inputs, recurse=False).items()
-            if not k.startswith("_")
+            k: v for k, v in attrs_values(self.inputs).items() if not k.startswith("_")
         }
         map_copyfiles = {}
         input_fields = attr.fields(type(self.inputs))
@@ -754,7 +753,7 @@ class Task:
 
     def _reset(self):
         """Reset the connections between inputs and LazyFields."""
-        for field in attr_fields(self.inputs):
+        for field in attrs_fields(self.inputs):
             if field.name in self.inp_lf:
                 setattr(self.inputs, field.name, self.inp_lf[field.name])
         if is_workflow(self):
@@ -979,7 +978,7 @@ class WorkflowTask(Task):
         """
         # TODO: create connection is run twice
         other_states = {}
-        for field in attr_fields(task.inputs):
+        for field in attrs_fields(task.inputs):
             val = getattr(task.inputs, field.name)
             if is_lazy(val):
                 # saving all connections with LazyFields

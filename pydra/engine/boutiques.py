@@ -7,7 +7,7 @@ from functools import reduce
 
 from pydra.utils.messenger import AuditFlag
 from pydra.engine.task import ShellCommandTask
-from pydra.engine.specs import SpecInfo, ShellSpec, ShellOutSpec, File, attr_fields
+from pydra.engine.specs import SpecInfo, ShellSpec, ShellOutSpec, File, attrs_fields
 from .helpers_file import is_local_file
 
 
@@ -192,7 +192,7 @@ class BoshTask(ShellCommandTask):
     def _bosh_invocation_file(self, state_ind=None, index=None):
         """creating bosh invocation file - json file with inputs values"""
         input_json = {}
-        for f in attr_fields(self.inputs, exclude_names=("executable", "args")):
+        for f in attrs_fields(self.inputs, exclude_names=("executable", "args")):
             if self.state and f"{self.name}.{f.name}" in state_ind:
                 value = getattr(self.inputs, f.name)[state_ind[f"{self.name}.{f.name}"]]
             else:

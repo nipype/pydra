@@ -51,13 +51,15 @@ import shlex
 from pathlib import Path
 import cloudpickle as cp
 from fileformats.core import FileSet
-from .core import Task, is_lazy
+from .core import Task
 from pydra.utils.messenger import AuditFlag
 from .specs import (
     ShellSpec,
-    attr_fields,
+    attrs_fields,
 )
 from .helpers import (
+    attrs_values,
+    is_lazy,
     parse_format_string,
     position_sort,
     ensure_list,
@@ -72,7 +74,7 @@ class FunctionTask(Task):
     """Wrap a Python callable as a task element."""
 
     def _run_task(self, environment=None):
-        inputs = attr.asdict(self.inputs, recurse=False)
+        inputs = attrs_values(self.inputs)
         del inputs["_func"]
         self.output_ = None
         output = cp.loads(self.inputs._func)(**inputs)
@@ -185,7 +187,7 @@ class ShellCommandTask(Task):
 
         pos_args = []  # list for (position, command arg)
         self._positions_provided = []
-        for field in attr_fields(self.inputs):
+        for field in attrs_fields(self.inputs):
             name, meta = field.name, field.metadata
             if (
                 getattr(self.inputs, name) is attr.NOTHING
@@ -285,7 +287,7 @@ class ShellCommandTask(Task):
         ):
             return None
 
-        inputs_dict = attr.asdict(self.inputs, recurse=False)
+        inputs_dict = attrs_values(self.inputs)
 
         cmd_add = []
         # formatter that creates a custom command argument
@@ -390,7 +392,7 @@ class ShellCommandTask(Task):
         This updates the ``bindings`` attribute of the current task to make files available
         in an ``Environment``-defined ``root``.
         """
-        for fld in attr_fields(self.inputs):
+        for fld in attrs_fields(self.inputs):
             if TypeParser.contains_type(FileSet, fld.type):
                 fileset = getattr(self.inputs, fld.name)
                 copy = parse_copyfile(fld)[0] == FileSet.CopyMode.copy
@@ -439,7 +441,7 @@ def argstr_formatting(argstr, inputs, value_updates=None):
     """formatting argstr that have form {field_name},
     using values from inputs and updating with value_update if provided
     """
-    inputs_dict = attr.asdict(inputs, recurse=False)
+    inputs_dict = attrs_values(inputs)
     # if there is a value that has to be updated (e.g. single value from a list)
     if value_updates:
         inputs_dict.update(value_updates)

@@ -36,8 +36,6 @@ __all__ = [
     "make_task_spec",
 ]
 
-RESERVED_OUTPUT_NAMES = ("split", "combine")
-
 
 class _Empty(enum.Enum):
 
@@ -58,6 +56,11 @@ def is_type(_, __, val: ty.Any) -> bool:
     return inspect.isclass(val) or ty.get_origin(val)
 
 
+def convert_default_value(value: ty.Any, self_: "Field") -> ty.Any:
+    """Ensure the default value has been coerced into the correct type"""
+    return TypeParser[self_.type](self_.type, label=self_.name)(value)
+
+
 @attrs.define(kw_only=True)
 class Field:
     """Base class for input and output fields to task specifications
@@ -66,9 +69,11 @@ class Field:
     ----------
     name: str, optional
         The name of the field, used when specifying a list of fields instead of a mapping
-        from name to field, by default it is None
     type: type, optional
         The type of the field, by default it is Any
+        from name to field, by default it is None
+    default : Any, optional
+        the default value for the field, by default it is EMPTY
     help_string: str, optional
         A short description of the input field.
     requires: list, optional
@@ -82,6 +87,9 @@ class Field:
     name: str | None = None
     type: ty.Type[ty.Any] = attrs.field(
         validator=is_type, default=ty.Any, converter=default_if_none(ty.Any)
+    )
+    default: ty.Any = attrs.field(
+        default=EMPTY, converter=attrs.Converter(convert_default_value, with_self=True)
     )
     help_string: str = ""
     requires: list[str] | list[list[str]] = attrs.field(
@@ -97,10 +105,15 @@ class Arg(Field):
 
     Parameters
     ----------
+    name: str, optional
+        The name of the field, used when specifying a list of fields instead of a mapping
+        from name to field, by default it is None
+    type: type, optional
+        The type of the field, by default it is Any
+    default : Any, optional
+        the default value for the field, by default it is EMPTY
     help_string: str
         A short description of the input field.
-    default : Any, optional
-        the default value for the argument
     allowed_values: list, optional
         List of allowed values for the field.
     requires: list, optional
@@ -118,14 +131,8 @@ class Arg(Field):
         If True the input field can’t be provided by the user but it aggregates other
         input fields (for example the fields with argstr: -o {fldA} {fldB}), by default
         it is False
-    type: type, optional
-        The type of the field, by default it is Any
-    name: str, optional
-        The name of the field, used when specifying a list of fields instead of a mapping
-        from name to field, by default it is None
     """
 
-    default: ty.Any = EMPTY
     allowed_values: list | None = None
     xor: list | None = None
     copy_mode: File.CopyMode = File.CopyMode.any
@@ -145,6 +152,8 @@ class Out(Field):
         from name to field, by default it is None
     type: type, optional
         The type of the field, by default it is Any
+    default : Any, optional
+        the default value for the field, by default it is EMPTY
     help_string: str, optional
         A short description of the input field.
     requires: list, optional
@@ -385,7 +394,7 @@ def make_outputs_spec(
                 f"Cannot make {spec_type} output spec from {out_spec_bases} bases"
             )
         outputs_bases = bases + (spec_type,)
-    if reserved_names := [n for n in outputs if n in RESERVED_OUTPUT_NAMES]:
+    if reserved_names := [n for n in outputs if n in spec_type.RESERVED_FIELD_NAMES]:
         raise ValueError(
             f"{reserved_names} are reserved and cannot be used for output field names"
         )

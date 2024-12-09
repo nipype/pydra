@@ -5,7 +5,7 @@ import itertools
 from functools import reduce
 import attrs
 from . import helpers_state as hlpst
-from .helpers import ensure_list
+from .helpers import ensure_list, attrs_values
 
 # from .specs import BaseSpec
 
@@ -765,7 +765,7 @@ class State:
         else:
             self.cont_dim = {}
         if attrs.has(inputs):
-            self.inputs = attrs.asdict(inputs, recurse=False)
+            self.inputs = attrs_values(inputs)
         else:
             self.inputs = inputs
         if self.other_states:

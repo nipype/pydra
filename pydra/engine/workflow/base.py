@@ -3,7 +3,7 @@ from copy import copy
 from operator import itemgetter
 from typing_extensions import Self
 import attrs
-from pydra.engine.helpers import list_fields
+from pydra.engine.helpers import list_fields, attrs_values
 from pydra.engine.specs import TaskSpec, OutSpec, WorkflowOutSpec
 from .lazy import LazyInField
 from pydra.utils.hash import hash_function
@@ -49,11 +49,7 @@ class Workflow(ty.Generic[WorkflowOutSpecType]):
         lazy_input_names = {f.name for f in lazy_inputs}
         non_lazy_vals = tuple(
             sorted(
-                (
-                    i
-                    for i in attrs.asdict(spec, recurse=False).items()
-                    if i[0] not in lazy_input_names
-                ),
+                (i for i in attrs_values(spec).items() if i[0] not in lazy_input_names),
                 key=itemgetter(0),
             )
         )
@@ -84,7 +80,7 @@ class Workflow(ty.Generic[WorkflowOutSpecType]):
                 ),
             )
 
-        input_values = attrs.asdict(lazy_spec, recurse=False)
+        input_values = attrs_values(lazy_spec)
         constructor = input_values.pop("constructor")
         cls._under_construction = wf
         try:
@@ -111,9 +107,7 @@ class Workflow(ty.Generic[WorkflowOutSpecType]):
                     setattr(outputs, outpt.name, outpt_lf)
             else:
                 if unset_outputs := [
-                    a
-                    for a, v in attrs.asdict(outputs, recurse=False).items()
-                    if v is attrs.NOTHING
+                    a for a, v in attrs_values(outputs).items() if v is attrs.NOTHING
                 ]:
                     raise ValueError(
                         f"Expected outputs {unset_outputs} to be set by the "

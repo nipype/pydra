@@ -5,7 +5,7 @@ import attrs
 from pydra.utils.typing import TypeParser, StateArray
 from . import lazy
 from ..specs import TaskSpec, OutSpec
-from ..helpers import ensure_list
+from ..helpers import ensure_list, attrs_values
 from .. import helpers_state as hlpst
 from ..state import State
 
@@ -111,7 +111,7 @@ class Node(ty.Generic[OutputType]):
 
     @property
     def input_values(self) -> tuple[tuple[str, ty.Any]]:
-        return tuple(attrs.asdict(self._spec, recurse=False).items())
+        return tuple(attrs_values(self._spec).items())
 
     @property
     def lzout(self) -> OutputType:
@@ -130,7 +130,7 @@ class Node(ty.Generic[OutputType]):
         outputs = self.inputs.Outputs(**lazy_fields)
         # Flag the output lazy fields as being not typed checked (i.e. assigned to another
         # node's inputs) yet
-        for outpt in attrs.asdict(outputs, recurse=False).values():
+        for outpt in attrs_values(outputs).values():
             outpt.type_checked = False
         outputs._node = self
         self._lzout = outputs
@@ -353,7 +353,7 @@ class Node(ty.Generic[OutputType]):
             elif all(s not in self.state.combiner for s in split):
                 remaining_splits.append(split)
         state_depth = len(remaining_splits)
-        for outpt_lf in attrs.asdict(self.lzout, recurse=False).values():
+        for outpt_lf in attrs_values(self.lzout).values():
             assert not outpt_lf.type_checked
             type_, _ = TypeParser.strip_splits(outpt_lf.type)
             for _ in range(state_depth):

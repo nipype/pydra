@@ -12,6 +12,7 @@ from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError
 from pydra.engine.specs import ShellSpec, ShellOutSpec
+from pydra.engine.helpers import attrs_values
 from .base import (
     Arg,
     Out,
@@ -470,7 +471,7 @@ def parse_command_line_template(
                 kwds["type"] = field
                 field = field_type(name=name, **kwds)
             elif not isinstance(field, field_type):  # If field type is outarg not out
-                field = field_type(**attrs.asdict(field, recurse=False))
+                field = field_type(**attrs_values(field))
             field.name = name
             type_ = kwds.pop("type", field.type)
             if field.type is ty.Any:

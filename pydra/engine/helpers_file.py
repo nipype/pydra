@@ -10,7 +10,7 @@ import subprocess as sp
 from contextlib import contextmanager
 import attr
 from fileformats.core import FileSet
-from pydra.engine.helpers import is_lazy
+from pydra.engine.helpers import is_lazy, attrs_values
 
 
 logger = logging.getLogger("pydra")
@@ -105,7 +105,7 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
 
     """
 
-    inputs_dict_st = attr.asdict(inputs, recurse=False)
+    inputs_dict_st = attrs_values(inputs)
     if map_copyfiles is not None:
         inputs_dict_st.update(map_copyfiles)
 
@@ -114,12 +114,12 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
             k = k.split(".")[1]
             inputs_dict_st[k] = inputs_dict_st[k][v]
 
-    from .specs import attr_fields
+    from .specs import attrs_fields
 
     # Collect templated inputs for which all requirements are satisfied.
     fields_templ = [
         field
-        for field in attr_fields(inputs)
+        for field in attrs_fields(inputs)
         if field.metadata.get("output_file_template")
         and getattr(inputs, field.name) is not False
         and all(
@@ -155,7 +155,7 @@ def template_update_single(
     from pydra.engine.specs import OUTPUT_TEMPLATE_TYPES
 
     if inputs_dict_st is None:
-        inputs_dict_st = attr.asdict(inputs, recurse=False)
+        inputs_dict_st = attrs_values(inputs)
 
     if spec_type == "input":
         inp_val_set = inputs_dict_st[field.name]
