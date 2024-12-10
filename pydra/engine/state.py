@@ -112,6 +112,11 @@ class State:
         )
 
     @property
+    def depth(self):
+        """Return the number of uncombined splits of the state."""
+        return len(self.states_ind)
+
+    @property
     def splitter(self):
         """Get the splitter of the state."""
         return self._splitter

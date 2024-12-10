@@ -461,7 +461,7 @@ def parse_command_line_template(
         return template, inputs, outputs
     executable, args_str = parts
     tokens = re.split(r"\s+", args_str.strip())
-    arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+]+\??)>"
+    arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+]+(?:\?|=[^>]+)?)>"
     opt_pattern = r"--?[a-zA-Z0-9_]+"
     arg_re = re.compile(arg_pattern)
     opt_re = re.compile(opt_pattern)
@@ -470,10 +470,8 @@ def parse_command_line_template(
     arguments = []
     option = None
 
-    def add_arg(name, field_type, kwds, is_option=False):
+    def add_arg(name, field_type, kwds):
         """Merge the typing information with an existing field if it exists"""
-        if is_option and kwds["type"] is not bool:
-            kwds["type"] |= None
         if issubclass(field_type, Out):
             dct = outputs
         else:
@@ -497,7 +495,8 @@ def parse_command_line_template(
             for k, v in kwds.items():
                 setattr(field, k, v)
         dct[name] = field
-        arguments.append(field)
+        if issubclass(field_type, Arg):
+            arguments.append(field)
 
     def from_type_str(type_str) -> type:
         types = []
@@ -528,9 +527,14 @@ def parse_command_line_template(
     for token in tokens:
         if match := arg_re.match(token):
             name = match.group(1)
+            modify = False
             if name.startswith("out|"):
                 name = name[4:]
                 field_type = outarg
+            elif name.startswith("modify|"):
+                name = name[7:]
+                field_type = arg
+                modify = True
             else:
                 field_type = arg
             # Identify type after ':' symbols
@@ -539,6 +543,10 @@ def parse_command_line_template(
                 optional = True
             else:
                 optional = False
+            kwds = {}
+            if "=" in name:
+                name, default = name.split("=")
+                kwds["default"] = eval(default)
             if ":" in name:
                 name, type_str = name.split(":")
                 type_ = from_type_str(type_str)
@@ -546,7 +554,11 @@ def parse_command_line_template(
                 type_ = generic.FsObject if option is None else str
             if optional:
                 type_ |= None  # Make the arguments optional
-            kwds = {"type": type_}
+            kwds["type"] = type_
+            if modify:
+                kwds["copy_mode"] = generic.File.CopyMode.copy
+                # Add field to outputs with the same name as the input
+                add_arg(name, out, {"type": type_, "callable": _InputPassThrough(name)})
             # If name contains a '.', treat it as a file template and strip it from the name
             if field_type is outarg:
                 path_template = name
@@ -566,6 +578,7 @@ def parse_command_line_template(
                 kwds["argstr"] = option
                 add_arg(name, field_type, kwds)
                 option = None
+
         elif match := bool_arg_re.match(token):
             argstr, var = match.groups()
             add_arg(var, arg, {"type": bool, "argstr": argstr, "default": False})
@@ -626,3 +639,13 @@ def remaining_positions(
             f"Multiple fields have the overlapping positions: {multiple_positions}"
         )
     return [i for i in range(start, num_args) if i not in positions]
+
+
+@attrs.define
+class _InputPassThrough:
+    """A class that can be used to pass through an input to the output"""
+
+    name: str
+
+    def __call__(self, inputs: ShellSpec) -> ty.Any:
+        return getattr(inputs, self.name)

@@ -71,6 +71,34 @@ def test_interface_template_w_types_and_path_template_ext():
     SampleInterface.Outputs(out_image=image.Png.mock())
 
 
+def test_interface_template_w_modify():
+
+    SampleInterface = shell.define("trim-png <modify|image:image/png>")
+
+    assert issubclass(SampleInterface, ShellSpec)
+    assert sorted_fields(SampleInterface) == [
+        shell.arg(
+            name="executable",
+            default="trim-png",
+            type=str | ty.Sequence[str],
+            position=0,
+            help_string=shell.EXECUTABLE_HELP_STRING,
+        ),
+        shell.arg(
+            name="image", type=image.Png, position=1, copy_mode=File.CopyMode.copy
+        ),
+    ]
+    assert sorted_fields(SampleInterface.Outputs) == [
+        shell.out(
+            name="image",
+            type=image.Png,
+            callable=shell._InputPassThrough("image"),
+        )
+    ]
+    SampleInterface(image=image.Png.mock())
+    SampleInterface.Outputs(image=image.Png.mock())
+
+
 def test_interface_template_more_complex():
 
     SampleInterface = shell.define(

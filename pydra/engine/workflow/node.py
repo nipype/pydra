@@ -81,8 +81,26 @@ class Node(ty.Generic[OutputType]):
 
     @property
     def state(self):
+        """Initialise the state of the node just after it has been created (i.e. before
+        it has been split or combined) based on the upstream connections
+        """
         if self._state is not NOT_SET:
             return self._state
+        upstream_states = self._upstream_states()
+        if upstream_states:
+            state = State(
+                self.name,
+                splitter=None,
+                other_states=upstream_states,
+                combiner=None,
+            )
+        else:
+            state = None
+        self._state = state
+        return state
+
+    def _upstream_states(self):
+        """Get the states of the upstream nodes that are connected to this node"""
         upstream_states = {}
         for inpt_name, val in self.input_values:
             if isinstance(val, lazy.LazyOutField) and val.node.state:
@@ -97,17 +115,7 @@ class Node(ty.Generic[OutputType]):
                     # if the task already exist in other_state,
                     # additional field name should be added to the list of fields
                     upstream_states[node.name][1].append(inpt_name)
-        if upstream_states:
-            state = State(
-                node.name,
-                splitter=None,
-                other_states=upstream_states,
-                combiner=None,
-            )
-        else:
-            state = None
-        self._state = state
-        return state
+        return upstream_states
 
     @property
     def input_values(self) -> tuple[tuple[str, ty.Any]]:
@@ -248,7 +256,7 @@ class Node(ty.Generic[OutputType]):
             raise Exception("combiner has to be a string or a list")
         combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
         if not_split := [
-            c for c in combiner if not any(c in s for s in self.state.splitter)
+            c for c in combiner if not any(c in s for s in self.state.splitter_rpn)
         ]:
             raise ValueError(
                 f"Combiner fields {not_split} for Node {self.name!r} are not in the "
