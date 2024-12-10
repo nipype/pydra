@@ -5,7 +5,7 @@ import attrs
 from pydra.utils.typing import TypeParser, StateArray
 from . import lazy
 from ..specs import TaskSpec, Outputs
-from ..helpers import ensure_list, attrs_values
+from ..helpers import ensure_list, attrs_values, is_lazy
 from .. import helpers_state as hlpst
 from ..state import State
 
@@ -62,17 +62,16 @@ class Node(ty.Generic[OutputType]):
             return getattr(self._node._spec, name)
 
         def __setattr__(self, name: str, value: ty.Any) -> None:
-            if isinstance(value, lazy.LazyField):
-                # Save the current state for comparison later
-                prev_state = self._node.state
-                if value.node.state:
-                    # Reset the state to allow the lazy field to be set
-                    self._node._state = NOT_SET
-                setattr(self._node._spec, name, value)
-                if value.node.state and self._node.state != prev_state:
+            setattr(self._node._spec, name, value)
+            if is_lazy(value):
+                upstream_states = self._node._get_upstream_states()
+                if (
+                    not self._node._state
+                    or self._node._state.other_states != upstream_states
+                ):
                     self._node._check_if_outputs_have_been_used(
                         f"cannot set {name!r} input to {value} because it changes the "
-                        f"state of the node from {prev_state} to {value.node.state}"
+                        f"state"
                     )
 
     @property
@@ -86,36 +85,8 @@ class Node(ty.Generic[OutputType]):
         """
         if self._state is not NOT_SET:
             return self._state
-        upstream_states = self._upstream_states()
-        if upstream_states:
-            state = State(
-                self.name,
-                splitter=None,
-                other_states=upstream_states,
-                combiner=None,
-            )
-        else:
-            state = None
-        self._state = state
-        return state
-
-    def _upstream_states(self):
-        """Get the states of the upstream nodes that are connected to this node"""
-        upstream_states = {}
-        for inpt_name, val in self.input_values:
-            if isinstance(val, lazy.LazyOutField) and val.node.state:
-                node: Node = val.node
-                # variables that are part of inner splitters should be treated as a containers
-                if node.state and f"{node.name}.{inpt_name}" in node.state.splitter:
-                    node._inner_cont_dim[f"{node.name}.{inpt_name}"] = 1
-                # adding task_name: (task.state, [a field from the connection]
-                if node.name not in upstream_states:
-                    upstream_states[node.name] = (node.state, [inpt_name])
-                else:
-                    # if the task already exist in other_state,
-                    # additional field name should be added to the list of fields
-                    upstream_states[node.name][1].append(inpt_name)
-        return upstream_states
+        self._set_state(other_states=self._get_upstream_states())
+        return self._state
 
     @property
     def input_values(self) -> tuple[tuple[str, ty.Any]]:
@@ -222,8 +193,7 @@ class Node(ty.Generic[OutputType]):
                 new_inputs[inpt_name] = new_val
             # Update the inputs with the new split values
             self._spec = attrs.evolve(self._spec, **new_inputs)
-        if not self._state or splitter != self._state.splitter:
-            self._set_state(splitter)
+        self._set_state(splitter=splitter)
         # Wrap types of lazy outputs in StateArray types
         self._wrap_lzout_types_in_state_arrays()
         return self
@@ -272,38 +242,9 @@ class Node(ty.Generic[OutputType]):
                 "combiner has been already set, "
                 "if you want to overwrite it - use overwrite=True"
             )
-        if not self._state:
-            self.split(splitter=None)
-            # a task can have a combiner without a splitter
-            # if is connected to one with a splitter;
-            # self.fut_combiner will be used later as a combiner
-            self._state.fut_combiner = (
-                combiner  # QUESTION: why separate combiner and fut_combiner?
-            )
-        else:  # self.state and not self.state.combiner
-            self._set_state(splitter=self._state.splitter, combiner=combiner)
+        self._set_state(combiner=combiner)
         self._wrap_lzout_types_in_state_arrays()
         return self
-
-    def _set_state(self, splitter, combiner=None):
-        """
-        Set a particular state on this task.
-
-        Parameters
-        ----------
-        splitter : str | list[str] | tuple[str]
-            the fields which to split over. If splitting over multiple fields, lists of
-            fields are interpreted as outer-products and tuples inner-products. If None,
-            then the fields to split are taken from the keyword-arg names.
-        combiner : list[str] | str, optional
-            the field or list of inputs to be combined (i.e. not left split) after the
-            task has been run
-        """
-        if splitter is not None:
-            self._state = State(name=self.name, splitter=splitter, combiner=combiner)
-        else:
-            self._state = None
-        return self._state
 
     @property
     def cont_dim(self):
@@ -353,40 +294,50 @@ class Node(ty.Generic[OutputType]):
         if not self.state:
             return
         outpt_lf: lazy.LazyOutField
-        remaining_splits = []
-        for split in self.state.splitter:
-            if isinstance(split, str):
-                if split not in self.state.combiner:
-                    remaining_splits.append(split)
-            elif all(s not in self.state.combiner for s in split):
-                remaining_splits.append(split)
-        state_depth = len(remaining_splits)
         for outpt_lf in attrs_values(self.lzout).values():
             assert not outpt_lf.type_checked
             type_, _ = TypeParser.strip_splits(outpt_lf.type)
-            for _ in range(state_depth):
+            for _ in range(self._state.depth):
                 type_ = StateArray[type_]
             outpt_lf.type = type_
 
-    # @classmethod
-    # def _normalize_splitter(
-    #     cls, splitter: Splitter, strip_previous: bool = True
-    # ) -> ty.Tuple[ty.Tuple[str, ...], ...]:
-    #     """Converts the splitter spec into a consistent tuple[tuple[str, ...], ...] form
-    #     used in LazyFields"""
-    #     if isinstance(splitter, str):
-    #         splitter = (splitter,)
-    #     if isinstance(splitter, tuple):
-    #         splitter = (splitter,)  # type: ignore
-    #     else:
-    #         assert isinstance(splitter, list)
-    #         # convert to frozenset to differentiate from tuple, yet still be hashable
-    #         # (NB: order of fields in list splitters aren't relevant)
-    #         splitter = tuple((s,) if isinstance(s, str) else s for s in splitter)
-    #     # Strip out fields starting with "_" designating splits in upstream nodes
-    #     if strip_previous:
-    #         stripped = tuple(
-    #             tuple(f for f in i if not f.startswith("_")) for i in splitter
-    #         )
-    #         splitter = tuple(s for s in stripped if s)  # type: ignore
-    #     return splitter  # type: ignore
+    def _set_state(
+        self,
+        splitter: list[str] | tuple[str, ...] | None = None,
+        combiner: list[str] | None = None,
+        other_states: dict[str, tuple["State", list[str]]] | None = None,
+    ) -> None:
+        if self._state not in (NOT_SET, None):
+            if splitter is None:
+                splitter = self._state.current_splitter
+            if combiner is None:
+                combiner = self._state.current_combiner
+            if other_states is None:
+                other_states = self._state.other_states
+        if not (splitter or combiner or other_states):
+            self._state = None
+        else:
+            self._state = State(
+                self.name,
+                splitter=splitter,
+                other_states=other_states,
+                combiner=combiner,
+            )
+
+    def _get_upstream_states(self) -> dict[str, tuple["State", list[str]]]:
+        """Get the states of the upstream nodes that are connected to this node"""
+        upstream_states = {}
+        for inpt_name, val in self.input_values:
+            if isinstance(val, lazy.LazyOutField) and val.node.state:
+                node: Node = val.node
+                # variables that are part of inner splitters should be treated as a containers
+                if node.state and f"{node.name}.{inpt_name}" in node.state.splitter:
+                    node._inner_cont_dim[f"{node.name}.{inpt_name}"] = 1
+                # adding task_name: (task.state, [a field from the connection]
+                if node.name not in upstream_states:
+                    upstream_states[node.name] = (node.state, [inpt_name])
+                else:
+                    # if the task already exist in other_state,
+                    # additional field name should be added to the list of fields
+                    upstream_states[node.name][1].append(inpt_name)
+        return upstream_states

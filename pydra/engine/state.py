@@ -112,9 +112,28 @@ class State:
         )
 
     @property
-    def depth(self):
-        """Return the number of uncombined splits of the state."""
-        return len(self.states_ind)
+    def depth(self) -> int:
+        """Return the number of uncombined splits of the state, i.e. the number nested
+        state arrays to wrap around the type of lazy out fields
+
+        Returns
+        -------
+        int
+            number of uncombined splits
+        """
+        depth = 0
+        stack = []
+        for spl in self.splitter_rpn:
+            if spl in [".", "*"]:
+                if spl == ".":
+                    depth += int(all(s not in self.combiner for s in stack))
+                else:
+                    assert spl == "*"
+                    depth += len([s for s in stack if s not in self.combiner])
+                stack = []
+            else:
+                stack.append(spl)
+        return depth + len(stack)
 
     @property
     def splitter(self):
