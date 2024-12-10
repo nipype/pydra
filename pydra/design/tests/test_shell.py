@@ -131,12 +131,25 @@ def test_interface_template_more_complex():
         ),
         output,
         shell.arg(name="recursive", argstr="-R", type=bool, default=False, position=3),
-        shell.arg(name="text_arg", argstr="--text-arg", type=str | None, position=4),
-        shell.arg(name="int_arg", argstr="--int-arg", type=int | None, position=5),
+        shell.arg(
+            name="text_arg",
+            argstr="--text-arg",
+            type=str | None,
+            default=None,
+            position=4,
+        ),
+        shell.arg(
+            name="int_arg",
+            argstr="--int-arg",
+            type=int | None,
+            default=None,
+            position=5,
+        ),
         shell.arg(
             name="tuple_arg",
             argstr="--tuple-arg",
             type=tuple[int, str] | None,
+            default=None,
             position=6,
         ),
     ]
@@ -145,7 +158,7 @@ def test_interface_template_more_complex():
     SampleInterface.Outputs(out_dir=Directory.sample())
 
 
-def test_interface_template_with_overrides():
+def test_interface_template_with_overrides_and_optionals():
 
     RECURSIVE_HELP = (
         "If source_file designates a directory, cp copies the directory and the entire "
@@ -154,14 +167,86 @@ def test_interface_template_with_overrides():
 
     SampleInterface = shell.define(
         (
-            "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
+            "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> <out|out_file:file?> "
             "-R<recursive> "
             "--text-arg <text_arg> "
             "--int-arg <int_arg:int?> "
             "--tuple-arg <tuple_arg:int,str> "
         ),
         inputs={"recursive": shell.arg(help_string=RECURSIVE_HELP)},
-        outputs={"out_dir": shell.outarg(position=-1)},
+        outputs={
+            "out_dir": shell.outarg(position=-2),
+            "out_file": shell.outarg(position=-1),
+        },
+    )
+
+    assert issubclass(SampleInterface, ShellSpec)
+    outargs = [
+        shell.outarg(
+            name="out_dir",
+            type=Directory,
+            path_template="out_dir",
+            position=-2,
+        ),
+        shell.outarg(
+            name="out_file",
+            type=File | None,
+            default=None,
+            path_template="out_file",
+            position=-1,
+        ),
+    ]
+    assert (
+        sorted_fields(SampleInterface)
+        == [
+            shell.arg(
+                name="executable",
+                default="cp",
+                type=str | ty.Sequence[str],
+                position=0,
+                help_string=shell.EXECUTABLE_HELP_STRING,
+            ),
+            shell.arg(
+                name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
+            ),
+            shell.arg(
+                name="recursive",
+                argstr="-R",
+                type=bool,
+                default=False,
+                help_string=RECURSIVE_HELP,
+                position=2,
+            ),
+            shell.arg(name="text_arg", argstr="--text-arg", type=str, position=3),
+            shell.arg(
+                name="int_arg",
+                argstr="--int-arg",
+                type=int | None,
+                default=None,
+                position=4,
+            ),
+            shell.arg(
+                name="tuple_arg",
+                argstr="--tuple-arg",
+                type=tuple[int, str],
+                position=5,
+            ),
+        ]
+        + outargs
+    )
+    assert sorted_fields(SampleInterface.Outputs) == outargs
+
+
+def test_interface_template_with_defaults():
+
+    SampleInterface = shell.define(
+        (
+            "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
+            "-R<recursive=True> "
+            "--text-arg <text_arg='foo'> "
+            "--int-arg <int_arg:int=99> "
+            "--tuple-arg <tuple_arg:int,str=(1,'bar')> "
+        ),
     )
 
     assert issubclass(SampleInterface, ShellSpec)
@@ -169,7 +254,7 @@ def test_interface_template_with_overrides():
         name="out_dir",
         type=Directory,
         path_template="out_dir",
-        position=-1,
+        position=2,
     )
     assert sorted_fields(SampleInterface) == [
         shell.arg(
@@ -182,25 +267,23 @@ def test_interface_template_with_overrides():
         shell.arg(
             name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
         ),
+        output,
+        shell.arg(name="recursive", argstr="-R", type=bool, default=True, position=3),
         shell.arg(
-            name="recursive",
-            argstr="-R",
-            type=bool,
-            default=False,
-            help_string=RECURSIVE_HELP,
-            position=2,
+            name="text_arg", argstr="--text-arg", type=str, position=4, default="foo"
         ),
-        shell.arg(name="text_arg", argstr="--text-arg", type=str, position=3),
-        shell.arg(name="int_arg", argstr="--int-arg", type=int | None, position=4),
+        shell.arg(name="int_arg", argstr="--int-arg", type=int, position=5, default=99),
         shell.arg(
             name="tuple_arg",
             argstr="--tuple-arg",
             type=tuple[int, str],
-            position=5,
+            default=(1, "bar"),
+            position=6,
         ),
-        output,
     ]
     assert sorted_fields(SampleInterface.Outputs) == [output]
+    SampleInterface(in_fs_objects=[File.sample(), File.sample(seed=1)])
+    SampleInterface.Outputs(out_dir=Directory.sample())
 
 
 def test_interface_template_with_type_overrides():
@@ -237,7 +320,12 @@ def test_interface_template_with_type_overrides():
         output,
         shell.arg(name="recursive", argstr="-R", type=bool, default=False, position=3),
         shell.arg(name="text_arg", argstr="--text-arg", type=str, position=4),
-        shell.arg(name="int_arg", argstr="--int-arg", type=int | None, position=5),
+        shell.arg(
+            name="int_arg",
+            argstr="--int-arg",
+            type=int | None,
+            position=5,
+        ),
         shell.arg(
             name="tuple_arg",
             argstr="--tuple-arg",

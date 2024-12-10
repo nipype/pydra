@@ -538,15 +538,17 @@ def parse_command_line_template(
             else:
                 field_type = arg
             # Identify type after ':' symbols
+            kwds = {}
             if name.endswith("?"):
+                assert "=" not in name
                 name = name[:-1]
                 optional = True
-            else:
-                optional = False
-            kwds = {}
-            if "=" in name:
+                kwds["default"] = None
+            elif "=" in name:
                 name, default = name.split("=")
                 kwds["default"] = eval(default)
+            else:
+                optional = False
             if ":" in name:
                 name, type_str = name.split(":")
                 type_ = from_type_str(type_str)
@@ -581,7 +583,12 @@ def parse_command_line_template(
 
         elif match := bool_arg_re.match(token):
             argstr, var = match.groups()
-            add_arg(var, arg, {"type": bool, "argstr": argstr, "default": False})
+            if "=" in var:
+                var, default = var.split("=")
+                default = eval(default)
+            else:
+                default = False
+            add_arg(var, arg, {"type": bool, "argstr": argstr, "default": default})
         elif match := opt_re.match(token):
             option = token
         else:
