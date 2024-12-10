@@ -3,7 +3,7 @@ from copy import copy
 from operator import itemgetter
 from typing_extensions import Self
 import attrs
-from pydra.engine.helpers import list_fields, attrs_values
+from pydra.engine.helpers import list_fields, attrs_values, is_lazy
 from pydra.engine.specs import TaskSpec, Outputs, WorkflowOutputs
 from .lazy import LazyInField
 from pydra.utils.hash import hash_function
@@ -53,6 +53,10 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                 key=itemgetter(0),
             )
         )
+        if lazy_non_lazy_vals := [f for f in non_lazy_vals if is_lazy(f[1])]:
+            raise ValueError(
+                f"Lazy input fields {lazy_non_lazy_vals} found in non-lazy fields "
+            )
         hash_key = hash_function(non_lazy_vals)
         if hash_key in cls._constructed:
             return cls._constructed[hash_key]
