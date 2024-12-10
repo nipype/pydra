@@ -6,7 +6,13 @@ import pytest
 import cloudpickle as cp
 from pydra.design import shell
 from pydra.engine.helpers import list_fields
-from pydra.engine.specs import ShellSpec, ShellOutputs
+from pydra.engine.specs import (
+    ShellSpec,
+    ShellOutputs,
+    RETURN_CODE_HELP,
+    STDOUT_HELP,
+    STDERR_HELP,
+)
 from fileformats.generic import File, Directory, FsObject
 from fileformats import text, image
 from pydra.utils.typing import MultiInputObj
@@ -34,7 +40,24 @@ def test_interface_template():
         shell.arg(name="in_path", type=FsObject, position=1),
         output,
     ]
-    assert sorted_fields(SampleInterface.Outputs) == [output]
+    assert sorted_fields(SampleInterface.Outputs) == [
+        output,
+        shell.out(
+            name="return_code",
+            type=int,
+            help_string=RETURN_CODE_HELP,
+        ),
+        shell.out(
+            name="stderr",
+            type=str,
+            help_string=STDERR_HELP,
+        ),
+        shell.out(
+            name="stdout",
+            type=str,
+            help_string=STDOUT_HELP,
+        ),
+    ]
     intf = SampleInterface(in_path=File.mock("in-path.txt"))
     assert intf.executable == "cp"
     SampleInterface(in_path=File.mock("in-path.txt"), out_path=Path("./out-path.txt"))
@@ -65,7 +88,24 @@ def test_interface_template_w_types_and_path_template_ext():
         shell.arg(name="in_image", type=image.Png, position=1),
         output,
     ]
-    assert sorted_fields(SampleInterface.Outputs) == [output]
+    assert sorted_fields(SampleInterface.Outputs) == [
+        output,
+        shell.out(
+            name="return_code",
+            type=int,
+            help_string=RETURN_CODE_HELP,
+        ),
+        shell.out(
+            name="stderr",
+            type=str,
+            help_string=STDERR_HELP,
+        ),
+        shell.out(
+            name="stdout",
+            type=str,
+            help_string=STDOUT_HELP,
+        ),
+    ]
     SampleInterface(in_image=image.Png.mock())
     SampleInterface(in_image=image.Png.mock(), out_image=Path("./new_image.png"))
     SampleInterface.Outputs(out_image=image.Png.mock())
@@ -93,7 +133,22 @@ def test_interface_template_w_modify():
             name="image",
             type=image.Png,
             callable=shell._InputPassThrough("image"),
-        )
+        ),
+        shell.out(
+            name="return_code",
+            type=int,
+            help_string=RETURN_CODE_HELP,
+        ),
+        shell.out(
+            name="stderr",
+            type=str,
+            help_string=STDERR_HELP,
+        ),
+        shell.out(
+            name="stdout",
+            type=str,
+            help_string=STDOUT_HELP,
+        ),
     ]
     SampleInterface(image=image.Png.mock())
     SampleInterface.Outputs(image=image.Png.mock())
@@ -153,7 +208,24 @@ def test_interface_template_more_complex():
             position=6,
         ),
     ]
-    assert sorted_fields(SampleInterface.Outputs) == [output]
+    assert sorted_fields(SampleInterface.Outputs) == [
+        output,
+        shell.out(
+            name="return_code",
+            type=int,
+            help_string=RETURN_CODE_HELP,
+        ),
+        shell.out(
+            name="stderr",
+            type=str,
+            help_string=STDERR_HELP,
+        ),
+        shell.out(
+            name="stdout",
+            type=str,
+            help_string=STDOUT_HELP,
+        ),
+    ]
     SampleInterface(in_fs_objects=[File.sample(), File.sample(seed=1)])
     SampleInterface.Outputs(out_dir=Directory.sample())
 
@@ -234,7 +306,23 @@ def test_interface_template_with_overrides_and_optionals():
         ]
         + outargs
     )
-    assert sorted_fields(SampleInterface.Outputs) == outargs
+    assert sorted_fields(SampleInterface.Outputs) == outargs + [
+        shell.out(
+            name="return_code",
+            type=int,
+            help_string=RETURN_CODE_HELP,
+        ),
+        shell.out(
+            name="stderr",
+            type=str,
+            help_string=STDERR_HELP,
+        ),
+        shell.out(
+            name="stdout",
+            type=str,
+            help_string=STDOUT_HELP,
+        ),
+    ]
 
 
 def test_interface_template_with_defaults():
@@ -281,7 +369,24 @@ def test_interface_template_with_defaults():
             position=6,
         ),
     ]
-    assert sorted_fields(SampleInterface.Outputs) == [output]
+    assert sorted_fields(SampleInterface.Outputs) == [
+        output,
+        shell.out(
+            name="return_code",
+            type=int,
+            help_string=RETURN_CODE_HELP,
+        ),
+        shell.out(
+            name="stderr",
+            type=str,
+            help_string=STDERR_HELP,
+        ),
+        shell.out(
+            name="stdout",
+            type=str,
+            help_string=STDOUT_HELP,
+        ),
+    ]
     SampleInterface(in_fs_objects=[File.sample(), File.sample(seed=1)])
     SampleInterface.Outputs(out_dir=Directory.sample())
 
@@ -333,7 +438,24 @@ def test_interface_template_with_type_overrides():
             position=6,
         ),
     ]
-    assert sorted_fields(SampleInterface.Outputs) == [output]
+    assert sorted_fields(SampleInterface.Outputs) == [
+        output,
+        shell.out(
+            name="return_code",
+            type=int,
+            help_string=RETURN_CODE_HELP,
+        ),
+        shell.out(
+            name="stderr",
+            type=str,
+            help_string=STDERR_HELP,
+        ),
+        shell.out(
+            name="stdout",
+            type=str,
+            help_string=STDOUT_HELP,
+        ),
+    ]
 
 
 @pytest.fixture(params=["static", "dynamic"])
@@ -582,7 +704,12 @@ def test_shell_output_field_name_static():
             )
 
     assert sorted([a.name for a in attrs.fields(A)]) == ["executable", "x", "y"]
-    assert [a.name for a in attrs.fields(A.Outputs)] == ["y"]
+    assert sorted(a.name for a in attrs.fields(A.Outputs)) == [
+        "return_code",
+        "stderr",
+        "stdout",
+        "y",
+    ]
     output = shell.outarg(
         name="y",
         type=File,
@@ -609,7 +736,24 @@ def test_shell_output_field_name_static():
         ),
         output,
     ]
-    assert sorted_fields(A.Outputs) == [output]
+    assert sorted_fields(A.Outputs) == [
+        output,
+        shell.out(
+            name="return_code",
+            type=int,
+            help_string=RETURN_CODE_HELP,
+        ),
+        shell.out(
+            name="stderr",
+            type=str,
+            help_string=STDERR_HELP,
+        ),
+        shell.out(
+            name="stdout",
+            type=str,
+            help_string=STDOUT_HELP,
+        ),
+    ]
 
 
 def test_shell_output_field_name_dynamic():

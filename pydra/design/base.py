@@ -505,6 +505,18 @@ def make_outputs_spec(
         raise ValueError(
             f"{reserved_names} are reserved and cannot be used for output field names"
         )
+    # Add in any fields in base classes that haven't already been converted into attrs
+    # fields (e.g. stdout, stderr and return_code)
+    for base in outputs_bases:
+        base_outputs = {
+            n: o
+            for n, o in base.__dict__.items()
+            if isinstance(o, Out) and n not in outputs
+        }
+        for name, field in base_outputs.items():
+            field.name = name
+            field.type = base.__annotations__.get(name, ty.Any)
+        outputs.update(base_outputs)
     outputs_klass = type(
         spec_name + "Outputs",
         tuple(outputs_bases),

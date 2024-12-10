@@ -335,15 +335,17 @@ class WorkflowSpec(TaskSpec[WorkflowOutputsType]):
     pass
 
 
+RETURN_CODE_HELP = """The process' exit code."""
+STDOUT_HELP = """The standard output stream produced by the command."""
+STDERR_HELP = """The standard error stream produced by the command."""
+
+
 class ShellOutputs(Outputs):
     """Output specification of a generic shell process."""
 
-    return_code: int = shell.out()
-    """The process' exit code."""
-    stdout: str = shell.out()
-    """The process' standard output."""
-    stderr: str = shell.out()
-    """The process' standard input."""
+    return_code: int = shell.out(help_string=RETURN_CODE_HELP)
+    stdout: str = shell.out(help_string=STDOUT_HELP)
+    stderr: str = shell.out(help_string=STDERR_HELP)
 
     @classmethod
     def collect_outputs(
