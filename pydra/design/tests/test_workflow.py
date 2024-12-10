@@ -1,4 +1,5 @@
 from operator import attrgetter
+from copy import copy
 import pytest
 import attrs
 from pydra.engine.workflow.base import Workflow
@@ -401,3 +402,84 @@ def test_workflow_split_after_access_fail():
 
     with pytest.raises(RuntimeError, match="Outputs .* have already been accessed"):
         Workflow.construct(MyTestWorkflow(a=[1, 2, 3], b=[1.0, 10.0, 100.0]))
+
+
+def test_nested_workflow():
+    """Simple test of a nested workflow"""
+
+    @python.define
+    def Add(x: float, y: float) -> float:
+        return x + y
+
+    @python.define
+    def Mul(x: float, y: float) -> float:
+        return x * y
+
+    @python.define
+    def Divide(x: float, y: float) -> float:
+        return x / y
+
+    @python.define
+    def Power(x: float, y: float) -> float:
+        return x**y
+
+    @workflow.define
+    def NestedWorkflow(a: float, b: float, c: float) -> float:
+        pow = workflow.add(Power(x=a, y=c))
+        add = workflow.add(Add(x=pow.out, y=b))
+        return add.out
+
+    @workflow.define
+    def MyTestWorkflow(a: int, b: float, c: float) -> float:
+        div = workflow.add(Divide(x=a, y=b))
+        nested = workflow.add(NestedWorkflow(a=div.out, b=b, c=c))
+        return nested.out
+
+    wf = Workflow.construct(MyTestWorkflow(a=1, b=10.0, c=2.0))
+    assert wf.inputs.a == 1
+    assert wf.inputs.b == 10.0
+    assert wf.inputs.c == 2.0
+    assert wf.outputs.out == LazyOutField(
+        node=wf["NestedWorkflow"], field="out", type=float, type_checked=True
+    )
+    assert list(wf.node_names) == ["Divide", "NestedWorkflow"]
+    nwf_spec = copy(wf["NestedWorkflow"]._spec)
+    nwf_spec.a = 100.0
+    nwf = Workflow.construct(nwf_spec)
+    nwf.inputs.a == 100.0
+    nwf.inputs.b == 10.0
+    nwf.inputs.c == 2.0
+    nwf.outputs.out == LazyOutField(node=nwf["Add"], field="out", type=float)
+    assert list(nwf.node_names) == ["Power", "Add"]
+
+
+def test_recursively_nested_conditional_workflow():
+    """More complex nested workflow example demonstrating conditional branching at run
+    time"""
+
+    @python.define
+    def Add(x: float, y: float) -> float:
+        return x + y
+
+    @python.define
+    def Subtract(x: float, y: float) -> float:
+        return x - y
+
+    @workflow.define
+    def RecursiveNestedWorkflow(a: float, depth: int) -> float:
+        add = workflow.add(Add(x=a, y=1))
+        decrement_depth = workflow.add(Subtract(x=depth, y=1))
+        if depth > 0:
+            out_node = workflow.add(
+                RecursiveNestedWorkflow(a=add.out, depth=decrement_depth.out)
+            )
+        else:
+            out_node = add
+        return out_node.out
+
+    wf = Workflow.construct(RecursiveNestedWorkflow(a=1, depth=3))
+    assert wf.inputs.a == 1
+    assert wf.inputs.depth == 3
+    assert wf.outputs.out == LazyOutField(
+        node=wf["RecursiveNestedWorkflow"], field="out", type=float, type_checked=True
+    )
