@@ -3,8 +3,11 @@
 import os
 from pathlib import Path
 import re
+from copy import copy
 import inspect
 import itertools
+import platform
+import shlex
 import typing as ty
 from glob import glob
 from copy import deepcopy
@@ -13,22 +16,56 @@ import attrs
 from fileformats.generic import File
 from pydra.engine.audit import AuditFlag
 from pydra.utils.typing import TypeParser, MultiOutputObj
-from .helpers import attrs_fields, attrs_values, is_lazy, list_fields
-from .helpers_file import template_update_single
+from .helpers import (
+    attrs_fields,
+    attrs_values,
+    is_lazy,
+    list_fields,
+    position_sort,
+    ensure_list,
+    parse_format_string,
+)
+from .helpers_file import template_update_single, template_update
 from pydra.utils.hash import hash_function, Cache
-from pydra.design.base import Field, Arg, Out, RequirementSet
+from pydra.design.base import Field, Arg, Out, RequirementSet, EMPTY
 from pydra.design import shell
+
+if ty.TYPE_CHECKING:
+    from pydra.engine.core import Task
+    from pydra.engine.task import ShellTask
 
 
 def is_set(value: ty.Any) -> bool:
     """Check if a value has been set."""
-    return value is not attrs.NOTHING
+    return value not in (attrs.NOTHING, EMPTY)
 
 
 class Outputs:
     """Base class for all output specifications"""
 
-    RESERVED_FIELD_NAMES = ("split", "combine")
+    RESERVED_FIELD_NAMES = ("inputs", "split", "combine")
+
+    @classmethod
+    def from_task(cls, task: "Task") -> Self:
+        """Collect the outputs of a task from a combination of the provided inputs,
+        the objects in the output directory, and the stdout and stderr of the process.
+
+        Parameters
+        ----------
+        task : Task
+            The task whose outputs are being collected.
+
+        Returns
+        -------
+        outputs : Outputs
+            The outputs of the task
+        """
+        return cls(**{f.name: attrs.NOTHING for f in attrs_fields(cls)})
+
+    @property
+    def inputs(self):
+        """The inputs object associated with a lazy-outputs object"""
+        return self._get_node().inputs
 
     def split(
         self,
@@ -62,7 +99,9 @@ class Outputs:
         self : TaskBase
             a reference to the task
         """
-        self._node.split(splitter, overwrite=overwrite, cont_dim=cont_dim, **inputs)
+        self._get_node().split(
+            splitter, overwrite=overwrite, cont_dim=cont_dim, **inputs
+        )
         return self
 
     def combine(
@@ -89,8 +128,16 @@ class Outputs:
         self : Self
             a reference to the outputs object
         """
-        self._node.combine(combiner, overwrite=overwrite)
+        self._get_node().combine(combiner, overwrite=overwrite)
         return self
+
+    def _get_node(self):
+        try:
+            return self._node
+        except AttributeError:
+            raise AttributeError(
+                f"{self} outputs object is not a lazy output of a workflow node"
+            )
 
 
 OutputsType = ty.TypeVar("OutputType", bound=Outputs)
@@ -100,6 +147,8 @@ class TaskSpec(ty.Generic[OutputsType]):
     """Base class for all task specifications"""
 
     Task: "ty.Type[core.Task]"
+
+    RESERVED_FIELD_NAMES = ()
 
     def __call__(
         self,
@@ -116,7 +165,7 @@ class TaskSpec(ty.Generic[OutputsType]):
     ):
         self._check_rules()
         task = self.Task(
-            self,
+            spec=self,
             name=name,
             audit_flags=audit_flags,
             cache_dir=cache_dir,
@@ -175,6 +224,9 @@ class TaskSpec(ty.Generic[OutputsType]):
         for field in list_fields(self):
             value = getattr(self, field.name)
 
+            if is_lazy(value):
+                continue
+
             # Collect alternative fields associated with this field.
             if field.xor:
                 alternative_fields = {
@@ -182,9 +234,7 @@ class TaskSpec(ty.Generic[OutputsType]):
                     for name in field.xor
                     if name != field.name
                 }
-                set_alternatives = {
-                    n: v for n, v in alternative_fields.items() if is_set(v)
-                }
+                set_alternatives = {n: v for n, v in alternative_fields.items() if v}
 
                 # Raise error if no field in mandatory alternative group is set.
                 if not is_set(value):
@@ -206,10 +256,19 @@ class TaskSpec(ty.Generic[OutputsType]):
                     )
 
             # Raise error if any required field is unset.
-            if field.requires and not any(rs.satisfied(self) for rs in field.requires):
+            if (
+                value
+                and field.requires
+                and not any(rs.satisfied(self) for rs in field.requires)
+            ):
+                if len(field.requires) > 1:
+                    qualification = (
+                        " at least one of the following requirements to be satisfied: "
+                    )
+                else:
+                    qualification = ""
                 raise ValueError(
-                    f"{field.name} requires at least one of the requirement sets to be "
-                    f"satisfied: {[str(r) for r in field.requires]}"
+                    f"{field.name!r} requires{qualification} {[str(r) for r in field.requires]}"
                 )
 
     @classmethod
@@ -235,6 +294,14 @@ class TaskSpec(ty.Generic[OutputsType]):
                     f"of {inpt} " + str(list(unrecognised))
                 )
 
+    def _check_resolved(self):
+        """Checks that all the fields in the spec have been resolved"""
+        if has_lazy_values := [n for n, v in attrs_values(self).items() if is_lazy(v)]:
+            raise ValueError(
+                f"Cannot execute {self} because the following fields "
+                f"still have lazy values {has_lazy_values}"
+            )
+
 
 @attrs.define(kw_only=True)
 class Runtime:
@@ -257,7 +324,7 @@ class Result:
     errored: bool = False
 
     def __getstate__(self):
-        state = self.__dict__.copy()
+        state = attrs_values(self)
         if state["output"] is not None:
             fields = tuple((el.name, el.type) for el in attrs_fields(state["output"]))
             state["output_spec"] = (state["output"].__class__.__name__, fields)
@@ -348,13 +415,9 @@ class ShellOutputs(Outputs):
     stderr: str = shell.out(help_string=STDERR_HELP)
 
     @classmethod
-    def collect_outputs(
+    def from_task(
         cls,
-        inputs: "ShellSpec",
-        output_dir: Path,
-        stdout: str,
-        stderr: str,
-        return_code: int,
+        task: "ShellTask",
     ) -> Self:
         """Collect the outputs of a shell process from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
@@ -378,9 +441,15 @@ class ShellOutputs(Outputs):
             The outputs of the shell process
         """
 
-        outputs = cls(return_code=return_code, stdout=stdout, stderr=stderr)
+        outputs = cls(
+            return_code=task.output_["return_code"],
+            stdout=task.output_["stdout"],
+            stderr=task.output_["stderr"],
+        )
         fld: shell.out
         for fld in list_fields(cls):
+            if fld.name in ["return_code", "stdout", "stderr"]:
+                continue
             if not TypeParser.is_subclass(
                 fld.type,
                 (
@@ -399,17 +468,17 @@ class ShellOutputs(Outputs):
                 )
             # Get the corresponding value from the inputs if it exists, which will be
             # passed through to the outputs, to permit manual overrides
-            if isinstance(fld, shell.outarg) and is_set(getattr(inputs, fld.name)):
-                resolved_value = getattr(inputs, fld.name)
+            if isinstance(fld, shell.outarg) and is_set(getattr(task.inputs, fld.name)):
+                resolved_value = getattr(task.spec, fld.name)
             elif is_set(fld.default):
-                resolved_value = cls._resolve_default_value(fld, output_dir)
+                resolved_value = cls._resolve_default_value(fld, task.output_dir)
             else:
                 if fld.type in [int, float, bool, str, list] and not fld.callable:
                     raise AttributeError(
                         f"{fld.type} has to have a callable in metadata"
                     )
                 resolved_value = cls._generate_implicit_value(
-                    fld, inputs, output_dir, outputs, stdout, stderr
+                    fld, task.spec, task.output_dir, outputs.stdout, outputs.stderr
                 )
             # Set the resolved value
             setattr(outputs, fld.name, resolved_value)
@@ -543,10 +612,204 @@ ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
 
 class ShellSpec(TaskSpec[ShellOutputsType]):
-    pass
+
+    RESERVED_FIELD_NAMES = ("cmdline",)
+
+    @property
+    def cmdline(self) -> str:
+        """The equivalent command line that would be submitted if the task were run on
+        the current working directory."""
+        # checking the inputs fields before returning the command line
+        self._check_resolved()
+        # Skip the executable, which can be a multi-part command, e.g. 'docker run'.
+        cmd_args = self._command_args()
+        cmdline = cmd_args[0]
+        for arg in cmd_args[1:]:
+            # If there are spaces in the arg, and it is not enclosed by matching
+            # quotes, add quotes to escape the space. Not sure if this should
+            # be expanded to include other special characters apart from spaces
+            if " " in arg:
+                cmdline += " '" + arg + "'"
+            else:
+                cmdline += " " + arg
+        return cmdline
+
+    def _command_args(
+        self,
+        output_dir: Path | None = None,
+        input_updates: dict[str, ty.Any] | None = None,
+        root: Path | None = None,
+    ) -> list[str]:
+        """Get command line arguments"""
+        if output_dir is None:
+            output_dir = Path.cwd()
+        self._check_resolved()
+        inputs = attrs_values(self)
+        modified_inputs = template_update(self, output_dir=output_dir)
+        if input_updates:
+            inputs.update(input_updates)
+        inputs.update(modified_inputs)
+        pos_args = []  # list for (position, command arg)
+        self._positions_provided = []
+        for field in list_fields(self):
+            name = field.name
+            value = inputs[name]
+            if value is None:
+                continue
+            if name == "executable":
+                pos_args.append(self._command_shelltask_executable(field, value))
+            elif name == "args":
+                pos_val = self._command_shelltask_args(field, value)
+                if pos_val:
+                    pos_args.append(pos_val)
+            else:
+                if name in modified_inputs:
+                    pos_val = self._command_pos_args(
+                        field, value, output_dir, root=root
+                    )
+                else:
+                    pos_val = self._command_pos_args(field, value, output_dir, inputs)
+                if pos_val:
+                    pos_args.append(pos_val)
+
+        # Sort command and arguments by position
+        cmd_args = position_sort(pos_args)
+        # pos_args values are each a list of arguments, so concatenate lists after sorting
+        return sum(cmd_args, [])
+
+    def _command_shelltask_executable(
+        self, field: shell.arg, value: ty.Any
+    ) -> tuple[int, ty.Any]:
+        """Returning position and value for executable ShellTask input"""
+        pos = 0  # executable should be the first el. of the command
+        assert value
+        return pos, ensure_list(value, tuple2list=True)
+
+    def _command_shelltask_args(
+        self, field: shell.arg, value: ty.Any
+    ) -> tuple[int, ty.Any]:
+        """Returning position and value for args ShellTask input"""
+        pos = -1  # assuming that args is the last el. of the command
+        if value is None:
+            return None
+        else:
+            return pos, ensure_list(value, tuple2list=True)
+
+    def _command_pos_args(
+        self,
+        field: shell.arg,
+        value: ty.Any,
+        inputs: dict[str, ty.Any],
+        output_dir: Path,
+        root: Path | None = None,
+    ) -> tuple[int, ty.Any]:
+        """
+        Checking all additional input fields, setting pos to None, if position not set.
+        Creating a list with additional parts of the command that comes from
+        the specific field.
+        """
+        if field.argstr is None and field.formatter is None:
+            # assuming that input that has no argstr is not used in the command,
+            # or a formatter is not provided too.
+            return None
+        if field.position is not None:
+            if not isinstance(field.position, int):
+                raise Exception(
+                    f"position should be an integer, but {field.position} given"
+                )
+            # checking if the position is not already used
+            if field.position in self._positions_provided:
+                raise Exception(
+                    f"{field.name} can't have provided position, {field.position} is already used"
+                )
+
+            self._positions_provided.append(field.position)
+
+            # Shift non-negatives up to allow executable to be 0
+            # Shift negatives down to allow args to be -1
+            field.position += 1 if field.position >= 0 else -1
+
+        if value:
+            if root:  # values from templates
+                value = value.replace(str(output_dir), f"{root}{output_dir}")
+
+        if field.readonly and value is not None:
+            raise Exception(f"{field.name} is read only, the value can't be provided")
+        elif value is None and not field.readonly and field.formatter is None:
+            return None
+
+        cmd_add = []
+        # formatter that creates a custom command argument
+        # it can take the value of the field, all inputs, or the value of other fields.
+        if field.formatter:
+            call_args = inspect.getfullargspec(field.formatter)
+            call_args_val = {}
+            for argnm in call_args.args:
+                if argnm == "field":
+                    call_args_val[argnm] = value
+                elif argnm == "inputs":
+                    call_args_val[argnm] = inputs
+                else:
+                    if argnm in inputs:
+                        call_args_val[argnm] = inputs[argnm]
+                    else:
+                        raise AttributeError(
+                            f"arguments of the formatter function from {field.name} "
+                            f"has to be in inputs or be field or output_dir, "
+                            f"but {argnm} is used"
+                        )
+            cmd_el_str = field.formatter(**call_args_val)
+            cmd_el_str = cmd_el_str.strip().replace("  ", " ")
+            if cmd_el_str != "":
+                cmd_add += split_cmd(cmd_el_str)
+        elif field.type is bool and "{" not in field.argstr:
+            # if value is simply True the original argstr is used,
+            # if False, nothing is added to the command.
+            if value is True:
+                cmd_add.append(field.argstr)
+        else:
+            if (
+                field.argstr.endswith("...")
+                and isinstance(value, ty.Iterable)
+                and not isinstance(value, (str, bytes))
+            ):
+                field.argstr = field.argstr.replace("...", "")
+                # if argstr has a more complex form, with "{input_field}"
+                if "{" in field.argstr and "}" in field.argstr:
+                    argstr_formatted_l = []
+                    for val in value:
+                        argstr_f = argstr_formatting(
+                            field.argstr, self, value_updates={field.name: val}
+                        )
+                        argstr_formatted_l.append(f" {argstr_f}")
+                    cmd_el_str = field.sep.join(argstr_formatted_l)
+                else:  # argstr has a simple form, e.g. "-f", or "--f"
+                    cmd_el_str = field.sep.join(
+                        [f" {field.argstr} {val}" for val in value]
+                    )
+            else:
+                # in case there are ... when input is not a list
+                field.argstr = field.argstr.replace("...", "")
+                if isinstance(value, ty.Iterable) and not isinstance(
+                    value, (str, bytes)
+                ):
+                    cmd_el_str = field.sep.join([str(val) for val in value])
+                    value = cmd_el_str
+                # if argstr has a more complex form, with "{input_field}"
+                if "{" in field.argstr and "}" in field.argstr:
+                    cmd_el_str = field.argstr.replace(f"{{{field.name}}}", str(value))
+                    cmd_el_str = argstr_formatting(cmd_el_str, self.spec)
+                else:  # argstr has a simple form, e.g. "-f", or "--f"
+                    if value:
+                        cmd_el_str = f"{field.argstr} {value}"
+                    else:
+                        cmd_el_str = ""
+            if cmd_el_str:
+                cmd_add += split_cmd(cmd_el_str)
+        return field.position, cmd_add
 
 
-def donothing(*args, **kwargs):
+def donothing(*args: ty.Any, **kwargs: ty.Any) -> None:
     return None
 
 
@@ -567,6 +830,71 @@ class TaskHook:
     def reset(self):
         for val in ["pre_run_task", "post_run_task", "pre_run", "post_run"]:
             setattr(self, val, donothing)
+
+
+def split_cmd(cmd: str):
+    """Splits a shell command line into separate arguments respecting quotes
+
+    Parameters
+    ----------
+    cmd : str
+        Command line string or part thereof
+
+    Returns
+    -------
+    str
+        the command line string split into process args
+    """
+    # Check whether running on posix or Windows system
+    on_posix = platform.system() != "Windows"
+    args = shlex.split(cmd, posix=on_posix)
+    cmd_args = []
+    for arg in args:
+        match = re.match("(['\"])(.*)\\1$", arg)
+        if match:
+            cmd_args.append(match.group(2))
+        else:
+            cmd_args.append(arg)
+    return cmd_args
+
+
+def argstr_formatting(
+    argstr: str, inputs: dict[str, ty.Any], value_updates: dict[str, ty.Any] = None
+):
+    """formatting argstr that have form {field_name},
+    using values from inputs and updating with value_update if provided
+    """
+    # if there is a value that has to be updated (e.g. single value from a list)
+    # getting all fields that should be formatted, i.e. {field_name}, ...
+    if value_updates:
+        inputs = copy(inputs)
+        inputs.update(value_updates)
+    inp_fields = parse_format_string(argstr)
+    val_dict = {}
+    for fld_name in inp_fields:
+        fld_value = inputs[fld_name]
+        fld_attr = getattr(attrs.fields(type(inputs)), fld_name)
+        if fld_value is None or (
+            fld_value is False
+            and fld_attr.type is not bool
+            and TypeParser.matches_type(fld_attr.type, ty.Union[Path, bool])
+        ):
+            # if value is NOTHING, nothing should be added to the command
+            val_dict[fld_name] = ""
+        else:
+            val_dict[fld_name] = fld_value
+
+    # formatting string based on the val_dict
+    argstr_formatted = argstr.format(**val_dict)
+    # removing extra commas and spaces after removing the field that have NOTHING
+    argstr_formatted = (
+        argstr_formatted.replace("[ ", "[")
+        .replace(" ]", "]")
+        .replace("[,", "[")
+        .replace(",]", "]")
+        .strip()
+    )
+    return argstr_formatted
 
 
 from pydra.engine import core  # noqa: E402

@@ -1,6 +1,9 @@
+import typing as ty
 from .helpers import execute
-
 from pathlib import Path
+
+if ty.TYPE_CHECKING:
+    from pydra.engine.task import ShellTask
 
 
 class Environment:
@@ -14,7 +17,7 @@ class Environment:
     def setup(self):
         pass
 
-    def execute(self, task):
+    def execute(self, task: "ShellTask"):
         """
         Execute the task in the environment.
 
@@ -39,7 +42,7 @@ class Native(Environment):
     Native environment, i.e. the tasks are executed in the current python environment.
     """
 
-    def execute(self, task):
+    def execute(self, task: "ShellTask"):
         keys = ["return_code", "stdout", "stderr"]
         values = execute(task.command_args(), strip=task.strip)
         output = dict(zip(keys, values))
@@ -87,7 +90,7 @@ class Container(Environment):
 class Docker(Container):
     """Docker environment."""
 
-    def execute(self, task):
+    def execute(self, task: "ShellTask"):
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
         mounts = task.get_bindings(root=self.root)
@@ -123,7 +126,7 @@ class Docker(Container):
 class Singularity(Container):
     """Singularity environment."""
 
-    def execute(self, task):
+    def execute(self, task: "ShellTask"):
         singularity_img = f"{self.image}:{self.tag}"
         # mounting all input locations
         mounts = task.get_bindings(root=self.root)

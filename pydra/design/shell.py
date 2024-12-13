@@ -343,6 +343,7 @@ def define(
             argstr="",
             position=0,
             default=executable,
+            validator=attrs.validators.min_len(1),
             help_string=EXECUTABLE_HELP_STRING,
         )
 

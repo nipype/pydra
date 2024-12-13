@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 import typing as ty
-from copy import deepcopy, copy
+from copy import deepcopy
 from uuid import uuid4
 from filelock import SoftFileLock
 import shutil
@@ -22,6 +22,7 @@ from .specs import (
     RuntimeSpec,
     Result,
     TaskHook,
+    TaskSpec,
 )
 from .helpers import (
     create_checksum,
@@ -75,6 +76,9 @@ class Task:
 
     _cache_dir = None  # Working directory in which to operate
     _references = None  # List of references for a task
+
+    name: str
+    spec: TaskSpec
 
     def __init__(
         self,
@@ -131,23 +135,12 @@ class Task:
         if Task._etelemetry_version_data is None:
             Task._etelemetry_version_data = check_latest_version()
 
-        self.interface = spec
-        # raise error if name is same as of attributes
+        self.spec = spec
         self.name = name
-        if not self.input_spec:
-            raise Exception("No input_spec in class: %s" % self.__class__.__name__)
-
-        self.inputs = self.interface(
-            **{
-                # in attrs names that starts with "_" could be set when name provided w/o "_"
-                (f.name[1:] if f.name.startswith("_") else f.name): f.default
-                for f in attr.fields(type(self.interface))
-            }
-        )
 
         self.input_names = [
             field.name
-            for field in attr.fields(type(self.interface))
+            for field in attr.fields(type(self.spec))
             if field.name not in ["_func", "_graph_checksums"]
         ]
 
@@ -164,17 +157,11 @@ class Task:
                     raise ValueError(f"Unknown input set {inputs!r}")
                 inputs = self._input_sets[inputs]
 
-        self.inputs = attr.evolve(self.inputs, **inputs)
+        self.spec = attr.evolve(self.spec, **inputs)
 
         # checking if metadata is set properly
-        self.inputs.check_metadata()
-        # dictionary to save the connections with lazy fields
-        self.inp_lf = {}
-        self.state = None
-        # container dimensions provided by the user
-        self.cont_dim = cont_dim
-        # container dimension for inner input if needed (e.g. for inner splitter)
-        self._inner_cont_dim = {}
+        self.spec._check_resolved()
+        self.spec._check_rules()
         self._output = {}
         self._result = {}
         # flag that says if node finished all jobs
@@ -206,18 +193,11 @@ class Task:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state["interface"] = cp.dumps(state["interface"])
-        inputs = {}
-        for k, v in attr.asdict(state["inputs"], recurse=False).items():
-            if k.startswith("_"):
-                k = k[1:]
-            inputs[k] = v
-        state["inputs"] = inputs
+        state["spec"] = cp.dumps(state["spec"])
         return state
 
     def __setstate__(self, state):
-        state["interface"] = cp.loads(state["interface"])
-        state["inputs"] = self.interface(**state["inputs"])
+        state["spec"] = cp.loads(state["spec"])
         self.__dict__.update(state)
 
     def help(self, returnhelp=False):
@@ -243,62 +223,9 @@ class Task:
         and to create nodes checksums needed for graph checksums
         (before the tasks have inputs etc.)
         """
-        input_hash = self.inputs.hash
-        if self.state is None:
-            self._checksum = create_checksum(self.__class__.__name__, input_hash)
-        else:
-            splitter_hash = hash_function(self.state.splitter)
-            self._checksum = create_checksum(
-                self.__class__.__name__, hash_function([input_hash, splitter_hash])
-            )
+        input_hash = self.spec._hash
+        self._checksum = create_checksum(self.__class__.__name__, input_hash)
         return self._checksum
-
-    def checksum_states(self, state_index=None):
-        """
-        Calculate a checksum for the specific state or all of the states of the task.
-        Replaces state-arrays in the inputs fields with a specific values for states.
-        Used to recreate names of the task directories,
-
-        Parameters
-        ----------
-        state_index :
-            TODO
-
-        """
-        if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
-            self.inputs._graph_checksums = {
-                nd.name: nd.checksum for nd in self.graph_sorted
-            }
-
-        if state_index is not None:
-            inputs_copy = copy(self.inputs)
-            for key, ind in self.state.inputs_ind[state_index].items():
-                val = self._extract_input_el(
-                    inputs=self.inputs, inp_nm=key.split(".")[1], ind=ind
-                )
-                setattr(inputs_copy, key.split(".")[1], val)
-            # setting files_hash again in case it was cleaned by setting specific element
-            # that might be important for outer splitter of input variable with big files
-            # the file can be changed with every single index even if there are only two files
-            input_hash = inputs_copy.hash
-            if is_workflow(self):
-                con_hash = hash_function(self._connections)
-                # TODO: hash list is not used
-                hash_list = [input_hash, con_hash]  # noqa: F841
-                checksum_ind = create_checksum(
-                    self.__class__.__name__, self._checksum_wf(input_hash)
-                )
-            else:
-                checksum_ind = create_checksum(self.__class__.__name__, input_hash)
-            return checksum_ind
-        else:
-            checksum_list = []
-            if not hasattr(self.state, "inputs_ind"):
-                self.state.prepare_states(self.inputs, cont_dim=self.cont_dim)
-                self.state.prepare_inputs()
-            for ind in range(len(self.state.inputs_ind)):
-                checksum_list.append(self.checksum_states(state_index=ind))
-            return checksum_list
 
     @property
     def uid(self):
@@ -333,7 +260,7 @@ class Task:
         """Get the names of the outputs from the task's output_spec
         (not everything has to be generated, see generated_output_names).
         """
-        return [f.name for f in attr.fields(self.interface.Outputs)]
+        return [f.name for f in attr.fields(self.spec.Outputs)]
 
     @property
     def generated_output_names(self):
@@ -342,13 +269,13 @@ class Task:
         it uses output_names.
         The results depends on the input provided to the task
         """
-        output_klass = self.interface.Outputs
+        output_klass = self.spec.Outputs
         if hasattr(output_klass, "_generated_output_names"):
             output = output_klass(
                 **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
             )
             # using updated input (after filing the templates)
-            _inputs = deepcopy(self.inputs)
+            _inputs = deepcopy(self.spec)
             modified_inputs = template_update(_inputs, self.output_dir)
             if modified_inputs:
                 _inputs = attr.evolve(_inputs, **modified_inputs)
@@ -397,8 +324,6 @@ class Task:
     @property
     def output_dir(self):
         """Get the filesystem path where outputs will be written."""
-        if self.state:
-            return [self._cache_dir / checksum for checksum in self.checksum_states()]
         return self._cache_dir / self.checksum
 
     @property
@@ -434,7 +359,7 @@ class Task:
             pass
         # if there is plugin provided or the task is a Workflow or has a state,
         # the submitter will be created using provided plugin, self.plugin or "cf"
-        elif plugin or self.state or is_workflow(self):
+        elif plugin:
             plugin = plugin or self.plugin or "cf"
             if plugin_kwargs is None:
                 plugin_kwargs = {}
@@ -442,7 +367,7 @@ class Task:
 
         if submitter:
             with submitter as sub:
-                self.inputs = attr.evolve(self.inputs, **kwargs)
+                self.spec = attr.evolve(self.spec, **kwargs)
                 res = sub(self, environment=environment)
         else:  # tasks without state could be run without a submitter
             res = self._run(rerun=rerun, environment=environment, **kwargs)
@@ -462,10 +387,10 @@ class Task:
         from pydra.utils.typing import TypeParser
 
         orig_inputs = {
-            k: v for k, v in attrs_values(self.inputs).items() if not k.startswith("_")
+            k: v for k, v in attrs_values(self.spec).items() if not k.startswith("_")
         }
         map_copyfiles = {}
-        input_fields = attr.fields(type(self.inputs))
+        input_fields = attr.fields(type(self.spec))
         for name, value in orig_inputs.items():
             fld = getattr(input_fields, name)
             copy_mode, copy_collation = parse_copyfile(
@@ -484,7 +409,7 @@ class Task:
                 if value is not copied_value:
                     map_copyfiles[name] = copied_value
         modified_inputs = template_update(
-            self.inputs, self.output_dir, map_copyfiles=map_copyfiles
+            self.spec, self.output_dir, map_copyfiles=map_copyfiles
         )
         assert all(m in orig_inputs for m in modified_inputs), (
             "Modified inputs contain fields not present in original inputs. "
@@ -497,7 +422,7 @@ class Task:
                 # Ensure we pass a copy not the original just in case inner
                 # attributes are modified during execution
                 value = deepcopy(orig_value)
-            setattr(self.inputs, name, value)
+            setattr(self.spec, name, value)
         return orig_inputs
 
     def _populate_filesystem(self, checksum, output_dir):
@@ -517,10 +442,7 @@ class Task:
             shutil.rmtree(output_dir)
         output_dir.mkdir(parents=False, exist_ok=self.can_resume)
 
-    def _run(self, rerun=False, environment=None, **kwargs):
-        self.inputs = attr.evolve(self.inputs, **kwargs)
-        self.inputs.check_fields_input_spec()
-
+    def _run(self, rerun=False, environment=None):
         checksum = self.checksum
         output_dir = self.output_dir
         lockfile = self.cache_dir / (checksum + ".lock")
@@ -535,7 +457,6 @@ class Task:
             cwd = os.getcwd()
             self._populate_filesystem(checksum, output_dir)
             os.chdir(output_dir)
-            orig_inputs = self._modify_inputs()
             result = Result(output=None, runtime=None, errored=False)
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=output_dir)
@@ -544,7 +465,7 @@ class Task:
             try:
                 self.audit.monitor()
                 self._run_task(environment=environment)
-                result.output = self._collect_outputs(output_dir=output_dir)
+                result.output = self.spec.Outputs.from_task(self)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
@@ -558,24 +479,12 @@ class Task:
                 # removing the additional file with the checksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 # Restore original values to inputs
-                for field_name, field_value in orig_inputs.items():
-                    setattr(self.inputs, field_name, field_value)
                 os.chdir(cwd)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
         # of the task
         self._check_for_hash_changes()
         return result
-
-    def _collect_outputs(self, output_dir):
-        output_klass = self.interface.Outputs
-        output = output_klass(
-            **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
-        )
-        other_output = output.collect_additional_outputs(
-            self.inputs, output_dir, self.output_
-        )
-        return attr.evolve(output, **self.output_, **other_output)
 
     def _extract_input_el(self, inputs, inp_nm, ind):
         """
@@ -603,7 +512,7 @@ class Task:
         for inp in set(self.input_names):
             if f"{self.name}.{inp}" in input_ind:
                 inputs_dict[inp] = self._extract_input_el(
-                    inputs=self.inputs,
+                    inputs=self.spec,
                     inp_nm=inp,
                     ind=input_ind[f"{self.name}.{inp}"],
                 )
@@ -626,7 +535,7 @@ class Task:
     def done(self):
         """Check whether the tasks has been finalized and all outputs are stored."""
         # if any of the field is lazy, there is no need to check results
-        if has_lazy(self.inputs):
+        if has_lazy(self.spec):
             return False
         _result = self.result()
         if self.state:
@@ -699,73 +608,40 @@ class Task:
         # return a future if not
         if self.errored:
             return Result(output=None, runtime=None, errored=True)
-        if self.state:
-            if state_index is None:
-                # if state_index=None, collecting all results
-                if self.state.combiner:
-                    return self._combined_output(return_inputs=return_inputs)
-                else:
-                    results = []
-                    for ind in range(len(self.state.inputs_ind)):
-                        checksum = self.checksum_states(state_index=ind)
-                        result = load_result(checksum, self.cache_locations)
-                        if result is None:
-                            return None
-                        results.append(result)
-                    if return_inputs is True or return_inputs == "val":
-                        return list(zip(self.state.states_val, results))
-                    elif return_inputs == "ind":
-                        return list(zip(self.state.states_ind, results))
-                    else:
-                        return results
-            else:  # state_index is not None
-                if self.state.combiner:
-                    return self._combined_output(return_inputs=return_inputs)[
-                        state_index
-                    ]
-                result = load_result(
-                    self.checksum_states(state_index), self.cache_locations
-                )
-                if return_inputs is True or return_inputs == "val":
-                    return (self.state.states_val[state_index], result)
-                elif return_inputs == "ind":
-                    return (self.state.states_ind[state_index], result)
-                else:
-                    return result
+
+        if state_index is not None:
+            raise ValueError("Task does not have a state")
+        checksum = self.checksum
+        result = load_result(checksum, self.cache_locations)
+        if result and result.errored:
+            self._errored = True
+        if return_inputs is True or return_inputs == "val":
+            inputs_val = {
+                f"{self.name}.{inp}": getattr(self.spec, inp)
+                for inp in self.input_names
+            }
+            return (inputs_val, result)
+        elif return_inputs == "ind":
+            inputs_ind = {f"{self.name}.{inp}": None for inp in self.input_names}
+            return (inputs_ind, result)
         else:
-            if state_index is not None:
-                raise ValueError("Task does not have a state")
-            checksum = self.checksum
-            result = load_result(checksum, self.cache_locations)
-            if result and result.errored:
-                self._errored = True
-            if return_inputs is True or return_inputs == "val":
-                inputs_val = {
-                    f"{self.name}.{inp}": getattr(self.inputs, inp)
-                    for inp in self.input_names
-                }
-                return (inputs_val, result)
-            elif return_inputs == "ind":
-                inputs_ind = {f"{self.name}.{inp}": None for inp in self.input_names}
-                return (inputs_ind, result)
-            else:
-                return result
+            return result
 
     def _reset(self):
         """Reset the connections between inputs and LazyFields."""
-        for field in attrs_fields(self.inputs):
+        for field in attrs_fields(self.spec):
             if field.name in self.inp_lf:
-                setattr(self.inputs, field.name, self.inp_lf[field.name])
+                setattr(self.spec, field.name, self.inp_lf[field.name])
         if is_workflow(self):
             for task in self.graph.nodes:
                 task._reset()
 
     def _check_for_hash_changes(self):
-        hash_changes = self.inputs.hash_changes()
+        hash_changes = self.spec._hash_changes()
         details = ""
         for changed in hash_changes:
-            field = getattr(attr.fields(type(self.inputs)), changed)
-            val = getattr(self.inputs, changed)
+            field = getattr(attr.fields(type(self.spec)), changed)
+            val = getattr(self.spec, changed)
             field_type = type(val)
             if issubclass(field.type, FileSet):
                 details += (
@@ -797,8 +673,8 @@ class Task:
             "Input values and hashes for '%s' %s node:\n%s\n%s",
             self.name,
             type(self).__name__,
-            self.inputs,
-            self.inputs._hashes,
+            self.spec,
+            self.spec._hashes,
         )
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any
@@ -906,12 +782,12 @@ class WorkflowTask(Task):
         (before the tasks have inputs etc.)
         """
         # if checksum is called before run the _graph_checksums is not ready
-        if is_workflow(self) and self.inputs._graph_checksums is attr.NOTHING:
-            self.inputs._graph_checksums = {
+        if is_workflow(self) and self.spec._graph_checksums is attr.NOTHING:
+            self.spec._graph_checksums = {
                 nd.name: nd.checksum for nd in self.graph_sorted
             }
 
-        input_hash = self.inputs.hash
+        input_hash = self.spec.hash
         if not self.state:
             self._checksum = create_checksum(
                 self.__class__.__name__, self._checksum_wf(input_hash)
@@ -1190,7 +1066,7 @@ class WorkflowTask(Task):
     #     logger.info("Added %s to %s", self.output_spec, self)
 
     def _collect_outputs(self):
-        output_klass = self.interface.Outputs
+        output_klass = self.spec.Outputs
         output = output_klass(
             **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
         )

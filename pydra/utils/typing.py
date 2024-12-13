@@ -1042,3 +1042,14 @@ def is_fileset_or_union(type_: type) -> bool:
     if is_union(type_):
         return any(is_fileset_or_union(t) for t in ty.get_args(type_))
     return issubclass(type_, core.FileSet)
+
+
+def is_type(*args: ty.Any) -> bool:
+    """check that the value is a type or generic"""
+    if len(args) == 3:  # attrs validator
+        val = args[2]
+    elif len(args) != 1:
+        raise TypeError(f"is_type() takes 1 or 3 arguments, not {args}")
+    else:
+        val = args[0]
+    return inspect.isclass(val) or ty.get_origin(val)

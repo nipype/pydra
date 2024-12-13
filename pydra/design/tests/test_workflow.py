@@ -93,14 +93,8 @@ def test_shell_workflow():
         )
         output_video = workflow.add(
             shell.define(
-                "HandBrakeCLI -i <in_video> -o <out|out_video> "
+                "HandBrakeCLI -i <in_video:video/mp4> -o <out|out_video:video/mp4> "
                 "--width <width:int> --height <height:int>",
-                # By default any input/output specified with a flag (e.g. -i <in_video>)
-                # is considered optional, i.e. of type `FsObject | None`, and therefore
-                # won't be used by default. By overriding this with non-optional types,
-                # the fields are specified as being required.
-                inputs={"in_video": video.Mp4},
-                outputs={"out_video": video.Mp4},
             )(in_video=add_watermark.out_video, width=1280, height=720),
             name="resize",
         ).out_video

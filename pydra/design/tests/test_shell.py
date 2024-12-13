@@ -32,6 +32,7 @@ def test_interface_template():
     assert sorted_fields(SampleInterface) == [
         shell.arg(
             name="executable",
+            validator=attrs.validators.min_len(1),
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
@@ -80,6 +81,7 @@ def test_interface_template_w_types_and_path_template_ext():
     assert sorted_fields(SampleInterface) == [
         shell.arg(
             name="executable",
+            validator=attrs.validators.min_len(1),
             default="trim-png",
             type=str | ty.Sequence[str],
             position=0,
@@ -119,6 +121,7 @@ def test_interface_template_w_modify():
     assert sorted_fields(SampleInterface) == [
         shell.arg(
             name="executable",
+            validator=attrs.validators.min_len(1),
             default="trim-png",
             type=str | ty.Sequence[str],
             position=0,
@@ -176,6 +179,7 @@ def test_interface_template_more_complex():
     assert sorted_fields(SampleInterface) == [
         shell.arg(
             name="executable",
+            validator=attrs.validators.min_len(1),
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
@@ -273,6 +277,7 @@ def test_interface_template_with_overrides_and_optionals():
         == [
             shell.arg(
                 name="executable",
+                validator=attrs.validators.min_len(1),
                 default="cp",
                 type=str | ty.Sequence[str],
                 position=0,
@@ -347,6 +352,7 @@ def test_interface_template_with_defaults():
     assert sorted_fields(SampleInterface) == [
         shell.arg(
             name="executable",
+            validator=attrs.validators.min_len(1),
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
@@ -414,6 +420,7 @@ def test_interface_template_with_type_overrides():
     assert sorted_fields(SampleInterface) == [
         shell.arg(
             name="executable",
+            validator=attrs.validators.min_len(1),
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
@@ -545,6 +552,7 @@ def Ls(request):
                     type=bool,
                     help_string="Show complete date in long format",
                     argstr="-T",
+                    default=False,
                     requires=["long_format"],
                     xor=["date_format_str"],
                 ),
@@ -606,7 +614,7 @@ def test_shell_pickle_roundtrip(Ls, tmp_path):
     assert RereadLs is Ls
 
 
-@pytest.mark.xfail(reason="Still need to update tasks to use new shell interface")
+# @pytest.mark.xfail(reason="Still need to update tasks to use new shell interface")
 def test_shell_run(Ls, tmp_path):
     Path.touch(tmp_path / "a")
     Path.touch(tmp_path / "b")
@@ -615,16 +623,16 @@ def test_shell_run(Ls, tmp_path):
     ls = Ls(directory=tmp_path, long_format=True)
 
     # Test cmdline
-    assert ls.inputs.directory == tmp_path
-    assert not ls.inputs.hidden
-    assert ls.inputs.long_format
+    assert ls.directory == Directory(tmp_path)
+    assert not ls.hidden
+    assert ls.long_format
     assert ls.cmdline == f"ls -l {tmp_path}"
 
     # Drop Long format flag to make output simpler
     ls = Ls(directory=tmp_path)
     result = ls()
 
-    assert result.output.entries == ["a", "b", "c"]
+    assert sorted(result.output.entries) == ["a", "b", "c"]
 
 
 @pytest.fixture(params=["static", "dynamic"])
@@ -721,6 +729,7 @@ def test_shell_output_field_name_static():
     assert sorted_fields(A) == [
         shell.arg(
             name="executable",
+            validator=attrs.validators.min_len(1),
             default="cp",
             type=str | ty.Sequence[str],
             argstr="",

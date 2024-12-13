@@ -57,7 +57,7 @@ def test_numpy():
     fft = mark.annotate({"a": np.ndarray, "return": np.ndarray})(np.fft.fft)
     fft = mark.task(fft)()
     arr = np.array([[1, 10], [2, 20]])
-    fft.inputs.a = arr
+    fft.spec.a = arr
     res = fft()
     assert np.allclose(np.fft.fft(arr), res.output.out)
 
@@ -1319,7 +1319,7 @@ def test_shell_cmd(tmpdir):
 
     # separate command into exec + args
     shelly = ShellTask(executable=cmd[0], args=cmd[1:])
-    assert shelly.inputs.executable == "echo"
+    assert shelly.spec.executable == "echo"
     assert shelly.cmdline == " ".join(cmd)
     res = shelly._run()
     assert res.output.return_code == 0

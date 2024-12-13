@@ -29,8 +29,8 @@ pytestmark = pytest.mark.skip()
 def test_boutiques_1(maskfile, plugin, results_function, tmpdir, data_tests_dir):
     """simple task to run fsl.bet using BoshTask"""
     btask = BoshTask(name="NA", zenodo_id="1482743")
-    btask.inputs.infile = data_tests_dir / "test.nii.gz"
-    btask.inputs.maskfile = maskfile
+    btask.spec.infile = data_tests_dir / "test.nii.gz"
+    btask.spec.maskfile = maskfile
     btask.cache_dir = tmpdir
     res = results_function(btask, plugin)
 
@@ -60,8 +60,8 @@ def test_boutiques_spec_1(data_tests_dir):
     assert len(btask.input_spec.fields) == 2
     assert btask.input_spec.fields[0][0] == "infile"
     assert btask.input_spec.fields[1][0] == "maskfile"
-    assert hasattr(btask.inputs, "infile")
-    assert hasattr(btask.inputs, "maskfile")
+    assert hasattr(btask.spec, "infile")
+    assert hasattr(btask.spec, "maskfile")
 
     assert len(btask.output_spec.fields) == 2
     assert btask.output_spec.fields[0][0] == "outfile"
@@ -84,9 +84,9 @@ def test_boutiques_spec_2(data_tests_dir):
 
     assert len(btask.input_spec.fields) == 1
     assert btask.input_spec.fields[0][0] == "infile"
-    assert hasattr(btask.inputs, "infile")
+    assert hasattr(btask.spec, "infile")
     # input doesn't see maskfile
-    assert not hasattr(btask.inputs, "maskfile")
+    assert not hasattr(btask.spec, "maskfile")
 
     assert len(btask.output_spec.fields) == 0
 

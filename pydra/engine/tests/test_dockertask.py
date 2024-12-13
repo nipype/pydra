@@ -77,7 +77,7 @@ def test_docker_2a(results_function, plugin):
         args=cmd_args,
         environment=Docker(image="busybox"),
     )
-    assert docky.inputs.executable == "echo"
+    assert docky.spec.executable == "echo"
     assert docky.cmdline == f"{cmd_exec} {' '.join(cmd_args)}"
 
     res = results_function(docky, plugin)
@@ -332,7 +332,7 @@ def test_docker_inputspec_2a_except(plugin, tmp_path):
         input_spec=my_input_spec,
         strip=True,
     )
-    assert docky.inputs.file2.fspath == filename_2
+    assert docky.spec.file2.fspath == filename_2
 
     res = docky()
     assert res.output.stdout == "hello from pydra\nhave a nice one"

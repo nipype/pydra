@@ -9,7 +9,7 @@ from typing_extensions import Self
 import attrs.validators
 from attrs.converters import default_if_none
 from fileformats.generic import File
-from pydra.utils.typing import TypeParser, is_optional, is_fileset_or_union
+from pydra.utils.typing import TypeParser, is_optional, is_fileset_or_union, is_type
 from pydra.engine.helpers import (
     from_list_if_single,
     ensure_list,
@@ -50,11 +50,6 @@ class _Empty(enum.Enum):
 
 
 EMPTY = _Empty.EMPTY  # To provide a blank placeholder for the default field
-
-
-def is_type(_, __, val: ty.Any) -> bool:
-    """check that the value is a type or generic"""
-    return inspect.isclass(val) or ty.get_origin(val)
 
 
 def convert_default_value(value: ty.Any, self_: "Field") -> ty.Any:
@@ -400,6 +395,10 @@ def make_task_spec(
 
     if name is None and klass is not None:
         name = klass.__name__
+    if reserved_names := [n for n in inputs if n in spec_type.RESERVED_FIELD_NAMES]:
+        raise ValueError(
+            f"{reserved_names} are reserved and cannot be used for {spec_type} field names"
+        )
     outputs_klass = make_outputs_spec(out_type, outputs, outputs_bases, name)
     if klass is None or not issubclass(klass, spec_type):
         if name is None:
@@ -503,7 +502,7 @@ def make_outputs_spec(
         outputs_bases = bases + (spec_type,)
     if reserved_names := [n for n in outputs if n in spec_type.RESERVED_FIELD_NAMES]:
         raise ValueError(
-            f"{reserved_names} are reserved and cannot be used for output field names"
+            f"{reserved_names} are reserved and cannot be used for {spec_type} field names"
         )
     # Add in any fields in base classes that haven't already been converted into attrs
     # fields (e.g. stdout, stderr and return_code)
@@ -585,11 +584,24 @@ def ensure_field_objects(
                 arg.name = input_name
             if not arg.help_string:
                 arg.help_string = input_helps.get(input_name, "")
-        else:
+        elif is_type(arg):
             inputs[input_name] = arg_type(
                 type=arg,
                 name=input_name,
                 help_string=input_helps.get(input_name, ""),
+            )
+        elif isinstance(arg, dict):
+            arg_kwds = copy(arg)
+            if "help_string" not in arg_kwds:
+                arg_kwds["help_string"] = input_helps.get(input_name, "")
+            inputs[input_name] = arg_type(
+                name=input_name,
+                **arg_kwds,
+            )
+        else:
+            raise ValueError(
+                f"Input {input_name} must be an instance of {Arg}, a type, or a dictionary "
+                f" of keyword arguments to pass to {Arg}, not {arg}"
             )
 
     for output_name, out in list(outputs.items()):

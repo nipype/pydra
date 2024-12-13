@@ -1,11 +1,14 @@
 import typing as ty
-from copy import deepcopy
+from copy import deepcopy, copy
 from enum import Enum
+from pathlib import Path
 import attrs
 from pydra.utils.typing import TypeParser, StateArray
 from . import lazy
-from ..specs import TaskSpec, Outputs
-from ..helpers import ensure_list, attrs_values, is_lazy
+from ..specs import TaskSpec, Outputs, WorkflowSpec
+from ..task import Task
+from ..helpers import ensure_list, attrs_values, is_lazy, load_result, create_checksum
+from pydra.utils.hash import hash_function
 from .. import helpers_state as hlpst
 from ..state import State
 
@@ -272,6 +275,94 @@ class Node(ty.Generic[OutputType]):
         if not self._state:
             return ()
         return self._state.combiner
+
+    def _get_tasks(
+        self,
+        cache_locations: Path | list[Path],
+        state_index: int | None = None,
+        return_inputs: bool = False,
+    ) -> list["Task"]:
+        raise NotImplementedError
+        if self.state:
+            if state_index is None:
+                # if state_index=None, collecting all results
+                if self.state.combiner:
+                    return self._combined_output(return_inputs=return_inputs)
+                else:
+                    results = []
+                    for ind in range(len(self.state.inputs_ind)):
+                        checksum = self.checksum_states(state_index=ind)
+                        result = load_result(checksum, cache_locations)
+                        if result is None:
+                            return None
+                        results.append(result)
+                    if return_inputs is True or return_inputs == "val":
+                        return list(zip(self.state.states_val, results))
+                    elif return_inputs == "ind":
+                        return list(zip(self.state.states_ind, results))
+                    else:
+                        return results
+            else:  # state_index is not None
+                if self.state.combiner:
+                    return self._combined_output(return_inputs=return_inputs)[
+                        state_index
+                    ]
+                result = load_result(self.checksum_states(state_index), cache_locations)
+                if return_inputs is True or return_inputs == "val":
+                    return (self.state.states_val[state_index], result)
+                elif return_inputs == "ind":
+                    return (self.state.states_ind[state_index], result)
+                else:
+                    return result
+        else:
+            return load_result(self._spec._checksum, cache_locations)
+
+    def _checksum_states(self, state_index=None):
+        """
+        Calculate a checksum for the specific state or all of the states of the task.
+        Replaces state-arrays in the inputs fields with a specific values for states.
+        Used to recreate names of the task directories,
+
+        Parameters
+        ----------
+        state_index :
+            TODO
+
+        """
+        # if is_workflow(self) and self.spec._graph_checksums is attr.NOTHING:
+        #     self.spec._graph_checksums = {
+        #         nd.name: nd.checksum for nd in self.graph_sorted
+        #     }
+
+        if state_index is not None:
+            inputs_copy = copy(self.spec)
+            for key, ind in self.state.inputs_ind[state_index].items():
+                val = self._extract_input_el(
+                    inputs=self.spec, inp_nm=key.split(".")[1], ind=ind
+                )
+                setattr(inputs_copy, key.split(".")[1], val)
+            # setting files_hash again in case it was cleaned by setting specific element
+            # that might be important for outer splitter of input variable with big files
+            # the file can be changed with every single index even if there are only two files
+            input_hash = inputs_copy.hash
+            if isinstance(self._spec, WorkflowSpec):
+                con_hash = hash_function(self._connections)
+                # TODO: hash list is not used
+                hash_list = [input_hash, con_hash]  # noqa: F841
+                checksum_ind = create_checksum(
+                    self.__class__.__name__, self._checksum_wf(input_hash)
+                )
+            else:
+                checksum_ind = create_checksum(self.__class__.__name__, input_hash)
+            return checksum_ind
+        else:
+            checksum_list = []
+            if not hasattr(self.state, "inputs_ind"):
+                self.state.prepare_states(self.spec, cont_dim=self.cont_dim)
+                self.state.prepare_inputs()
+            for ind in range(len(self.state.inputs_ind)):
+                checksum_list.append(self._checksum_states(state_index=ind))
+            return checksum_list
 
     def _check_if_outputs_have_been_used(self, msg):
         used = []

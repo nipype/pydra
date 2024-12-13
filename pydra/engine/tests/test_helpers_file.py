@@ -394,11 +394,11 @@ def test_output_template(tmp_path):
 
     task = MyCommand(in_file=filename)
     assert task.cmdline == f"my {filename}"
-    task.inputs.optional = True
+    task.spec.optional = True
     assert task.cmdline == f"my {filename} --opt {task.output_dir / 'file.out'}"
-    task.inputs.optional = False
+    task.spec.optional = False
     assert task.cmdline == f"my {filename}"
-    task.inputs.optional = "custom-file-out.txt"
+    task.spec.optional = "custom-file-out.txt"
     assert task.cmdline == f"my {filename} --opt custom-file-out.txt"
 
 

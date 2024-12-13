@@ -182,9 +182,9 @@ class BoshTask(ShellTask):
         """Get command line arguments for a single state"""
         input_filepath = self._bosh_invocation_file(state_ind=state_ind, index=index)
         cmd_list = (
-            self.inputs.executable
+            self.spec.executable
             + [str(self.bosh_file), input_filepath]
-            + self.inputs.args
+            + self.spec.args
             + self.bindings
         )
         return cmd_list
@@ -192,11 +192,11 @@ class BoshTask(ShellTask):
     def _bosh_invocation_file(self, state_ind=None, index=None):
         """creating bosh invocation file - json file with inputs values"""
         input_json = {}
-        for f in attrs_fields(self.inputs, exclude_names=("executable", "args")):
+        for f in attrs_fields(self.spec, exclude_names=("executable", "args")):
             if self.state and f"{self.name}.{f.name}" in state_ind:
-                value = getattr(self.inputs, f.name)[state_ind[f"{self.name}.{f.name}"]]
+                value = getattr(self.spec, f.name)[state_ind[f"{self.name}.{f.name}"]]
             else:
-                value = getattr(self.inputs, f.name)
+                value = getattr(self.spec, f.name)
             # adding to the json file if specified by the user
             if value is not attr.NOTHING and value != "NOTHING":
                 if is_local_file(f):
