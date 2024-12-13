@@ -13,6 +13,7 @@ from glob import glob
 from copy import deepcopy
 from typing_extensions import Self
 import attrs
+import cloudpickle as cp
 from fileformats.generic import File
 from pydra.engine.audit import AuditFlag
 from pydra.utils.typing import TypeParser, MultiOutputObj
@@ -60,7 +61,12 @@ class Outputs:
         outputs : Outputs
             The outputs of the task
         """
-        return cls(**{f.name: attrs.NOTHING for f in attrs_fields(cls)})
+        return cls(
+            **{
+                f.name: task.output_.get(f.name, attrs.NOTHING)
+                for f in attrs_fields(cls)
+            }
+        )
 
     @property
     def inputs(self):
@@ -319,26 +325,19 @@ class Runtime:
 class Result:
     """Metadata regarding the outputs of processing."""
 
-    output: ty.Optional[ty.Any] = None
-    runtime: ty.Optional[Runtime] = None
+    output: Outputs | None = None
+    runtime: Runtime | None = None
     errored: bool = False
 
     def __getstate__(self):
         state = attrs_values(self)
         if state["output"] is not None:
-            fields = tuple((el.name, el.type) for el in attrs_fields(state["output"]))
-            state["output_spec"] = (state["output"].__class__.__name__, fields)
-            state["output"] = attrs.asdict(state["output"], recurse=False)
+            state["output"] = cp.dumps(state["output"])
         return state
 
     def __setstate__(self, state):
-        if "output_spec" in state:
-            spec = list(state["output_spec"])
-            del state["output_spec"]
-            klass = attrs.make_class(
-                spec[0], {k: attrs.field(type=v) for k, v in list(spec[1])}
-            )
-            state["output"] = klass(**state["output"])
+        if state["output"] is not None:
+            state["output"] = cp.loads(state["output"])
         self.__dict__.update(state)
 
     def get_output_field(self, field_name):
@@ -441,11 +440,7 @@ class ShellOutputs(Outputs):
             The outputs of the shell process
         """
 
-        outputs = cls(
-            return_code=task.output_["return_code"],
-            stdout=task.output_["stdout"],
-            stderr=task.output_["stderr"],
-        )
+        outputs = super().from_task(task)
         fld: shell.out
         for fld in list_fields(cls):
             if fld.name in ["return_code", "stdout", "stderr"]:

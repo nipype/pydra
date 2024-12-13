@@ -157,7 +157,7 @@ class Task:
                     raise ValueError(f"Unknown input set {inputs!r}")
                 inputs = self._input_sets[inputs]
 
-        self.spec = attr.evolve(self.spec, **inputs)
+            self.spec = attr.evolve(self.spec, **inputs)
 
         # checking if metadata is set properly
         self.spec._check_resolved()

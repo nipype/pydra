@@ -43,7 +43,6 @@ from __future__ import annotations
 
 import attr
 from pathlib import Path
-import cloudpickle as cp
 from fileformats.core import FileSet
 from .core import Task
 from pydra.utils.messenger import AuditFlag
@@ -67,9 +66,9 @@ class PythonTask(Task):
 
     def _run_task(self, environment=None):
         inputs = attrs_values(self.spec)
-        del inputs["_func"]
+        del inputs["function"]
         self.output_ = None
-        output = cp.loads(self.spec._func)(**inputs)
+        output = self.spec.function(**inputs)
         output_names = [f.name for f in attr.fields(self.spec.Outputs)]
         if output is None:
             self.output_ = {nm: None for nm in output_names}

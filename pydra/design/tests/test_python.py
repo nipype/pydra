@@ -17,20 +17,21 @@ def test_interface_wrap_function():
         """Sample function with inputs and outputs"""
         return a * 2
 
-    SampleInterface = python.define(func)
+    SampleSpec = python.define(func)
 
-    assert issubclass(SampleInterface, PythonSpec)
-    inputs = sorted(list_fields(SampleInterface), key=sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
+    assert issubclass(SampleSpec, PythonSpec)
+    inputs = sorted(list_fields(SampleSpec), key=sort_key)
+    outputs = sorted(list_fields(SampleSpec.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int),
         python.arg(name="function", type=ty.Callable, default=func),
     ]
     assert outputs == [python.out(name="out", type=float)]
-    SampleInterface(a=1)
-    SampleInterface.Outputs(out=2.0)
+    spec = SampleSpec(a=1)
+    result = spec()
+    assert result.output.out == 2.0
     with pytest.raises(TypeError):
-        SampleInterface(a=1.5)
+        SampleSpec(a=1.5)
 
 
 def test_interface_wrap_function_with_default():
@@ -38,20 +39,19 @@ def test_interface_wrap_function_with_default():
         """Sample function with inputs and outputs"""
         return a * k
 
-    SampleInterface = python.define(func)
+    SampleSpec = python.define(func)
 
-    assert issubclass(SampleInterface, PythonSpec)
-    inputs = sorted(list_fields(SampleInterface), key=sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
+    assert issubclass(SampleSpec, PythonSpec)
+    inputs = sorted(list_fields(SampleSpec), key=sort_key)
+    outputs = sorted(list_fields(SampleSpec.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int),
         python.arg(name="function", type=ty.Callable, default=func),
         python.arg(name="k", type=float, default=2.0),
     ]
     assert outputs == [python.out(name="out", type=float)]
-    SampleInterface(a=1)
-    SampleInterface(a=10, k=3.0)
-    SampleInterface.Outputs(out=2.0)
+    assert SampleSpec(a=1)().output.out == 2.0
+    assert SampleSpec(a=10, k=3.0)().output.out == 30.0
 
 
 def test_interface_wrap_function_overrides():
@@ -59,15 +59,15 @@ def test_interface_wrap_function_overrides():
         """Sample function with inputs and outputs"""
         return a * 2
 
-    SampleInterface = python.define(
+    SampleSpec = python.define(
         func,
         inputs={"a": python.arg(help_string="The argument to be doubled")},
         outputs={"b": python.out(help_string="the doubled output", type=Decimal)},
     )
 
-    assert issubclass(SampleInterface, PythonSpec)
-    inputs = sorted(list_fields(SampleInterface), key=sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
+    assert issubclass(SampleSpec, PythonSpec)
+    inputs = sorted(list_fields(SampleSpec), key=sort_key)
+    outputs = sorted(list_fields(SampleSpec.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help_string="The argument to be doubled"),
         python.arg(name="function", type=ty.Callable, default=func),
@@ -75,7 +75,7 @@ def test_interface_wrap_function_overrides():
     assert outputs == [
         python.out(name="b", type=Decimal, help_string="the doubled output"),
     ]
-    outputs = SampleInterface.Outputs(b=Decimal(2.0))
+    outputs = SampleSpec.Outputs(b=Decimal(2.0))
     assert isinstance(outputs.b, Decimal)
 
 
@@ -84,84 +84,84 @@ def test_interface_wrap_function_types():
         """Sample function with inputs and outputs"""
         return a * 2
 
-    SampleInterface = python.define(
+    SampleSpec = python.define(
         func,
         inputs={"a": float},
         outputs={"b": float},
     )
 
-    assert issubclass(SampleInterface, PythonSpec)
-    inputs = sorted(list_fields(SampleInterface), key=sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
+    assert issubclass(SampleSpec, PythonSpec)
+    inputs = sorted(list_fields(SampleSpec), key=sort_key)
+    outputs = sorted(list_fields(SampleSpec.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=float),
         python.arg(name="function", type=ty.Callable, default=func),
     ]
     assert outputs == [python.out(name="b", type=float)]
-    intf = SampleInterface(a=1)
+    intf = SampleSpec(a=1)
     assert isinstance(intf.a, float)
-    outputs = SampleInterface.Outputs(b=2.0)
+    outputs = SampleSpec.Outputs(b=2.0)
     assert isinstance(outputs.b, float)
 
 
 def test_decorated_function_interface():
     @python.define(outputs=["c", "d"])
-    def SampleInterface(a: int, b: float) -> tuple[float, float]:
+    def SampleSpec(a: int, b: float) -> tuple[float, float]:
         """Sample function for testing"""
         return a + b, a * b
 
-    assert issubclass(SampleInterface, PythonSpec)
-    assert SampleInterface.Task is PythonTask
-    inputs = sorted(list_fields(SampleInterface), key=sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
+    assert issubclass(SampleSpec, PythonSpec)
+    assert SampleSpec.Task is PythonTask
+    inputs = sorted(list_fields(SampleSpec), key=sort_key)
+    outputs = sorted(list_fields(SampleSpec.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int),
         python.arg(name="b", type=float),
         python.arg(
             name="function",
             type=ty.Callable,
-            default=attrs.fields(SampleInterface).function.default,
+            default=attrs.fields(SampleSpec).function.default,
         ),
     ]
     assert outputs == [
         python.out(name="c", type=float),
         python.out(name="d", type=float),
     ]
-    assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
-    SampleInterface.Outputs(c=1.0, d=2.0)
+    assert attrs.fields(SampleSpec).function.default.__name__ == "SampleSpec"
+    SampleSpec.Outputs(c=1.0, d=2.0)
 
 
 def test_interface_with_function_implicit_outputs_from_return_stmt():
     @python.define
-    def SampleInterface(a: int, b: float) -> tuple[float, float]:
+    def SampleSpec(a: int, b: float) -> tuple[float, float]:
         """Sample function for testing"""
         c = a + b
         d = a * b
         return c, d
 
-    assert SampleInterface.Task is PythonTask
-    inputs = sorted(list_fields(SampleInterface), key=sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
+    assert SampleSpec.Task is PythonTask
+    inputs = sorted(list_fields(SampleSpec), key=sort_key)
+    outputs = sorted(list_fields(SampleSpec.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int),
         python.arg(name="b", type=float),
         python.arg(
             name="function",
             type=ty.Callable,
-            default=attrs.fields(SampleInterface).function.default,
+            default=attrs.fields(SampleSpec).function.default,
         ),
     ]
     assert outputs == [
         python.out(name="c", type=float),
         python.out(name="d", type=float),
     ]
-    assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
-    SampleInterface.Outputs(c=1.0, d=2.0)
+    assert attrs.fields(SampleSpec).function.default.__name__ == "SampleSpec"
+    SampleSpec.Outputs(c=1.0, d=2.0)
 
 
 def test_interface_with_function_docstr():
     @python.define(outputs=["c", "d"])
-    def SampleInterface(a: int, b: float) -> tuple[float, float]:
+    def SampleSpec(a: int, b: float) -> tuple[float, float]:
         """Sample function for testing
 
         :param a: First input to be inputted
@@ -171,28 +171,28 @@ def test_interface_with_function_docstr():
         """
         return a + b, a * b
 
-    assert SampleInterface.Task is PythonTask
-    inputs = sorted(list_fields(SampleInterface), key=sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
+    assert SampleSpec.Task is PythonTask
+    inputs = sorted(list_fields(SampleSpec), key=sort_key)
+    outputs = sorted(list_fields(SampleSpec.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help_string="First input to be inputted"),
         python.arg(name="b", type=float, help_string="Second input"),
         python.arg(
             name="function",
             type=ty.Callable,
-            default=attrs.fields(SampleInterface).function.default,
+            default=attrs.fields(SampleSpec).function.default,
         ),
     ]
     assert outputs == [
         python.out(name="c", type=float, help_string="Sum of a and b"),
         python.out(name="d", type=float, help_string="product of a and b"),
     ]
-    assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
+    assert attrs.fields(SampleSpec).function.default.__name__ == "SampleSpec"
 
 
 def test_interface_with_function_google_docstr():
     @python.define(outputs=["c", "d"])
-    def SampleInterface(a: int, b: float) -> tuple[float, float]:
+    def SampleSpec(a: int, b: float) -> tuple[float, float]:
         """Sample function for testing
 
         Args:
@@ -206,30 +206,30 @@ def test_interface_with_function_google_docstr():
         """
         return a + b, a * b
 
-    assert SampleInterface.Task is PythonTask
-    inputs = sorted(list_fields(SampleInterface), key=sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
+    assert SampleSpec.Task is PythonTask
+    inputs = sorted(list_fields(SampleSpec), key=sort_key)
+    outputs = sorted(list_fields(SampleSpec.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help_string="First input to be inputted"),
         python.arg(name="b", type=float, help_string="Second input"),
         python.arg(
             name="function",
             type=ty.Callable,
-            default=attrs.fields(SampleInterface).function.default,
+            default=attrs.fields(SampleSpec).function.default,
         ),
     ]
     assert outputs == [
         python.out(name="c", type=float, help_string="Sum of a and b"),
         python.out(name="d", type=float, help_string="Product of a and b"),
     ]
-    assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
+    assert attrs.fields(SampleSpec).function.default.__name__ == "SampleSpec"
 
 
 def test_interface_with_function_numpy_docstr():
     @python.define(
         outputs=["c", "d"]
     )  # Could potentiall read output names from doc-string instead
-    def SampleInterface(a: int, b: float) -> tuple[float, float]:
+    def SampleSpec(a: int, b: float) -> tuple[float, float]:
         """Sample function for testing
 
         Parameters
@@ -249,28 +249,28 @@ def test_interface_with_function_numpy_docstr():
         """
         return a + b, a * b
 
-    assert SampleInterface.Task is PythonTask
-    inputs = sorted(list_fields(SampleInterface), key=sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
+    assert SampleSpec.Task is PythonTask
+    inputs = sorted(list_fields(SampleSpec), key=sort_key)
+    outputs = sorted(list_fields(SampleSpec.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help_string="First input to be inputted"),
         python.arg(name="b", type=float, help_string="Second input"),
         python.arg(
             name="function",
             type=ty.Callable,
-            default=attrs.fields(SampleInterface).function.default,
+            default=attrs.fields(SampleSpec).function.default,
         ),
     ]
     assert outputs == [
         python.out(name="c", type=float, help_string="Sum of a and b"),
         python.out(name="d", type=float, help_string="Product of a and b"),
     ]
-    assert attrs.fields(SampleInterface).function.default.__name__ == "SampleInterface"
+    assert attrs.fields(SampleSpec).function.default.__name__ == "SampleSpec"
 
 
 def test_interface_with_class():
     @python.define
-    class SampleInterface:
+    class SampleSpec:
         """Sample class for testing
 
         Args:
@@ -296,32 +296,32 @@ def test_interface_with_class():
         def function(a, b):
             return a + b, a * b
 
-    assert issubclass(SampleInterface, PythonSpec)
-    assert SampleInterface.Task is PythonTask
-    inputs = sorted(list_fields(SampleInterface), key=sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
+    assert issubclass(SampleSpec, PythonSpec)
+    assert SampleSpec.Task is PythonTask
+    inputs = sorted(list_fields(SampleSpec), key=sort_key)
+    outputs = sorted(list_fields(SampleSpec.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help_string="First input to be inputted"),
         python.arg(name="b", type=float, default=2.0, help_string="Second input"),
         python.arg(
             name="function",
             type=ty.Callable,
-            default=attrs.fields(SampleInterface).function.default,
+            default=attrs.fields(SampleSpec).function.default,
         ),
     ]
     assert outputs == [
         python.out(name="c", type=float, help_string="Sum of a and b"),
         python.out(name="d", type=float, help_string="Product of a and b"),
     ]
-    assert SampleInterface.function.__name__ == "function"
-    SampleInterface(a=1)
-    SampleInterface(a=1, b=2.0)
-    SampleInterface.Outputs(c=1.0, d=2.0)
+    assert SampleSpec.function.__name__ == "function"
+    SampleSpec(a=1)
+    SampleSpec(a=1, b=2.0)
+    SampleSpec.Outputs(c=1.0, d=2.0)
 
 
 def test_interface_with_inheritance():
     @python.define
-    class SampleInterface(PythonSpec["SampleInterface.Outputs"]):
+    class SampleSpec(PythonSpec["SampleSpec.Outputs"]):
         """Sample class for testing
 
         Args:
@@ -347,12 +347,12 @@ def test_interface_with_inheritance():
         def function(a, b):
             return a + b, a * b
 
-    assert issubclass(SampleInterface, PythonSpec)
+    assert issubclass(SampleSpec, PythonSpec)
 
 
 def test_interface_with_class_no_auto_attribs():
     @python.define(auto_attribs=False)
-    class SampleInterface:
+    class SampleSpec:
         a: int = python.arg(help_string="First input to be inputted")
         b: float = python.arg(help_string="Second input")
 
@@ -368,36 +368,36 @@ def test_interface_with_class_no_auto_attribs():
         def function(a, b):
             return a + b, a * b
 
-    assert SampleInterface.Task is PythonTask
-    inputs = sorted(list_fields(SampleInterface), key=sort_key)
-    outputs = sorted(list_fields(SampleInterface.Outputs), key=sort_key)
+    assert SampleSpec.Task is PythonTask
+    inputs = sorted(list_fields(SampleSpec), key=sort_key)
+    outputs = sorted(list_fields(SampleSpec.Outputs), key=sort_key)
     assert inputs == [
         python.arg(name="a", type=int, help_string="First input to be inputted"),
         python.arg(name="b", type=float, help_string="Second input"),
         python.arg(
             name="function",
             type=ty.Callable,
-            default=attrs.fields(SampleInterface).function.default,
+            default=attrs.fields(SampleSpec).function.default,
         ),
     ]
     assert outputs == [
         python.out(name="c", type=float, help_string="Sum of a and b"),
         python.out(name="d", type=float, help_string="Product of a and b"),
     ]
-    assert SampleInterface.function.__name__ == "function"
-    SampleInterface(a=1, b=2.0)
-    SampleInterface.Outputs(c=1.0, d=2.0)
+    assert SampleSpec.function.__name__ == "function"
+    SampleSpec(a=1, b=2.0)
+    SampleSpec.Outputs(c=1.0, d=2.0)
     with pytest.raises(TypeError):
-        SampleInterface(a=1, b=2.0, x=3)
+        SampleSpec(a=1, b=2.0, x=3)
     with pytest.raises(TypeError):
-        SampleInterface.Outputs(c=1.0, d=2.0, y="hello")
+        SampleSpec.Outputs(c=1.0, d=2.0, y="hello")
 
 
 def test_interface_invalid_wrapped1():
     with pytest.raises(ValueError):
 
         @python.define(inputs={"a": python.arg()})
-        class SampleInterface(PythonSpec["SampleInterface.Outputs"]):
+        class SampleSpec(PythonSpec["SampleSpec.Outputs"]):
             a: int
 
             class Outputs:
@@ -412,7 +412,7 @@ def test_interface_invalid_wrapped2():
     with pytest.raises(ValueError):
 
         @python.define(outputs={"b": python.out()})
-        class SampleInterface(PythonSpec["SampleInterface.Outputs"]):
+        class SampleSpec(PythonSpec["SampleSpec.Outputs"]):
             a: int
 
             class Outputs:
