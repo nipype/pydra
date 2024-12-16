@@ -168,7 +168,37 @@ class TaskSpec(ty.Generic[OutputsType]):
         messengers=None,
         rerun=False,
         **kwargs,
-    ):
+    ) -> "Result[OutputsType]":
+        """Create a task from this specification and execute it to produce a result.
+
+        Parameters
+        ----------
+        name : str, optional
+            The name of the task, by default None
+        audit_flags : AuditFlag, optional
+            Auditing configuration, by default AuditFlag.NONE
+        cache_dir : os.PathLike, optional
+            Cache directory, by default None
+        cache_locations : list[os.PathLike], optional
+            Cache locations, by default None
+        inputs : str or File or dict, optional
+            Inputs for the task, by default None
+        cont_dim : dict, optional
+            Container dimensions for specific inputs, by default None
+        messenger_args : dict, optional
+            Messenger arguments, by default None
+        messengers : list, optional
+            Messengers, by default None
+        rerun : bool, optional
+            Whether to rerun the task, by default False
+        **kwargs
+            Additional keyword arguments to pass to the task
+
+        Returns
+        -------
+        Result
+            The result of the task
+        """
         self._check_rules()
         task = self.Task(
             spec=self,
@@ -322,10 +352,10 @@ class Runtime:
 
 
 @attrs.define(kw_only=True)
-class Result:
+class Result(ty.Generic[OutputsType]):
     """Metadata regarding the outputs of processing."""
 
-    output: Outputs | None = None
+    output: OutputsType | None = None
     runtime: Runtime | None = None
     errored: bool = False
 
