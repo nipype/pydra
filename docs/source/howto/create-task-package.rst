@@ -1,4 +1,4 @@
-Creating a Task Package
+Creating a task package
 =======================
 
 Work in progress....

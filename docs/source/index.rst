@@ -7,6 +7,9 @@ Pydra is a new lightweight dataflow engine written in Python.
 Pydra is developed as an open-source project in the neuroimaging community,
 but it is designed as a general-purpose dataflow engine to support any scientific domain.
 
+Rationale
+---------
+
 Scientific workflows often require sophisticated analyses that encompass a large collection
 of algorithms.
 The algorithms, that were originally not necessarily designed to work together,
@@ -20,6 +23,9 @@ Consistency, reproducibility and scalability demand scientific workflows
 to be organized into fully automated pipelines.
 This was the motivation behind Pydra - a new dataflow engine written in Python.
 
+History
+-------
+
 The Pydra package is a part of the second generation of the Nipype_ ecosystem
 --- an open-source framework that provides a uniform interface to existing neuroimaging
 software and facilitates interaction between different software components.
@@ -32,6 +38,9 @@ The second generation of Nipype ecosystem is meant to provide additional flexibi
 and is being developed with reproducibility, ease of use, and scalability in mind.
 Pydra itself is a standalone project and is designed as a general-purpose dataflow engine
 to support any scientific domain.
+
+Design goals
+------------
 
 The goal of Pydra is to provide a lightweight dataflow engine for computational graph construction,
 manipulation, and distributed execution, as well as ensuring reproducibility of scientific pipelines.
@@ -77,7 +86,6 @@ Indices and tables
 
 * :ref:`genindex`
 * :ref:`modindex`
-* :ref:`search`
 
 
 .. toctree::
@@ -104,6 +112,7 @@ Indices and tables
    :caption: Explanation
    :hidden:
 
+   explanation/conditional-logic
    explanation/typing
    explanation/hashing-caching
    explanation/provenance

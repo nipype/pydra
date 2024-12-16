@@ -135,12 +135,12 @@ html_theme = "furo"
 # documentation.
 html_theme_options = {
     "light_css_variables": {
-        "color-brand-primary": "#0e691b",
-        "color-brand-content": "#0e691b",
+        "color-brand-primary": "#69306d",
+        "color-brand-content": "#69306d",
     },
     "dark_css_variables": {
-        "color-brand-primary": "#5db754",
-        "color-brand-content": "#5db754",
+        "color-brand-primary": "#ce8dcf",
+        "color-brand-content": "#ce8dcf",
     },
 }
 

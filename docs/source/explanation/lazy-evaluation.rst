@@ -1,4 +1,4 @@
-Lazy Execution
-==============
+Lazy evaluation
+===============
 
 Work in progress....
