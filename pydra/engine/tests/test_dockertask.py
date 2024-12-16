@@ -1,12 +1,9 @@
-import typing as ty
 import pytest
-import attr
-
 from ..task import ShellTask
 from ..submitter import Submitter
-from ..core import Workflow
-from ..specs import ShellOutputs, SpecInfo, File, ShellSpec
+from fileformats.generic import File
 from ..environments import Docker
+from pydra.design import shell, workflow
 from .utils import no_win, need_docker, result_submitter, result_no_submitter
 
 
@@ -17,7 +14,7 @@ def test_docker_1_nosubm():
     no submitter
     """
     cmd = "whoami"
-    docky = ShellTask(name="docky", executable=cmd, environment=Docker(image="busybox"))
+    docky = shell.define(cmd)(environment=Docker(image="busybox"))
     assert docky.environment.image == "busybox"
     assert docky.environment.tag == "latest"
     assert isinstance(docky.environment, Docker)
@@ -35,7 +32,7 @@ def test_docker_1(plugin):
     using submitter
     """
     cmd = "whoami"
-    docky = ShellTask(name="docky", executable=cmd, environment=Docker(image="busybox"))
+    docky = shell.define(cmd)(environment=Docker(image="busybox"))
 
     with Submitter(plugin=plugin) as sub:
         docky(submitter=sub)
@@ -52,12 +49,12 @@ def test_docker_2(results_function, plugin):
     """a command with arguments, cmd and args given as executable
     with and without submitter
     """
-    cmd = ["echo", "hail", "pydra"]
-    docky = ShellTask(name="docky", executable=cmd, environment=Docker(image="busybox"))
+    cmdline = "echo hail pydra"
+    docky = shell.define(cmdline)(environment=Docker(image="busybox"))
     # cmdline doesn't know anything about docker
-    assert docky.cmdline == " ".join(cmd)
+    assert docky.cmdline == cmdline
     res = results_function(docky, plugin)
-    assert res.output.stdout.strip() == " ".join(cmd[1:])
+    assert res.output.stdout.strip() == " ".join(cmdline.split()[1:])
     assert res.output.return_code == 0
 
 
@@ -117,23 +114,12 @@ def test_docker_outputspec_1(plugin, tmp_path):
     customised output_spec, adding files to the output, providing specific pathname
     output_path is automatically added to the bindings
     """
-    cmd = ["touch", "newfile_tmp.txt"]
-    my_output_spec = SpecInfo(
-        name="Output",
-        fields=[("newfile", File, "newfile_tmp.txt")],
-        bases=(ShellOutputs,),
-    )
-    docky = ShellTask(
-        name="docky",
-        environment=Docker(image="ubuntu"),
-        executable=cmd,
-        output_spec=my_output_spec,
+    outputs = [shell.out(name="newfile", type=File, help_string="new file")]
+    docky = shell.define("touch newfile_tmp.txt", outputs=outputs)(
+        environment=Docker(image="ubuntu")
     )
 
-    with Submitter(plugin=plugin) as sub:
-        docky(submitter=sub)
-
-    res = docky.result()
+    res = docky(plugin=plugin)
     assert res.output.stdout == ""
 
 
@@ -150,31 +136,20 @@ def test_docker_inputspec_1(tmp_path):
 
     cmd = "cat"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help_string": "input file",
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
+    inputs = [
+        shell.arg(
+            name="file",
+            type=File,
+            mandatory=True,
+            position=1,
+            argstr="",
+            help_string="input file",
+        )
+    ]
 
-    docky = ShellTask(
-        name="docky",
+    docky = shell.define(cmd, inputs=inputs)(
         environment=Docker(image="busybox"),
-        executable=cmd,
         file=filename,
-        input_spec=my_input_spec,
         strip=True,
     )
 
@@ -194,26 +169,19 @@ def test_docker_inputspec_1a(tmp_path):
 
     cmd = "cat"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    default=filename,
-                    metadata={"position": 1, "argstr": "", "help_string": "input file"},
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
+    inputs = [
+        shell.arg(
+            name="file",
+            type=File,
+            default=filename,
+            position=1,
+            argstr="",
+            help_string="input file",
+        )
+    ]
 
-    docky = ShellTask(
-        name="docky",
+    docky = shell.define(cmd, inputs=inputs)(
         environment=Docker(image="busybox"),
-        executable=cmd,
-        input_spec=my_input_spec,
         strip=True,
     )
 
@@ -235,42 +203,27 @@ def test_docker_inputspec_2(plugin, tmp_path):
 
     cmd = "cat"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file1",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 1,
-                        "argstr": "",
-                        "help_string": "input file 1",
-                    },
-                ),
-            ),
-            (
-                "file2",
-                attr.ib(
-                    type=File,
-                    default=filename_2,
-                    metadata={
-                        "position": 2,
-                        "argstr": "",
-                        "help_string": "input file 2",
-                    },
-                ),
-            ),
-        ],
-        bases=(ShellSpec,),
-    )
-
-    docky = ShellTask(
+    inputs = [
+        shell.arg(
+            name="file1",
+            type=File,
+            position=1,
+            argstr="",
+            help_string="input file 1",
+        ),
+        shell.arg(
+            name="file2",
+            type=File,
+            default=filename_2,
+            position=2,
+            argstr="",
+            help_string="input file 2",
+        ),
+    ]
+    docky = shell.define(cmd, inputs=inputs)(
         name="docky",
         environment=Docker(image="busybox"),
-        executable=cmd,
         file1=filename_1,
-        input_spec=my_input_spec,
         strip=True,
     )
 
@@ -293,43 +246,28 @@ def test_docker_inputspec_2a_except(plugin, tmp_path):
 
     cmd = "cat"
 
-    # the field with default value can't be before value without default
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file1",
-                attr.ib(
-                    type=File,
-                    default=filename_1,
-                    metadata={
-                        "position": 1,
-                        "argstr": "",
-                        "help_string": "input file 1",
-                    },
-                ),
-            ),
-            (
-                "file2",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 2,
-                        "argstr": "",
-                        "help_string": "input file 2",
-                    },
-                ),
-            ),
-        ],
-        bases=(ShellSpec,),
-    )
+    inputs = [
+        shell.arg(
+            name="file1",
+            type=File,
+            default=filename_1,
+            position=1,
+            argstr="",
+            help_string="input file 1",
+        ),
+        shell.arg(
+            name="file2",
+            type=File,
+            mandatory=True,
+            position=2,
+            argstr="",
+            help_string="input file 2",
+        ),
+    ]
 
-    docky = ShellTask(
-        name="docky",
+    docky = shell.define(cmd, inputs=inputs)(
         environment=Docker(image="busybox"),
-        executable=cmd,
         file2=filename_2,
-        input_spec=my_input_spec,
         strip=True,
     )
     assert docky.spec.file2.fspath == filename_2
@@ -354,43 +292,28 @@ def test_docker_inputspec_2a(plugin, tmp_path):
 
     cmd = "cat"
 
-    # if you want set default in the first field you can use default value
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file1",
-                attr.ib(
-                    type=File,
-                    default=filename_1,
-                    metadata={
-                        "position": 1,
-                        "argstr": "",
-                        "help_string": "input file 1",
-                    },
-                ),
-            ),
-            (
-                "file2",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 2,
-                        "argstr": "",
-                        "help_string": "input file 2",
-                    },
-                ),
-            ),
-        ],
-        bases=(ShellSpec,),
-    )
+    inputs = [
+        shell.arg(
+            name="file1",
+            type=File,
+            default=filename_1,
+            position=1,
+            argstr="",
+            help_string="input file 1",
+        ),
+        shell.arg(
+            name="file2",
+            type=File,
+            mandatory=True,
+            position=2,
+            argstr="",
+            help_string="input file 2",
+        ),
+    ]
 
-    docky = ShellTask(
-        name="docky",
+    docky = shell.define(cmd, inputs=inputs)(
         environment=Docker(image="busybox"),
-        executable=cmd,
         file2=filename_2,
-        input_spec=my_input_spec,
         strip=True,
     )
 
@@ -408,32 +331,21 @@ def test_docker_inputspec_3(plugin, tmp_path):
 
     cmd = "cat"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help_string": "input file",
-                        "container_path": True,
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
+    inputs = [
+        shell.arg(
+            name="file",
+            type=File,
+            mandatory=True,
+            position=1,
+            argstr="",
+            help_string="input file",
+            container_path=True,
+        )
+    ]
 
-    docky = ShellTask(
-        name="docky",
+    docky = shell.define(cmd, inputs=inputs)(
         environment=Docker(image="busybox"),
-        executable=cmd,
         file=filename,
-        input_spec=my_input_spec,
         strip=True,
     )
 
@@ -456,41 +368,26 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
 
     cmd = ["sed", "-is", "s/hello/hi/"]
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "orig_file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 1,
-                        "argstr": "",
-                        "help_string": "orig file",
-                        "mandatory": True,
-                        "copyfile": "copy",
-                    },
-                ),
-            ),
-            (
-                "out_file",
-                attr.ib(
-                    type=str,
-                    metadata={
-                        "output_file_template": "{orig_file}",
-                        "help_string": "output file",
-                    },
-                ),
-            ),
-        ],
-        bases=(ShellSpec,),
-    )
+    inputs = [
+        shell.arg(
+            name="orig_file",
+            type=File,
+            mandatory=True,
+            position=1,
+            argstr="",
+            help_string="orig file",
+            copyfile="copy",
+        ),
+        shell.arg(
+            name="out_file",
+            type=str,
+            output_file_template="{orig_file}",
+            help_string="output file",
+        ),
+    ]
 
-    docky = ShellTask(
-        name="docky",
+    docky = shell.define(cmd, inputs=inputs)(
         environment=Docker(image="busybox"),
-        executable=cmd,
-        input_spec=my_input_spec,
         orig_file=str(file),
     )
 
@@ -498,7 +395,7 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
     assert res.output.stdout == ""
     out_file = res.output.out_file.fspath
     assert out_file.exists()
-    # the file is  copied, and than it is changed in place
+    # the file is copied, and then it is changed in place
     assert out_file.parent == docky.output_dir
     with open(out_file) as f:
         assert "hi from pydra\n" == f.read()
@@ -522,34 +419,23 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
 
     cmd = "cat"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help_string": "input file",
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
+    inputs = [
+        shell.arg(
+            name="file",
+            type=File,
+            mandatory=True,
+            position=1,
+            argstr="",
+            help_string="input file",
+        )
+    ]
+
+    docky = shell.define(cmd, inputs=inputs)(
+        environment=Docker(image="busybox"),
+        strip=True,
     )
 
-    docky = ShellTask(
-        name="docky",
-        environment=Docker(image="busybox"),
-        executable=cmd,
-        input_spec=my_input_spec,
-        strip=True,
-    ).split("file", file=[str(filename_1), str(filename_2)])
-
-    res = docky()
+    res = docky(split={"file": [str(filename_1), str(filename_2)]})
     assert res[0].output.stdout == "hello from pydra"
     assert res[1].output.stdout == "have a nice one"
 
@@ -569,36 +455,23 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
         f.write("have a nice one")
 
     cmd = "cat"
-    filename = []
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help_string": "input file",
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
+    inputs = [
+        shell.arg(
+            name="file",
+            type=File,
+            mandatory=True,
+            position=1,
+            argstr="",
+            help_string="input file",
+        )
+    ]
+    docky = shell.define(cmd, inputs=inputs)(
+        environment=Docker(image="busybox"),
+        strip=True,
     )
 
-    docky = ShellTask(
-        name="docky",
-        environment=Docker(image="busybox"),
-        executable=cmd,
-        input_spec=my_input_spec,
-        strip=True,
-    ).split("file", file=[str(file_1), str(file_2)])
-
-    res = docky()
+    res = docky(split={"file": [str(file_1), str(file_2)]})
     assert res[0].output.stdout == "hello from pydra"
     assert res[1].output.stdout == "have a nice one"
 
@@ -613,43 +486,31 @@ def test_docker_wf_inputspec_1(plugin, tmp_path):
 
     cmd = "cat"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help_string": "input file",
-                    },
-                ),
+    inputs = [
+        shell.arg(
+            name="file",
+            type=File,
+            mandatory=True,
+            position=1,
+            argstr="",
+            help_string="input file",
+        )
+    ]
+
+    @workflow.define
+    def Workflow(cmd, file):
+
+        docky = workflow.add(
+            shell.define(cmd, inputs=inputs)(
+                file=file,
+                environment=Docker(image="busybox"),
+                strip=True,
             )
-        ],
-        bases=(ShellSpec,),
-    )
+        )
 
-    wf = Workflow(name="wf", input_spec=["cmd", "file"])
-    wf.inputs.cmd = cmd
-    wf.inputs.file = filename
+        return docky.stdout
 
-    docky = ShellTask(
-        name="docky",
-        environment=Docker(image="busybox"),
-        executable=wf.lzin.cmd,
-        file=wf.lzin.file,
-        input_spec=my_input_spec,
-        strip=True,
-    )
-    wf.add(docky)
-
-    wf.set_output([("out", wf.docky.lzout.stdout)])
-
-    with Submitter(plugin=plugin) as sub:
-        wf(submitter=sub)
+    wf = Workflow(cmd=cmd, file=filename)
 
     res = wf.result()
     assert res.output.out == "hello from pydra"
@@ -668,45 +529,34 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
 
     cmd = "cat"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help_string": "input file",
-                    },
-                ),
+    inputs = [
+        shell.arg(
+            name="file",
+            type=File,
+            mandatory=True,
+            position=1,
+            argstr="",
+            help_string="input file",
+        )
+    ]
+
+    @workflow.define
+    def Workflow(cmd, file):
+
+        docky = workflow.add(
+            shell.define(cmd, inputs=inputs)(
+                environment=Docker(image="busybox"),
+                file=file,
+                strip=True,
             )
-        ],
-        bases=(ShellSpec,),
-    )
+        )
 
-    wf = Workflow(name="wf", input_spec=["cmd", "file"])
-    wf.split(file=[str(file_1), str(file_2)])
-    wf.inputs.cmd = cmd
+        return docky.stdout
 
-    docky = ShellTask(
-        name="docky",
-        environment=Docker(image="busybox"),
-        executable=wf.lzin.cmd,
-        file=wf.lzin.file,
-        input_spec=my_input_spec,
-        strip=True,
-    )
-    wf.add(docky)
+    wf = Workflow(cmd=cmd)
 
-    wf.set_output([("out", wf.docky.lzout.stdout)])
+    res = wf(split={"file": [file_1, file_2]})
 
-    with Submitter(plugin=plugin) as sub:
-        wf(submitter=sub)
-
-    res = wf.result()
     assert res[0].output.out == "hello from pydra"
     assert res[1].output.out == "have a nice one"
 
@@ -724,42 +574,31 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
 
     cmd = "cat"
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help_string": "input file",
-                    },
-                ),
+    inputs = [
+        shell.arg(
+            name="file",
+            type=File,
+            mandatory=True,
+            position=1,
+            argstr="",
+            help_string="input file",
+        )
+    ]
+
+    @workflow.define
+    def Workflow(cmd, file):
+
+        docky = workflow.add(
+            shell.define(cmd, inputs=inputs)(
+                environment=Docker(image="busybox"),
+                file=file,
+                strip=True,
             )
-        ],
-        bases=(ShellSpec,),
-    )
+        )
 
-    wf = Workflow(name="wf", input_spec=["cmd", "file"])
-    wf.inputs.cmd = cmd
+        return docky.stdout
 
-    docky = ShellTask(
-        name="docky",
-        environment=Docker(image="busybox"),
-        executable=wf.lzin.cmd,
-        file=wf.lzin.file,
-        input_spec=my_input_spec,
-        strip=True,
-    ).split("file", file=[str(file_1), str(file_2)])
-    wf.add(docky)
+    wf = Workflow(cmd=cmd)
 
-    wf.set_output([("out", wf.docky.lzout.stdout)])
-
-    with Submitter(plugin=plugin) as sub:
-        wf(submitter=sub)
-
-    res = wf.result()
+    res = wf(split={"file": [str(file_1), str(file_2)]})
     assert res.output.out == ["hello from pydra", "have a nice one"]

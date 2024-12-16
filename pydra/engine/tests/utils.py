@@ -1,6 +1,7 @@
 # Tasks for testing
 import time
-import sys, shutil
+import sys
+import shutil
 import typing as ty
 from pathlib import Path
 import functools
@@ -8,9 +9,8 @@ import operator
 import subprocess as sp
 import pytest
 from fileformats.generic import File
-
-from ..core import Workflow
 from ..submitter import Submitter
+from pydra.design import workflow
 from pydra import mark
 
 
@@ -294,12 +294,14 @@ def gen_basic_wf(name="basic-wf"):
     -----------
     out : int (9)
     """
-    wf = Workflow(name=name, input_spec=["x"])
-    wf.inputs.x = 5
-    wf.add(fun_addtwo(name="task1", a=wf.lzin.x, b=0))
-    wf.add(fun_addvar(name="task2", a=wf.task1.lzout.out, b=2))
-    wf.set_output([("out", wf.task2.lzout.out)])
-    return wf
+
+    @workflow.define(outputs=["out"])
+    def Workflow(x):
+        task1 = workflow.add(fun_addtwo(a=x, b=0))
+        task2 = workflow.add(fun_addvar(a=task1.out, b=2))
+        return task2.out
+
+    return Workflow(x=5)
 
 
 def gen_basic_wf_with_threadcount(name="basic-wf-with-threadcount"):
@@ -314,12 +316,14 @@ def gen_basic_wf_with_threadcount(name="basic-wf-with-threadcount"):
     -----------
     out : int (9)
     """
-    wf = Workflow(name=name, input_spec=["x"])
-    wf.inputs.x = 5
-    wf.add(fun_addtwo_with_threadcount(name="task1", a=wf.lzin.x, sgeThreads=4))
-    wf.add(fun_addvar(name="task2", a=wf.task1.lzout.out, b=2))
-    wf.set_output([("out", wf.task2.lzout.out)])
-    return wf
+
+    @workflow.define(outputs=["out"])
+    def Workflow(x):
+        task1 = workflow.add(fun_addtwo_with_threadcount(a=x, sgeThreads=4))
+        task2 = workflow.add(fun_addvar(a=task1.out, b=2))
+        return task2.out
+
+    return Workflow(x=5)
 
 
 def gen_basic_wf_with_threadcount_concurrent(name="basic-wf-with-threadcount"):
@@ -334,13 +338,15 @@ def gen_basic_wf_with_threadcount_concurrent(name="basic-wf-with-threadcount"):
     -----------
     out : int (9)
     """
-    wf = Workflow(name=name, input_spec=["x"])
-    wf.inputs.x = 5
-    wf.add(fun_addtwo_with_threadcount(name="task1_1", a=wf.lzin.x, sgeThreads=4))
-    wf.add(fun_addtwo_with_threadcount(name="task1_2", a=wf.lzin.x, sgeThreads=2))
-    wf.add(fun_addvar(name="task2", a=wf.task1_1.lzout.out, b=2))
-    wf.set_output([("out1", wf.task2.lzout.out), ("out2", wf.task1_2.lzout.out)])
-    return wf
+
+    @workflow.define(outputs=["out1", "out2"])
+    def Workflow(x):
+        task1_1 = workflow.add(fun_addtwo_with_threadcount(a=x, sgeThreads=4))
+        task1_2 = workflow.add(fun_addtwo_with_threadcount(a=x, sgeThreads=2))
+        task2 = workflow.add(fun_addvar(a=task1_1.out, b=2))
+        return task2.out, task1_2.out
+
+    return Workflow(x=5)
 
 
 @mark.task
