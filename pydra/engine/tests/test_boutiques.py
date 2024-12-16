@@ -2,12 +2,9 @@ import shutil
 import subprocess as sp
 import attr
 import pytest
-
-from ..core import Workflow
-from ..task import ShellTask
-from ..submitter import Submitter
-from ..boutiques import BoshTask
+from pydra.engine.helpers import attrs_values
 from .utils import result_no_submitter, result_submitter, no_win
+from pydra.design import workflow, boutiques, shell
 
 need_bosh_docker = pytest.mark.skipif(
     shutil.which("docker") is None
@@ -28,11 +25,10 @@ pytestmark = pytest.mark.skip()
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_boutiques_1(maskfile, plugin, results_function, tmpdir, data_tests_dir):
     """simple task to run fsl.bet using BoshTask"""
-    btask = BoshTask(name="NA", zenodo_id="1482743")
-    btask.spec.infile = data_tests_dir / "test.nii.gz"
-    btask.spec.maskfile = maskfile
-    btask.cache_dir = tmpdir
-    res = results_function(btask, plugin)
+    btask = boutiques.define(zenodo_id="1482743")
+    btask.infile = data_tests_dir / "test.nii.gz"
+    btask.maskfile = maskfile
+    res = btask(plugin, cache_dir=tmpdir)
 
     assert res.output.return_code == 0
 
@@ -48,13 +44,13 @@ def test_boutiques_1(maskfile, plugin, results_function, tmpdir, data_tests_dir)
 @pytest.mark.flaky(reruns=3)
 def test_boutiques_spec_1(data_tests_dir):
     """testing spec: providing input/output fields names"""
-    btask = BoshTask(
-        name="NA",
+    btask = boutiques.define(
         zenodo_id="1482743",
-        infile=data_tests_dir / "test.nii.gz",
-        maskfile="test_brain.nii.gz",
         input_spec_names=["infile", "maskfile"],
         output_spec_names=["outfile", "out_outskin_off"],
+    )(
+        infile=data_tests_dir / "test.nii.gz",
+        maskfile="test_brain.nii.gz",
     )
 
     assert len(btask.input_spec.fields) == 2
@@ -73,17 +69,16 @@ def test_boutiques_spec_1(data_tests_dir):
 @pytest.mark.flaky(reruns=3)
 def test_boutiques_spec_2(data_tests_dir):
     """testing spec: providing partial input/output fields names"""
-    btask = BoshTask(
-        name="NA",
-        zenodo_id="1482743",
+    btask = boutiques.define(
+        zenodo_id="1482743", input_spec_names=["infile"], output_spec_names=[]
+    )(
         infile=data_tests_dir / "test.nii.gz",
         maskfile="test_brain.nii.gz",
-        input_spec_names=["infile"],
-        output_spec_names=[],
     )
 
-    assert len(btask.input_spec.fields) == 1
-    assert btask.input_spec.fields[0][0] == "infile"
+    fields = attrs_values(btask)
+    assert len(fields) == 1
+    assert fields[0][0] == "infile"
     assert hasattr(btask.spec, "infile")
     # input doesn't see maskfile
     assert not hasattr(btask.spec, "maskfile")
@@ -99,24 +94,19 @@ def test_boutiques_spec_2(data_tests_dir):
 )
 def test_boutiques_wf_1(maskfile, plugin, tmpdir, infile):
     """wf with one task that runs fsl.bet using BoshTask"""
-    wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
-    wf.inputs.maskfile = maskfile
-    wf.inputs.infile = infile
-    wf.cache_dir = tmpdir
 
-    wf.add(
-        BoshTask(
-            name="bet",
-            zenodo_id="1482743",
-            infile=wf.lzin.infile,
-            maskfile=wf.lzin.maskfile,
+    def Workflow(maskfile, infile):
+        bet = workflow.add(
+            boutiques.define(zenodo_id="1482743")(
+                infile=infile,
+                maskfile=maskfile,
+            )
         )
-    )
 
-    wf.set_output([("outfile", wf.bet.lzout.outfile)])
+        return bet.outfile
 
-    with Submitter(plugin=plugin) as sub:
-        wf(submitter=sub)
+    wf = Workflow(maskfile=maskfile, infile=infile)
+    wf(plugin=plugin, cache_dir=tmpdir)
 
     res = wf.result()
     assert res.output.outfile.name == "test_brain.nii.gz"
@@ -132,39 +122,27 @@ def test_boutiques_wf_1(maskfile, plugin, tmpdir, infile):
 )
 def test_boutiques_wf_2(maskfile, plugin, tmpdir, infile):
     """wf with two BoshTasks (fsl.bet and fsl.stats) and one ShellTask"""
-    wf = Workflow(name="wf", input_spec=["maskfile", "infile"])
-    wf.inputs.maskfile = maskfile
-    wf.inputs.infile = infile
-    wf.cache_dir = tmpdir
 
-    wf.add(
-        BoshTask(
-            name="bet",
-            zenodo_id="1482743",
-            infile=wf.lzin.infile,
-            maskfile=wf.lzin.maskfile,
+    @workflow.define(outputs=["outfile_bet", "out_stat", "out"])
+    def Workflow(maskfile, infile):
+
+        bet = workflow.add(
+            boutiques.define(zenodo_id="1482743")(
+                infile=infile,
+                maskfile=maskfile,
+            )
         )
-    )
-    # used to be "3240521", but can't access anymore
-    wf.add(
-        BoshTask(
-            name="stat", zenodo_id="4472771", input_file=wf.bet.lzout.outfile, v=True
+        # used to be "3240521", but can't access anymore
+        stat = workflow.add(
+            boutiques.define(zenodo_id="4472771")(
+                input_file=bet.outfile,
+                v=True,
+            )
         )
-    )
-    wf.add(ShellTask(name="cat", executable="cat", args=wf.stat.lzout.output))
+        cat = workflow.add(shell.define("cat <file>")(file=stat.output))
+        return bet.outfile, stat.output, cat.stdout
 
-    wf.set_output(
-        [
-            ("outfile_bet", wf.bet.lzout.outfile),
-            ("out_stat", wf.stat.lzout.output),
-            ("out", wf.cat.lzout.stdout),
-        ]
-    )
-
-    with Submitter(plugin=plugin) as sub:
-        wf(submitter=sub)
-
-    res = wf.result()
+    res = Workflow(maskfile=maskfile, infile=infile)(plugin=plugin, cache_dir=tmpdir)
     assert res.output.outfile_bet.name == "test_brain.nii.gz"
     assert res.output.outfile_bet.exists()
 

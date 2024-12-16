@@ -41,7 +41,8 @@ Implement processing nodes.
 
 from __future__ import annotations
 
-import attr
+import attrs
+import json
 from pathlib import Path
 from fileformats.core import FileSet
 from .core import Task
@@ -55,6 +56,7 @@ from .helpers import (
     attrs_values,
     parse_copyfile,
 )
+from pydra.engine.helpers_file import is_local_file
 from pydra.utils.typing import TypeParser
 from .environments import Native
 
@@ -69,7 +71,7 @@ class PythonTask(Task):
         del inputs["function"]
         self.output_ = None
         output = self.spec.function(**inputs)
-        output_names = [f.name for f in attr.fields(self.spec.Outputs)]
+        output_names = [f.name for f in attrs.fields(self.spec.Outputs)]
         if output is None:
             self.output_ = {nm: None for nm in output_names}
         elif len(output_names) == 1:
@@ -202,3 +204,40 @@ class ShellTask(Task):
                 )
 
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
+
+
+class BoshTask(ShellTask):
+
+    def _command_args_single(self, state_ind=None, index=None):
+        """Get command line arguments for a single state"""
+        input_filepath = self._bosh_invocation_file(state_ind=state_ind, index=index)
+        cmd_list = (
+            self.spec.executable
+            + [str(self.bosh_file), input_filepath]
+            + self.spec.args
+            + self.bindings
+        )
+        return cmd_list
+
+    def _bosh_invocation_file(self, state_ind=None, index=None):
+        """creating bosh invocation file - json file with inputs values"""
+        input_json = {}
+        for f in attrs_fields(self.spec, exclude_names=("executable", "args")):
+            if self.state and f"{self.name}.{f.name}" in state_ind:
+                value = getattr(self.spec, f.name)[state_ind[f"{self.name}.{f.name}"]]
+            else:
+                value = getattr(self.spec, f.name)
+            # adding to the json file if specified by the user
+            if value is not attrs.NOTHING and value != "NOTHING":
+                if is_local_file(f):
+                    value = Path(value)
+                    self.bindings.extend(["-v", f"{value.parent}:{value.parent}:ro"])
+                    value = str(value)
+
+                input_json[f.name] = value
+
+        filename = self.cache_dir / f"{self.name}-{index}.json"
+        with open(filename, "w") as jsonfile:
+            json.dump(input_json, jsonfile)
+
+        return str(filename)
