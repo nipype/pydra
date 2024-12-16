@@ -47,9 +47,11 @@ dev = ["black", "pre-commit", "pydra[test]"]
 doc = [
     "packaging",
     "sphinx ==6.2.1",
-    "sphinx_rtd_theme",
+    "nbsphinx",
     "sphinxcontrib-apidoc ~=0.3.0",
     "sphinxcontrib-versioning",
+    "furo>=2022.2.14.1",
+    "numpydoc>=0.6.0",
 ]
 test = [
     "pytest >=6.2.5",

@@ -19,8 +19,8 @@ def check_latest_version():
 
 
 # Run telemetry on import for interactive sessions, such as IPython, Jupyter notebooks, Python REPL
-if not hasattr(__main__, "__file__"):
-    from .engine.core import TaskBase
+# if not hasattr(__main__, "__file__"):
+#     from pydra.engine.core import TaskBase
 
-    if TaskBase._etelemetry_version_data is None:
-        TaskBase._etelemetry_version_data = check_latest_version()
+#     if TaskBase._etelemetry_version_data is None:
+#         TaskBase._etelemetry_version_data = check_latest_version()
