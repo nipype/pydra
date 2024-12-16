@@ -7,23 +7,21 @@ import attrs
 import time
 
 from ..specs import (
-    BaseSpec,
-    SpecInfo,
     File,
     Runtime,
     Result,
     ShellSpec,
-    # ContainerSpec,
-    LazyIn,
-    LazyOut,
-    # LazyField,
-    StateArray,
 )
+from pydra.engine.workflow.lazy import (
+    LazyInField,
+    LazyOutField,
+)
+
+from pydra.utils.typing import StateArray
 
 # from ..helpers import make_klass
 from .utils import foo
 from pydra import mark
-from pydra.engine import Workflow
 import pytest
 
 

@@ -1,7 +1,7 @@
 import attr
 import typing as ty
-import os, sys
-import subprocess as sp
+import os
+import sys
 import pytest
 from pathlib import Path
 import re
@@ -9,14 +9,15 @@ import stat
 
 from ..task import ShellTask
 from ..submitter import Submitter
-from ..core import Workflow
 from ..specs import (
     ShellOutputs,
     ShellSpec,
-    SpecInfo,
+)
+from fileformats.generic import (
     File,
     Directory,
-    MultiInputFile,
+)
+from pydra.utils.typing import (
     MultiOutputFile,
     MultiInputObj,
 )

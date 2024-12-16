@@ -5,7 +5,7 @@ import attr
 from unittest.mock import Mock
 import pytest
 from fileformats.generic import File
-from ..specs import SpecInfo, ShellSpec
+from ..specs import ShellSpec
 from ..task import ShellTask
 from ..helpers_file import (
     ensure_list,

@@ -25,7 +25,7 @@ from .utils import (
 )
 
 from ..core import Task
-from ..specs import StateArray
+from pydra.utils.typing import StateArray
 from ..submitter import Submitter
 
 

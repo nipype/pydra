@@ -34,9 +34,8 @@ from .utils import (
     DOT_FLAG,
 )
 from ..submitter import Submitter
-from ..core import Workflow
 from pydra import mark
-from ..specs import SpecInfo, BaseSpec, ShellSpec
+from ..specs import ShellSpec
 from pydra.utils import exc_info_matches
 
 

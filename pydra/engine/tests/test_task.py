@@ -9,15 +9,14 @@ import json
 import glob as glob
 from pydra import mark
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
-from ..core import Workflow
-from ..task import AuditFlag, ShellTask, argstr_formatting
+from ..task import AuditFlag, ShellTask
+from pydra.engine.specs import argstr_formatting
 from .utils import gen_basic_wf
-from ..specs import (
+from pydra.utils.typing import (
     MultiInputObj,
     MultiOutputObj,
-    SpecInfo,
-    FunctionSpec,
-    BaseSpec,
+)
+from ..specs import (
     ShellSpec,
     File,
 )

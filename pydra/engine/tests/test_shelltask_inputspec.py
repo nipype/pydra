@@ -4,13 +4,12 @@ import attr
 import pytest
 
 from ..task import ShellTask
-from ..specs import (
+from pydra.engine.specs import (
     ShellOutputs,
     ShellSpec,
-    SpecInfo,
     File,
-    MultiInputObj,
 )
+from pydra.design import shell
 
 
 def test_shell_cmd_execargs_1():
@@ -2167,45 +2166,27 @@ def test_shell_cmd_inputs_denoise_image(
 # tests with XOR in input metadata
 
 
-class SimpleTaskXor(ShellTask):
-    input_fields = [
-        (
-            "input_1",
-            str,
-            {
-                "help_string": "help",
-                "mandatory": True,
-                "xor": ("input_1", "input_2", "input_3"),
-            },
-        ),
-        (
-            "input_2",
-            bool,
-            {
-                "help_string": "help",
-                "mandatory": True,
-                "argstr": "--i2",
-                "xor": ("input_1", "input_2", "input_3"),
-            },
-        ),
-        (
-            "input_3",
-            bool,
-            {
-                "help_string": "help",
-                "mandatory": True,
-                "xor": ("input_1", "input_2", "input_3"),
-            },
-        ),
-    ]
-    task_input_spec = SpecInfo(name="Input", fields=input_fields, bases=(ShellSpec,))
-    task_output_fields = []
-    task_output_spec = SpecInfo(
-        name="Output", fields=task_output_fields, bases=(ShellOutputs,)
+@shell.define
+class SimpleTaskXor(ShellSpec["SimpleTaskXor.Outputs"]):
+
+    input_1: str = shell.arg(
+        help_string="help",
+        xor=("input_1", "input_2", "input_3"),
+    )
+    input_2: bool = shell.arg(
+        help_string="help",
+        argstr="--i2",
+        xor=("input_1", "input_2", "input_3"),
+    )
+    input_3: bool = shell.arg(
+        help_string="help",
+        xor=("input_1", "input_2", "input_3"),
     )
 
-    input_spec = task_input_spec
-    output_spec = task_output_spec
+    @shell.outputs
+    class Outputs(ShellOutputs):
+        pass
+
     executable = "cmd"
 
 

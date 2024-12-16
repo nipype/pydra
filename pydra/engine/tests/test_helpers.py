@@ -5,7 +5,6 @@ import random
 import platform
 import typing as ty
 import pytest
-import attrs
 import cloudpickle as cp
 from unittest.mock import Mock
 from fileformats.generic import Directory, File
@@ -20,7 +19,6 @@ from ..helpers import (
     parse_format_string,
 )
 from pydra.utils.hash import hash_function
-from ..core import Workflow
 
 
 def test_save(tmpdir):

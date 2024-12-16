@@ -1,4 +1,3 @@
-from ..core import Workflow
 from ..helpers import load_task
 from pydra import mark
 

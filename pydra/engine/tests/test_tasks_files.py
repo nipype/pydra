@@ -5,9 +5,8 @@ import pytest
 import typing as ty
 
 from ..submitter import Submitter
-from ..core import Workflow
 from pydra import mark
-from ..specs import File, Directory
+from fileformats.generic import File, Directory
 
 
 @mark.task

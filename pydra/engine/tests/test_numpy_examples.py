@@ -7,7 +7,6 @@ import pytest
 
 
 from ..submitter import Submitter
-from ..core import Workflow
 from pydra.mark import task, annotate
 from .utils import identity
 from pydra.utils.hash import hash_function

@@ -328,7 +328,13 @@ def define(
                 input_helps=input_helps,
                 output_helps=output_helps,
             )
-            class_name = re.sub(r"[^\w]", "_", executable) if not name else name
+            if name:
+                class_name = name
+            else:
+                class_name = (
+                    "_".join(executable) if isinstance(executable, list) else executable
+                )
+                class_name = re.sub(r"[^\w]", "_", class_name)
             if class_name[0].isdigit():
                 class_name = f"_{class_name}"
 
@@ -457,10 +463,19 @@ def parse_command_line_template(
     else:
         assert outputs is None
         outputs = {}
-    parts = template.split(maxsplit=1)
-    if len(parts) == 1:
-        return template, inputs, outputs
-    executable, args_str = parts
+    parts = template.split()
+    executable = []
+    for i, part in enumerate(parts, start=1):
+        if part.startswith("<") or part.startswith("-"):
+            break
+        executable.append(part)
+    if not executable:
+        raise ValueError(f"Found no executable in command line template: {template}")
+    if len(executable) == 1:
+        executable = executable[0]
+    if i == len(parts):
+        return executable, inputs, outputs
+    args_str = " ".join(parts[i:])
     tokens = re.split(r"\s+", args_str.strip())
     arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+]+(?:\?|=[^>]+)?)>"
     opt_pattern = r"--?[a-zA-Z0-9_]+"

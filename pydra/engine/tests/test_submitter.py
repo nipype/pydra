@@ -17,7 +17,7 @@ from .utils import (
     gen_basic_wf_with_threadcount,
     gen_basic_wf_with_threadcount_concurrent,
 )
-from ..core import Workflow, Task
+from ..core import Task
 from ..submitter import Submitter
 from ..workers import SerialWorker
 from pydra import mark

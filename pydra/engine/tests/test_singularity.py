@@ -5,8 +5,7 @@ import attr
 
 from ..task import ShellTask
 from ..submitter import Submitter
-from ..core import Workflow
-from ..specs import ShellOutputs, SpecInfo, File, ShellSpec
+from ..specs import ShellOutputs, File, ShellSpec
 from ..environments import Singularity
 
 

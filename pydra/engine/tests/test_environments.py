@@ -4,13 +4,10 @@ from ..environments import Native, Docker, Singularity
 from ..task import ShellTask
 from ..submitter import Submitter
 from ..specs import (
-    ShellSpec,
-    SpecInfo,
     File,
 )
+from pydra.design import shell
 from .utils import no_win, need_docker, need_singularity
-
-import attr
 import pytest
 
 
@@ -176,33 +173,22 @@ def test_singularity_1_subm(tmp_path, plugin):
 
 def create_shelly_inputfile(tempdir, filename, name, executable):
     """creating a task with a simple input_spec"""
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "position": 1,
-                        "help_string": "files",
-                        "mandatory": True,
-                        "argstr": "",
-                    },
-                ),
-            )
-        ],
-        bases=(ShellSpec,),
-    )
+    inputs = [
+        shell.arg(
+            name="file",
+            type=File,
+            position=1,
+            help_string="files",
+            mandatory=True,
+            argstr="",
+        )
+    ]
 
     kwargs = {} if filename is None else {"file": filename}
-    shelly = ShellTask(
-        name=name,
-        executable=executable,
-        cache_dir=makedir(tempdir, name),
-        input_spec=my_input_spec,
-        **kwargs,
-    )
+    shelly = shell.define(
+        executable,
+        input=inputs,
+    )(**kwargs)
     return shelly
 
 
@@ -363,35 +349,25 @@ def test_docker_fileinp_st(tmp_path):
 
 def create_shelly_outputfile(tempdir, filename, name, executable="cp"):
     """creating a task with an input_spec that contains a template"""
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "file_orig",
-                attr.ib(
-                    type=File,
-                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
-                ),
-            ),
-            (
-                "file_copy",
-                attr.ib(
-                    type=str,
-                    metadata={
-                        "output_file_template": "{file_orig}_copy",
-                        "help_string": "output file",
-                        "argstr": "",
-                    },
-                ),
-            ),
-        ],
-        bases=(ShellSpec,),
-    )
+    my_input_spec = [
+        shell.arg(
+            name="file_orig",
+            type=File,
+            position=2,
+            help_string="new file",
+            argstr="",
+        ),
+        shell.arg(
+            name="file_copy",
+            type=str,
+            output_file_template="{file_orig}_copy",
+            help_string="output file",
+            argstr="",
+        ),
+    ]
 
     kwargs = {} if filename is None else {"file_orig": filename}
-    shelly = ShellTask(
-        name=name,
-        executable=executable,
+    shelly = shell.define(executable)(
         cache_dir=makedir(tempdir, name),
         input_spec=my_input_spec,
         **kwargs,

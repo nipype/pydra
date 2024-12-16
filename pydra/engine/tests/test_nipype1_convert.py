@@ -1,76 +1,56 @@
 import typing as ty
 import pytest
+from pathlib import Path
+from pydra.engine.specs import ShellOutputs, ShellSpec
+from fileformats.generic import File
+from pydra.design import shell
 
 
-from ..task import ShellTask
-from ..specs import ShellOutputs, ShellSpec, SpecInfo, File
-
-interf_input_spec = SpecInfo(
-    name="Input", fields=[("test", ty.Any, {"help_string": "test"})], bases=(ShellSpec,)
-)
-interf_output_spec = SpecInfo(
-    name="Output", fields=[("test_out", File, "*.txt")], bases=(ShellOutputs,)
-)
+def find_txt(output_dir: Path) -> File:
+    files = list(output_dir.glob("*.txt"))
+    assert len(files) == 1
+    return files[0]
 
 
-class Interf_1(ShellTask):
-    """class with customized input/output specs"""
-
-    input_spec = interf_input_spec
-    output_spec = interf_output_spec
+interf_inputs = [shell.arg(name="test", type=ty.Any, help_string="test")]
+interf_outputs = [shell.out(name="test_out", type=File, callable=find_txt)]
 
 
-class Interf_2(ShellTask):
-    """class with customized input/output specs and executables"""
-
-    input_spec = interf_input_spec
-    output_spec = interf_output_spec
-    executable = "testing command"
+Interf_1 = shell.define(inputs=interf_inputs, outputs=interf_outputs)
+Interf_2 = shell.define("testing command", inputs=interf_inputs, outputs=interf_outputs)
 
 
-class Interf_3(ShellTask):
+@shell.define
+class Interf_3(ShellSpec["Interf_3.Outputs"]):
     """class with customized input and executables"""
 
-    input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "in_file",
-                str,
-                {"help_string": "in_file", "argstr": "'{in_file}'"},
-            )
-        ],
-        bases=(ShellSpec,),
-    )
-    executable = "testing command"
+    executable = ["testing", "command"]
+
+    in_file: str = shell.arg(help_string="in_file", argstr="{in_file}")
+
+    @shell.outputs
+    class Outputs(ShellOutputs):
+        pass
 
 
-class TouchInterf(ShellTask):
+@shell.define
+class TouchInterf(ShellSpec["TouchInterf.Outputs"]):
     """class with customized input and executables"""
 
-    input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "new_file",
-                str,
-                {
-                    "help_string": "new_file",
-                    "argstr": "",
-                    "output_file_template": "{new_file}",
-                },
-            )
-        ],
-        bases=(ShellSpec,),
+    new_file: str = shell.outarg(
+        help_string="new_file", argstr="", path_template="{new_file}"
     )
     executable = "touch"
+
+    @shell.outputs
+    class Outputs(ShellOutputs):
+        pass
 
 
 def test_interface_specs_1():
     """testing if class input/output spec are set properly"""
-    task = Interf_1(executable="ls")
-    assert task.input_spec == interf_input_spec
-    assert task.output_spec == interf_output_spec
+    task_spec = Interf_1(executable="ls")
+    assert task.Outputs == Interf_1.Outputs
 
 
 def test_interface_specs_2():
