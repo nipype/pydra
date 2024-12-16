@@ -16,8 +16,8 @@ from packaging.version import Version
 
 sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
 sys.path.insert(1, str(Path(__file__).parent / "sphinxext"))
-from pydra import __version__
-from github_link import make_linkcode_resolve
+from pydra import __version__  # noqa: E402
+from github_link import make_linkcode_resolve  # noqa: E402
 
 
 # -- Project information -----------------------------------------------------
