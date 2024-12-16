@@ -104,6 +104,7 @@ Indices and tables
    :caption: Explanation
    :hidden:
 
+   explanation/typing
    explanation/hashing-caching
    explanation/provenance
    explanation/lazy-evaluation
