@@ -1,4 +1,4 @@
-Creating a task package
+Splitting and combining
 =======================
 
 Work in progress....

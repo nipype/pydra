@@ -112,11 +112,12 @@ Indices and tables
    :caption: Explanation
    :hidden:
 
-   explanation/conditional-logic
+   explanation/splitting-combining
    explanation/typing
    explanation/hashing-caching
+   explanation/conditional-lazy
    explanation/provenance
-   explanation/lazy-evaluation
+
 
 .. toctree::
    :maxdepth: 2

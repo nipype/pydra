@@ -124,6 +124,11 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
 
         return wf
 
+    @classmethod
+    def clear_cache(cls):
+        """Clear the cache of constructed workflows"""
+        cls._constructed.clear()
+
     def add(self, task_spec: TaskSpec[OutputsType], name=None) -> OutputsType:
         """Add a node to the workflow
 
