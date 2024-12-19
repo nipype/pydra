@@ -95,6 +95,7 @@ def test_boutiques_spec_2(data_tests_dir):
 def test_boutiques_wf_1(maskfile, plugin, tmpdir, infile):
     """wf with one task that runs fsl.bet using BoshTask"""
 
+    @workflow.define
     def Workflow(maskfile, infile):
         bet = workflow.add(
             boutiques.define(zenodo_id="1482743")(
