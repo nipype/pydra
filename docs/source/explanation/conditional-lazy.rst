@@ -1,4 +1,4 @@
-Conditional construction and lazy evaluation
-=====================================================
+Conditionals and lazy fields
+============================
 
 Work in progress...

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import time
 from fileformats.generic import File
-import pydra.mark
+from pydra.design import python
 
 from .utils import (
     fun_addtwo,
@@ -1643,7 +1643,7 @@ def test_task_files_persistentcache(tmp_path):
     cache_dir.mkdir()
     test_file = OverriddenContentsFile(test_file_path)
 
-    @pydra.mark.task
+    @python.define
     def read_contents(x: OverriddenContentsFile) -> bytes:
         return x.contents
 

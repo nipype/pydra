@@ -7,7 +7,7 @@ import pytest
 
 
 from ..submitter import Submitter
-from pydra.mark import task, annotate
+from pydra.design import python, workflow
 from .utils import identity
 from pydra.utils.hash import hash_function
 
@@ -15,8 +15,7 @@ if importlib.util.find_spec("numpy") is None:
     pytest.skip("can't find numpy library", allow_module_level=True)
 
 
-@task
-@annotate({"return": {"b": ty.Any}})
+@python.define(outputs=["b"])
 def arrayout(val):
     return np.array([val, val])
 

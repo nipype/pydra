@@ -1,4 +1,4 @@
-Strong typing
+Type checking
 =============
 
 Work in progress...
