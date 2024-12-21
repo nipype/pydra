@@ -368,7 +368,8 @@ class Result(ty.Generic[OutputsType]):
     def __setstate__(self, state):
         if state["output"] is not None:
             state["output"] = cp.loads(state["output"])
-        self.__dict__.update(state)
+        for name, val in state.items():
+            setattr(self, name, val)
 
     def get_output_field(self, field_name):
         """Used in get_values in Workflow

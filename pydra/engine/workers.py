@@ -145,8 +145,8 @@ class SerialWorker(Worker):
         if isinstance(runnable, Task):
             return runnable._run(rerun, environment=environment)
         else:  # it could be tuple that includes pickle files with tasks and inputs
-            ind, task_main_pkl, _ = runnable
-            return load_and_run(task_main_pkl, ind, rerun, environment=environment)
+            task_main_pkl, _ = runnable
+            return load_and_run(task_main_pkl, rerun, environment=environment)
 
     async def fetch_finished(self, futures):
         await asyncio.gather(*futures)

@@ -6,7 +6,6 @@ from pathlib import Path
 import os
 import inspect
 import sys
-from uuid import uuid4
 import getpass
 import typing as ty
 import subprocess as sp
@@ -414,9 +413,7 @@ def get_available_cpus():
     return os.cpu_count()
 
 
-def load_and_run(
-    task_pkl, ind=None, rerun=False, submitter=None, plugin=None, **kwargs
-):
+def load_and_run(task_pkl, rerun=False, submitter=None, plugin=None, **kwargs):
     """
     loading a task from a pickle file, settings proper input
     and running the task
@@ -425,7 +422,7 @@ def load_and_run(
     from .specs import Result
 
     try:
-        task = load_task(task_pkl=task_pkl, ind=ind)
+        task = load_task(task_pkl=task_pkl)
     except Exception:
         if task_pkl.parent.exists():
             etype, eval, etr = sys.exc_info()
@@ -455,27 +452,20 @@ def load_and_run(
     return resultfile
 
 
-async def load_and_run_async(task_pkl, ind=None, submitter=None, rerun=False, **kwargs):
+async def load_and_run_async(task_pkl, submitter=None, rerun=False, **kwargs):
     """
     loading a task from a pickle file, settings proper input
     and running the workflow
     """
-    task = load_task(task_pkl=task_pkl, ind=ind)
+    task = load_task(task_pkl=task_pkl)
     await task._run(submitter=submitter, rerun=rerun, **kwargs)
 
 
-def load_task(task_pkl, ind=None):
+def load_task(task_pkl):
     """loading a task from a pickle file, settings proper input for the specific ind"""
     if isinstance(task_pkl, str):
         task_pkl = Path(task_pkl)
     task = cp.loads(task_pkl.read_bytes())
-    if ind is not None:
-        ind_inputs = task.get_input_el(ind)
-        task.inputs = attrs.evolve(task.inputs, **ind_inputs)
-        task._pre_split = True
-        task.state = None
-        # resetting uid for task
-        task._uid = uuid4().hex
     return task
 
 

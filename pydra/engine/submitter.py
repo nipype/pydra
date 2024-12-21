@@ -88,12 +88,7 @@ class Submitter:
             runnable._reset()
         else:
             # 2
-            if runnable.state is None:
-                # run_el should always return a coroutine
-                await self.worker.run_el(runnable, rerun=rerun, environment=environment)
-            # 3
-            else:
-                await self.expand_runnable(runnable, wait=True, rerun=rerun)  # TODO
+            await self.expand_runnable(runnable, wait=True, rerun=rerun)  # TODO
         return True
 
     async def expand_runnable(self, runnable, wait=False, rerun=False):
@@ -123,20 +118,17 @@ class Submitter:
             raise NotImplementedError()
 
         futures = set()
-        if runnable.state is None:
-            raise Exception("Only runnables with state should reach here")
 
-        task_pkl = await prepare_runnable_with_state(runnable)
+        task_pkl = await prepare_runnable(runnable)
 
-        for sidx in range(len(runnable.state.states_val)):
-            if is_workflow(runnable):
-                # job has no state anymore
-                futures.add(
-                    # This unpickles and runs workflow - why are we pickling?
-                    asyncio.create_task(load_and_run_async(task_pkl, sidx, self, rerun))
-                )
-            else:
-                futures.add(self.worker.run_el((sidx, task_pkl, runnable), rerun=rerun))
+        if is_workflow(runnable):
+            # job has no state anymore
+            futures.add(
+                # This unpickles and runs workflow - why are we pickling?
+                asyncio.create_task(load_and_run_async(task_pkl, self, rerun))
+            )
+        else:
+            futures.add(self.worker.run_el((task_pkl, runnable), rerun=rerun))
 
         if wait and futures:
             # if wait is True, we are at the end of the graph / state expansion.
@@ -338,10 +330,7 @@ def is_runnable(graph, obj):
     return True
 
 
-async def prepare_runnable_with_state(runnable):
-    runnable.state.prepare_states(runnable.inputs, cont_dim=runnable.cont_dim)
-    runnable.state.prepare_inputs()
-    logger.debug(f"Expanding {runnable} into {len(runnable.state.states_val)} states")
+async def prepare_runnable(runnable):
     return runnable.pickle_task()
 
 
