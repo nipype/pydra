@@ -783,19 +783,6 @@ def extract_function_inputs_and_outputs(
         else:
             inputs[inpt_name] = arg_type(type=inpt, default=default)
     return_type = type_hints.get("return", ty.Any)
-    if outputs is None:
-        src = inspect.getsource(function).strip()
-        return_lines = re.findall(r"\n\s+return .*$", src)
-        if len(return_lines) == 1 and src.endswith(return_lines[0]):
-            return_line = return_lines[0].split("#")[0]
-            implicit_outputs = [
-                o.strip()
-                for o in re.match(r"\s*return\s+(.*)", return_line).group(1).split(",")
-            ]
-            if len(implicit_outputs) and all(
-                re.match(r"^\w+$", o) for o in implicit_outputs
-            ):
-                outputs = implicit_outputs
     if outputs and len(outputs) > 1:
         if return_type is not ty.Any:
             if ty.get_origin(return_type) is not tuple:
