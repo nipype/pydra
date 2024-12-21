@@ -1,5 +1,5 @@
 from ..helpers import load_task
-from pydra import mark
+from pydra.design import python
 
 import numpy as np
 from pympler import asizeof
@@ -10,7 +10,7 @@ def generate_list(l):
     return np.arange(l).tolist()
 
 
-@mark.task
+@python.define
 def show_var(a):
     return a
 

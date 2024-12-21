@@ -5,21 +5,21 @@ import pytest
 import typing as ty
 
 from ..submitter import Submitter
-from pydra import mark
+from pydra.design import python
 from fileformats.generic import File, Directory
 
 
-@mark.task
+@python.define
 def dir_count_file(dirpath):
     return len(os.listdir(dirpath))
 
 
-@mark.task
+@python.define
 def dir_count_file_annot(dirpath: Directory):
     return len(os.listdir(dirpath))
 
 
-@mark.task
+@python.define
 def file_add2(file):
     array_inp = np.load(file)
     array_out = array_inp + 2
@@ -30,7 +30,7 @@ def file_add2(file):
     return file_out
 
 
-@mark.task
+@python.define
 def file_mult(file):
     array_inp = np.load(file)
     array_out = 10 * array_inp
@@ -40,7 +40,7 @@ def file_mult(file):
     return file_out
 
 
-@mark.task
+@python.define
 def file_add2_annot(file: File) -> ty.NamedTuple("Output", [("out", File)]):
     array_inp = np.load(file)
     array_out = array_inp + 2
@@ -51,7 +51,7 @@ def file_add2_annot(file: File) -> ty.NamedTuple("Output", [("out", File)]):
     return file_out
 
 
-@mark.task
+@python.define
 def file_mult_annot(file: File) -> ty.NamedTuple("Output", [("out", File)]):
     array_inp = np.load(file)
     array_out = 10 * array_inp

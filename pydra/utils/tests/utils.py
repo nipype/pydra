@@ -1,6 +1,6 @@
 from fileformats.generic import File
 from fileformats.core.mixin import WithSeparateHeader, WithMagicNumber
-from pydra import mark
+from pydra.design import python
 from pydra.engine.task import ShellTask
 from pydra.engine import specs
 from pydra.design import shell, python
@@ -51,7 +51,7 @@ class GenericShellTask(specs.ShellSpec["GenericShellTask.Outputs"]):
     executable = "echo"
 
 
-@mark.task
+@python.define
 def specific_func_task(in_file: MyFormatX) -> MyFormatX:
     return in_file
 

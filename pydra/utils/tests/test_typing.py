@@ -5,7 +5,7 @@ import typing as ty
 from pathlib import Path
 import tempfile
 import pytest
-from pydra import mark
+from pydra.design import python
 from pydra.engine.specs import File
 from pydra.engine.workflow.lazy import LazyOutField
 from ..typing import TypeParser, MultiInputObj
@@ -520,7 +520,7 @@ def test_type_coercion_realistic():
     Path.touch(yet_another_file)
     file_list = [File(p) for p in (a_file, another_file, yet_another_file)]
 
-    @mark.task
+    @python.define
     @mark.annotate({"return": {"a": ty.List[File], "b": ty.List[str]}})
     def f(x: ty.List[File], y: ty.Dict[str, ty.List[File]]):
         return list(itertools.chain(x, *y.values())), list(y.keys())

@@ -7,7 +7,7 @@ import cloudpickle as cp
 from pathlib import Path
 import json
 import glob as glob
-from pydra import mark
+from pydra.design import python
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from ..task import AuditFlag, ShellTask
 from pydra.engine.specs import argstr_formatting
@@ -29,7 +29,7 @@ no_win = pytest.mark.skipif(
 )
 
 
-@mark.task
+@python.define
 def funaddtwo(a):
     return a + 2
 
@@ -71,7 +71,7 @@ def test_checksum():
 
 
 def test_annotated_func():
-    @mark.task
+    @python.define
     def testfunc(
         a: int, b: float = 0.1
     ) -> ty.NamedTuple("Output", [("out_out", float)]):
@@ -117,7 +117,7 @@ def test_annotated_func():
 def test_annotated_func_dictreturn():
     """Test mapping from returned dictionary to output spec."""
 
-    @mark.task
+    @python.define
     @mark.annotate({"return": {"sum": int, "mul": ty.Optional[int]}})
     def testfunc(a: int, b: int):
         return dict(sum=a + b, diff=a - b)
@@ -138,7 +138,7 @@ def test_annotated_func_dictreturn():
 def test_annotated_func_multreturn():
     """the function has two elements in the return statement"""
 
-    @mark.task
+    @python.define
     def testfunc(
         a: float,
     ) -> ty.NamedTuple("Output", [("fractional", float), ("integer", int)]):
@@ -177,7 +177,7 @@ def test_annotated_func_multreturn():
 def test_annotated_input_func_1():
     """the function with annotated input (float)"""
 
-    @mark.task
+    @python.define
     def testfunc(a: float):
         return a
 
@@ -188,7 +188,7 @@ def test_annotated_input_func_1():
 def test_annotated_input_func_2():
     """the function with annotated input (int, but float provided)"""
 
-    @mark.task
+    @python.define
     def testfunc(a: int):
         return a
 
@@ -199,7 +199,7 @@ def test_annotated_input_func_2():
 def test_annotated_input_func_2a():
     """the function with annotated input (int, but float provided)"""
 
-    @mark.task
+    @python.define
     def testfunc(a: int):
         return a
 
@@ -211,7 +211,7 @@ def test_annotated_input_func_2a():
 def test_annotated_input_func_3():
     """the function with annotated input (list)"""
 
-    @mark.task
+    @python.define
     def testfunc(a: list):
         return sum(a)
 
@@ -222,7 +222,7 @@ def test_annotated_input_func_3():
 def test_annotated_input_func_3a():
     """the function with annotated input (list of floats)"""
 
-    @mark.task
+    @python.define
     def testfunc(a: ty.List[float]):
         return sum(a)
 
@@ -235,7 +235,7 @@ def test_annotated_input_func_3b():
     (list of floats - int and float provided, should be fine)
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: ty.List[float]):
         return sum(a)
 
@@ -248,7 +248,7 @@ def test_annotated_input_func_3c_excep():
     (list of ints - int and float provided, should raise an error)
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: ty.List[int]):
         return sum(a)
 
@@ -259,7 +259,7 @@ def test_annotated_input_func_3c_excep():
 def test_annotated_input_func_4():
     """the function with annotated input (dictionary)"""
 
-    @mark.task
+    @python.define
     def testfunc(a: dict):
         return sum(a.values())
 
@@ -270,7 +270,7 @@ def test_annotated_input_func_4():
 def test_annotated_input_func_4a():
     """the function with annotated input (dictionary of floats)"""
 
-    @mark.task
+    @python.define
     def testfunc(a: ty.Dict[str, float]):
         return sum(a.values())
 
@@ -281,7 +281,7 @@ def test_annotated_input_func_4a():
 def test_annotated_input_func_4b_excep():
     """the function with annotated input (dictionary of ints, but float provided)"""
 
-    @mark.task
+    @python.define
     def testfunc(a: ty.Dict[str, int]):
         return sum(a.values())
 
@@ -295,7 +295,7 @@ def test_annotated_input_func_5():
     so no error for 3.5
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: ty.Dict[str, ty.List]):
         return sum(a["el1"])
 
@@ -308,7 +308,7 @@ def test_annotated_input_func_5a_except():
     list is provided as a dict value (instead a dict), so error is raised
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: ty.Dict[str, ty.Dict[str, float]]):
         return sum(a["el1"])
 
@@ -321,7 +321,7 @@ def test_annotated_input_func_6():
     the validator should unpack values from the Union
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: ty.Dict[str, ty.Union[float, int]]):
         return sum(a["el1"])
 
@@ -334,7 +334,7 @@ def test_annotated_input_func_6a_excep():
     the validator should unpack values from the Union and raise an error for 3.5
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: ty.Dict[str, ty.Union[str, int]]):
         return sum(a["el1"])
 
@@ -348,7 +348,7 @@ def test_annotated_input_func_7():
     it should work, the validator tries to guess if this is a field with a splitter
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: float):
         return a
 
@@ -361,7 +361,7 @@ def test_annotated_input_func_7a_excep():
     list of float provided - should raise an error (list of int would be fine)
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: int):
         return a
 
@@ -374,7 +374,7 @@ def test_annotated_input_func_8():
     a single value is provided and should be converted to a list
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: MultiInputObj):
         return len(a)
 
@@ -389,7 +389,7 @@ def test_annotated_input_func_8a():
     a 1-el list is provided so shouldn't be changed
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: MultiInputObj):
         return len(a)
 
@@ -405,7 +405,7 @@ def test_annotated_input_func_8b():
     (input should still be converted to a list)
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: MultiInputObj):
         return len(a)
 
@@ -422,7 +422,7 @@ def test_annotated_func_multreturn_exception():
     but three element provided in the spec - should raise an error
     """
 
-    @mark.task
+    @python.define
     def testfunc(
         a: float,
     ) -> ty.NamedTuple(
@@ -439,7 +439,7 @@ def test_annotated_func_multreturn_exception():
 
 
 def test_halfannotated_func():
-    @mark.task
+    @python.define
     def testfunc(a, b) -> int:
         return a + b
 
@@ -480,7 +480,7 @@ def test_halfannotated_func():
 
 
 def test_halfannotated_func_multreturn():
-    @mark.task
+    @python.define
     def testfunc(a, b) -> (int, int):
         return a + 1, b + 1
 
@@ -522,7 +522,7 @@ def test_halfannotated_func_multreturn():
 
 
 def test_notannotated_func():
-    @mark.task
+    @python.define
     def no_annots(c, d):
         return c + d
 
@@ -538,7 +538,7 @@ def test_notannotated_func():
 
 
 def test_notannotated_func_returnlist():
-    @mark.task
+    @python.define
     def no_annots(c, d):
         return [c, d]
 
@@ -549,7 +549,7 @@ def test_notannotated_func_returnlist():
 
 
 def test_halfannotated_func_multrun_returnlist():
-    @mark.task
+    @python.define
     def no_annots(c, d) -> (list, float):
         return [c, d], c + d
 
@@ -567,7 +567,7 @@ def test_notannotated_func_multreturn():
     all elements should be returned as a tuple and set to "out"
     """
 
-    @mark.task
+    @python.define
     def no_annots(c, d):
         return c + d, c - d
 
@@ -585,7 +585,7 @@ def test_notannotated_func_multreturn():
 def test_input_spec_func_1():
     """the function w/o annotated, but input_spec is used"""
 
-    @mark.task
+    @python.define
     def testfunc(a):
         return a
 
@@ -604,7 +604,7 @@ def test_input_spec_func_1a_except():
     a TypeError is raised (float is provided instead of int)
     """
 
-    @mark.task
+    @python.define
     def testfunc(a):
         return a
 
@@ -622,7 +622,7 @@ def test_input_spec_func_1b_except():
     metadata checks raise an error
     """
 
-    @mark.task
+    @python.define
     def testfunc(a):
         return a
 
@@ -645,7 +645,7 @@ def test_input_spec_func_1d_except():
     input_spec doesn't contain 'a' input, an error is raised
     """
 
-    @mark.task
+    @python.define
     def testfunc(a):
         return a
 
@@ -660,7 +660,7 @@ def test_input_spec_func_2():
     input_spec changes the type of the input (so error is not raised)
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: int):
         return a
 
@@ -680,7 +680,7 @@ def test_input_spec_func_2a():
     using the shorter syntax
     """
 
-    @mark.task
+    @python.define
     def testfunc(a: int):
         return a
 
@@ -699,7 +699,7 @@ def test_input_spec_func_3():
     additional keys (allowed_values) are used in metadata
     """
 
-    @mark.task
+    @python.define
     def testfunc(a):
         return a
 
@@ -726,7 +726,7 @@ def test_input_spec_func_3a_except():
     allowed_values is used in metadata and the ValueError is raised
     """
 
-    @mark.task
+    @python.define
     def testfunc(a):
         return a
 
@@ -753,7 +753,7 @@ def test_input_spec_func_4():
     but b is set as mandatory in the input_spec, so error is raised if not provided
     """
 
-    @mark.task
+    @python.define
     def testfunc(a, b=1):
         return a + b
 
@@ -786,7 +786,7 @@ def test_input_spec_func_4a():
     has a different default value, so value from the function is overwritten
     """
 
-    @mark.task
+    @python.define
     def testfunc(a, b=1):
         return a + b
 
@@ -814,7 +814,7 @@ def test_input_spec_func_5():
     a single value is provided and should be converted to a list
     """
 
-    @mark.task
+    @python.define
     def testfunc(a):
         return len(a)
 
@@ -835,7 +835,7 @@ def test_input_spec_func_5():
 def test_output_spec_func_1():
     """the function w/o annotated, but output_spec is used"""
 
-    @mark.task
+    @python.define
     def testfunc(a):
         return a
 
@@ -855,7 +855,7 @@ def test_output_spec_func_1a_except():
     float returned instead of int - TypeError
     """
 
-    @mark.task
+    @python.define
     def testfunc(a):
         return a
 
@@ -875,7 +875,7 @@ def test_output_spec_func_2():
     output_spec changes the type of the output (so error is not raised)
     """
 
-    @mark.task
+    @python.define
     def testfunc(a) -> int:
         return a
 
@@ -896,7 +896,7 @@ def test_output_spec_func_2a():
     using a shorter syntax
     """
 
-    @mark.task
+    @python.define
     def testfunc(a) -> int:
         return a
 
@@ -916,7 +916,7 @@ def test_output_spec_func_3():
     MultiOutputObj is used, output is a 2-el list, so converter doesn't do anything
     """
 
-    @mark.task
+    @python.define
     def testfunc(a, b):
         return [a, b]
 
@@ -941,7 +941,7 @@ def test_output_spec_func_4():
     MultiOutputObj is used, output is a 1el list, so converter return the element
     """
 
-    @mark.task
+    @python.define
     def testfunc(a):
         return [a]
 
@@ -962,7 +962,7 @@ def test_output_spec_func_4():
 
 
 def test_exception_func():
-    @mark.task
+    @python.define
     def raise_exception(c, d):
         raise Exception()
 
@@ -973,7 +973,7 @@ def test_exception_func():
 def test_result_none_1():
     """checking if None is properly returned as the result"""
 
-    @mark.task
+    @python.define
     def fun_none(x):
         return None
 
@@ -985,7 +985,7 @@ def test_result_none_1():
 def test_result_none_2():
     """checking if None is properly set for all outputs"""
 
-    @mark.task
+    @python.define
     def fun_none(x) -> (ty.Any, ty.Any):
         return None
 
@@ -998,7 +998,7 @@ def test_result_none_2():
 def test_audit_prov(
     tmpdir,
 ):
-    @mark.task
+    @python.define
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
@@ -1020,7 +1020,7 @@ def test_audit_prov(
 
 
 def test_audit_task(tmpdir):
-    @mark.task
+    @python.define
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
@@ -1200,7 +1200,7 @@ def test_audit_prov_messdir_1(
 ):
     """customized messenger dir"""
 
-    @mark.task
+    @python.define
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
@@ -1228,7 +1228,7 @@ def test_audit_prov_messdir_2(
 ):
     """customized messenger dir in init"""
 
-    @mark.task
+    @python.define
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
@@ -1260,7 +1260,7 @@ def test_audit_prov_wf(
 ):
     """FileMessenger for wf"""
 
-    @mark.task
+    @python.define
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
@@ -1287,7 +1287,7 @@ def test_audit_prov_wf(
 def test_audit_all(
     tmpdir,
 ):
-    @mark.task
+    @python.define
     def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
@@ -1480,7 +1480,7 @@ def test_traceback(tmpdir):
     full traceback including the line in the python function
     """
 
-    @mark.task
+    @python.define
     def fun_error(x):
         raise Exception("Error from the function")
 
@@ -1507,7 +1507,7 @@ def test_traceback_wf(tmpdir):
     full traceback including the line in the python function
     """
 
-    @mark.task
+    @python.define
     def fun_error(x):
         raise Exception("Error from the function")
 
@@ -1534,7 +1534,7 @@ def test_rerun_errored(tmpdir, capfd):
     """Test rerunning a task containing errors.
     Only the errored tasks should be rerun"""
 
-    @mark.task
+    @python.define
     def pass_odds(x):
         if x % 2 == 0:
             print(f"x%2 = {x % 2} (error)\n")
@@ -1576,7 +1576,7 @@ class A:
 def test_object_input():
     """Test function tasks with object inputs"""
 
-    @mark.task
+    @python.define
     def testfunc(a: A):
         return a.x
 

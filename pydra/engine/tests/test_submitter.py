@@ -20,12 +20,12 @@ from .utils import (
 from ..core import Task
 from ..submitter import Submitter
 from ..workers import SerialWorker
-from pydra import mark
+from pydra.design import python
 from pathlib import Path
 from datetime import datetime
 
 
-@mark.task
+@python.define
 def sleep_add_one(x):
     time.sleep(1)
     return x + 1
@@ -302,7 +302,7 @@ def test_slurm_args_2(tmpdir):
             sub(task)
 
 
-@mark.task
+@python.define
 def sleep(x, job_name_part):
     time.sleep(x)
     import subprocess as sp
@@ -319,7 +319,7 @@ def sleep(x, job_name_part):
     return x
 
 
-@mark.task
+@python.define
 def cancel(job_name_part):
     import subprocess as sp
 
@@ -580,7 +580,7 @@ def test_sge_no_limit_maxthreads(tmpdir):
 
 
 def test_hash_changes_in_task_inputs_file(tmp_path):
-    @mark.task
+    @python.define
     def output_dir_as_input(out_dir: Directory) -> Directory:
         (out_dir.fspath / "new-file.txt").touch()
         return out_dir
@@ -599,7 +599,7 @@ def test_hash_changes_in_task_inputs_unstable(tmp_path):
             """Random 128-bit bytestring"""
             yield secrets.token_bytes(16)
 
-    @mark.task
+    @python.define
     def unstable_input(unstable: Unstable) -> int:
         return unstable.value
 
@@ -609,7 +609,7 @@ def test_hash_changes_in_task_inputs_unstable(tmp_path):
 
 
 def test_hash_changes_in_workflow_inputs(tmp_path):
-    @mark.task
+    @python.define
     def output_dir_as_output(out_dir: Path) -> Directory:
         (out_dir / "new-file.txt").touch()
         return out_dir
@@ -639,17 +639,17 @@ def test_hash_changes_in_workflow_graph(tmpdir):
             hopefully cases like this will be very rare"""
             yield bytes(self.value)
 
-    @mark.task
+    @python.define
     @mark.annotate({"return": {"x": X, "y": int}})
     def identity(x: X) -> ty.Tuple[X, int]:
         return x, 99
 
-    @mark.task
+    @python.define
     def alter_x(y):
         X.value = 2
         return y
 
-    @mark.task
+    @python.define
     def to_tuple(x, y):
         return (x, y)
 
@@ -670,7 +670,7 @@ def test_hash_changes_in_workflow_graph(tmpdir):
             result = sub(wf)
 
 
-@mark.task
+@python.define
 def to_tuple(x, y):
     return (x, y)
 
@@ -693,7 +693,7 @@ class BYOAddVarWorker(SerialWorker):
             return super().exec_serial(runnable, rerun, environment)
 
 
-@mark.task
+@python.define
 def add_env_var_task(x: int) -> int:
     return x + int(os.environ.get("BYO_ADD_VAR", 0))
 

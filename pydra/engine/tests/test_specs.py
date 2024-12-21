@@ -21,7 +21,7 @@ from pydra.utils.typing import StateArray
 
 # from ..helpers import make_klass
 from .utils import foo
-from pydra import mark
+from pydra.design import python
 import pytest
 
 
@@ -352,7 +352,7 @@ def test_lazy_field_cast():
 
 
 def test_lazy_field_multi_same_split():
-    @mark.task
+    @python.define
     def f(x: ty.List[int]) -> ty.List[int]:
         return x
 
@@ -369,7 +369,7 @@ def test_lazy_field_multi_same_split():
 
 
 def test_lazy_field_multi_diff_split():
-    @mark.task
+    @python.define
     def f(x: ty.Any, y: ty.Any) -> ty.Any:
         return x
 
@@ -390,7 +390,7 @@ def test_lazy_field_multi_diff_split():
 
 
 def test_wf_lzin_split():
-    @mark.task
+    @python.define
     def identity(x: int) -> int:
         return x
 

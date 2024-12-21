@@ -34,7 +34,7 @@ from .utils import (
     DOT_FLAG,
 )
 from ..submitter import Submitter
-from pydra import mark
+from pydra.design import python
 from ..specs import ShellSpec
 from pydra.utils import exc_info_matches
 
@@ -4835,7 +4835,7 @@ def test_duplicate_input_on_split_wf(tmpdir):
     """
     text = ["test"] * 2
 
-    @mark.task
+    @python.define
     def printer(a):
         return a
 
@@ -4862,13 +4862,13 @@ def test_inner_outer_wf_duplicate(tmpdir):
     task_list = ["First", "Second"]
     start_list = [3, 4]
 
-    @mark.task
+    @python.define
     def one_arg(start_number):
         for k in range(10):
             start_number += 1
         return start_number
 
-    @mark.task
+    @python.define
     def one_arg_inner(start_number):
         for k in range(10):
             start_number += 1
@@ -4911,7 +4911,7 @@ def test_rerun_errored(tmpdir, capfd):
     """Test rerunning a workflow containing errors.
     Only the errored tasks and workflow should be rerun"""
 
-    @mark.task
+    @python.define
     def pass_odds(x):
         if x % 2 == 0:
             print(f"x%2 = {x % 2} (error)\n")
