@@ -435,7 +435,7 @@ def load_and_run(task_pkl, rerun=False, submitter=None, plugin=None, **kwargs):
     resultfile = task.output_dir / "_result.pklz"
     try:
         task(rerun=rerun, plugin=plugin, submitter=submitter, **kwargs)
-    except Exception as excinfo:
+    except Exception as e:
         # creating result and error files if missing
         errorfile = task.output_dir / "_error.pklz"
         if not errorfile.exists():  # not sure if this is needed
@@ -445,10 +445,8 @@ def load_and_run(task_pkl, rerun=False, submitter=None, plugin=None, **kwargs):
         if not resultfile.exists():  # not sure if this is needed
             result = Result(output=None, runtime=None, errored=True)
             save(task.output_dir, result=result)
-        raise type(excinfo)(
-            str(excinfo.with_traceback(None)),
-            f" full crash report is here: {errorfile}",
-        )
+        e.add_note(f" full crash report is here: {errorfile}")
+        raise
     return resultfile
 
 

@@ -367,7 +367,6 @@ class Task:
 
         if submitter:
             with submitter as sub:
-                self.spec = attr.evolve(self.spec, **kwargs)
                 res = sub(self, environment=environment)
         else:  # tasks without state could be run without a submitter
             res = self._run(rerun=rerun, environment=environment, **kwargs)
