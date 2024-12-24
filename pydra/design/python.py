@@ -115,6 +115,11 @@ def define(
         The outputs of the function or class.
     auto_attribs : bool
         Whether to use auto_attribs mode when creating the class.
+
+    Returns
+    -------
+    PythonSpec
+        The task specification class for the Python function
     """
     from pydra.engine.task import PythonTask
     from pydra.engine.specs import PythonSpec, PythonOutputs

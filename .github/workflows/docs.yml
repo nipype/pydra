@@ -1,0 +1,66 @@
+# This workflows will upload a Python Package using Twine when a release is created
+# For more information see: https://help.github.com/en/actions/language-and-framework-guides/using-python-with-github-actions#publishing-to-package-registries
+
+name: Build docs
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  # release:
+  #   types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    - name: Install Pandoc
+      run: |
+        sudo apt-get update
+        sudo apt-get install -Y pandoc
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+
+    - name: Build docs
+      run: |
+        cd docs
+        make html
+        twine upload dist/*
+    - uses: actions/upload-artifact@v3
+      with:
+        name: built-docs
+        path: docs/build/html
+
+  deploy:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download built docs
+      uses: actions/download-artifact@v3
+      with:
+        name: built-docs
+        path: docs-build
+    - name: Check for GHPAGES_DEPLOY_KEY token
+      id: deployable
+      if: github.event_name == 'release'
+      env:
+        GHPAGES_DEPLOY_KEY: "${{ secrets.GHPAGES_DEPLOY_KEY }}"
+      run: if [ -n "$GHPAGES_DEPLOY_KEY" ]; then echo "DEPLOY=true" >> $GITHUB_OUTPUT; fi
+    - name: Deploy Docs to GitHub Pages
+      if: steps.deployable.outputs.DEPLOY
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GHPAGES_DEPLOY_KEY }}
+        publish_dir: docs-build
