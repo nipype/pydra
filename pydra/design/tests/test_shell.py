@@ -20,16 +20,16 @@ from pydra.utils.typing import MultiInputObj
 
 def test_interface_template():
 
-    SampleInterface = shell.define("cp <in_path> <out|out_path>")
+    Cp = shell.define("cp <in_path> <out|out_path>")
 
-    assert issubclass(SampleInterface, ShellSpec)
+    assert issubclass(Cp, ShellSpec)
     output = shell.outarg(
         name="out_path",
         path_template="out_path",
         type=FsObject,
         position=2,
     )
-    assert sorted_fields(SampleInterface) == [
+    assert sorted_fields(Cp) == [
         shell.arg(
             name="executable",
             validator=attrs.validators.min_len(1),
@@ -41,7 +41,7 @@ def test_interface_template():
         shell.arg(name="in_path", type=FsObject, position=1),
         output,
     ]
-    assert sorted_fields(SampleInterface.Outputs) == [
+    assert sorted_fields(Cp.Outputs) == [
         output,
         shell.out(
             name="return_code",
@@ -59,26 +59,24 @@ def test_interface_template():
             help_string=STDOUT_HELP,
         ),
     ]
-    intf = SampleInterface(in_path=File.mock("in-path.txt"))
+    intf = Cp(in_path=File.mock("in-path.txt"))
     assert intf.executable == "cp"
-    SampleInterface(in_path=File.mock("in-path.txt"), out_path=Path("./out-path.txt"))
-    SampleInterface.Outputs(out_path=File.mock("in-path.txt"))
+    Cp(in_path=File.mock("in-path.txt"), out_path=Path("./out-path.txt"))
+    Cp.Outputs(out_path=File.mock("in-path.txt"))
 
 
 def test_interface_template_w_types_and_path_template_ext():
 
-    SampleInterface = shell.define(
-        "trim-png <in_image:image/png> <out|out_image:image/png>"
-    )
+    TrimPng = shell.define("trim-png <in_image:image/png> <out|out_image:image/png>")
 
-    assert issubclass(SampleInterface, ShellSpec)
+    assert issubclass(TrimPng, ShellSpec)
     output = shell.outarg(
         name="out_image",
         path_template="out_image.png",
         type=image.Png,
         position=2,
     )
-    assert sorted_fields(SampleInterface) == [
+    assert sorted_fields(TrimPng) == [
         shell.arg(
             name="executable",
             validator=attrs.validators.min_len(1),
@@ -90,7 +88,7 @@ def test_interface_template_w_types_and_path_template_ext():
         shell.arg(name="in_image", type=image.Png, position=1),
         output,
     ]
-    assert sorted_fields(SampleInterface.Outputs) == [
+    assert sorted_fields(TrimPng.Outputs) == [
         output,
         shell.out(
             name="return_code",
@@ -108,17 +106,17 @@ def test_interface_template_w_types_and_path_template_ext():
             help_string=STDOUT_HELP,
         ),
     ]
-    SampleInterface(in_image=image.Png.mock())
-    SampleInterface(in_image=image.Png.mock(), out_image=Path("./new_image.png"))
-    SampleInterface.Outputs(out_image=image.Png.mock())
+    TrimPng(in_image=image.Png.mock())
+    TrimPng(in_image=image.Png.mock(), out_image=Path("./new_image.png"))
+    TrimPng.Outputs(out_image=image.Png.mock())
 
 
 def test_interface_template_w_modify():
 
-    SampleInterface = shell.define("trim-png <modify|image:image/png>")
+    TrimPng = shell.define("trim-png <modify|image:image/png>")
 
-    assert issubclass(SampleInterface, ShellSpec)
-    assert sorted_fields(SampleInterface) == [
+    assert issubclass(TrimPng, ShellSpec)
+    assert sorted_fields(TrimPng) == [
         shell.arg(
             name="executable",
             validator=attrs.validators.min_len(1),
@@ -131,7 +129,7 @@ def test_interface_template_w_modify():
             name="image", type=image.Png, position=1, copy_mode=File.CopyMode.copy
         ),
     ]
-    assert sorted_fields(SampleInterface.Outputs) == [
+    assert sorted_fields(TrimPng.Outputs) == [
         shell.out(
             name="image",
             type=image.Png,
@@ -153,13 +151,13 @@ def test_interface_template_w_modify():
             help_string=STDOUT_HELP,
         ),
     ]
-    SampleInterface(image=image.Png.mock())
-    SampleInterface.Outputs(image=image.Png.mock())
+    TrimPng(image=image.Png.mock())
+    TrimPng.Outputs(image=image.Png.mock())
 
 
 def test_interface_template_more_complex():
 
-    SampleInterface = shell.define(
+    Cp = shell.define(
         (
             "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
             "-R<recursive> "
@@ -169,14 +167,14 @@ def test_interface_template_more_complex():
         ),
     )
 
-    assert issubclass(SampleInterface, ShellSpec)
+    assert issubclass(Cp, ShellSpec)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
         path_template="out_dir",
         position=2,
     )
-    assert sorted_fields(SampleInterface) == [
+    assert sorted_fields(Cp) == [
         shell.arg(
             name="executable",
             validator=attrs.validators.min_len(1),
@@ -212,7 +210,7 @@ def test_interface_template_more_complex():
             position=6,
         ),
     ]
-    assert sorted_fields(SampleInterface.Outputs) == [
+    assert sorted_fields(Cp.Outputs) == [
         output,
         shell.out(
             name="return_code",
@@ -230,8 +228,8 @@ def test_interface_template_more_complex():
             help_string=STDOUT_HELP,
         ),
     ]
-    SampleInterface(in_fs_objects=[File.sample(), File.sample(seed=1)])
-    SampleInterface.Outputs(out_dir=Directory.sample())
+    Cp(in_fs_objects=[File.sample(), File.sample(seed=1)])
+    Cp.Outputs(out_dir=Directory.sample())
 
 
 def test_interface_template_with_overrides_and_optionals():
@@ -241,7 +239,7 @@ def test_interface_template_with_overrides_and_optionals():
         "subtree connected at that point."
     )
 
-    SampleInterface = shell.define(
+    Cp = shell.define(
         (
             "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> <out|out_file:file?> "
             "-R<recursive> "
@@ -256,7 +254,7 @@ def test_interface_template_with_overrides_and_optionals():
         },
     )
 
-    assert issubclass(SampleInterface, ShellSpec)
+    assert issubclass(Cp, ShellSpec)
     outargs = [
         shell.outarg(
             name="out_dir",
@@ -273,7 +271,7 @@ def test_interface_template_with_overrides_and_optionals():
         ),
     ]
     assert (
-        sorted_fields(SampleInterface)
+        sorted_fields(Cp)
         == [
             shell.arg(
                 name="executable",
@@ -311,7 +309,7 @@ def test_interface_template_with_overrides_and_optionals():
         ]
         + outargs
     )
-    assert sorted_fields(SampleInterface.Outputs) == outargs + [
+    assert sorted_fields(Cp.Outputs) == outargs + [
         shell.out(
             name="return_code",
             type=int,
@@ -332,7 +330,7 @@ def test_interface_template_with_overrides_and_optionals():
 
 def test_interface_template_with_defaults():
 
-    SampleInterface = shell.define(
+    Cp = shell.define(
         (
             "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
             "-R<recursive=True> "
@@ -342,14 +340,14 @@ def test_interface_template_with_defaults():
         ),
     )
 
-    assert issubclass(SampleInterface, ShellSpec)
+    assert issubclass(Cp, ShellSpec)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
         path_template="out_dir",
         position=2,
     )
-    assert sorted_fields(SampleInterface) == [
+    assert sorted_fields(Cp) == [
         shell.arg(
             name="executable",
             validator=attrs.validators.min_len(1),
@@ -375,7 +373,7 @@ def test_interface_template_with_defaults():
             position=6,
         ),
     ]
-    assert sorted_fields(SampleInterface.Outputs) == [
+    assert sorted_fields(Cp.Outputs) == [
         output,
         shell.out(
             name="return_code",
@@ -393,13 +391,13 @@ def test_interface_template_with_defaults():
             help_string=STDOUT_HELP,
         ),
     ]
-    SampleInterface(in_fs_objects=[File.sample(), File.sample(seed=1)])
-    SampleInterface.Outputs(out_dir=Directory.sample())
+    Cp(in_fs_objects=[File.sample(), File.sample(seed=1)])
+    Cp.Outputs(out_dir=Directory.sample())
 
 
 def test_interface_template_with_type_overrides():
 
-    SampleInterface = shell.define(
+    Cp = shell.define(
         (
             "cp <in_fs_objects:fs-object,...> <out|out_dir:directory> "
             "-R<recursive> "
@@ -410,14 +408,14 @@ def test_interface_template_with_type_overrides():
         inputs={"text_arg": str, "int_arg": int | None},
     )
 
-    assert issubclass(SampleInterface, ShellSpec)
+    assert issubclass(Cp, ShellSpec)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
         path_template="out_dir",
         position=2,
     )
-    assert sorted_fields(SampleInterface) == [
+    assert sorted_fields(Cp) == [
         shell.arg(
             name="executable",
             validator=attrs.validators.min_len(1),
@@ -445,7 +443,7 @@ def test_interface_template_with_type_overrides():
             position=6,
         ),
     ]
-    assert sorted_fields(SampleInterface.Outputs) == [
+    assert sorted_fields(Cp.Outputs) == [
         output,
         shell.out(
             name="return_code",
