@@ -10,7 +10,7 @@ import subprocess as sp
 from contextlib import contextmanager
 import attr
 from fileformats.core import FileSet
-from pydra.engine.helpers import is_lazy, attrs_values
+from pydra.engine.helpers import is_lazy, attrs_values, list_fields
 
 
 logger = logging.getLogger("pydra")
@@ -114,17 +114,18 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
             k = k.split(".")[1]
             inputs_dict_st[k] = inputs_dict_st[k][v]
 
-    from .specs import attrs_fields
+    from pydra.design import shell
 
     # Collect templated inputs for which all requirements are satisfied.
     fields_templ = [
         field
-        for field in attrs_fields(inputs)
-        if field.metadata.get("output_file_template")
+        for field in list_fields(inputs)
+        if isinstance(field, shell.outarg)
+        and field.path_template
         and getattr(inputs, field.name) is not False
         and all(
-            getattr(inputs, required_field) is not attr.NOTHING
-            for required_field in field.metadata.get("requires", ())
+            getattr(inputs, required_field) is not None
+            for required_field in field.requires
         )
     ]
 
@@ -151,8 +152,7 @@ def template_update_single(
     """
     # if input_dict_st with state specific value is not available,
     # the dictionary will be created from inputs object
-    from pydra.utils.typing import TypeParser  # noqa
-    from pydra.engine.specs import OUTPUT_TEMPLATE_TYPES
+    from pydra.utils.typing import TypeParser, OUTPUT_TEMPLATE_TYPES  # noqa
 
     if inputs_dict_st is None:
         inputs_dict_st = attrs_values(inputs)
@@ -200,9 +200,23 @@ def _template_formatting(field, inputs, inputs_dict_st):
     returning a list of formatted templates in that case.
     Allowing for multiple input values used in the template as longs as
     there is no more than one file (i.e. File, PathLike or string with extensions)
+
+    Parameters
+    ----------
+    field : pydra.engine.helpers.Field
+        field with a template
+    inputs : pydra.engine.helpers.Input
+        inputs object
+    inputs_dict_st : dict
+        dictionary with values from inputs object
+
+    Returns
+    -------
+    formatted : str or list
+        formatted template
     """
     # if a template is a function it has to be run first with the inputs as the only arg
-    template = field.metadata["output_file_template"]
+    template = field.path_template
     if callable(template):
         template = template(inputs)
 
@@ -219,9 +233,8 @@ def _template_formatting(field, inputs, inputs_dict_st):
 
 
 def _string_template_formatting(field, template, inputs, inputs_dict_st):
-    from .specs import MultiInputObj, MultiOutputFile
+    from pydra.utils.typing import MultiInputObj, MultiOutputFile
 
-    keep_extension = field.metadata.get("keep_extension", True)
     inp_fields = re.findall(r"{\w+}", template)
     inp_fields_fl = re.findall(r"{\w+:[0-9.]+f}", template)
     inp_fields += [re.sub(":[0-9.]+f", "", el) for el in inp_fields_fl]
@@ -281,17 +294,25 @@ def _string_template_formatting(field, template, inputs, inputs_dict_st):
 
             formatted_value.append(
                 _element_formatting(
-                    template, val_dict_el, file_template, keep_extension=keep_extension
+                    template,
+                    val_dict_el,
+                    file_template,
+                    keep_extension=field.keep_extension,
                 )
             )
     else:
         formatted_value = _element_formatting(
-            template, val_dict, file_template, keep_extension=keep_extension
+            template, val_dict, file_template, keep_extension=field.keep_extension
         )
     return formatted_value
 
 
-def _element_formatting(template, values_template_dict, file_template, keep_extension):
+def _element_formatting(
+    template: str,
+    values_template_dict: dict[str, ty.Any],
+    file_template: str,
+    keep_extension: bool,
+):
     """Formatting a single template for a single element (if a list).
     Taking into account that a file used in the template (file_template)
     and the template itself could have file extensions

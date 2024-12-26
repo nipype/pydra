@@ -189,6 +189,7 @@ class outarg(Out, arg):
     """
 
     path_template: str | None = attrs.field(default=None)
+    keep_extension: bool = attrs.field(default=False)
 
     @path_template.validator
     def _validate_path_template(self, attribute, value):
@@ -196,6 +197,14 @@ class outarg(Out, arg):
             raise ValueError(
                 f"path_template ({value!r}) can only be provided when no default "
                 f"({self.default!r}) is provided"
+            )
+
+    @keep_extension.validator
+    def _validate_keep_extension(self, attribute, value):
+        if value and self.path_template is not None:
+            raise ValueError(
+                f"keep_extension ({value!r}) can only be provided when path_template "
+                f"is provided"
             )
 
 
@@ -465,7 +474,7 @@ def parse_command_line_template(
         outputs = {}
     parts = template.split()
     executable = []
-    for i, part in enumerate(parts, start=1):
+    for i, part in enumerate(parts):
         if part.startswith("<") or part.startswith("-"):
             break
         executable.append(part)

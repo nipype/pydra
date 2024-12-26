@@ -494,7 +494,7 @@ class ShellOutputs(Outputs):
                 )
             # Get the corresponding value from the inputs if it exists, which will be
             # passed through to the outputs, to permit manual overrides
-            if isinstance(fld, shell.outarg) and is_set(getattr(task.inputs, fld.name)):
+            if isinstance(fld, shell.outarg) and is_set(getattr(task.spec, fld.name)):
                 resolved_value = getattr(task.spec, fld.name)
             elif is_set(fld.default):
                 resolved_value = cls._resolve_default_value(fld, task.output_dir)
@@ -691,10 +691,20 @@ class ShellSpec(TaskSpec[ShellOutputsType]):
             else:
                 if name in modified_inputs:
                     pos_val = self._command_pos_args(
-                        field, value, output_dir, root=root
+                        field=field,
+                        value=value,
+                        inputs=inputs,
+                        root=root,
+                        output_dir=output_dir,
                     )
                 else:
-                    pos_val = self._command_pos_args(field, value, output_dir, inputs)
+                    pos_val = self._command_pos_args(
+                        field=field,
+                        value=value,
+                        output_dir=output_dir,
+                        inputs=inputs,
+                        root=root,
+                    )
                 if pos_val:
                     pos_args.append(pos_val)
 
@@ -755,7 +765,7 @@ class ShellSpec(TaskSpec[ShellOutputsType]):
             # Shift negatives down to allow args to be -1
             field.position += 1 if field.position >= 0 else -1
 
-        if value:
+        if value and isinstance(value, str):
             if root:  # values from templates
                 value = value.replace(str(output_dir), f"{root}{output_dir}")
 
