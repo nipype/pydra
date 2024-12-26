@@ -128,6 +128,11 @@ class out(Out):
 
     callable: ty.Callable | None = None
 
+    def __attrs_post_init__(self):
+        # Set type from return annotation of callable if not set
+        if self.type is ty.Any and self.callable:
+            self.type = ty.get_type_hints(self.callable).get("return", ty.Any)
+
 
 @attrs.define(kw_only=True)
 class outarg(Out, arg):
@@ -474,7 +479,7 @@ def parse_command_line_template(
         outputs = {}
     parts = template.split()
     executable = []
-    for i, part in enumerate(parts):
+    for i, part in enumerate(parts, start=1):
         if part.startswith("<") or part.startswith("-"):
             break
         executable.append(part)
@@ -484,7 +489,7 @@ def parse_command_line_template(
         executable = executable[0]
     if i == len(parts):
         return executable, inputs, outputs
-    args_str = " ".join(parts[i:])
+    args_str = " ".join(parts[i - 1 :])
     tokens = re.split(r"\s+", args_str.strip())
     arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+]+(?:\?|=[^>]+)?)>"
     opt_pattern = r"--?[a-zA-Z0-9_]+"

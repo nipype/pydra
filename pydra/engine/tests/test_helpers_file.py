@@ -413,7 +413,7 @@ def test_template_formatting(tmp_path):
     assert template_update_single(
         field,
         inputs,
-        inputs_dict_st=inputs_dict,
+        input_values=inputs_dict,
         output_dir=tmp_path,
         spec_type="input",
     ) == [str(tmp_path / "file.bvec"), str(tmp_path / "file.bval")]

@@ -97,7 +97,9 @@ def copy_nested_files(
 
 
 # not sure if this might be useful for Function Task
-def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
+def template_update(
+    spec, output_dir: Path, map_copyfiles: dict[str, Path] | None = None
+):
     """
     Update all templates that are present in the input spec.
 
@@ -105,26 +107,21 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
 
     """
 
-    inputs_dict_st = attrs_values(inputs)
+    inputs_dict_st = attrs_values(spec)
     if map_copyfiles is not None:
         inputs_dict_st.update(map_copyfiles)
-
-    if state_ind is not None:
-        for k, v in state_ind.items():
-            k = k.split(".")[1]
-            inputs_dict_st[k] = inputs_dict_st[k][v]
 
     from pydra.design import shell
 
     # Collect templated inputs for which all requirements are satisfied.
     fields_templ = [
         field
-        for field in list_fields(inputs)
+        for field in list_fields(spec)
         if isinstance(field, shell.outarg)
         and field.path_template
-        and getattr(inputs, field.name) is not False
+        and getattr(spec, field.name) is not False
         and all(
-            getattr(inputs, required_field) is not None
+            getattr(spec, required_field) is not None
             for required_field in field.requires
         )
     ]
@@ -133,8 +130,8 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
     for fld in fields_templ:
         dict_mod[fld.name] = template_update_single(
             field=fld,
-            inputs=inputs,
-            inputs_dict_st=inputs_dict_st,
+            spec=spec,
+            input_values=inputs_dict_st,
             output_dir=output_dir,
         )
     # adding elements from map_copyfiles to fields with templates
@@ -144,7 +141,11 @@ def template_update(inputs, output_dir, state_ind=None, map_copyfiles=None):
 
 
 def template_update_single(
-    field, inputs, inputs_dict_st=None, output_dir=None, spec_type="input"
+    field,
+    spec,
+    input_values: dict[str, ty.Any] = None,
+    output_dir: Path | None = None,
+    spec_type: str = "input",
 ):
     """Update a single template from the input_spec or output_spec
     based on the value from inputs_dict
@@ -154,11 +155,11 @@ def template_update_single(
     # the dictionary will be created from inputs object
     from pydra.utils.typing import TypeParser, OUTPUT_TEMPLATE_TYPES  # noqa
 
-    if inputs_dict_st is None:
-        inputs_dict_st = attrs_values(inputs)
+    if input_values is None:
+        input_values = attrs_values(spec)
 
     if spec_type == "input":
-        inp_val_set = inputs_dict_st[field.name]
+        inp_val_set = input_values[field.name]
         if isinstance(inp_val_set, bool) and field.type in (Path, str):
             raise TypeError(
                 f"type of '{field.name}' is Path, consider using Union[Path, bool]"
@@ -179,21 +180,21 @@ def template_update_single(
             return inp_val_set
         if inp_val_set is False:
             # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
-            return attr.NOTHING
+            return None
     # inputs_dict[field.name] is True or spec_type is output
-    value = _template_formatting(field, inputs, inputs_dict_st)
+    value = _template_formatting(field, spec, input_values)
     # changing path so it is in the output_dir
-    if output_dir and value is not attr.NOTHING:
+    if output_dir and value is not None:
         # should be converted to str, it is also used for input fields that should be str
         if type(value) is list:
             return [str(output_dir / Path(val).name) for val in value]
         else:
             return str(output_dir / Path(value).name)
     else:
-        return attr.NOTHING
+        return None
 
 
-def _template_formatting(field, inputs, inputs_dict_st):
+def _template_formatting(field, spec, input_values):
     """Formatting the field template based on the values from inputs.
     Taking into account that the field with a template can be a MultiOutputFile
     and the field values needed in the template can be a list -
@@ -218,21 +219,20 @@ def _template_formatting(field, inputs, inputs_dict_st):
     # if a template is a function it has to be run first with the inputs as the only arg
     template = field.path_template
     if callable(template):
-        template = template(inputs)
+        template = template(spec)
 
     # as default, we assume that keep_extension is True
     if isinstance(template, (tuple, list)):
         formatted = [
-            _string_template_formatting(field, t, inputs, inputs_dict_st)
-            for t in template
+            _string_template_formatting(field, t, spec, input_values) for t in template
         ]
     else:
         assert isinstance(template, str)
-        formatted = _string_template_formatting(field, template, inputs, inputs_dict_st)
+        formatted = _string_template_formatting(field, template, spec, input_values)
     return formatted
 
 
-def _string_template_formatting(field, template, inputs, inputs_dict_st):
+def _string_template_formatting(field, template, spec, input_values):
     from pydra.utils.typing import MultiInputObj, MultiOutputFile
 
     inp_fields = re.findall(r"{\w+}", template)
@@ -246,9 +246,9 @@ def _string_template_formatting(field, template, inputs, inputs_dict_st):
 
     for fld in inp_fields:
         fld_name = fld[1:-1]  # extracting the name form {field_name}
-        if fld_name not in inputs_dict_st:
+        if fld_name not in input_values:
             raise AttributeError(f"{fld_name} is not provided in the input")
-        fld_value = inputs_dict_st[fld_name]
+        fld_value = input_values[fld_name]
         if fld_value is attr.NOTHING:
             # if value is NOTHING, nothing should be added to the command
             return attr.NOTHING

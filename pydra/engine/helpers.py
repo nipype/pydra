@@ -48,6 +48,11 @@ def list_fields(spec: "type[TaskSpec] | TaskSpec") -> list["Field"]:
     ]
 
 
+def fields_dict(spec: "type[TaskSpec] | TaskSpec") -> dict[str, "Field"]:
+    """Returns the fields of a spec in a dictionary"""
+    return {f.name: f for f in list_fields(spec)}
+
+
 # from .specs import MultiInputFile, MultiInputObj, MultiOutputObj, MultiOutputFile
 
 
@@ -527,41 +532,6 @@ class PydraFileLock:
     async def __aexit__(self, exc_type, exc_value, traceback):
         self.lock.release()
         return None
-
-
-def parse_copyfile(fld: attrs.Attribute, default_collation=FileSet.CopyCollation.any):
-    """Gets the copy mode from the 'copyfile' value from a field attribute"""
-    copyfile = fld.metadata.get("copyfile", FileSet.CopyMode.any)
-    if isinstance(copyfile, tuple):
-        mode, collation = copyfile
-    elif isinstance(copyfile, str):
-        try:
-            mode, collation = copyfile.split(",")
-        except ValueError:
-            mode = copyfile
-            collation = default_collation
-        else:
-            collation = FileSet.CopyCollation[collation]
-        mode = FileSet.CopyMode[mode]
-    else:
-        if copyfile is True:
-            mode = FileSet.CopyMode.copy
-        elif copyfile is False:
-            mode = FileSet.CopyMode.link
-        elif copyfile is None:
-            mode = FileSet.CopyMode.any
-        else:
-            mode = copyfile
-        collation = default_collation
-    if not isinstance(mode, FileSet.CopyMode):
-        raise TypeError(
-            f"Unrecognised type for mode copyfile metadata of {fld}, {mode}"
-        )
-    if not isinstance(collation, FileSet.CopyCollation):
-        raise TypeError(
-            f"Unrecognised type for collation copyfile metadata of {fld}, {collation}"
-        )
-    return mode, collation
 
 
 def parse_format_string(fmtstr):

@@ -618,11 +618,31 @@ def ensure_field_objects(
                 out.name = output_name
             if not out.help_string:
                 out.help_string = output_helps.get(output_name, "")
-        else:
+        elif inspect.isclass(out):
             outputs[output_name] = out_type(
                 type=out,
                 name=output_name,
                 help_string=output_helps.get(output_name, ""),
+            )
+        elif isinstance(out, dict):
+            out_kwds = copy(out)
+            if "help_string" not in out_kwds:
+                out_kwds["help_string"] = output_helps.get(output_name, "")
+            outputs[output_name] = out_type(
+                name=output_name,
+                **out_kwds,
+            )
+        elif isinstance(out, ty.Callable) and hasattr(out_type, "callable"):
+            outputs[output_name] = out_type(
+                name=output_name,
+                type=ty.get_type_hints(out).get("return", ty.Any),
+                callable=out,
+                help_string=re.split(r"\n\s*\n", out.__doc__)[0] if out.__doc__ else "",
+            )
+        else:
+            raise ValueError(
+                f"Unrecognised value provided to outputs ({arg}), can be either {out_type} "
+                "type" + (" or callable" if hasattr(out_type, "callable") else "")
             )
 
     return inputs, outputs
