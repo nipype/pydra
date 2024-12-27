@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Shell-task design" href="shell.html" /><link rel="prev" title="Executing tasks" href="execution.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Task design - Pydra v0.1.dev1+g5f1bf12</title>
+        <title>Task design - Pydra v0.1.dev1+g1ca68f9</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
@@ -173,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g5f1bf12</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g1ca68f9</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -200,7 +200,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g5f1bf12</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+g1ca68f9</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -278,18 +278,18 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from pydra.design import python
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">python</span>
 
 
-def func(a: int) -&gt; float:
-    &quot;&quot;&quot;Sample function with inputs and outputs&quot;&quot;&quot;
-    return a * 2
+<span class="k">def</span> <span class="nf">func</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function with inputs and outputs&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">*</span> <span class="mi">2</span>
 
-SampleSpec = python.define(func)
+<span class="n">SampleSpec</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
 
-spec = SampleSpec(a=1)
-result = spec()
-print(result.output)
+<span class="n">spec</span> <span class="o">=</span> <span class="n">SampleSpec</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">spec</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -307,11 +307,11 @@ funcOutputs(out=2.0)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><br/><span></span>def func(a: int, k: float = 2.0) -&gt; float:
-    &quot;&quot;&quot;Sample function with inputs and outputs&quot;&quot;&quot;
-    return a * k
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><br/><span></span><span class="k">def</span> <span class="nf">func</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function with inputs and outputs&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">*</span> <span class="n">k</span>
 
-SampleSpec = python.define(func)
+<span class="n">SampleSpec</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
 <br/></pre></div>
 </div>
 </div>
@@ -322,17 +322,17 @@ SampleSpec = python.define(func)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from decimal import Decimal
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">decimal</span> <span class="kn">import</span> <span class="n">Decimal</span>
 
-def func(a: int) -&gt; float:
-    &quot;&quot;&quot;Sample function with inputs and outputs&quot;&quot;&quot;
-    return a * 2
+<span class="k">def</span> <span class="nf">func</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function with inputs and outputs&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">*</span> <span class="mi">2</span>
 
-SampleSpec = python.define(
-    func,
-    inputs={&quot;a&quot;: python.arg(help_string=&quot;The argument to be doubled&quot;)},
-    outputs={&quot;b&quot;: python.out(help_string=&quot;the doubled output&quot;, type=Decimal)},
-)
+<span class="n">SampleSpec</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+    <span class="n">func</span><span class="p">,</span>
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">help_string</span><span class="o">=</span><span class="s2">&quot;The argument to be doubled&quot;</span><span class="p">)},</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">out</span><span class="p">(</span><span class="n">help_string</span><span class="o">=</span><span class="s2">&quot;the doubled output&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Decimal</span><span class="p">)},</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -342,12 +342,12 @@ SampleSpec = python.define(
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Note we use CamelCase as the function is translated to a class
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Note we use CamelCase as the function is translated to a class</span>
 
-@python.define(outputs=[&quot;c&quot;, &quot;d&quot;])
-def SampleSpec(a: int, b: float) -&gt; tuple[float, float]:
-    &quot;&quot;&quot;Sample function for testing&quot;&quot;&quot;
-    return a + b, a * b
+<span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">])</span>
+<span class="k">def</span> <span class="nf">SampleSpec</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 </pre></div>
 </div>
 </div>
@@ -358,26 +358,26 @@ def SampleSpec(a: int, b: float) -&gt; tuple[float, float]:
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from pprint import pprint
-from pydra.engine.helpers import fields_dict
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pprint</span> <span class="kn">import</span> <span class="n">pprint</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.helpers</span> <span class="kn">import</span> <span class="n">fields_dict</span>
 
-@python.define(outputs=[&quot;c&quot;, &quot;d&quot;])
-def SampleSpec(a: int, b: float) -&gt; tuple[float, float]:
-    &quot;&quot;&quot;Sample function for testing
+<span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">])</span>
+<span class="k">def</span> <span class="nf">SampleSpec</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing</span>
 
-    Args:
-        a: First input
-            to be inputted
-        b: Second input
+<span class="sd">    Args:</span>
+<span class="sd">        a: First input</span>
+<span class="sd">            to be inputted</span>
+<span class="sd">        b: Second input</span>
 
-    Returns:
-        c: Sum of a and b
-        d: Product of a and b
-    &quot;&quot;&quot;
-    return a + b, a * b
+<span class="sd">    Returns:</span>
+<span class="sd">        c: Sum of a and b</span>
+<span class="sd">        d: Product of a and b</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 
-pprint(fields_dict(SampleSpec))
-pprint(fields_dict(SampleSpec.Outputs))
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
 </pre></div>
 </div>
 </div>
@@ -401,35 +401,35 @@ pprint(fields_dict(SampleSpec.Outputs))
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><br/><span></span>@python.define
-class SampleSpec:
-    &quot;&quot;&quot;Sample class for testing
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><br/><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
+<span class="k">class</span> <span class="nc">SampleSpec</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample class for testing</span>
 
-    Args:
-        a: First input
-            to be inputted
-        b: Second input
-    &quot;&quot;&quot;
+<span class="sd">    Args:</span>
+<span class="sd">        a: First input</span>
+<span class="sd">            to be inputted</span>
+<span class="sd">        b: Second input</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
-    a: int
-    b: float = 2.0
+    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">b</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span>
 
-    class Outputs:
-        &quot;&quot;&quot;
-        Args:
-            c: Sum of a and b
-            d: Product of a and b
-        &quot;&quot;&quot;
+    <span class="k">class</span> <span class="nc">Outputs</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            c: Sum of a and b</span>
+<span class="sd">            d: Product of a and b</span>
+<span class="sd">        &quot;&quot;&quot;</span>
 
-        c: float
-        d: float
+        <span class="n">c</span><span class="p">:</span> <span class="nb">float</span>
+        <span class="n">d</span><span class="p">:</span> <span class="nb">float</span>
 
-    @staticmethod
-    def function(a, b):
-        return a + b, a * b
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">function</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 
-pprint(fields_dict(SampleSpec))
-pprint(fields_dict(SampleSpec.Outputs))
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
 </pre></div>
 </div>
 </div>
@@ -452,38 +452,38 @@ pprint(fields_dict(SampleSpec.Outputs))
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from pydra.engine.specs import PythonSpec, PythonOutputs
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">PythonSpec</span><span class="p">,</span> <span class="n">PythonOutputs</span>
 
-@python.define
-class SampleSpec(PythonSpec[&quot;SampleSpec.Outputs&quot;]):
-    &quot;&quot;&quot;Sample class for testing
+<span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
+<span class="k">class</span> <span class="nc">SampleSpec</span><span class="p">(</span><span class="n">PythonSpec</span><span class="p">[</span><span class="s2">&quot;SampleSpec.Outputs&quot;</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample class for testing</span>
 
-    Args:
-        a: First input
-            to be inputted
-        b: Second input
-    &quot;&quot;&quot;
+<span class="sd">    Args:</span>
+<span class="sd">        a: First input</span>
+<span class="sd">            to be inputted</span>
+<span class="sd">        b: Second input</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
-    a: int
-    b: float
+    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">b</span><span class="p">:</span> <span class="nb">float</span>
 
-    @python.outputs
-    class Outputs(PythonOutputs):
-        &quot;&quot;&quot;
-        Args:
-            c: Sum of a and b
-            d: Product of a and b
-        &quot;&quot;&quot;
+    <span class="nd">@python</span><span class="o">.</span><span class="n">outputs</span>
+    <span class="k">class</span> <span class="nc">Outputs</span><span class="p">(</span><span class="n">PythonOutputs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            c: Sum of a and b</span>
+<span class="sd">            d: Product of a and b</span>
+<span class="sd">        &quot;&quot;&quot;</span>
 
-        c: float
-        d: float
+        <span class="n">c</span><span class="p">:</span> <span class="nb">float</span>
+        <span class="n">d</span><span class="p">:</span> <span class="nb">float</span>
 
-    @staticmethod
-    def function(a, b):
-        return a + b, a * b
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">function</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 
-pprint(fields_dict(SampleSpec))
-pprint(fields_dict(SampleSpec.Outputs))
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
 </pre></div>
 </div>
 </div>

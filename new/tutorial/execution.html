@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Task design" href="task.html" /><link rel="prev" title="Pydra" href="../index.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Executing tasks - Pydra v0.1.dev1+g5f1bf12</title>
+        <title>Executing tasks - Pydra v0.1.dev1+g1ca68f9</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
@@ -173,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g5f1bf12</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g1ca68f9</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -200,7 +200,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g5f1bf12</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+g1ca68f9</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -279,23 +279,23 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from fileformats.application import Json
-from pydra.tasks.common import LoadJson
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">fileformats.application</span> <span class="kn">import</span> <span class="n">Json</span>
+<span class="kn">from</span> <span class="nn">pydra.tasks.common</span> <span class="kn">import</span> <span class="n">LoadJson</span>
 
-# Create a sample JSON file to test
-json_file = Json.sample()
+<span class="c1"># Create a sample JSON file to test</span>
+<span class="n">json_file</span> <span class="o">=</span> <span class="n">Json</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
 
-# Print the path of the sample JSON file and its contents for reference
-print(f&quot;Sample JSON file created at {json_file.name!r} with contents: {json_file.read_text()}&quot;)
+<span class="c1"># Print the path of the sample JSON file and its contents for reference</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sample JSON file created at </span><span class="si">{</span><span class="n">json_file</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> with contents: </span><span class="si">{</span><span class="n">json_file</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-# Parameterise the task specification to load the JSON file
-load_json = LoadJson(file=json_file)
+<span class="c1"># Parameterise the task specification to load the JSON file</span>
+<span class="n">load_json</span> <span class="o">=</span> <span class="n">LoadJson</span><span class="p">(</span><span class="n">file</span><span class="o">=</span><span class="n">json_file</span><span class="p">)</span>
 
-# Run the task to load the JSON file
-result = load_json()
+<span class="c1"># Run the task to load the JSON file</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">load_json</span><span class="p">()</span>
 
-# Print the output interface of the of the task (LoadJson.Outputs)
-print(f&quot;Loaded contents: {result.output.out}&quot;)
+<span class="c1"># Print the output interface of the of the task (LoadJson.Outputs)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loaded contents: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">out</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>

@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Workflow design" href="workflow.html" /><link rel="prev" title="Task design" href="task.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Shell-task design - Pydra v0.1.dev1+g5f1bf12</title>
+        <title>Shell-task design - Pydra v0.1.dev1+g1ca68f9</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
@@ -173,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g5f1bf12</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g1ca68f9</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -200,7 +200,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g5f1bf12</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+g1ca68f9</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -281,9 +281,9 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from pydra.design import shell
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
 
-Cp = shell.define(&quot;cp &lt;in_file&gt; &lt;out|destination&gt;&quot;)
+<span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;cp &lt;in_file&gt; &lt;out|destination&gt;&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -293,28 +293,28 @@ Cp = shell.define(&quot;cp &lt;in_file&gt; &lt;out|destination&gt;&quot;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from pathlib import Path
-from tempfile import mkdtemp
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">tempfile</span> <span class="kn">import</span> <span class="n">mkdtemp</span>
 
-# Make a test file to copy
-test_dir = Path(mkdtemp())
-test_file = test_dir / &quot;in.txt&quot;
-with open(test_file, &quot;w&quot;) as f:
-    f.write(&quot;Contents to be copied&quot;)
+<span class="c1"># Make a test file to copy</span>
+<span class="n">test_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">mkdtemp</span><span class="p">())</span>
+<span class="n">test_file</span> <span class="o">=</span> <span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;in.txt&quot;</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">test_file</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;Contents to be copied&quot;</span><span class="p">)</span>
 
-# Parameterise the task spec
-cp = Cp(in_file=test_file, destination=test_dir / &quot;out.txt&quot;)
+<span class="c1"># Parameterise the task spec</span>
+<span class="n">cp</span> <span class="o">=</span> <span class="n">Cp</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">test_file</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;out.txt&quot;</span><span class="p">)</span>
 
-# Print the cmdline to be run to double check
-print(f&quot;Command-line to be run: {cp.cmdline}&quot;)
+<span class="c1"># Print the cmdline to be run to double check</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Command-line to be run: </span><span class="si">{</span><span class="n">cp</span><span class="o">.</span><span class="n">cmdline</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-# Run the shell-comand task
-result = cp()
+<span class="c1"># Run the shell-comand task</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">cp</span><span class="p">()</span>
 
-print(
-    f&quot;Contents of copied file (&#39;{result.output.destination}&#39;): &quot;
-    f&quot;&#39;{Path(result.output.destination).read_text()}&#39;&quot;
-)
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Contents of copied file (&#39;</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">destination</span><span class="si">}</span><span class="s2">&#39;): &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">Path</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">destination</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -332,8 +332,8 @@ Contents of copied file (&#39;/var/folders/mz/yn83q2fd3s758w1j75d2nnw80000gn/T/t
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cp = Cp(in_file=test_file)
-print(cp.cmdline)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">cp</span> <span class="o">=</span> <span class="n">Cp</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">test_file</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">cp</span><span class="o">.</span><span class="n">cmdline</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -353,13 +353,13 @@ cp /var/folders/mz/yn83q2fd3s758w1j75d2nnw80000gn/T/tmpoyx19gql/in.txt /Users/tc
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from fileformats.image import Png
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">fileformats.image</span> <span class="kn">import</span> <span class="n">Png</span>
 
-TrimPng = shell.define(&quot;trim-png &lt;in_image:image/png&gt; &lt;out|out_image:image/png&gt;&quot;)
+<span class="n">TrimPng</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="s2">&quot;trim-png &lt;in_image:image/png&gt; &lt;out|out_image:image/png&gt;&quot;</span><span class="p">)</span>
 
-trim_png = TrimPng(in_image=Png.mock(), out_image=&quot;/path/to/output.png&quot;)
+<span class="n">trim_png</span> <span class="o">=</span> <span class="n">TrimPng</span><span class="p">(</span><span class="n">in_image</span><span class="o">=</span><span class="n">Png</span><span class="o">.</span><span class="n">mock</span><span class="p">(),</span> <span class="n">out_image</span><span class="o">=</span><span class="s2">&quot;/path/to/output.png&quot;</span><span class="p">)</span>
 
-print(trim_png.cmdline)
+<span class="nb">print</span><span class="p">(</span><span class="n">trim_png</span><span class="o">.</span><span class="n">cmdline</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -382,21 +382,21 @@ trim-png /mock/png.png /path/to/output.png
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from pprint import pprint
-from pydra.engine.helpers import fields_dict
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pprint</span> <span class="kn">import</span> <span class="n">pprint</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.helpers</span> <span class="kn">import</span> <span class="n">fields_dict</span>
 
-Cp = shell.define(
-        (
-            &quot;cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &quot;
-            &quot;-R&lt;recursive&gt; &quot;
-            &quot;--text-arg &lt;text_arg?&gt; &quot;
-            &quot;--int-arg &lt;int_arg:int?&gt; &quot;
-            &quot;--tuple-arg &lt;tuple_arg:int,str?&gt; &quot;
-        ),
-    )
+<span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &quot;</span>
+            <span class="s2">&quot;-R&lt;recursive&gt; &quot;</span>
+            <span class="s2">&quot;--text-arg &lt;text_arg?&gt; &quot;</span>
+            <span class="s2">&quot;--int-arg &lt;int_arg:int?&gt; &quot;</span>
+            <span class="s2">&quot;--tuple-arg &lt;tuple_arg:int,str?&gt; &quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
 
-pprint(fields_dict(Cp))
-pprint(fields_dict(Cp.Outputs))
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">Cp</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">Cp</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
 </pre></div>
 </div>
 </div>
@@ -426,17 +426,17 @@ pprint(fields_dict(Cp.Outputs))
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>Cp = shell.define(
-        (
-            &quot;cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &quot;
-            &quot;-R&lt;recursive=True&gt; &quot;
-            &quot;--text-arg &lt;text_arg=&#39;foo&#39;&gt; &quot;
-            &quot;--int-arg &lt;int_arg:int=99&gt; &quot;
-            &quot;--tuple-arg &lt;tuple_arg:int,str=(1,&#39;bar&#39;)&gt; &quot;
-        ),
-    )
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &quot;</span>
+            <span class="s2">&quot;-R&lt;recursive=True&gt; &quot;</span>
+            <span class="s2">&quot;--text-arg &lt;text_arg=&#39;foo&#39;&gt; &quot;</span>
+            <span class="s2">&quot;--int-arg &lt;int_arg:int=99&gt; &quot;</span>
+            <span class="s2">&quot;--tuple-arg &lt;tuple_arg:int,str=(1,&#39;bar&#39;)&gt; &quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
 
-print(f&quot;&#39;--int-arg&#39; default: {fields_dict(Cp)[&#39;int_arg&#39;].default}&quot;)
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;--int-arg&#39; default: </span><span class="si">{</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">Cp</span><span class="p">)[</span><span class="s1">&#39;int_arg&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">default</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -456,29 +456,29 @@ print(f&quot;&#39;--int-arg&#39; default: {fields_dict(Cp)[&#39;int_arg&#39;].de
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>Cp = shell.define(
-        (
-            &quot;cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &lt;out|out_file:file?&gt; &quot;
-            &quot;-R&lt;recursive&gt; &quot;
-            &quot;--text-arg &lt;text_arg&gt; &quot;
-            &quot;--int-arg &lt;int_arg:int?&gt; &quot;
-            &quot;--tuple-arg &lt;tuple_arg:int,str&gt; &quot;
-        ),
-        inputs={&quot;recursive&quot;: shell.arg(
-            help_string=(
-                &quot;If source_file designates a directory, cp copies the directory and &quot;
-                &quot;the entire subtree connected at that point.&quot;
-            )
-        )},
-        outputs={
-            &quot;out_dir&quot;: shell.outarg(position=-2),
-            &quot;out_file&quot;: shell.outarg(position=-1),
-        },
-    )
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">Cp</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;cp &lt;in_fs_objects:fs-object,...&gt; &lt;out|out_dir:directory&gt; &lt;out|out_file:file?&gt; &quot;</span>
+            <span class="s2">&quot;-R&lt;recursive&gt; &quot;</span>
+            <span class="s2">&quot;--text-arg &lt;text_arg&gt; &quot;</span>
+            <span class="s2">&quot;--int-arg &lt;int_arg:int?&gt; &quot;</span>
+            <span class="s2">&quot;--tuple-arg &lt;tuple_arg:int,str&gt; &quot;</span>
+        <span class="p">),</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;recursive&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
+            <span class="n">help_string</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;If source_file designates a directory, cp copies the directory and &quot;</span>
+                <span class="s2">&quot;the entire subtree connected at that point.&quot;</span>
+            <span class="p">)</span>
+        <span class="p">)},</span>
+        <span class="n">outputs</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;out_dir&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">position</span><span class="o">=-</span><span class="mi">2</span><span class="p">),</span>
+            <span class="s2">&quot;out_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">position</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
 
 
-pprint(fields_dict(Cp))
-pprint(fields_dict(Cp.Outputs))
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">Cp</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">Cp</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
 </pre></div>
 </div>
 </div>
@@ -510,31 +510,31 @@ pprint(fields_dict(Cp.Outputs))
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import os
-from pydra.design import shell
-from pathlib import Path
-from fileformats.generic import File
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">File</span>
 
-# Arguments to the callable function can be one of
-def get_file_size(out_file: Path) -&gt; int:
-    &quot;&quot;&quot;Calculate the file size&quot;&quot;&quot;
-    result = os.stat(out_file)
-    return result.st_size
-
-
-CpWithSize = shell.define(
-    &quot;cp &lt;in_file:file&gt; &lt;out|out_file:file&gt;&quot;,
-    outputs={&quot;out_file_size&quot;: get_file_size},
-)
-
-# Parameterise the task spec
-cp_with_size = CpWithSize(in_file=File.sample())
-
-# Run the command
-result = cp_with_size()
+<span class="c1"># Arguments to the callable function can be one of</span>
+<span class="k">def</span> <span class="nf">get_file_size</span><span class="p">(</span><span class="n">out_file</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate the file size&quot;&quot;&quot;</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">out_file</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">st_size</span>
 
 
-print(f&quot;Size of the output file is: {result.output.out_file_size}&quot;)
+<span class="n">CpWithSize</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+    <span class="s2">&quot;cp &lt;in_file:file&gt; &lt;out|out_file:file&gt;&quot;</span><span class="p">,</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;out_file_size&quot;</span><span class="p">:</span> <span class="n">get_file_size</span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="c1"># Parameterise the task spec</span>
+<span class="n">cp_with_size</span> <span class="o">=</span> <span class="n">CpWithSize</span><span class="p">(</span><span class="n">in_file</span><span class="o">=</span><span class="n">File</span><span class="o">.</span><span class="n">sample</span><span class="p">())</span>
+
+<span class="c1"># Run the command</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">cp_with_size</span><span class="p">()</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Size of the output file is: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">out_file_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -564,27 +564,27 @@ Size of the output file is: 256
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from fileformats.generic import FsObject, Directory
-from pydra.utils.typing import MultiInputObj
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">FsObject</span><span class="p">,</span> <span class="n">Directory</span>
+<span class="kn">from</span> <span class="nn">pydra.utils.typing</span> <span class="kn">import</span> <span class="n">MultiInputObj</span>
 
-@shell.define
-class CpWithSize:
+<span class="nd">@shell</span><span class="o">.</span><span class="n">define</span>
+<span class="k">class</span> <span class="nc">CpWithSize</span><span class="p">:</span>
 
-    executable = &quot;cp&quot;
+    <span class="n">executable</span> <span class="o">=</span> <span class="s2">&quot;cp&quot;</span>
 
-    in_fs_objects: MultiInputObj[FsObject]
-    recursive: bool = shell.arg(argstr=&quot;-R&quot;, default=False)
-    text_arg: str = shell.arg(argstr=&quot;--text-arg&quot;)
-    int_arg: int | None = shell.arg(argstr=&quot;--int-arg&quot;, default=None)
-    tuple_arg: tuple[int, str] | None = shell.arg(argstr=&quot;--tuple-arg&quot;, default=None)
+    <span class="n">in_fs_objects</span><span class="p">:</span> <span class="n">MultiInputObj</span><span class="p">[</span><span class="n">FsObject</span><span class="p">]</span>
+    <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;-R&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">text_arg</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;--text-arg&quot;</span><span class="p">)</span>
+    <span class="n">int_arg</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;--int-arg&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">tuple_arg</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;--tuple-arg&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 
-    class Outputs:
-        out_file: File
-        out_file_size: int = shell.out(callable=get_file_size)
+    <span class="k">class</span> <span class="nc">Outputs</span><span class="p">:</span>
+        <span class="n">out_file</span><span class="p">:</span> <span class="n">File</span>
+        <span class="n">out_file_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">out</span><span class="p">(</span><span class="nb">callable</span><span class="o">=</span><span class="n">get_file_size</span><span class="p">)</span>
 
 
-pprint(fields_dict(CpWithSize))
-pprint(fields_dict(CpWithSize.Outputs))
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">CpWithSize</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">CpWithSize</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
 </pre></div>
 </div>
 </div>
@@ -611,22 +611,22 @@ pprint(fields_dict(CpWithSize.Outputs))
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from pydra.engine.specs import ShellSpec, ShellOutputs
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">ShellSpec</span><span class="p">,</span> <span class="n">ShellOutputs</span>
 
-@shell.define
-class Cp(ShellSpec[&quot;Cp.Outputs&quot;]):
+<span class="nd">@shell</span><span class="o">.</span><span class="n">define</span>
+<span class="k">class</span> <span class="nc">Cp</span><span class="p">(</span><span class="n">ShellSpec</span><span class="p">[</span><span class="s2">&quot;Cp.Outputs&quot;</span><span class="p">]):</span>
 
-    executable = &quot;cp&quot;
+    <span class="n">executable</span> <span class="o">=</span> <span class="s2">&quot;cp&quot;</span>
 
-    in_fs_objects: MultiInputObj[FsObject] = shell.arg()
-    recursive: bool = shell.arg(default=False)
-    text_arg: str = shell.arg()
-    int_arg: int | None =  shell.arg(default=None)
-    tuple_arg: tuple[int, str] | None  = shell.arg(default=None)
+    <span class="n">in_fs_objects</span><span class="p">:</span> <span class="n">MultiInputObj</span><span class="p">[</span><span class="n">FsObject</span><span class="p">]</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">()</span>
+    <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">text_arg</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">()</span>
+    <span class="n">int_arg</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span>  <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">tuple_arg</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>  <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 
-    @shell.outputs
-    class Outputs(ShellOutputs):
-        out_dir: Directory = shell.outarg(path_template=&quot;{out_dir}&quot;)
+    <span class="nd">@shell</span><span class="o">.</span><span class="n">outputs</span>
+    <span class="k">class</span> <span class="nc">Outputs</span><span class="p">(</span><span class="n">ShellOutputs</span><span class="p">):</span>
+        <span class="n">out_dir</span><span class="p">:</span> <span class="n">Directory</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span><span class="n">path_template</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">{out_dir}</span><span class="s2">&quot;</span><span class="p">)</span>
 <br/></pre></div>
 </div>
 </div>
@@ -638,29 +638,29 @@ class Cp(ShellSpec[&quot;Cp.Outputs&quot;]):
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from fileformats.generic import File
-from pydra.engine.helpers import list_fields
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">fileformats.generic</span> <span class="kn">import</span> <span class="n">File</span>
+<span class="kn">from</span> <span class="nn">pydra.engine.helpers</span> <span class="kn">import</span> <span class="n">list_fields</span>
 
-ACommand = shell.define(
-    &quot;a-command&quot;,
-    inputs={
-        &quot;in_file&quot;: shell.arg(type=File, help_string=&quot;output file&quot;, argstr=&quot;&quot;, position=-2)
-    },
-    outputs={
-        &quot;out_file&quot;: shell.outarg(
-            type=File, help_string=&quot;output file&quot;, argstr=&quot;&quot;, position=-1
-        ),
-        &quot;out_file_size&quot;: {
-            &quot;type&quot;: int,
-            &quot;help_string&quot;: &quot;size of the output directory&quot;,
-            &quot;callable&quot;: get_file_size,
-        }
-    },
-)
+<span class="n">ACommand</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+    <span class="s2">&quot;a-command&quot;</span><span class="p">,</span>
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;in_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="n">File</span><span class="p">,</span> <span class="n">help_string</span><span class="o">=</span><span class="s2">&quot;output file&quot;</span><span class="p">,</span> <span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">position</span><span class="o">=-</span><span class="mi">2</span><span class="p">)</span>
+    <span class="p">},</span>
+    <span class="n">outputs</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;out_file&quot;</span><span class="p">:</span> <span class="n">shell</span><span class="o">.</span><span class="n">outarg</span><span class="p">(</span>
+            <span class="nb">type</span><span class="o">=</span><span class="n">File</span><span class="p">,</span> <span class="n">help_string</span><span class="o">=</span><span class="s2">&quot;output file&quot;</span><span class="p">,</span> <span class="n">argstr</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">position</span><span class="o">=-</span><span class="mi">1</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;out_file_size&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+            <span class="s2">&quot;help_string&quot;</span><span class="p">:</span> <span class="s2">&quot;size of the output directory&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;callable&quot;</span><span class="p">:</span> <span class="n">get_file_size</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+<span class="p">)</span>
 
 
-print(f&quot;ACommand input fields: {list_fields(ACommand)}&quot;)
-print(f&quot;ACommand input fields: {list_fields(ACommand.Outputs)}&quot;)
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ACommand input fields: </span><span class="si">{</span><span class="n">list_fields</span><span class="p">(</span><span class="n">ACommand</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ACommand input fields: </span><span class="si">{</span><span class="n">list_fields</span><span class="p">(</span><span class="n">ACommand</span><span class="o">.</span><span class="n">Outputs</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 <br/></pre></div>
 </div>
 </div>
