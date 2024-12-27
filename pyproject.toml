@@ -43,6 +43,7 @@ dev = ["black", "pre-commit", "pydra[test]"]
 doc = [
     "packaging",
     "sphinx ==6.2.1",
+    "sphinxarg",
     "nbsphinx",
     "pandoc",
     "sphinx_rtd_theme",

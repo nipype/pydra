@@ -69,7 +69,7 @@ jobs:
         path: new-docs/build/html
 
   deploy:
-    needs: [build]
+    needs: [build, build-new]
     runs-on: ubuntu-latest
     steps:
     - name: Download docs
