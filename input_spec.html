@@ -6,10 +6,9 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Input Specification &mdash; Pydra: A simple dataflow engine with scalable semantics 0.24 documentation</title>
+  <title>Input Specification &mdash; Pydra: A simple dataflow engine with scalable semantics 0.1.dev1+g5f1bf12 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
-      <link rel="stylesheet" type="text/css" href="_static/banner.css" />
 
   
       <script src="_static/jquery.js"></script>
@@ -53,7 +52,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#adding-a-new-field-to-the-spec">Adding a New Field to the Spec</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#types">Types</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#metadata">Metadata</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#validators">Validators</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#shell-arg-function"><cite>shell_arg</cite> Function</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="output_spec.html">Output Specification</a></li>
@@ -88,16 +87,7 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  
-
-
-    
-    
-
-
-
-    <p class="scv-banner scv-sphinx_rtd_theme"><a href="master/input_spec.html"><b>Warning:</b> This document is for an old version of Pydra: A simple dataflow engine with scalable semantics. The main version is master.</a></p>
-<section id="input-specification">
+  <section id="input-specification">
 <span id="input-specification-section"></span><h1>Input Specification<a class="headerlink" href="#input-specification" title="Permalink to this heading"></a></h1>
 <p>As it was mentioned in <a class="reference internal" href="components.html#shell-command-task"><span class="std std-ref">Shell Command Tasks</span></a>, the user can customize the input and output
 for the <cite>ShellCommandTask</cite>.
@@ -236,11 +226,11 @@ The function can take <cite>field</cite> (this input field will be passed to the
 </dd>
 </dl>
 </section>
-<section id="validators">
-<h2>Validators<a class="headerlink" href="#validators" title="Permalink to this heading"></a></h2>
-<p>Pydra allows for using simple validator for types and <cite>allowev_values</cite>.
-The validators are disabled by default, but can be enabled by calling
-<cite>pydra.set_input_validator(flag=True)</cite>.</p>
+<section id="shell-arg-function">
+<h2><cite>shell_arg</cite> Function<a class="headerlink" href="#shell-arg-function" title="Permalink to this heading"></a></h2>
+<p>For convenience, there is a function in <cite>pydra.mark</cite> called <cite>shell_arg()</cite>, which will
+takes the above metadata values as arguments and inserts them into the metadata passed
+to <cite>attrs.field</cite>. This can be especially useful when using an IDE with code-completion.</p>
 </section>
 </section>
 
@@ -268,37 +258,7 @@ The validators are disabled by default, but can be enabled by calling
       </div>
     </section>
   </div>
-  
-<div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
-    <span class="rst-current-version" data-toggle="rst-current-version">
-        <span class="fa fa-book"> Other Versions</span>
-        v: 0.25
-        <span class="fa fa-caret-down"></span>
-    </span>
-    <div class="rst-other-versions">
-        <dl>
-            <dt>Tags</dt>
-            <dd><a href="0.21/input_spec.html">0.21</a></dd>
-            <dd><a href="0.22/input_spec.html">0.22</a></dd>
-            <dd><a href="0.23/input_spec.html">0.23</a></dd>
-            <dd><a href="0.23.0-alpha/input_spec.html">0.23.0-alpha</a></dd>
-            <dd><a href="0.24/input_spec.html">0.24</a></dd>
-            <dd><a href="0.25/input_spec.html">0.25</a></dd>
-        </dl>
-        <dl>
-            <dt>Branches</dt>
-            <dd><a href="ci_test-py3.11-windows/input_spec.html">ci/test-py3.11-windows</a></dd>
-            <dd><a href="debugging-hashing/input_spec.html">debugging-hashing</a></dd>
-            <dd><a href="effigies_input-spec-suggestions/input_spec.html">effigies/input-spec-suggestions</a></dd>
-            <dd><a href="master/input_spec.html">master</a></dd>
-            <dd><a href="mriqc-hacking/input_spec.html">mriqc-hacking</a></dd>
-            <dd><a href="new-syntax/input_spec.html">new-syntax</a></dd>
-            <dd><a href="pre-commit-ci-update-config/input_spec.html">pre-commit-ci-update-config</a></dd>
-            <dd><a href="unittest-fixes/input_spec.html">unittest-fixes</a></dd>
-        </dl>
-    </div>
-</div>
-<script>
+  <script>
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });

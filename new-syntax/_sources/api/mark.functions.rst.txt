@@ -1,7 +1,0 @@
-mark.functions module
-=====================
-
-.. automodule:: mark.functions
-   :members:
-   :undoc-members:
-   :show-inheritance:

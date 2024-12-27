@@ -1,0 +1,7 @@
+design.workflow module
+======================
+
+.. automodule:: design.workflow
+   :members:
+   :undoc-members:
+   :show-inheritance:

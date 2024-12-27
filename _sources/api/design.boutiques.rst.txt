@@ -1,0 +1,7 @@
+design.boutiques module
+=======================
+
+.. automodule:: design.boutiques
+   :members:
+   :undoc-members:
+   :show-inheritance:

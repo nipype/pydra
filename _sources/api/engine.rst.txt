@@ -1,0 +1,35 @@
+engine package
+==============
+
+.. automodule:: engine
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 1
+
+   engine.workflow
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   engine.audit
+   engine.core
+   engine.environments
+   engine.graph
+   engine.helpers
+   engine.helpers_file
+   engine.helpers_state
+   engine.run_pickled
+   engine.specs
+   engine.state
+   engine.submitter
+   engine.task
+   engine.workers
