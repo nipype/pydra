@@ -45,6 +45,7 @@ doc = [
     "sphinx ==6.2.1",
     "sphinx-argparse",
     "nbsphinx",
+    "ipython",
     "pandoc",
     "sphinx_rtd_theme",
     "sphinx-click",
