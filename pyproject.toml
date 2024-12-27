@@ -47,6 +47,7 @@ doc = [
     "nbsphinx",
     "pandoc",
     "sphinx_rtd_theme",
+    "sphinx-click",
     "sphinxcontrib-apidoc ~=0.3.0",
     "sphinxcontrib-versioning",
     "furo>=2022.2.14.1",
