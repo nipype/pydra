@@ -86,7 +86,7 @@ jobs:
         path: docs-build/new
     - name: Check for GHPAGES_DEPLOY_KEY token
       id: deployable
-      if: github.event_name == 'release'
+      # if: github.event_name == 'release'
       env:
         GHPAGES_DEPLOY_KEY: "${{ secrets.GHPAGES_DEPLOY_KEY }}"
       run: if [ -n "$GHPAGES_DEPLOY_KEY" ]; then echo "DEPLOY=true" >> $GITHUB_OUTPUT; fi
