@@ -4,14 +4,14 @@ from operator import itemgetter
 from typing_extensions import Self
 import attrs
 from pydra.engine.helpers import list_fields, attrs_values, is_lazy
-from pydra.engine.specs import TaskSpec, Outputs, WorkflowOutputs
+from pydra.engine.specs import TaskSpec, TaskOutputs, WorkflowOutputs
 from .lazy import LazyInField
 from pydra.utils.hash import hash_function
 from pydra.utils.typing import TypeParser, StateArray
 from .node import Node
 
 
-OutputsType = ty.TypeVar("OutputType", bound=Outputs)
+OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
 WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 

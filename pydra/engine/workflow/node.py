@@ -5,7 +5,7 @@ from pathlib import Path
 import attrs
 from pydra.utils.typing import TypeParser, StateArray
 from . import lazy
-from ..specs import TaskSpec, Outputs, WorkflowSpec
+from ..specs import TaskSpec, TaskOutputs, WorkflowSpec
 from ..task import Task
 from ..helpers import ensure_list, attrs_values, is_lazy, load_result, create_checksum
 from pydra.utils.hash import hash_function
@@ -16,7 +16,7 @@ if ty.TYPE_CHECKING:
     from .base import Workflow
 
 
-OutputType = ty.TypeVar("OutputType", bound=Outputs)
+OutputType = ty.TypeVar("OutputType", bound=TaskOutputs)
 Splitter = ty.Union[str, ty.Tuple[str, ...]]
 
 _not_set = Enum("_not_set", "NOT_SET")

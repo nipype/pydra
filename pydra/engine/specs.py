@@ -40,7 +40,7 @@ def is_set(value: ty.Any) -> bool:
     return value not in (attrs.NOTHING, EMPTY)
 
 
-class Outputs:
+class TaskOutputs:
     """Base class for all output specifications"""
 
     RESERVED_FIELD_NAMES = ("inputs", "split", "combine")
@@ -167,7 +167,7 @@ class Outputs:
             raise KeyError(f"{self} doesn't have an attribute {name}") from None
 
 
-OutputsType = ty.TypeVar("OutputType", bound=Outputs)
+OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
 
 
 class TaskSpec(ty.Generic[OutputsType]):
@@ -453,7 +453,7 @@ class RuntimeSpec:
     network: bool = False
 
 
-class PythonOutputs(Outputs):
+class PythonOutputs(TaskOutputs):
     pass
 
 
@@ -464,7 +464,7 @@ class PythonSpec(TaskSpec[PythonOutputsType]):
     pass
 
 
-class WorkflowOutputs(Outputs):
+class WorkflowOutputs(TaskOutputs):
     pass
 
 
@@ -480,7 +480,7 @@ STDOUT_HELP = """The standard output stream produced by the command."""
 STDERR_HELP = """The standard error stream produced by the command."""
 
 
-class ShellOutputs(Outputs):
+class ShellOutputs(TaskOutputs):
     """Output specification of a generic shell process."""
 
     return_code: int = shell.out(help_string=RETURN_CODE_HELP)

@@ -26,7 +26,7 @@ from pydra.utils.typing import (
 
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import TaskSpec, Outputs
+    from pydra.engine.specs import TaskSpec, TaskOutputs
     from pydra.engine.core import Task
 
 __all__ = [
@@ -351,7 +351,7 @@ def extract_fields_from_class(
 
 def make_task_spec(
     spec_type: type["TaskSpec"],
-    out_type: type["Outputs"],
+    out_type: type["TaskOutputs"],
     task_type: type["Task"],
     inputs: dict[str, Arg],
     outputs: dict[str, Out],
@@ -467,11 +467,11 @@ def make_task_spec(
 
 
 def make_outputs_spec(
-    spec_type: type["Outputs"],
+    spec_type: type["TaskOutputs"],
     outputs: dict[str, Out],
     bases: ty.Sequence[type],
     spec_name: str,
-) -> type["Outputs"]:
+) -> type["TaskOutputs"]:
     """Create an outputs specification class and its outputs specification class from the
     output fields provided to the decorator/function.
 
@@ -492,10 +492,10 @@ def make_outputs_spec(
     klass : type
         The class created using the attrs package
     """
-    from pydra.engine.specs import Outputs
+    from pydra.engine.specs import TaskOutputs
 
     if not any(issubclass(b, spec_type) for b in bases):
-        if out_spec_bases := [b for b in bases if issubclass(b, Outputs)]:
+        if out_spec_bases := [b for b in bases if issubclass(b, TaskOutputs)]:
             raise ValueError(
                 f"Cannot make {spec_type} output spec from {out_spec_bases} bases"
             )

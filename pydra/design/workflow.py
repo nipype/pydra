@@ -15,7 +15,7 @@ from .base import (
 
 if ty.TYPE_CHECKING:
     from pydra.engine.workflow.base import Workflow
-    from pydra.engine.specs import TaskSpec, Outputs, WorkflowSpec
+    from pydra.engine.specs import TaskSpec, TaskOutputs, WorkflowSpec
 
 
 __all__ = ["define", "add", "this", "arg", "out"]
@@ -205,7 +205,7 @@ def this() -> "Workflow":
     return Workflow.under_construction
 
 
-OutputsType = ty.TypeVar("OutputsType", bound="Outputs")
+OutputsType = ty.TypeVar("OutputsType", bound="TaskOutputs")
 
 
 def add(task_spec: "TaskSpec[OutputsType]", name: str = None) -> OutputsType:
