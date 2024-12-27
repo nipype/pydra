@@ -20,8 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Revert version to most recent version tag
-      run: git checkout $(git tag -l | grep 'v.*' | tail -n 1 | awk -F post '{print $1}')
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -32,6 +30,8 @@ jobs:
         pip install build twine
     - name: Install package
       run: pip install .[doc]
+    - name: Revert version to most recent version tag
+      run: git checkout $(git tag -l | grep 'v.*' | tail -n 1 | awk -F post '{print $1}')
     - name: Build docs
       run: |
         cd docs
