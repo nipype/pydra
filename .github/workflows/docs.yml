@@ -77,7 +77,7 @@ jobs:
     - name: Download docs
       uses: actions/download-artifact@v3
       with:
-        name: built-docs
+        name: docs
         path: docs-build
     - name: Download new docs
       uses: actions/download-artifact@v3
