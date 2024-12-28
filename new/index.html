@@ -3,13 +3,14 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Executing tasks" href="tutorial/execution.html" />
+<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Running tasks" href="tutorial/execution.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Pydra v0.1.dev1+gb08f22a</title>
+        <title>Pydra v0.1.dev1+gdd21700</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?digest=cf727022eb7470bc603c08d2e55c3247faec75c9" />
+    <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
     
     
 
@@ -172,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="#"><div class="brand">Pydra v0.1.dev1+gb08f22a</div></a>
+      <a href="#"><div class="brand">Pydra v0.1.dev1+gdd21700</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -199,7 +200,7 @@
     <img class="sidebar-logo" src="_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+gb08f22a</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+gdd21700</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -209,23 +210,24 @@
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <p class="caption" role="heading"><span class="caption-text">Tutorials</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorial/execution.html">Executing tasks</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial/task.html">Task design</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial/execution.html">Running tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial/python.html">Python-task design</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorial/shell.html">Shell-task design</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorial/workflow.html">Workflow design</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How-to Guides</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="howto/install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="howto/real-example.html">Real-world example</a></li>
 <li class="toctree-l1"><a class="reference internal" href="howto/create-task-package.html">Creating a task package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="howto/port-from-nipype.html">Port interfaces from Nipype</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Explanation</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="explanation/design-approach.html">Design philosophy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="explanation/splitting-combining.html">Splitting and combining</a></li>
 <li class="toctree-l1"><a class="reference internal" href="explanation/typing.html">Type checking</a></li>
-<li class="toctree-l1"><a class="reference internal" href="explanation/hashing-caching.html">Hashing and caching</a></li>
-<li class="toctree-l1"><a class="reference internal" href="explanation/conditional-lazy.html">Conditionals and lazy fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="explanation/hashing-caching.html">Caching</a></li>
+<li class="toctree-l1"><a class="reference internal" href="explanation/conditional-lazy.html">Conditional construction</a></li>
 <li class="toctree-l1"><a class="reference internal" href="explanation/provenance.html">Provenance</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -273,67 +275,25 @@
         <article role="main" id="furo-main-content">
           <section id="pydra">
 <span id="home"></span><h1>Pydra<a class="headerlink" href="#pydra" title="Permalink to this heading">¶</a></h1>
-<p>Pydra is a new lightweight dataflow engine written in Python.
-Pydra is developed as an open-source project in the neuroimaging community,
+<p>Pydra is a new lightweight dataflow engine written in Python, which provides a simple way to
+implement scientific workflows that use a mix of shell commands and Python functions.</p>
+<p>Pydra is developed as an open-source project in the neuroimaging community,
 but it is designed as a general-purpose dataflow engine to support any scientific domain.</p>
-<section id="rationale">
-<h2>Rationale<a class="headerlink" href="#rationale" title="Permalink to this heading">¶</a></h2>
-<p>Scientific workflows often require sophisticated analyses that encompass a large collection
-of algorithms.
-The algorithms, that were originally not necessarily designed to work together,
-and were written by different authors.
-Some may be written in Python, while others might require calling external programs.
-It is a common practice to create semi-manual workflows that require the scientists
-to handle the files and interact with partial results from algorithms and external tools.
-This approach is conceptually simple and easy to implement, but the resulting workflow
-is often time consuming, error-prone and difficult to share with others.
-Consistency, reproducibility and scalability demand scientific workflows
-to be organized into fully automated pipelines.
-This was the motivation behind Pydra - a new dataflow engine written in Python.</p>
-</section>
-<section id="history">
-<h2>History<a class="headerlink" href="#history" title="Permalink to this heading">¶</a></h2>
-<p>The Pydra package is a part of the second generation of the <a class="reference external" href="https://nipype.readthedocs.io/en/latest/">Nipype</a> ecosystem
---- an open-source framework that provides a uniform interface to existing neuroimaging
-software and facilitates interaction between different software components.
-The Nipype project was born in the neuroimaging community, and has been helping scientists
-build workflows for a decade, providing a uniform interface to such neuroimaging packages
-as <a class="reference external" href="https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL">FSL</a>, <a class="reference external" href="http://stnava.github.io/ANTs/">ANTs</a>, <a class="reference external" href="https://afni.nimh.nih.gov/">AFNI</a>, <a class="reference external" href="https://surfer.nmr.mgh.harvard.edu/">FreeSurfer</a> and <a class="reference external" href="https://www.fil.ion.ucl.ac.uk/spm/">SPM</a>.
-This flexibility has made it an ideal basis for popular preprocessing tools,
-such as <a class="reference external" href="https://fmriprep.org/en/stable/">fMRIPrep</a> and <a class="reference external" href="https://fcp-indi.github.io/docs/latest/index">C-PAC</a>.
-The second generation of Nipype ecosystem is meant to provide additional flexibility
-and is being developed with reproducibility, ease of use, and scalability in mind.
-Pydra itself is a standalone project and is designed as a general-purpose dataflow engine
-to support any scientific domain.</p>
-</section>
-<section id="design-goals">
-<h2>Design goals<a class="headerlink" href="#design-goals" title="Permalink to this heading">¶</a></h2>
-<p>The goal of Pydra is to provide a lightweight dataflow engine for computational graph construction,
-manipulation, and distributed execution, as well as ensuring reproducibility of scientific pipelines.
-In Pydra, a dataflow is represented as a directed acyclic graph, where each node represents a Python
-function, execution of an external tool, or another reusable dataflow.
-The combination of several key features makes Pydra a customizable and powerful dataflow engine:</p>
-<ul class="simple">
-<li><p>Composable dataflows: Any node of a dataflow graph can be another dataflow, allowing for nested
-dataflows of arbitrary depths and encouraging creating reusable dataflows.</p></li>
-<li><p>Flexible semantics for creating nested loops over input sets: Any Task or dataflow can be run
-over input parameter sets and the outputs can be recombined (similar concept to <a class="reference external" href="https://en.wikipedia.org/wiki/MapReduce">Map-Reduce</a> model,
-but Pydra extends this to graphs with nested dataflows).</p></li>
-<li><p>A content-addressable global cache: Hash values are computed for each graph and each Task.
-This supports reusing of previously computed and stored dataflows and Tasks.</p></li>
-<li><p>Support for Python functions and external (shell) commands: Pydra can decorate and use existing
-functions in Python libraries alongside external command line tools, allowing easy integration
-of existing code and software.</p></li>
-<li><p>Native container execution support: Any dataflow or Task can be executed in an associated container
-(via Docker or Singularity) enabling greater consistency for reproducibility.</p></li>
-<li><p>Auditing and provenance tracking: Pydra provides a simple JSON-LD-based message passing mechanism
-to capture the dataflow execution activities as a provenance graph. These messages track inputs
-and outputs of each task in a dataflow, and the resources consumed by the task.</p></li>
-</ul>
-</section>
+<p>See the <a class="reference internal" href="explanation/design-approach.html#design-philosophy"><span class="std std-ref">Design philosophy</span></a> for more an explanation of the design
+philosophy and goals of Pydra.</p>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Permalink to this heading">¶</a></h2>
+<p>Pydra itself is a pure-Python package, which has only a handful of dependencies,
+therefore, it is straightforward to install via pip</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>pydra
+</pre></div>
+</div>
+<p>Of course, if you use Pydra to execute shell-commands tools, you will need to either have
+those commands installed on the execution machine, or use software containers
+(e.g., Docker or Singularity) to run them.</p>
 </section>
 <section id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this heading">¶</a></h1>
+<h2>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this heading">¶</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
 <li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
@@ -347,6 +307,7 @@ and outputs of each task in a dataflow, and the resources consumed by the task.<
 <div class="toctree-wrapper compound">
 </div>
 </section>
+</section>
 
         </article>
       </div>
@@ -358,7 +319,7 @@ and outputs of each task in a dataflow, and the resources consumed by the task.<
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Executing tasks</div>
+                <div class="title">Running tasks</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -394,12 +355,10 @@ and outputs of each task in a dataflow, and the resources consumed by the task.<
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">Pydra</a><ul>
-<li><a class="reference internal" href="#rationale">Rationale</a></li>
-<li><a class="reference internal" href="#history">History</a></li>
-<li><a class="reference internal" href="#design-goals">Design goals</a></li>
+<li><a class="reference internal" href="#installation">Installation</a></li>
+<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a><ul>
 </ul>
 </li>
-<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a><ul>
 </ul>
 </li>
 </ul>

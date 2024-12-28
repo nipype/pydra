@@ -3,10 +3,10 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="prev" title="Provenance" href="../explanation/provenance.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Creating a task package" href="create-task-package.html" /><link rel="prev" title="Workflow design" href="../tutorial/workflow.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>API - Pydra v0.1.dev1+gdd21700</title>
+        <title>Real-world example - Pydra v0.1.dev1+gdd21700</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?digest=cf727022eb7470bc603c08d2e55c3247faec75c9" />
@@ -185,7 +185,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
         <div class="visually-hidden">Toggle table of contents sidebar</div>
         <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
       </label>
@@ -216,10 +216,10 @@
 <li class="toctree-l1"><a class="reference internal" href="../tutorial/workflow.html">Workflow design</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How-to Guides</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../howto/real-example.html">Real-world example</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../howto/create-task-package.html">Creating a task package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../howto/port-from-nipype.html">Port interfaces from Nipype</a></li>
+<ul class="current">
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Real-world example</a></li>
+<li class="toctree-l1"><a class="reference internal" href="create-task-package.html">Creating a task package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="port-from-nipype.html">Port interfaces from Nipype</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Explanation</span></p>
 <ul>
@@ -231,8 +231,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../explanation/provenance.html">Provenance</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
-<ul class="current">
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">API</a></li>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../reference/api.html">API</a></li>
 </ul>
 
 </div>
@@ -253,7 +253,7 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="../_sources/reference/api.rst.txt" title="View this page">
+  <a class="muted-link" href="../_sources/howto/real-example.ipynb.txt" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
@@ -267,29 +267,16 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
             <div class="visually-hidden">Toggle table of contents sidebar</div>
             <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="api">
-<h1>API<a class="headerlink" href="#api" title="Permalink to this heading">¶</a></h1>
-<section id="python-tasks">
-<h2>Python tasks<a class="headerlink" href="#python-tasks" title="Permalink to this heading">¶</a></h2>
-</section>
-<section id="shell-tasks">
-<h2>Shell tasks<a class="headerlink" href="#shell-tasks" title="Permalink to this heading">¶</a></h2>
-</section>
-<section id="workflows">
-<h2>Workflows<a class="headerlink" href="#workflows" title="Permalink to this heading">¶</a></h2>
-</section>
-<section id="specification-classes">
-<h2>Specification classes<a class="headerlink" href="#specification-classes" title="Permalink to this heading">¶</a></h2>
-</section>
-<section id="task-classes">
-<h2>Task classes<a class="headerlink" href="#task-classes" title="Permalink to this heading">¶</a></h2>
-</section>
+          <section id="Real-world-example">
+<h1>Real-world example<a class="headerlink" href="#Real-world-example" title="Permalink to this heading">¶</a></h1>
+<p>This is an real-world example of a workflow to pre-process T1-weighted MRI images for further analysis</p>
+<p>Work in progress…</p>
 </section>
 
         </article>
@@ -297,15 +284,23 @@
       <footer>
         
         <div class="related-pages">
-          
-          <a class="prev-page" href="../explanation/provenance.html">
+          <a class="next-page" href="create-task-package.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Creating a task package</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="../tutorial/workflow.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Provenance</div>
+                <div class="title">Workflow design</div>
                 
               </div>
             </a>
@@ -327,31 +322,8 @@
         
       </footer>
     </div>
-    <aside class="toc-drawer">
+    <aside class="toc-drawer no-toc">
       
-      
-      <div class="toc-sticky toc-scroll">
-        <div class="toc-title-container">
-          <span class="toc-title">
-            On this page
-          </span>
-        </div>
-        <div class="toc-tree-container">
-          <div class="toc-tree">
-            <ul>
-<li><a class="reference internal" href="#">API</a><ul>
-<li><a class="reference internal" href="#python-tasks">Python tasks</a></li>
-<li><a class="reference internal" href="#shell-tasks">Shell tasks</a></li>
-<li><a class="reference internal" href="#workflows">Workflows</a></li>
-<li><a class="reference internal" href="#specification-classes">Specification classes</a></li>
-<li><a class="reference internal" href="#task-classes">Task classes</a></li>
-</ul>
-</li>
-</ul>
-
-          </div>
-        </div>
-      </div>
       
       
     </aside>
@@ -361,5 +333,7 @@
     <script src="../_static/sphinx_highlight.js"></script>
     <script src="../_static/scripts/furo.js"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     </body>
 </html>

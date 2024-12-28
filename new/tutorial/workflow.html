@@ -3,13 +3,15 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Installation" href="../howto/install.html" /><link rel="prev" title="Shell-task design" href="shell.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Real-world example" href="../howto/real-example.html" /><link rel="prev" title="Shell-task design" href="shell.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Workflow design - Pydra v0.1.dev1+gb08f22a</title>
+        <title>Workflow design - Pydra v0.1.dev1+gdd21700</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?digest=cf727022eb7470bc603c08d2e55c3247faec75c9" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css" />
     
     
 
@@ -172,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+gb08f22a</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+gdd21700</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -184,7 +186,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
         <div class="visually-hidden">Toggle table of contents sidebar</div>
         <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
       </label>
@@ -199,7 +201,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+gb08f22a</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+gdd21700</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -209,23 +211,24 @@
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <p class="caption" role="heading"><span class="caption-text">Tutorials</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="execution.html">Executing tasks</a></li>
-<li class="toctree-l1"><a class="reference internal" href="task.html">Task design</a></li>
+<li class="toctree-l1"><a class="reference internal" href="execution.html">Running tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="python.html">Python-task design</a></li>
 <li class="toctree-l1"><a class="reference internal" href="shell.html">Shell-task design</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Workflow design</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How-to Guides</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../howto/install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/real-example.html">Real-world example</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../howto/create-task-package.html">Creating a task package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../howto/port-from-nipype.html">Port interfaces from Nipype</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Explanation</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/design-approach.html">Design philosophy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/splitting-combining.html">Splitting and combining</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/typing.html">Type checking</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../explanation/hashing-caching.html">Hashing and caching</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Conditionals and lazy fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/hashing-caching.html">Caching</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Conditional construction</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/provenance.html">Provenance</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -265,7 +268,7 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
             <div class="visually-hidden">Toggle table of contents sidebar</div>
             <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
           </label>
@@ -273,6 +276,287 @@
         <article role="main" id="furo-main-content">
           <section id="Workflow-design">
 <h1>Workflow design<a class="headerlink" href="#Workflow-design" title="Permalink to this heading">¶</a></h1>
+<p>Given two task specifications, <code class="docutils literal notranslate"><span class="pre">Add</span></code> and <code class="docutils literal notranslate"><span class="pre">Mul</span></code></p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">workflow</span><span class="p">,</span> <span class="n">python</span>
+
+<span class="c1"># Example python task specifications</span>
+<span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
+<span class="k">def</span> <span class="nf">Add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
+
+
+<span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
+<span class="k">def</span> <span class="nf">Mul</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
+</pre></div>
+</div>
+</div>
+<p>we can create a simple workflow specification using <code class="docutils literal notranslate"><span class="pre">workflow.define</span></code> to decorate a function that constructs the workflow. Nodes are added to the workflow being constructed by calling <code class="docutils literal notranslate"><span class="pre">workflow.add</span></code> function.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
+<span class="k">def</span> <span class="nf">MyTestWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
+    <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">mul</span><span class="o">.</span><span class="n">out</span>
+</pre></div>
+</div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">workflow.add</span></code> returns an &quot;outputs&quot; object corresponding to the specification added to the workflow. The fields of the outptus object can be referenced as inputs to downstream workflow nodes. Note that these fields are just placeholders for the values that will be returned and can’t be used in conditional statements during workflow construction. The return value(s) of workflow constructor function are the placeholders of the fields that are to be the outputs of the workflow.</p>
+<p>It is also possible to define new tasks to add to the workflow inline the constructor and type the inputs and outputs of the workflow.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">shell</span>
+<span class="kn">from</span> <span class="nn">fileformats</span> <span class="kn">import</span> <span class="n">image</span><span class="p">,</span> <span class="n">video</span>
+
+<span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
+<span class="k">def</span> <span class="nf">MyTestShellWorkflow</span><span class="p">(</span>
+    <span class="n">input_video</span><span class="p">:</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">,</span>
+    <span class="n">watermark</span><span class="p">:</span> <span class="n">image</span><span class="o">.</span><span class="n">Png</span><span class="p">,</span>
+    <span class="n">watermark_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">:</span>
+
+    <span class="n">add_watermark</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+        <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+            <span class="s2">&quot;ffmpeg -i &lt;in_video&gt; -i &lt;watermark:image/png&gt; &quot;</span>
+            <span class="s2">&quot;-filter_complex &lt;filter&gt; &lt;out|out_video&gt;&quot;</span>
+        <span class="p">)(</span>
+            <span class="n">in_video</span><span class="o">=</span><span class="n">input_video</span><span class="p">,</span>
+            <span class="n">watermark</span><span class="o">=</span><span class="n">watermark</span><span class="p">,</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="s2">&quot;overlay=</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">watermark_dims</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">output_video</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+        <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+            <span class="s2">&quot;HandBrakeCLI -i &lt;in_video:video/mp4&gt; -o &lt;out|out_video:video/mp4&gt; &quot;</span>
+            <span class="s2">&quot;--width &lt;width:int&gt; --height &lt;height:int&gt;&quot;</span><span class="p">,</span>
+        <span class="p">)(</span><span class="n">in_video</span><span class="o">=</span><span class="n">add_watermark</span><span class="o">.</span><span class="n">out_video</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">1280</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="mi">720</span><span class="p">)</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">out_video</span>
+
+    <span class="k">return</span> <span class="n">output_video</span>  <span class="c1"># test implicit detection of output name</span>
+</pre></div>
+</div>
+</div>
+<section id="Accessing-the-workflow-object">
+<h2>Accessing the workflow object<a class="headerlink" href="#Accessing-the-workflow-object" title="Permalink to this heading">¶</a></h2>
+<p>If you need to access the workflow object being constructed from inside the constructor function you can use <code class="docutils literal notranslate"><span class="pre">workflow.this()</span></code>.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;divided&quot;</span><span class="p">])</span>
+<span class="k">def</span> <span class="nf">Divide</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">x</span> <span class="o">/</span> <span class="n">y</span>
+
+
+<span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;out1&quot;</span><span class="p">,</span> <span class="s2">&quot;out2&quot;</span><span class="p">])</span>
+<span class="k">def</span> <span class="nf">DirectAccesWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A test workflow demonstration a few alternative ways to set and connect nodes</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        a: An integer input</span>
+<span class="sd">        b: A float input</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        out1: The first output</span>
+<span class="sd">        out2: The second output</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">wf</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">this</span><span class="p">()</span>
+
+    <span class="n">add</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">b</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;addition&quot;</span><span class="p">)</span>
+    <span class="n">mul</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">Mul</span><span class="p">,</span> <span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;out&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">})(</span><span class="n">x</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">z</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
+    <span class="n">divide</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Divide</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">wf</span><span class="p">[</span><span class="s2">&quot;addition&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">lzout</span><span class="o">.</span><span class="n">z</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;division&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Alter one of the inputs to a node after it has been initialised</span>
+    <span class="n">wf</span><span class="p">[</span><span class="s2">&quot;Mul&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">y</span> <span class="o">*=</span> <span class="mi">2</span>
+
+    <span class="k">return</span> <span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">divide</span><span class="o">.</span><span class="n">divided</span>
+</pre></div>
+</div>
+</div>
+<p>Directly access the workflow being constructed also enables you to set the outputs of the workflow directly</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;out1&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="s2">&quot;out2&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">})</span>
+<span class="k">def</span> <span class="nf">SetOutputsOfWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A test workflow demonstration a few alternative ways to set and connect nodes</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        a: An integer input</span>
+<span class="sd">        b: A float input</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        out1: The first output</span>
+<span class="sd">        out2: The second output</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">wf</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">this</span><span class="p">()</span>
+
+    <span class="n">add</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">b</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;addition&quot;</span><span class="p">)</span>
+    <span class="n">mul</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">Mul</span><span class="p">,</span> <span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;out&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">})(</span><span class="n">x</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">z</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
+    <span class="n">divide</span> <span class="o">=</span> <span class="n">wf</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Divide</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">wf</span><span class="p">[</span><span class="s2">&quot;addition&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">lzout</span><span class="o">.</span><span class="n">z</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;division&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Alter one of the inputs to a node after it has been initialised</span>
+    <span class="n">wf</span><span class="p">[</span><span class="s2">&quot;Mul&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">y</span> <span class="o">*=</span> <span class="mi">2</span>
+
+    <span class="c1"># Set the outputs of the workflow directly</span>
+    <span class="n">wf</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">out1</span> <span class="o">=</span> <span class="n">mul</span><span class="o">.</span><span class="n">out</span>
+    <span class="n">wf</span><span class="o">.</span><span class="n">outputs</span><span class="o">.</span><span class="n">out2</span> <span class="o">=</span> <span class="n">divide</span><span class="o">.</span><span class="n">divided</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Dataclass-form">
+<h2>Dataclass form<a class="headerlink" href="#Dataclass-form" title="Permalink to this heading">¶</a></h2>
+<p>Like with Python and shell tasks, it is also possible to specify workflows in &quot;dataclass form&quot; in order to be more explicit to linters, which can be worth the extra effort when creating a suite of workflows to be shared publicly. In this case the workflow constructor should be a static method of the dataclasss named <code class="docutils literal notranslate"><span class="pre">constructor</span></code>.</p>
+<p>This form also lends itself to defining custom converters and validators on the fields</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><br/><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">WorkflowSpec</span><span class="p">,</span> <span class="n">WorkflowOutputs</span>
+
+<span class="k">def</span> <span class="nf">a_converter</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">value</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+<span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
+<span class="k">class</span> <span class="nc">MyLibraryWorkflow</span><span class="p">(</span><span class="n">WorkflowSpec</span><span class="p">[</span><span class="s2">&quot;MyLibraryWorkflow.Outputs&quot;</span><span class="p">]):</span>
+
+    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">b</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
+        <span class="n">help_string</span><span class="o">=</span><span class="s2">&quot;A float input&quot;</span><span class="p">,</span>
+        <span class="n">converter</span><span class="o">=</span><span class="n">a_converter</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">constructor</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+        <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
+        <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">mul</span><span class="o">.</span><span class="n">out</span>
+
+    <span class="nd">@workflow</span><span class="o">.</span><span class="n">outputs</span>
+    <span class="k">class</span> <span class="nc">Outputs</span><span class="p">(</span><span class="n">WorkflowOutputs</span><span class="p">):</span>
+        <span class="n">out</span><span class="p">:</span> <span class="nb">float</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Splitting/combining-task-inputs">
+<h2>Splitting/combining task inputs<a class="headerlink" href="#Splitting/combining-task-inputs" title="Permalink to this heading">¶</a></h2>
+<p>Sometimes, you might want to perform the same task over a set of input values/files, and then collect the results into a list to perform further processing. This can be achieved by using the <code class="docutils literal notranslate"><span class="pre">split</span></code> and <code class="docutils literal notranslate"><span class="pre">combine</span></code> methods</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
+<span class="k">def</span> <span class="nf">Sum</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+<span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
+<span class="k">def</span> <span class="nf">MySplitWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+    <span class="c1"># Multiply over all combinations of the elements of a and b, then combine the results</span>
+    <span class="c1"># for each a element into a list over each b element</span>
+    <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">())</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">b</span><span class="p">)</span><span class="o">.</span><span class="n">combine</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">)</span>
+    <span class="c1"># Sume the multiplications across all all b elements for each a element</span>
+    <span class="nb">sum</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Sum</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">sum</span><span class="o">.</span><span class="n">out</span>
+</pre></div>
+</div>
+</div>
+<p>The combination step doesn’t have to be done on the same step as the split, in which case the splits propagate to downstream nodes</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
+<span class="k">def</span> <span class="nf">MySplitThenCombineWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">c</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+    <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">())</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">b</span><span class="p">)</span>
+    <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">c</span><span class="p">))</span><span class="o">.</span><span class="n">combine</span><span class="p">(</span><span class="s2">&quot;Mul.x&quot;</span><span class="p">)</span>
+    <span class="nb">sum</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Sum</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">sum</span><span class="o">.</span><span class="n">out</span>
+</pre></div>
+</div>
+</div>
+<p>For more advanced discussion on the intricacies of splitting and combining see <a class="reference external" href="../explanation/splitting-combining.html">Splitting and combining</a></p>
+</section>
+<section id="Nested-and-conditional-workflows">
+<h2>Nested and conditional workflows<a class="headerlink" href="#Nested-and-conditional-workflows" title="Permalink to this heading">¶</a></h2>
+<p>One of the most powerful features of Pydra is the ability to use inline Python code to conditionally add/omit nodes to workflow, and alter the parameterisation of the nodes, depending on inputs to the workflow</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
+<span class="k">def</span> <span class="nf">MyConditionalWorkflow</span><span class="p">(</span>
+    <span class="n">input_video</span><span class="p">:</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">,</span>
+    <span class="n">watermark</span><span class="p">:</span> <span class="n">image</span><span class="o">.</span><span class="n">Png</span><span class="p">,</span>
+    <span class="n">watermark_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">:</span>
+
+    <span class="k">if</span> <span class="n">watermark_dims</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">add_watermark</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+            <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+                <span class="s2">&quot;ffmpeg -i &lt;in_video&gt; -i &lt;watermark:image/png&gt; &quot;</span>
+                <span class="s2">&quot;-filter_complex &lt;filter&gt; &lt;out|out_video&gt;&quot;</span>
+            <span class="p">)(</span>
+                <span class="n">in_video</span><span class="o">=</span><span class="n">input_video</span><span class="p">,</span>
+                <span class="n">watermark</span><span class="o">=</span><span class="n">watermark</span><span class="p">,</span>
+                <span class="nb">filter</span><span class="o">=</span><span class="s2">&quot;overlay=</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">watermark_dims</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">handbrake_input</span> <span class="o">=</span> <span class="n">add_watermark</span><span class="o">.</span><span class="n">out_video</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">handbrake_input</span> <span class="o">=</span> <span class="n">input_video</span>
+
+    <span class="n">output_video</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+        <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+            <span class="s2">&quot;HandBrakeCLI -i &lt;in_video:video/mp4&gt; -o &lt;out|out_video:video/mp4&gt; &quot;</span>
+            <span class="s2">&quot;--width &lt;width:int&gt; --height &lt;height:int&gt;&quot;</span><span class="p">,</span>
+        <span class="p">)(</span><span class="n">in_video</span><span class="o">=</span><span class="n">handbrake_input</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">1280</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="mi">720</span><span class="p">)</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">out_video</span>
+
+    <span class="k">return</span> <span class="n">output_video</span>  <span class="c1"># test implicit detection of output name</span>
+</pre></div>
+</div>
+</div>
+<p>Note that outputs of upstream nodes cannot be used in conditional statements, since these are just placeholders at the time the workflow is being constructed. However, you can get around this limitation by placing the conditional logic within a nested workflow</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
+<span class="k">def</span> <span class="nf">Subtract</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">x</span> <span class="o">-</span> <span class="n">y</span>
+
+<span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
+<span class="k">def</span> <span class="nf">RecursiveNestedWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+    <span class="n">decrement_depth</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Subtract</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">depth</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">depth</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">out_node</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+            <span class="n">RecursiveNestedWorkflow</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">decrement_depth</span><span class="o">.</span><span class="n">out</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">out_node</span> <span class="o">=</span> <span class="n">add</span>
+    <span class="k">return</span> <span class="n">out_node</span><span class="o">.</span><span class="n">out</span>
+</pre></div>
+</div>
+</div>
+<p>For more detailed discussion of the construction of conditional workflows and &quot;lazy field&quot; placeholders see <a class="reference external" href="../explanation/conditional-lazy.html">Conditional construction</a></p>
+</section>
 </section>
 
         </article>
@@ -280,12 +564,12 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="../howto/install.html">
+          <a class="next-page" href="../howto/real-example.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Installation</div>
+                <div class="title">Real-world example</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -318,8 +602,30 @@
         
       </footer>
     </div>
-    <aside class="toc-drawer no-toc">
+    <aside class="toc-drawer">
       
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Workflow design</a><ul>
+<li><a class="reference internal" href="#Accessing-the-workflow-object">Accessing the workflow object</a></li>
+<li><a class="reference internal" href="#Dataclass-form">Dataclass form</a></li>
+<li><a class="reference internal" href="#Splitting/combining-task-inputs">Splitting/combining task inputs</a></li>
+<li><a class="reference internal" href="#Nested-and-conditional-workflows">Nested and conditional workflows</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
       
       
     </aside>
