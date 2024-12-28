@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Real-world example" href="../howto/real-example.html" /><link rel="prev" title="Shell-task design" href="shell.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Workflow design - Pydra v0.1.dev1+gdd21700</title>
+        <title>Workflow design - Pydra v0.1.dev1+g234053d</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
@@ -174,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+gdd21700</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g234053d</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -201,7 +201,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+gdd21700</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+g234053d</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -276,7 +276,10 @@
         <article role="main" id="furo-main-content">
           <section id="Workflow-design">
 <h1>Workflow design<a class="headerlink" href="#Workflow-design" title="Permalink to this heading">¶</a></h1>
-<p>Given two task specifications, <code class="docutils literal notranslate"><span class="pre">Add</span></code> and <code class="docutils literal notranslate"><span class="pre">Mul</span></code></p>
+<p>In Pydra, workflows are DAG of component tasks to be executed on specified inputs. Workflow specifications are dataclasses, which interchangeable with Python and shell tasks specifications and executed in the same way.</p>
+<section id="Constructor-functions">
+<h2>Constructor functions<a class="headerlink" href="#Constructor-functions" title="Permalink to this heading">¶</a></h2>
+<p>Workflows are typically defined using the <code class="docutils literal notranslate"><span class="pre">pydra.design.workflow.define</span></code> decorator on a &quot;constructor&quot; function that generates the workflow. For example, given two task specifications, <code class="docutils literal notranslate"><span class="pre">Add</span></code> and <code class="docutils literal notranslate"><span class="pre">Mul</span></code>.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
@@ -301,7 +304,7 @@
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span> <span class="nf">MyTestWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">BasicWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
     <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
     <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">mul</span><span class="o">.</span><span class="n">out</span>
@@ -318,7 +321,7 @@
 <span class="kn">from</span> <span class="nn">fileformats</span> <span class="kn">import</span> <span class="n">image</span><span class="p">,</span> <span class="n">video</span>
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span> <span class="nf">MyTestShellWorkflow</span><span class="p">(</span>
+<span class="k">def</span> <span class="nf">ShellWorkflow</span><span class="p">(</span>
     <span class="n">input_video</span><span class="p">:</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">,</span>
     <span class="n">watermark</span><span class="p">:</span> <span class="n">image</span><span class="o">.</span><span class="n">Png</span><span class="p">,</span>
     <span class="n">watermark_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span>
@@ -345,6 +348,7 @@
 </pre></div>
 </div>
 </div>
+</section>
 <section id="Accessing-the-workflow-object">
 <h2>Accessing the workflow object<a class="headerlink" href="#Accessing-the-workflow-object" title="Permalink to this heading">¶</a></h2>
 <p>If you need to access the workflow object being constructed from inside the constructor function you can use <code class="docutils literal notranslate"><span class="pre">workflow.this()</span></code>.</p>
@@ -433,7 +437,7 @@
     <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span> <span class="nc">MyLibraryWorkflow</span><span class="p">(</span><span class="n">WorkflowSpec</span><span class="p">[</span><span class="s2">&quot;MyLibraryWorkflow.Outputs&quot;</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">LibraryWorkflow</span><span class="p">(</span><span class="n">WorkflowSpec</span><span class="p">[</span><span class="s2">&quot;MyLibraryWorkflow.Outputs&quot;</span><span class="p">]):</span>
 
     <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">b</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
@@ -466,7 +470,7 @@
     <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span> <span class="nf">MySplitWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">SplitWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
     <span class="c1"># Multiply over all combinations of the elements of a and b, then combine the results</span>
     <span class="c1"># for each a element into a list over each b element</span>
     <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">())</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">b</span><span class="p">)</span><span class="o">.</span><span class="n">combine</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">)</span>
@@ -482,7 +486,7 @@
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span> <span class="nf">MySplitThenCombineWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">c</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">SplitThenCombineWorkflow</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">c</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
     <span class="n">mul</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Mul</span><span class="p">())</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">b</span><span class="p">)</span>
     <span class="n">add</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Add</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">mul</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">c</span><span class="p">))</span><span class="o">.</span><span class="n">combine</span><span class="p">(</span><span class="s2">&quot;Mul.x&quot;</span><span class="p">)</span>
     <span class="nb">sum</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Sum</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">add</span><span class="o">.</span><span class="n">out</span><span class="p">))</span>
@@ -500,7 +504,7 @@
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">def</span> <span class="nf">MyConditionalWorkflow</span><span class="p">(</span>
+<span class="k">def</span> <span class="nf">ConditionalWorkflow</span><span class="p">(</span>
     <span class="n">input_video</span><span class="p">:</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">,</span>
     <span class="n">watermark</span><span class="p">:</span> <span class="n">image</span><span class="o">.</span><span class="n">Png</span><span class="p">,</span>
     <span class="n">watermark_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -556,6 +560,61 @@
 </div>
 </div>
 <p>For more detailed discussion of the construction of conditional workflows and &quot;lazy field&quot; placeholders see <a class="reference external" href="../explanation/conditional-lazy.html">Conditional construction</a></p>
+</section>
+<section id="Typing">
+<h2>Typing<a class="headerlink" href="#Typing" title="Permalink to this heading">¶</a></h2>
+<p>Pydra utilizes Python type annotations to implement strong type-checking, which is performed when values or upstream outputs are assigned to task specification inputs.</p>
+<p>Task input and output fields do not need to be assigned types, since they will default to <code class="docutils literal notranslate"><span class="pre">typing.Any</span></code>. However, if they are assigned a type and a value or output from an upstream node conflicts with the type, a <code class="docutils literal notranslate"><span class="pre">TypeError</span></code> will be raised at construction time.</p>
+<p>Note that the type-checking &quot;assumes the best&quot;, and will pass if the upstream field is typed by <code class="docutils literal notranslate"><span class="pre">Any</span></code> or a super-class of the field being assigned to. For example, an input of <code class="docutils literal notranslate"><span class="pre">fileformats.generic.File</span></code> passed to a field expecting a <code class="docutils literal notranslate"><span class="pre">fileformats.image.Png</span></code> file type, because <code class="docutils literal notranslate"><span class="pre">Png</span></code> is a subtype of <code class="docutils literal notranslate"><span class="pre">File</span></code>, where as <code class="docutils literal notranslate"><span class="pre">fileformats.image.Jpeg</span></code> input would fail since it is clearly not the intended type.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">fileformats</span> <span class="kn">import</span> <span class="n">generic</span>
+
+<span class="n">Mp4Handbrake</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+    <span class="s2">&quot;HandBrakeCLI -i &lt;in_video:video/mp4&gt; -o &lt;out|out_video:video/mp4&gt; &quot;</span>
+    <span class="s2">&quot;--width &lt;width:int&gt; --height &lt;height:int&gt;&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="n">QuicktimeHandbrake</span> <span class="o">=</span> <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+    <span class="s2">&quot;HandBrakeCLI -i &lt;in_video:video/quicktime&gt; -o &lt;out|out_video:video/quicktime&gt; &quot;</span>
+    <span class="s2">&quot;--width &lt;width:int&gt; --height &lt;height:int&gt;&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
+<span class="k">def</span> <span class="nf">TypeErrorWorkflow</span><span class="p">(</span>
+    <span class="n">input_video</span><span class="p">:</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">,</span>
+    <span class="n">watermark</span><span class="p">:</span> <span class="n">generic</span><span class="o">.</span><span class="n">File</span><span class="p">,</span>
+    <span class="n">watermark_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">video</span><span class="o">.</span><span class="n">Mp4</span><span class="p">:</span>
+
+    <span class="n">add_watermark</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+        <span class="n">shell</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+            <span class="s2">&quot;ffmpeg -i &lt;in_video&gt; -i &lt;watermark:image/png&gt; &quot;</span>
+            <span class="s2">&quot;-filter_complex &lt;filter&gt; &lt;out|out_video:video/mp4&gt;&quot;</span>
+        <span class="p">)(</span>
+            <span class="n">in_video</span><span class="o">=</span><span class="n">input_video</span><span class="p">,</span>
+            <span class="n">watermark</span><span class="o">=</span><span class="n">watermark</span><span class="p">,</span>  <span class="c1"># Type is OK because generic.File is superclass of image.Png</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="s2">&quot;overlay=</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">watermark_dims</span><span class="p">),</span>
+        <span class="p">),</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;add_watermark&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">handbrake</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+            <span class="n">QuicktimeHandbrake</span><span class="p">(</span><span class="n">in_video</span><span class="o">=</span><span class="n">add_watermark</span><span class="o">.</span><span class="n">out_video</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">1280</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="mi">720</span><span class="p">),</span>
+        <span class="p">)</span>  <span class="c1"># This will raise a TypeError because the input video is an Mp4</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="n">handbrake</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+            <span class="n">Mp4Handbrake</span><span class="p">(</span><span class="n">in_video</span><span class="o">=</span><span class="n">add_watermark</span><span class="o">.</span><span class="n">out_video</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">1280</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="mi">720</span><span class="p">),</span>
+        <span class="p">)</span>  <span class="c1"># The type of the input video is now correct</span>
+
+    <span class="k">return</span> <span class="n">handbrake</span><span class="o">.</span><span class="n">output_video</span>
+</pre></div>
+</div>
+</div>
 </section>
 </section>
 
@@ -615,10 +674,12 @@
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">Workflow design</a><ul>
+<li><a class="reference internal" href="#Constructor-functions">Constructor functions</a></li>
 <li><a class="reference internal" href="#Accessing-the-workflow-object">Accessing the workflow object</a></li>
 <li><a class="reference internal" href="#Dataclass-form">Dataclass form</a></li>
 <li><a class="reference internal" href="#Splitting/combining-task-inputs">Splitting/combining task inputs</a></li>
 <li><a class="reference internal" href="#Nested-and-conditional-workflows">Nested and conditional workflows</a></li>
+<li><a class="reference internal" href="#Typing">Typing</a></li>
 </ul>
 </li>
 </ul>
