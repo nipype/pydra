@@ -3,10 +3,10 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Real-world example" href="../howto/real-example.html" /><link rel="prev" title="Shell-task design" href="shell.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Real-world example" href="../examples/real-example.html" /><link rel="prev" title="Shell-tasks" href="shell.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Workflow design - Pydra v0.1.dev1+g234053d</title>
+        <title>Workflows - Pydra v0.1.dev1+ga96118e</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
@@ -174,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g234053d</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+ga96118e</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -201,7 +201,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g234053d</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+ga96118e</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -209,26 +209,32 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Tutorials</span></p>
-<ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="execution.html">Running tasks</a></li>
-<li class="toctree-l1"><a class="reference internal" href="python.html">Python-task design</a></li>
-<li class="toctree-l1"><a class="reference internal" href="shell.html">Shell-task design</a></li>
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Workflow design</a></li>
+  <ul>
+<li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced-execution.html">Execution options</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">How-to Guides</span></p>
+<p class="caption" role="heading"><span class="caption-text">Design</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="python.html">Python-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="shell.html">Shell-tasks</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Workflows</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../howto/real-example.html">Real-world example</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../howto/create-task-package.html">Creating a task package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/real-example.html">Real-world example</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-to</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../howto/create-task-package.html">Create a task package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../howto/port-from-nipype.html">Port interfaces from Nipype</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Explanation</span></p>
+<p class="caption" role="heading"><span class="caption-text">In-depth</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/design-approach.html">Design philosophy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/splitting-combining.html">Splitting and combining</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/typing.html">Type checking</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../explanation/hashing-caching.html">Caching</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Conditional construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/hashing-caching.html">Caching and hashing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Conditionals and lazy fields</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/provenance.html">Provenance</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -274,8 +280,8 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="Workflow-design">
-<h1>Workflow design<a class="headerlink" href="#Workflow-design" title="Permalink to this heading">¶</a></h1>
+          <section id="Workflows">
+<h1>Workflows<a class="headerlink" href="#Workflows" title="Permalink to this heading">¶</a></h1>
 <p>In Pydra, workflows are DAG of component tasks to be executed on specified inputs. Workflow specifications are dataclasses, which interchangeable with Python and shell tasks specifications and executed in the same way.</p>
 <section id="Constructor-functions">
 <h2>Constructor functions<a class="headerlink" href="#Constructor-functions" title="Permalink to this heading">¶</a></h2>
@@ -429,7 +435,7 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><br/><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">WorkflowSpec</span><span class="p">,</span> <span class="n">WorkflowOutputs</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">WorkflowSpec</span><span class="p">,</span> <span class="n">WorkflowOutputs</span>
 
 <span class="k">def</span> <span class="nf">a_converter</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -559,10 +565,10 @@
 </pre></div>
 </div>
 </div>
-<p>For more detailed discussion of the construction of conditional workflows and &quot;lazy field&quot; placeholders see <a class="reference external" href="../explanation/conditional-lazy.html">Conditional construction</a></p>
+<p>For more detailed discussion of the construction of conditional workflows and &quot;lazy field&quot; placeholders see <a class="reference external" href="../explanation/conditional-lazy.html">Conditionals and lazy fields</a></p>
 </section>
-<section id="Typing">
-<h2>Typing<a class="headerlink" href="#Typing" title="Permalink to this heading">¶</a></h2>
+<section id="Type-checking-between-nodes">
+<h2>Type-checking between nodes<a class="headerlink" href="#Type-checking-between-nodes" title="Permalink to this heading">¶</a></h2>
 <p>Pydra utilizes Python type annotations to implement strong type-checking, which is performed when values or upstream outputs are assigned to task specification inputs.</p>
 <p>Task input and output fields do not need to be assigned types, since they will default to <code class="docutils literal notranslate"><span class="pre">typing.Any</span></code>. However, if they are assigned a type and a value or output from an upstream node conflicts with the type, a <code class="docutils literal notranslate"><span class="pre">TypeError</span></code> will be raised at construction time.</p>
 <p>Note that the type-checking &quot;assumes the best&quot;, and will pass if the upstream field is typed by <code class="docutils literal notranslate"><span class="pre">Any</span></code> or a super-class of the field being assigned to. For example, an input of <code class="docutils literal notranslate"><span class="pre">fileformats.generic.File</span></code> passed to a field expecting a <code class="docutils literal notranslate"><span class="pre">fileformats.image.Png</span></code> file type, because <code class="docutils literal notranslate"><span class="pre">Png</span></code> is a subtype of <code class="docutils literal notranslate"><span class="pre">File</span></code>, where as <code class="docutils literal notranslate"><span class="pre">fileformats.image.Jpeg</span></code> input would fail since it is clearly not the intended type.</p>
@@ -595,7 +601,7 @@
             <span class="s2">&quot;ffmpeg -i &lt;in_video&gt; -i &lt;watermark:image/png&gt; &quot;</span>
             <span class="s2">&quot;-filter_complex &lt;filter&gt; &lt;out|out_video:video/mp4&gt;&quot;</span>
         <span class="p">)(</span>
-            <span class="n">in_video</span><span class="o">=</span><span class="n">input_video</span><span class="p">,</span>
+            <span class="n">in_video</span><span class="o">=</span><span class="n">input_video</span><span class="p">,</span>  <span class="c1"># This is OK because in_video is typed Any</span>
             <span class="n">watermark</span><span class="o">=</span><span class="n">watermark</span><span class="p">,</span>  <span class="c1"># Type is OK because generic.File is superclass of image.Png</span>
             <span class="nb">filter</span><span class="o">=</span><span class="s2">&quot;overlay=</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">watermark_dims</span><span class="p">),</span>
         <span class="p">),</span>
@@ -615,6 +621,7 @@
 </pre></div>
 </div>
 </div>
+<p>For more detailed discussion on Pydra’s type-checking see <a class="reference external" href="../explanation/typing.html">Type Checking</a>.</p>
 </section>
 </section>
 
@@ -623,7 +630,7 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="../howto/real-example.html">
+          <a class="next-page" href="../examples/real-example.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
@@ -639,7 +646,7 @@
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Shell-task design</div>
+                <div class="title">Shell-tasks</div>
                 
               </div>
             </a>
@@ -673,13 +680,13 @@
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Workflow design</a><ul>
+<li><a class="reference internal" href="#">Workflows</a><ul>
 <li><a class="reference internal" href="#Constructor-functions">Constructor functions</a></li>
 <li><a class="reference internal" href="#Accessing-the-workflow-object">Accessing the workflow object</a></li>
 <li><a class="reference internal" href="#Dataclass-form">Dataclass form</a></li>
 <li><a class="reference internal" href="#Splitting/combining-task-inputs">Splitting/combining task inputs</a></li>
 <li><a class="reference internal" href="#Nested-and-conditional-workflows">Nested and conditional workflows</a></li>
-<li><a class="reference internal" href="#Typing">Typing</a></li>
+<li><a class="reference internal" href="#Type-checking-between-nodes">Type-checking between nodes</a></li>
 </ul>
 </li>
 </ul>

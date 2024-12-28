@@ -4,7 +4,7 @@
    "cell_type": "markdown",
    "metadata": {},
    "source": [
-    "# Running tasks\n",
+    "# Getting started\n",
     "\n",
     "A *Task* is the basic runnable component in Pydra, and can execute either a Python function,\n",
     "shell command or workflows consisting of combinations of all three types."

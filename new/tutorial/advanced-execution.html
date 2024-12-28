@@ -3,10 +3,10 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Creating a task package" href="create-task-package.html" /><link rel="prev" title="Workflow design" href="../tutorial/workflow.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Python-tasks" href="python.html" /><link rel="prev" title="Getting started" href="getting-started.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Real-world example - Pydra v0.1.dev1+g234053d</title>
+        <title>Execution options - Pydra v0.1.dev1+ga96118e</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?digest=cf727022eb7470bc603c08d2e55c3247faec75c9" />
@@ -173,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g234053d</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+ga96118e</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -185,7 +185,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
         <div class="visually-hidden">Toggle table of contents sidebar</div>
         <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
       </label>
@@ -200,7 +200,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g234053d</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+ga96118e</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -208,26 +208,32 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Tutorials</span></p>
+  <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting started</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Execution options</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Design</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/execution.html">Running tasks</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/python.html">Python-task design</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/shell.html">Shell-task design</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/workflow.html">Workflow design</a></li>
+<li class="toctree-l1"><a class="reference internal" href="python.html">Python-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="shell.html">Shell-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflow.html">Workflows</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">How-to Guides</span></p>
-<ul class="current">
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Real-world example</a></li>
-<li class="toctree-l1"><a class="reference internal" href="create-task-package.html">Creating a task package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="port-from-nipype.html">Port interfaces from Nipype</a></li>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/real-example.html">Real-world example</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Explanation</span></p>
+<p class="caption" role="heading"><span class="caption-text">How-to</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../howto/create-task-package.html">Create a task package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/port-from-nipype.html">Port interfaces from Nipype</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">In-depth</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/design-approach.html">Design philosophy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/splitting-combining.html">Splitting and combining</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/typing.html">Type checking</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../explanation/hashing-caching.html">Caching</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Conditional construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/hashing-caching.html">Caching and hashing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Conditionals and lazy fields</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/provenance.html">Provenance</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -253,7 +259,7 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="../_sources/howto/real-example.ipynb.txt" title="View this page">
+  <a class="muted-link" href="../_sources/tutorial/advanced-execution.ipynb.txt" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
@@ -267,16 +273,23 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
             <div class="visually-hidden">Toggle table of contents sidebar</div>
             <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="Real-world-example">
-<h1>Real-world example<a class="headerlink" href="#Real-world-example" title="Permalink to this heading">¶</a></h1>
-<p>This is an real-world example of a workflow to pre-process T1-weighted MRI images for further analysis</p>
-<p>Work in progress…</p>
+          <section id="Execution-options">
+<h1>Execution options<a class="headerlink" href="#Execution-options" title="Permalink to this heading">¶</a></h1>
+<section id="Execution-plugins">
+<h2>Execution plugins<a class="headerlink" href="#Execution-plugins" title="Permalink to this heading">¶</a></h2>
+</section>
+<section id="Cache-locations">
+<h2>Cache locations<a class="headerlink" href="#Cache-locations" title="Permalink to this heading">¶</a></h2>
+</section>
+<section id="Environments">
+<h2>Environments<a class="headerlink" href="#Environments" title="Permalink to this heading">¶</a></h2>
+</section>
 </section>
 
         </article>
@@ -284,23 +297,23 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="create-task-package.html">
+          <a class="next-page" href="python.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Creating a task package</div>
+                <div class="title">Python-tasks</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="../tutorial/workflow.html">
+          <a class="prev-page" href="getting-started.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Workflow design</div>
+                <div class="title">Getting started</div>
                 
               </div>
             </a>
@@ -322,8 +335,29 @@
         
       </footer>
     </div>
-    <aside class="toc-drawer no-toc">
+    <aside class="toc-drawer">
       
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Execution options</a><ul>
+<li><a class="reference internal" href="#Execution-plugins">Execution plugins</a></li>
+<li><a class="reference internal" href="#Cache-locations">Cache locations</a></li>
+<li><a class="reference internal" href="#Environments">Environments</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
       
       
     </aside>

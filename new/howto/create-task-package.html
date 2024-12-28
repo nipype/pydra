@@ -3,10 +3,10 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Port interfaces from Nipype" href="port-from-nipype.html" /><link rel="prev" title="Real-world example" href="real-example.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Port interfaces from Nipype" href="port-from-nipype.html" /><link rel="prev" title="Real-world example" href="../examples/real-example.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Creating a task package - Pydra v0.1.dev1+g234053d</title>
+        <title>Create a task package - Pydra v0.1.dev1+ga96118e</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?digest=cf727022eb7470bc603c08d2e55c3247faec75c9" />
@@ -173,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g234053d</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+ga96118e</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -200,7 +200,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g234053d</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+ga96118e</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -208,26 +208,32 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Tutorials</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/execution.html">Running tasks</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/python.html">Python-task design</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/shell.html">Shell-task design</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorial/workflow.html">Workflow design</a></li>
+  <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/getting-started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/advanced-execution.html">Execution options</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">How-to Guides</span></p>
+<p class="caption" role="heading"><span class="caption-text">Design</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/python.html">Python-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/shell.html">Shell-tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial/workflow.html">Workflows</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/real-example.html">Real-world example</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-to</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="real-example.html">Real-world example</a></li>
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Creating a task package</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Create a task package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="port-from-nipype.html">Port interfaces from Nipype</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Explanation</span></p>
+<p class="caption" role="heading"><span class="caption-text">In-depth</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/design-approach.html">Design philosophy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/splitting-combining.html">Splitting and combining</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/typing.html">Type checking</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../explanation/hashing-caching.html">Caching</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Conditional construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/hashing-caching.html">Caching and hashing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Conditionals and lazy fields</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/provenance.html">Provenance</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
@@ -273,8 +279,8 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="Creating-a-task-package">
-<h1>Creating a task package<a class="headerlink" href="#Creating-a-task-package" title="Permalink to this heading">¶</a></h1>
+          <section id="Create-a-task-package">
+<h1>Create a task package<a class="headerlink" href="#Create-a-task-package" title="Permalink to this heading">¶</a></h1>
 </section>
 
         </article>
@@ -291,7 +297,7 @@
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="real-example.html">
+          <a class="prev-page" href="../examples/real-example.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
