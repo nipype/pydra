@@ -1,4 +1,4 @@
-Hashing and caching
-===================
+Caching
+=======
 
 Work in progress....

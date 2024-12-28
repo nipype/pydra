@@ -144,6 +144,9 @@ html_theme_options = {
     },
 }
 
+html_static_path = ["_static"]
+html_css_files = ["css/custom.css"]
+
 # Add any paths that contain custom themes here, relative to this directory.
 # html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 

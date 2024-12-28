@@ -618,7 +618,7 @@ def ensure_field_objects(
                 out.name = output_name
             if not out.help_string:
                 out.help_string = output_helps.get(output_name, "")
-        elif inspect.isclass(out):
+        elif inspect.isclass(out) or ty.get_origin(out):
             outputs[output_name] = out_type(
                 type=out,
                 name=output_name,
