@@ -27,35 +27,67 @@ those commands installed on the execution machine, or use software containers
 (e.g., Docker or Singularity) to run them.
 
 
+Tutorials
+---------
+
+* :ref:`Getting started`
+* :ref:`Execution options`
+* :ref:`Python-tasks`
+* :ref:`Shell-tasks`
+* :ref:`Workflows`
+
+Examples
+--------
+
+* :ref:`Real-world example`
+
+How-to Guides
+-------------
+
+* :ref:`Create a task package`
+* :ref:`Port interfaces from Nipype`
+
 Indices and tables
 ------------------
 
 * :ref:`genindex`
 * :ref:`modindex`
 
+.. toctree::
+    :maxdepth: 2
+    :hidden:
+
+    tutorial/getting-started
+    tutorial/advanced-execution
 
 .. toctree::
     :maxdepth: 2
-    :caption: Tutorials
+    :caption: Design
     :hidden:
 
-    tutorial/execution
     tutorial/python
     tutorial/shell
     tutorial/workflow
 
+
 .. toctree::
    :maxdepth: 2
-   :caption: How-to Guides
+   :caption: Examples
    :hidden:
 
-   howto/real-example
+   examples/real-example
+
+.. toctree::
+   :maxdepth: 2
+   :caption: How-to
+   :hidden:
+
    howto/create-task-package
    howto/port-from-nipype
 
 .. toctree::
    :maxdepth: 2
-   :caption: Explanation
+   :caption: In-depth
    :hidden:
 
    explanation/design-approach
