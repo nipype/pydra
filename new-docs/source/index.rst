@@ -96,6 +96,8 @@ Indices and tables
    :hidden:
 
    examples/t1w-preprocess
+   examples/first-level-glm
+   examples/two-level-glm
 
 .. toctree::
    :maxdepth: 2
