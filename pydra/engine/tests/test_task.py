@@ -17,7 +17,7 @@ from pydra.utils.typing import (
     MultiOutputObj,
 )
 from ..specs import (
-    ShellSpec,
+    ShellDef,
     File,
 )
 from pydra.utils.hash import hash_function
@@ -592,7 +592,7 @@ def test_input_spec_func_1():
     my_input_spec = SpecInfo(
         name="Input",
         fields=[("a", attr.ib(type=float, metadata={"help_string": "input a"}))],
-        bases=(FunctionSpec,),
+        bases=(FunctionDef,),
     )
 
     funky = testfunc(a=3.5, input_spec=my_input_spec)
@@ -611,7 +611,7 @@ def test_input_spec_func_1a_except():
     my_input_spec = SpecInfo(
         name="Input",
         fields=[("a", attr.ib(type=int, metadata={"help_string": "input a"}))],
-        bases=(FunctionSpec,),
+        bases=(FunctionDef,),
     )
     with pytest.raises(TypeError):
         testfunc(a=3.5, input_spec=my_input_spec)
@@ -634,7 +634,7 @@ def test_input_spec_func_1b_except():
                 attr.ib(type=float, metadata={"position": 1, "help_string": "input a"}),
             )
         ],
-        bases=(FunctionSpec,),
+        bases=(FunctionDef,),
     )
     with pytest.raises(AttributeError, match="only these keys are supported"):
         testfunc(a=3.5, input_spec=my_input_spec)
@@ -649,7 +649,7 @@ def test_input_spec_func_1d_except():
     def testfunc(a):
         return a
 
-    my_input_spec = SpecInfo(name="Input", fields=[], bases=(FunctionSpec,))
+    my_input_spec = SpecInfo(name="Input", fields=[], bases=(FunctionDef,))
     funky = testfunc(a=3.5, input_spec=my_input_spec)
     with pytest.raises(TypeError, match="missing 1 required positional argument"):
         funky()
@@ -667,7 +667,7 @@ def test_input_spec_func_2():
     my_input_spec = SpecInfo(
         name="Input",
         fields=[("a", attr.ib(type=float, metadata={"help_string": "input a"}))],
-        bases=(FunctionSpec,),
+        bases=(FunctionDef,),
     )
 
     funky = testfunc(a=3.5, input_spec=my_input_spec)
@@ -687,7 +687,7 @@ def test_input_spec_func_2a():
     my_input_spec = SpecInfo(
         name="Input",
         fields=[("a", float, {"help_string": "input a"})],
-        bases=(FunctionSpec,),
+        bases=(FunctionDef,),
     )
 
     funky = testfunc(a=3.5, input_spec=my_input_spec)
@@ -714,7 +714,7 @@ def test_input_spec_func_3():
                 ),
             )
         ],
-        bases=(FunctionSpec,),
+        bases=(FunctionDef,),
     )
 
     funky = testfunc(a=2, input_spec=my_input_spec)
@@ -741,7 +741,7 @@ def test_input_spec_func_3a_except():
                 ),
             )
         ],
-        bases=(FunctionSpec,),
+        bases=(FunctionDef,),
     )
 
     with pytest.raises(ValueError, match="value of a has to be"):
@@ -773,7 +773,7 @@ def test_input_spec_func_4():
                 ),
             ),
         ],
-        bases=(FunctionSpec,),
+        bases=(FunctionDef,),
     )
 
     funky = testfunc(a=2, input_spec=my_input_spec)
@@ -801,7 +801,7 @@ def test_input_spec_func_4a():
             ),
             ("b", attr.ib(type=int, default=10, metadata={"help_string": "input b"})),
         ],
-        bases=(FunctionSpec,),
+        bases=(FunctionDef,),
     )
 
     funky = testfunc(a=2, input_spec=my_input_spec)
@@ -823,7 +823,7 @@ def test_input_spec_func_5():
         fields=[
             ("a", attr.ib(type=MultiInputObj, metadata={"help_string": "input a"}))
         ],
-        bases=(FunctionSpec,),
+        bases=(FunctionDef,),
     )
 
     funky = testfunc(a=3.5, input_spec=my_input_spec)
@@ -842,7 +842,7 @@ def test_output_spec_func_1():
     my_output_spec = SpecInfo(
         name="Output",
         fields=[("out1", attr.ib(type=float, metadata={"help_string": "output"}))],
-        bases=(BaseSpec,),
+        bases=(BaseDef,),
     )
 
     funky = testfunc(a=3.5, output_spec=my_output_spec)
@@ -862,7 +862,7 @@ def test_output_spec_func_1a_except():
     my_output_spec = SpecInfo(
         name="Output",
         fields=[("out1", attr.ib(type=int, metadata={"help_string": "output"}))],
-        bases=(BaseSpec,),
+        bases=(BaseDef,),
     )
 
     funky = testfunc(a=3.5, output_spec=my_output_spec)
@@ -882,7 +882,7 @@ def test_output_spec_func_2():
     my_output_spec = SpecInfo(
         name="Output",
         fields=[("out1", attr.ib(type=float, metadata={"help_string": "output"}))],
-        bases=(BaseSpec,),
+        bases=(BaseDef,),
     )
 
     funky = testfunc(a=3.5, output_spec=my_output_spec)
@@ -903,7 +903,7 @@ def test_output_spec_func_2a():
     my_output_spec = SpecInfo(
         name="Output",
         fields=[("out1", float, {"help_string": "output"})],
-        bases=(BaseSpec,),
+        bases=(BaseDef,),
     )
 
     funky = testfunc(a=3.5, output_spec=my_output_spec)
@@ -928,7 +928,7 @@ def test_output_spec_func_3():
                 attr.ib(type=MultiOutputObj, metadata={"help_string": "output"}),
             )
         ],
-        bases=(BaseSpec,),
+        bases=(BaseDef,),
     )
 
     funky = testfunc(a=3.5, b=1, output_spec=my_output_spec)
@@ -953,7 +953,7 @@ def test_output_spec_func_4():
                 attr.ib(type=MultiOutputObj, metadata={"help_string": "output"}),
             )
         ],
-        bases=(BaseSpec,),
+        bases=(BaseDef,),
     )
 
     funky = testfunc(a=3.5, output_spec=my_output_spec)
@@ -1135,7 +1135,7 @@ def test_audit_shellcommandtask_file(tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
     shelly = ShellTask(
         name="shelly",

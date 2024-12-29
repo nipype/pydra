@@ -4,7 +4,7 @@ from operator import itemgetter
 from typing_extensions import Self
 import attrs
 from pydra.engine.helpers import list_fields, attrs_values, is_lazy
-from pydra.engine.specs import TaskSpec, TaskOutputs, WorkflowOutputs
+from pydra.engine.specs import TaskDef, TaskOutputs, WorkflowOutputs
 from .lazy import LazyInField
 from pydra.utils.hash import hash_function
 from pydra.utils.typing import TypeParser, StateArray
@@ -17,29 +17,29 @@ WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 @attrs.define(auto_attribs=False)
 class Workflow(ty.Generic[WorkflowOutputsType]):
-    """A workflow, constructed from a workflow specification
+    """A workflow, constructed from a workflow definition
 
     Parameters
     ----------
     name : str
         The name of the workflow
-    inputs : TaskSpec
-        The input specification of the workflow
-    outputs : TaskSpec
-        The output specification of the workflow
+    inputs : TaskDef
+        The input definition of the workflow
+    outputs : TaskDef
+        The output definition of the workflow
     """
 
     name: str = attrs.field()
-    inputs: TaskSpec[WorkflowOutputsType] = attrs.field()
+    inputs: TaskDef[WorkflowOutputsType] = attrs.field()
     outputs: WorkflowOutputsType = attrs.field()
     _nodes: dict[str, Node] = attrs.field(factory=dict)
 
     @classmethod
     def construct(
         cls,
-        spec: TaskSpec[WorkflowOutputsType],
+        spec: TaskDef[WorkflowOutputsType],
     ) -> Self:
-        """Construct a workflow from a specification, caching the constructed worklow"""
+        """Construct a workflow from a definition, caching the constructed worklow"""
 
         lazy_inputs = [f for f in list_fields(type(spec)) if f.lazy]
 
@@ -129,21 +129,21 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         """Clear the cache of constructed workflows"""
         cls._constructed.clear()
 
-    def add(self, task_spec: TaskSpec[OutputsType], name=None) -> OutputsType:
+    def add(self, task_spec: TaskDef[OutputsType], name=None) -> OutputsType:
         """Add a node to the workflow
 
         Parameters
         ----------
-        task_spec : TaskSpec
-            The specification of the task to add to the workflow as a node
+        task_spec : TaskDef
+            The definition of the task to add to the workflow as a node
         name : str, optional
-            The name of the node, by default it will be the name of the task specification
+            The name of the node, by default it will be the name of the task definition
             class
 
         Returns
         -------
         OutputType
-            The outputs specification of the node
+            The outputs definition of the node
         """
         if name is None:
             name = type(task_spec).__name__

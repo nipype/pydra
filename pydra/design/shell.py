@@ -25,7 +25,7 @@ from .base import (
 from pydra.utils.typing import is_fileset_or_union, MultiInputObj
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.specs import ShellSpec
+    from pydra.engine.specs import ShellDef
 
 __all__ = ["arg", "out", "outarg", "define"]
 
@@ -190,7 +190,7 @@ class outarg(Out, arg):
         field will be sent).
     path_template: str, optional
         The template used to specify where the output file will be written to can use
-        other fields, e.g. {file1}. Used in order to create an output specification.
+        other fields, e.g. {file1}. Used in order to create an output definition.
     """
 
     path_template: str | None = attrs.field(default=None)
@@ -235,9 +235,9 @@ def define(
     outputs_bases: ty.Sequence[type] = (),
     auto_attribs: bool = True,
     name: str | None = None,
-) -> "ShellSpec":
-    """Create a task specification for a shell command. Can be used either as a decorator on
-    the "canonical" dataclass-form of a task specification or as a function that takes a
+) -> "ShellDef":
+    """Create a task definition for a shell command. Can be used either as a decorator on
+    the "canonical" dataclass-form of a task definition or as a function that takes a
     "shell-command template string" of the form
 
     ```
@@ -284,15 +284,15 @@ def define(
 
     Returns
     -------
-    ShellSpec
+    ShellDef
         The interface for the shell command
     """
     from pydra.engine.task import ShellTask
-    from pydra.engine.specs import ShellSpec, ShellOutputs
+    from pydra.engine.specs import ShellDef, ShellOutputs
 
     def make(
         wrapped: ty.Callable | type | None = None,
-    ) -> ShellSpec:
+    ) -> ShellDef:
 
         if inspect.isclass(wrapped):
             klass = wrapped
@@ -374,7 +374,7 @@ def define(
                 inpt.position = position_stack.pop(0)
 
         interface = make_task_spec(
-            ShellSpec,
+            ShellDef,
             ShellOutputs,
             ShellTask,
             parsed_inputs,
@@ -684,5 +684,5 @@ class _InputPassThrough:
 
     name: str
 
-    def __call__(self, inputs: ShellSpec) -> ty.Any:
+    def __call__(self, inputs: ShellDef) -> ty.Any:
         return getattr(inputs, self.name)

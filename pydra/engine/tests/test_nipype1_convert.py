@@ -1,7 +1,7 @@
 import typing as ty
 import pytest
 from pathlib import Path
-from pydra.engine.specs import ShellOutputs, ShellSpec
+from pydra.engine.specs import ShellOutputs, ShellDef
 from fileformats.generic import File
 from pydra.design import shell
 
@@ -21,7 +21,7 @@ Interf_2 = shell.define("testing command", inputs=interf_inputs, outputs=interf_
 
 
 @shell.define
-class Interf_3(ShellSpec["Interf_3.Outputs"]):
+class Interf_3(ShellDef["Interf_3.Outputs"]):
     """class with customized input and executables"""
 
     executable = ["testing", "command"]
@@ -34,7 +34,7 @@ class Interf_3(ShellSpec["Interf_3.Outputs"]):
 
 
 @shell.define
-class TouchInterf(ShellSpec["TouchInterf.Outputs"]):
+class TouchInterf(ShellDef["TouchInterf.Outputs"]):
     """class with customized input and executables"""
 
     new_file: str = shell.outarg(
@@ -58,7 +58,7 @@ def test_interface_specs_2():
     my_input_spec = SpecInfo(
         name="Input",
         fields=[("my_inp", ty.Any, {"help_string": "my inp"})],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
     my_output_spec = SpecInfo(
         name="Output", fields=[("my_out", File, "*.txt")], bases=(ShellOutputs,)

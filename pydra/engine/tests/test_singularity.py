@@ -5,7 +5,7 @@ import attr
 
 from ..task import ShellTask
 from ..submitter import Submitter
-from ..specs import ShellOutputs, File, ShellSpec
+from ..specs import ShellOutputs, File, ShellDef
 from ..environments import Singularity
 
 
@@ -219,7 +219,7 @@ def test_singularity_inputspec_1(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     singu = ShellTask(
@@ -260,7 +260,7 @@ def test_singularity_inputspec_1a(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     singu = ShellTask(
@@ -317,7 +317,7 @@ def test_singularity_inputspec_2(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     singu = ShellTask(
@@ -377,7 +377,7 @@ def test_singularity_inputspec_2a_except(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     singu = ShellTask(
@@ -437,7 +437,7 @@ def test_singularity_inputspec_2a(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     singu = ShellTask(
@@ -494,7 +494,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     singu = ShellTask(
@@ -550,7 +550,7 @@ def test_singularity_inputspec_state_1(tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     singu = ShellTask(
@@ -600,7 +600,7 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     singu = ShellTask(
@@ -643,7 +643,7 @@ def test_singularity_wf_inputspec_1(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmp_path)
@@ -699,7 +699,7 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmp_path)
@@ -756,7 +756,7 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     wf = Workflow(name="wf", input_spec=["cmd", "file"], cache_dir=tmp_path)

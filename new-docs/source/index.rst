@@ -3,11 +3,21 @@
 Pydra
 =====
 
-Pydra is a new lightweight dataflow engine written in Python, which provides a simple way to
-implement scientific workflows that use a mix of shell commands and Python functions.
+Pydra is a lightweight, Python 3.11+ dataflow engine for computational graph construction,
+manipulation, and distributed execution. Designed as a successor to created for [Nipype](https://github.com/nipy/nipype),
+Pydra is a general-purpose engine that supports analytics in any scientific domain.
+Pydra helps build reproducible, scalable, reusable, and fully automated, provenance
+tracked scientific workflows that combine Python functions and shell commands.
 
-Pydra is developed as an open-source project in the neuroimaging community,
-but it is designed as a general-purpose dataflow engine to support any scientific domain.
+The power of Pydra lies in ease of workflow creation and execution for complex
+multiparameter map-reduce operations, and the use of global cache.
+
+Pydra's key features are:
+- Modular execution backends (see [Advanced execution](../tutorial/advanced-execution.html))
+- Map-reduce like semantics (see [Splitting and combining](../explanation/splitting-combining.html))
+- Global cache support to reduce recomputation (see [Hashing and caching](../explanation/hashing-caching.html))
+- Support for execution of Tasks in containerized environments (see [Environments](../explanation/environments.html))
+- Strong type-checking and type-hinting support (see [Typing](../explanation/typing.html))
 
 See :ref:`Design philosophy` for more an explanation of the design of Pydra.
 
@@ -64,7 +74,7 @@ Indices and tables
 
 .. toctree::
     :maxdepth: 2
-    :caption: Execution
+    :caption: Task execution
     :hidden:
 
     tutorial/getting-started

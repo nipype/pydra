@@ -409,7 +409,7 @@ class TypeParser(ty.Generic[T]):
         try:
             return expand_and_coerce(object_, self.pattern)
         except TypeError as e:
-            # Special handling for MultiInputObjects (which are annoying)
+            # Defial handling for MultiInputObjects (which are annoying)
             if isinstance(self.pattern, tuple) and self.pattern[0] == MultiInputObj:
                 # Attempt to coerce the object into arg type of the MultiInputObj first,
                 # and if that fails, try to coerce it into a list of the arg type
@@ -588,7 +588,7 @@ class TypeParser(ty.Generic[T]):
         try:
             return expand_and_check(type_, self.pattern)
         except TypeError as e:
-            # Special handling for MultiInputObjects (which are annoying)
+            # Defial handling for MultiInputObjects (which are annoying)
             if not isinstance(self.pattern, tuple) or self.pattern[0] != MultiInputObj:
                 raise e
             # Attempt to coerce the object into arg type of the MultiInputObj first,

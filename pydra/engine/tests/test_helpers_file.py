@@ -5,7 +5,7 @@ import attr
 from unittest.mock import Mock
 import pytest
 from fileformats.generic import File
-from ..specs import ShellSpec
+from ..specs import ShellDef
 from ..task import ShellTask
 from ..helpers_file import (
     ensure_list,
@@ -385,7 +385,7 @@ def test_output_template(tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     class MyCommand(ShellTask):

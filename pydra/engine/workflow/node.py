@@ -5,7 +5,7 @@ from pathlib import Path
 import attrs
 from pydra.utils.typing import TypeParser, StateArray
 from . import lazy
-from ..specs import TaskSpec, TaskOutputs, WorkflowSpec
+from ..specs import TaskDef, TaskOutputs, WorkflowDef
 from ..task import Task
 from ..helpers import ensure_list, attrs_values, is_lazy, load_result, create_checksum
 from pydra.utils.hash import hash_function
@@ -32,12 +32,12 @@ class Node(ty.Generic[OutputType]):
     ----------
     name : str
         The name of the node
-    inputs : TaskSpec
-        The specification of the node
+    inputs : TaskDef
+        The definition of the node
     """
 
     name: str
-    _spec: TaskSpec[OutputType]
+    _spec: TaskDef[OutputType]
     _workflow: "Workflow" = attrs.field(default=None, eq=False, hash=False)
     _lzout: OutputType | None = attrs.field(
         init=False, default=None, eq=False, hash=False
@@ -148,7 +148,7 @@ class Node(ty.Generic[OutputType]):
 
         Returns
         -------
-        self : TaskSpec
+        self : TaskDef
             a reference to the task
         """
         self._check_if_outputs_have_been_used("the node cannot be split or combined")
@@ -222,7 +222,7 @@ class Node(ty.Generic[OutputType]):
 
         Returns
         -------
-        self : TaskSpec
+        self : TaskDef
             a reference to the task
         """
         if not isinstance(combiner, (str, list)):
@@ -345,7 +345,7 @@ class Node(ty.Generic[OutputType]):
             # that might be important for outer splitter of input variable with big files
             # the file can be changed with every single index even if there are only two files
             input_hash = inputs_copy.hash
-            if isinstance(self._spec, WorkflowSpec):
+            if isinstance(self._spec, WorkflowDef):
                 con_hash = hash_function(self._connections)
                 # TODO: hash list is not used
                 hash_list = [input_hash, con_hash]  # noqa: F841

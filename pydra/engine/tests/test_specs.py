@@ -10,7 +10,7 @@ from ..specs import (
     File,
     Runtime,
     Result,
-    ShellSpec,
+    ShellDef,
 )
 from pydra.engine.workflow.lazy import (
     LazyInField,
@@ -29,7 +29,7 @@ make_klass = lambda x: x
 
 
 def test_basespec():
-    spec = BaseSpec()
+    spec = BaseDef()
     assert spec.hash == "0b1d98df22ecd1733562711c205abca2"
 
 
@@ -50,8 +50,8 @@ def test_result():
 
 def test_shellspec():
     with pytest.raises(TypeError):
-        spec = ShellSpec()
-    spec = ShellSpec(executable="ls")  # (executable, args)
+        spec = ShellDef()
+    spec = ShellDef(executable="ls")  # (executable, args)
     assert hasattr(spec, "executable")
     assert hasattr(spec, "args")
 
@@ -63,7 +63,7 @@ class NodeTesting:
         inp_b: str = "B"
 
     def __init__(self):
-        class InpSpec:
+        class InpDef:
             def __init__(self):
                 self.fields = [("inp_a", int), ("inp_b", int)]
 
@@ -73,7 +73,7 @@ class NodeTesting:
 
         self.name = "tn"
         self.inputs = self.Input()
-        self.input_spec = InpSpec()
+        self.input_spec = InpDef()
         self.output_spec = Outputs()
         self.output_names = ["out_a"]
         self.state = None
@@ -138,14 +138,14 @@ def test_input_file_hash_1(tmp_path):
     os.chdir(tmp_path)
     outfile = "test.file"
     fields = [("in_file", ty.Any)]
-    input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
+    input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseDef,))
     inputs = make_klass(input_spec)
     assert inputs(in_file=outfile).hash == "9a106eb2830850834d9b5bf098d5fa85"
 
     with open(outfile, "w") as fp:
         fp.write("test")
     fields = [("in_file", File)]
-    input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseSpec,))
+    input_spec = SpecInfo(name="Inputs", fields=fields, bases=(BaseDef,))
     inputs = make_klass(input_spec)
     assert inputs(in_file=outfile).hash == "02fa5f6f1bbde7f25349f54335e1adaf"
 
@@ -156,7 +156,7 @@ def test_input_file_hash_2(tmp_path):
     with open(file, "w") as f:
         f.write("hello")
 
-    input_spec = SpecInfo(name="Inputs", fields=[("in_file", File)], bases=(BaseSpec,))
+    input_spec = SpecInfo(name="Inputs", fields=[("in_file", File)], bases=(BaseDef,))
     inputs = make_klass(input_spec)
 
     # checking specific hash value
@@ -186,7 +186,7 @@ def test_input_file_hash_2a(tmp_path):
         f.write("hello")
 
     input_spec = SpecInfo(
-        name="Inputs", fields=[("in_file", ty.Union[File, int])], bases=(BaseSpec,)
+        name="Inputs", fields=[("in_file", ty.Union[File, int])], bases=(BaseDef,)
     )
     inputs = make_klass(input_spec)
 
@@ -221,7 +221,7 @@ def test_input_file_hash_3(tmp_path):
         f.write("hello")
 
     input_spec = SpecInfo(
-        name="Inputs", fields=[("in_file", File), ("in_int", int)], bases=(BaseSpec,)
+        name="Inputs", fields=[("in_file", File), ("in_int", int)], bases=(BaseDef,)
     )
     inputs = make_klass(input_spec)
 
@@ -279,7 +279,7 @@ def test_input_file_hash_4(tmp_path):
     input_spec = SpecInfo(
         name="Inputs",
         fields=[("in_file", ty.List[ty.List[ty.Union[int, File]]])],
-        bases=(BaseSpec,),
+        bases=(BaseDef,),
     )
     inputs = make_klass(input_spec)
 
@@ -316,7 +316,7 @@ def test_input_file_hash_5(tmp_path):
     input_spec = SpecInfo(
         name="Inputs",
         fields=[("in_file", ty.List[ty.Dict[ty.Any, ty.Union[File, int]]])],
-        bases=(BaseSpec,),
+        bases=(BaseDef,),
     )
     inputs = make_klass(input_spec)
 

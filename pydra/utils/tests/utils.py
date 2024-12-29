@@ -31,7 +31,7 @@ def generic_func_task(in_file: File) -> File:
 
 
 @shell.define
-class GenericShellTask(specs.ShellSpec["GenericShellTask.Outputs"]):
+class GenericShellTask(specs.ShellDef["GenericShellTask.Outputs"]):
     """class with customized input and executables"""
 
     in_file: File = shell.arg(
@@ -57,7 +57,7 @@ def specific_func_task(in_file: MyFormatX) -> MyFormatX:
 
 
 @shell.define
-class SpecificShellTask(specs.ShellSpec["SpecificShellTask.Outputs"]):
+class SpecificShellTask(specs.ShellDef["SpecificShellTask.Outputs"]):
     executable = "echo"
 
     in_file: MyFormatX = shell.arg(

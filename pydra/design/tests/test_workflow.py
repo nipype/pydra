@@ -7,7 +7,7 @@ from pydra.engine.workflow.lazy import LazyInField, LazyOutField
 import typing as ty
 from pydra.design import shell, python, workflow
 from pydra.engine.helpers import list_fields
-from pydra.engine.specs import WorkflowSpec, WorkflowOutputs
+from pydra.engine.specs import WorkflowDef, WorkflowOutputs
 from fileformats import video, image
 
 # NB: We use PascalCase for interfaces and workflow functions as it is translated into a class
@@ -50,7 +50,7 @@ def test_workflow():
     constructor = MyTestWorkflow().constructor
     assert constructor.__name__ == "MyTestWorkflow"
 
-    # The constructor function is included as a part of the specification so it is
+    # The constructor function is included as a part of the definition so it is
     # included in the hash by default and can be overridden if needed. Not 100% sure
     # if this is a good idea or not
     assert list_fields(MyTestWorkflow) == [
@@ -133,7 +133,7 @@ def test_workflow_canonical():
     # NB: We use PascalCase (i.e. class names) as it is translated into a class
 
     @workflow.define
-    class MyTestWorkflow(WorkflowSpec["MyTestWorkflow.Outputs"]):
+    class MyTestWorkflow(WorkflowDef["MyTestWorkflow.Outputs"]):
 
         a: int
         b: float = workflow.arg(
@@ -154,7 +154,7 @@ def test_workflow_canonical():
     constructor = MyTestWorkflow().constructor
     assert constructor.__name__ == "constructor"
 
-    # The constructor function is included as a part of the specification so it is
+    # The constructor function is included as a part of the definition so it is
     # included in the hash by default and can be overridden if needed. Not 100% sure
     # if this is a good idea or not
     assert sorted(list_fields(MyTestWorkflow), key=attrgetter("name")) == [

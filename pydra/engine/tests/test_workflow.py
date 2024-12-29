@@ -35,7 +35,7 @@ from .utils import (
 )
 from ..submitter import Submitter
 from pydra.design import python
-from ..specs import ShellSpec
+from ..specs import ShellDef
 from pydra.utils import exc_info_matches
 
 
@@ -51,7 +51,7 @@ def test_wf_specinfo_input_spec():
             ("a", str, "", {"mandatory": True}),
             ("b", dict, {"foo": 1, "bar": False}, {"mandatory": False}),
         ],
-        bases=(BaseSpec,),
+        bases=(BaseDef,),
     )
     wf = Workflow(
         name="workflow",
@@ -66,10 +66,10 @@ def test_wf_specinfo_input_spec():
         fields=[
             ("a", str, {"mandatory": True}),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
     with pytest.raises(
-        ValueError, match="Provided SpecInfo must have BaseSpec as its base."
+        ValueError, match="Provided SpecInfo must have BaseDef as its base."
     ):
         Workflow(name="workflow", input_spec=bad_input_spec)
 
@@ -243,7 +243,7 @@ def test_wf_1_call_exception(plugin, tmpdir):
     with Submitter(plugin=plugin) as sub:
         with pytest.raises(Exception) as e:
             wf(submitter=sub, plugin=plugin)
-        assert "Specify submitter OR plugin" in str(e.value)
+        assert "Defify submitter OR plugin" in str(e.value)
 
 
 def test_wf_1_inp_in_call(tmpdir):

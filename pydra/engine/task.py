@@ -50,8 +50,8 @@ from fileformats.core import FileSet
 from .core import Task
 from pydra.utils.messenger import AuditFlag
 from .specs import (
-    PythonSpec,
-    ShellSpec,
+    PythonDef,
+    ShellDef,
     is_set,
     attrs_fields,
 )
@@ -70,7 +70,7 @@ if ty.TYPE_CHECKING:
 class PythonTask(Task):
     """Wrap a Python callable as a task element."""
 
-    spec: PythonSpec
+    spec: PythonDef
 
     def _run_task(self, environment=None):
         inputs = attrs_values(self.spec)
@@ -97,11 +97,11 @@ class PythonTask(Task):
 class ShellTask(Task):
     """Wrap a shell command as a task element."""
 
-    spec: ShellSpec
+    spec: ShellDef
 
     def __init__(
         self,
-        spec: ShellSpec,
+        spec: ShellDef,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cont_dim=None,
@@ -133,7 +133,7 @@ class ShellTask(Task):
             TODO
         name : :obj:`str`
             Name of this task.
-        output_spec : :obj:`pydra.engine.specs.BaseSpec`
+        output_spec : :obj:`pydra.engine.specs.BaseDef`
             Specification of inputs.
         strip : :obj:`bool`
             TODO

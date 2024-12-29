@@ -15,7 +15,7 @@ from .base import (
 
 if ty.TYPE_CHECKING:
     from pydra.engine.workflow.base import Workflow
-    from pydra.engine.specs import TaskSpec, TaskOutputs, WorkflowSpec
+    from pydra.engine.specs import TaskDef, TaskOutputs, WorkflowDef
 
 
 __all__ = ["define", "add", "this", "arg", "out"]
@@ -107,10 +107,10 @@ def define(
     outputs_bases: ty.Sequence[type] = (),
     lazy: list[str] | None = None,
     auto_attribs: bool = True,
-) -> "WorkflowSpec":
+) -> "WorkflowDef":
     """
     Create an interface for a function or a class. Can be used either as a decorator on
-    a constructor function or the "canonical" dataclass-form of a task specification.
+    a constructor function or the "canonical" dataclass-form of a task definition.
 
     Parameters
     ----------
@@ -125,16 +125,16 @@ def define(
 
     Returns
     -------
-    TaskSpec
+    TaskDef
         The interface for the function or class.
     """
     from pydra.engine.core import WorkflowTask
-    from pydra.engine.specs import TaskSpec, WorkflowSpec, WorkflowOutputs
+    from pydra.engine.specs import TaskDef, WorkflowDef, WorkflowOutputs
 
     if lazy is None:
         lazy = []
 
-    def make(wrapped: ty.Callable | type) -> TaskSpec:
+    def make(wrapped: ty.Callable | type) -> TaskDef:
         if inspect.isclass(wrapped):
             klass = wrapped
             constructor = klass.constructor
@@ -172,7 +172,7 @@ def define(
             parsed_inputs[inpt_name].lazy = True
 
         interface = make_task_spec(
-            WorkflowSpec,
+            WorkflowDef,
             WorkflowOutputs,
             WorkflowTask,
             parsed_inputs,
@@ -208,20 +208,20 @@ def this() -> "Workflow":
 OutputsType = ty.TypeVar("OutputsType", bound="TaskOutputs")
 
 
-def add(task_spec: "TaskSpec[OutputsType]", name: str = None) -> OutputsType:
+def add(task_spec: "TaskDef[OutputsType]", name: str = None) -> OutputsType:
     """Add a node to the workflow currently being constructed
 
     Parameters
     ----------
-    task_spec : TaskSpec
-        The specification of the task to add to the workflow as a node
+    task_spec : TaskDef
+        The definition of the task to add to the workflow as a node
     name : str, optional
-        The name of the node, by default it will be the name of the task specification
+        The name of the node, by default it will be the name of the task definition
         class
 
     Returns
     -------
     Outputs
-        The outputs specification of the node
+        The outputs definition of the node
     """
     return this().add(task_spec, name=name)

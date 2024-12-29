@@ -941,10 +941,10 @@ class PsijWorker(Worker):
 
         Returns
         -------
-        psij.JobSpec
+        psij.JobDef
             PSI/J job specification.
         """
-        spec = self.psij.JobSpec()
+        spec = self.psij.JobDef()
         spec.executable = cmd
         spec.arguments = arg
 
@@ -956,7 +956,7 @@ class PsijWorker(Worker):
 
         Parameters
         ----------
-        spec : psij.JobSpec
+        spec : psij.JobDef
             PSI/J job specification.
         attributes : any
             Job attributes.

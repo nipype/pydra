@@ -11,7 +11,7 @@ from ..task import ShellTask
 from ..submitter import Submitter
 from ..specs import (
     ShellOutputs,
-    ShellSpec,
+    ShellDef,
 )
 from fileformats.generic import (
     File,
@@ -296,7 +296,7 @@ def test_shell_cmd_inputspec_1(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -344,7 +344,7 @@ def test_shell_cmd_inputspec_2(plugin, results_function, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -385,7 +385,7 @@ def test_shell_cmd_inputspec_3(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -418,7 +418,7 @@ def test_shell_cmd_inputspec_3a(plugin, results_function, tmp_path):
                 {"position": 1, "help_string": "text", "mandatory": True, "argstr": ""},
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -456,7 +456,7 @@ def test_shell_cmd_inputspec_3b(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -490,7 +490,7 @@ def test_shell_cmd_inputspec_3c_exception(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -523,7 +523,7 @@ def test_shell_cmd_inputspec_3c(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -553,7 +553,7 @@ def test_shell_cmd_inputspec_4(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -579,7 +579,7 @@ def test_shell_cmd_inputspec_4a(plugin, results_function, tmp_path):
         fields=[
             ("text", str, "Hello", {"position": 1, "help_string": "text", "argstr": ""})
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -610,7 +610,7 @@ def test_shell_cmd_inputspec_4b(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -645,7 +645,7 @@ def test_shell_cmd_inputspec_4c_exception(plugin):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -675,7 +675,7 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -718,7 +718,7 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -767,7 +767,7 @@ def test_shell_cmd_inputspec_5a_exception(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -814,7 +814,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -860,7 +860,7 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -902,7 +902,7 @@ def test_shell_cmd_inputspec_6b(plugin, results_function, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -943,7 +943,7 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -988,7 +988,7 @@ def test_shell_cmd_inputspec_7a(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1035,7 +1035,7 @@ def test_shell_cmd_inputspec_7b(plugin, results_function, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1074,7 +1074,7 @@ def test_shell_cmd_inputspec_7c(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1132,7 +1132,7 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1189,7 +1189,7 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1240,7 +1240,7 @@ def test_shell_cmd_inputspec_9(tmp_path, plugin, results_function):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1293,7 +1293,7 @@ def test_shell_cmd_inputspec_9a(tmp_path, plugin, results_function):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1341,7 +1341,7 @@ def test_shell_cmd_inputspec_9b(tmp_path, plugin, results_function):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1392,7 +1392,7 @@ def test_shell_cmd_inputspec_9c(tmp_path, plugin, results_function):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1444,7 +1444,7 @@ def test_shell_cmd_inputspec_9d(tmp_path, plugin, results_function):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1495,7 +1495,7 @@ def test_shell_cmd_inputspec_10(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1543,7 +1543,7 @@ def test_shell_cmd_inputspec_10_err(tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     with pytest.raises(FileNotFoundError):
@@ -1579,7 +1579,7 @@ def test_shell_cmd_inputspec_11(tmp_path):
         )
     ]
 
-    input_spec = SpecInfo(name="Input", fields=input_fields, bases=(ShellSpec,))
+    input_spec = SpecInfo(name="Input", fields=input_fields, bases=(ShellDef,))
     output_spec = SpecInfo(name="Output", fields=output_fields, bases=(ShellOutputs,))
 
     task = ShellTask(
@@ -1655,7 +1655,7 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, plugin, results_function):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1699,7 +1699,7 @@ def test_shell_cmd_inputspec_with_iterable():
                 },
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     task = ShellTask(name="test", input_spec=input_spec, executable="test")
@@ -1749,7 +1749,7 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1811,7 +1811,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1889,7 +1889,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1930,7 +1930,7 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -1965,7 +1965,7 @@ def test_shell_cmd_inputspec_typeval_1():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     with pytest.raises(TypeError):
@@ -1981,7 +1981,7 @@ def test_shell_cmd_inputspec_typeval_2():
     my_input_spec = SpecInfo(
         name="Input",
         fields=[("text", int, {"position": 1, "argstr": "", "help_string": "text"})],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     with pytest.raises(TypeError):
@@ -2003,7 +2003,7 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmp_path):
                 {"position": 1, "help_string": "text", "mandatory": True, "argstr": ""},
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -2042,7 +2042,7 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -2088,7 +2088,7 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -2148,7 +2148,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -2200,7 +2200,7 @@ def test_wf_shell_cmd_2(plugin_dask_opt, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     wf.add(
@@ -2247,7 +2247,7 @@ def test_wf_shell_cmd_2a(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     wf.add(
@@ -2295,7 +2295,7 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_input_spec2 = SpecInfo(
@@ -2325,7 +2325,7 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     wf.add(
@@ -2392,7 +2392,7 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_input_spec2 = SpecInfo(
@@ -2422,7 +2422,7 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     wf.add(
@@ -2487,7 +2487,7 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_input_spec2 = SpecInfo(
@@ -2517,7 +2517,7 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     wf.add(
@@ -2585,7 +2585,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_input_spec2 = SpecInfo(
@@ -2615,7 +2615,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     wf.add(
@@ -2884,7 +2884,7 @@ def test_shell_cmd_outputspec_5c(plugin, results_function, tmp_path):
     """
 
     @attr.s(kw_only=True)
-    class MyOutputSpec(ShellOutputs):
+    class MyOutputDef(ShellOutputs):
         @staticmethod
         def gather_output(executable, output_dir):
             files = executable[1:]
@@ -2895,7 +2895,7 @@ def test_shell_cmd_outputspec_5c(plugin, results_function, tmp_path):
     shelly = ShellTask(
         name="shelly",
         executable=["touch", "newfile_tmp1.txt", "newfile_tmp2.txt"],
-        output_spec=SpecInfo(name="Output", bases=(MyOutputSpec,)),
+        output_spec=SpecInfo(name="Output", bases=(MyOutputDef,)),
         cache_dir=tmp_path,
     )
 
@@ -3015,7 +3015,7 @@ def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3091,7 +3091,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3288,7 +3288,7 @@ def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3421,7 +3421,7 @@ def test_shell_cmd_inputspec_outputspec_1():
                 {"help_string": "2nd creadted file", "argstr": "", "position": 2},
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3475,7 +3475,7 @@ def test_shell_cmd_inputspec_outputspec_1a():
                 {"help_string": "2nd creadted file", "argstr": "", "position": 2},
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3528,7 +3528,7 @@ def test_shell_cmd_inputspec_outputspec_2():
                 {"help_string": "2nd creadted file", "argstr": "", "position": 2},
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3595,7 +3595,7 @@ def test_shell_cmd_inputspec_outputspec_2a():
                 {"help_string": "2nd creadted file", "argstr": "", "position": 2},
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3671,7 +3671,7 @@ def test_shell_cmd_inputspec_outputspec_3():
             ),
             ("additional_inp", int, {"help_string": "additional inp"}),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3732,7 +3732,7 @@ def test_shell_cmd_inputspec_outputspec_3a():
             ),
             ("additional_inp", str, {"help_string": "additional inp"}),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3801,7 +3801,7 @@ def test_shell_cmd_inputspec_outputspec_4():
             ),
             ("additional_inp", int, {"help_string": "additional inp"}),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3856,7 +3856,7 @@ def test_shell_cmd_inputspec_outputspec_4a():
             ),
             ("additional_inp", int, {"help_string": "additional inp"}),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3907,7 +3907,7 @@ def test_shell_cmd_inputspec_outputspec_5():
             ("additional_inp_A", int, {"help_string": "additional inp A"}),
             ("additional_inp_B", str, {"help_string": "additional inp B"}),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -3961,7 +3961,7 @@ def test_shell_cmd_inputspec_outputspec_5a():
             ("additional_inp_A", str, {"help_string": "additional inp A"}),
             ("additional_inp_B", int, {"help_string": "additional inp B"}),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -4015,7 +4015,7 @@ def test_shell_cmd_inputspec_outputspec_5b():
             ("additional_inp_A", str, {"help_string": "additional inp A"}),
             ("additional_inp_B", str, {"help_string": "additional inp B"}),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -4067,7 +4067,7 @@ def test_shell_cmd_inputspec_outputspec_6_except():
             ),
             ("additional_inp_A", str, {"help_string": "additional inp A"}),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_output_spec = SpecInfo(
@@ -4328,7 +4328,7 @@ def test_fsl(data_tests_dir):
             # ("output_biascorrected", bool,
             #  attr.ib(metadata={"help_string": 'output restored image (bias-corrected image)', "argstr": '-B'})),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # TODO: not sure why this has to be string
@@ -4381,7 +4381,7 @@ def test_shell_cmd_optional_output_file1(tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_cp = ShellTask(
@@ -4421,7 +4421,7 @@ def test_shell_cmd_optional_output_file2(tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_cp = ShellTask(
@@ -4459,7 +4459,7 @@ def test_shell_cmd_non_existing_outputs_1(tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
     out_spec = SpecInfo(
         name="Output",
@@ -4521,7 +4521,7 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
     out_spec = SpecInfo(
         name="Output",
@@ -4587,7 +4587,7 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
     out_spec = SpecInfo(
         name="Output",
@@ -4654,7 +4654,7 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
     out_spec = SpecInfo(
         name="Output",
@@ -4719,7 +4719,7 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
     out_spec = SpecInfo(
         name="Output",
@@ -4773,7 +4773,7 @@ def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
     out_spec = SpecInfo(
         name="Output",
@@ -4857,7 +4857,7 @@ def test_shellspec_formatter_1(tmp_path):
                     ),
                 ),
             ],
-            bases=(ShellSpec,),
+            bases=(ShellDef,),
         )
 
     def formatter_1(inputs):
@@ -4970,7 +4970,7 @@ def test_shellspec_formatter_splitter_2(tmp_path):
                     ),
                 ),
             ],
-            bases=(ShellSpec,),
+            bases=(ShellDef,),
         )
 
     # asking for specific inputs
@@ -5023,7 +5023,7 @@ def test_shellcommand_error_msg(tmp_path):
                 {"help_string": "a dummy string", "argstr": "", "mandatory": True},
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(

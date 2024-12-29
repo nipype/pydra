@@ -66,7 +66,7 @@ Shell Command Tasks
   The *Task* can accommodate more complex shell commands by allowing the user to
   customize inputs and outputs of the commands.
   One can generate an input
-  specification to specify names of inputs, positions in the command, types of
+  definition to specify names of inputs, positions in the command, types of
   the inputs, and other metadata.
   As a specific example, FSL's BET command (Brain
   Extraction Tool) can be called on the command line as:
@@ -76,7 +76,7 @@ Shell Command Tasks
     bet input_file output_file -m
 
   Each of the command argument can be treated as a named input to the
-  ``ShellCommandTask``, and can be included in the input specification.
+  ``ShellCommandTask``, and can be included in the input definition.
   As shown next, even an output is specified by constructing
   the *out_file* field form a template:
 
@@ -97,7 +97,7 @@ Shell Command Tasks
         ( "mask", bool,
           { "help_string": "create binary mask",
             "argstr": "-m", } ) ],
-        bases=(ShellSpec,) )
+        bases=(ShellDef,) )
 
     ShellCommandTask(executable="bet",
                      input_spec=bet_input_spec)

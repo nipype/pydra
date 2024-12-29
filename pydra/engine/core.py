@@ -19,10 +19,10 @@ from . import state
 from . import helpers_state as hlpst
 from .specs import (
     File,
-    RuntimeSpec,
+    RuntimeDef,
     Result,
     TaskHook,
-    TaskSpec,
+    TaskDef,
 )
 from .helpers import (
     create_checksum,
@@ -71,14 +71,14 @@ class Task:
     _can_resume = False  # Does the task allow resuming from previous state
     _redirect_x = False  # Whether an X session should be created/directed
 
-    _runtime_requirements = RuntimeSpec()
+    _runtime_requirements = RuntimeDef()
     _runtime_hints = None
 
     _cache_dir = None  # Working directory in which to operate
     _references = None  # List of references for a task
 
     name: str
-    spec: TaskSpec
+    spec: TaskDef
 
     _inputs: dict[str, ty.Any] | None = None
 
@@ -336,7 +336,7 @@ class Task:
         from .submitter import Submitter
 
         if submitter and plugin:
-            raise Exception("Specify submitter OR plugin, not both")
+            raise Exception("Defify submitter OR plugin, not both")
         elif submitter:
             pass
         # if there is plugin provided or the task is a Workflow or has a state,
@@ -1033,7 +1033,7 @@ class WorkflowTask(Task):
     #             else:
     #                 type_ = lf.type
     #             fields.append((wf_out_nm, type_, {"help_string": help_string}))
-    #     self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseSpec,))
+    #     self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseDef,))
     #     logger.info("Added %s to %s", self.output_spec, self)
 
     def _collect_outputs(self):

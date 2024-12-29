@@ -5,14 +5,14 @@ from urllib.request import urlretrieve
 from pathlib import Path
 from functools import reduce
 from fileformats.generic import File
-from pydra.engine.specs import ShellSpec
+from pydra.engine.specs import ShellDef
 from pydra.engine.task import BoshTask
 from .base import make_task_spec
 from . import shell
 
 
 class arg(shell.arg):
-    """Class for input fields of Boutiques task specifications
+    """Class for input fields of Boutiques task definitions
 
     Parameters
     ----------
@@ -46,7 +46,7 @@ class arg(shell.arg):
 
 
 class out(shell.out):
-    """Class for output fields of Boutiques task specifications
+    """Class for output fields of Boutiques task definitions
 
     Parameters
     ----------
@@ -114,7 +114,7 @@ def define(
         bosh_spec, input_keys, names_subset=output_spec_names
     )
     return make_task_spec(
-        spec_type=ShellSpec,
+        spec_type=ShellDef,
         task_type=BoshTask,
         out_type=out,
         arg_type=arg,

@@ -5,7 +5,7 @@ Output Specification
 
 As it was mentioned in :ref:`shell_command_task`, the user can customize the input and output
 for the `ShellCommandTask`.
-In this section, the output specification will be covered.
+In this section, the output definition will be covered.
 
 
 Instead of using field with `output_file_template` in the customized `input_spec` to specify an output field,
@@ -29,7 +29,7 @@ a customized `output_spec` can be used, e.g.:
                 ),
             )
         ],
-        bases=(ShellOutSpec,),
+        bases=(ShellOutDef,),
     )
 
     ShellCommandTask(executable=executable,
@@ -37,18 +37,18 @@ a customized `output_spec` can be used, e.g.:
 
 
 
-Similarly as for `input_spec`, in order to create an output specification,
+Similarly as for `input_spec`, in order to create an output definition,
 a new `SpecInfo` object has to be created.
 The field `name` specifies the type of the spec and it should be always "Output" for
-the output specification.
-The field `bases` specifies the "base specification" you want to use (can think about it as a
-`parent class`) and it will usually contains `ShellOutSpec` only, unless you want to build on top of
-your other specification (this will not be cover in this section).
+the output definition.
+The field `bases` specifies the "base definition" you want to use (can think about it as a
+`parent class`) and it will usually contains `ShellOutDef` only, unless you want to build on top of
+your other definition (this will not be cover in this section).
 The part that should be always customised is the `fields` part.
-Each element of the `fields` is a separate output field that is added to the specification.
+Each element of the `fields` is a separate output field that is added to the definition.
 In this example, a three-elements tuple - with name, type and dictionary with additional
 information - is used.
-See :ref:`Input Specification section` for other recognized syntax for specification's fields
+See :ref:`Input Specification section` for other recognized syntax for definition's fields
 and possible types.
 
 

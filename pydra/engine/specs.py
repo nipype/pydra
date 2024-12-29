@@ -1,4 +1,4 @@
-"""Task I/O specifications."""
+"""Task I/O definitions."""
 
 from pathlib import Path
 import re
@@ -41,7 +41,7 @@ def is_set(value: ty.Any) -> bool:
 
 
 class TaskOutputs:
-    """Base class for all output specifications"""
+    """Base class for all output definitions"""
 
     RESERVED_FIELD_NAMES = ("inputs", "split", "combine")
 
@@ -145,7 +145,7 @@ class TaskOutputs:
             )
 
     def __iter__(self) -> ty.Generator[str, None, None]:
-        """Iterate through all the names in the specification"""
+        """Iterate through all the names in the definition"""
         return (f.name for f in list_fields(self))
 
     def __getitem__(self, name: str) -> ty.Any:
@@ -170,8 +170,8 @@ class TaskOutputs:
 OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
 
 
-class TaskSpec(ty.Generic[OutputsType]):
-    """Base class for all task specifications"""
+class TaskDef(ty.Generic[OutputsType]):
+    """Base class for all task definitions"""
 
     Task: "ty.Type[core.Task]"
 
@@ -190,7 +190,7 @@ class TaskSpec(ty.Generic[OutputsType]):
         rerun=False,
         **kwargs,
     ) -> "Result[OutputsType]":
-        """Create a task from this specification and execute it to produce a result.
+        """Create a task from this definition and execute it to produce a result.
 
         Parameters
         ----------
@@ -236,7 +236,7 @@ class TaskSpec(ty.Generic[OutputsType]):
         return task(**kwargs)
 
     def __iter__(self) -> ty.Generator[str, None, None]:
-        """Iterate through all the names in the specification"""
+        """Iterate through all the names in the definition"""
         return (f.name for f in list_fields(self))
 
     def __getitem__(self, name: str) -> ty.Any:
@@ -429,7 +429,7 @@ class Result(ty.Generic[OutputsType]):
 
 
 @attrs.define(kw_only=True)
-class RuntimeSpec:
+class RuntimeDef:
     """
     Specification for a task.
 
@@ -460,7 +460,7 @@ class PythonOutputs(TaskOutputs):
 PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 
-class PythonSpec(TaskSpec[PythonOutputsType]):
+class PythonDef(TaskDef[PythonOutputsType]):
     pass
 
 
@@ -471,7 +471,7 @@ class WorkflowOutputs(TaskOutputs):
 WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 
-class WorkflowSpec(TaskSpec[WorkflowOutputsType]):
+class WorkflowDef(TaskDef[WorkflowOutputsType]):
     pass
 
 
@@ -481,7 +481,7 @@ STDERR_HELP = """The standard error stream produced by the command."""
 
 
 class ShellOutputs(TaskOutputs):
-    """Output specification of a generic shell process."""
+    """Output definition of a generic shell process."""
 
     return_code: int = shell.out(help_string=RETURN_CODE_HELP)
     stdout: str = shell.out(help_string=STDOUT_HELP)
@@ -497,8 +497,8 @@ class ShellOutputs(TaskOutputs):
 
         Parameters
         ----------
-        inputs : ShellSpec
-            The input specification of the shell process.
+        inputs : ShellDef
+            The input definition of the shell process.
         output_dir : Path
             The directory where the process was run.
         stdout : str
@@ -556,7 +556,7 @@ class ShellOutputs(TaskOutputs):
         return default
 
     @classmethod
-    def _required_fields_satisfied(cls, fld: shell.out, inputs: "ShellSpec") -> bool:
+    def _required_fields_satisfied(cls, fld: shell.out, inputs: "ShellDef") -> bool:
         """checking if all fields from the requires and template are set in the input
         if requires is a list of list, checking if at least one list has all elements set
         """
@@ -587,7 +587,7 @@ class ShellOutputs(TaskOutputs):
 ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
 
-class ShellSpec(TaskSpec[ShellOutputsType]):
+class ShellDef(TaskDef[ShellOutputsType]):
 
     RESERVED_FIELD_NAMES = ("cmdline",)
 

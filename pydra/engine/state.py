@@ -7,7 +7,7 @@ import attrs
 from . import helpers_state as hlpst
 from .helpers import ensure_list, attrs_values
 
-# from .specs import BaseSpec
+# from .specs import BaseDef
 
 # TODO: move to State
 op = {".": zip, "*": itertools.product}

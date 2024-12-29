@@ -18,7 +18,7 @@ import cloudpickle as cp
 from fileformats.core import FileSet
 
 if ty.TYPE_CHECKING:
-    from .specs import TaskSpec
+    from .specs import TaskDef
     from pydra.design.base import Field
 
 
@@ -35,8 +35,8 @@ def attrs_values(obj, **kwargs) -> dict[str, ty.Any]:
     return attrs.asdict(obj, recurse=False, **kwargs)
 
 
-def list_fields(spec: "type[TaskSpec] | TaskSpec") -> list["Field"]:
-    """List the fields of a task specification"""
+def list_fields(spec: "type[TaskDef] | TaskDef") -> list["Field"]:
+    """List the fields of a task definition"""
     if not inspect.isclass(spec):
         spec = type(spec)
     if not attrs.has(spec):
@@ -48,7 +48,7 @@ def list_fields(spec: "type[TaskSpec] | TaskSpec") -> list["Field"]:
     ]
 
 
-def fields_dict(spec: "type[TaskSpec] | TaskSpec") -> dict[str, "Field"]:
+def fields_dict(spec: "type[TaskDef] | TaskDef") -> dict[str, "Field"]:
     """Returns the fields of a spec in a dictionary"""
     return {f.name: f for f in list_fields(spec)}
 

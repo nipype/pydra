@@ -7,7 +7,7 @@ import cloudpickle as cp
 from pydra.design import shell
 from pydra.engine.helpers import list_fields
 from pydra.engine.specs import (
-    ShellSpec,
+    ShellDef,
     ShellOutputs,
     RETURN_CODE_HELP,
     STDOUT_HELP,
@@ -22,7 +22,7 @@ def test_interface_template():
 
     Cp = shell.define("cp <in_path> <out|out_path>")
 
-    assert issubclass(Cp, ShellSpec)
+    assert issubclass(Cp, ShellDef)
     output = shell.outarg(
         name="out_path",
         path_template="out_path",
@@ -69,7 +69,7 @@ def test_interface_template_w_types_and_path_template_ext():
 
     TrimPng = shell.define("trim-png <in_image:image/png> <out|out_image:image/png>")
 
-    assert issubclass(TrimPng, ShellSpec)
+    assert issubclass(TrimPng, ShellDef)
     output = shell.outarg(
         name="out_image",
         path_template="out_image.png",
@@ -115,7 +115,7 @@ def test_interface_template_w_modify():
 
     TrimPng = shell.define("trim-png <modify|image:image/png>")
 
-    assert issubclass(TrimPng, ShellSpec)
+    assert issubclass(TrimPng, ShellDef)
     assert sorted_fields(TrimPng) == [
         shell.arg(
             name="executable",
@@ -167,7 +167,7 @@ def test_interface_template_more_complex():
         ),
     )
 
-    assert issubclass(Cp, ShellSpec)
+    assert issubclass(Cp, ShellDef)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
@@ -254,7 +254,7 @@ def test_interface_template_with_overrides_and_optionals():
         },
     )
 
-    assert issubclass(Cp, ShellSpec)
+    assert issubclass(Cp, ShellDef)
     outargs = [
         shell.outarg(
             name="out_dir",
@@ -340,7 +340,7 @@ def test_interface_template_with_defaults():
         ),
     )
 
-    assert issubclass(Cp, ShellSpec)
+    assert issubclass(Cp, ShellDef)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
@@ -408,7 +408,7 @@ def test_interface_template_with_type_overrides():
         inputs={"text_arg": str, "int_arg": int | None},
     )
 
-    assert issubclass(Cp, ShellSpec)
+    assert issubclass(Cp, ShellDef)
     output = shell.outarg(
         name="out_dir",
         type=Directory,
@@ -468,7 +468,7 @@ def Ls(request):
     if request.param == "static":
 
         @shell.define
-        class Ls(ShellSpec["Ls.Outputs"]):
+        class Ls(ShellDef["Ls.Outputs"]):
             executable = "ls"
 
             directory: Directory = shell.arg(

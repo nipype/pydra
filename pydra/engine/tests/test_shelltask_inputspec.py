@@ -6,7 +6,7 @@ import pytest
 from ..task import ShellTask
 from pydra.engine.specs import (
     ShellOutputs,
-    ShellSpec,
+    ShellDef,
     File,
 )
 from pydra.design import shell
@@ -38,7 +38,7 @@ def test_shell_cmd_inputs_1():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -54,7 +54,7 @@ def test_shell_cmd_inputs_1a():
         fields=[
             ("inpA", attr.ib(type=str, metadata={"help_string": "inpA", "argstr": ""}))
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -77,7 +77,7 @@ def test_shell_cmd_inputs_1b():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -101,7 +101,7 @@ def test_shell_cmd_inputs_1_st():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     ShellTask(
@@ -135,7 +135,7 @@ def test_shell_cmd_inputs_2():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -153,7 +153,7 @@ def test_shell_cmd_inputs_2a():
             ("inpA", attr.ib(type=str, metadata={"help_string": "inpA", "argstr": ""})),
             ("inpB", attr.ib(type=str, metadata={"help_string": "inpB", "argstr": ""})),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -187,7 +187,7 @@ def test_shell_cmd_inputs_2_err():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -220,7 +220,7 @@ def test_shell_cmd_inputs_2_noerr():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", inpA="inp1", input_spec=my_input_spec)
@@ -248,7 +248,7 @@ def test_shell_cmd_inputs_3():
             ),
             ("inpC", attr.ib(type=str, metadata={"help_string": "inpC", "argstr": ""})),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -276,7 +276,7 @@ def test_shell_cmd_inputs_argstr_1():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", inpA="inp1", input_spec=my_input_spec)
@@ -297,7 +297,7 @@ def test_shell_cmd_inputs_argstr_2():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # separate command into exec + args
@@ -321,7 +321,7 @@ def test_shell_cmd_inputs_list_1():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -344,7 +344,7 @@ def test_shell_cmd_inputs_list_2():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -366,7 +366,7 @@ def test_shell_cmd_inputs_list_3():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -394,7 +394,7 @@ def test_shell_cmd_inputs_list_sep_1():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -424,7 +424,7 @@ def test_shell_cmd_inputs_list_sep_2():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -454,7 +454,7 @@ def test_shell_cmd_inputs_list_sep_2a():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -484,7 +484,7 @@ def test_shell_cmd_inputs_list_sep_3():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -514,7 +514,7 @@ def test_shell_cmd_inputs_list_sep_3a():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -544,7 +544,7 @@ def test_shell_cmd_inputs_sep_4():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", inpA=["aaa"], input_spec=my_input_spec)
@@ -569,7 +569,7 @@ def test_shell_cmd_inputs_sep_4a():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", inpA="aaa", input_spec=my_input_spec)
@@ -593,7 +593,7 @@ def test_shell_cmd_inputs_format_1():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", inpA="aaa", input_spec=my_input_spec)
@@ -617,7 +617,7 @@ def test_shell_cmd_inputs_format_2():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -645,7 +645,7 @@ def test_shell_cmd_inputs_format_3():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", inpA=0.007, input_spec=my_input_spec)
@@ -670,7 +670,7 @@ def test_shell_cmd_inputs_mandatory_1():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", input_spec=my_input_spec)
@@ -714,7 +714,7 @@ def test_shell_cmd_inputs_not_given_1():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
     shelly = ShellTask(name="shelly", executable="executable", input_spec=my_input_spec)
 
@@ -753,7 +753,7 @@ def test_shell_cmd_inputs_template_1():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA="inpA")
@@ -792,7 +792,7 @@ def test_shell_cmd_inputs_template_1a():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA="inpA")
@@ -826,7 +826,7 @@ def test_shell_cmd_inputs_template_2():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", input_spec=my_input_spec)
@@ -904,7 +904,7 @@ def test_shell_cmd_inputs_template_3(tmp_path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -984,7 +984,7 @@ def test_shell_cmd_inputs_template_3a():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1060,7 +1060,7 @@ def test_shell_cmd_inputs_template_4():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA="inpA")
@@ -1087,7 +1087,7 @@ def test_shell_cmd_inputs_template_5_ex():
                 ),
             )
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", input_spec=my_input_spec, outAB="outAB")
@@ -1130,7 +1130,7 @@ def test_shell_cmd_inputs_template_6():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # no input for outA (and no default value), so the output is created whenever the
@@ -1191,7 +1191,7 @@ def test_shell_cmd_inputs_template_6a():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # no input for outA, but default is False, so the outA shouldn't be used
@@ -1249,7 +1249,7 @@ def test_shell_cmd_inputs_template_7(tmp_path: Path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     inpA_file = tmp_path / "a_file.txt"
@@ -1298,7 +1298,7 @@ def test_shell_cmd_inputs_template_7a(tmp_path: Path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     inpA_file = tmp_path / "a_file.txt"
@@ -1347,7 +1347,7 @@ def test_shell_cmd_inputs_template_7b(tmp_path: Path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     inpA_file = tmp_path / "a_file.txt"
@@ -1393,7 +1393,7 @@ def test_shell_cmd_inputs_template_8(tmp_path: Path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     inpA_file = tmp_path / "a_file.t"
@@ -1453,7 +1453,7 @@ def test_shell_cmd_inputs_template_9(tmp_path: Path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     inpA_file = tmp_path / "inpA.t"
@@ -1515,7 +1515,7 @@ def test_shell_cmd_inputs_template_9a(tmp_path: Path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     inpA_file = tmp_path / "inpA.t"
@@ -1577,7 +1577,7 @@ def test_shell_cmd_inputs_template_9b_err(tmp_path: Path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     inpA_file = tmp_path / "inpA.t"
@@ -1641,7 +1641,7 @@ def test_shell_cmd_inputs_template_9c_err(tmp_path: Path):
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     inpA_file = tmp_path / "inpA.t"
@@ -1689,7 +1689,7 @@ def test_shell_cmd_inputs_template_10():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA=3.3456)
@@ -1701,7 +1701,7 @@ def test_shell_cmd_inputs_template_10():
 
 
 def test_shell_cmd_inputs_template_requires_1():
-    """Given an input specification with a templated output file subject to required fields,
+    """Given an input definition with a templated output file subject to required fields,
     ensure the field is set only when all requirements are met."""
 
     my_input_spec = SpecInfo(
@@ -1738,7 +1738,7 @@ def test_shell_cmd_inputs_template_requires_1():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     # When requirements are not met.
@@ -1787,7 +1787,7 @@ def test_shell_cmd_inputs_template_function_1():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(executable="executable", input_spec=my_input_spec, inpA="inpA")
@@ -1845,7 +1845,7 @@ def test_shell_cmd_inputs_template_function_2():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     shelly = ShellTask(
@@ -1890,7 +1890,7 @@ def test_shell_cmd_inputs_template_1_st():
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     inpA = ["inpA_1", "inpA_2"]
@@ -2085,7 +2085,7 @@ def test_shell_cmd_inputs_denoise_image(
                 ),
             ),
         ],
-        bases=(ShellSpec,),
+        bases=(ShellDef,),
     )
 
     my_input_file = tmp_path / "a_file.ext"
@@ -2167,7 +2167,7 @@ def test_shell_cmd_inputs_denoise_image(
 
 
 @shell.define
-class SimpleTaskXor(ShellSpec["SimpleTaskXor.Outputs"]):
+class SimpleTaskXor(ShellDef["SimpleTaskXor.Outputs"]):
 
     input_1: str = shell.arg(
         help_string="help",
