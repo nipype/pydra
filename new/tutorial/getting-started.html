@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Advanced execution" href="advanced-execution.html" /><link rel="prev" title="Pydra" href="../index.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Getting started - Pydra v0.1.dev1+ga8c6666</title>
+        <title>Getting started - Pydra v0.1.dev1+g6e6f8b4</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
@@ -174,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+ga8c6666</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g6e6f8b4</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -201,7 +201,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+ga8c6666</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+g6e6f8b4</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -283,25 +283,26 @@
         <article role="main" id="furo-main-content">
           <section id="Getting-started">
 <h1>Getting started<a class="headerlink" href="#Getting-started" title="Permalink to this heading">¶</a></h1>
+<p>The basic runnable component of Pydra is a <em>task</em>. Tasks are conceptually similar to functions, in that they take inputs, operate on them and then return results. However, unlike functions, tasks are parameterised before they are executed in a separate step. This enables parameterised tasks to be linked together into workflows that are checked for errors before they are executed, and modular execution workers and environments to specified independently of the task being performed.</p>
+<p>Tasks can encapsulate Python functions, shell-commands or workflows constructed from task components.</p>
 <section id="Running-your-first-task">
 <h2>Running your first task<a class="headerlink" href="#Running-your-first-task" title="Permalink to this heading">¶</a></h2>
-<p>The basic runnable component of Pydra is a <em>task</em>. Tasks are conceptually similar to functions, in that they take inputs, process them and then return results. However, unlike functions, tasks are parameterised before they are executed in a separate step. This enables parameterised tasks to be linked together into workflows that are checked for errors before they are executed, and modular execution workers and environments to specified independently of the task being performed.</p>
 <p>Pre-defined task definitions are installed under the <code class="docutils literal notranslate"><span class="pre">pydra.tasks.*</span></code> namespace by separate task packages (e.g. <code class="docutils literal notranslate"><span class="pre">pydra-fsl</span></code>, <code class="docutils literal notranslate"><span class="pre">pydra-ants</span></code>, …). Pre-define task definitions are run by</p>
 <ul class="simple">
 <li><p>importing the class from the <code class="docutils literal notranslate"><span class="pre">pydra.tasks.*</span></code> package it is in</p></li>
 <li><p>instantiate the class with the parameters of the task</p></li>
 <li><p>&quot;call&quot; resulting object to execute it as you would a function (i.e. with the <code class="docutils literal notranslate"><span class="pre">my_task(...)</span></code>)</p></li>
 </ul>
-<p>To demonstrate with a toy example, of loading a JSON file with the <code class="docutils literal notranslate"><span class="pre">pydra.tasks.common.LoadJson</span></code> task, this we first create an example JSON file</p>
+<p>To demonstrate with a toy example of loading a JSON file with the <code class="docutils literal notranslate"><span class="pre">pydra.tasks.common.LoadJson</span></code> task, we first create an example JSON file to test with</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span> <span class="nn">tempfile</span> <span class="kn">import</span> <span class="n">mkdtemp</span>
 <span class="kn">import</span> <span class="nn">json</span>
 
-<span class="n">JSON_CONTENTS</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;a&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">:</span> <span class="s1">&#39;two&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mf">0.5598136790149003</span><span class="p">,</span> <span class="mi">6</span><span class="p">]}</span>
+<span class="n">JSON_CONTENTS</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;a&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">:</span> <span class="s1">&#39;two&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mf">0.55</span><span class="p">,</span> <span class="mi">6</span><span class="p">]}</span>
 
 <span class="n">test_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">mkdtemp</span><span class="p">())</span>
 <span class="n">json_file</span> <span class="o">=</span> <span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;test.json&quot;</span>
@@ -329,6 +330,14 @@
 </pre></div>
 </div>
 </div>
+<p>The <code class="docutils literal notranslate"><span class="pre">Result</span></code> object contains</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">output</span></code>: the outputs of the task (if there is only one output it is called <code class="docutils literal notranslate"><span class="pre">out</span></code> by default)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">runtime</span></code>: information about the peak memory and CPU usage</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">errored</span></code>: the error status of the task</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">task</span></code>: the task object that generated the results</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">output_dir</span></code>: the output directory the results are stored in</p></li>
+</ul>
 </section>
 <section id="Iterating-over-inputs">
 <h2>Iterating over inputs<a class="headerlink" href="#Iterating-over-inputs" title="Permalink to this heading">¶</a></h2>
@@ -374,21 +383,75 @@
 <span class="c1"># as the number of NIfTI files</span>
 <span class="n">VOXEL_SIZES</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.25</span><span class="p">]</span>
 
-<span class="n">mrgrid_varying_sizes</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+<span class="n">mrgrid_varying_vox_sizes</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
     <span class="p">(</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;voxel&quot;</span><span class="p">),</span>
     <span class="nb">input</span><span class="o">=</span><span class="n">nifti_dir</span><span class="o">.</span><span class="n">iterdir</span><span class="p">(),</span>
     <span class="n">voxel</span><span class="o">=</span><span class="n">VOXEL_SIZES</span>
 <span class="p">)</span>
 
 <span class="c1"># Run the task to resample all NIfTI files with different voxel sizes</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">()</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mrgrid_varying_vox_sizes</span><span class="p">(</span><span class="n">cache_dir</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;cache&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 </section>
 <section id="Cache-directories">
 <h2>Cache directories<a class="headerlink" href="#Cache-directories" title="Permalink to this heading">¶</a></h2>
-<p>When a task runs, a hash is generated by the combination of all the inputs to the task and the task to be run.</p>
+<p>When a task runs, a unique hash is generated by the combination of all the inputs to the task and the operation to be performed. This hash is used to name the output directory for the task within the specified cache directory. Therefore, if you use the same cache directory between runs and in a subsequent run the same task is executed with the same inputs then the location of its output directory will also be the same, and the outputs generated by the previous run are reused.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">mrgrid_varying_vox_sizes2</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;voxel&quot;</span><span class="p">),</span>
+    <span class="nb">input</span><span class="o">=</span><span class="n">nifti_dir</span><span class="o">.</span><span class="n">iterdir</span><span class="p">(),</span>
+    <span class="n">voxel</span><span class="o">=</span><span class="n">VOXEL_SIZES</span>
+<span class="p">)</span>
+
+<span class="c1"># Result from previous run is reused as the task and inputs are identical</span>
+<span class="n">result1</span> <span class="o">=</span> <span class="n">mrgrid_varying_vox_sizes2</span><span class="p">(</span><span class="n">cache_dir</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;cache&quot;</span><span class="p">)</span>
+
+<span class="c1"># Check that the output directory is the same for both runs</span>
+<span class="k">assert</span> <span class="n">result1</span><span class="o">.</span><span class="n">output_dir</span> <span class="o">==</span> <span class="n">result</span><span class="o">.</span><span class="n">output_dir</span>
+
+<span class="c1"># Change the voxel sizes to resample the NIfTI files to for one of the files</span>
+<span class="n">mrgrid_varying_vox_sizes2</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">voxel</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.25</span><span class="p">]</span>
+
+<span class="c1"># Result from previous run is reused as the task and inputs are identical</span>
+<span class="n">result2</span> <span class="o">=</span> <span class="n">mrgrid_varying_vox_sizes2</span><span class="p">(</span><span class="n">cache_dir</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;cache&quot;</span><span class="p">)</span>
+
+<span class="c1"># The output directory will be different as the inputs are now different</span>
+<span class="k">assert</span> <span class="n">result2</span><span class="o">.</span><span class="n">output_dir</span> <span class="o">!=</span> <span class="n">result</span><span class="o">.</span><span class="n">output_dir</span>
+</pre></div>
+</div>
+</div>
+<p>Note that for file objects, the contents of the files are used to calculate the hash not their paths. Therefore, when inputting large files there might be some additional overhead on the first run (the file hashes themselves are cached by path and mtime so shouldn’t need to be recalculated unless they are modified). However, this makes the hashes invariant to file-system movement. For example, changing the name of one of the files in the nifti directory won’t invalidate the hash.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Rename a NIfTI file within the test directory</span>
+<span class="n">first_file</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">nifti_dir</span><span class="o">.</span><span class="n">iterdir</span><span class="p">())</span>
+<span class="n">first_file</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">first_file</span><span class="o">.</span><span class="n">with_name</span><span class="p">(</span><span class="s2">&quot;first.nii.gz&quot;</span><span class="p">))</span>
+
+<span class="n">mrgrid_varying_vox_sizes3</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;voxel&quot;</span><span class="p">),</span>
+    <span class="nb">input</span><span class="o">=</span><span class="n">nifti_dir</span><span class="o">.</span><span class="n">iterdir</span><span class="p">(),</span>
+    <span class="n">voxel</span><span class="o">=</span><span class="n">VOXEL_SIZES</span>
+<span class="p">)</span>
+
+<span class="c1"># Result from previous run is reused as the task and inputs are identical</span>
+<span class="n">result3</span> <span class="o">=</span> <span class="n">mrgrid_varying_vox_sizes2</span><span class="p">(</span><span class="n">cache_dir</span><span class="o">=</span><span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;cache&quot;</span><span class="p">)</span>
+
+<span class="c1"># Check that the output directory is the same for both runs</span>
+<span class="k">assert</span> <span class="n">result3</span><span class="o">.</span><span class="n">output_dir</span> <span class="o">==</span> <span class="n">result</span><span class="o">.</span><span class="n">output_dir</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Debugging">
+<h2>Debugging<a class="headerlink" href="#Debugging" title="Permalink to this heading">¶</a></h2>
+<p>Work in progress…</p>
 </section>
 </section>
 
@@ -451,6 +514,7 @@
 <li><a class="reference internal" href="#Running-your-first-task">Running your first task</a></li>
 <li><a class="reference internal" href="#Iterating-over-inputs">Iterating over inputs</a></li>
 <li><a class="reference internal" href="#Cache-directories">Cache directories</a></li>
+<li><a class="reference internal" href="#Debugging">Debugging</a></li>
 </ul>
 </li>
 </ul>
