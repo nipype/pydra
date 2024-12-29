@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="T1w MRI preprocessing" href="../examples/t1w-preprocess.html" /><link rel="prev" title="Shell-tasks" href="shell.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Workflows - Pydra v0.1.dev1+g976fb9f</title>
+        <title>Workflows - Pydra v0.1.dev1+ga8c6666</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
@@ -174,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g976fb9f</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+ga8c6666</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -201,7 +201,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g976fb9f</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+ga8c6666</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -209,7 +209,7 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Execution</span></p>
+  <p class="caption" role="heading"><span class="caption-text">Task execution</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="advanced-execution.html">Advanced execution</a></li>
@@ -283,17 +283,17 @@
         <article role="main" id="furo-main-content">
           <section id="Workflows">
 <h1>Workflows<a class="headerlink" href="#Workflows" title="Permalink to this heading">¶</a></h1>
-<p>In Pydra, workflows are DAG of component tasks to be executed on specified inputs. Workflow specifications are dataclasses, which interchangeable with Python and shell tasks specifications and executed in the same way.</p>
+<p>In Pydra, workflows are DAG of component tasks to be executed on specified inputs. Workflow definitions are dataclasses, which interchangeable with Python and shell tasks definitions and executed in the same way.</p>
 <section id="Constructor-functions">
 <h2>Constructor functions<a class="headerlink" href="#Constructor-functions" title="Permalink to this heading">¶</a></h2>
-<p>Workflows are typically defined using the <code class="docutils literal notranslate"><span class="pre">pydra.design.workflow.define</span></code> decorator on a &quot;constructor&quot; function that generates the workflow. For example, given two task specifications, <code class="docutils literal notranslate"><span class="pre">Add</span></code> and <code class="docutils literal notranslate"><span class="pre">Mul</span></code>.</p>
+<p>Workflows are typically defined using the <code class="docutils literal notranslate"><span class="pre">pydra.design.workflow.define</span></code> decorator on a &quot;constructor&quot; function that generates the workflow. For example, given two task definitions, <code class="docutils literal notranslate"><span class="pre">Add</span></code> and <code class="docutils literal notranslate"><span class="pre">Mul</span></code>.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.design</span> <span class="kn">import</span> <span class="n">workflow</span><span class="p">,</span> <span class="n">python</span>
 
-<span class="c1"># Example python task specifications</span>
+<span class="c1"># Example python task definitions</span>
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
 <span class="k">def</span> <span class="nf">Add</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
@@ -305,7 +305,7 @@
 </pre></div>
 </div>
 </div>
-<p>we can create a simple workflow specification using <code class="docutils literal notranslate"><span class="pre">workflow.define</span></code> to decorate a function that constructs the workflow. Nodes are added to the workflow being constructed by calling <code class="docutils literal notranslate"><span class="pre">workflow.add</span></code> function.</p>
+<p>we can create a simple workflow definition using <code class="docutils literal notranslate"><span class="pre">workflow.define</span></code> to decorate a function that constructs the workflow. Nodes are added to the workflow being constructed by calling <code class="docutils literal notranslate"><span class="pre">workflow.add</span></code> function.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
@@ -318,7 +318,7 @@
 </pre></div>
 </div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">workflow.add</span></code> returns an &quot;outputs&quot; object corresponding to the specification added to the workflow. The fields of the outptus object can be referenced as inputs to downstream workflow nodes. Note that these fields are just placeholders for the values that will be returned and can’t be used in conditional statements during workflow construction. The return value(s) of workflow constructor function are the placeholders of the fields that are to be the outputs of the workflow.</p>
+<p><code class="docutils literal notranslate"><span class="pre">workflow.add</span></code> returns an &quot;outputs&quot; object corresponding to the definition added to the workflow. The fields of the outptus object can be referenced as inputs to downstream workflow nodes. Note that these fields are just placeholders for the values that will be returned and can’t be used in conditional statements during workflow construction. The return value(s) of workflow constructor function are the placeholders of the fields that are to be the outputs of the workflow.</p>
 <p>It is also possible to define new tasks to add to the workflow inline the constructor and type the inputs and outputs of the workflow.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
@@ -436,7 +436,7 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">WorkflowSpec</span><span class="p">,</span> <span class="n">WorkflowOutputs</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">WorkflowDef</span><span class="p">,</span> <span class="n">WorkflowOutputs</span>
 
 <span class="k">def</span> <span class="nf">a_converter</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -444,7 +444,7 @@
     <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
 
 <span class="nd">@workflow</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span> <span class="nc">LibraryWorkflow</span><span class="p">(</span><span class="n">WorkflowSpec</span><span class="p">[</span><span class="s2">&quot;MyLibraryWorkflow.Outputs&quot;</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">LibraryWorkflow</span><span class="p">(</span><span class="n">WorkflowDef</span><span class="p">[</span><span class="s2">&quot;MyLibraryWorkflow.Outputs&quot;</span><span class="p">]):</span>
 
     <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">b</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">workflow</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span>
@@ -570,7 +570,7 @@
 </section>
 <section id="Type-checking-between-nodes">
 <h2>Type-checking between nodes<a class="headerlink" href="#Type-checking-between-nodes" title="Permalink to this heading">¶</a></h2>
-<p>Pydra utilizes Python type annotations to implement strong type-checking, which is performed when values or upstream outputs are assigned to task specification inputs.</p>
+<p>Pydra utilizes Python type annotations to implement strong type-checking, which is performed when values or upstream outputs are assigned to task definition inputs.</p>
 <p>Task input and output fields do not need to be assigned types, since they will default to <code class="docutils literal notranslate"><span class="pre">typing.Any</span></code>. However, if they are assigned a type and a value or output from an upstream node conflicts with the type, a <code class="docutils literal notranslate"><span class="pre">TypeError</span></code> will be raised at construction time.</p>
 <p>Note that the type-checking &quot;assumes the best&quot;, and will pass if the upstream field is typed by <code class="docutils literal notranslate"><span class="pre">Any</span></code> or a super-class of the field being assigned to. For example, an input of <code class="docutils literal notranslate"><span class="pre">fileformats.generic.File</span></code> passed to a field expecting a <code class="docutils literal notranslate"><span class="pre">fileformats.image.Png</span></code> file type, because <code class="docutils literal notranslate"><span class="pre">Png</span></code> is a subtype of <code class="docutils literal notranslate"><span class="pre">File</span></code>, where as <code class="docutils literal notranslate"><span class="pre">fileformats.image.Jpeg</span></code> input would fail since it is clearly not the intended type.</p>
 <div class="nbinput nblast docutils container">

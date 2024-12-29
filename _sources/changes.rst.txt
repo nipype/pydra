@@ -108,7 +108,7 @@ Release Notes
 ---
 
 * big changes in ``ShellTask``, ``DockerTask`` and ``SingularityTask``
-    * customized input specification and output specification for ``Task``\s
+    * customized input definition and output definition for ``Task``\s
     * adding singularity checks to Travis CI
     * binding all input files to the container
 * changes in ``Workflow``

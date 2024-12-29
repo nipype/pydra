@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Advanced execution" href="advanced-execution.html" /><link rel="prev" title="Pydra" href="../index.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Getting started - Pydra v0.1.dev1+g976fb9f</title>
+        <title>Getting started - Pydra v0.1.dev1+ga8c6666</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
@@ -174,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g976fb9f</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+ga8c6666</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -186,7 +186,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
         <div class="visually-hidden">Toggle table of contents sidebar</div>
         <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
       </label>
@@ -201,7 +201,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g976fb9f</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+ga8c6666</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -209,7 +209,7 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Execution</span></p>
+  <p class="caption" role="heading"><span class="caption-text">Task execution</span></p>
 <ul class="current">
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="advanced-execution.html">Advanced execution</a></li>
@@ -275,7 +275,7 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
             <div class="visually-hidden">Toggle table of contents sidebar</div>
             <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
           </label>
@@ -283,40 +283,113 @@
         <article role="main" id="furo-main-content">
           <section id="Getting-started">
 <h1>Getting started<a class="headerlink" href="#Getting-started" title="Permalink to this heading">¶</a></h1>
-<p>A <em>Task</em> is the basic runnable component in Pydra, and can execute either a Python function, shell command or workflows consisting of combinations of all three types.</p>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<section id="Running-your-first-task">
+<h2>Running your first task<a class="headerlink" href="#Running-your-first-task" title="Permalink to this heading">¶</a></h2>
+<p>The basic runnable component of Pydra is a <em>task</em>. Tasks are conceptually similar to functions, in that they take inputs, process them and then return results. However, unlike functions, tasks are parameterised before they are executed in a separate step. This enables parameterised tasks to be linked together into workflows that are checked for errors before they are executed, and modular execution workers and environments to specified independently of the task being performed.</p>
+<p>Pre-defined task definitions are installed under the <code class="docutils literal notranslate"><span class="pre">pydra.tasks.*</span></code> namespace by separate task packages (e.g. <code class="docutils literal notranslate"><span class="pre">pydra-fsl</span></code>, <code class="docutils literal notranslate"><span class="pre">pydra-ants</span></code>, …). Pre-define task definitions are run by</p>
+<ul class="simple">
+<li><p>importing the class from the <code class="docutils literal notranslate"><span class="pre">pydra.tasks.*</span></code> package it is in</p></li>
+<li><p>instantiate the class with the parameters of the task</p></li>
+<li><p>&quot;call&quot; resulting object to execute it as you would a function (i.e. with the <code class="docutils literal notranslate"><span class="pre">my_task(...)</span></code>)</p></li>
+</ul>
+<p>To demonstrate with a toy example, of loading a JSON file with the <code class="docutils literal notranslate"><span class="pre">pydra.tasks.common.LoadJson</span></code> task, this we first create an example JSON file</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">fileformats.application</span> <span class="kn">import</span> <span class="n">Json</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">tempfile</span> <span class="kn">import</span> <span class="n">mkdtemp</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="n">JSON_CONTENTS</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;a&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">:</span> <span class="s1">&#39;two&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mf">0.5598136790149003</span><span class="p">,</span> <span class="mi">6</span><span class="p">]}</span>
+
+<span class="n">test_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">mkdtemp</span><span class="p">())</span>
+<span class="n">json_file</span> <span class="o">=</span> <span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;test.json&quot;</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">json_file</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">JSON_CONTENTS</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Now we can load the JSON contents back from the file using the <code class="docutils literal notranslate"><span class="pre">LoadJson</span></code> task definition class</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Import the task definition</span>
 <span class="kn">from</span> <span class="nn">pydra.tasks.common</span> <span class="kn">import</span> <span class="n">LoadJson</span>
 
-<span class="c1"># Create a sample JSON file to test</span>
-<span class="n">json_file</span> <span class="o">=</span> <span class="n">Json</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
-
-<span class="c1"># Print the path of the sample JSON file and its contents for reference</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sample JSON file created at </span><span class="si">{</span><span class="n">json_file</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> with contents: </span><span class="si">{</span><span class="n">json_file</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-<span class="c1"># Parameterise the task specification to load the JSON file</span>
+<span class="c1"># Instantiate the task definition, providing the JSON file we want to load</span>
 <span class="n">load_json</span> <span class="o">=</span> <span class="n">LoadJson</span><span class="p">(</span><span class="n">file</span><span class="o">=</span><span class="n">json_file</span><span class="p">)</span>
 
 <span class="c1"># Run the task to load the JSON file</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">load_json</span><span class="p">()</span>
 
-<span class="c1"># Print the output interface of the of the task (LoadJson.Outputs)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loaded contents: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">out</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="c1"># Access the loaded JSON output contents and check they match original</span>
+<span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">out</span> <span class="o">==</span> <span class="n">JSON_CONTENTS</span>
 </pre></div>
 </div>
 </div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
+</section>
+<section id="Iterating-over-inputs">
+<h2>Iterating over inputs<a class="headerlink" href="#Iterating-over-inputs" title="Permalink to this heading">¶</a></h2>
+<p>It is straightforward to apply the same operation over a set of inputs using the <code class="docutils literal notranslate"><span class="pre">split()</span></code> method. For example, if we wanted to re-grid all the NIfTI images stored in a directory, such as the sample ones generated by the code below</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
 </div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-Sample JSON file created at &#39;0UAqFzWsDK4FrUMp48Y3tT3Q.json&#39; with contents: {&#34;a&#34;: true, &#34;b&#34;: &#34;two&#34;, &#34;c&#34;: 3, &#34;d&#34;: [7, 0.5598136790149003, 6]}
-Loaded contents: {&#39;a&#39;: True, &#39;b&#39;: &#39;two&#39;, &#39;c&#39;: 3, &#39;d&#39;: [7, 0.5598136790149003, 6]}
-</pre></div></div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">fileformats.medimage</span> <span class="kn">import</span> <span class="n">Nifti</span>
+
+<span class="n">nifti_dir</span> <span class="o">=</span> <span class="n">test_dir</span> <span class="o">/</span> <span class="s2">&quot;nifti&quot;</span>
+<span class="n">nifti_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">()</span>
+
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+    <span class="n">Nifti</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">nifti_dir</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">i</span><span class="p">)</span>
+</pre></div>
 </div>
+</div>
+<p>Then we can by importing the <code class="docutils literal notranslate"><span class="pre">MrGrid</span></code> shell-command task from the <code class="docutils literal notranslate"><span class="pre">pydra-mrtrix3</span></code> package and then splitting over the list of files in the directory</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.tasks.mrtrix3</span> <span class="kn">import</span> <span class="n">MrGrid</span>
+
+<span class="c1"># Instantiate the task definition, &quot;splitting&quot; over all NIfTI files in the test directory</span>
+<span class="n">mrgrid</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">(</span><span class="n">voxel</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="nb">input</span><span class="o">=</span><span class="n">nifti_dir</span><span class="o">.</span><span class="n">iterdir</span><span class="p">())</span>
+
+<span class="c1"># Run the task to resample all NIfTI files</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">()</span>
+
+<span class="c1"># Print the locations of the output files</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">output</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<p>It is also possible to iterate over inputs in pairs, if for example you wanted to use different voxel sizes for different images, both the list of images and the voxel sizes are passed to the <code class="docutils literal notranslate"><span class="pre">split()</span></code> method and their combination is specified by a tuple &quot;splitter&quot; (see <a class="reference external" href="../explanation/splitting-combining.html">Splitting and combining</a> for more details on splitters)</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Define a list of voxel sizes to resample the NIfTI files to, must be the same length</span>
+<span class="c1"># as the number of NIfTI files</span>
+<span class="n">VOXEL_SIZES</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.25</span><span class="p">]</span>
+
+<span class="n">mrgrid_varying_sizes</span> <span class="o">=</span> <span class="n">MrGrid</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;voxel&quot;</span><span class="p">),</span>
+    <span class="nb">input</span><span class="o">=</span><span class="n">nifti_dir</span><span class="o">.</span><span class="n">iterdir</span><span class="p">(),</span>
+    <span class="n">voxel</span><span class="o">=</span><span class="n">VOXEL_SIZES</span>
+<span class="p">)</span>
+
+<span class="c1"># Run the task to resample all NIfTI files with different voxel sizes</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mrgrid</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Cache-directories">
+<h2>Cache directories<a class="headerlink" href="#Cache-directories" title="Permalink to this heading">¶</a></h2>
+<p>When a task runs, a hash is generated by the combination of all the inputs to the task and the task to be run.</p>
+</section>
 </section>
 
         </article>
@@ -362,8 +435,29 @@ Loaded contents: {&#39;a&#39;: True, &#39;b&#39;: &#39;two&#39;, &#39;c&#39;: 3,
         
       </footer>
     </div>
-    <aside class="toc-drawer no-toc">
+    <aside class="toc-drawer">
       
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Getting started</a><ul>
+<li><a class="reference internal" href="#Running-your-first-task">Running your first task</a></li>
+<li><a class="reference internal" href="#Iterating-over-inputs">Iterating over inputs</a></li>
+<li><a class="reference internal" href="#Cache-directories">Cache directories</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
       
       
     </aside>

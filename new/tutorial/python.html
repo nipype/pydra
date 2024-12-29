@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Shell-tasks" href="shell.html" /><link rel="prev" title="Advanced execution" href="advanced-execution.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Python-tasks - Pydra v0.1.dev1+g976fb9f</title>
+        <title>Python-tasks - Pydra v0.1.dev1+ga8c6666</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
@@ -174,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g976fb9f</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+ga8c6666</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -201,7 +201,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g976fb9f</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+ga8c6666</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -209,7 +209,7 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Execution</span></p>
+  <p class="caption" role="heading"><span class="caption-text">Task execution</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="advanced-execution.html">Advanced execution</a></li>
@@ -294,9 +294,9 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function with inputs and outputs&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">*</span> <span class="mi">2</span>
 
-<span class="n">SampleSpec</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+<span class="n">SampleDef</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
 
-<span class="n">spec</span> <span class="o">=</span> <span class="n">SampleSpec</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">spec</span> <span class="o">=</span> <span class="n">SampleDef</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">spec</span><span class="p">()</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="p">)</span>
 </pre></div>
@@ -320,7 +320,7 @@ funcOutputs(out=2.0)
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function with inputs and outputs&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">*</span> <span class="n">k</span>
 
-<span class="n">SampleSpec</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+<span class="n">SampleDef</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
 <br/></pre></div>
 </div>
 </div>
@@ -337,7 +337,7 @@ funcOutputs(out=2.0)
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function with inputs and outputs&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">*</span> <span class="mi">2</span>
 
-<span class="n">SampleSpec</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
+<span class="n">SampleDef</span> <span class="o">=</span> <span class="n">python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span>
     <span class="n">func</span><span class="p">,</span>
     <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">arg</span><span class="p">(</span><span class="n">help_string</span><span class="o">=</span><span class="s2">&quot;The argument to be doubled&quot;</span><span class="p">)},</span>
     <span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">python</span><span class="o">.</span><span class="n">out</span><span class="p">(</span><span class="n">help_string</span><span class="o">=</span><span class="s2">&quot;the doubled output&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Decimal</span><span class="p">)},</span>
@@ -354,7 +354,7 @@ funcOutputs(out=2.0)
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Note we use CamelCase as the function is translated to a class</span>
 
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">])</span>
-<span class="k">def</span> <span class="nf">SampleSpec</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">SampleDef</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 </pre></div>
@@ -371,7 +371,7 @@ funcOutputs(out=2.0)
 <span class="kn">from</span> <span class="nn">pydra.engine.helpers</span> <span class="kn">import</span> <span class="n">fields_dict</span>
 
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">outputs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">])</span>
-<span class="k">def</span> <span class="nf">SampleSpec</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">SampleDef</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample function for testing</span>
 
 <span class="sd">    Args:</span>
@@ -385,8 +385,8 @@ funcOutputs(out=2.0)
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 
-<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="p">))</span>
-<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleDef</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleDef</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
 </pre></div>
 </div>
 </div>
@@ -397,7 +397,7 @@ funcOutputs(out=2.0)
 <div class="highlight"><pre>
 {&#39;a&#39;: arg(name=&#39;a&#39;, type=&lt;class &#39;int&#39;&gt;, default=EMPTY, help_string=&#39;First input to be inputted&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
  &#39;b&#39;: arg(name=&#39;b&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help_string=&#39;Second input&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
- &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function SampleSpec at 0x10d0253a0&gt;, help_string=&#39;&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
+ &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function SampleDef at 0x10d0253a0&gt;, help_string=&#39;&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
 {&#39;c&#39;: out(name=&#39;c&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help_string=&#39;Sum of a and b&#39;, requires=[], converter=None, validator=None),
  &#39;d&#39;: out(name=&#39;d&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help_string=&#39;Product of a and b&#39;, requires=[], converter=None, validator=None)}
 </pre></div></div>
@@ -411,7 +411,7 @@ funcOutputs(out=2.0)
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><br/><span></span><span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span> <span class="nc">SampleSpec</span><span class="p">:</span>
+<span class="k">class</span> <span class="nc">SampleDef</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample class for testing</span>
 
 <span class="sd">    Args:</span>
@@ -437,8 +437,8 @@ funcOutputs(out=2.0)
     <span class="k">def</span> <span class="nf">function</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 
-<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="p">))</span>
-<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleDef</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleDef</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
 </pre></div>
 </div>
 </div>
@@ -449,7 +449,7 @@ funcOutputs(out=2.0)
 <div class="highlight"><pre>
 {&#39;a&#39;: arg(name=&#39;a&#39;, type=&lt;class &#39;int&#39;&gt;, default=EMPTY, help_string=&#39;First input to be inputted&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
  &#39;b&#39;: arg(name=&#39;b&#39;, type=&lt;class &#39;float&#39;&gt;, default=2.0, help_string=&#39;Second input&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
- &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function SampleSpec.function at 0x10d024040&gt;, help_string=&#39;&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
+ &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function SampleDef.function at 0x10d024040&gt;, help_string=&#39;&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
 {&#39;c&#39;: out(name=&#39;c&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help_string=&#39;Sum of a and b&#39;, requires=[], converter=None, validator=None),
  &#39;d&#39;: out(name=&#39;d&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help_string=&#39;Product of a and b&#39;, requires=[], converter=None, validator=None)}
 </pre></div></div>
@@ -461,10 +461,10 @@ funcOutputs(out=2.0)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">PythonSpec</span><span class="p">,</span> <span class="n">PythonOutputs</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">PythonDef</span><span class="p">,</span> <span class="n">PythonOutputs</span>
 
 <span class="nd">@python</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span> <span class="nc">SampleSpec</span><span class="p">(</span><span class="n">PythonSpec</span><span class="p">[</span><span class="s2">&quot;SampleSpec.Outputs&quot;</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">SampleDef</span><span class="p">(</span><span class="n">PythonDef</span><span class="p">[</span><span class="s2">&quot;SampleDef.Outputs&quot;</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample class for testing</span>
 
 <span class="sd">    Args:</span>
@@ -491,8 +491,8 @@ funcOutputs(out=2.0)
     <span class="k">def</span> <span class="nf">function</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span>
 
-<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="p">))</span>
-<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleSpec</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleDef</span><span class="p">))</span>
+<span class="n">pprint</span><span class="p">(</span><span class="n">fields_dict</span><span class="p">(</span><span class="n">SampleDef</span><span class="o">.</span><span class="n">Outputs</span><span class="p">))</span>
 </pre></div>
 </div>
 </div>
@@ -503,7 +503,7 @@ funcOutputs(out=2.0)
 <div class="highlight"><pre>
 {&#39;a&#39;: arg(name=&#39;a&#39;, type=&lt;class &#39;int&#39;&gt;, default=EMPTY, help_string=&#39;First input to be inputted&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
  &#39;b&#39;: arg(name=&#39;b&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help_string=&#39;Second input&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False),
- &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function SampleSpec.function at 0x10d024180&gt;, help_string=&#39;&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
+ &#39;function&#39;: arg(name=&#39;function&#39;, type=typing.Callable, default=&lt;function SampleDef.function at 0x10d024180&gt;, help_string=&#39;&#39;, requires=[], converter=None, validator=None, allowed_values=(), xor=(), copy_mode=&lt;CopyMode.any: 15&gt;, copy_collation=&lt;CopyCollation.any: 0&gt;, copy_ext_decomp=&lt;ExtensionDecomposition.single: 1&gt;, readonly=False)}
 {&#39;c&#39;: out(name=&#39;c&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help_string=&#39;Sum of a and b&#39;, requires=[], converter=None, validator=None),
  &#39;d&#39;: out(name=&#39;d&#39;, type=&lt;class &#39;float&#39;&gt;, default=EMPTY, help_string=&#39;Product of a and b&#39;, requires=[], converter=None, validator=None)}
 </pre></div></div>

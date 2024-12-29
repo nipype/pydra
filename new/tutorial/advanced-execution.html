@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Python-tasks" href="python.html" /><link rel="prev" title="Getting started" href="getting-started.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Advanced execution - Pydra v0.1.dev1+g976fb9f</title>
+        <title>Advanced execution - Pydra v0.1.dev1+ga8c6666</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?digest=cf727022eb7470bc603c08d2e55c3247faec75c9" />
@@ -173,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g976fb9f</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+ga8c6666</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -200,7 +200,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g976fb9f</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+ga8c6666</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -208,7 +208,7 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Execution</span></p>
+  <p class="caption" role="heading"><span class="caption-text">Task execution</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting started</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Advanced execution</a></li>
@@ -282,8 +282,15 @@
         <article role="main" id="furo-main-content">
           <section id="Advanced-execution">
 <h1>Advanced execution<a class="headerlink" href="#Advanced-execution" title="Permalink to this heading">¶</a></h1>
-<section id="Plugins">
-<h2>Plugins<a class="headerlink" href="#Plugins" title="Permalink to this heading">¶</a></h2>
+<section id="Workers">
+<h2>Workers<a class="headerlink" href="#Workers" title="Permalink to this heading">¶</a></h2>
+<p>Pydra supports several workers with which to execute tasks</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ConcurrentFutures</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SLURM</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Dask</span></code> (experimental)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Serial</span></code> (for debugging)</p></li>
+</ul>
 </section>
 <section id="Caching-results">
 <h2>Caching results<a class="headerlink" href="#Caching-results" title="Permalink to this heading">¶</a></h2>
@@ -354,7 +361,7 @@
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">Advanced execution</a><ul>
-<li><a class="reference internal" href="#Plugins">Plugins</a></li>
+<li><a class="reference internal" href="#Workers">Workers</a></li>
 <li><a class="reference internal" href="#Caching-results">Caching results</a></li>
 <li><a class="reference internal" href="#Environments-(containers)">Environments (containers)</a></li>
 <li><a class="reference internal" href="#Provenance">Provenance</a></li>

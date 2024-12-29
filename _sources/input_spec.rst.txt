@@ -5,7 +5,7 @@ Input Specification
 
 As it was mentioned in :ref:`shell_command_task`, the user can customize the input and output
 for the `ShellCommandTask`.
-In this section, more examples of the input specification will be provided.
+In this section, more examples of the input definition will be provided.
 
 
 Let's start from the previous example:
@@ -27,29 +27,29 @@ Let's start from the previous example:
         ( "mask", bool,
           { "help_string": "create binary mask",
             "argstr": "-m", } ) ],
-        bases=(ShellSpec,) )
+        bases=(ShellDef,) )
 
     ShellCommandTask(executable="bet",
                      input_spec=bet_input_spec)
 
 
 
-In order to create an input specification, a new `SpecInfo` object has to be created.
+In order to create an input definition, a new `SpecInfo` object has to be created.
 The field `name` specifies the type of the spec and it should be always "Input" for
-the input specification.
-The field `bases` specifies the "base specification" you want to use (can think about it as a
-`parent class`) and it will usually contains `ShellSpec` only, unless you want to build on top of
-your other specification (this will not be cover in this section).
+the input definition.
+The field `bases` specifies the "base definition" you want to use (can think about it as a
+`parent class`) and it will usually contains `ShellDef` only, unless you want to build on top of
+your other definition (this will not be cover in this section).
 The part that should be always customised is the `fields` part.
-Each element of the `fields` is a separate input field that is added to the specification.
+Each element of the `fields` is a separate input field that is added to the definition.
 In this example, three-elements tuples - with name, type and dictionary with additional
 information - are used.
 But this is only one of the supported syntax, more options will be described below.
 
-Adding a New Field to the Spec
+Adding a New Field to the Def
 ------------------------------
 
-Pydra uses `attr` classes to represent the input specification, and the full syntax for each field
+Pydra uses `attr` classes to represent the input definition, and the full syntax for each field
 is:
 
 .. code-block:: python
@@ -152,15 +152,15 @@ In the example we used multiple keys in the metadata dictionary including `help_
 `output_file_template` (`str`):
    If provided, the field is treated also as an output field and it is added to the output spec.
    The template can use other fields, e.g. `{file1}`.
-   Used in order to create an output specification.
+   Used in order to create an output definition.
 
 `output_field_name` (`str`, used together with `output_file_template`)
    If provided the field is added to the output spec with changed name.
-   Used in order to create an output specification.
+   Used in order to create an output definition.
 
 `keep_extension` (`bool`, default: `True`):
    A flag that specifies if the file extension should be removed from the field value.
-   Used in order to create an output specification.
+   Used in order to create an output definition.
 
 `readonly` (`bool`, default: `False`):
    If `True` the input field can't be provided by the user but it aggregates other input fields

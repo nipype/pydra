@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dataflows Components: Task and Workflow &mdash; Pydra: A simple dataflow engine with scalable semantics 0.1.dev1+g976fb9f documentation</title>
+  <title>Dataflows Components: Task and Workflow &mdash; Pydra: A simple dataflow engine with scalable semantics 0.1.dev1+ga8c6666 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -146,7 +146,7 @@ set of arguments and flags, e.g.:</p>
 <p>The <em>Task</em> can accommodate more complex shell commands by allowing the user to
 customize inputs and outputs of the commands.
 One can generate an input
-specification to specify names of inputs, positions in the command, types of
+definition to specify names of inputs, positions in the command, types of
 the inputs, and other metadata.
 As a specific example, FSL’s BET command (Brain
 Extraction Tool) can be called on the command line as:</p>
@@ -154,7 +154,7 @@ Extraction Tool) can be called on the command line as:</p>
 </pre></div>
 </div>
 <p>Each of the command argument can be treated as a named input to the
-<code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code>, and can be included in the input specification.
+<code class="docutils literal notranslate"><span class="pre">ShellCommandTask</span></code>, and can be included in the input definition.
 As shown next, even an output is specified by constructing
 the <em>out_file</em> field form a template:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">bet_input_spec</span> <span class="o">=</span> <span class="n">SpecInfo</span><span class="p">(</span>
@@ -172,7 +172,7 @@ the <em>out_file</em> field form a template:</p>
     <span class="p">(</span> <span class="s2">&quot;mask&quot;</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span>
       <span class="p">{</span> <span class="s2">&quot;help_string&quot;</span><span class="p">:</span> <span class="s2">&quot;create binary mask&quot;</span><span class="p">,</span>
         <span class="s2">&quot;argstr&quot;</span><span class="p">:</span> <span class="s2">&quot;-m&quot;</span><span class="p">,</span> <span class="p">}</span> <span class="p">)</span> <span class="p">],</span>
-    <span class="n">bases</span><span class="o">=</span><span class="p">(</span><span class="n">ShellSpec</span><span class="p">,)</span> <span class="p">)</span>
+    <span class="n">bases</span><span class="o">=</span><span class="p">(</span><span class="n">ShellDef</span><span class="p">,)</span> <span class="p">)</span>
 
 <span class="n">ShellCommandTask</span><span class="p">(</span><span class="n">executable</span><span class="o">=</span><span class="s2">&quot;bet&quot;</span><span class="p">,</span>
                  <span class="n">input_spec</span><span class="o">=</span><span class="n">bet_input_spec</span><span class="p">)</span>

@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Workflows" href="workflow.html" /><link rel="prev" title="Python-tasks" href="python.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Shell-tasks - Pydra v0.1.dev1+g976fb9f</title>
+        <title>Shell-tasks - Pydra v0.1.dev1+ga8c6666</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css" />
@@ -174,7 +174,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g976fb9f</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+ga8c6666</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -201,7 +201,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g976fb9f</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+ga8c6666</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -209,7 +209,7 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Execution</span></p>
+  <p class="caption" role="heading"><span class="caption-text">Task execution</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="advanced-execution.html">Advanced execution</a></li>
@@ -354,8 +354,8 @@ Contents of copied file (&#39;/var/folders/mz/yn83q2fd3s758w1j75d2nnw80000gn/T/t
 cp /var/folders/mz/yn83q2fd3s758w1j75d2nnw80000gn/T/tmpoyx19gql/in.txt /Users/tclose/git/workflows/pydra/docs/source/tutorial/destination
 </pre></div></div>
 </div>
-<section id="Specifying-types">
-<h3>Specifying types<a class="headerlink" href="#Specifying-types" title="Permalink to this heading">¶</a></h3>
+<section id="Defifying-types">
+<h3>Defifying types<a class="headerlink" href="#Defifying-types" title="Permalink to this heading">¶</a></h3>
 <p>By default, shell-command fields are considered to be of <code class="docutils literal notranslate"><span class="pre">fileformats.generic.FsObject</span></code> type. However, more specific file formats or built-in Python types can be specified by appending the type to the field name after a <code class="docutils literal notranslate"><span class="pre">:</span></code>.</p>
 <p>File formats are specified by their MIME type or &quot;MIME-like&quot; strings (see the <a class="reference external" href="https://arcanaframework.github.io/fileformats/mime.html">FileFormats docs</a> for details)</p>
 <div class="nbinput docutils container">
@@ -615,15 +615,15 @@ Size of the output file is: 256
  &#39;stdout&#39;: out(name=&#39;stdout&#39;, type=&lt;class &#39;str&#39;&gt;, default=EMPTY, help_string=&#39;The standard output stream produced by the command.&#39;, requires=[], converter=None, validator=None, callable=None)}
 </pre></div></div>
 </div>
-<p>To make workflows that use the interface type-checkable, the canonical form of a shell task dataclass should inherit from <code class="docutils literal notranslate"><span class="pre">shell.Spec</span></code> parameterized by its nested Outputs class, and the <code class="docutils literal notranslate"><span class="pre">Outputs</span></code> nested class should inherit from <code class="docutils literal notranslate"><span class="pre">shell.Outputs</span></code>.</p>
+<p>To make workflows that use the interface type-checkable, the canonical form of a shell task dataclass should inherit from <code class="docutils literal notranslate"><span class="pre">shell.Def</span></code> parameterized by its nested Outputs class, and the <code class="docutils literal notranslate"><span class="pre">Outputs</span></code> nested class should inherit from <code class="docutils literal notranslate"><span class="pre">shell.Outputs</span></code>.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">ShellSpec</span><span class="p">,</span> <span class="n">ShellOutputs</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pydra.engine.specs</span> <span class="kn">import</span> <span class="n">ShellDef</span><span class="p">,</span> <span class="n">ShellOutputs</span>
 
 <span class="nd">@shell</span><span class="o">.</span><span class="n">define</span>
-<span class="k">class</span> <span class="nc">Cp</span><span class="p">(</span><span class="n">ShellSpec</span><span class="p">[</span><span class="s2">&quot;Cp.Outputs&quot;</span><span class="p">]):</span>
+<span class="k">class</span> <span class="nc">Cp</span><span class="p">(</span><span class="n">ShellDef</span><span class="p">[</span><span class="s2">&quot;Cp.Outputs&quot;</span><span class="p">]):</span>
 
     <span class="n">executable</span> <span class="o">=</span> <span class="s2">&quot;cp&quot;</span>
 
@@ -640,9 +640,9 @@ Size of the output file is: 256
 </div>
 </div>
 </section>
-<section id="Dynamic-specifications">
-<h2>Dynamic specifications<a class="headerlink" href="#Dynamic-specifications" title="Permalink to this heading">¶</a></h2>
-<p>In some cases, it is required to generate the specification for a task dynamically, which can be done by just providing the executable to <code class="docutils literal notranslate"><span class="pre">shell.define</span></code> and specifying all inputs and outputs explicitly</p>
+<section id="Dynamic-definitions">
+<h2>Dynamic definitions<a class="headerlink" href="#Dynamic-definitions" title="Permalink to this heading">¶</a></h2>
+<p>In some cases, it is required to generate the definition for a task dynamically, which can be done by just providing the executable to <code class="docutils literal notranslate"><span class="pre">shell.define</span></code> and specifying all inputs and outputs explicitly</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
@@ -742,7 +742,7 @@ ACommand input fields: [outarg(name=&#39;out_file&#39;, type=&lt;class &#39;file
             <ul>
 <li><a class="reference internal" href="#">Shell-tasks</a><ul>
 <li><a class="reference internal" href="#Command-line-templates">Command-line templates</a><ul>
-<li><a class="reference internal" href="#Specifying-types">Specifying types</a></li>
+<li><a class="reference internal" href="#Defifying-types">Defifying types</a></li>
 <li><a class="reference internal" href="#Flags-and-options">Flags and options</a></li>
 <li><a class="reference internal" href="#Defaults">Defaults</a></li>
 <li><a class="reference internal" href="#Additional-field-attributes">Additional field attributes</a></li>
@@ -750,7 +750,7 @@ ACommand input fields: [outarg(name=&#39;out_file&#39;, type=&lt;class &#39;file
 </ul>
 </li>
 <li><a class="reference internal" href="#Dataclass-form">Dataclass form</a></li>
-<li><a class="reference internal" href="#Dynamic-specifications">Dynamic specifications</a></li>
+<li><a class="reference internal" href="#Dynamic-definitions">Dynamic definitions</a></li>
 </ul>
 </li>
 </ul>

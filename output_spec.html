@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Output Specification &mdash; Pydra: A simple dataflow engine with scalable semantics 0.1.dev1+g976fb9f documentation</title>
+  <title>Output Specification &mdash; Pydra: A simple dataflow engine with scalable semantics 0.1.dev1+ga8c6666 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -88,7 +88,7 @@
 <span id="output-specification-section"></span><h1>Output Specification<a class="headerlink" href="#output-specification" title="Permalink to this heading"></a></h1>
 <p>As it was mentioned in <a class="reference internal" href="components.html#shell-command-task"><span class="std std-ref">Shell Command Tasks</span></a>, the user can customize the input and output
 for the <cite>ShellCommandTask</cite>.
-In this section, the output specification will be covered.</p>
+In this section, the output definition will be covered.</p>
 <p>Instead of using field with <cite>output_file_template</cite> in the customized <cite>input_spec</cite> to specify an output field,
 a customized <cite>output_spec</cite> can be used, e.g.:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">output_spec</span> <span class="o">=</span> <span class="n">SpecInfo</span><span class="p">(</span>
@@ -106,25 +106,25 @@ a customized <cite>output_spec</cite> can be used, e.g.:</p>
             <span class="p">),</span>
         <span class="p">)</span>
     <span class="p">],</span>
-    <span class="n">bases</span><span class="o">=</span><span class="p">(</span><span class="n">ShellOutSpec</span><span class="p">,),</span>
+    <span class="n">bases</span><span class="o">=</span><span class="p">(</span><span class="n">ShellOutDef</span><span class="p">,),</span>
 <span class="p">)</span>
 
 <span class="n">ShellCommandTask</span><span class="p">(</span><span class="n">executable</span><span class="o">=</span><span class="n">executable</span><span class="p">,</span>
                  <span class="n">output_spec</span><span class="o">=</span><span class="n">output_spec</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Similarly as for <cite>input_spec</cite>, in order to create an output specification,
+<p>Similarly as for <cite>input_spec</cite>, in order to create an output definition,
 a new <cite>SpecInfo</cite> object has to be created.
 The field <cite>name</cite> specifies the type of the spec and it should be always “Output” for
-the output specification.
-The field <cite>bases</cite> specifies the “base specification” you want to use (can think about it as a
-<cite>parent class</cite>) and it will usually contains <cite>ShellOutSpec</cite> only, unless you want to build on top of
-your other specification (this will not be cover in this section).
+the output definition.
+The field <cite>bases</cite> specifies the “base definition” you want to use (can think about it as a
+<cite>parent class</cite>) and it will usually contains <cite>ShellOutDef</cite> only, unless you want to build on top of
+your other definition (this will not be cover in this section).
 The part that should be always customised is the <cite>fields</cite> part.
-Each element of the <cite>fields</cite> is a separate output field that is added to the specification.
+Each element of the <cite>fields</cite> is a separate output field that is added to the definition.
 In this example, a three-elements tuple - with name, type and dictionary with additional
 information - is used.
-See <a class="reference internal" href="input_spec.html#input-specification-section"><span class="std std-ref">Input Specification</span></a> for other recognized syntax for specification’s fields
+See <a class="reference internal" href="input_spec.html#input-specification-section"><span class="std std-ref">Input Specification</span></a> for other recognized syntax for definition’s fields
 and possible types.</p>
 <section id="metadata">
 <h2>Metadata<a class="headerlink" href="#metadata" title="Permalink to this heading"></a></h2>

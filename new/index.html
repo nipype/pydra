@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Getting started" href="tutorial/getting-started.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Pydra v0.1.dev1+g976fb9f</title>
+        <title>Pydra v0.1.dev1+ga8c6666</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?digest=cf727022eb7470bc603c08d2e55c3247faec75c9" />
@@ -173,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="#"><div class="brand">Pydra v0.1.dev1+g976fb9f</div></a>
+      <a href="#"><div class="brand">Pydra v0.1.dev1+ga8c6666</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -200,7 +200,7 @@
     <img class="sidebar-logo" src="_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+g976fb9f</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+ga8c6666</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -208,7 +208,7 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <p class="caption" role="heading"><span class="caption-text">Execution</span></p>
+  <p class="caption" role="heading"><span class="caption-text">Task execution</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tutorial/getting-started.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorial/advanced-execution.html">Advanced execution</a></li>
@@ -282,10 +282,19 @@
         <article role="main" id="furo-main-content">
           <section id="pydra">
 <span id="home"></span><h1>Pydra<a class="headerlink" href="#pydra" title="Permalink to this heading">¶</a></h1>
-<p>Pydra is a new lightweight dataflow engine written in Python, which provides a simple way to
-implement scientific workflows that use a mix of shell commands and Python functions.</p>
-<p>Pydra is developed as an open-source project in the neuroimaging community,
-but it is designed as a general-purpose dataflow engine to support any scientific domain.</p>
+<p>Pydra is a lightweight, Python 3.11+ dataflow engine for computational graph construction,
+manipulation, and distributed execution. Designed as a successor to created for [Nipype](<a class="reference external" href="https://github.com/nipy/nipype">https://github.com/nipy/nipype</a>),
+Pydra is a general-purpose engine that supports analytics in any scientific domain.
+Pydra helps build reproducible, scalable, reusable, and fully automated, provenance
+tracked scientific workflows that combine Python functions and shell commands.</p>
+<p>The power of Pydra lies in ease of workflow creation and execution for complex
+multiparameter map-reduce operations, and the use of global cache.</p>
+<p>Pydra's key features are:
+- Modular execution backends (see [Advanced execution](../tutorial/advanced-execution.html))
+- Map-reduce like semantics (see [Splitting and combining](../explanation/splitting-combining.html))
+- Global cache support to reduce recomputation (see [Hashing and caching](../explanation/hashing-caching.html))
+- Support for execution of Tasks in containerized environments (see [Environments](../explanation/environments.html))
+- Strong type-checking and type-hinting support (see [Typing](../explanation/typing.html))</p>
 <p>See <a class="reference internal" href="explanation/design-approach.html#design-philosophy"><span class="std std-ref">Design philosophy</span></a> for more an explanation of the design of Pydra.</p>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Permalink to this heading">¶</a></h2>
