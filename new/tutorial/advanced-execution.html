@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Python-tasks" href="python.html" /><link rel="prev" title="Getting started" href="getting-started.html" />
 
     <!-- Generated with Sphinx 6.2.1 and Furo 2024.08.06 -->
-        <title>Execution options - Pydra v0.1.dev1+ga96118e</title>
+        <title>Advanced execution - Pydra v0.1.dev1+g976fb9f</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=04c057b233f3c8d71940eee6080f658a04e2027d" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?digest=cf727022eb7470bc603c08d2e55c3247faec75c9" />
@@ -173,7 +173,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+ga96118e</div></a>
+      <a href="../index.html"><div class="brand">Pydra v0.1.dev1+g976fb9f</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -200,7 +200,7 @@
     <img class="sidebar-logo" src="../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v0.1.dev1+ga96118e</span>
+  <span class="sidebar-brand-text">Pydra v0.1.dev1+g976fb9f</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -208,9 +208,10 @@
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <ul class="current">
+  <p class="caption" role="heading"><span class="caption-text">Execution</span></p>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting started</a></li>
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Execution options</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Advanced execution</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Design</span></p>
 <ul>
@@ -220,7 +221,7 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Examples</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../examples/real-example.html">Real-world example</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/t1w-preprocess.html">T1w MRI preprocessing</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How-to</span></p>
 <ul>
@@ -231,10 +232,10 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/design-approach.html">Design philosophy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/splitting-combining.html">Splitting and combining</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Conditionals and lazy fields</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/typing.html">Type checking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../explanation/hashing-caching.html">Caching and hashing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../explanation/conditional-lazy.html">Conditionals and lazy fields</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../explanation/provenance.html">Provenance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../explanation/environments.html">Containers and environments</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul>
@@ -279,16 +280,21 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="Execution-options">
-<h1>Execution options<a class="headerlink" href="#Execution-options" title="Permalink to this heading">¶</a></h1>
-<section id="Execution-plugins">
-<h2>Execution plugins<a class="headerlink" href="#Execution-plugins" title="Permalink to this heading">¶</a></h2>
+          <section id="Advanced-execution">
+<h1>Advanced execution<a class="headerlink" href="#Advanced-execution" title="Permalink to this heading">¶</a></h1>
+<section id="Plugins">
+<h2>Plugins<a class="headerlink" href="#Plugins" title="Permalink to this heading">¶</a></h2>
 </section>
-<section id="Cache-locations">
-<h2>Cache locations<a class="headerlink" href="#Cache-locations" title="Permalink to this heading">¶</a></h2>
+<section id="Caching-results">
+<h2>Caching results<a class="headerlink" href="#Caching-results" title="Permalink to this heading">¶</a></h2>
+<p>See <a class="reference external" href="../explanation/hashing-caching.html">Caching and hashing</a> for more details.</p>
 </section>
-<section id="Environments">
-<h2>Environments<a class="headerlink" href="#Environments" title="Permalink to this heading">¶</a></h2>
+<section id="Environments-(containers)">
+<h2>Environments (containers)<a class="headerlink" href="#Environments-(containers)" title="Permalink to this heading">¶</a></h2>
+<p>See <a class="reference internal" href="../explanation/environments.html"><span class="doc">Containers and Environments</span></a> for more details.</p>
+</section>
+<section id="Provenance">
+<h2>Provenance<a class="headerlink" href="#Provenance" title="Permalink to this heading">¶</a></h2>
 </section>
 </section>
 
@@ -347,10 +353,11 @@
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Execution options</a><ul>
-<li><a class="reference internal" href="#Execution-plugins">Execution plugins</a></li>
-<li><a class="reference internal" href="#Cache-locations">Cache locations</a></li>
-<li><a class="reference internal" href="#Environments">Environments</a></li>
+<li><a class="reference internal" href="#">Advanced execution</a><ul>
+<li><a class="reference internal" href="#Plugins">Plugins</a></li>
+<li><a class="reference internal" href="#Caching-results">Caching results</a></li>
+<li><a class="reference internal" href="#Environments-(containers)">Environments (containers)</a></li>
+<li><a class="reference internal" href="#Provenance">Provenance</a></li>
 </ul>
 </li>
 </ul>
