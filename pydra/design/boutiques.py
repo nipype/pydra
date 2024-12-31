@@ -135,7 +135,7 @@ def _download_spec(zenodo_id):
     searcher = Searcher(zenodo_id, exact_match=True)
     hits = searcher.zenodo_search().json()["hits"]["hits"]
     if len(hits) == 0:
-        raise Exception(f"can't find zenodo spec for {zenodo_id}")
+        raise Exception(f"can't find zenodo definition for {zenodo_id}")
     elif len(hits) > 1:
         raise Exception(f"too many hits for {zenodo_id}")
     else:
@@ -146,8 +146,8 @@ def _download_spec(zenodo_id):
 
 
 def _prepare_input_spec(bosh_spec: dict[str, ty.Any], names_subset=None):
-    """creating input spec from the zenodo file
-    if name_subset provided, only names from the subset will be used in the spec
+    """creating input definition from the zenodo file
+    if name_subset provided, only names from the subset will be used in the definition
     """
     binputs = bosh_spec["inputs"]
     input_keys = {}
@@ -185,13 +185,13 @@ def _prepare_input_spec(bosh_spec: dict[str, ty.Any], names_subset=None):
         )
         input_keys[input["value-key"]] = "{" + f"{name}" + "}"
     if names_subset:
-        raise RuntimeError(f"{names_subset} are not in the zenodo input spec")
+        raise RuntimeError(f"{names_subset} are not in the zenodo input definition")
     return fields, input_keys
 
 
 def _prepare_output_spec(bosh_spec: dict[str, ty.Any], input_keys, names_subset=None):
-    """creating output spec from the zenodo file
-    if name_subset provided, only names from the subset will be used in the spec
+    """creating output definition from the zenodo file
+    if name_subset provided, only names from the subset will be used in the definition
     """
     boutputs = bosh_spec["output-files"]
     fields = []
@@ -219,5 +219,5 @@ def _prepare_output_spec(bosh_spec: dict[str, ty.Any], input_keys, names_subset=
         )
 
     if names_subset:
-        raise RuntimeError(f"{names_subset} are not in the zenodo output spec")
+        raise RuntimeError(f"{names_subset} are not in the zenodo output definition")
     return fields

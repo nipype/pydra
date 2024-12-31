@@ -37,19 +37,23 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
     @classmethod
     def construct(
         cls,
-        spec: TaskDef[WorkflowOutputsType],
+        definition: TaskDef[WorkflowOutputsType],
     ) -> Self:
         """Construct a workflow from a definition, caching the constructed worklow"""
 
-        lazy_inputs = [f for f in list_fields(type(spec)) if f.lazy]
+        lazy_inputs = [f for f in list_fields(type(definition)) if f.lazy]
 
-        # Create a cache key by hashing all the non-lazy input values in the spec
+        # Create a cache key by hashing all the non-lazy input values in the definition
         # and use this to store the constructed workflow in case it is reused or nested
         # and split over within another workflow
         lazy_input_names = {f.name for f in lazy_inputs}
         non_lazy_vals = tuple(
             sorted(
-                (i for i in attrs_values(spec).items() if i[0] not in lazy_input_names),
+                (
+                    i
+                    for i in attrs_values(definition).items()
+                    if i[0] not in lazy_input_names
+                ),
                 key=itemgetter(0),
             )
         )
@@ -62,14 +66,14 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             return cls._constructed[hash_key]
 
         # Initialise the outputs of the workflow
-        outputs = spec.Outputs(
-            **{f.name: attrs.NOTHING for f in attrs.fields(spec.Outputs)}
+        outputs = definition.Outputs(
+            **{f.name: attrs.NOTHING for f in attrs.fields(definition.Outputs)}
         )
 
         # Initialise the lzin fields
-        lazy_spec = copy(spec)
+        lazy_spec = copy(definition)
         wf = cls.under_construction = Workflow(
-            name=type(spec).__name__,
+            name=type(definition).__name__,
             inputs=lazy_spec,
             outputs=outputs,
         )
@@ -98,7 +102,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             if output_lazy_fields:
                 if not isinstance(output_lazy_fields, (list, tuple)):
                     output_lazy_fields = [output_lazy_fields]
-                output_fields = list_fields(spec.Outputs)
+                output_fields = list_fields(definition.Outputs)
                 if len(output_lazy_fields) != len(output_fields):
                     raise ValueError(
                         f"Expected {len(output_fields)} outputs, got "
@@ -149,7 +153,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             name = type(task_spec).__name__
         if name in self._nodes:
             raise ValueError(f"Node with name {name!r} already exists in the workflow")
-        node = Node[OutputsType](name=name, spec=task_spec, workflow=self)
+        node = Node[OutputsType](name=name, definition=task_spec, workflow=self)
         self._nodes[name] = node
         return node.lzout
 

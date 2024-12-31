@@ -222,7 +222,7 @@ class TaskDef(ty.Generic[OutputsType]):
         """
         self._check_rules()
         task = self.Task(
-            spec=self,
+            definition=self,
             name=name,
             audit_flags=audit_flags,
             cache_dir=cache_dir,
@@ -375,7 +375,7 @@ class TaskDef(ty.Generic[OutputsType]):
                 )
 
     def _check_resolved(self):
-        """Checks that all the fields in the spec have been resolved"""
+        """Checks that all the fields in the definition have been resolved"""
         if has_lazy_values := [n for n, v in attrs_values(self).items() if is_lazy(v)]:
             raise ValueError(
                 f"Cannot execute {self} because the following fields "
@@ -523,7 +523,9 @@ class ShellOutputs(TaskOutputs):
                 continue
             # Get the corresponding value from the inputs if it exists, which will be
             # passed through to the outputs, to permit manual overrides
-            if isinstance(fld, shell.outarg) and is_set(getattr(task.spec, fld.name)):
+            if isinstance(fld, shell.outarg) and is_set(
+                getattr(task.definition, fld.name)
+            ):
                 resolved_value = task.inputs[fld.name]
             elif is_set(fld.default):
                 resolved_value = cls._resolve_default_value(fld, task.output_dir)
@@ -785,7 +787,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
                 # if argstr has a more complex form, with "{input_field}"
                 if "{" in field.argstr and "}" in field.argstr:
                     cmd_el_str = field.argstr.replace(f"{{{field.name}}}", str(value))
-                    cmd_el_str = argstr_formatting(cmd_el_str, self.spec)
+                    cmd_el_str = argstr_formatting(cmd_el_str, self.definition)
                 else:  # argstr has a simple form, e.g. "-f", or "--f"
                     if value:
                         cmd_el_str = f"{field.argstr} {value}"

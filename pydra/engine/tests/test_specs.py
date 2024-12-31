@@ -29,8 +29,8 @@ make_klass = lambda x: x
 
 
 def test_basespec():
-    spec = BaseDef()
-    assert spec.hash == "0b1d98df22ecd1733562711c205abca2"
+    definition = BaseDef()
+    assert definition.hash == "0b1d98df22ecd1733562711c205abca2"
 
 
 def test_runtime():
@@ -50,10 +50,10 @@ def test_result():
 
 def test_shellspec():
     with pytest.raises(TypeError):
-        spec = ShellDef()
-    spec = ShellDef(executable="ls")  # (executable, args)
-    assert hasattr(spec, "executable")
-    assert hasattr(spec, "args")
+        definition = ShellDef()
+    definition = ShellDef(executable="ls")  # (executable, args)
+    assert hasattr(definition, "executable")
+    assert hasattr(definition, "args")
 
 
 class NodeTesting:
@@ -151,7 +151,7 @@ def test_input_file_hash_1(tmp_path):
 
 
 def test_input_file_hash_2(tmp_path):
-    """input spec with File types, checking when the checksum changes"""
+    """input definition with File types, checking when the checksum changes"""
     file = tmp_path / "in_file_1.txt"
     with open(file, "w") as f:
         f.write("hello")
@@ -180,7 +180,7 @@ def test_input_file_hash_2(tmp_path):
 
 
 def test_input_file_hash_2a(tmp_path):
-    """input spec with ty.Union[File, ...] type, checking when the checksum changes"""
+    """input definition with ty.Union[File, ...] type, checking when the checksum changes"""
     file = tmp_path / "in_file_1.txt"
     with open(file, "w") as f:
         f.write("hello")
@@ -215,7 +215,7 @@ def test_input_file_hash_2a(tmp_path):
 
 
 def test_input_file_hash_3(tmp_path):
-    """input spec with File types, checking when the hash and file_hash change"""
+    """input definition with File types, checking when the hash and file_hash change"""
     file = tmp_path / "in_file_1.txt"
     with open(file, "w") as f:
         f.write("hello")
@@ -269,7 +269,7 @@ def test_input_file_hash_3(tmp_path):
 
 
 def test_input_file_hash_4(tmp_path):
-    """input spec with nested list, that contain ints and Files,
+    """input definition with nested list, that contain ints and Files,
     checking changes in checksums
     """
     file = tmp_path / "in_file_1.txt"
@@ -308,7 +308,7 @@ def test_input_file_hash_4(tmp_path):
 
 
 def test_input_file_hash_5(tmp_path):
-    """input spec with File in nested containers, checking changes in checksums"""
+    """input definition with File in nested containers, checking changes in checksums"""
     file = tmp_path / "in_file_1.txt"
     with open(file, "w") as f:
         f.write("hello")

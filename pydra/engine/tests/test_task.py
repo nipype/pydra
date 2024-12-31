@@ -56,7 +56,7 @@ def test_numpy():
     fft = mark.annotate({"a": np.ndarray, "return": np.ndarray})(np.fft.fft)
     fft = mark.task(fft)()
     arr = np.array([[1, 10], [2, 20]])
-    fft.spec.a = arr
+    fft.definition.a = arr
     res = fft()
     assert np.allclose(np.fft.fft(arr), res.output.out)
 
@@ -115,7 +115,7 @@ def test_annotated_func():
 
 
 def test_annotated_func_dictreturn():
-    """Test mapping from returned dictionary to output spec."""
+    """Test mapping from returned dictionary to output definition."""
 
     @python.define
     @mark.annotate({"return": {"sum": int, "mul": ty.Optional[int]}})
@@ -419,7 +419,7 @@ def test_annotated_input_func_8b():
 
 def test_annotated_func_multreturn_exception():
     """function has two elements in the return statement,
-    but three element provided in the spec - should raise an error
+    but three element provided in the definition - should raise an error
     """
 
     @python.define
@@ -1318,7 +1318,7 @@ def test_shell_cmd(tmpdir):
 
     # separate command into exec + args
     shelly = ShellTask(executable=cmd[0], args=cmd[1:])
-    assert shelly.spec.executable == "echo"
+    assert shelly.definition.executable == "echo"
     assert shelly.cmdline == " ".join(cmd)
     res = shelly._run()
     assert res.output.return_code == 0

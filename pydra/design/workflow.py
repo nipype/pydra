@@ -23,7 +23,7 @@ __all__ = ["define", "add", "this", "arg", "out"]
 
 @attrs.define
 class arg(Arg):
-    """Argument of a workflow task spec
+    """Argument of a workflow task definition
 
     Parameters
     ----------
@@ -63,7 +63,7 @@ class arg(Arg):
 
 @attrs.define
 class out(Out):
-    """Output of a workflow task spec
+    """Output of a workflow task definition
 
     Parameters
     ----------

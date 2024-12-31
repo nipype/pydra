@@ -27,8 +27,8 @@ def test_interface_wrap_function():
         python.arg(name="function", type=ty.Callable, default=func),
     ]
     assert outputs == [python.out(name="out", type=float)]
-    spec = SampleDef(a=1)
-    result = spec()
+    definition = SampleDef(a=1)
+    result = definition()
     assert result.output.out == 2.0
     with pytest.raises(TypeError):
         SampleDef(a=1.5)

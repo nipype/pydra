@@ -43,7 +43,7 @@ def test_boutiques_1(maskfile, plugin, results_function, tmpdir, data_tests_dir)
 @need_bosh_docker
 @pytest.mark.flaky(reruns=3)
 def test_boutiques_spec_1(data_tests_dir):
-    """testing spec: providing input/output fields names"""
+    """testing definition: providing input/output fields names"""
     btask = boutiques.define(
         zenodo_id="1482743",
         input_spec_names=["infile", "maskfile"],
@@ -56,8 +56,8 @@ def test_boutiques_spec_1(data_tests_dir):
     assert len(btask.input_spec.fields) == 2
     assert btask.input_spec.fields[0][0] == "infile"
     assert btask.input_spec.fields[1][0] == "maskfile"
-    assert hasattr(btask.spec, "infile")
-    assert hasattr(btask.spec, "maskfile")
+    assert hasattr(btask.definition, "infile")
+    assert hasattr(btask.definition, "maskfile")
 
     assert len(btask.output_spec.fields) == 2
     assert btask.output_spec.fields[0][0] == "outfile"
@@ -68,7 +68,7 @@ def test_boutiques_spec_1(data_tests_dir):
 @need_bosh_docker
 @pytest.mark.flaky(reruns=3)
 def test_boutiques_spec_2(data_tests_dir):
-    """testing spec: providing partial input/output fields names"""
+    """testing definition: providing partial input/output fields names"""
     btask = boutiques.define(
         zenodo_id="1482743", input_spec_names=["infile"], output_spec_names=[]
     )(
@@ -79,9 +79,9 @@ def test_boutiques_spec_2(data_tests_dir):
     fields = attrs_values(btask)
     assert len(fields) == 1
     assert fields[0][0] == "infile"
-    assert hasattr(btask.spec, "infile")
+    assert hasattr(btask.definition, "infile")
     # input doesn't see maskfile
-    assert not hasattr(btask.spec, "maskfile")
+    assert not hasattr(btask.definition, "maskfile")
 
     assert len(btask.output_spec.fields) == 0
 

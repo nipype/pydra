@@ -40,7 +40,7 @@ from pydra.utils import exc_info_matches
 
 
 def test_wf_no_input_spec():
-    with pytest.raises(ValueError, match='Empty "Inputs" spec'):
+    with pytest.raises(ValueError, match='Empty "Inputs" definition'):
         Workflow(name="workflow")
 
 
@@ -75,14 +75,14 @@ def test_wf_specinfo_input_spec():
 
 
 def test_wf_dict_input_and_output_spec():
-    spec = {
+    definition = {
         "a": str,
         "b": ty.Dict[str, ty.Union[int, bool]],
     }
     wf = Workflow(
         name="workflow",
-        input_spec=spec,
-        output_spec=spec,
+        input_spec=definition,
+        output_spec=definition,
     )
     wf.add(
         identity_2flds(

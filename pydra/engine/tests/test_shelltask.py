@@ -79,7 +79,7 @@ def test_shell_cmd_2a(plugin, results_function, tmp_path):
     # separate command into exec + args
     shelly = ShellTask(name="shelly", executable=cmd_exec, args=cmd_args)
     shelly.cache_dir = tmp_path
-    assert shelly.spec.executable == "echo"
+    assert shelly.definition.executable == "echo"
     assert shelly.cmdline == "echo " + " ".join(cmd_args)
 
     res = results_function(shelly, plugin)
@@ -96,7 +96,7 @@ def test_shell_cmd_2b(plugin, results_function, tmp_path):
     # separate command into exec + args
     shelly = ShellTask(name="shelly", executable=cmd_exec, args=cmd_args)
     shelly.cache_dir = tmp_path
-    assert shelly.spec.executable == "echo"
+    assert shelly.definition.executable == "echo"
     assert shelly.cmdline == "echo pydra"
 
     res = results_function(shelly, plugin)
@@ -273,7 +273,7 @@ def test_wf_shell_cmd_1(plugin, tmp_path):
     assert "_task.pklz" in res.output.out
 
 
-# customised input spec
+# customised input definition
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -308,8 +308,8 @@ def test_shell_cmd_inputspec_1(plugin, results_function, tmp_path):
         input_spec=my_input_spec,
         cache_dir=tmp_path,
     )
-    assert shelly.spec.executable == cmd_exec
-    assert shelly.spec.args == cmd_args
+    assert shelly.definition.executable == cmd_exec
+    assert shelly.definition.args == cmd_args
     assert shelly.cmdline == "echo -n 'hello from pydra'"
 
     res = results_function(shelly, plugin)
@@ -357,8 +357,8 @@ def test_shell_cmd_inputspec_2(plugin, results_function, tmp_path):
         input_spec=my_input_spec,
         cache_dir=tmp_path,
     )
-    assert shelly.spec.executable == cmd_exec
-    assert shelly.spec.args == cmd_args
+    assert shelly.definition.executable == cmd_exec
+    assert shelly.definition.args == cmd_args
     assert shelly.cmdline == "echo -n HELLO 'from pydra'"
     res = results_function(shelly, plugin)
     assert res.output.stdout == "HELLO from pydra"
@@ -396,7 +396,7 @@ def test_shell_cmd_inputspec_3(plugin, results_function, tmp_path):
         input_spec=my_input_spec,
         cache_dir=tmp_path,
     )
-    assert shelly.spec.executable == cmd_exec
+    assert shelly.definition.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
     res = results_function(shelly, plugin)
     assert res.output.stdout == "HELLO\n"
@@ -405,7 +405,7 @@ def test_shell_cmd_inputspec_3(plugin, results_function, tmp_path):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_3a(plugin, results_function, tmp_path):
     """mandatory field added to fields, value provided
-    using shorter syntax for input spec (no attr.ib)
+    using shorter syntax for input definition (no attr.ib)
     """
     cmd_exec = "echo"
     hello = "HELLO"
@@ -429,7 +429,7 @@ def test_shell_cmd_inputspec_3a(plugin, results_function, tmp_path):
         input_spec=my_input_spec,
         cache_dir=tmp_path,
     )
-    assert shelly.spec.executable == cmd_exec
+    assert shelly.definition.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
     res = results_function(shelly, plugin)
     assert res.output.stdout == "HELLO\n"
@@ -463,9 +463,9 @@ def test_shell_cmd_inputspec_3b(plugin, results_function, tmp_path):
     shelly = ShellTask(
         name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmp_path
     )
-    shelly.spec.text = hello
+    shelly.definition.text = hello
 
-    assert shelly.spec.executable == cmd_exec
+    assert shelly.definition.executable == cmd_exec
     assert shelly.cmdline == "echo HELLO"
     res = results_function(shelly, plugin)
     assert res.output.stdout == "HELLO\n"
@@ -531,7 +531,7 @@ def test_shell_cmd_inputspec_3c(plugin, results_function, tmp_path):
         name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmp_path
     )
 
-    assert shelly.spec.executable == cmd_exec
+    assert shelly.definition.executable == cmd_exec
     assert shelly.cmdline == "echo"
     res = results_function(shelly, plugin)
     assert res.output.stdout == "\n"
@@ -561,7 +561,7 @@ def test_shell_cmd_inputspec_4(plugin, results_function, tmp_path):
         name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmp_path
     )
 
-    assert shelly.spec.executable == cmd_exec
+    assert shelly.definition.executable == cmd_exec
     assert shelly.cmdline == "echo Hello"
 
     res = results_function(shelly, plugin)
@@ -571,7 +571,7 @@ def test_shell_cmd_inputspec_4(plugin, results_function, tmp_path):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_inputspec_4a(plugin, results_function, tmp_path):
     """mandatory field added to fields, value provided
-    using shorter syntax for input spec (no attr.ib)
+    using shorter syntax for input definition (no attr.ib)
     """
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
@@ -587,7 +587,7 @@ def test_shell_cmd_inputspec_4a(plugin, results_function, tmp_path):
         name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmp_path
     )
 
-    assert shelly.spec.executable == cmd_exec
+    assert shelly.definition.executable == cmd_exec
     assert shelly.cmdline == "echo Hello"
 
     res = results_function(shelly, plugin)
@@ -618,7 +618,7 @@ def test_shell_cmd_inputspec_4b(plugin, results_function, tmp_path):
         name="shelly", executable=cmd_exec, input_spec=my_input_spec, cache_dir=tmp_path
     )
 
-    assert shelly.spec.executable == cmd_exec
+    assert shelly.definition.executable == cmd_exec
     assert shelly.cmdline == "echo Hi"
 
     res = results_function(shelly, plugin)
@@ -729,7 +729,7 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmp_path):
         input_spec=my_input_spec,
         cache_dir=tmp_path,
     )
-    assert shelly.spec.executable == cmd_exec
+    assert shelly.definition.executable == cmd_exec
     assert shelly.cmdline == "ls -t"
     results_function(shelly, plugin)
 
@@ -826,7 +826,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function, tmp_path):
         input_spec=my_input_spec,
         cache_dir=tmp_path,
     )
-    assert shelly.spec.executable == cmd_exec
+    assert shelly.definition.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
     results_function(shelly, plugin)
 
@@ -914,8 +914,8 @@ def test_shell_cmd_inputspec_6b(plugin, results_function, tmp_path):
         input_spec=my_input_spec,
         cache_dir=tmp_path,
     )
-    shelly.spec.opt_l = cmd_l
-    assert shelly.spec.executable == cmd_exec
+    shelly.definition.opt_l = cmd_l
+    assert shelly.definition.executable == cmd_exec
     assert shelly.cmdline == "ls -l -t"
     results_function(shelly, plugin)
 
@@ -1506,7 +1506,7 @@ def test_shell_cmd_inputspec_10(plugin, results_function, tmp_path):
         cache_dir=tmp_path,
     )
 
-    assert shelly.spec.executable == cmd_exec
+    assert shelly.definition.executable == cmd_exec
     res = results_function(shelly, plugin)
     assert res.output.stdout == "hello from boston"
 
@@ -1591,7 +1591,7 @@ def test_shell_cmd_inputspec_11(tmp_path):
 
     wf = Workflow(name="wf", input_spec=["inputFiles"], inputFiles=["test1", "test2"])
 
-    task.spec.inputFiles = wf.lzin.inputFiles
+    task.definition.inputFiles = wf.lzin.inputFiles
 
     wf.add(task)
     wf.set_output([("out", wf.echoMultiple.lzout.outputFiles)])
@@ -1705,8 +1705,8 @@ def test_shell_cmd_inputspec_with_iterable():
     task = ShellTask(name="test", input_spec=input_spec, executable="test")
 
     for iterable_type in (list, tuple):
-        task.spec.iterable_1 = iterable_type(range(3))
-        task.spec.iterable_2 = iterable_type(["bar", "foo"])
+        task.definition.iterable_1 = iterable_type(range(3))
+        task.definition.iterable_2 = iterable_type(["bar", "foo"])
         assert task.cmdline == "test --in1 0 1 2 --in2 bar --in2 foo"
 
 
@@ -2653,7 +2653,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
     assert all([file.fspath.exists() for file in res.output.cp_file])
 
 
-# customised output spec
+# customised output definition
 
 
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
@@ -2879,7 +2879,7 @@ def test_shell_cmd_outputspec_5b_error():
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_5c(plugin, results_function, tmp_path):
     """
-    Customised output spec defined as a class,
+    Customised output definition defined as a class,
     using a static function to collect output files.
     """
 
@@ -3264,7 +3264,7 @@ def test_shell_cmd_outputspec_8c(tmp_path, plugin, results_function):
 @pytest.mark.parametrize("results_function", [result_no_submitter, result_submitter])
 def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
     """
-    customised output_spec, adding Directory to the output named by input spec
+    customised output_spec, adding Directory to the output named by input definition
     """
 
     # For /tmp/some_dict/test this function returns "/test"
@@ -3446,8 +3446,8 @@ def test_shell_cmd_inputspec_outputspec_1():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
-    shelly.spec.file2 = "new_file_2.txt"
+    shelly.definition.file1 = "new_file_1.txt"
+    shelly.definition.file2 = "new_file_2.txt"
 
     res = shelly()
     assert res.output.stdout == ""
@@ -3500,7 +3500,7 @@ def test_shell_cmd_inputspec_outputspec_1a():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
+    shelly.definition.file1 = "new_file_1.txt"
 
     res = shelly()
     assert res.output.stdout == ""
@@ -3561,8 +3561,8 @@ def test_shell_cmd_inputspec_outputspec_2():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
-    shelly.spec.file2 = "new_file_2.txt"
+    shelly.definition.file1 = "new_file_1.txt"
+    shelly.definition.file2 = "new_file_2.txt"
     # all fields from output_spec should be in output_names and generated_output_names
     assert (
         shelly.output_names
@@ -3628,7 +3628,7 @@ def test_shell_cmd_inputspec_outputspec_2a():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
+    shelly.definition.file1 = "new_file_1.txt"
     # generated_output_names should know that newfile2 will not be generated
     assert shelly.output_names == [
         "return_code",
@@ -3700,9 +3700,9 @@ def test_shell_cmd_inputspec_outputspec_3():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
-    shelly.spec.file2 = "new_file_2.txt"
-    shelly.spec.additional_inp = 2
+    shelly.definition.file1 = "new_file_1.txt"
+    shelly.definition.file2 = "new_file_2.txt"
+    shelly.definition.additional_inp = 2
 
     res = shelly()
     assert res.output.stdout == ""
@@ -3761,8 +3761,8 @@ def test_shell_cmd_inputspec_outputspec_3a():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
-    shelly.spec.file2 = "new_file_2.txt"
+    shelly.definition.file1 = "new_file_1.txt"
+    shelly.definition.file2 = "new_file_2.txt"
     # generated_output_names should know that newfile2 will not be generated
     assert shelly.output_names == [
         "return_code",
@@ -3825,8 +3825,8 @@ def test_shell_cmd_inputspec_outputspec_4():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
-    shelly.spec.additional_inp = 2
+    shelly.definition.file1 = "new_file_1.txt"
+    shelly.definition.additional_inp = 2
     # generated_output_names should be the same as output_names
     assert (
         shelly.output_names
@@ -3880,9 +3880,9 @@ def test_shell_cmd_inputspec_outputspec_4a():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
+    shelly.definition.file1 = "new_file_1.txt"
     # the value is not in the list from requires
-    shelly.spec.additional_inp = 1
+    shelly.definition.additional_inp = 1
 
     res = shelly()
     assert res.output.stdout == ""
@@ -3935,8 +3935,8 @@ def test_shell_cmd_inputspec_outputspec_5():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
-    shelly.spec.additional_inp_A = 2
+    shelly.definition.file1 = "new_file_1.txt"
+    shelly.definition.additional_inp_A = 2
 
     res = shelly()
     assert res.output.stdout == ""
@@ -3989,8 +3989,8 @@ def test_shell_cmd_inputspec_outputspec_5a():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
-    shelly.spec.additional_inp_B = 2
+    shelly.definition.file1 = "new_file_1.txt"
+    shelly.definition.additional_inp_B = 2
 
     res = shelly()
     assert res.output.stdout == ""
@@ -4043,7 +4043,7 @@ def test_shell_cmd_inputspec_outputspec_5b():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
+    shelly.definition.file1 = "new_file_1.txt"
 
     res = shelly()
     assert res.output.stdout == ""
@@ -4092,7 +4092,7 @@ def test_shell_cmd_inputspec_outputspec_6_except():
         input_spec=my_input_spec,
         output_spec=my_output_spec,
     )
-    shelly.spec.file1 = "new_file_1.txt"
+    shelly.definition.file1 = "new_file_1.txt"
 
     with pytest.raises(Exception, match="requires field can be"):
         shelly()
@@ -4339,7 +4339,7 @@ def test_fsl(data_tests_dir):
         name="bet_task", executable="bet", in_file=in_file, input_spec=bet_input_spec
     )
     out_file = shelly.output_dir / "test_brain.nii.gz"
-    assert shelly.spec.executable == "bet"
+    assert shelly.definition.executable == "bet"
     assert shelly.cmdline == f"bet {in_file} {out_file}"
     # res = shelly(plugin="cf")
 

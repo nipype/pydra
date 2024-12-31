@@ -98,16 +98,16 @@ def copy_nested_files(
 
 # not sure if this might be useful for Function Task
 def template_update(
-    spec, output_dir: Path, map_copyfiles: dict[str, Path] | None = None
+    definition, output_dir: Path, map_copyfiles: dict[str, Path] | None = None
 ):
     """
-    Update all templates that are present in the input spec.
+    Update all templates that are present in the input definition.
 
     Should be run when all inputs used in the templates are already set.
 
     """
 
-    inputs_dict_st = attrs_values(spec)
+    inputs_dict_st = attrs_values(definition)
     if map_copyfiles is not None:
         inputs_dict_st.update(map_copyfiles)
 
@@ -116,12 +116,12 @@ def template_update(
     # Collect templated inputs for which all requirements are satisfied.
     fields_templ = [
         field
-        for field in list_fields(spec)
+        for field in list_fields(definition)
         if isinstance(field, shell.outarg)
         and field.path_template
-        and getattr(spec, field.name) is not False
+        and getattr(definition, field.name) is not False
         and all(
-            getattr(spec, required_field) is not None
+            getattr(definition, required_field) is not None
             for required_field in field.requires
         )
     ]
@@ -130,7 +130,7 @@ def template_update(
     for fld in fields_templ:
         dict_mod[fld.name] = template_update_single(
             field=fld,
-            spec=spec,
+            definition=definition,
             input_values=inputs_dict_st,
             output_dir=output_dir,
         )
@@ -142,7 +142,7 @@ def template_update(
 
 def template_update_single(
     field,
-    spec,
+    definition,
     input_values: dict[str, ty.Any] = None,
     output_dir: Path | None = None,
     spec_type: str = "input",
@@ -156,7 +156,7 @@ def template_update_single(
     from pydra.utils.typing import TypeParser, OUTPUT_TEMPLATE_TYPES  # noqa
 
     if input_values is None:
-        input_values = attrs_values(spec)
+        input_values = attrs_values(definition)
 
     if spec_type == "input":
         inp_val_set = input_values[field.name]
@@ -182,7 +182,7 @@ def template_update_single(
             # if input fld is set to False, the fld shouldn't be used (setting NOTHING)
             return None
     # inputs_dict[field.name] is True or spec_type is output
-    value = _template_formatting(field, spec, input_values)
+    value = _template_formatting(field, definition, input_values)
     # changing path so it is in the output_dir
     if output_dir and value is not None:
         # should be converted to str, it is also used for input fields that should be str
@@ -194,7 +194,7 @@ def template_update_single(
         return None
 
 
-def _template_formatting(field, spec, input_values):
+def _template_formatting(field, definition, input_values):
     """Formatting the field template based on the values from inputs.
     Taking into account that the field with a template can be a MultiOutputFile
     and the field values needed in the template can be a list -
@@ -219,20 +219,23 @@ def _template_formatting(field, spec, input_values):
     # if a template is a function it has to be run first with the inputs as the only arg
     template = field.path_template
     if callable(template):
-        template = template(spec)
+        template = template(definition)
 
     # as default, we assume that keep_extension is True
     if isinstance(template, (tuple, list)):
         formatted = [
-            _string_template_formatting(field, t, spec, input_values) for t in template
+            _string_template_formatting(field, t, definition, input_values)
+            for t in template
         ]
     else:
         assert isinstance(template, str)
-        formatted = _string_template_formatting(field, template, spec, input_values)
+        formatted = _string_template_formatting(
+            field, template, definition, input_values
+        )
     return formatted
 
 
-def _string_template_formatting(field, template, spec, input_values):
+def _string_template_formatting(field, template, definition, input_values):
     from pydra.utils.typing import MultiInputObj, MultiOutputFile
 
     inp_fields = re.findall(r"{\w+}", template)

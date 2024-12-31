@@ -944,19 +944,19 @@ class PsijWorker(Worker):
         psij.JobDef
             PSI/J job specification.
         """
-        spec = self.psij.JobDef()
-        spec.executable = cmd
-        spec.arguments = arg
+        definition = self.psij.JobDef()
+        definition.executable = cmd
+        definition.arguments = arg
 
-        return spec
+        return definition
 
-    def make_job(self, spec, attributes):
+    def make_job(self, definition, attributes):
         """
         Create a PSI/J job.
 
         Parameters
         ----------
-        spec : psij.JobDef
+        definition : psij.JobDef
             PSI/J job specification.
         attributes : any
             Job attributes.
@@ -967,7 +967,7 @@ class PsijWorker(Worker):
             PSI/J job.
         """
         job = self.psij.Job()
-        job.spec = spec
+        job.definition = definition
         return job
 
     async def exec_psij(self, runnable, rerun=False):
@@ -995,7 +995,7 @@ class PsijWorker(Worker):
             with open(file_path, "wb") as file:
                 pickle.dump(runnable._run, file)
             func_path = absolute_path / "run_pickled.py"
-            spec = self.make_spec("python", [func_path, file_path])
+            definition = self.make_spec("python", [func_path, file_path])
         else:  # it could be tuple that includes pickle files with tasks and inputs
             cache_dir = runnable[-1].cache_dir
             file_path_1 = cache_dir / "taskmain.pkl"
@@ -1006,7 +1006,7 @@ class PsijWorker(Worker):
             with open(file_path_2, "wb") as file:
                 pickle.dump(ind, file)
             func_path = absolute_path / "run_pickled.py"
-            spec = self.make_spec(
+            definition = self.make_spec(
                 "python",
                 [
                     func_path,
@@ -1016,20 +1016,20 @@ class PsijWorker(Worker):
             )
 
         if rerun:
-            spec.arguments.append("--rerun")
+            definition.arguments.append("--rerun")
 
-        spec.stdout_path = cache_dir / "demo.stdout"
-        spec.stderr_path = cache_dir / "demo.stderr"
+        definition.stdout_path = cache_dir / "demo.stdout"
+        definition.stderr_path = cache_dir / "demo.stderr"
 
-        job = self.make_job(spec, None)
+        job = self.make_job(definition, None)
         jex.submit(job)
         job.wait()
 
-        if spec.stderr_path.stat().st_size > 0:
-            with open(spec.stderr_path, "r") as stderr_file:
+        if definition.stderr_path.stat().st_size > 0:
+            with open(definition.stderr_path, "r") as stderr_file:
                 stderr_contents = stderr_file.read()
             raise Exception(
-                f"stderr_path '{spec.stderr_path}' is not empty. Contents:\n{stderr_contents}"
+                f"stderr_path '{definition.stderr_path}' is not empty. Contents:\n{stderr_contents}"
             )
 
         return

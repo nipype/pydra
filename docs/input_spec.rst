@@ -35,7 +35,7 @@ Let's start from the previous example:
 
 
 In order to create an input definition, a new `SpecInfo` object has to be created.
-The field `name` specifies the type of the spec and it should be always "Input" for
+The field `name` specifies the type of the definition and it should be always "Input" for
 the input definition.
 The field `bases` specifies the "base definition" you want to use (can think about it as a
 `parent class`) and it will usually contains `ShellDef` only, unless you want to build on top of
@@ -150,12 +150,12 @@ In the example we used multiple keys in the metadata dictionary including `help_
    If `True` a path will be consider as a path inside the container (and not as a local path).
 
 `output_file_template` (`str`):
-   If provided, the field is treated also as an output field and it is added to the output spec.
+   If provided, the field is treated also as an output field and it is added to the output definition.
    The template can use other fields, e.g. `{file1}`.
    Used in order to create an output definition.
 
 `output_field_name` (`str`, used together with `output_file_template`)
-   If provided the field is added to the output spec with changed name.
+   If provided the field is added to the output definition with changed name.
    Used in order to create an output definition.
 
 `keep_extension` (`bool`, default: `True`):

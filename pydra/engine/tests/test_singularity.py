@@ -195,7 +195,7 @@ def test_singularity_outputspec_1(plugin, tmp_path):
 
 @need_singularity
 def test_singularity_inputspec_1(plugin, tmp_path):
-    """a simple customized input spec for singularity task"""
+    """a simple customized input definition for singularity task"""
     filename = str((tmp_path / "file_pydra.txt"))
     with open(filename, "w") as f:
         f.write("hello from pydra")
@@ -238,7 +238,7 @@ def test_singularity_inputspec_1(plugin, tmp_path):
 
 @need_singularity
 def test_singularity_inputspec_1a(plugin, tmp_path):
-    """a simple customized input spec for singularity task
+    """a simple customized input definition for singularity task
     a default value is used
     """
     filename = str((tmp_path / "file_pydra.txt"))
@@ -278,7 +278,7 @@ def test_singularity_inputspec_1a(plugin, tmp_path):
 
 @need_singularity
 def test_singularity_inputspec_2(plugin, tmp_path):
-    """a customized input spec with two fields for singularity task"""
+    """a customized input definition with two fields for singularity task"""
     filename_1 = tmp_path / "file_pydra.txt"
     with open(filename_1, "w") as f:
         f.write("hello from pydra\n")
@@ -336,7 +336,7 @@ def test_singularity_inputspec_2(plugin, tmp_path):
 
 @need_singularity
 def test_singularity_inputspec_2a_except(plugin, tmp_path):
-    """a customized input spec with two fields
+    """a customized input definition with two fields
     first one uses a default, and second doesn't - raises a dataclass exception
     """
     filename_1 = tmp_path / "file_pydra.txt"
@@ -395,7 +395,7 @@ def test_singularity_inputspec_2a_except(plugin, tmp_path):
 
 @need_singularity
 def test_singularity_inputspec_2a(plugin, tmp_path):
-    """a customized input spec with two fields
+    """a customized input definition with two fields
     first one uses a default value,
     this is fine even if the second field is not using any defaults
     """
@@ -520,7 +520,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
 
 @need_singularity
 def test_singularity_inputspec_state_1(tmp_path):
-    """a customised input spec for a singularity file with a splitter,
+    """a customised input definition for a singularity file with a splitter,
     splitter is on files
     """
     filename_1 = tmp_path / "file_pydra.txt"
@@ -569,8 +569,8 @@ def test_singularity_inputspec_state_1(tmp_path):
 
 @need_singularity
 def test_singularity_inputspec_state_1b(plugin, tmp_path):
-    """a customised input spec for a singularity file with a splitter,
-    files from the input spec have the same path in the local os and the container,
+    """a customised input definition for a singularity file with a splitter,
+    files from the input definition have the same path in the local os and the container,
     so hash is calculated and the test works fine
     """
     file_1 = tmp_path / "file_pydra.txt"
@@ -619,7 +619,7 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
 
 @need_singularity
 def test_singularity_wf_inputspec_1(plugin, tmp_path):
-    """a customized input spec for workflow with singularity tasks"""
+    """a customized input definition for workflow with singularity tasks"""
     filename = tmp_path / "file_pydra.txt"
     with open(filename, "w") as f:
         f.write("hello from pydra")
@@ -671,7 +671,7 @@ def test_singularity_wf_inputspec_1(plugin, tmp_path):
 
 @need_singularity
 def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
-    """a customized input spec for workflow with singularity tasks that has a state"""
+    """a customized input definition for workflow with singularity tasks that has a state"""
     file_1 = tmp_path / "file_pydra.txt"
     file_2 = tmp_path / "file_nice.txt"
     with open(file_1, "w") as f:
@@ -728,7 +728,7 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
 
 @need_singularity
 def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
-    """a customized input spec for workflow with singularity tasks with states"""
+    """a customized input definition for workflow with singularity tasks with states"""
     file_1 = tmp_path / "file_pydra.txt"
     file_2 = tmp_path / "file_nice.txt"
     with open(file_1, "w") as f:

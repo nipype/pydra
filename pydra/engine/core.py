@@ -78,13 +78,13 @@ class Task:
     _references = None  # List of references for a task
 
     name: str
-    spec: TaskDef
+    definition: TaskDef
 
     _inputs: dict[str, ty.Any] | None = None
 
     def __init__(
         self,
-        spec,
+        definition,
         name: str | None = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
@@ -137,12 +137,12 @@ class Task:
         if Task._etelemetry_version_data is None:
             Task._etelemetry_version_data = check_latest_version()
 
-        self.spec = spec
+        self.definition = definition
         self.name = name
 
         self.input_names = [
             field.name
-            for field in attr.fields(type(self.spec))
+            for field in attr.fields(type(self.definition))
             if field.name not in ["_func", "_graph_checksums"]
         ]
 
@@ -159,11 +159,11 @@ class Task:
                     raise ValueError(f"Unknown input set {inputs!r}")
                 inputs = self._input_sets[inputs]
 
-            self.spec = attr.evolve(self.spec, **inputs)
+            self.definition = attr.evolve(self.definition, **inputs)
 
         # checking if metadata is set properly
-        self.spec._check_resolved()
-        self.spec._check_rules()
+        self.definition._check_resolved()
+        self.definition._check_rules()
         self._output = {}
         self._result = {}
         # flag that says if node finished all jobs
@@ -195,11 +195,11 @@ class Task:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state["spec"] = cp.dumps(state["spec"])
+        state["definition"] = cp.dumps(state["definition"])
         return state
 
     def __setstate__(self, state):
-        state["spec"] = cp.loads(state["spec"])
+        state["definition"] = cp.loads(state["definition"])
         self.__dict__.update(state)
 
     def help(self, returnhelp=False):
@@ -225,7 +225,7 @@ class Task:
         and to create nodes checksums needed for graph checksums
         (before the tasks have inputs etc.)
         """
-        input_hash = self.spec._hash
+        input_hash = self.definition._hash
         self._checksum = create_checksum(self.__class__.__name__, input_hash)
         return self._checksum
 
@@ -262,7 +262,7 @@ class Task:
         """Get the names of the outputs from the task's output_spec
         (not everything has to be generated, see generated_output_names).
         """
-        return [f.name for f in attr.fields(self.spec.Outputs)]
+        return [f.name for f in attr.fields(self.definition.Outputs)]
 
     @property
     def generated_output_names(self):
@@ -373,10 +373,12 @@ class Task:
         from pydra.utils.typing import TypeParser
 
         self._inputs = {
-            k: v for k, v in attrs_values(self.spec).items() if not k.startswith("_")
+            k: v
+            for k, v in attrs_values(self.definition).items()
+            if not k.startswith("_")
         }
         map_copyfiles = {}
-        for fld in list_fields(self.spec):
+        for fld in list_fields(self.definition):
             name = fld.name
             value = self._inputs[name]
             if value is not attr.NOTHING and TypeParser.contains_type(
@@ -392,7 +394,9 @@ class Task:
                 if value is not copied_value:
                     map_copyfiles[name] = copied_value
         self._inputs.update(
-            template_update(self.spec, self.output_dir, map_copyfiles=map_copyfiles)
+            template_update(
+                self.definition, self.output_dir, map_copyfiles=map_copyfiles
+            )
         )
         return self._inputs
 
@@ -436,7 +440,7 @@ class Task:
             try:
                 self.audit.monitor()
                 self._run_task(environment=environment)
-                result.output = self.spec.Outputs.from_task(self)
+                result.output = self.definition.Outputs.from_task(self)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
@@ -483,7 +487,7 @@ class Task:
         for inp in set(self.input_names):
             if f"{self.name}.{inp}" in input_ind:
                 inputs_dict[inp] = self._extract_input_el(
-                    inputs=self.spec,
+                    inputs=self.definition,
                     inp_nm=inp,
                     ind=input_ind[f"{self.name}.{inp}"],
                 )
@@ -506,7 +510,7 @@ class Task:
     def done(self):
         """Check whether the tasks has been finalized and all outputs are stored."""
         # if any of the field is lazy, there is no need to check results
-        if has_lazy(self.spec):
+        if has_lazy(self.definition):
             return False
         _result = self.result()
         if self.state:
@@ -588,7 +592,7 @@ class Task:
             self._errored = True
         if return_inputs is True or return_inputs == "val":
             inputs_val = {
-                f"{self.name}.{inp}": getattr(self.spec, inp)
+                f"{self.name}.{inp}": getattr(self.definition, inp)
                 for inp in self.input_names
             }
             return (inputs_val, result)
@@ -600,19 +604,19 @@ class Task:
 
     def _reset(self):
         """Reset the connections between inputs and LazyFields."""
-        for field in attrs_fields(self.spec):
+        for field in attrs_fields(self.definition):
             if field.name in self.inp_lf:
-                setattr(self.spec, field.name, self.inp_lf[field.name])
+                setattr(self.definition, field.name, self.inp_lf[field.name])
         if is_workflow(self):
             for task in self.graph.nodes:
                 task._reset()
 
     def _check_for_hash_changes(self):
-        hash_changes = self.spec._hash_changes()
+        hash_changes = self.definition._hash_changes()
         details = ""
         for changed in hash_changes:
-            field = getattr(attr.fields(type(self.spec)), changed)
-            val = getattr(self.spec, changed)
+            field = getattr(attr.fields(type(self.definition)), changed)
+            val = getattr(self.definition, changed)
             field_type = type(val)
             if issubclass(field.type, FileSet):
                 details += (
@@ -644,8 +648,8 @@ class Task:
             "Input values and hashes for '%s' %s node:\n%s\n%s",
             self.name,
             type(self).__name__,
-            self.spec,
-            self.spec._hashes,
+            self.definition,
+            self.definition._hashes,
         )
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any
@@ -753,12 +757,12 @@ class WorkflowTask(Task):
         (before the tasks have inputs etc.)
         """
         # if checksum is called before run the _graph_checksums is not ready
-        if is_workflow(self) and self.spec._graph_checksums is attr.NOTHING:
-            self.spec._graph_checksums = {
+        if is_workflow(self) and self.definition._graph_checksums is attr.NOTHING:
+            self.definition._graph_checksums = {
                 nd.name: nd.checksum for nd in self.graph_sorted
             }
 
-        input_hash = self.spec.hash
+        input_hash = self.definition.hash
         if not self.state:
             self._checksum = create_checksum(
                 self.__class__.__name__, self._checksum_wf(input_hash)
@@ -1037,7 +1041,7 @@ class WorkflowTask(Task):
     #     logger.info("Added %s to %s", self.output_spec, self)
 
     def _collect_outputs(self):
-        output_klass = self.spec.Outputs
+        output_klass = self.definition.Outputs
         output = output_klass(
             **{f.name: attr.NOTHING for f in attr.fields(output_klass)}
         )

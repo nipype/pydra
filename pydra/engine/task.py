@@ -70,14 +70,14 @@ if ty.TYPE_CHECKING:
 class PythonTask(Task):
     """Wrap a Python callable as a task element."""
 
-    spec: PythonDef
+    definition: PythonDef
 
     def _run_task(self, environment=None):
-        inputs = attrs_values(self.spec)
+        inputs = attrs_values(self.definition)
         del inputs["function"]
         self.output_ = None
-        output = self.spec.function(**inputs)
-        output_names = [f.name for f in attrs.fields(self.spec.Outputs)]
+        output = self.definition.function(**inputs)
+        output_names = [f.name for f in attrs.fields(self.definition.Outputs)]
         if output is None:
             self.output_ = {nm: None for nm in output_names}
         elif len(output_names) == 1:
@@ -97,11 +97,11 @@ class PythonTask(Task):
 class ShellTask(Task):
     """Wrap a shell command as a task element."""
 
-    spec: ShellDef
+    definition: ShellDef
 
     def __init__(
         self,
-        spec: ShellDef,
+        definition: ShellDef,
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cont_dim=None,
@@ -142,7 +142,7 @@ class ShellTask(Task):
         self.stdout = None
         self.stderr = None
         super().__init__(
-            spec=spec,
+            definition=definition,
             name=name,
             inputs=kwargs,
             cont_dim=cont_dim,
@@ -180,7 +180,9 @@ class ShellTask(Task):
             return self.bindings
 
     def command_args(self, root: Path | None = None) -> list[str]:
-        return self.spec._command_args(input_updates=self.inputs_mod_root, root=root)
+        return self.definition._command_args(
+            input_updates=self.inputs_mod_root, root=root
+        )
 
     def _run_task(self, environment=None):
         if environment is None:
@@ -193,9 +195,9 @@ class ShellTask(Task):
         This updates the ``bindings`` attribute of the current task to make files available
         in an ``Environment``-defined ``root``.
         """
-        for fld in attrs_fields(self.spec):
+        for fld in attrs_fields(self.definition):
             if TypeParser.contains_type(FileSet, fld.type):
-                fileset = getattr(self.spec, fld.name)
+                fileset = getattr(self.definition, fld.name)
                 copy = fld.copy_mode == FileSet.CopyMode.copy
 
                 host_path, env_path = fileset.parent, Path(f"{root}{fileset.parent}")
@@ -218,11 +220,14 @@ class ShellTask(Task):
         """Collect output file if metadata specified."""
         from pydra.design import shell
 
-        if not self.spec.Outputs._required_fields_satisfied(fld, self.spec):
+        if not self.definition.Outputs._required_fields_satisfied(fld, self.definition):
             return None
         elif isinstance(fld, shell.outarg) and fld.path_template:
             return template_update_single(
-                fld, spec=self.spec, output_dir=self.output_dir, spec_type="output"
+                fld,
+                definition=self.definition,
+                output_dir=self.output_dir,
+                spec_type="output",
             )
         elif fld.callable:
             callable_ = fld.callable
@@ -266,7 +271,7 @@ class ShellTask(Task):
         TODO: should be in all Output specs?
         """
         # checking the input (if all mandatory fields are provided, etc.)
-        self.spec._check_rules()
+        self.definition._check_rules()
         output_names = ["return_code", "stdout", "stderr"]
         for fld in list_fields(self):
             # assuming that field should have either default or metadata, but not both
@@ -285,9 +290,9 @@ class BoshTask(ShellTask):
         """Get command line arguments for a single state"""
         input_filepath = self._bosh_invocation_file(state_ind=state_ind, index=index)
         cmd_list = (
-            self.spec.executable
+            self.definition.executable
             + [str(self.bosh_file), input_filepath]
-            + self.spec.args
+            + self.definition.args
             + self.bindings
         )
         return cmd_list
@@ -295,11 +300,13 @@ class BoshTask(ShellTask):
     def _bosh_invocation_file(self, state_ind=None, index=None):
         """creating bosh invocation file - json file with inputs values"""
         input_json = {}
-        for f in attrs_fields(self.spec, exclude_names=("executable", "args")):
+        for f in attrs_fields(self.definition, exclude_names=("executable", "args")):
             if self.state and f"{self.name}.{f.name}" in state_ind:
-                value = getattr(self.spec, f.name)[state_ind[f"{self.name}.{f.name}"]]
+                value = getattr(self.definition, f.name)[
+                    state_ind[f"{self.name}.{f.name}"]
+                ]
             else:
-                value = getattr(self.spec, f.name)
+                value = getattr(self.definition, f.name)
             # adding to the json file if specified by the user
             if value is not attrs.NOTHING and value != "NOTHING":
                 if is_local_file(f):

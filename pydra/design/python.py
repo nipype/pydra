@@ -21,7 +21,7 @@ __all__ = ["arg", "out", "define"]
 
 @attrs.define
 class arg(Arg):
-    """Argument of a Python task spec
+    """Argument of a Python task definition
 
     Parameters
     ----------
@@ -58,7 +58,7 @@ class arg(Arg):
 
 @attrs.define
 class out(Out):
-    """Output of a Python task spec
+    """Output of a Python task definition
 
     Parameters
     ----------

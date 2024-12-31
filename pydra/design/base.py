@@ -404,7 +404,7 @@ def make_task_spec(
         if name is None:
             raise ValueError("name must be provided if klass is not")
         if klass is not None and issubclass(klass, TaskDef):
-            raise ValueError(f"Cannot change type of spec {klass} to {spec_type}")
+            raise ValueError(f"Cannot change type of definition {klass} to {spec_type}")
         bases = tuple(bases)
         # Ensure that TaskDef is a base class
         if not any(issubclass(b, spec_type) for b in bases):
@@ -497,7 +497,7 @@ def make_outputs_spec(
     if not any(issubclass(b, spec_type) for b in bases):
         if out_spec_bases := [b for b in bases if issubclass(b, TaskOutputs)]:
             raise ValueError(
-                f"Cannot make {spec_type} output spec from {out_spec_bases} bases"
+                f"Cannot make {spec_type} output definition from {out_spec_bases} bases"
             )
         outputs_bases = bases + (spec_type,)
     if reserved_names := [n for n in outputs if n in spec_type.RESERVED_FIELD_NAMES]:

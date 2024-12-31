@@ -48,13 +48,13 @@ class TouchInterf(ShellDef["TouchInterf.Outputs"]):
 
 
 def test_interface_specs_1():
-    """testing if class input/output spec are set properly"""
+    """testing if class input/output definition are set properly"""
     task_spec = Interf_1(executable="ls")
     assert task.Outputs == Interf_1.Outputs
 
 
 def test_interface_specs_2():
-    """testing if class input/output spec are overwritten properly by the user's specs"""
+    """testing if class input/output definition are overwritten properly by the user's specs"""
     my_input_spec = SpecInfo(
         name="Input",
         fields=[("my_inp", ty.Any, {"help_string": "my inp"})],
@@ -72,7 +72,7 @@ def test_interface_executable_1():
     """testing if the class executable is properly set and used in the command line"""
     task = Interf_2()
     assert task.executable == "testing command"
-    assert task.spec.executable == "testing command"
+    assert task.definition.executable == "testing command"
     assert task.cmdline == "testing command"
 
 
@@ -83,14 +83,14 @@ def test_interface_executable_2():
         task = Interf_2(executable="i want a different command")
         assert task.executable == "testing command"
         # task.executable stays the same, but input.executable is changed, so the cmd is changed
-        assert task.spec.executable == "i want a different command"
+        assert task.definition.executable == "i want a different command"
         assert task.cmdline == "i want a different command"
 
 
 def test_interface_cmdline_with_spaces():
     task = Interf_3(in_file="/path/to/file/with spaces")
     assert task.executable == "testing command"
-    assert task.spec.executable == "testing command"
+    assert task.definition.executable == "testing command"
     assert task.cmdline == "testing command '/path/to/file/with spaces'"
 
 

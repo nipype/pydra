@@ -637,7 +637,7 @@ def unwrap_splitter(
     Parameters
     ----------
     splitter: str or list[str] or tuple[str, ...]
-        the splitter spec to unwrap
+        the splitter definition to unwrap
 
     Returns
     -------

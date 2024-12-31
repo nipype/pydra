@@ -25,9 +25,11 @@ if ty.TYPE_CHECKING:
 PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
 
 
-def attrs_fields(spec, exclude_names=()) -> list[attrs.Attribute]:
-    """Get the fields of a spec, excluding some names."""
-    return [field for field in spec.__attrs_attrs__ if field.name not in exclude_names]
+def attrs_fields(definition, exclude_names=()) -> list[attrs.Attribute]:
+    """Get the fields of a definition, excluding some names."""
+    return [
+        field for field in definition.__attrs_attrs__ if field.name not in exclude_names
+    ]
 
 
 def attrs_values(obj, **kwargs) -> dict[str, ty.Any]:
@@ -35,22 +37,22 @@ def attrs_values(obj, **kwargs) -> dict[str, ty.Any]:
     return attrs.asdict(obj, recurse=False, **kwargs)
 
 
-def list_fields(spec: "type[TaskDef] | TaskDef") -> list["Field"]:
+def list_fields(definition: "type[TaskDef] | TaskDef") -> list["Field"]:
     """List the fields of a task definition"""
-    if not inspect.isclass(spec):
-        spec = type(spec)
-    if not attrs.has(spec):
+    if not inspect.isclass(definition):
+        definition = type(definition)
+    if not attrs.has(definition):
         return []
     return [
         f.metadata[PYDRA_ATTR_METADATA]
-        for f in attrs.fields(spec)
+        for f in attrs.fields(definition)
         if PYDRA_ATTR_METADATA in f.metadata
     ]
 
 
-def fields_dict(spec: "type[TaskDef] | TaskDef") -> dict[str, "Field"]:
-    """Returns the fields of a spec in a dictionary"""
-    return {f.name: f for f in list_fields(spec)}
+def fields_dict(definition: "type[TaskDef] | TaskDef") -> dict[str, "Field"]:
+    """Returns the fields of a definition in a dictionary"""
+    return {f.name: f for f in list_fields(definition)}
 
 
 # from .specs import MultiInputFile, MultiInputObj, MultiOutputObj, MultiOutputFile
@@ -546,7 +548,7 @@ def parse_format_string(fmtstr):
     conversion = "(?:!r|!s)"
     nobrace = "[^{}]*"
     # Example: 0{pads[hex]}x (capture "pads")
-    fmtspec = f"{nobrace}(?:{{({identifier}){nobrace}}}{nobrace})?"  # Capture keywords in spec
+    fmtspec = f"{nobrace}(?:{{({identifier}){nobrace}}}{nobrace})?"  # Capture keywords in definition
     full_field = f"{{{field_with_lookups}{conversion}?(?::{fmtspec})?}}"
 
     all_keywords = re.findall(full_field, fmtstr)

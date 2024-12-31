@@ -39,7 +39,7 @@ a customized `output_spec` can be used, e.g.:
 
 Similarly as for `input_spec`, in order to create an output definition,
 a new `SpecInfo` object has to be created.
-The field `name` specifies the type of the spec and it should be always "Output" for
+The field `name` specifies the type of the definition and it should be always "Output" for
 the output definition.
 The field `bases` specifies the "base definition" you want to use (can think about it as a
 `parent class`) and it will usually contains `ShellOutDef` only, unless you want to build on top of
@@ -69,7 +69,7 @@ The metadata dictionary for `output_spec` can include:
    The template can use other fields, e.g. `{file1}`. The same as in `input_spec`.
 
 `output_field_name` (`str`, used together with `output_file_template`)
-   If provided the field is added to the output spec with changed name.
+   If provided the field is added to the output definition with changed name.
    The same as in `input_spec`.
 
 `keep_extension` (`bool`, default: `True`):

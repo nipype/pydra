@@ -163,7 +163,7 @@ def test_shell_cmd_inputs_2a():
         inpB="inpNone2",
         input_spec=my_input_spec,
     )
-    # position taken from the order in input spec
+    # position taken from the order in input definition
     assert shelly.cmdline == "executable inpNone1 inpNone2"
 
 
@@ -718,7 +718,7 @@ def test_shell_cmd_inputs_not_given_1():
     )
     shelly = ShellTask(name="shelly", executable="executable", input_spec=my_input_spec)
 
-    shelly.spec.arg2 = "argument2"
+    shelly.definition.arg2 = "argument2"
 
     assert shelly.cmdline == "executable --arg2 argument2"
 
@@ -922,7 +922,7 @@ def test_shell_cmd_inputs_template_3(tmp_path):
 def test_shell_cmd_inputs_template_3a():
     """additional inputs with output_file_template and an additional
     read-only fields that combine two outputs together in the command line
-    testing a different order within the input spec
+    testing a different order within the input definition
     """
     my_input_spec = SpecInfo(
         name="Input",
@@ -1746,7 +1746,7 @@ def test_shell_cmd_inputs_template_requires_1():
     assert "--tpl" not in shelly.cmdline
 
     # When requirements are met.
-    shelly.spec.with_tpl = True
+    shelly.definition.with_tpl = True
     assert "tpl.in.file" in shelly.cmdline
 
 
@@ -2191,55 +2191,55 @@ class SimpleTaskXor(ShellDef["SimpleTaskXor.Outputs"]):
 
 
 def test_task_inputs_mandatory_with_xOR_one_mandatory_is_OK():
-    """input spec with mandatory inputs"""
+    """input definition with mandatory inputs"""
     task = SimpleTaskXor()
-    task.spec.input_1 = "Input1"
-    task.spec.input_2 = attr.NOTHING
-    task.spec.check_fields_input_spec()
+    task.definition.input_1 = "Input1"
+    task.definition.input_2 = attr.NOTHING
+    task.definition.check_fields_input_spec()
 
 
 def test_task_inputs_mandatory_with_xOR_one_mandatory_out_3_is_OK():
-    """input spec with mandatory inputs"""
+    """input definition with mandatory inputs"""
     task = SimpleTaskXor()
-    task.spec.input_1 = attr.NOTHING
-    task.spec.input_2 = attr.NOTHING
-    task.spec.input_3 = True
-    task.spec.check_fields_input_spec()
+    task.definition.input_1 = attr.NOTHING
+    task.definition.input_2 = attr.NOTHING
+    task.definition.input_3 = True
+    task.definition.check_fields_input_spec()
 
 
 def test_task_inputs_mandatory_with_xOR_zero_mandatory_raises_error():
-    """input spec with mandatory inputs"""
+    """input definition with mandatory inputs"""
     task = SimpleTaskXor()
-    task.spec.input_1 = attr.NOTHING
-    task.spec.input_2 = attr.NOTHING
+    task.definition.input_1 = attr.NOTHING
+    task.definition.input_2 = attr.NOTHING
     with pytest.raises(Exception) as excinfo:
-        task.spec.check_fields_input_spec()
+        task.definition.check_fields_input_spec()
     assert "input_1 is mandatory" in str(excinfo.value)
     assert "no alternative provided by ['input_2', 'input_3']" in str(excinfo.value)
     assert excinfo.type is AttributeError
 
 
 def test_task_inputs_mandatory_with_xOR_two_mandatories_raises_error():
-    """input spec with mandatory inputs"""
+    """input definition with mandatory inputs"""
     task = SimpleTaskXor()
-    task.spec.input_1 = "Input1"
-    task.spec.input_2 = True
+    task.definition.input_1 = "Input1"
+    task.definition.input_2 = True
 
     with pytest.raises(Exception) as excinfo:
-        task.spec.check_fields_input_spec()
+        task.definition.check_fields_input_spec()
     assert "input_1 is mutually exclusive with ['input_2']" in str(excinfo.value)
     assert excinfo.type is AttributeError
 
 
 def test_task_inputs_mandatory_with_xOR_3_mandatories_raises_error():
-    """input spec with mandatory inputs"""
+    """input definition with mandatory inputs"""
     task = SimpleTaskXor()
-    task.spec.input_1 = "Input1"
-    task.spec.input_2 = True
-    task.spec.input_3 = False
+    task.definition.input_1 = "Input1"
+    task.definition.input_2 = True
+    task.definition.input_3 = False
 
     with pytest.raises(Exception) as excinfo:
-        task.spec.check_fields_input_spec()
+        task.definition.check_fields_input_spec()
     assert "input_1 is mutually exclusive with ['input_2', 'input_3']" in str(
         excinfo.value
     )

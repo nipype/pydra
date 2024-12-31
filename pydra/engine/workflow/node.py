@@ -99,7 +99,7 @@ class Node(ty.Generic[OutputType]):
     def lzout(self) -> OutputType:
         from pydra.engine.helpers import list_fields
 
-        """The output spec of the node populated with lazy fields"""
+        """The output definition of the node populated with lazy fields"""
         if self._lzout is not None:
             return self._lzout
         lazy_fields = {}
@@ -329,16 +329,16 @@ class Node(ty.Generic[OutputType]):
             TODO
 
         """
-        # if is_workflow(self) and self.spec._graph_checksums is attr.NOTHING:
-        #     self.spec._graph_checksums = {
+        # if is_workflow(self) and self.definition._graph_checksums is attr.NOTHING:
+        #     self.definition._graph_checksums = {
         #         nd.name: nd.checksum for nd in self.graph_sorted
         #     }
 
         if state_index is not None:
-            inputs_copy = copy(self.spec)
+            inputs_copy = copy(self.definition)
             for key, ind in self.state.inputs_ind[state_index].items():
                 val = self._extract_input_el(
-                    inputs=self.spec, inp_nm=key.split(".")[1], ind=ind
+                    inputs=self.definition, inp_nm=key.split(".")[1], ind=ind
                 )
                 setattr(inputs_copy, key.split(".")[1], val)
             # setting files_hash again in case it was cleaned by setting specific element
@@ -358,7 +358,7 @@ class Node(ty.Generic[OutputType]):
         else:
             checksum_list = []
             if not hasattr(self.state, "inputs_ind"):
-                self.state.prepare_states(self.spec, cont_dim=self.cont_dim)
+                self.state.prepare_states(self.definition, cont_dim=self.cont_dim)
                 self.state.prepare_inputs()
             for ind in range(len(self.state.inputs_ind)):
                 checksum_list.append(self._checksum_states(state_index=ind))
