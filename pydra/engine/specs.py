@@ -189,7 +189,7 @@ class TaskDef(ty.Generic[OutputsType]):
         messengers=None,
         rerun=False,
         **kwargs,
-    ) -> "Result[OutputsType]":
+    ) -> OutputsType:
         """Create a task from this definition and execute it to produce a result.
 
         Parameters
@@ -217,8 +217,8 @@ class TaskDef(ty.Generic[OutputsType]):
 
         Returns
         -------
-        Result
-            The result of the task
+        Outputs
+            The output interface of the task
         """
         self._check_rules()
         task = self.Task(
@@ -233,7 +233,8 @@ class TaskDef(ty.Generic[OutputsType]):
             messengers=messengers,
             rerun=rerun,
         )
-        return task(**kwargs)
+        result = task(**kwargs)
+        return result.output
 
     def __iter__(self) -> ty.Generator[str, None, None]:
         """Iterate through all the names in the definition"""

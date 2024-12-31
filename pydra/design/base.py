@@ -817,6 +817,8 @@ def extract_function_inputs_and_outputs(
                     f"of the return types ({return_types})"
                 )
             output_types = dict(zip(outputs, return_types))
+        else:
+            output_types = {o: ty.Any for o in outputs}
         if isinstance(outputs, dict):
             for output_name, output in outputs.items():
                 if isinstance(output, Out) and output.type is ty.Any:

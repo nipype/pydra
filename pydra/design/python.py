@@ -134,7 +134,7 @@ def define(
                 klass, arg, out, auto_attribs
             )
         else:
-            if not inspect.isfunction(wrapped):
+            if not isinstance(wrapped, ty.Callable):
                 raise ValueError(
                     f"wrapped must be a class or a function, not {wrapped!r}"
                 )

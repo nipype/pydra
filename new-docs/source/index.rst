@@ -88,6 +88,7 @@ Indices and tables
     tutorial/python
     tutorial/shell
     tutorial/workflow
+    tutorial/canonical-form
 
 
 .. toctree::
