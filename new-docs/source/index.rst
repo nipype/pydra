@@ -54,11 +54,14 @@ Tutorials
 * :ref:`Python-tasks`
 * :ref:`Shell-tasks`
 * :ref:`Workflows`
+* :ref:`Canonical (dataclass) task form`
 
 Examples
 --------
 
 * :ref:`T1w MRI preprocessing`
+* :ref:`One-level GLM`
+* :ref:`Two-Level GLM`
 
 How-to Guides
 -------------
