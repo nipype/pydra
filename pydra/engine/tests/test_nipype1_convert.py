@@ -12,7 +12,7 @@ def find_txt(output_dir: Path) -> File:
     return files[0]
 
 
-interf_inputs = [shell.arg(name="test", type=ty.Any, help_string="test")]
+interf_inputs = [shell.arg(name="test", type=ty.Any, help="test")]
 interf_outputs = [shell.out(name="test_out", type=File, callable=find_txt)]
 
 
@@ -26,7 +26,7 @@ class Interf_3(ShellDef["Interf_3.Outputs"]):
 
     executable = ["testing", "command"]
 
-    in_file: str = shell.arg(help_string="in_file", argstr="{in_file}")
+    in_file: str = shell.arg(help="in_file", argstr="{in_file}")
 
     @shell.outputs
     class Outputs(ShellOutputs):
@@ -37,9 +37,7 @@ class Interf_3(ShellDef["Interf_3.Outputs"]):
 class TouchInterf(ShellDef["TouchInterf.Outputs"]):
     """class with customized input and executables"""
 
-    new_file: str = shell.outarg(
-        help_string="new_file", argstr="", path_template="{new_file}"
-    )
+    new_file: str = shell.outarg(help="new_file", argstr="", path_template="{new_file}")
     executable = "touch"
 
     @shell.outputs
@@ -57,7 +55,7 @@ def test_interface_specs_2():
     """testing if class input/output definition are overwritten properly by the user's specs"""
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[("my_inp", ty.Any, {"help_string": "my inp"})],
+        fields=[("my_inp", ty.Any, {"help": "my inp"})],
         bases=(ShellDef,),
     )
     my_output_spec = SpecInfo(

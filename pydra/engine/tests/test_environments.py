@@ -178,7 +178,7 @@ def create_shelly_inputfile(tempdir, filename, name, executable):
             name="file",
             type=File,
             position=1,
-            help_string="files",
+            help="files",
             mandatory=True,
             argstr="",
         )
@@ -354,14 +354,14 @@ def create_shelly_outputfile(tempdir, filename, name, executable="cp"):
             name="file_orig",
             type=File,
             position=2,
-            help_string="new file",
+            help="new file",
             argstr="",
         ),
         shell.arg(
             name="file_copy",
             type=str,
             output_file_template="{file_orig}_copy",
-            help_string="output file",
+            help="output file",
             argstr="",
         ),
     ]

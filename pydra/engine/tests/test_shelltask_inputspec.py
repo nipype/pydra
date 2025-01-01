@@ -34,7 +34,7 @@ def test_shell_cmd_inputs_1():
                 "inpA",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "inp1", "argstr": ""},
+                    metadata={"position": 1, "help": "inp1", "argstr": ""},
                 ),
             )
         ],
@@ -51,9 +51,7 @@ def test_shell_cmd_inputs_1a():
     """additional input without provided position"""
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[
-            ("inpA", attr.ib(type=str, metadata={"help_string": "inpA", "argstr": ""}))
-        ],
+        fields=[("inpA", attr.ib(type=str, metadata={"help": "inpA", "argstr": ""}))],
         bases=(ShellDef,),
     )
 
@@ -73,7 +71,7 @@ def test_shell_cmd_inputs_1b():
                 "inpA",
                 attr.ib(
                     type=str,
-                    metadata={"position": -1, "help_string": "inpA", "argstr": ""},
+                    metadata={"position": -1, "help": "inpA", "argstr": ""},
                 ),
             )
         ],
@@ -97,7 +95,7 @@ def test_shell_cmd_inputs_1_st():
                 "inpA",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "inp1", "argstr": ""},
+                    metadata={"position": 1, "help": "inp1", "argstr": ""},
                 ),
             )
         ],
@@ -124,14 +122,14 @@ def test_shell_cmd_inputs_2():
                 "inpA",
                 attr.ib(
                     type=str,
-                    metadata={"position": 2, "help_string": "inpA", "argstr": ""},
+                    metadata={"position": 2, "help": "inpA", "argstr": ""},
                 ),
             ),
             (
                 "inpB",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "inpN", "argstr": ""},
+                    metadata={"position": 1, "help": "inpN", "argstr": ""},
                 ),
             ),
         ],
@@ -150,8 +148,8 @@ def test_shell_cmd_inputs_2a():
     my_input_spec = SpecInfo(
         name="Input",
         fields=[
-            ("inpA", attr.ib(type=str, metadata={"help_string": "inpA", "argstr": ""})),
-            ("inpB", attr.ib(type=str, metadata={"help_string": "inpB", "argstr": ""})),
+            ("inpA", attr.ib(type=str, metadata={"help": "inpA", "argstr": ""})),
+            ("inpB", attr.ib(type=str, metadata={"help": "inpB", "argstr": ""})),
         ],
         bases=(ShellDef,),
     )
@@ -176,14 +174,14 @@ def test_shell_cmd_inputs_2_err():
                 "inpA",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "inpA", "argstr": ""},
+                    metadata={"position": 1, "help": "inpA", "argstr": ""},
                 ),
             ),
             (
                 "inpB",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "inpB", "argstr": ""},
+                    metadata={"position": 1, "help": "inpB", "argstr": ""},
                 ),
             ),
         ],
@@ -209,14 +207,14 @@ def test_shell_cmd_inputs_2_noerr():
                 "inpA",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "inpA", "argstr": ""},
+                    metadata={"position": 1, "help": "inpA", "argstr": ""},
                 ),
             ),
             (
                 "inpB",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "inpB", "argstr": ""},
+                    metadata={"position": 1, "help": "inpB", "argstr": ""},
                 ),
             ),
         ],
@@ -236,17 +234,17 @@ def test_shell_cmd_inputs_3():
                 "inpA",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "inpA", "argstr": ""},
+                    metadata={"position": 1, "help": "inpA", "argstr": ""},
                 ),
             ),
             (
                 "inpB",
                 attr.ib(
                     type=str,
-                    metadata={"position": -1, "help_string": "inpB", "argstr": ""},
+                    metadata={"position": -1, "help": "inpB", "argstr": ""},
                 ),
             ),
-            ("inpC", attr.ib(type=str, metadata={"help_string": "inpC", "argstr": ""})),
+            ("inpC", attr.ib(type=str, metadata={"help": "inpC", "argstr": ""})),
         ],
         bases=(ShellDef,),
     )
@@ -272,7 +270,7 @@ def test_shell_cmd_inputs_argstr_1():
                 "inpA",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "inpA", "argstr": "-v"},
+                    metadata={"position": 1, "help": "inpA", "argstr": "-v"},
                 ),
             )
         ],
@@ -293,7 +291,7 @@ def test_shell_cmd_inputs_argstr_2():
                 "inpA",
                 attr.ib(
                     type=bool,
-                    metadata={"position": 1, "help_string": "inpA", "argstr": "-v"},
+                    metadata={"position": 1, "help": "inpA", "argstr": "-v"},
                 ),
             )
         ],
@@ -317,7 +315,7 @@ def test_shell_cmd_inputs_list_1():
                 "inpA",
                 attr.ib(
                     type=ty.List[str],
-                    metadata={"position": 2, "help_string": "inpA", "argstr": ""},
+                    metadata={"position": 2, "help": "inpA", "argstr": ""},
                 ),
             )
         ],
@@ -340,7 +338,7 @@ def test_shell_cmd_inputs_list_2():
                 "inpA",
                 attr.ib(
                     type=ty.List[str],
-                    metadata={"position": 2, "help_string": "inpA", "argstr": "-v"},
+                    metadata={"position": 2, "help": "inpA", "argstr": "-v"},
                 ),
             )
         ],
@@ -362,7 +360,7 @@ def test_shell_cmd_inputs_list_3():
                 "inpA",
                 attr.ib(
                     type=ty.List[str],
-                    metadata={"position": 2, "help_string": "inpA", "argstr": "-v..."},
+                    metadata={"position": 2, "help": "inpA", "argstr": "-v..."},
                 ),
             )
         ],
@@ -387,7 +385,7 @@ def test_shell_cmd_inputs_list_sep_1():
                     type=MultiInputObj[str],
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "sep": ",",
                         "argstr": "",
                     },
@@ -417,7 +415,7 @@ def test_shell_cmd_inputs_list_sep_2():
                     type=MultiInputObj[str],
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "sep": ",",
                         "argstr": "-v",
                     },
@@ -447,7 +445,7 @@ def test_shell_cmd_inputs_list_sep_2a():
                     type=MultiInputObj[str],
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "sep": ",",
                         "argstr": "-v {inpA}",
                     },
@@ -477,7 +475,7 @@ def test_shell_cmd_inputs_list_sep_3():
                     type=MultiInputObj[str],
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "sep": ",",
                         "argstr": "-v...",
                     },
@@ -507,7 +505,7 @@ def test_shell_cmd_inputs_list_sep_3a():
                     type=MultiInputObj[str],
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "sep": ",",
                         "argstr": "-v {inpA}...",
                     },
@@ -537,7 +535,7 @@ def test_shell_cmd_inputs_sep_4():
                     type=MultiInputObj[str],
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "sep": ",",
                         "argstr": "-v...",
                     },
@@ -562,7 +560,7 @@ def test_shell_cmd_inputs_sep_4a():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "sep": ",",
                         "argstr": "-v...",
                     },
@@ -587,7 +585,7 @@ def test_shell_cmd_inputs_format_1():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "-v {inpA}",
                     },
                 ),
@@ -611,7 +609,7 @@ def test_shell_cmd_inputs_format_2():
                     type=MultiInputObj[str],
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "-v {inpA}...",
                     },
                 ),
@@ -639,7 +637,7 @@ def test_shell_cmd_inputs_format_3():
                     type=float,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "-v {inpA:.5f}",
                     },
                 ),
@@ -663,7 +661,7 @@ def test_shell_cmd_inputs_mandatory_1():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -689,7 +687,7 @@ def test_shell_cmd_inputs_not_given_1():
                     type=MultiInputObj,
                     metadata={
                         "argstr": "--arg1",
-                        "help_string": "Command line argument 1",
+                        "help": "Command line argument 1",
                     },
                 ),
             ),
@@ -699,7 +697,7 @@ def test_shell_cmd_inputs_not_given_1():
                     type=MultiInputObj,
                     metadata={
                         "argstr": "--arg2",
-                        "help_string": "Command line argument 2",
+                        "help": "Command line argument 2",
                     },
                 ),
             ),
@@ -709,7 +707,7 @@ def test_shell_cmd_inputs_not_given_1():
                     type=File,
                     metadata={
                         "argstr": "--arg3",
-                        "help_string": "Command line argument 3",
+                        "help": "Command line argument 3",
                     },
                 ),
             ),
@@ -734,7 +732,7 @@ def test_shell_cmd_inputs_template_1():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -746,7 +744,7 @@ def test_shell_cmd_inputs_template_1():
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "-o",
                         "output_file_template": "{inpA}_out",
                     },
@@ -775,7 +773,7 @@ def test_shell_cmd_inputs_template_1a():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -786,7 +784,7 @@ def test_shell_cmd_inputs_template_1a():
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "outA",
+                        "help": "outA",
                         "output_file_template": "{inpA}_out",
                     },
                 ),
@@ -810,7 +808,7 @@ def test_shell_cmd_inputs_template_2():
                 "inpB",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "inpB", "argstr": ""},
+                    metadata={"position": 1, "help": "inpB", "argstr": ""},
                 ),
             ),
             (
@@ -819,7 +817,7 @@ def test_shell_cmd_inputs_template_2():
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "outB",
+                        "help": "outB",
                         "argstr": "-o",
                         "output_file_template": "{inpB}_out",
                     },
@@ -853,7 +851,7 @@ def test_shell_cmd_inputs_template_3(tmp_path):
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -865,7 +863,7 @@ def test_shell_cmd_inputs_template_3(tmp_path):
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "inpB",
+                        "help": "inpB",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -876,7 +874,7 @@ def test_shell_cmd_inputs_template_3(tmp_path):
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "outA",
+                        "help": "outA",
                         "output_file_template": "{inpA}_out",
                     },
                 ),
@@ -886,7 +884,7 @@ def test_shell_cmd_inputs_template_3(tmp_path):
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "outB",
+                        "help": "outB",
                         "output_file_template": "{inpB}_out",
                     },
                 ),
@@ -897,7 +895,7 @@ def test_shell_cmd_inputs_template_3(tmp_path):
                     type=str,
                     metadata={
                         "position": -1,
-                        "help_string": "outAB",
+                        "help": "outAB",
                         "argstr": "-o {outA} {outB}",
                         "readonly": True,
                     },
@@ -933,7 +931,7 @@ def test_shell_cmd_inputs_template_3a():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -945,7 +943,7 @@ def test_shell_cmd_inputs_template_3a():
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "inpB",
+                        "help": "inpB",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -957,7 +955,7 @@ def test_shell_cmd_inputs_template_3a():
                     type=str,
                     metadata={
                         "position": -1,
-                        "help_string": "outAB",
+                        "help": "outAB",
                         "argstr": "-o {outA} {outB}",
                         "readonly": True,
                     },
@@ -968,7 +966,7 @@ def test_shell_cmd_inputs_template_3a():
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "outA",
+                        "help": "outA",
                         "output_file_template": "{inpA}_out",
                     },
                 ),
@@ -978,7 +976,7 @@ def test_shell_cmd_inputs_template_3a():
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "outB",
+                        "help": "outB",
                         "output_file_template": "{inpB}_out",
                     },
                 ),
@@ -1014,7 +1012,7 @@ def test_shell_cmd_inputs_template_4():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1024,7 +1022,7 @@ def test_shell_cmd_inputs_template_4():
                 "inpB",
                 attr.ib(
                     type=str,
-                    metadata={"position": 2, "help_string": "inpB", "argstr": ""},
+                    metadata={"position": 2, "help": "inpB", "argstr": ""},
                 ),
             ),
             (
@@ -1033,7 +1031,7 @@ def test_shell_cmd_inputs_template_4():
                     type=str,
                     metadata={
                         "position": -1,
-                        "help_string": "outAB",
+                        "help": "outAB",
                         "argstr": "-o {outA} {outB}",
                         "readonly": True,
                     },
@@ -1044,7 +1042,7 @@ def test_shell_cmd_inputs_template_4():
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "outA",
+                        "help": "outA",
                         "output_file_template": "{inpA}_out",
                     },
                 ),
@@ -1054,7 +1052,7 @@ def test_shell_cmd_inputs_template_4():
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "outB",
+                        "help": "outB",
                         "output_file_template": "{inpB}_out",
                     },
                 ),
@@ -1080,7 +1078,7 @@ def test_shell_cmd_inputs_template_5_ex():
                     type=str,
                     metadata={
                         "position": -1,
-                        "help_string": "outAB",
+                        "help": "outAB",
                         "argstr": "-o",
                         "readonly": True,
                     },
@@ -1111,7 +1109,7 @@ def test_shell_cmd_inputs_template_6():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1123,7 +1121,7 @@ def test_shell_cmd_inputs_template_6():
                     type=ty.Union[str, bool],
                     metadata={
                         "position": 2,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "-o",
                         "output_file_template": "{inpA}_out",
                     },
@@ -1171,7 +1169,7 @@ def test_shell_cmd_inputs_template_6a():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1184,7 +1182,7 @@ def test_shell_cmd_inputs_template_6a():
                     default=False,
                     metadata={
                         "position": 2,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "-o",
                         "output_file_template": "{inpA}_out",
                     },
@@ -1230,7 +1228,7 @@ def test_shell_cmd_inputs_template_7(tmp_path: Path):
                     type=File,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1242,7 +1240,7 @@ def test_shell_cmd_inputs_template_7(tmp_path: Path):
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "",
                         "output_file_template": "{inpA}_out",
                     },
@@ -1278,7 +1276,7 @@ def test_shell_cmd_inputs_template_7a(tmp_path: Path):
                     type=File,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1290,7 +1288,7 @@ def test_shell_cmd_inputs_template_7a(tmp_path: Path):
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "",
                         "keep_extension": True,
                         "output_file_template": "{inpA}_out",
@@ -1327,7 +1325,7 @@ def test_shell_cmd_inputs_template_7b(tmp_path: Path):
                     type=File,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1339,7 +1337,7 @@ def test_shell_cmd_inputs_template_7b(tmp_path: Path):
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "",
                         "keep_extension": False,
                         "output_file_template": "{inpA}_out",
@@ -1374,7 +1372,7 @@ def test_shell_cmd_inputs_template_8(tmp_path: Path):
                     type=File,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1386,7 +1384,7 @@ def test_shell_cmd_inputs_template_8(tmp_path: Path):
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "",
                         "output_file_template": "{inpA}_out.txt",
                     },
@@ -1422,7 +1420,7 @@ def test_shell_cmd_inputs_template_9(tmp_path: Path):
                     type=File,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1434,7 +1432,7 @@ def test_shell_cmd_inputs_template_9(tmp_path: Path):
                     type=int,
                     metadata={
                         "position": 2,
-                        "help_string": "inp int",
+                        "help": "inp int",
                         "argstr": "-i",
                         "mandatory": True,
                     },
@@ -1446,7 +1444,7 @@ def test_shell_cmd_inputs_template_9(tmp_path: Path):
                     type=str,
                     metadata={
                         "position": 3,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "-o",
                         "output_file_template": "{inpA}_{inpInt}_out.txt",
                     },
@@ -1484,7 +1482,7 @@ def test_shell_cmd_inputs_template_9a(tmp_path: Path):
                     type=File,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1496,7 +1494,7 @@ def test_shell_cmd_inputs_template_9a(tmp_path: Path):
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "inp str",
+                        "help": "inp str",
                         "argstr": "-i",
                         "mandatory": True,
                     },
@@ -1508,7 +1506,7 @@ def test_shell_cmd_inputs_template_9a(tmp_path: Path):
                     type=str,
                     metadata={
                         "position": 3,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "-o",
                         "output_file_template": "{inpA}_{inpStr}_out.txt",
                     },
@@ -1546,7 +1544,7 @@ def test_shell_cmd_inputs_template_9b_err(tmp_path: Path):
                     type=File,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1558,7 +1556,7 @@ def test_shell_cmd_inputs_template_9b_err(tmp_path: Path):
                     type=File,
                     metadata={
                         "position": 2,
-                        "help_string": "inp file",
+                        "help": "inp file",
                         "argstr": "-i",
                         "mandatory": True,
                     },
@@ -1570,7 +1568,7 @@ def test_shell_cmd_inputs_template_9b_err(tmp_path: Path):
                     type=str,
                     metadata={
                         "position": 3,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "-o",
                         "output_file_template": "{inpA}_{inpFile}_out.txt",
                     },
@@ -1610,7 +1608,7 @@ def test_shell_cmd_inputs_template_9c_err(tmp_path: Path):
                     type=File,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1622,7 +1620,7 @@ def test_shell_cmd_inputs_template_9c_err(tmp_path: Path):
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "inp str with extension",
+                        "help": "inp str with extension",
                         "argstr": "-i",
                         "mandatory": True,
                     },
@@ -1634,7 +1632,7 @@ def test_shell_cmd_inputs_template_9c_err(tmp_path: Path):
                     type=str,
                     metadata={
                         "position": 3,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "-o",
                         "output_file_template": "{inpA}_{inpStr}_out.txt",
                     },
@@ -1670,7 +1668,7 @@ def test_shell_cmd_inputs_template_10():
                     type=float,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "{inpA:.1f}",
                         "mandatory": True,
                     },
@@ -1682,7 +1680,7 @@ def test_shell_cmd_inputs_template_10():
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "-o",
                         "output_file_template": "file_{inpA:.1f}_out",
                     },
@@ -1712,7 +1710,7 @@ def test_shell_cmd_inputs_template_requires_1():
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "input file",
+                        "help": "input file",
                         "mandatory": True,
                         "argstr": "",
                     },
@@ -1722,7 +1720,7 @@ def test_shell_cmd_inputs_template_requires_1():
                 "with_tpl",
                 attr.ib(
                     type=bool,
-                    metadata={"help_string": "enable template"},
+                    metadata={"help": "enable template"},
                 ),
             ),
             (
@@ -1730,7 +1728,7 @@ def test_shell_cmd_inputs_template_requires_1():
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "output file",
+                        "help": "output file",
                         "argstr": "--tpl",
                         "output_file_template": "tpl.{in_file}",
                         "requires": {"with_tpl"},
@@ -1768,7 +1766,7 @@ def test_shell_cmd_inputs_template_function_1():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1780,7 +1778,7 @@ def test_shell_cmd_inputs_template_function_1():
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "-o",
                         "output_file_template": template_fun,
                     },
@@ -1816,7 +1814,7 @@ def test_shell_cmd_inputs_template_function_2():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1827,7 +1825,7 @@ def test_shell_cmd_inputs_template_function_2():
                 attr.ib(
                     type=int,
                     metadata={
-                        "help_string": "inpB",
+                        "help": "inpB",
                         "mandatory": True,
                     },
                 ),
@@ -1838,7 +1836,7 @@ def test_shell_cmd_inputs_template_function_2():
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "-o",
                         "output_file_template": template_fun,
                     },
@@ -1871,7 +1869,7 @@ def test_shell_cmd_inputs_template_1_st():
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "inpA",
+                        "help": "inpA",
                         "argstr": "",
                         "mandatory": True,
                     },
@@ -1883,7 +1881,7 @@ def test_shell_cmd_inputs_template_1_st():
                     type=str,
                     metadata={
                         "position": 2,
-                        "help_string": "outA",
+                        "help": "outA",
                         "argstr": "-o",
                         "output_file_template": "{inpA}_out",
                     },
@@ -1920,7 +1918,7 @@ def test_shell_cmd_inputs_denoise_image(
                 attr.ib(
                     type=int,
                     metadata={
-                        "help_string": """
+                        "help": """
                     2/3/4
                     This option forces the image to be treated as a specified-dimensional image.
                     If not specified, the program tries to infer the dimensionality from
@@ -1936,7 +1934,7 @@ def test_shell_cmd_inputs_denoise_image(
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "A scalar image is expected as input for noise correction.",
+                        "help": "A scalar image is expected as input for noise correction.",
                         "argstr": "-i",
                         "mandatory": True,
                     },
@@ -1947,7 +1945,7 @@ def test_shell_cmd_inputs_denoise_image(
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": """
+                        "help": """
                     Rician/(Gaussian)
                     Employ a Rician or Gaussian noise model.
                     """,
@@ -1961,7 +1959,7 @@ def test_shell_cmd_inputs_denoise_image(
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "If a mask image is specified, denoising is only performed in the mask region.",
+                        "help": "If a mask image is specified, denoising is only performed in the mask region.",
                         "argstr": "-x",
                     },
                 ),
@@ -1972,7 +1970,7 @@ def test_shell_cmd_inputs_denoise_image(
                     type=int,
                     default=1,
                     metadata={
-                        "help_string": """
+                        "help": """
                     (1)/2/3/...
                     Running noise correction on large images can be time consuming.
                     To lessen computation time, the input image can be resampled.
@@ -1989,7 +1987,7 @@ def test_shell_cmd_inputs_denoise_image(
                     type=int,
                     default=1,
                     metadata={
-                        "help_string": "Patch radius. Default = 1x1x1",
+                        "help": "Patch radius. Default = 1x1x1",
                         "argstr": "-p",
                     },
                 ),
@@ -2000,7 +1998,7 @@ def test_shell_cmd_inputs_denoise_image(
                     type=int,
                     default=2,
                     metadata={
-                        "help_string": "Search radius. Default = 2x2x2.",
+                        "help": "Search radius. Default = 2x2x2.",
                         "argstr": "-r",
                     },
                 ),
@@ -2010,7 +2008,7 @@ def test_shell_cmd_inputs_denoise_image(
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": """
+                        "help": """
                     The output consists of the noise corrected version of the input image.
                     Optionally, one can also output the estimated noise image.
                     """,
@@ -2024,7 +2022,7 @@ def test_shell_cmd_inputs_denoise_image(
                     type=ty.Union[str, bool],
                     default=False,
                     metadata={
-                        "help_string": """
+                        "help": """
                     The output consists of the noise corrected version of the input image.
                     Optionally, one can also output the estimated noise image.
                     """,
@@ -2037,7 +2035,7 @@ def test_shell_cmd_inputs_denoise_image(
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "Combined output",
+                        "help": "Combined output",
                         "argstr": "-o [{correctedImage}, {noiseImage}]",
                         "position": -1,
                         "readonly": True,
@@ -2050,7 +2048,7 @@ def test_shell_cmd_inputs_denoise_image(
                     type=bool,
                     default=False,
                     metadata={
-                        "help_string": "Get Version Information.",
+                        "help": "Get Version Information.",
                         "argstr": "--version",
                     },
                 ),
@@ -2060,7 +2058,7 @@ def test_shell_cmd_inputs_denoise_image(
                 attr.ib(
                     type=int,
                     default=0,
-                    metadata={"help_string": "(0)/1. Verbose output. ", "argstr": "-v"},
+                    metadata={"help": "(0)/1. Verbose output. ", "argstr": "-v"},
                 ),
             ),
             (
@@ -2069,7 +2067,7 @@ def test_shell_cmd_inputs_denoise_image(
                     type=bool,
                     default=False,
                     metadata={
-                        "help_string": "Print the help menu (short version)",
+                        "help": "Print the help menu (short version)",
                         "argstr": "-h",
                     },
                 ),
@@ -2079,7 +2077,7 @@ def test_shell_cmd_inputs_denoise_image(
                 attr.ib(
                     type=int,
                     metadata={
-                        "help_string": "Print the help menu.",
+                        "help": "Print the help menu.",
                         "argstr": "--help",
                     },
                 ),
@@ -2170,16 +2168,16 @@ def test_shell_cmd_inputs_denoise_image(
 class SimpleTaskXor(ShellDef["SimpleTaskXor.Outputs"]):
 
     input_1: str = shell.arg(
-        help_string="help",
+        help="help",
         xor=("input_1", "input_2", "input_3"),
     )
     input_2: bool = shell.arg(
-        help_string="help",
+        help="help",
         argstr="--i2",
         xor=("input_1", "input_2", "input_3"),
     )
     input_3: bool = shell.arg(
-        help_string="help",
+        help="help",
         xor=("input_1", "input_2", "input_3"),
     )
 

@@ -41,7 +41,7 @@ class arg(Arg):
 
     Parameters
     ----------
-    help_string: str
+    help: str
         A short description of the input field.
     default : Any, optional
         the default value for the argument
@@ -140,7 +140,7 @@ class outarg(Out, arg):
 
     Parameters
     ----------
-    help_string: str
+    help: str
         A short description of the input field.
     default : Any, optional
         the default value for the argument
@@ -364,7 +364,7 @@ def define(
             position=0,
             default=executable,
             validator=attrs.validators.min_len(1),
-            help_string=EXECUTABLE_HELP_STRING,
+            help=EXECUTABLE_HELP_STRING,
         )
 
         # Set positions for the remaining inputs that don't have an explicit position

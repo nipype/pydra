@@ -292,7 +292,7 @@ def test_shell_cmd_inputspec_1(plugin, results_function, tmp_path):
                 "opt_n",
                 attr.ib(
                     type=bool,
-                    metadata={"position": 1, "argstr": "-n", "help_string": "option"},
+                    metadata={"position": 1, "argstr": "-n", "help": "option"},
                 ),
             )
         ],
@@ -333,14 +333,14 @@ def test_shell_cmd_inputspec_2(plugin, results_function, tmp_path):
                 "opt_hello",
                 attr.ib(
                     type=str,
-                    metadata={"position": 3, "help_string": "todo", "argstr": ""},
+                    metadata={"position": 3, "help": "todo", "argstr": ""},
                 ),
             ),
             (
                 "opt_n",
                 attr.ib(
                     type=bool,
-                    metadata={"position": 1, "help_string": "todo", "argstr": "-n"},
+                    metadata={"position": 1, "help": "todo", "argstr": "-n"},
                 ),
             ),
         ],
@@ -378,7 +378,7 @@ def test_shell_cmd_inputspec_3(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "text",
+                        "help": "text",
                         "mandatory": True,
                         "argstr": "",
                     },
@@ -415,7 +415,7 @@ def test_shell_cmd_inputspec_3a(plugin, results_function, tmp_path):
             (
                 "text",
                 str,
-                {"position": 1, "help_string": "text", "mandatory": True, "argstr": ""},
+                {"position": 1, "help": "text", "mandatory": True, "argstr": ""},
             )
         ],
         bases=(ShellDef,),
@@ -449,7 +449,7 @@ def test_shell_cmd_inputspec_3b(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "text",
+                        "help": "text",
                         "mandatory": True,
                         "argstr": "",
                     },
@@ -483,7 +483,7 @@ def test_shell_cmd_inputspec_3c_exception(plugin, tmp_path):
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "text",
+                        "help": "text",
                         "mandatory": True,
                         "argstr": "",
                     },
@@ -516,7 +516,7 @@ def test_shell_cmd_inputspec_3c(plugin, results_function, tmp_path):
                     default=None,
                     metadata={
                         "position": 1,
-                        "help_string": "text",
+                        "help": "text",
                         "mandatory": False,
                         "argstr": "",
                     },
@@ -549,7 +549,7 @@ def test_shell_cmd_inputspec_4(plugin, results_function, tmp_path):
                 attr.ib(
                     type=str,
                     default="Hello",
-                    metadata={"position": 1, "help_string": "text", "argstr": ""},
+                    metadata={"position": 1, "help": "text", "argstr": ""},
                 ),
             )
         ],
@@ -576,9 +576,7 @@ def test_shell_cmd_inputspec_4a(plugin, results_function, tmp_path):
     cmd_exec = "echo"
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[
-            ("text", str, "Hello", {"position": 1, "help_string": "text", "argstr": ""})
-        ],
+        fields=[("text", str, "Hello", {"position": 1, "help": "text", "argstr": ""})],
         bases=(ShellDef,),
     )
 
@@ -606,7 +604,7 @@ def test_shell_cmd_inputspec_4b(plugin, results_function, tmp_path):
                 attr.ib(
                     type=str,
                     default="Hi",
-                    metadata={"position": 1, "help_string": "text", "argstr": ""},
+                    metadata={"position": 1, "help": "text", "argstr": ""},
                 ),
             )
         ],
@@ -638,7 +636,7 @@ def test_shell_cmd_inputspec_4c_exception(plugin):
                     default="Hello",
                     metadata={
                         "position": 1,
-                        "help_string": "text",
+                        "help": "text",
                         "mandatory": True,
                         "argstr": "",
                     },
@@ -668,7 +666,7 @@ def test_shell_cmd_inputspec_4d_exception(plugin):
                     default="Hello",
                     metadata={
                         "position": 1,
-                        "help_string": "text",
+                        "help": "text",
                         "output_file_template": "exception",
                         "argstr": "",
                     },
@@ -699,7 +697,7 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmp_path):
                     type=bool,
                     metadata={
                         "position": 1,
-                        "help_string": "opt t",
+                        "help": "opt t",
                         "argstr": "-t",
                         "xor": ["opt_S"],
                     },
@@ -711,7 +709,7 @@ def test_shell_cmd_inputspec_5_nosubm(plugin, results_function, tmp_path):
                     type=bool,
                     metadata={
                         "position": 2,
-                        "help_string": "opt S",
+                        "help": "opt S",
                         "argstr": "-S",
                         "xor": ["opt_t"],
                     },
@@ -748,7 +746,7 @@ def test_shell_cmd_inputspec_5a_exception(plugin, tmp_path):
                     type=bool,
                     metadata={
                         "position": 1,
-                        "help_string": "opt t",
+                        "help": "opt t",
                         "argstr": "-t",
                         "xor": ["opt_S"],
                     },
@@ -760,7 +758,7 @@ def test_shell_cmd_inputspec_5a_exception(plugin, tmp_path):
                     type=bool,
                     metadata={
                         "position": 2,
-                        "help_string": "opt S",
+                        "help": "opt S",
                         "argstr": "-S",
                         "xor": ["opt_t"],
                     },
@@ -800,7 +798,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function, tmp_path):
                     type=bool,
                     metadata={
                         "position": 2,
-                        "help_string": "opt t",
+                        "help": "opt t",
                         "argstr": "-t",
                         "requires": ["opt_l"],
                     },
@@ -810,7 +808,7 @@ def test_shell_cmd_inputspec_6(plugin, results_function, tmp_path):
                 "opt_l",
                 attr.ib(
                     type=bool,
-                    metadata={"position": 1, "help_string": "opt l", "argstr": "-l"},
+                    metadata={"position": 1, "help": "opt l", "argstr": "-l"},
                 ),
             ),
         ],
@@ -846,7 +844,7 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
                     type=bool,
                     metadata={
                         "position": 2,
-                        "help_string": "opt t",
+                        "help": "opt t",
                         "argstr": "-t",
                         "requires": ["opt_l"],
                     },
@@ -856,7 +854,7 @@ def test_shell_cmd_inputspec_6a_exception(plugin):
                 "opt_l",
                 attr.ib(
                     type=bool,
-                    metadata={"position": 1, "help_string": "opt l", "argstr": "-l"},
+                    metadata={"position": 1, "help": "opt l", "argstr": "-l"},
                 ),
             ),
         ],
@@ -888,7 +886,7 @@ def test_shell_cmd_inputspec_6b(plugin, results_function, tmp_path):
                     type=bool,
                     metadata={
                         "position": 2,
-                        "help_string": "opt t",
+                        "help": "opt t",
                         "argstr": "-t",
                         "requires": ["opt_l"],
                     },
@@ -898,7 +896,7 @@ def test_shell_cmd_inputspec_6b(plugin, results_function, tmp_path):
                 "opt_l",
                 attr.ib(
                     type=bool,
-                    metadata={"position": 1, "help_string": "opt l", "argstr": "-l"},
+                    metadata={"position": 1, "help": "opt l", "argstr": "-l"},
                 ),
             ),
         ],
@@ -938,7 +936,7 @@ def test_shell_cmd_inputspec_7(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -983,7 +981,7 @@ def test_shell_cmd_inputspec_7a(plugin, results_function, tmp_path):
                     metadata={
                         "output_file_template": "{args}",
                         "output_field_name": "out1_changed",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -1021,7 +1019,7 @@ def test_shell_cmd_inputspec_7b(plugin, results_function, tmp_path):
                 "newfile",
                 attr.ib(
                     type=str,
-                    metadata={"position": 1, "help_string": "new file", "argstr": ""},
+                    metadata={"position": 1, "help": "new file", "argstr": ""},
                 ),
             ),
             (
@@ -1030,7 +1028,7 @@ def test_shell_cmd_inputspec_7b(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{newfile}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -1069,7 +1067,7 @@ def test_shell_cmd_inputspec_7c(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{args}.txt",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -1107,7 +1105,7 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmp_path):
                 "newfile",
                 attr.ib(
                     type=str,
-                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                    metadata={"position": 2, "help": "new file", "argstr": ""},
                 ),
             ),
             (
@@ -1117,7 +1115,7 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmp_path):
                     metadata={
                         "position": 1,
                         "argstr": "-t",
-                        "help_string": "time of modif.",
+                        "help": "time of modif.",
                     },
                 ),
             ),
@@ -1127,7 +1125,7 @@ def test_shell_cmd_inputspec_8(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{newfile}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -1164,7 +1162,7 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmp_path):
                 "newfile",
                 attr.ib(
                     type=str,
-                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                    metadata={"position": 2, "help": "new file", "argstr": ""},
                 ),
             ),
             (
@@ -1174,7 +1172,7 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmp_path):
                     metadata={
                         "position": 1,
                         "argstr": "-t {time}",
-                        "help_string": "time of modif.",
+                        "help": "time of modif.",
                     },
                 ),
             ),
@@ -1184,7 +1182,7 @@ def test_shell_cmd_inputspec_8a(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{newfile}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -1225,7 +1223,7 @@ def test_shell_cmd_inputspec_9(tmp_path, plugin, results_function):
                 "file_orig",
                 attr.ib(
                     type=File,
-                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                    metadata={"position": 2, "help": "new file", "argstr": ""},
                 ),
             ),
             (
@@ -1234,7 +1232,7 @@ def test_shell_cmd_inputspec_9(tmp_path, plugin, results_function):
                     type=str,
                     metadata={
                         "output_file_template": "{file_orig}_copy",
-                        "help_string": "output file",
+                        "help": "output file",
                         "argstr": "",
                     },
                 ),
@@ -1278,7 +1276,7 @@ def test_shell_cmd_inputspec_9a(tmp_path, plugin, results_function):
                 "file_orig",
                 attr.ib(
                     type=File,
-                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                    metadata={"position": 2, "help": "new file", "argstr": ""},
                 ),
             ),
             (
@@ -1287,7 +1285,7 @@ def test_shell_cmd_inputspec_9a(tmp_path, plugin, results_function):
                     type=str,
                     metadata={
                         "output_file_template": "{file_orig}_copy",
-                        "help_string": "output file",
+                        "help": "output file",
                         "argstr": "",
                     },
                 ),
@@ -1325,7 +1323,7 @@ def test_shell_cmd_inputspec_9b(tmp_path, plugin, results_function):
                 "file_orig",
                 attr.ib(
                     type=File,
-                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                    metadata={"position": 2, "help": "new file", "argstr": ""},
                 ),
             ),
             (
@@ -1335,7 +1333,7 @@ def test_shell_cmd_inputspec_9b(tmp_path, plugin, results_function):
                     metadata={
                         "output_file_template": "{file_orig}_copy",
                         "keep_extension": False,
-                        "help_string": "output file",
+                        "help": "output file",
                         "argstr": "",
                     },
                 ),
@@ -1376,7 +1374,7 @@ def test_shell_cmd_inputspec_9c(tmp_path, plugin, results_function):
                 "file_orig",
                 attr.ib(
                     type=File,
-                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                    metadata={"position": 2, "help": "new file", "argstr": ""},
                 ),
             ),
             (
@@ -1386,7 +1384,7 @@ def test_shell_cmd_inputspec_9c(tmp_path, plugin, results_function):
                     metadata={
                         "output_file_template": "{file_orig}",
                         "keep_extension": False,
-                        "help_string": "output file",
+                        "help": "output file",
                         "argstr": "",
                     },
                 ),
@@ -1429,7 +1427,7 @@ def test_shell_cmd_inputspec_9d(tmp_path, plugin, results_function):
                 "file_orig",
                 attr.ib(
                     type=File,
-                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                    metadata={"position": 2, "help": "new file", "argstr": ""},
                 ),
             ),
             (
@@ -1438,7 +1436,7 @@ def test_shell_cmd_inputspec_9d(tmp_path, plugin, results_function):
                     type=str,
                     metadata={
                         "output_file_template": "{file_orig}_copy",
-                        "help_string": "output file",
+                        "help": "output file",
                         "argstr": "",
                     },
                 ),
@@ -1489,7 +1487,7 @@ def test_shell_cmd_inputspec_10(plugin, results_function, tmp_path):
                         "position": 1,
                         "argstr": "...",
                         "sep": " ",
-                        "help_string": "list of files",
+                        "help": "list of files",
                         "mandatory": True,
                     },
                 ),
@@ -1537,7 +1535,7 @@ def test_shell_cmd_inputspec_10_err(tmp_path):
                     metadata={
                         "position": 1,
                         "argstr": "",
-                        "help_string": "a file",
+                        "help": "a file",
                         "mandatory": True,
                     },
                 ),
@@ -1560,7 +1558,7 @@ def test_shell_cmd_inputspec_11(tmp_path):
                 type=MultiInputObj[str],
                 metadata={
                     "argstr": "...",
-                    "help_string": "The list of input image files to be segmented.",
+                    "help": "The list of input image files to be segmented.",
                 },
             ),
         )
@@ -1572,7 +1570,7 @@ def test_shell_cmd_inputspec_11(tmp_path):
             attr.ib(
                 type=MultiOutputFile,
                 metadata={
-                    "help_string": "Corrected Output Images: should specify the same number of images as inputVolume, if only one element is given, then it is used as a file pattern where %s is replaced by the imageVolumeType, and %d by the index list location.",
+                    "help": "Corrected Output Images: should specify the same number of images as inputVolume, if only one element is given, then it is used as a file pattern where %s is replaced by the imageVolumeType, and %d by the index list location.",
                     "output_file_template": "{inputFiles}",
                 },
             ),
@@ -1633,14 +1631,14 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, plugin, results_function):
                 "file_orig",
                 attr.ib(
                     type=File,
-                    metadata={"position": 2, "help_string": "new file", "argstr": ""},
+                    metadata={"position": 2, "help": "new file", "argstr": ""},
                 ),
             ),
             (
                 "number",
                 attr.ib(
                     type=int,
-                    metadata={"help_string": "a number", "mandatory": True},
+                    metadata={"help": "a number", "mandatory": True},
                 ),
             ),
             (
@@ -1649,7 +1647,7 @@ def test_shell_cmd_inputspec_12(tmp_path: Path, plugin, results_function):
                     type=str,
                     metadata={
                         "output_file_template": template_function,
-                        "help_string": "output file",
+                        "help": "output file",
                         "argstr": "",
                     },
                 ),
@@ -1686,7 +1684,7 @@ def test_shell_cmd_inputspec_with_iterable():
                 "iterable_1",
                 ty.Iterable[int],
                 {
-                    "help_string": "iterable input 1",
+                    "help": "iterable input 1",
                     "argstr": "--in1",
                 },
             ),
@@ -1694,7 +1692,7 @@ def test_shell_cmd_inputspec_with_iterable():
                 "iterable_2",
                 ty.Iterable[str],
                 {
-                    "help_string": "iterable input 2",
+                    "help": "iterable input 2",
                     "argstr": "--in2...",
                 },
             ),
@@ -1732,7 +1730,7 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path):
                     metadata={
                         "position": 1,
                         "argstr": "",
-                        "help_string": "orig file",
+                        "help": "orig file",
                         "mandatory": True,
                         "copyfile": True,
                     },
@@ -1744,7 +1742,7 @@ def test_shell_cmd_inputspec_copyfile_1(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -1794,7 +1792,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path):
                     metadata={
                         "position": 1,
                         "argstr": "",
-                        "help_string": "orig file",
+                        "help": "orig file",
                         "mandatory": True,
                         "copyfile": "hardlink",
                     },
@@ -1806,7 +1804,7 @@ def test_shell_cmd_inputspec_copyfile_1a(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -1873,7 +1871,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path):
                     metadata={
                         "position": 1,
                         "argstr": "",
-                        "help_string": "orig file",
+                        "help": "orig file",
                         "mandatory": True,
                     },
                 ),
@@ -1884,7 +1882,7 @@ def test_shell_cmd_inputspec_copyfile_1b(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -1923,7 +1921,7 @@ def test_shell_cmd_inputspec_state_1(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "text",
+                        "help": "text",
                         "mandatory": True,
                         "argstr": "",
                     },
@@ -1961,7 +1959,7 @@ def test_shell_cmd_inputspec_typeval_1():
                 "text",
                 attr.ib(
                     type=int,
-                    metadata={"position": 1, "argstr": "", "help_string": "text"},
+                    metadata={"position": 1, "argstr": "", "help": "text"},
                 ),
             )
         ],
@@ -1980,7 +1978,7 @@ def test_shell_cmd_inputspec_typeval_2():
 
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[("text", int, {"position": 1, "argstr": "", "help_string": "text"})],
+        fields=[("text", int, {"position": 1, "argstr": "", "help": "text"})],
         bases=(ShellDef,),
     )
 
@@ -2000,7 +1998,7 @@ def test_shell_cmd_inputspec_state_1a(plugin, results_function, tmp_path):
             (
                 "text",
                 str,
-                {"position": 1, "help_string": "text", "mandatory": True, "argstr": ""},
+                {"position": 1, "help": "text", "mandatory": True, "argstr": ""},
             )
         ],
         bases=(ShellDef,),
@@ -2037,7 +2035,7 @@ def test_shell_cmd_inputspec_state_2(plugin, results_function, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -2081,7 +2079,7 @@ def test_shell_cmd_inputspec_state_3(plugin, results_function, tmp_path):
                     type=File,
                     metadata={
                         "position": 1,
-                        "help_string": "files",
+                        "help": "files",
                         "mandatory": True,
                         "argstr": "",
                     },
@@ -2131,7 +2129,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
                     metadata={
                         "position": 1,
                         "argstr": "",
-                        "help_string": "orig file",
+                        "help": "orig file",
                         "mandatory": True,
                         "copyfile": "copy",
                     },
@@ -2143,7 +2141,7 @@ def test_shell_cmd_inputspec_copyfile_state_1(plugin, results_function, tmp_path
                     type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -2195,7 +2193,7 @@ def test_wf_shell_cmd_2(plugin_dask_opt, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -2242,7 +2240,7 @@ def test_wf_shell_cmd_2a(plugin, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -2290,7 +2288,7 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -2307,7 +2305,7 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
                     type=File,
                     metadata={
                         "position": 1,
-                        "help_string": "output file",
+                        "help": "output file",
                         "argstr": "",
                     },
                 ),
@@ -2320,7 +2318,7 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
                         "position": 2,
                         "argstr": "",
                         "output_file_template": "{orig_file}_copy",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -2387,7 +2385,7 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -2404,7 +2402,7 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "output file",
+                        "help": "output file",
                         "argstr": "",
                     },
                 ),
@@ -2417,7 +2415,7 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
                         "position": 2,
                         "argstr": "",
                         "output_file_template": "{orig_file}_cp",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -2482,7 +2480,7 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -2499,7 +2497,7 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "output file",
+                        "help": "output file",
                         "argstr": "",
                     },
                 ),
@@ -2512,7 +2510,7 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
                         "position": 2,
                         "argstr": "",
                         "output_file_template": "{orig_file}_copy",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -2580,7 +2578,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -2597,7 +2595,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "output file",
+                        "help": "output file",
                         "argstr": "",
                     },
                 ),
@@ -2610,7 +2608,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
                         "position": 2,
                         "argstr": "",
                         "output_file_template": "{orig_file}_copy",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -2924,7 +2922,7 @@ def test_shell_cmd_outputspec_6(plugin, results_function, tmp_path):
                     type=File,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -2959,7 +2957,7 @@ def test_shell_cmd_outputspec_6a():
             (
                 "out1",
                 File,
-                {"output_file_template": "{args}", "help_string": "output file"},
+                {"output_file_template": "{args}", "help": "output file"},
             )
         ],
         bases=(ShellOutputs,),
@@ -2994,7 +2992,7 @@ def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "script file",
+                        "help": "script file",
                         "mandatory": True,
                         "position": 1,
                         "argstr": "",
@@ -3009,7 +3007,7 @@ def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
                         "position": 2,
                         "argstr": "...",
                         "sep": " ",
-                        "help_string": "list of name indices",
+                        "help": "list of name indices",
                         "mandatory": True,
                     },
                 ),
@@ -3027,7 +3025,7 @@ def test_shell_cmd_outputspec_7(tmp_path, plugin, results_function):
                     type=MultiOutputFile,
                     metadata={
                         "output_file_template": "file{files_id}.txt",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -3070,7 +3068,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "script file",
+                        "help": "script file",
                         "mandatory": True,
                         "position": 1,
                         "argstr": "",
@@ -3085,7 +3083,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
                         "position": 2,
                         "argstr": "...",
                         "sep": " ",
-                        "help_string": "list of name indices",
+                        "help": "list of name indices",
                         "mandatory": True,
                     },
                 ),
@@ -3103,7 +3101,7 @@ def test_shell_cmd_outputspec_7a(tmp_path, plugin, results_function):
                     type=MultiOutputFile,
                     metadata={
                         "output_file_template": "file{files_id}.txt",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -3155,7 +3153,7 @@ def test_shell_cmd_outputspec_8a(tmp_path, plugin, results_function):
                     type=File,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -3163,7 +3161,7 @@ def test_shell_cmd_outputspec_8a(tmp_path, plugin, results_function):
                 "out_file_index",
                 attr.ib(
                     type=int,
-                    metadata={"help_string": "output file", "callable": get_file_index},
+                    metadata={"help": "output file", "callable": get_file_index},
                 ),
             ),
             (
@@ -3171,7 +3169,7 @@ def test_shell_cmd_outputspec_8a(tmp_path, plugin, results_function):
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "The standard error output",
+                        "help": "The standard error output",
                         "callable": get_stderr,
                     },
                 ),
@@ -3203,9 +3201,7 @@ def test_shell_cmd_outputspec_8b_error():
         fields=[
             (
                 "out",
-                attr.ib(
-                    type=int, metadata={"help_string": "output file", "value": "val"}
-                ),
+                attr.ib(type=int, metadata={"help": "output file", "value": "val"}),
             )
         ],
         bases=(ShellOutputs,),
@@ -3239,7 +3235,7 @@ def test_shell_cmd_outputspec_8c(tmp_path, plugin, results_function):
                     type=Directory,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -3282,7 +3278,7 @@ def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
                     type=str,
                     metadata={
                         "position": 1,
-                        "help_string": "new directory",
+                        "help": "new directory",
                         "argstr": "",
                     },
                 ),
@@ -3300,7 +3296,7 @@ def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
                     type=Directory,
                     metadata={
                         "output_file_template": "{resultsDir}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -3347,7 +3343,7 @@ def test_shell_cmd_state_outputspec_1(plugin, results_function, tmp_path):
                     type=File,
                     metadata={
                         "output_file_template": "{args}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             )
@@ -3413,12 +3409,12 @@ def test_shell_cmd_inputspec_outputspec_1():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
             (
                 "file2",
                 str,
-                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+                {"help": "2nd creadted file", "argstr": "", "position": 2},
             ),
         ],
         bases=(ShellDef,),
@@ -3430,12 +3426,12 @@ def test_shell_cmd_inputspec_outputspec_1():
             (
                 "newfile1",
                 File,
-                {"output_file_template": "{file1}", "help_string": "newfile 1"},
+                {"output_file_template": "{file1}", "help": "newfile 1"},
             ),
             (
                 "newfile2",
                 File,
-                {"output_file_template": "{file2}", "help_string": "newfile 2"},
+                {"output_file_template": "{file2}", "help": "newfile 2"},
             ),
         ],
         bases=(ShellOutputs,),
@@ -3467,12 +3463,12 @@ def test_shell_cmd_inputspec_outputspec_1a():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
             (
                 "file2",
                 str,
-                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+                {"help": "2nd creadted file", "argstr": "", "position": 2},
             ),
         ],
         bases=(ShellDef,),
@@ -3484,12 +3480,12 @@ def test_shell_cmd_inputspec_outputspec_1a():
             (
                 "newfile1",
                 File,
-                {"output_file_template": "{file1}", "help_string": "newfile 1"},
+                {"output_file_template": "{file1}", "help": "newfile 1"},
             ),
             (
                 "newfile2",
                 File,
-                {"output_file_template": "{file2}", "help_string": "newfile 2"},
+                {"output_file_template": "{file2}", "help": "newfile 2"},
             ),
         ],
         bases=(ShellOutputs,),
@@ -3520,12 +3516,12 @@ def test_shell_cmd_inputspec_outputspec_2():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
             (
                 "file2",
                 str,
-                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+                {"help": "2nd creadted file", "argstr": "", "position": 2},
             ),
         ],
         bases=(ShellDef,),
@@ -3539,7 +3535,7 @@ def test_shell_cmd_inputspec_outputspec_2():
                 File,
                 {
                     "output_file_template": "{file1}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     "requires": ["file1"],
                 },
             ),
@@ -3548,7 +3544,7 @@ def test_shell_cmd_inputspec_outputspec_2():
                 File,
                 {
                     "output_file_template": "{file2}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     "requires": ["file1", "file2"],
                 },
             ),
@@ -3587,12 +3583,12 @@ def test_shell_cmd_inputspec_outputspec_2a():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
             (
                 "file2",
                 str,
-                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+                {"help": "2nd creadted file", "argstr": "", "position": 2},
             ),
         ],
         bases=(ShellDef,),
@@ -3606,7 +3602,7 @@ def test_shell_cmd_inputspec_outputspec_2a():
                 File,
                 {
                     "output_file_template": "{file1}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     "requires": ["file1"],
                 },
             ),
@@ -3615,7 +3611,7 @@ def test_shell_cmd_inputspec_outputspec_2a():
                 File,
                 {
                     "output_file_template": "{file2}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     "requires": ["file1", "file2"],
                 },
             ),
@@ -3662,14 +3658,14 @@ def test_shell_cmd_inputspec_outputspec_3():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
             (
                 "file2",
                 str,
-                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+                {"help": "2nd creadted file", "argstr": "", "position": 2},
             ),
-            ("additional_inp", int, {"help_string": "additional inp"}),
+            ("additional_inp", int, {"help": "additional inp"}),
         ],
         bases=(ShellDef,),
     )
@@ -3680,14 +3676,14 @@ def test_shell_cmd_inputspec_outputspec_3():
             (
                 "newfile1",
                 File,
-                {"output_file_template": "{file1}", "help_string": "newfile 1"},
+                {"output_file_template": "{file1}", "help": "newfile 1"},
             ),
             (
                 "newfile2",
                 File,
                 {
                     "output_file_template": "{file2}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     "requires": ["file1", "additional_inp"],
                 },
             ),
@@ -3723,14 +3719,14 @@ def test_shell_cmd_inputspec_outputspec_3a():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
             (
                 "file2",
                 str,
-                {"help_string": "2nd creadted file", "argstr": "", "position": 2},
+                {"help": "2nd creadted file", "argstr": "", "position": 2},
             ),
-            ("additional_inp", str, {"help_string": "additional inp"}),
+            ("additional_inp", str, {"help": "additional inp"}),
         ],
         bases=(ShellDef,),
     )
@@ -3741,14 +3737,14 @@ def test_shell_cmd_inputspec_outputspec_3a():
             (
                 "newfile1",
                 File,
-                {"output_file_template": "{file1}", "help_string": "newfile 1"},
+                {"output_file_template": "{file1}", "help": "newfile 1"},
             ),
             (
                 "newfile2",
                 File,
                 {
                     "output_file_template": "{file2}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     "requires": ["file1", "additional_inp"],
                 },
             ),
@@ -3797,9 +3793,9 @@ def test_shell_cmd_inputspec_outputspec_4():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
-            ("additional_inp", int, {"help_string": "additional inp"}),
+            ("additional_inp", int, {"help": "additional inp"}),
         ],
         bases=(ShellDef,),
     )
@@ -3812,7 +3808,7 @@ def test_shell_cmd_inputspec_outputspec_4():
                 File,
                 {
                     "output_file_template": "{file1}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     "requires": ["file1", ("additional_inp", [2, 3])],
                 },
             )
@@ -3852,9 +3848,9 @@ def test_shell_cmd_inputspec_outputspec_4a():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
-            ("additional_inp", int, {"help_string": "additional inp"}),
+            ("additional_inp", int, {"help": "additional inp"}),
         ],
         bases=(ShellDef,),
     )
@@ -3867,7 +3863,7 @@ def test_shell_cmd_inputspec_outputspec_4a():
                 File,
                 {
                     "output_file_template": "{file1}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     "requires": ["file1", ("additional_inp", [2, 3])],
                 },
             )
@@ -3902,10 +3898,10 @@ def test_shell_cmd_inputspec_outputspec_5():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
-            ("additional_inp_A", int, {"help_string": "additional inp A"}),
-            ("additional_inp_B", str, {"help_string": "additional inp B"}),
+            ("additional_inp_A", int, {"help": "additional inp A"}),
+            ("additional_inp_B", str, {"help": "additional inp B"}),
         ],
         bases=(ShellDef,),
     )
@@ -3918,7 +3914,7 @@ def test_shell_cmd_inputspec_outputspec_5():
                 File,
                 {
                     "output_file_template": "{file1}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     # requires is a list of list so it's treated as el[0] OR el[1] OR...
                     "requires": [
                         ["file1", "additional_inp_A"],
@@ -3956,10 +3952,10 @@ def test_shell_cmd_inputspec_outputspec_5a():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
-            ("additional_inp_A", str, {"help_string": "additional inp A"}),
-            ("additional_inp_B", int, {"help_string": "additional inp B"}),
+            ("additional_inp_A", str, {"help": "additional inp A"}),
+            ("additional_inp_B", int, {"help": "additional inp B"}),
         ],
         bases=(ShellDef,),
     )
@@ -3972,7 +3968,7 @@ def test_shell_cmd_inputspec_outputspec_5a():
                 File,
                 {
                     "output_file_template": "{file1}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     # requires is a list of list so it's treated as el[0] OR el[1] OR...
                     "requires": [
                         ["file1", "additional_inp_A"],
@@ -4010,10 +4006,10 @@ def test_shell_cmd_inputspec_outputspec_5b():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
-            ("additional_inp_A", str, {"help_string": "additional inp A"}),
-            ("additional_inp_B", str, {"help_string": "additional inp B"}),
+            ("additional_inp_A", str, {"help": "additional inp A"}),
+            ("additional_inp_B", str, {"help": "additional inp B"}),
         ],
         bases=(ShellDef,),
     )
@@ -4026,7 +4022,7 @@ def test_shell_cmd_inputspec_outputspec_5b():
                 File,
                 {
                     "output_file_template": "{file1}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     # requires is a list of list so it's treated as el[0] OR el[1] OR...
                     "requires": [
                         ["file1", "additional_inp_A"],
@@ -4063,9 +4059,9 @@ def test_shell_cmd_inputspec_outputspec_6_except():
             (
                 "file1",
                 str,
-                {"help_string": "1st creadted file", "argstr": "", "position": 1},
+                {"help": "1st creadted file", "argstr": "", "position": 1},
             ),
-            ("additional_inp_A", str, {"help_string": "additional inp A"}),
+            ("additional_inp_A", str, {"help": "additional inp A"}),
         ],
         bases=(ShellDef,),
     )
@@ -4078,7 +4074,7 @@ def test_shell_cmd_inputspec_outputspec_6_except():
                 File,
                 {
                     "output_file_template": "{file1}",
-                    "help_string": "newfile 1",
+                    "help": "newfile 1",
                     # requires has invalid syntax
                     "requires": [["file1", "additional_inp_A"], "file1"],
                 },
@@ -4130,7 +4126,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "input file to skull strip",
+                        "help": "input file to skull strip",
                         "position": 1,
                         "mandatory": True,
                         "argstr": "",
@@ -4142,7 +4138,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": "name of output skull stripped image",
+                        "help": "name of output skull stripped image",
                         "position": 2,
                         "argstr": "",
                         "output_file_template": "{in_file}_brain",
@@ -4154,7 +4150,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=bool,
                     metadata={
-                        "help_string": "create surface outline image",
+                        "help": "create surface outline image",
                         "argstr": "-o",
                     },
                 ),
@@ -4164,7 +4160,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=bool,
                     metadata={
-                        "help_string": "create binary mask image",
+                        "help": "create binary mask image",
                         "argstr": "-m",
                     },
                 ),
@@ -4173,7 +4169,7 @@ def test_fsl(data_tests_dir):
                 "skull",
                 attr.ib(
                     type=bool,
-                    metadata={"help_string": "create skull image", "argstr": "-s"},
+                    metadata={"help": "create skull image", "argstr": "-s"},
                 ),
             ),
             (
@@ -4181,7 +4177,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=bool,
                     metadata={
-                        "help_string": "Don't generate segmented output",
+                        "help": "Don't generate segmented output",
                         "argstr": "-n",
                     },
                 ),
@@ -4191,7 +4187,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=float,
                     metadata={
-                        "help_string": "fractional intensity threshold",
+                        "help": "fractional intensity threshold",
                         "argstr": "-f",
                     },
                 ),
@@ -4201,7 +4197,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=float,
                     metadata={
-                        "help_string": "vertical gradient in fractional intensity threshold (-1, 1)",
+                        "help": "vertical gradient in fractional intensity threshold (-1, 1)",
                         "argstr": "-g",
                         "allowed_values": {"min_val": -1, "max_val": 1},
                     },
@@ -4209,16 +4205,14 @@ def test_fsl(data_tests_dir):
             ),
             (
                 "radius",
-                attr.ib(
-                    type=int, metadata={"argstr": "-r", "help_string": "head radius"}
-                ),
+                attr.ib(type=int, metadata={"argstr": "-r", "help": "head radius"}),
             ),
             (
                 "center",
                 attr.ib(
                     type=ty.List[int],
                     metadata={
-                        "help_string": "center of gravity in voxels",
+                        "help": "center of gravity in voxels",
                         "argstr": "-c",
                         "allowed_values": {"min_value": 0, "max_value": 3},
                     },
@@ -4230,7 +4224,7 @@ def test_fsl(data_tests_dir):
                     type=bool,
                     metadata={
                         "argstr": "-t",
-                        "help_string": "apply thresholding to segmented brain image and mask",
+                        "help": "apply thresholding to segmented brain image and mask",
                     },
                 ),
             ),
@@ -4240,7 +4234,7 @@ def test_fsl(data_tests_dir):
                     type=bool,
                     metadata={
                         "argstr": "-e",
-                        "help_string": "generate a vtk mesh brain surface",
+                        "help": "generate a vtk mesh brain surface",
                     },
                 ),
             ),
@@ -4249,7 +4243,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=bool,
                     metadata={
-                        "help_string": "robust brain centre estimation (iterates BET several times)",
+                        "help": "robust brain centre estimation (iterates BET several times)",
                         "argstr": "-R",
                         "xor": _xor_inputs,
                     },
@@ -4260,7 +4254,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=bool,
                     metadata={
-                        "help_string": "improve BET if FOV is very small in Z (by temporarily padding end slices",
+                        "help": "improve BET if FOV is very small in Z (by temporarily padding end slices",
                         "argstr": "-Z",
                         "xor": _xor_inputs,
                     },
@@ -4271,7 +4265,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=bool,
                     metadata={
-                        "help_string": "eye & optic nerve cleanup (can be useful in SIENA)",
+                        "help": "eye & optic nerve cleanup (can be useful in SIENA)",
                         "argstr": "-S",
                         "xor": _xor_inputs,
                     },
@@ -4282,7 +4276,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=bool,
                     metadata={
-                        "help_string": "run bet2 and then betsurf to get additional skull and scalp surfaces (includes registrations)",
+                        "help": "run bet2 and then betsurf to get additional skull and scalp surfaces (includes registrations)",
                         "argstr": "-A",
                         "xor": _xor_inputs,
                     },
@@ -4293,7 +4287,7 @@ def test_fsl(data_tests_dir):
                 attr.ib(
                     type=ty.Union[File, str],
                     metadata={
-                        "help_string": "as with creating surfaces, when also feeding in non-brain-extracted T2 (includes registrations)",
+                        "help": "as with creating surfaces, when also feeding in non-brain-extracted T2 (includes registrations)",
                         "argstr": "-A2",
                         "xor": _xor_inputs,
                     },
@@ -4306,7 +4300,7 @@ def test_fsl(data_tests_dir):
                     metadata={
                         "argstr": "-F",
                         "xor": _xor_inputs,
-                        "help_string": "apply to 4D fMRI data",
+                        "help": "apply to 4D fMRI data",
                     },
                 ),
             ),
@@ -4317,16 +4311,16 @@ def test_fsl(data_tests_dir):
                     metadata={
                         "argstr": "-B",
                         "xor": _xor_inputs,
-                        "help_string": "bias field and neck cleanup",
+                        "help": "bias field and neck cleanup",
                     },
                 ),
             ),
-            # ("number_classes", int, attr.ib(metadata={"help_string": 'number of tissue-type classes', "argstr": '-n',
+            # ("number_classes", int, attr.ib(metadata={"help": 'number of tissue-type classes', "argstr": '-n',
             #                                            "allowed_values": {"min_val": 1, "max_val": 10}})),
             # ("output_biasfield", bool,
-            #  attr.ib(metadata={"help_string": 'output estimated bias field', "argstr": '-b'})),
+            #  attr.ib(metadata={"help": 'output estimated bias field', "argstr": '-b'})),
             # ("output_biascorrected", bool,
-            #  attr.ib(metadata={"help_string": 'output restored image (bias-corrected image)', "argstr": '-B'})),
+            #  attr.ib(metadata={"help": 'output restored image (bias-corrected image)', "argstr": '-B'})),
         ],
         bases=(ShellDef,),
     )
@@ -4353,9 +4347,7 @@ def test_shell_cmd_optional_output_file1(tmp_path):
         fields=[
             (
                 "input",
-                attr.ib(
-                    type=File, metadata={"argstr": "", "help_string": "input file"}
-                ),
+                attr.ib(type=File, metadata={"argstr": "", "help": "input file"}),
             ),
             (
                 "output",
@@ -4364,7 +4356,7 @@ def test_shell_cmd_optional_output_file1(tmp_path):
                     metadata={
                         "argstr": "",
                         "output_file_template": "out.txt",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -4376,7 +4368,7 @@ def test_shell_cmd_optional_output_file1(tmp_path):
                     metadata={
                         "argstr": "--not-used",
                         "output_file_template": "out.txt",
-                        "help_string": "dummy output",
+                        "help": "dummy output",
                     },
                 ),
             ),
@@ -4404,9 +4396,7 @@ def test_shell_cmd_optional_output_file2(tmp_path):
         fields=[
             (
                 "input",
-                attr.ib(
-                    type=File, metadata={"argstr": "", "help_string": "input file"}
-                ),
+                attr.ib(type=File, metadata={"argstr": "", "help": "input file"}),
             ),
             (
                 "output",
@@ -4416,7 +4406,7 @@ def test_shell_cmd_optional_output_file2(tmp_path):
                     metadata={
                         "argstr": "",
                         "output_file_template": "out.txt",
-                        "help_string": "dummy output",
+                        "help": "dummy output",
                     },
                 ),
             ),
@@ -4451,7 +4441,7 @@ def test_shell_cmd_non_existing_outputs_1(tmp_path):
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": """
+                        "help": """
                         base name of the pretend outputs.
                         """,
                         "mandatory": True,
@@ -4469,7 +4459,7 @@ def test_shell_cmd_non_existing_outputs_1(tmp_path):
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "fictional output #1",
+                        "help": "fictional output #1",
                         "output_file_template": "{out_name}_1.nii",
                     },
                 ),
@@ -4479,7 +4469,7 @@ def test_shell_cmd_non_existing_outputs_1(tmp_path):
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "fictional output #2",
+                        "help": "fictional output #2",
                         "output_file_template": "{out_name}_2.nii",
                     },
                 ),
@@ -4512,7 +4502,7 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": """
+                        "help": """
                         base name of the pretend outputs.
                         """,
                         "mandatory": True,
@@ -4531,7 +4521,7 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "fictional output #1",
+                        "help": "fictional output #1",
                         "output_file_template": "{out_name}_1.nii",
                     },
                 ),
@@ -4541,7 +4531,7 @@ def test_shell_cmd_non_existing_outputs_2(tmp_path):
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "fictional output #2",
+                        "help": "fictional output #2",
                         "output_file_template": "{out_name}_2.nii",
                     },
                 ),
@@ -4578,7 +4568,7 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": """
+                        "help": """
                         base name of the pretend outputs.
                         """,
                         "mandatory": True,
@@ -4597,7 +4587,7 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "fictional output #1",
+                        "help": "fictional output #1",
                         "output_file_template": "{out_name}_1.nii",
                         "mandatory": True,
                     },
@@ -4608,7 +4598,7 @@ def test_shell_cmd_non_existing_outputs_3(tmp_path):
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "fictional output #2",
+                        "help": "fictional output #2",
                         "output_file_template": "{out_name}_2.nii",
                     },
                 ),
@@ -4645,7 +4635,7 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
                 attr.ib(
                     type=str,
                     metadata={
-                        "help_string": """
+                        "help": """
                         base name of the pretend outputs.
                         """,
                         "mandatory": True,
@@ -4664,7 +4654,7 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "fictional output #1",
+                        "help": "fictional output #1",
                         "output_file_template": "{out_name}_1.nii",
                         "mandatory": True,
                     },
@@ -4675,7 +4665,7 @@ def test_shell_cmd_non_existing_outputs_4(tmp_path):
                 attr.ib(
                     type=File,
                     metadata={
-                        "help_string": "fictional output #2",
+                        "help": "fictional output #2",
                         "output_file_template": "{out_name}_2.nii",
                         "mandatory": True,
                     },
@@ -4710,7 +4700,7 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmp_path):
                 attr.ib(
                     type=MultiInputObj,
                     metadata={
-                        "help_string": """
+                        "help": """
                         base name of the pretend outputs.
                         """,
                         "mandatory": True,
@@ -4729,7 +4719,7 @@ def test_shell_cmd_non_existing_outputs_multi_1(tmp_path):
                 attr.ib(
                     type=MultiOutputFile,
                     metadata={
-                        "help_string": "fictional output #1",
+                        "help": "fictional output #1",
                         "output_file_template": "{out_name}",
                     },
                 ),
@@ -4763,7 +4753,7 @@ def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
                 attr.ib(
                     type=MultiInputObj,
                     metadata={
-                        "help_string": """
+                        "help": """
                         base name of the pretend outputs.
                         """,
                         "sep": " test_1_real.nii",  # hacky way of creating an extra file with that name
@@ -4783,7 +4773,7 @@ def test_shell_cmd_non_existing_outputs_multi_2(tmp_path):
                 attr.ib(
                     type=MultiOutputFile,
                     metadata={
-                        "help_string": "fictional output #1",
+                        "help": "fictional output #1",
                         "output_file_template": "{out_name}_real.nii",
                     },
                 ),
@@ -4824,7 +4814,7 @@ def test_shellspec_formatter_1(tmp_path):
                     attr.ib(
                         type=str,
                         metadata={
-                            "help_string": """
+                            "help": """
                             just a dummy name
                             """,
                             "mandatory": True,
@@ -4836,7 +4826,7 @@ def test_shellspec_formatter_1(tmp_path):
                     attr.ib(
                         type=str,
                         metadata={
-                            "help_string": """
+                            "help": """
                                 just a dummy name
                                 """,
                             "mandatory": True,
@@ -4848,7 +4838,7 @@ def test_shellspec_formatter_1(tmp_path):
                     attr.ib(
                         type=ty.List,
                         metadata={
-                            "help_string": """
+                            "help": """
                                 combines in1 and in2 into a list
                                 """,
                             # When providing a formatter all other metadata options are discarded.
@@ -4943,7 +4933,7 @@ def test_shellspec_formatter_splitter_2(tmp_path):
                     attr.ib(
                         type=str,
                         metadata={
-                            "help_string": "in1",
+                            "help": "in1",
                         },
                     ),
                 ),
@@ -4952,7 +4942,7 @@ def test_shellspec_formatter_splitter_2(tmp_path):
                     attr.ib(
                         type=str,
                         metadata={
-                            "help_string": "in2",
+                            "help": "in2",
                         },
                     ),
                 ),
@@ -4961,7 +4951,7 @@ def test_shellspec_formatter_splitter_2(tmp_path):
                     attr.ib(
                         type=ty.List,
                         metadata={
-                            "help_string": """
+                            "help": """
                             uses in1
                             """,
                             # When providing a formatter all other metadata options are discarded.
@@ -5020,7 +5010,7 @@ def test_shellcommand_error_msg(tmp_path):
             (
                 "in1",
                 str,
-                {"help_string": "a dummy string", "argstr": "", "mandatory": True},
+                {"help": "a dummy string", "argstr": "", "mandatory": True},
             ),
         ],
         bases=(ShellDef,),

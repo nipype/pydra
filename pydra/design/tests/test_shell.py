@@ -36,7 +36,7 @@ def test_interface_template():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help_string=shell.EXECUTABLE_HELP_STRING,
+            help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(name="in_path", type=FsObject, position=1),
         output,
@@ -46,17 +46,17 @@ def test_interface_template():
         shell.out(
             name="return_code",
             type=int,
-            help_string=RETURN_CODE_HELP,
+            help=RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help_string=STDERR_HELP,
+            help=STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help_string=STDOUT_HELP,
+            help=STDOUT_HELP,
         ),
     ]
     intf = Cp(in_path=File.mock("in-path.txt"))
@@ -83,7 +83,7 @@ def test_interface_template_w_types_and_path_template_ext():
             default="trim-png",
             type=str | ty.Sequence[str],
             position=0,
-            help_string=shell.EXECUTABLE_HELP_STRING,
+            help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(name="in_image", type=image.Png, position=1),
         output,
@@ -93,17 +93,17 @@ def test_interface_template_w_types_and_path_template_ext():
         shell.out(
             name="return_code",
             type=int,
-            help_string=RETURN_CODE_HELP,
+            help=RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help_string=STDERR_HELP,
+            help=STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help_string=STDOUT_HELP,
+            help=STDOUT_HELP,
         ),
     ]
     TrimPng(in_image=image.Png.mock())
@@ -123,7 +123,7 @@ def test_interface_template_w_modify():
             default="trim-png",
             type=str | ty.Sequence[str],
             position=0,
-            help_string=shell.EXECUTABLE_HELP_STRING,
+            help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
             name="image", type=image.Png, position=1, copy_mode=File.CopyMode.copy
@@ -138,17 +138,17 @@ def test_interface_template_w_modify():
         shell.out(
             name="return_code",
             type=int,
-            help_string=RETURN_CODE_HELP,
+            help=RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help_string=STDERR_HELP,
+            help=STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help_string=STDOUT_HELP,
+            help=STDOUT_HELP,
         ),
     ]
     TrimPng(image=image.Png.mock())
@@ -181,7 +181,7 @@ def test_interface_template_more_complex():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help_string=shell.EXECUTABLE_HELP_STRING,
+            help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
             name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
@@ -215,17 +215,17 @@ def test_interface_template_more_complex():
         shell.out(
             name="return_code",
             type=int,
-            help_string=RETURN_CODE_HELP,
+            help=RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help_string=STDERR_HELP,
+            help=STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help_string=STDOUT_HELP,
+            help=STDOUT_HELP,
         ),
     ]
     Cp(in_fs_objects=[File.sample(), File.sample(seed=1)])
@@ -247,7 +247,7 @@ def test_interface_template_with_overrides_and_optionals():
             "--int-arg <int_arg:int?> "
             "--tuple-arg <tuple_arg:int,str> "
         ),
-        inputs={"recursive": shell.arg(help_string=RECURSIVE_HELP)},
+        inputs={"recursive": shell.arg(help=RECURSIVE_HELP)},
         outputs={
             "out_dir": shell.outarg(position=-2),
             "out_file": shell.outarg(position=-1),
@@ -279,7 +279,7 @@ def test_interface_template_with_overrides_and_optionals():
                 default="cp",
                 type=str | ty.Sequence[str],
                 position=0,
-                help_string=shell.EXECUTABLE_HELP_STRING,
+                help=shell.EXECUTABLE_HELP_STRING,
             ),
             shell.arg(
                 name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
@@ -289,7 +289,7 @@ def test_interface_template_with_overrides_and_optionals():
                 argstr="-R",
                 type=bool,
                 default=False,
-                help_string=RECURSIVE_HELP,
+                help=RECURSIVE_HELP,
                 position=2,
             ),
             shell.arg(name="text_arg", argstr="--text-arg", type=str, position=3),
@@ -313,17 +313,17 @@ def test_interface_template_with_overrides_and_optionals():
         shell.out(
             name="return_code",
             type=int,
-            help_string=RETURN_CODE_HELP,
+            help=RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help_string=STDERR_HELP,
+            help=STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help_string=STDOUT_HELP,
+            help=STDOUT_HELP,
         ),
     ]
 
@@ -354,7 +354,7 @@ def test_interface_template_with_defaults():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help_string=shell.EXECUTABLE_HELP_STRING,
+            help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
             name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
@@ -378,17 +378,17 @@ def test_interface_template_with_defaults():
         shell.out(
             name="return_code",
             type=int,
-            help_string=RETURN_CODE_HELP,
+            help=RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help_string=STDERR_HELP,
+            help=STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help_string=STDOUT_HELP,
+            help=STDOUT_HELP,
         ),
     ]
     Cp(in_fs_objects=[File.sample(), File.sample(seed=1)])
@@ -422,7 +422,7 @@ def test_interface_template_with_type_overrides():
             default="cp",
             type=str | ty.Sequence[str],
             position=0,
-            help_string=shell.EXECUTABLE_HELP_STRING,
+            help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
             name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
@@ -448,17 +448,17 @@ def test_interface_template_with_type_overrides():
         shell.out(
             name="return_code",
             type=int,
-            help_string=RETURN_CODE_HELP,
+            help=RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help_string=STDERR_HELP,
+            help=STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help_string=STDOUT_HELP,
+            help=STDOUT_HELP,
         ),
     ]
 
@@ -472,17 +472,17 @@ def Ls(request):
             executable = "ls"
 
             directory: Directory = shell.arg(
-                help_string="the directory to list the contents of",
+                help="the directory to list the contents of",
                 argstr="",
                 position=-1,
             )
             hidden: bool = shell.arg(
-                help_string=("display hidden FS objects"),
+                help=("display hidden FS objects"),
                 argstr="-a",
                 default=False,
             )
             long_format: bool = shell.arg(
-                help_string=(
+                help=(
                     "display properties of FS object, such as permissions, size and "
                     "timestamps "
                 ),
@@ -490,20 +490,20 @@ def Ls(request):
                 argstr="-l",
             )
             human_readable: bool = shell.arg(
-                help_string="display file sizes in human readable form",
+                help="display file sizes in human readable form",
                 argstr="-h",
                 default=False,
                 requires=["long_format"],
             )
             complete_date: bool = shell.arg(
-                help_string="Show complete date in long format",
+                help="Show complete date in long format",
                 argstr="-T",
                 default=False,
                 requires=["long_format"],
                 xor=["date_format_str"],
             )
             date_format_str: str | None = shell.arg(
-                help_string="format string for ",
+                help="format string for ",
                 argstr="-D",
                 default=None,
                 requires=["long_format"],
@@ -513,7 +513,7 @@ def Ls(request):
             @shell.outputs
             class Outputs(ShellOutputs):
                 entries: list = shell.out(
-                    help_string="list of entries returned by ls command",
+                    help="list of entries returned by ls command",
                     callable=list_entries,
                 )
 
@@ -523,18 +523,18 @@ def Ls(request):
             inputs={
                 "directory": shell.arg(
                     type=Directory,
-                    help_string="the directory to list the contents of",
+                    help="the directory to list the contents of",
                     argstr="",
                     position=-1,
                 ),
                 "hidden": shell.arg(
                     type=bool,
-                    help_string="display hidden FS objects",
+                    help="display hidden FS objects",
                     argstr="-a",
                 ),
                 "long_format": {  # Mix it up with a full dictionary based definition
                     "type": bool,
-                    "help_string": (
+                    "help": (
                         "display properties of FS object, such as permissions, size and "
                         "timestamps "
                     ),
@@ -542,13 +542,13 @@ def Ls(request):
                 },
                 "human_readable": shell.arg(
                     type=bool,
-                    help_string="display file sizes in human readable form",
+                    help="display file sizes in human readable form",
                     argstr="-h",
                     requires=["long_format"],
                 ),
                 "complete_date": shell.arg(
                     type=bool,
-                    help_string="Show complete date in long format",
+                    help="Show complete date in long format",
                     argstr="-T",
                     default=False,
                     requires=["long_format"],
@@ -556,7 +556,7 @@ def Ls(request):
                 ),
                 "date_format_str": shell.arg(
                     type=str | None,
-                    help_string="format string for ",
+                    help="format string for ",
                     argstr="-D",
                     requires=["long_format"],
                     xor=["complete_date"],
@@ -565,7 +565,7 @@ def Ls(request):
             outputs={
                 "entries": shell.out(
                     type=list,
-                    help_string="list of entries returned by ls command",
+                    help="list of entries returned by ls command",
                     callable=list_entries,
                 )
             },
@@ -667,7 +667,7 @@ def A(request):
             inputs={
                 "x": shell.arg(
                     type=File,
-                    help_string="an input file",
+                    help="an input file",
                     argstr="",
                     position=1,
                 ),
@@ -675,7 +675,7 @@ def A(request):
             outputs={
                 "y": shell.outarg(
                     type=File,
-                    help_string="path of output file",
+                    help="path of output file",
                     argstr="",
                     path_template="{x}_out",
                 ),
@@ -699,11 +699,11 @@ def test_shell_output_field_name_static():
 
         executable = "cp"
 
-        x: File = shell.arg(help_string="an input file", argstr="", position=1)
+        x: File = shell.arg(help="an input file", argstr="", position=1)
 
         class Outputs:
             y: File = shell.outarg(
-                help_string="the output file",
+                help="the output file",
                 path_template="{x}_out",
                 argstr="",
                 position=-1,
@@ -719,7 +719,7 @@ def test_shell_output_field_name_static():
     output = shell.outarg(
         name="y",
         type=File,
-        help_string="the output file",
+        help="the output file",
         path_template="{x}_out",
         argstr="",
         position=-1,
@@ -732,12 +732,12 @@ def test_shell_output_field_name_static():
             type=str | ty.Sequence[str],
             argstr="",
             position=0,
-            help_string=shell.EXECUTABLE_HELP_STRING,
+            help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
             name="x",
             type=File,
-            help_string="an input file",
+            help="an input file",
             argstr="",
             position=1,
         ),
@@ -748,17 +748,17 @@ def test_shell_output_field_name_static():
         shell.out(
             name="return_code",
             type=int,
-            help_string=RETURN_CODE_HELP,
+            help=RETURN_CODE_HELP,
         ),
         shell.out(
             name="stderr",
             type=str,
-            help_string=STDERR_HELP,
+            help=STDERR_HELP,
         ),
         shell.out(
             name="stdout",
             type=str,
-            help_string=STDOUT_HELP,
+            help=STDOUT_HELP,
         ),
     ]
 
@@ -770,7 +770,7 @@ def test_shell_output_field_name_dynamic():
         inputs={
             "x": shell.arg(
                 type=File,
-                help_string="an input file",
+                help="an input file",
                 argstr="",
                 position=1,
             ),
@@ -778,7 +778,7 @@ def test_shell_output_field_name_dynamic():
         outputs={
             "y": shell.outarg(
                 type=File,
-                help_string="path of output file",
+                help="path of output file",
                 argstr="",
                 path_template="{x}_out",
             ),
@@ -796,13 +796,11 @@ def get_file_size(y: Path):
 def test_shell_bases_dynamic(A, tmp_path):
     B = shell.define(
         name="B",
-        inputs={
-            "y": shell.arg(type=File, help_string="output file", argstr="", position=-1)
-        },
+        inputs={"y": shell.arg(type=File, help="output file", argstr="", position=-1)},
         outputs={
             "out_file_size": {
                 "type": int,
-                "help_string": "size of the output directory",
+                "help": "size of the output directory",
                 "callable": get_file_size,
             }
         },
@@ -863,7 +861,7 @@ def test_shell_inputs_outputs_bases_dynamic(tmp_path):
         inputs={
             "directory": shell.arg(
                 type=Directory,
-                help_string="input directory",
+                help="input directory",
                 argstr="",
                 position=-1,
             )
@@ -871,7 +869,7 @@ def test_shell_inputs_outputs_bases_dynamic(tmp_path):
         outputs={
             "entries": shell.out(
                 type=list,
-                help_string="list of entries returned by ls command",
+                help="list of entries returned by ls command",
                 callable=list_entries,
             )
         },
@@ -883,7 +881,7 @@ def test_shell_inputs_outputs_bases_dynamic(tmp_path):
             "hidden": shell.arg(
                 type=bool,
                 argstr="-a",
-                help_string="show hidden files",
+                help="show hidden files",
                 default=False,
             )
         },
@@ -906,20 +904,18 @@ def test_shell_inputs_outputs_bases_static(tmp_path):
     class A:
         executable = "ls"
 
-        directory: Directory = shell.arg(
-            help_string="input directory", argstr="", position=-1
-        )
+        directory: Directory = shell.arg(help="input directory", argstr="", position=-1)
 
         class Outputs:
             entries: list = shell.out(
-                help_string="list of entries returned by ls command",
+                help="list of entries returned by ls command",
                 callable=list_entries,
             )
 
     @shell.define
     class B(A):
         hidden: bool = shell.arg(
-            help_string="show hidden files",
+            help="show hidden files",
             argstr="-a",
             default=False,
         )
@@ -941,12 +937,12 @@ def test_shell_missing_executable_static():
         @shell.define
         class A:
             directory: Directory = shell.arg(
-                help_string="input directory", argstr="", position=-1
+                help="input directory", argstr="", position=-1
             )
 
             class Outputs:
                 entries: list = shell.out(
-                    help_string="list of entries returned by ls command",
+                    help="list of entries returned by ls command",
                     callable=list_entries,
                 )
 
@@ -961,7 +957,7 @@ def test_shell_missing_executable_dynamic():
             inputs={
                 "directory": shell.arg(
                     type=Directory,
-                    help_string="input directory",
+                    help="input directory",
                     argstr="",
                     position=-1,
                 ),
@@ -969,7 +965,7 @@ def test_shell_missing_executable_dynamic():
             outputs={
                 "entries": shell.out(
                     type=list,
-                    help_string="list of entries returned by ls command",
+                    help="list of entries returned by ls command",
                     callable=list_entries,
                 )
             },

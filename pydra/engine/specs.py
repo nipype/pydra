@@ -484,9 +484,9 @@ STDERR_HELP = """The standard error stream produced by the command."""
 class ShellOutputs(TaskOutputs):
     """Output definition of a generic shell process."""
 
-    return_code: int = shell.out(help_string=RETURN_CODE_HELP)
-    stdout: str = shell.out(help_string=STDOUT_HELP)
-    stderr: str = shell.out(help_string=STDERR_HELP)
+    return_code: int = shell.out(help=RETURN_CODE_HELP)
+    stdout: str = shell.out(help=STDOUT_HELP)
+    stderr: str = shell.out(help=STDERR_HELP)
 
     @classmethod
     def from_task(

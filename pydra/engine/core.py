@@ -1020,8 +1020,8 @@ class WorkflowTask(Task):
     #         wf_out_nm, lf = con
     #         task_nm, task_out_nm = lf.name, lf.field
     #         if task_out_nm == "all_":
-    #             help_string = f"all outputs from {task_nm}"
-    #             fields.append((wf_out_nm, dict, {"help_string": help_string}))
+    #             help = f"all outputs from {task_nm}"
+    #             fields.append((wf_out_nm, dict, {"help": help}))
     #         else:
     #             from pydra.utils.typing import TypeParser
 
@@ -1029,14 +1029,14 @@ class WorkflowTask(Task):
     #             # providing proper type and some help string
     #             task_output_spec = getattr(self, task_nm).output_spec
     #             out_fld = attr.fields_dict(task_output_spec)[task_out_nm]
-    #             help_string = (
-    #                 f"{out_fld.metadata.get('help_string', '')} (from {task_nm})"
+    #             help = (
+    #                 f"{out_fld.metadata.get('help', '')} (from {task_nm})"
     #             )
     #             if TypeParser.get_origin(lf.type) is StateArray:
     #                 type_ = TypeParser.get_item_type(lf.type)
     #             else:
     #                 type_ = lf.type
-    #             fields.append((wf_out_nm, type_, {"help_string": help_string}))
+    #             fields.append((wf_out_nm, type_, {"help": help}))
     #     self.output_spec = SpecInfo(name="Output", fields=fields, bases=(BaseDef,))
     #     logger.info("Added %s to %s", self.output_spec, self)
 

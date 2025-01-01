@@ -137,7 +137,7 @@ def test_workflow_canonical():
 
         a: int
         b: float = workflow.arg(
-            help_string="A float input",
+            help="A float input",
             converter=a_converter,
         )
 
@@ -159,9 +159,7 @@ def test_workflow_canonical():
     # if this is a good idea or not
     assert sorted(list_fields(MyTestWorkflow), key=attrgetter("name")) == [
         workflow.arg(name="a", type=int),
-        workflow.arg(
-            name="b", type=float, help_string="A float input", converter=a_converter
-        ),
+        workflow.arg(name="b", type=float, help="A float input", converter=a_converter),
         workflow.arg(name="constructor", type=ty.Callable, default=constructor),
     ]
     assert list_fields(MyTestWorkflow.Outputs) == [
@@ -262,15 +260,15 @@ def test_direct_access_of_workflow_object():
         return mul.out, divide.divided
 
     assert list_fields(MyTestWorkflow) == [
-        workflow.arg(name="a", type=int, help_string="An integer input"),
-        workflow.arg(name="b", type=float, help_string="A float input"),
+        workflow.arg(name="a", type=int, help="An integer input"),
+        workflow.arg(name="b", type=float, help="A float input"),
         workflow.arg(
             name="constructor", type=ty.Callable, default=MyTestWorkflow().constructor
         ),
     ]
     assert list_fields(MyTestWorkflow.Outputs) == [
-        workflow.out(name="out1", type=float, help_string="The first output"),
-        workflow.out(name="out2", type=float, help_string="The second output"),
+        workflow.out(name="out1", type=float, help="The first output"),
+        workflow.out(name="out2", type=float, help="The second output"),
     ]
     workflow_spec = MyTestWorkflow(a=1, b=2.0)
     wf = Workflow.construct(workflow_spec)

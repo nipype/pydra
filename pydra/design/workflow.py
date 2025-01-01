@@ -27,7 +27,7 @@ class arg(Arg):
 
     Parameters
     ----------
-    help_string: str
+    help: str
         A short description of the input field.
     default : Any, optional
         the default value for the argument
@@ -72,7 +72,7 @@ class out(Out):
         from name to field, by default it is None
     type: type, optional
         The type of the field, by default it is Any
-    help_string: str, optional
+    help: str, optional
         A short description of the input field.
     requires: list, optional
         Names of the inputs that are required together with the field.

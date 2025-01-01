@@ -16,16 +16,16 @@ Let's start from the previous example:
         name="Input",
         fields=[
         ( "in_file", File,
-          { "help_string": "input file ...",
+          { "help": "input file ...",
             "position": 1,
             "mandatory": True } ),
         ( "out_file", str,
-          { "help_string": "name of output ...",
+          { "help": "name of output ...",
             "position": 2,
             "output_file_template":
                               "{in_file}_br" } ),
         ( "mask", bool,
-          { "help_string": "create binary mask",
+          { "help": "create binary mask",
             "argstr": "-m", } ) ],
         bases=(ShellDef,) )
 
@@ -109,10 +109,10 @@ There are also special types provided by Pydra:
 Metadata
 --------
 
-In the example we used multiple keys in the metadata dictionary including `help_string`,
+In the example we used multiple keys in the metadata dictionary including `help`,
 `position`, etc. In this section all allowed key will be described:
 
-`help_string` (`str`, mandatory):
+`help` (`str`, mandatory):
    A short description of the input field.
 
 `mandatory` (`bool`, default: `False`):

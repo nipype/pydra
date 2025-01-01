@@ -114,7 +114,7 @@ def test_docker_outputspec_1(plugin, tmp_path):
     customised output_spec, adding files to the output, providing specific pathname
     output_path is automatically added to the bindings
     """
-    outputs = [shell.out(name="newfile", type=File, help_string="new file")]
+    outputs = [shell.out(name="newfile", type=File, help="new file")]
     docky = shell.define("touch newfile_tmp.txt", outputs=outputs)(
         environment=Docker(image="ubuntu")
     )
@@ -143,7 +143,7 @@ def test_docker_inputspec_1(tmp_path):
             mandatory=True,
             position=1,
             argstr="",
-            help_string="input file",
+            help="input file",
         )
     ]
 
@@ -176,7 +176,7 @@ def test_docker_inputspec_1a(tmp_path):
             default=filename,
             position=1,
             argstr="",
-            help_string="input file",
+            help="input file",
         )
     ]
 
@@ -209,7 +209,7 @@ def test_docker_inputspec_2(plugin, tmp_path):
             type=File,
             position=1,
             argstr="",
-            help_string="input file 1",
+            help="input file 1",
         ),
         shell.arg(
             name="file2",
@@ -217,7 +217,7 @@ def test_docker_inputspec_2(plugin, tmp_path):
             default=filename_2,
             position=2,
             argstr="",
-            help_string="input file 2",
+            help="input file 2",
         ),
     ]
     docky = shell.define(cmd, inputs=inputs)(
@@ -253,7 +253,7 @@ def test_docker_inputspec_2a_except(plugin, tmp_path):
             default=filename_1,
             position=1,
             argstr="",
-            help_string="input file 1",
+            help="input file 1",
         ),
         shell.arg(
             name="file2",
@@ -261,7 +261,7 @@ def test_docker_inputspec_2a_except(plugin, tmp_path):
             mandatory=True,
             position=2,
             argstr="",
-            help_string="input file 2",
+            help="input file 2",
         ),
     ]
 
@@ -299,7 +299,7 @@ def test_docker_inputspec_2a(plugin, tmp_path):
             default=filename_1,
             position=1,
             argstr="",
-            help_string="input file 1",
+            help="input file 1",
         ),
         shell.arg(
             name="file2",
@@ -307,7 +307,7 @@ def test_docker_inputspec_2a(plugin, tmp_path):
             mandatory=True,
             position=2,
             argstr="",
-            help_string="input file 2",
+            help="input file 2",
         ),
     ]
 
@@ -338,7 +338,7 @@ def test_docker_inputspec_3(plugin, tmp_path):
             mandatory=True,
             position=1,
             argstr="",
-            help_string="input file",
+            help="input file",
             container_path=True,
         )
     ]
@@ -375,14 +375,14 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
             mandatory=True,
             position=1,
             argstr="",
-            help_string="orig file",
+            help="orig file",
             copyfile="copy",
         ),
         shell.arg(
             name="out_file",
             type=str,
             output_file_template="{orig_file}",
-            help_string="output file",
+            help="output file",
         ),
     ]
 
@@ -426,7 +426,7 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
             mandatory=True,
             position=1,
             argstr="",
-            help_string="input file",
+            help="input file",
         )
     ]
 
@@ -463,7 +463,7 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
             mandatory=True,
             position=1,
             argstr="",
-            help_string="input file",
+            help="input file",
         )
     ]
     docky = shell.define(cmd, inputs=inputs)(
@@ -493,7 +493,7 @@ def test_docker_wf_inputspec_1(plugin, tmp_path):
             mandatory=True,
             position=1,
             argstr="",
-            help_string="input file",
+            help="input file",
         )
     ]
 
@@ -536,7 +536,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
             mandatory=True,
             position=1,
             argstr="",
-            help_string="input file",
+            help="input file",
         )
     ]
 
@@ -581,7 +581,7 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
             mandatory=True,
             position=1,
             argstr="",
-            help_string="input file",
+            help="input file",
         )
     ]
 

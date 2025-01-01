@@ -61,19 +61,19 @@ def test_interface_wrap_function_overrides():
 
     SampleDef = python.define(
         func,
-        inputs={"a": python.arg(help_string="The argument to be doubled")},
-        outputs={"b": python.out(help_string="the doubled output", type=Decimal)},
+        inputs={"a": python.arg(help="The argument to be doubled")},
+        outputs={"b": python.out(help="the doubled output", type=Decimal)},
     )
 
     assert issubclass(SampleDef, PythonDef)
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
-        python.arg(name="a", type=int, help_string="The argument to be doubled"),
+        python.arg(name="a", type=int, help="The argument to be doubled"),
         python.arg(name="function", type=ty.Callable, default=func),
     ]
     assert outputs == [
-        python.out(name="b", type=Decimal, help_string="the doubled output"),
+        python.out(name="b", type=Decimal, help="the doubled output"),
     ]
     outputs = SampleDef.Outputs(b=Decimal(2.0))
     assert isinstance(outputs.b, Decimal)
@@ -175,8 +175,8 @@ def test_interface_with_function_docstr():
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
-        python.arg(name="a", type=int, help_string="First input to be inputted"),
-        python.arg(name="b", type=float, help_string="Second input"),
+        python.arg(name="a", type=int, help="First input to be inputted"),
+        python.arg(name="b", type=float, help="Second input"),
         python.arg(
             name="function",
             type=ty.Callable,
@@ -184,8 +184,8 @@ def test_interface_with_function_docstr():
         ),
     ]
     assert outputs == [
-        python.out(name="c", type=float, help_string="Sum of a and b"),
-        python.out(name="d", type=float, help_string="product of a and b"),
+        python.out(name="c", type=float, help="Sum of a and b"),
+        python.out(name="d", type=float, help="product of a and b"),
     ]
     assert attrs.fields(SampleDef).function.default.__name__ == "SampleDef"
 
@@ -210,8 +210,8 @@ def test_interface_with_function_google_docstr():
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
-        python.arg(name="a", type=int, help_string="First input to be inputted"),
-        python.arg(name="b", type=float, help_string="Second input"),
+        python.arg(name="a", type=int, help="First input to be inputted"),
+        python.arg(name="b", type=float, help="Second input"),
         python.arg(
             name="function",
             type=ty.Callable,
@@ -219,8 +219,8 @@ def test_interface_with_function_google_docstr():
         ),
     ]
     assert outputs == [
-        python.out(name="c", type=float, help_string="Sum of a and b"),
-        python.out(name="d", type=float, help_string="Product of a and b"),
+        python.out(name="c", type=float, help="Sum of a and b"),
+        python.out(name="d", type=float, help="Product of a and b"),
     ]
     assert attrs.fields(SampleDef).function.default.__name__ == "SampleDef"
 
@@ -253,8 +253,8 @@ def test_interface_with_function_numpy_docstr():
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
-        python.arg(name="a", type=int, help_string="First input to be inputted"),
-        python.arg(name="b", type=float, help_string="Second input"),
+        python.arg(name="a", type=int, help="First input to be inputted"),
+        python.arg(name="b", type=float, help="Second input"),
         python.arg(
             name="function",
             type=ty.Callable,
@@ -262,8 +262,8 @@ def test_interface_with_function_numpy_docstr():
         ),
     ]
     assert outputs == [
-        python.out(name="c", type=float, help_string="Sum of a and b"),
-        python.out(name="d", type=float, help_string="Product of a and b"),
+        python.out(name="c", type=float, help="Sum of a and b"),
+        python.out(name="d", type=float, help="Product of a and b"),
     ]
     assert attrs.fields(SampleDef).function.default.__name__ == "SampleDef"
 
@@ -301,8 +301,8 @@ def test_interface_with_class():
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
-        python.arg(name="a", type=int, help_string="First input to be inputted"),
-        python.arg(name="b", type=float, default=2.0, help_string="Second input"),
+        python.arg(name="a", type=int, help="First input to be inputted"),
+        python.arg(name="b", type=float, default=2.0, help="Second input"),
         python.arg(
             name="function",
             type=ty.Callable,
@@ -310,8 +310,8 @@ def test_interface_with_class():
         ),
     ]
     assert outputs == [
-        python.out(name="c", type=float, help_string="Sum of a and b"),
-        python.out(name="d", type=float, help_string="Product of a and b"),
+        python.out(name="c", type=float, help="Sum of a and b"),
+        python.out(name="d", type=float, help="Product of a and b"),
     ]
     assert SampleDef.function.__name__ == "function"
     SampleDef(a=1)
@@ -353,14 +353,14 @@ def test_interface_with_inheritance():
 def test_interface_with_class_no_auto_attribs():
     @python.define(auto_attribs=False)
     class SampleDef:
-        a: int = python.arg(help_string="First input to be inputted")
-        b: float = python.arg(help_string="Second input")
+        a: int = python.arg(help="First input to be inputted")
+        b: float = python.arg(help="Second input")
 
         x: int
 
         class Outputs:
-            c: float = python.out(help_string="Sum of a and b")
-            d: float = python.out(help_string="Product of a and b")
+            c: float = python.out(help="Sum of a and b")
+            d: float = python.out(help="Product of a and b")
 
             y: str
 
@@ -372,8 +372,8 @@ def test_interface_with_class_no_auto_attribs():
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
-        python.arg(name="a", type=int, help_string="First input to be inputted"),
-        python.arg(name="b", type=float, help_string="Second input"),
+        python.arg(name="a", type=int, help="First input to be inputted"),
+        python.arg(name="b", type=float, help="Second input"),
         python.arg(
             name="function",
             type=ty.Callable,
@@ -381,8 +381,8 @@ def test_interface_with_class_no_auto_attribs():
         ),
     ]
     assert outputs == [
-        python.out(name="c", type=float, help_string="Sum of a and b"),
-        python.out(name="d", type=float, help_string="Product of a and b"),
+        python.out(name="c", type=float, help="Sum of a and b"),
+        python.out(name="d", type=float, help="Product of a and b"),
     ]
     assert SampleDef.function.__name__ == "function"
     SampleDef(a=1, b=2.0)

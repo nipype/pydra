@@ -591,7 +591,7 @@ def test_input_spec_func_1():
 
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[("a", attr.ib(type=float, metadata={"help_string": "input a"}))],
+        fields=[("a", attr.ib(type=float, metadata={"help": "input a"}))],
         bases=(FunctionDef,),
     )
 
@@ -610,7 +610,7 @@ def test_input_spec_func_1a_except():
 
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[("a", attr.ib(type=int, metadata={"help_string": "input a"}))],
+        fields=[("a", attr.ib(type=int, metadata={"help": "input a"}))],
         bases=(FunctionDef,),
     )
     with pytest.raises(TypeError):
@@ -631,7 +631,7 @@ def test_input_spec_func_1b_except():
         fields=[
             (
                 "a",
-                attr.ib(type=float, metadata={"position": 1, "help_string": "input a"}),
+                attr.ib(type=float, metadata={"position": 1, "help": "input a"}),
             )
         ],
         bases=(FunctionDef,),
@@ -666,7 +666,7 @@ def test_input_spec_func_2():
 
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[("a", attr.ib(type=float, metadata={"help_string": "input a"}))],
+        fields=[("a", attr.ib(type=float, metadata={"help": "input a"}))],
         bases=(FunctionDef,),
     )
 
@@ -686,7 +686,7 @@ def test_input_spec_func_2a():
 
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[("a", float, {"help_string": "input a"})],
+        fields=[("a", float, {"help": "input a"})],
         bases=(FunctionDef,),
     )
 
@@ -710,7 +710,7 @@ def test_input_spec_func_3():
                 "a",
                 attr.ib(
                     type=int,
-                    metadata={"help_string": "input a", "allowed_values": [0, 1, 2]},
+                    metadata={"help": "input a", "allowed_values": [0, 1, 2]},
                 ),
             )
         ],
@@ -737,7 +737,7 @@ def test_input_spec_func_3a_except():
                 "a",
                 attr.ib(
                     type=int,
-                    metadata={"help_string": "input a", "allowed_values": [0, 1, 2]},
+                    metadata={"help": "input a", "allowed_values": [0, 1, 2]},
                 ),
             )
         ],
@@ -762,15 +762,11 @@ def test_input_spec_func_4():
         fields=[
             (
                 "a",
-                attr.ib(
-                    type=int, metadata={"help_string": "input a", "mandatory": True}
-                ),
+                attr.ib(type=int, metadata={"help": "input a", "mandatory": True}),
             ),
             (
                 "b",
-                attr.ib(
-                    type=int, metadata={"help_string": "input b", "mandatory": True}
-                ),
+                attr.ib(type=int, metadata={"help": "input b", "mandatory": True}),
             ),
         ],
         bases=(FunctionDef,),
@@ -795,11 +791,9 @@ def test_input_spec_func_4a():
         fields=[
             (
                 "a",
-                attr.ib(
-                    type=int, metadata={"help_string": "input a", "mandatory": True}
-                ),
+                attr.ib(type=int, metadata={"help": "input a", "mandatory": True}),
             ),
-            ("b", attr.ib(type=int, default=10, metadata={"help_string": "input b"})),
+            ("b", attr.ib(type=int, default=10, metadata={"help": "input b"})),
         ],
         bases=(FunctionDef,),
     )
@@ -820,9 +814,7 @@ def test_input_spec_func_5():
 
     my_input_spec = SpecInfo(
         name="Input",
-        fields=[
-            ("a", attr.ib(type=MultiInputObj, metadata={"help_string": "input a"}))
-        ],
+        fields=[("a", attr.ib(type=MultiInputObj, metadata={"help": "input a"}))],
         bases=(FunctionDef,),
     )
 
@@ -841,7 +833,7 @@ def test_output_spec_func_1():
 
     my_output_spec = SpecInfo(
         name="Output",
-        fields=[("out1", attr.ib(type=float, metadata={"help_string": "output"}))],
+        fields=[("out1", attr.ib(type=float, metadata={"help": "output"}))],
         bases=(BaseDef,),
     )
 
@@ -861,7 +853,7 @@ def test_output_spec_func_1a_except():
 
     my_output_spec = SpecInfo(
         name="Output",
-        fields=[("out1", attr.ib(type=int, metadata={"help_string": "output"}))],
+        fields=[("out1", attr.ib(type=int, metadata={"help": "output"}))],
         bases=(BaseDef,),
     )
 
@@ -881,7 +873,7 @@ def test_output_spec_func_2():
 
     my_output_spec = SpecInfo(
         name="Output",
-        fields=[("out1", attr.ib(type=float, metadata={"help_string": "output"}))],
+        fields=[("out1", attr.ib(type=float, metadata={"help": "output"}))],
         bases=(BaseDef,),
     )
 
@@ -902,7 +894,7 @@ def test_output_spec_func_2a():
 
     my_output_spec = SpecInfo(
         name="Output",
-        fields=[("out1", float, {"help_string": "output"})],
+        fields=[("out1", float, {"help": "output"})],
         bases=(BaseDef,),
     )
 
@@ -925,7 +917,7 @@ def test_output_spec_func_3():
         fields=[
             (
                 "out_list",
-                attr.ib(type=MultiOutputObj, metadata={"help_string": "output"}),
+                attr.ib(type=MultiOutputObj, metadata={"help": "output"}),
             )
         ],
         bases=(BaseDef,),
@@ -950,7 +942,7 @@ def test_output_spec_func_4():
         fields=[
             (
                 "out_1el",
-                attr.ib(type=MultiOutputObj, metadata={"help_string": "output"}),
+                attr.ib(type=MultiOutputObj, metadata={"help": "output"}),
             )
         ],
         bases=(BaseDef,),
@@ -1117,7 +1109,7 @@ def test_audit_shellcommandtask_file(tmp_path):
                     metadata={
                         "position": 1,
                         "argstr": "",
-                        "help_string": "text",
+                        "help": "text",
                         "mandatory": True,
                     },
                 ),
@@ -1129,7 +1121,7 @@ def test_audit_shellcommandtask_file(tmp_path):
                     metadata={
                         "position": 2,
                         "argstr": "",
-                        "help_string": "text",
+                        "help": "text",
                         "mandatory": True,
                     },
                 ),

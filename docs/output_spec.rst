@@ -23,7 +23,7 @@ a customized `output_spec` can be used, e.g.:
                     type=File,
                     metadata={
                         "output_file_template": "{inp1}",
-                        "help_string": "output file",
+                        "help": "output file",
                         "requires": ["inp1", "inp2"]
                     },
                 ),
@@ -58,7 +58,7 @@ Metadata
 
 The metadata dictionary for `output_spec` can include:
 
-`help_string` (`str`, mandatory):
+`help` (`str`, mandatory):
    A short description of the input field. The same as in `input_spec`.
 
 `mandatory` (`bool`, default: `False`):

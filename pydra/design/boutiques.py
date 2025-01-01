@@ -23,7 +23,7 @@ class arg(shell.arg):
         The type of the field, by default it is Any
     default : Any, optional
         the default value for the field, by default it is EMPTY
-    help_string: str
+    help: str
         A short description of the input field.
     allowed_values: list, optional
         List of allowed values for the field.
@@ -57,7 +57,7 @@ class out(shell.out):
         The type of the field, by default it is Any
     default : Any, optional
         the default value for the field, by default it is EMPTY
-    help_string: str, optional
+    help: str, optional
         A short description of the input field.
     requires: list, optional
         Names of the inputs that are required together with the field.
@@ -178,7 +178,7 @@ def _prepare_input_spec(bosh_spec: dict[str, ty.Any], names_subset=None):
             arg(
                 name=name,
                 type=tp,
-                help_string=input.get("description", None) or input["name"],
+                help=input.get("description", None) or input["name"],
                 mandatory=not input["optional"],
                 argstr=input.get("command-line-flag", None),
             )
@@ -212,7 +212,7 @@ def _prepare_output_spec(bosh_spec: dict[str, ty.Any], input_keys, names_subset=
             out(
                 name=name,
                 type=File,
-                help_string=output.get("description", None) or output["name"],
+                help=output.get("description", None) or output["name"],
                 mandatory=not output["optional"],
                 output_file_template=path_template,
             )

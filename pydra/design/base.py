@@ -166,7 +166,7 @@ class Field:
         from name to field, by default it is None
     default : Any, optional
         the default value for the field, by default it is EMPTY
-    help_string: str, optional
+    help: str, optional
         A short description of the input field.
     requires: str | list[str | list[str] | Requirement], optional
         The input fields that are required to be provided, along with the optional allowed
@@ -186,7 +186,7 @@ class Field:
     default: ty.Any = attrs.field(
         default=EMPTY, converter=attrs.Converter(convert_default_value, takes_self=True)
     )
-    help_string: str = ""
+    help: str = ""
     requires: list[RequirementSet] = attrs.field(
         factory=list, converter=requires_converter
     )
@@ -211,7 +211,7 @@ class Arg(Field):
         The type of the field, by default it is Any
     default : Any, optional
         the default value for the field, by default it is EMPTY
-    help_string: str
+    help: str
         A short description of the input field.
     allowed_values: list, optional
         List of allowed values for the field.
@@ -253,7 +253,7 @@ class Out(Field):
         The type of the field, by default it is Any
     default : Any, optional
         the default value for the field, by default it is EMPTY
-    help_string: str, optional
+    help: str, optional
         A short description of the input field.
     requires: list, optional
         Names of the inputs that are required together with the field.
@@ -315,8 +315,8 @@ def extract_fields_from_class(
                 fields_dict[atr_name] = atr
                 if atr_name in type_hints:
                     atr.type = type_hints[atr_name]
-                if not atr.help_string:
-                    atr.help_string = helps.get(atr_name, "")
+                if not atr.help:
+                    atr.help = helps.get(atr_name, "")
             elif atr_name in type_hints:
                 if atr_name in fields_dict:
                     fields_dict[atr_name].type = type_hints[atr_name]
@@ -325,13 +325,13 @@ def extract_fields_from_class(
                         name=atr_name,
                         type=type_hints[atr_name],
                         default=atr,
-                        help_string=helps.get(atr_name, ""),
+                        help=helps.get(atr_name, ""),
                     )
         if auto_attribs:
             for atr_name, type_ in type_hints.items():
                 if atr_name not in list(fields_dict) + ["Task", "Outputs"]:
                     fields_dict[atr_name] = field_type(
-                        name=atr_name, type=type_, help_string=helps.get(atr_name, "")
+                        name=atr_name, type=type_, help=helps.get(atr_name, "")
                     )
         return fields_dict
 
@@ -582,18 +582,18 @@ def ensure_field_objects(
                 )
             else:
                 arg.name = input_name
-            if not arg.help_string:
-                arg.help_string = input_helps.get(input_name, "")
+            if not arg.help:
+                arg.help = input_helps.get(input_name, "")
         elif is_type(arg):
             inputs[input_name] = arg_type(
                 type=arg,
                 name=input_name,
-                help_string=input_helps.get(input_name, ""),
+                help=input_helps.get(input_name, ""),
             )
         elif isinstance(arg, dict):
             arg_kwds = copy(arg)
-            if "help_string" not in arg_kwds:
-                arg_kwds["help_string"] = input_helps.get(input_name, "")
+            if "help" not in arg_kwds:
+                arg_kwds["help"] = input_helps.get(input_name, "")
             inputs[input_name] = arg_type(
                 name=input_name,
                 **arg_kwds,
@@ -616,18 +616,18 @@ def ensure_field_objects(
                 )
             else:
                 out.name = output_name
-            if not out.help_string:
-                out.help_string = output_helps.get(output_name, "")
+            if not out.help:
+                out.help = output_helps.get(output_name, "")
         elif inspect.isclass(out) or ty.get_origin(out):
             outputs[output_name] = out_type(
                 type=out,
                 name=output_name,
-                help_string=output_helps.get(output_name, ""),
+                help=output_helps.get(output_name, ""),
             )
         elif isinstance(out, dict):
             out_kwds = copy(out)
-            if "help_string" not in out_kwds:
-                out_kwds["help_string"] = output_helps.get(output_name, "")
+            if "help" not in out_kwds:
+                out_kwds["help"] = output_helps.get(output_name, "")
             outputs[output_name] = out_type(
                 name=output_name,
                 **out_kwds,
@@ -637,7 +637,7 @@ def ensure_field_objects(
                 name=output_name,
                 type=ty.get_type_hints(out).get("return", ty.Any),
                 callable=out,
-                help_string=re.split(r"\n\s*\n", out.__doc__)[0] if out.__doc__ else "",
+                help=re.split(r"\n\s*\n", out.__doc__)[0] if out.__doc__ else "",
             )
         else:
             raise ValueError(

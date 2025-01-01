@@ -214,7 +214,7 @@ def test_singularity_inputspec_1(plugin, tmp_path):
                         "mandatory": True,
                         "position": 1,
                         "argstr": "",
-                        "help_string": "input file",
+                        "help": "input file",
                     },
                 ),
             )
@@ -256,7 +256,7 @@ def test_singularity_inputspec_1a(plugin, tmp_path):
                 attr.ib(
                     type=File,
                     default=filename,
-                    metadata={"position": 1, "argstr": "", "help_string": "input file"},
+                    metadata={"position": 1, "argstr": "", "help": "input file"},
                 ),
             )
         ],
@@ -300,7 +300,7 @@ def test_singularity_inputspec_2(plugin, tmp_path):
                     metadata={
                         "position": 1,
                         "argstr": "",
-                        "help_string": "input file 1",
+                        "help": "input file 1",
                     },
                 ),
             ),
@@ -312,7 +312,7 @@ def test_singularity_inputspec_2(plugin, tmp_path):
                     metadata={
                         "position": 2,
                         "argstr": "",
-                        "help_string": "input file 2",
+                        "help": "input file 2",
                     },
                 ),
             ),
@@ -361,7 +361,7 @@ def test_singularity_inputspec_2a_except(plugin, tmp_path):
                     metadata={
                         "position": 1,
                         "argstr": "",
-                        "help_string": "input file 1",
+                        "help": "input file 1",
                     },
                 ),
             ),
@@ -372,7 +372,7 @@ def test_singularity_inputspec_2a_except(plugin, tmp_path):
                     metadata={
                         "position": 2,
                         "argstr": "",
-                        "help_string": "input file 2",
+                        "help": "input file 2",
                     },
                 ),
             ),
@@ -421,7 +421,7 @@ def test_singularity_inputspec_2a(plugin, tmp_path):
                     metadata={
                         "position": 1,
                         "argstr": "",
-                        "help_string": "input file 1",
+                        "help": "input file 1",
                     },
                 ),
             ),
@@ -432,7 +432,7 @@ def test_singularity_inputspec_2a(plugin, tmp_path):
                     metadata={
                         "position": 2,
                         "argstr": "",
-                        "help_string": "input file 2",
+                        "help": "input file 2",
                     },
                 ),
             ),
@@ -477,7 +477,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
                     metadata={
                         "position": 1,
                         "argstr": "",
-                        "help_string": "orig file",
+                        "help": "orig file",
                         "mandatory": True,
                         "copyfile": True,
                     },
@@ -489,7 +489,7 @@ def test_singularity_cmd_inputspec_copyfile_1(plugin, tmp_path):
                     type=str,
                     metadata={
                         "output_file_template": "{orig_file}",
-                        "help_string": "output file",
+                        "help": "output file",
                     },
                 ),
             ),
@@ -545,7 +545,7 @@ def test_singularity_inputspec_state_1(tmp_path):
                         "mandatory": True,
                         "position": 1,
                         "argstr": "",
-                        "help_string": "input file",
+                        "help": "input file",
                     },
                 ),
             )
@@ -595,7 +595,7 @@ def test_singularity_inputspec_state_1b(plugin, tmp_path):
                         "mandatory": True,
                         "position": 1,
                         "argstr": "",
-                        "help_string": "input file",
+                        "help": "input file",
                     },
                 ),
             )
@@ -638,7 +638,7 @@ def test_singularity_wf_inputspec_1(plugin, tmp_path):
                         "mandatory": True,
                         "position": 1,
                         "argstr": "",
-                        "help_string": "input file",
+                        "help": "input file",
                     },
                 ),
             )
@@ -694,7 +694,7 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
                         "mandatory": True,
                         "position": 1,
                         "argstr": "",
-                        "help_string": "input file",
+                        "help": "input file",
                     },
                 ),
             )
@@ -751,7 +751,7 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
                         "mandatory": True,
                         "position": 1,
                         "argstr": "",
-                        "help_string": "input file",
+                        "help": "input file",
                     },
                 ),
             )

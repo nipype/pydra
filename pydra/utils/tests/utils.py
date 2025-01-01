@@ -35,14 +35,14 @@ class GenericShellTask(specs.ShellDef["GenericShellTask.Outputs"]):
     """class with customized input and executables"""
 
     in_file: File = shell.arg(
-        help_string="the input file",
+        help="the input file",
         argstr="",
         copy_mode="copy",
     )
 
     class Outputs(specs.ShellOutputs):
         out: File = shell.outarg(
-            help_string="output file name",
+            help="output file name",
             argstr="",
             position=-1,
             path_template="{in_file}",
@@ -61,7 +61,7 @@ class SpecificShellTask(specs.ShellDef["SpecificShellTask.Outputs"]):
     executable = "echo"
 
     in_file: MyFormatX = shell.arg(
-        help_string="the input file",
+        help="the input file",
         argstr="",
         copy_mode="copy",
         sep=" ",
@@ -69,7 +69,7 @@ class SpecificShellTask(specs.ShellDef["SpecificShellTask.Outputs"]):
 
     class Outputs(specs.ShellOutputs):
         out: MyFormatX = shell.outarg(
-            help_string="output file name",
+            help="output file name",
             argstr="",
             position=-1,
             path_template="{in_file}",  # Pass through un-altered
@@ -84,7 +84,7 @@ def other_specific_func_task(in_file: MyOtherFormatX) -> MyOtherFormatX:
 class OtherSpecificShellTask(ShellTask):
 
     in_file: MyOtherFormatX = shell.arg(
-        help_string="the input file",
+        help="the input file",
         argstr="",
         copy_mode="copy",
         sep=" ",
@@ -92,7 +92,7 @@ class OtherSpecificShellTask(ShellTask):
 
     class Outputs(specs.ShellOutputs):
         out: MyOtherFormatX = shell.outarg(
-            help_string="output file name",
+            help="output file name",
             argstr="",
             position=-1,
             path_template="{in_file}",  # Pass through un-altered
