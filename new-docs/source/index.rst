@@ -4,7 +4,7 @@ Pydra
 =====
 
 Pydra is a lightweight, Python 3.11+ dataflow engine for computational graph construction,
-manipulation, and distributed execution. Designed as a successor to created for [Nipype](https://github.com/nipy/nipype),
+manipulation, and distributed execution. Designed as a successor to created for Nipype_,
 Pydra is a general-purpose engine that supports analytics in any scientific domain.
 Pydra helps build reproducible, scalable, reusable, and fully automated, provenance
 tracked scientific workflows that combine Python functions and shell commands.
@@ -13,11 +13,11 @@ The power of Pydra lies in ease of workflow creation and execution for complex
 multiparameter map-reduce operations, and the use of global cache.
 
 Pydra's key features are:
-- Modular execution backends (see [Advanced execution](../tutorial/advanced-execution.html))
-- Map-reduce like semantics (see [Splitting and combining](../explanation/splitting-combining.html))
-- Global cache support to reduce recomputation (see [Hashing and caching](../explanation/hashing-caching.html))
-- Support for execution of Tasks in containerized environments (see [Environments](../explanation/environments.html))
-- Strong type-checking and type-hinting support (see [Typing](../explanation/typing.html))
+- Modular execution backends (see `Advanced execution <./tutorial/advanced-execution.html>`__)
+- Map-reduce like semantics (see `Splitting and combining <./explanation/splitting-combining.html>`__)
+- Global cache support to reduce recomputation (see `Hashing and caching <./explanation/hashing-caching.html>`__)
+- Support for execution of Tasks in containerized environments (see `Environments <./explanation/environments.html>`__)
+- Strong type-checking and type-hinting support (see `Typing <./explanation/typing.html>`__)
 
 See :ref:`Design philosophy` for more an explanation of the design of Pydra.
 
@@ -118,9 +118,8 @@ Indices and tables
 
    explanation/design-approach
    explanation/splitting-combining
-   explanation/conditional-lazy
    explanation/typing
-   explanation/hashing-caching
+   explanation/conditional-lazy
    explanation/environments
 
 
@@ -135,3 +134,5 @@ Indices and tables
 .. _ANTs: http://stnava.github.io/ANTs/
 .. _AFNI: https://afni.nimh.nih.gov/
 .. _niworkflows: https://niworkflows.readthedocs.io/en/latest/
+.. _Nipype: https://nipype.readthedocs.io/en/latest/
+.. _
