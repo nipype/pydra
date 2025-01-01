@@ -52,7 +52,7 @@ doc = [
     "pandoc",
     "numpy",
     "scipy",
-    "pydra-mrtrix3",
+    # "pydra-mrtrix3",
     "sphinx_rtd_theme",
     "sphinx-click",
     "sphinxcontrib-apidoc ~=0.3.0",
