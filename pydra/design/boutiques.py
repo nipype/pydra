@@ -7,7 +7,7 @@ from functools import reduce
 from fileformats.generic import File
 from pydra.engine.specs import ShellDef
 from pydra.engine.task import BoshTask
-from .base import make_task_spec
+from .base import make_task_def
 from . import shell
 
 
@@ -113,7 +113,7 @@ def define(
     outputs = _prepare_output_spec(
         bosh_spec, input_keys, names_subset=output_spec_names
     )
-    return make_task_spec(
+    return make_task_def(
         spec_type=ShellDef,
         task_type=BoshTask,
         out_type=out,

@@ -6,7 +6,7 @@ from .base import (
     Arg,
     Out,
     ensure_field_objects,
-    make_task_spec,
+    make_task_def,
     parse_doc_string,
     extract_function_inputs_and_outputs,
     check_explicit_fields_are_none,
@@ -159,7 +159,7 @@ def define(
             name="function", type=ty.Callable, default=function
         )
 
-        interface = make_task_spec(
+        interface = make_task_def(
             PythonDef,
             PythonOutputs,
             PythonTask,

@@ -19,7 +19,7 @@ from .base import (
     check_explicit_fields_are_none,
     extract_fields_from_class,
     ensure_field_objects,
-    make_task_spec,
+    make_task_def,
     EMPTY,
 )
 from pydra.utils.typing import is_fileset_or_union, MultiInputObj
@@ -373,7 +373,7 @@ def define(
             if inpt.position is None:
                 inpt.position = position_stack.pop(0)
 
-        interface = make_task_spec(
+        interface = make_task_def(
             ShellDef,
             ShellOutputs,
             ShellTask,

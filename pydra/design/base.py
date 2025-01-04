@@ -34,7 +34,7 @@ __all__ = [
     "Arg",
     "Out",
     "ensure_field_objects",
-    "make_task_spec",
+    "make_task_def",
 ]
 
 
@@ -349,7 +349,7 @@ def extract_fields_from_class(
     return inputs, outputs
 
 
-def make_task_spec(
+def make_task_def(
     spec_type: type["TaskDef"],
     out_type: type["TaskOutputs"],
     task_type: type["Task"],
@@ -723,6 +723,8 @@ def allowed_values_validator(_, attribute, value):
     """checking if the values is in allowed_values"""
     allowed = attribute.metadata[PYDRA_ATTR_METADATA].allowed_values
     if value is attrs.NOTHING or is_lazy(value):
+        pass
+    elif value is None and is_optional(attribute.type):
         pass
     elif value not in allowed:
         raise ValueError(

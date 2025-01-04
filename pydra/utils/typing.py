@@ -1042,6 +1042,8 @@ def is_fileset_or_union(type_: type) -> bool:
     """Check if the type is a FileSet or a Union containing a FileSet"""
     if is_union(type_):
         return any(is_fileset_or_union(t) for t in ty.get_args(type_))
+    elif not inspect.isclass(type_):
+        return False
     return issubclass(type_, core.FileSet)
 
 

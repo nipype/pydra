@@ -179,7 +179,6 @@ def create_shelly_inputfile(tempdir, filename, name, executable):
             type=File,
             position=1,
             help="files",
-            mandatory=True,
             argstr="",
         )
     ]

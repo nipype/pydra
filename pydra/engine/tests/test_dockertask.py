@@ -140,7 +140,6 @@ def test_docker_inputspec_1(tmp_path):
         shell.arg(
             name="file",
             type=File,
-            mandatory=True,
             position=1,
             argstr="",
             help="input file",
@@ -258,7 +257,6 @@ def test_docker_inputspec_2a_except(plugin, tmp_path):
         shell.arg(
             name="file2",
             type=File,
-            mandatory=True,
             position=2,
             argstr="",
             help="input file 2",
@@ -304,7 +302,6 @@ def test_docker_inputspec_2a(plugin, tmp_path):
         shell.arg(
             name="file2",
             type=File,
-            mandatory=True,
             position=2,
             argstr="",
             help="input file 2",
@@ -335,7 +332,6 @@ def test_docker_inputspec_3(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            mandatory=True,
             position=1,
             argstr="",
             help="input file",
@@ -372,7 +368,6 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
         shell.arg(
             name="orig_file",
             type=File,
-            mandatory=True,
             position=1,
             argstr="",
             help="orig file",
@@ -423,7 +418,6 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            mandatory=True,
             position=1,
             argstr="",
             help="input file",
@@ -460,7 +454,6 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            mandatory=True,
             position=1,
             argstr="",
             help="input file",
@@ -490,7 +483,6 @@ def test_docker_wf_inputspec_1(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            mandatory=True,
             position=1,
             argstr="",
             help="input file",
@@ -533,7 +525,6 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            mandatory=True,
             position=1,
             argstr="",
             help="input file",
@@ -578,7 +569,6 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            mandatory=True,
             position=1,
             argstr="",
             help="input file",

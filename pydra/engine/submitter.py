@@ -50,8 +50,15 @@ class Submitter:
 
     def __call__(self, runnable, cache_locations=None, rerun=False, environment=None):
         """Submitter run function."""
+        from pydra.engine.core import TaskDef
+
         if cache_locations is not None:
             runnable.cache_locations = cache_locations
+        if isinstance(runnable, TaskDef):
+            runnable = runnable.Task(
+                runnable,
+                cache_locations=cache_locations,
+            )
         self.loop.run_until_complete(
             self.submit_from_call(runnable, rerun, environment)
         )

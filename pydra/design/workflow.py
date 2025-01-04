@@ -6,7 +6,7 @@ from .base import (
     Arg,
     Out,
     ensure_field_objects,
-    make_task_spec,
+    make_task_def,
     parse_doc_string,
     extract_function_inputs_and_outputs,
     check_explicit_fields_are_none,
@@ -171,7 +171,7 @@ def define(
         for inpt_name in lazy:
             parsed_inputs[inpt_name].lazy = True
 
-        interface = make_task_spec(
+        interface = make_task_def(
             WorkflowDef,
             WorkflowOutputs,
             WorkflowTask,
