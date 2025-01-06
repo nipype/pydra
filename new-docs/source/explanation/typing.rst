@@ -1,4 +1,4 @@
-Typing, file-formats and hashing
-================================
+Typing and file-formats
+=======================
 
 Work in progress...

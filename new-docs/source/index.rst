@@ -10,16 +10,18 @@ Pydra helps build reproducible, scalable, reusable, and fully automated, provena
 tracked scientific workflows that combine Python functions and shell commands.
 
 The power of Pydra lies in ease of workflow creation and execution for complex
-multiparameter map-reduce operations, and the use of global cache.
+multiparameter map-reduce operations, and the use of global cache (see
+:ref:`Design philosophy` for the rationale behind its design).
 
 Pydra's key features are:
-- Modular execution backends (see `Advanced execution <./tutorial/advanced-execution.html>`__)
-- Map-reduce like semantics (see `Splitting and combining <./explanation/splitting-combining.html>`__)
-- Global cache support to reduce recomputation (see `Hashing and caching <./explanation/hashing-caching.html>`__)
-- Support for execution of Tasks in containerized environments (see `Environments <./explanation/environments.html>`__)
-- Strong type-checking and type-hinting support (see `Typing <./explanation/typing.html>`__)
 
-See :ref:`Design philosophy` for more an explanation of the design of Pydra.
+* Map-reduce like semantics (see :ref:`Splitting and combining`)
+* Dynamic workflow construction using Python code (see :ref:`Dynamic workflow construction`)
+* Modular execution backends (see `Advanced execution <./tutorial/advanced-execution.html>`__)
+* Global cache support to reduce recomputation (see :ref:`Hashing and caching`)
+* Support for the execution of tasks in containerized environments (see :ref:`Containers and environments`)
+* Strong type-checking and type-hinting support (see :ref:`Typing and file-formats`)
+
 
 Installation
 ------------
@@ -113,11 +115,12 @@ Indices and tables
 
 .. toctree::
    :maxdepth: 2
-   :caption: In-depth
+   :caption: Explanation
    :hidden:
 
    explanation/design-approach
    explanation/splitting-combining
+   explanation/hashing-caching
    explanation/typing
    explanation/conditional-lazy
    explanation/environments
