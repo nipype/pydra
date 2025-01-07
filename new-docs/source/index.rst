@@ -4,23 +4,24 @@ Pydra
 =====
 
 Pydra is a lightweight, Python 3.11+ dataflow engine for computational graph construction,
-manipulation, and distributed execution. Designed as a successor to created for Nipype_,
+manipulation, and distributed execution. Designed as a successor to Nipype_,
 Pydra is a general-purpose engine that supports analytics in any scientific domain.
-Pydra helps build reproducible, scalable, reusable, and fully automated, provenance
-tracked scientific workflows that combine Python functions and shell commands.
+Pydra helps build reproducible, scalable, reusable scientific workflows
+that combine Python functions and shell commands.
 
-The power of Pydra lies in ease of workflow creation and execution for complex
-multiparameter map-reduce operations, and the use of global cache (see
+The power of Pydra lies in ease of constructing workflows, containing complex
+multiparameter map-reduce operations, in Python code and the use of a global cache (see
 :ref:`Design philosophy` for the rationale behind its design).
 
 Pydra's key features are:
 
+* Combine diverse tasks, implemented in `Python functions <./tutorial/python.html>`__ or stand-alone `shell commands <./tutorial/shell.html>`__, into coherent `workflows <./tutorial/workflow.html>`__
 * Map-reduce like semantics (see :ref:`Splitting and combining`)
-* Dynamic workflow construction using Python code (see :ref:`Dynamic workflow construction`)
-* Modular execution backends (see `Advanced execution <./tutorial/advanced-execution.html>`__)
-* Global cache support to reduce recomputation (see :ref:`Hashing and caching`)
+* Dynamic workflow construction using Python code (see :ref:`Dynamic construction`)
+* Modular execution systems for varied deployment on cloud, HPC, etc... (see `Execution options <./tutorial/advanced-execution.html>`__)
 * Support for the execution of tasks in containerized environments (see :ref:`Containers and environments`)
-* Strong type-checking and type-hinting support (see :ref:`Typing and file-formats`)
+* Global caching to reduce recomputation (see :ref:`Hashing and caching`)
+* Support for strong type-checking, including file types, at workflow construction time (see :ref:`Typing and file-formats`)
 
 
 Installation
@@ -45,21 +46,44 @@ install these packages as well:
 
 Of course, if you use Pydra to execute commands within toolkits, you will need to
 either have those commands installed on the execution machine, or use containers
-environments (see [Environments](../explanation/environments.html)) to run them.
+environments (see `Environments <../explanation/environments.html>`__) to run them.
 
 
-Tutorials
----------
+Tutorials and notebooks
+-----------------------
+
+The following tutorials provide a step-by-step guide to using Pydra.
+They can be read in any order, but it is recommended to start with :ref:`Getting started`.
+The tutorials are implemented as Jupyter notebooks, which can be downloaded and run locally
+or run online using the |Binder| within each tutorial.
+
+If you decide to download the notebooks and run locally, be sure to install the necessary
+dependencies with ``pip install -e /path/to/your/pydra[tutorial]``.
+
+
+Execution
+~~~~~~~~~
+
+Learn how to execute existing tasks (including workflows) on different systems
 
 * :ref:`Getting started`
-* :ref:`Advanced execution`
+* :ref:`Execution options`
+
+Design
+~~~~~~
+
+Learn how to design your own tasks
+
 * :ref:`Python-tasks`
 * :ref:`Shell-tasks`
 * :ref:`Workflows`
-* :ref:`Canonical (dataclass) task form`
+* :ref:`Canonical task form`
 
 Examples
---------
+~~~~~~~~
+
+The following comprehensive examples demonstrate how to use Pydra to build and execute
+complex workflows
 
 * :ref:`T1w MRI preprocessing`
 * :ref:`One-level GLM`
@@ -68,18 +92,24 @@ Examples
 How-to Guides
 -------------
 
+The following guides provide step-by-step instructions on how to
+
 * :ref:`Create a task package`
 * :ref:`Port interfaces from Nipype`
 
-Indices and tables
-------------------
+Reference
+---------
 
+See the full reference documentation for Pydra
+
+* :ref:`API`
 * :ref:`genindex`
 * :ref:`modindex`
 
+
 .. toctree::
     :maxdepth: 2
-    :caption: Task execution
+    :caption: Tutorials: Execution
     :hidden:
 
     tutorial/getting-started
@@ -87,7 +117,7 @@ Indices and tables
 
 .. toctree::
     :maxdepth: 2
-    :caption: Design
+    :caption: Tutorials: Design
     :hidden:
 
     tutorial/python
@@ -118,13 +148,12 @@ Indices and tables
    :caption: Explanation
    :hidden:
 
-   explanation/design-approach
    explanation/splitting-combining
-   explanation/hashing-caching
-   explanation/typing
    explanation/conditional-lazy
    explanation/environments
-
+   explanation/hashing-caching
+   explanation/typing
+   explanation/design-approach
 
 .. toctree::
    :maxdepth: 2
@@ -132,10 +161,13 @@ Indices and tables
    :hidden:
 
    reference/api
+   genindex
+   modindex
 
 .. _FSL: https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL
 .. _ANTs: http://stnava.github.io/ANTs/
 .. _AFNI: https://afni.nimh.nih.gov/
 .. _niworkflows: https://niworkflows.readthedocs.io/en/latest/
 .. _Nipype: https://nipype.readthedocs.io/en/latest/
-.. _
+.. |Binder| image:: https://mybinder.org/badge_logo.svg
+   :target: https://mybinder.org/v2/gh/nipype/pydra/develop

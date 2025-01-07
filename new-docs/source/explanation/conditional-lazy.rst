@@ -1,4 +1,4 @@
-Dynamic workflow construction
-=============================
+Dynamic construction
+====================
 
 Work in progress...

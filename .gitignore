@@ -18,6 +18,7 @@ cov.xml
 *.venv
 
 .DS_Store
+.ipynb_checkpoints
 
 # This can be generated in-tree. We never want to commit it.
 pydra/_version.py

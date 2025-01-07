@@ -76,7 +76,26 @@ test = [
     "boutiques",
     "pympler",
 ]
-jupyter = ["nest_asyncio"]
+tutorial = [
+    "fileformats-medimage-extras",
+    "jupyter",
+    "jupyter_contrib_nbextensions",
+    "jupytext",
+    "jupyterlab",
+    "matplotlib",
+    "nest_asyncio",
+    "nbformat",
+    "nbval",
+    "nibabel",
+    "nilearn",
+    "numpy",
+    "pandas",
+    "pydra-mrtrix3",
+    "psutil",
+    "pytest",
+    "scipy",
+    "sh",
+]
 # Aliases
 tests = ["pydra[test]"]
 docs = ["pydra[doc]"]
