@@ -15,10 +15,10 @@ multiparameter map-reduce operations, in Python code and the use of a global cac
 
 Pydra's key features are:
 
-* Combine diverse tasks, implemented in `Python functions <./tutorial/python.html>`__ or stand-alone `shell commands <./tutorial/shell.html>`__, into coherent `workflows <./tutorial/workflow.html>`__
+* Combine diverse tasks, implemented in `Python functions <./tutorial/3-python.html>`__ or stand-alone `shell commands <./tutorial/4-shell.html>`__, into coherent `workflows <./tutorial/5-workflow.html>`__
 * Map-reduce like semantics (see :ref:`Splitting and combining`)
 * Dynamic workflow construction using Python code (see :ref:`Dynamic construction`)
-* Modular execution systems for varied deployment on cloud, HPC, etc... (see `Execution options <./tutorial/advanced-execution.html>`__)
+* Modular execution systems for varied deployment on cloud, HPC, etc... (see `Execution options <./tutorial/2-advanced-execution.html>`__)
 * Support for the execution of tasks in containerized environments (see :ref:`Containers and environments`)
 * Global caching to reduce recomputation (see :ref:`Hashing and caching`)
 * Support for strong type-checking, including file types, at workflow construction time (see :ref:`Typing and file-formats`)
@@ -112,18 +112,18 @@ See the full reference documentation for Pydra
     :caption: Tutorials: Execution
     :hidden:
 
-    tutorial/getting-started
-    tutorial/advanced-execution
+    tutorial/1-getting-started
+    tutorial/2-advanced-execution
 
 .. toctree::
     :maxdepth: 2
     :caption: Tutorials: Design
     :hidden:
 
-    tutorial/python
-    tutorial/shell
-    tutorial/workflow
-    tutorial/canonical-form
+    tutorial/3-python
+    tutorial/4-shell
+    tutorial/5-workflow
+    tutorial/6-canonical-form
 
 
 .. toctree::
