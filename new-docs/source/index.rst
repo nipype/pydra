@@ -13,14 +13,14 @@ The power of Pydra lies in ease of constructing workflows, containing complex
 multiparameter map-reduce operations, in Python code and the use of a global cache (see
 :ref:`Design philosophy` for the rationale behind its design).
 
-Pydra's key features are:
+**Key features**:
 
-* Combine diverse tasks, implemented in `Python functions <./tutorial/3-python.html>`__ or stand-alone `shell commands <./tutorial/4-shell.html>`__, into coherent `workflows <./tutorial/5-workflow.html>`__
+* Combine diverse tasks (`Python functions <./tutorial/3-python.html>`__ or `shell commands <./tutorial/4-shell.html>`__) into coherent `workflows <./tutorial/5-workflow.html>`__
 * Map-reduce like semantics (see :ref:`Splitting and combining`)
 * Dynamic workflow construction using Python code (see :ref:`Dynamic construction`)
-* Modular execution systems for varied deployment on cloud, HPC, etc... (see `Execution options <./tutorial/2-advanced-execution.html>`__)
-* Support for the execution of tasks in containerized environments (see :ref:`Containers and environments`)
-* Global caching to reduce recomputation (see :ref:`Hashing and caching`)
+* Modular backends for deployment on different execution platforms (e.g. cloud, HPC, etc...) (see `Execution options <./tutorial/2-advanced-execution.html>`__)
+* Support for the execution of tasks in containerized environments (see :ref:`Software environments`)
+* Global caching to reduce recomputation (see :ref:`Caches and hashes`)
 * Support for strong type-checking, including file types, at workflow construction time (see :ref:`Typing and file-formats`)
 
 
