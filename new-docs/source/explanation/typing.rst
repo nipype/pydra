@@ -30,11 +30,11 @@ more generic ``fileformats.generic.FsObject`` or ``fileformats.generic.FileSet``
 
 The only cases where it isn't sufficient to use generic classes, is when there are
 implicit header or side cars assumed to be present adjacent to the primary file (e.g.
-a NIfTI file with an associated JSON sidecar file). Because in these cases, the
-header/sidecar file(s) will not be included in the hash calculation and may not be included in the
-movement of the "file set" between working directories. In these cases, you need to use the
-specific file format classes, such as ``fileformats.nifti.NiftiGzX``, which will check
-to see if the header/sidecar files are present.
+a NIfTI file `my_nifti.nii` with an associated JSON sidecar file `my_nifti.json`).
+Because the header/sidecar file(s) will not be included in the hash calculation
+by default and may be omitted if the "file set" is copied into a different work
+directories. In such cases, a specific file format class, such as
+``fileformats.nifti.NiftiGzX``, should be used instead.
 
 Coercion
 --------
