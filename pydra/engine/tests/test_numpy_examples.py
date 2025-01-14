@@ -28,7 +28,7 @@ def test_multiout(tmpdir):
     wf.set_output([("array", wf.mo.lzout.b)])
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin="cf", n_procs=2) as sub:
+    with Submitter(worker="cf", n_procs=2) as sub:
         sub(runnable=wf)
 
     results = wf.result(return_inputs=True)
@@ -46,7 +46,7 @@ def test_multiout_st(tmpdir):
     wf.set_output([("array", wf.mo.lzout.b)])
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin="cf", n_procs=2) as sub:
+    with Submitter(worker="cf", n_procs=2) as sub:
         sub(runnable=wf)
 
     results = wf.result(return_inputs=True)

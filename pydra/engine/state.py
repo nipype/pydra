@@ -2,7 +2,9 @@
 
 from copy import deepcopy
 import itertools
+from collections import OrderedDict
 from functools import reduce
+import typing as ty
 import attrs
 from . import helpers_state as hlpst
 from .helpers import ensure_list, attrs_values
@@ -11,6 +13,38 @@ from .helpers import ensure_list, attrs_values
 
 # TODO: move to State
 op = {".": zip, "*": itertools.product}
+
+
+OutputsType = ty.TypeVar("OutputsType")
+
+
+class StateIndex:
+    """The collection of state indices that identifies a single element within the list
+    of tasks generated from a node
+
+    Parameters
+    ----------
+    indices : dict[str, int]
+        a dictionary of indices for each input field
+    """
+
+    def __init__(self, indices: dict[str, int] | None = None):
+        # We used ordered dict here to ensure the keys are always in the same order
+        # while OrderedDict is not strictly necessary for CPython 3.7+, we use it to
+        # signal that the order of the keys is important
+        if indices is None:
+            self.indices = OrderedDict()
+        else:
+            self.indices = OrderedDict(sorted(indices))
+
+    def __hash__(self):
+        return hash(tuple(self.indices.items()))
+
+    def __eq__(self, other):
+        return self.indices == other.indices
+
+    def __str__(self):
+        return "__".join(f"{n}-{i}" for n, i in self.indices.items())
 
 
 class State:
@@ -1116,3 +1150,20 @@ class State:
             val = op["*"](val_ind)
             keys = [op_single]
             return val, keys
+
+    # def split(self, task_def: TaskDef[OutputsType]) -> list["TaskDef[OutputsType]"]:
+    #     """
+    #     Split the task definition containing state-array fields into multiple tasks
+    #     without splitters and non-state-array values.
+
+    #     Parameters
+    #     ----------
+    #     task_def: TaskDef
+    #         a task definition
+
+    #     Returns
+    #     -------
+    #     List[TaskDef]
+    #         a list of task definitions
+    #     """
+    #     return hlpst.map_splits(self.states_ind, task_def, cont_dim=task_def._cont_dim)

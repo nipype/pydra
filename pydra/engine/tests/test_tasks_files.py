@@ -70,7 +70,7 @@ def test_task_1(tmpdir):
     np.save(file, arr)
     nn = file_add2(name="add2", file=file)
 
-    with Submitter(plugin="cf") as sub:
+    with Submitter(worker="cf") as sub:
         sub(nn)
 
     # checking the results
@@ -93,7 +93,7 @@ def test_wf_1(tmpdir):
     np.save(file_orig, arr)
     wf.inputs.file_orig = file_orig
 
-    with Submitter(plugin="cf") as sub:
+    with Submitter(worker="cf") as sub:
         sub(wf)
 
     assert wf.output_dir.exists()
@@ -113,7 +113,7 @@ def test_file_annotation_1(tmpdir):
     np.save(file, arr)
     nn = file_add2_annot(name="add2", file=file)
 
-    with Submitter(plugin="cf") as sub:
+    with Submitter(worker="cf") as sub:
         sub(nn)
 
     # checking the results
@@ -129,7 +129,7 @@ def test_broken_file(tmpdir):
 
     nn = file_add2(name="add2", file=file)
     with pytest.raises(FileNotFoundError):
-        with Submitter(plugin="cf") as sub:
+        with Submitter(worker="cf") as sub:
             sub(nn)
 
     with pytest.raises(FileNotFoundError, match="do not exist"):
@@ -153,7 +153,7 @@ def test_broken_file_link(tmpdir):
     # raises error inside task
     # unless variable is defined as a File pydra will treat it as a string
     with pytest.raises(FileNotFoundError):
-        with Submitter(plugin="cf") as sub:
+        with Submitter(worker="cf") as sub:
             sub(nn)
 
     with pytest.raises(FileNotFoundError, match="do not exist"):
@@ -168,7 +168,7 @@ def test_broken_dir():
     # raises error inside task
     # unless variable is defined as a File pydra will treat it as a string
     with pytest.raises(FileNotFoundError):
-        with Submitter(plugin="cf") as sub:
+        with Submitter(worker="cf") as sub:
             sub(nn)
 
     # raises error before task is run
@@ -190,7 +190,7 @@ def test_broken_dir_link1(tmpdir):
     nn = dir_count_file(name="listdir", dirpath=Path(dir1))
     # raises error while running task
     with pytest.raises(FileNotFoundError):
-        with Submitter(plugin="cf") as sub:
+        with Submitter(worker="cf") as sub:
             sub(nn)
 
     with pytest.raises(FileNotFoundError):
@@ -212,9 +212,9 @@ def test_broken_dir_link2(tmpdir):
 
     nn = dir_count_file(name="listdir", dirpath=dir2)
     # does not raises error because pydra treats dirpath as a string
-    with Submitter(plugin="cf") as sub:
+    with Submitter(worker="cf") as sub:
         sub(nn)
 
     nn2 = dir_count_file_annot(name="listdir", dirpath=str(dir2))
-    with Submitter(plugin="cf") as sub:
+    with Submitter(worker="cf") as sub:
         sub(nn2)

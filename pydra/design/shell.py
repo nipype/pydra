@@ -287,7 +287,6 @@ def define(
     ShellDef
         The interface for the shell command
     """
-    from pydra.engine.task import ShellTask
     from pydra.engine.specs import ShellDef, ShellOutputs
 
     def make(
@@ -376,7 +375,6 @@ def define(
         interface = make_task_def(
             ShellDef,
             ShellOutputs,
-            ShellTask,
             parsed_inputs,
             parsed_outputs,
             name=class_name,

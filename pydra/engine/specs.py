@@ -7,13 +7,13 @@ import inspect
 import itertools
 import platform
 import shlex
+from collections import Counter
 import typing as ty
 from glob import glob
 from copy import deepcopy
 from typing_extensions import Self
 import attrs
 import cloudpickle as cp
-from fileformats.generic import File
 from pydra.engine.audit import AuditFlag
 from pydra.utils.typing import TypeParser
 from .helpers import (
@@ -26,13 +26,18 @@ from .helpers import (
     parse_format_string,
 )
 from .helpers_file import template_update
+from . import helpers_state as hlpst
+from . import lazy
 from pydra.utils.hash import hash_function, Cache
+from pydra.utils.typing import StateArray
 from pydra.design.base import Field, Arg, Out, RequirementSet, EMPTY
 from pydra.design import shell
 
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Task
     from pydra.engine.task import ShellTask
+    from pydra.engine.core import Workflow
+    from pydra.engine.submitter import Submitter
 
 
 def is_set(value: ty.Any) -> bool:
@@ -43,7 +48,7 @@ def is_set(value: ty.Any) -> bool:
 class TaskOutputs:
     """Base class for all output definitions"""
 
-    RESERVED_FIELD_NAMES = ("inputs", "split", "combine")
+    RESERVED_FIELD_NAMES = ("inputs",)
 
     @classmethod
     def from_task(cls, task: "Task") -> Self:
@@ -71,6 +76,53 @@ class TaskOutputs:
     def inputs(self):
         """The inputs object associated with a lazy-outputs object"""
         return self._get_node().inputs
+
+    def _get_node(self):
+        try:
+            return self._node
+        except AttributeError:
+            raise AttributeError(
+                f"{self} outputs object is not a lazy output of a workflow node"
+            ) from None
+
+    def __iter__(self) -> ty.Generator[str, None, None]:
+        """Iterate through all the names in the definition"""
+        return (f.name for f in list_fields(self))
+
+    def __getitem__(self, name: str) -> ty.Any:
+        """Return the value for the given attribute, resolving any templates
+
+        Parameters
+        ----------
+        name : str
+            the name of the attribute to return
+
+        Returns
+        -------
+        Any
+            the value of the attribute
+        """
+        try:
+            return getattr(self, name)
+        except AttributeError:
+            raise KeyError(f"{self} doesn't have an attribute {name}") from None
+
+
+OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
+
+
+@attrs.define(kw_only=True, auto_attribs=False)
+class TaskDef(ty.Generic[OutputsType]):
+    """Base class for all task definitions"""
+
+    Task: "ty.Type[core.Task]"
+
+    # The following fields are used to store split/combine state information
+    _splitter = attrs.field(default=None, init=False)
+    _combiner = attrs.field(default=None, init=False)
+    _cont_dim = attrs.field(default=None, init=False)
+
+    RESERVED_FIELD_NAMES = ("split", "combine")
 
     def split(
         self,
@@ -104,15 +156,56 @@ class TaskOutputs:
         self : TaskBase
             a reference to the task
         """
-        self._get_node().split(
-            splitter, overwrite=overwrite, cont_dim=cont_dim, **inputs
-        )
+        if self._splitter and not overwrite:
+            raise ValueError(
+                f"Cannot overwrite existing splitter {self._splitter} on {self}, "
+                "set 'overwrite=True' to do so"
+            )
+        if splitter:
+            unwraped_split = hlpst.unwrap_splitter(splitter)
+            if duplicated := [f for f, c in Counter(unwraped_split).items() if c > 1]:
+                raise ValueError(f"Splitter fields {duplicated} are duplicated")
+            split_names = set(
+                s for s in unwraped_split if not s.startswith("_") and "." not in s
+            )
+            input_names = set(inputs)
+            if missing_inputs := list(split_names - input_names):
+                raise ValueError(
+                    f"Splitter fields {missing_inputs} need to be provided as a keyword "
+                    f"arguments to the split method (provided {list(inputs)})"
+                )
+            if unrecognised_inputs := list(input_names - split_names):
+                raise ValueError(
+                    f"Provided inputs {unrecognised_inputs} are not present in the "
+                    f"splitter {splitter}"
+                )
+        else:
+            # If no splitter is provided, use the names of the inputs as combinatorial splitter
+            split_names = splitter = list(inputs)
+        for field_name in cont_dim or []:
+            if field_name not in split_names:
+                raise ValueError(
+                    f"Container dimension for {field_name} is provided but the field "
+                    f"is not present in the inputs"
+                )
+        self._splitter = splitter
+        self._cont_dim = cont_dim
+        for name, value in inputs.items():
+            if isinstance(value, lazy.LazyField):
+                split_val = value.split(splitter)
+            elif isinstance(value, ty.Iterable) and not isinstance(
+                value, (ty.Mapping, str)
+            ):
+                split_val = StateArray(value)
+            else:
+                raise TypeError(f"Could not split {value} as it is not a sequence type")
+            setattr(self, name, split_val)
         return self
 
     def combine(
         self,
         combiner: ty.Union[ty.List[str], str],
-        overwrite: bool = False,  # **kwargs
+        overwrite: bool = False,
     ) -> Self:
         """
         Combine inputs parameterized by one or more previous tasks.
@@ -133,49 +226,20 @@ class TaskOutputs:
         self : Self
             a reference to the outputs object
         """
-        self._get_node().combine(combiner, overwrite=overwrite)
-        return self
-
-    def _get_node(self):
-        try:
-            return self._node
-        except AttributeError:
-            raise AttributeError(
-                f"{self} outputs object is not a lazy output of a workflow node"
+        if self._combiner and not overwrite:
+            raise ValueError(
+                f"Attempting to overwrite existing combiner {self._combiner} on {self}, "
+                "set 'overwrite=True' to do so"
             )
-
-    def __iter__(self) -> ty.Generator[str, None, None]:
-        """Iterate through all the names in the definition"""
-        return (f.name for f in list_fields(self))
-
-    def __getitem__(self, name: str) -> ty.Any:
-        """Return the value for the given attribute, resolving any templates
-
-        Parameters
-        ----------
-        name : str
-            the name of the attribute to return
-
-        Returns
-        -------
-        Any
-            the value of the attribute
-        """
-        try:
-            return getattr(self, name)
-        except AttributeError:
-            raise KeyError(f"{self} doesn't have an attribute {name}") from None
-
-
-OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
-
-
-class TaskDef(ty.Generic[OutputsType]):
-    """Base class for all task definitions"""
-
-    Task: "ty.Type[core.Task]"
-
-    RESERVED_FIELD_NAMES = ()
+        if isinstance(combiner, str):
+            combiner = [combiner]
+        local_names = set(c for c in combiner if "." not in c and not c.startswith("_"))
+        if unrecognised := local_names - set(self):
+            raise ValueError(
+                f"Combiner fields {unrecognised} are not present in the task definition"
+            )
+        self._combiner = combiner
+        return self
 
     def __call__(
         self,
@@ -183,12 +247,10 @@ class TaskDef(ty.Generic[OutputsType]):
         audit_flags: AuditFlag = AuditFlag.NONE,
         cache_dir=None,
         cache_locations=None,
-        inputs: ty.Text | File | dict[str, ty.Any] | None = None,
-        cont_dim=None,
-        messenger_args=None,
         messengers=None,
+        messenger_args=None,
         rerun=False,
-        **kwargs,
+        **exec_kwargs,
     ) -> OutputsType:
         """Create a task from this definition and execute it to produce a result.
 
@@ -199,46 +261,71 @@ class TaskDef(ty.Generic[OutputsType]):
         audit_flags : AuditFlag, optional
             Auditing configuration, by default AuditFlag.NONE
         cache_dir : os.PathLike, optional
-            Cache directory, by default None
+            Cache directory where the working directory/results for the task will be
+            stored, by default None
         cache_locations : list[os.PathLike], optional
-            Cache locations, by default None
-        inputs : str or File or dict, optional
-            Inputs for the task, by default None
-        cont_dim : dict, optional
-            Container dimensions for specific inputs, by default None
+            Alternate cache locations to check for pre-computed results, by default None
         messenger_args : dict, optional
             Messenger arguments, by default None
         messengers : list, optional
             Messengers, by default None
         rerun : bool, optional
-            Whether to rerun the task, by default False
-        **kwargs
-            Additional keyword arguments to pass to the task
+            Whether to force the re-computation of the task results even if existing
+            results are found, by default False
+        exec_kwargs : dict
+            Keyword arguments to pass on to the Submitter object used to execute the task
 
         Returns
         -------
-        Outputs
-            The output interface of the task
+        OutputsType or list[OutputsType]
+            The output interface of the task, or in the case of split tasks, a list of
+            output interfaces
         """
+        from pydra.engine.submitter import Submitter
+
         self._check_rules()
-        task = self.Task(
-            definition=self,
-            name=name,
+        if self._splitter:
+            # Create an implicit workflow to hold the split nodes
+            from pydra.design import workflow
+
+            outputs = {o.name: list[o.type] for o in list_fields(self.Outputs)}
+
+            @workflow.define(outputs=outputs)
+            def Split():
+                node = workflow.add(self)
+                return tuple(getattr(node, o) for o in outputs)
+
+            definition = Split()
+
+        elif self._combiner:
+            raise ValueError(
+                f"Task {self} is marked for combining, but not splitting. "
+                "Use the `split` method to split the task before combining."
+            )
+        else:
+            definition = self
+
+        with Submitter(
             audit_flags=audit_flags,
             cache_dir=cache_dir,
             cache_locations=cache_locations,
-            inputs=inputs,
-            cont_dim=cont_dim,
             messenger_args=messenger_args,
             messengers=messengers,
             rerun=rerun,
-        )
-        result = task(**kwargs)
+            **exec_kwargs,
+        ) as sub:
+            result = sub(definition)
+        if result.errored:
+            raise ValueError(f"Task {definition} failed with an error")
         return result.output
 
     def __iter__(self) -> ty.Generator[str, None, None]:
         """Iterate through all the names in the definition"""
-        return (f.name for f in list_fields(self))
+        return (
+            f.name
+            for f in list_fields(self)
+            if not (f.name.startswith("_") or f.name in self.RESERVED_FIELD_NAMES)
+        )
 
     def __getitem__(self, name: str) -> ty.Any:
         """Return the value for the given attribute, resolving any templates
@@ -430,7 +517,7 @@ class Result(ty.Generic[OutputsType]):
 
 
 @attrs.define(kw_only=True)
-class RuntimeDef:
+class RuntimeSpec:
     """
     Specification for a task.
 
@@ -466,14 +553,71 @@ class PythonDef(TaskDef[PythonOutputsType]):
 
 
 class WorkflowOutputs(TaskOutputs):
-    pass
+
+    @classmethod
+    def from_task(cls, task: "Task") -> Self:
+        """Collect the outputs of a workflow task from the outputs of the nodes in the
+
+        Parameters
+        ----------
+        task : Task
+            The task whose outputs are being collected.
+
+        Returns
+        -------
+        outputs : Outputs
+            The outputs of the task
+        """
+        outputs = super().from_task(task)
+        wf = task.definition.construct()
+        # collecting outputs from tasks
+        output_wf = {}
+        for name, lazy_field in wf.outputs.items():
+            try:
+                val_out = lazy_field.get_value(wf)
+                output_wf[name] = val_out
+            except (ValueError, AttributeError) as e:
+                output_wf[name] = None
+                node = wf[lazy_field.name]
+                # checking if the tasks has predecessors that raises error
+                if isinstance(node._errored, list):
+                    raise ValueError(f"Tasks {node._errored} raised an error")
+                else:
+                    err_files = [(t.output_dir / "_error.pklz") for t in node.tasks]
+                    if not all(err_files):
+                        raise e
+                    raise ValueError(
+                        f"Task {lazy_field.name} raised an error, full crash report is "
+                        f"here: "
+                        + (
+                            str(err_files[0])
+                            if len(err_files) == 1
+                            else "\n" + "\n".join(str(f) for f in err_files)
+                        )
+                    )
+        return attrs.evolve(outputs, **output_wf)
 
 
 WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 
+@attrs.define(kw_only=True)
 class WorkflowDef(TaskDef[WorkflowOutputsType]):
-    pass
+
+    RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("construct",)
+
+    _constructed = attrs.field(default=None, init=False)
+
+    def construct(self) -> "Workflow":
+        from pydra.engine.core import Workflow
+
+        if self._constructed is not None:
+            return self._constructed
+        self._constructed = Workflow.construct(self)
+        return self._constructed
+
+    async def _run(self, task: "Task", submitter: "Submitter") -> Result:
+        await submitter.expand_workflow(task)
 
 
 RETURN_CODE_HELP = """The process' exit code."""
@@ -592,7 +736,7 @@ ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
 class ShellDef(TaskDef[ShellOutputsType]):
 
-    RESERVED_FIELD_NAMES = ("cmdline",)
+    RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("cmdline",)
 
     @property
     def cmdline(self) -> str:

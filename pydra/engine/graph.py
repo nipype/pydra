@@ -309,6 +309,12 @@ class DiGraph:
         else:
             return True
 
+    def successors_nodes(self, node):
+        """Get all the nodes that follow the node"""
+        self._successors_all = []
+        self._checking_successors_nodes(node=node, remove=False)
+        return set(self._successors_all)
+
     def remove_successors_nodes(self, node):
         """Removing all the nodes that follow the node"""
         self._successors_all = []

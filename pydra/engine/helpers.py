@@ -34,7 +34,11 @@ def attrs_fields(definition, exclude_names=()) -> list[attrs.Attribute]:
 
 def attrs_values(obj, **kwargs) -> dict[str, ty.Any]:
     """Get the values of an attrs object."""
-    return attrs.asdict(obj, recurse=False, **kwargs)
+    return {
+        n: v
+        for n, v in attrs.asdict(obj, recurse=False, **kwargs).items()
+        if not n.startswith("_")
+    }
 
 
 def list_fields(definition: "type[TaskDef] | TaskDef") -> list["Field"]:
@@ -592,6 +596,6 @@ def ensure_list(obj, tuple2list=False):
 
 def is_lazy(obj):
     """Check whether an object is a lazy field or has any attribute that is a Lazy Field"""
-    from pydra.engine.workflow.lazy import LazyField
+    from pydra.engine.lazy import LazyField
 
     return isinstance(obj, LazyField)

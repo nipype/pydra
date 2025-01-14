@@ -211,7 +211,7 @@ class ShellTask(Task):
                     env_path / rel for rel in fileset.relative_fspaths
                 )
 
-    def resolve_value(
+    def resolve_output_value(
         self,
         fld: "shell.out",
         stdout: str,
@@ -277,7 +277,7 @@ class ShellTask(Task):
             # assuming that field should have either default or metadata, but not both
             if is_set(fld.default):
                 output_names.append(fld.name)
-            elif is_set(self.resolve_value(fld, stdout, stderr)):
+            elif is_set(self.resolve_output_value(fld, stdout, stderr)):
                 output_names.append(fld.name)
         return output_names
 

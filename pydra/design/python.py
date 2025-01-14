@@ -121,7 +121,6 @@ def define(
     PythonDef
         The task definition class for the Python function
     """
-    from pydra.engine.task import PythonTask
     from pydra.engine.specs import PythonDef, PythonOutputs
 
     def make(wrapped: ty.Callable | type) -> PythonDef:
@@ -162,7 +161,6 @@ def define(
         interface = make_task_def(
             PythonDef,
             PythonOutputs,
-            PythonTask,
             parsed_inputs,
             parsed_outputs,
             name=name,

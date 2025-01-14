@@ -1,22 +1,25 @@
 import typing as ty
 from copy import deepcopy, copy
 from enum import Enum
-from pathlib import Path
 import attrs
 from pydra.utils.typing import TypeParser, StateArray
 from . import lazy
-from ..specs import TaskDef, TaskOutputs, WorkflowDef
-from ..task import Task
-from ..helpers import ensure_list, attrs_values, is_lazy, load_result, create_checksum
+from pydra.engine.helpers import (
+    ensure_list,
+    attrs_values,
+    is_lazy,
+    create_checksum,
+)
 from pydra.utils.hash import hash_function
-from .. import helpers_state as hlpst
-from ..state import State
+from pydra.engine import helpers_state as hlpst
+from pydra.engine.state import State, StateIndex
 
 if ty.TYPE_CHECKING:
-    from .base import Workflow
+    from .core import Workflow
+    from pydra.engine.specs import TaskDef, TaskOutputs
 
 
-OutputType = ty.TypeVar("OutputType", bound=TaskOutputs)
+OutputType = ty.TypeVar("OutputType", bound="TaskOutputs")
 Splitter = ty.Union[str, ty.Tuple[str, ...]]
 
 _not_set = Enum("_not_set", "NOT_SET")
@@ -37,7 +40,7 @@ class Node(ty.Generic[OutputType]):
     """
 
     name: str
-    _spec: TaskDef[OutputType]
+    _definition: "TaskDef[OutputType]"
     _workflow: "Workflow" = attrs.field(default=None, eq=False, hash=False)
     _lzout: OutputType | None = attrs.field(
         init=False, default=None, eq=False, hash=False
@@ -49,6 +52,28 @@ class Node(ty.Generic[OutputType]):
     _inner_cont_dim: dict[str, int] = attrs.field(
         init=False, factory=dict
     )  # QUESTION: should this be included in the state?
+
+    def __attrs_post_init__(self):
+        # Add node name to state's splitter, combiner and cont_dim loaded from the def
+        splitter = self._definition._splitter
+        combiner = self._definition._combiner
+        if splitter:
+            splitter = hlpst.add_name_splitter(splitter, self.name)
+        if combiner:
+            combiner = hlpst.add_name_combiner(combiner, self.name)
+        if self._definition._cont_dim:
+            self._cont_dim = {}
+            for key, val in self._definition._cont_dim.items():
+                self._cont_dim[f"{self.name}.{key}"] = val
+        self._set_state(splitter=splitter, combiner=combiner)
+        if combiner:
+            if not_split := [
+                c for c in combiner if not any(c in s for s in self.state.splitter_rpn)
+            ]:
+                raise ValueError(
+                    f"Combiner fields {not_split} for Node {self.name!r} are not in the "
+                    f"splitter fields {self.state.splitter_rpn}"
+                )
 
     class Inputs:
         """A class to wrap the inputs of a node and control access to them so lazy fields
@@ -62,10 +87,10 @@ class Node(ty.Generic[OutputType]):
             super().__setattr__("_node", node)
 
         def __getattr__(self, name: str) -> ty.Any:
-            return getattr(self._node._spec, name)
+            return getattr(self._node._definition, name)
 
         def __setattr__(self, name: str, value: ty.Any) -> None:
-            setattr(self._node._spec, name, value)
+            setattr(self._node._definition, name, value)
             if is_lazy(value):
                 upstream_states = self._node._get_upstream_states()
                 if (
@@ -82,6 +107,10 @@ class Node(ty.Generic[OutputType]):
         return self.Inputs(self)
 
     @property
+    def input_names(self) -> list[str]:
+        return list(attrs_values(self._definition).keys())
+
+    @property
     def state(self):
         """Initialise the state of the node just after it has been created (i.e. before
         it has been split or combined) based on the upstream connections
@@ -93,7 +122,7 @@ class Node(ty.Generic[OutputType]):
 
     @property
     def input_values(self) -> tuple[tuple[str, ty.Any]]:
-        return tuple(attrs_values(self._spec).items())
+        return tuple(attrs_values(self._definition).items())
 
     @property
     def lzout(self) -> OutputType:
@@ -118,136 +147,6 @@ class Node(ty.Generic[OutputType]):
         self._lzout = outputs
         self._wrap_lzout_types_in_state_arrays()
         return outputs
-
-    def split(
-        self,
-        splitter: ty.Union[str, ty.List[str], ty.Tuple[str, ...], None] = None,
-        /,
-        overwrite: bool = False,
-        cont_dim: ty.Optional[dict] = None,
-        **inputs,
-    ):
-        """
-        Run this task parametrically over lists of split inputs.
-
-        Parameters
-        ----------
-        splitter : str or list[str] or tuple[str] or None
-            the fields which to split over. If splitting over multiple fields, lists of
-            fields are interpreted as outer-products and tuples inner-products. If None,
-            then the fields to split are taken from the keyword-arg names.
-        overwrite : bool, optional
-            whether to overwrite an existing split on the node, by default False
-        cont_dim : dict, optional
-            Container dimensions for specific inputs, used in the splitter.
-            If input name is not in cont_dim, it is assumed that the input values has
-            a container dimension of 1, so only the most outer dim will be used for splitting.
-        **inputs
-            fields to split over, will automatically be wrapped in a StateArray object
-            and passed to the node inputs
-
-        Returns
-        -------
-        self : TaskDef
-            a reference to the task
-        """
-        self._check_if_outputs_have_been_used("the node cannot be split or combined")
-        if splitter is None and inputs:
-            splitter = list(inputs)
-        elif splitter:
-            missing = set(hlpst.unwrap_splitter(splitter)) - set(inputs)
-            missing = [m for m in missing if not m.startswith("_")]
-            if missing:
-                raise ValueError(
-                    f"Split is missing values for the following fields {list(missing)}"
-                )
-        splitter = hlpst.add_name_splitter(splitter, self.name)
-        # if user want to update the splitter, overwrite has to be True
-        if self._state and not overwrite and self._state.splitter != splitter:
-            raise Exception(
-                "splitter has been already set, "
-                "if you want to overwrite it - use overwrite=True"
-            )
-        if cont_dim:
-            for key, vel in cont_dim.items():
-                self._cont_dim[f"{self.name}.{key}"] = vel
-        if inputs:
-            new_inputs = {}
-            split_inputs = set(
-                f"{self.name}.{n}" if "." not in n else n
-                for n in hlpst.unwrap_splitter(splitter)
-                if not n.startswith("_")
-            )
-            for inpt_name, inpt_val in inputs.items():
-                new_val: ty.Any
-                if f"{self.name}.{inpt_name}" in split_inputs:  # type: ignore
-                    if isinstance(inpt_val, lazy.LazyField):
-                        new_val = inpt_val.split(splitter)
-                    elif isinstance(inpt_val, ty.Iterable) and not isinstance(
-                        inpt_val, (ty.Mapping, str)
-                    ):
-                        new_val = StateArray(inpt_val)
-                    else:
-                        raise TypeError(
-                            f"Could not split {inpt_val} as it is not a sequence type"
-                        )
-                else:
-                    new_val = inpt_val
-                new_inputs[inpt_name] = new_val
-            # Update the inputs with the new split values
-            self._spec = attrs.evolve(self._spec, **new_inputs)
-        self._set_state(splitter=splitter)
-        # Wrap types of lazy outputs in StateArray types
-        self._wrap_lzout_types_in_state_arrays()
-        return self
-
-    def combine(
-        self,
-        combiner: ty.Union[ty.List[str], str],
-        overwrite: bool = False,  # **kwargs
-    ):
-        """
-        Combine inputs parameterized by one or more previous tasks.
-
-        Parameters
-        ----------
-        combiner : list[str] or str
-            the field or list of inputs to be combined (i.e. not left split) after the
-            task has been run
-        overwrite : bool
-            whether to overwrite an existing combiner on the node
-        **kwargs : dict[str, Any]
-            values for the task that will be "combined" before they are provided to the
-            node
-
-        Returns
-        -------
-        self : TaskDef
-            a reference to the task
-        """
-        if not isinstance(combiner, (str, list)):
-            raise Exception("combiner has to be a string or a list")
-        combiner = hlpst.add_name_combiner(ensure_list(combiner), self.name)
-        if not_split := [
-            c for c in combiner if not any(c in s for s in self.state.splitter_rpn)
-        ]:
-            raise ValueError(
-                f"Combiner fields {not_split} for Node {self.name!r} are not in the "
-                f"splitter fields {self.splitter}"
-            )
-        if (
-            self._state
-            and self._state.combiner
-            and combiner != self._state.combiner
-            and not overwrite
-        ):
-            raise Exception(
-                "combiner has been already set, "
-                "if you want to overwrite it - use overwrite=True"
-            )
-        self._set_state(combiner=combiner)
-        self._wrap_lzout_types_in_state_arrays()
-        return self
 
     @property
     def cont_dim(self):
@@ -276,47 +175,6 @@ class Node(ty.Generic[OutputType]):
             return ()
         return self._state.combiner
 
-    def _get_tasks(
-        self,
-        cache_locations: Path | list[Path],
-        state_index: int | None = None,
-        return_inputs: bool = False,
-    ) -> list["Task"]:
-        raise NotImplementedError
-        if self.state:
-            if state_index is None:
-                # if state_index=None, collecting all results
-                if self.state.combiner:
-                    return self._combined_output(return_inputs=return_inputs)
-                else:
-                    results = []
-                    for ind in range(len(self.state.inputs_ind)):
-                        checksum = self.checksum_states(state_index=ind)
-                        result = load_result(checksum, cache_locations)
-                        if result is None:
-                            return None
-                        results.append(result)
-                    if return_inputs is True or return_inputs == "val":
-                        return list(zip(self.state.states_val, results))
-                    elif return_inputs == "ind":
-                        return list(zip(self.state.states_ind, results))
-                    else:
-                        return results
-            else:  # state_index is not None
-                if self.state.combiner:
-                    return self._combined_output(return_inputs=return_inputs)[
-                        state_index
-                    ]
-                result = load_result(self.checksum_states(state_index), cache_locations)
-                if return_inputs is True or return_inputs == "val":
-                    return (self.state.states_val[state_index], result)
-                elif return_inputs == "ind":
-                    return (self.state.states_ind[state_index], result)
-                else:
-                    return result
-        else:
-            return load_result(self._spec._checksum, cache_locations)
-
     def _checksum_states(self, state_index=None):
         """
         Calculate a checksum for the specific state or all of the states of the task.
@@ -329,23 +187,24 @@ class Node(ty.Generic[OutputType]):
             TODO
 
         """
-        # if is_workflow(self) and self.definition._graph_checksums is attr.NOTHING:
-        #     self.definition._graph_checksums = {
+        # if is_workflow(self) and self._definition._graph_checksums is attr.NOTHING:
+        #     self._definition._graph_checksums = {
         #         nd.name: nd.checksum for nd in self.graph_sorted
         #     }
+        from pydra.engine.specs import WorkflowDef
 
         if state_index is not None:
-            inputs_copy = copy(self.definition)
+            inputs_copy = copy(self._definition)
             for key, ind in self.state.inputs_ind[state_index].items():
                 val = self._extract_input_el(
-                    inputs=self.definition, inp_nm=key.split(".")[1], ind=ind
+                    inputs=self._definition, inp_nm=key.split(".")[1], ind=ind
                 )
                 setattr(inputs_copy, key.split(".")[1], val)
             # setting files_hash again in case it was cleaned by setting specific element
             # that might be important for outer splitter of input variable with big files
             # the file can be changed with every single index even if there are only two files
             input_hash = inputs_copy.hash
-            if isinstance(self._spec, WorkflowDef):
+            if isinstance(self._definition, WorkflowDef):
                 con_hash = hash_function(self._connections)
                 # TODO: hash list is not used
                 hash_list = [input_hash, con_hash]  # noqa: F841
@@ -358,7 +217,7 @@ class Node(ty.Generic[OutputType]):
         else:
             checksum_list = []
             if not hasattr(self.state, "inputs_ind"):
-                self.state.prepare_states(self.definition, cont_dim=self.cont_dim)
+                self.state.prepare_states(self._definition, cont_dim=self.cont_dim)
                 self.state.prepare_inputs()
             for ind in range(len(self.state.inputs_ind)):
                 checksum_list.append(self._checksum_states(state_index=ind))
@@ -432,3 +291,47 @@ class Node(ty.Generic[OutputType]):
                     # additional field name should be added to the list of fields
                     upstream_states[node.name][1].append(inpt_name)
         return upstream_states
+
+    def _extract_input_el(self, inputs, inp_nm, ind):
+        """
+        Extracting element of the inputs taking into account
+        container dimension of the specific element that can be set in self.cont_dim.
+        If input name is not in cont_dim, it is assumed that the input values has
+        a container dimension of 1, so only the most outer dim will be used for splitting.
+        If
+        """
+        if f"{self.name}.{inp_nm}" in self.cont_dim:
+            return list(
+                hlpst.flatten(
+                    ensure_list(getattr(inputs, inp_nm)),
+                    max_depth=self.cont_dim[f"{self.name}.{inp_nm}"],
+                )
+            )[ind]
+        else:
+            return getattr(inputs, inp_nm)[ind]
+
+    def _split_definition(self) -> dict[StateIndex, "TaskDef[OutputType]"]:
+        """Split the definition into the different states it will be run over"""
+        # TODO: doesn't work properly for more cmplicated wf (check if still an issue)
+        if not self.state:
+            return {None: self._definition}
+        split_defs = {}
+        for input_ind in self.state.inputs_ind:
+            inputs_dict = {}
+            for inp in set(self.input_names):
+                if f"{self.name}.{inp}" in input_ind:
+                    inputs_dict[inp] = self._extract_input_el(
+                        inputs=self._definition,
+                        inp_nm=inp,
+                        ind=input_ind[f"{self.name}.{inp}"],
+                    )
+            split_defs[StateIndex(input_ind)] = attrs.evolve(
+                self._definition, inputs_dict
+            )
+        return split_defs
+
+        # else:
+        #     # todo it never gets here
+        #     breakpoint()
+        #     inputs_dict = {inp: getattr(self.inputs, inp) for inp in self.input_names}
+        #     return None, inputs_dict

@@ -27,7 +27,7 @@ from pydra.utils.typing import (
 
 if ty.TYPE_CHECKING:
     from pydra.engine.specs import TaskDef, TaskOutputs
-    from pydra.engine.core import Task
+
 
 __all__ = [
     "Field",
@@ -352,7 +352,6 @@ def extract_fields_from_class(
 def make_task_def(
     spec_type: type["TaskDef"],
     out_type: type["TaskOutputs"],
-    task_type: type["Task"],
     inputs: dict[str, Arg],
     outputs: dict[str, Out],
     klass: type | None = None,
@@ -418,15 +417,12 @@ def make_task_def(
             name=name,
             bases=bases,
             kwds={},
-            exec_body=lambda ns: ns.update(
-                {"Task": task_type, "Outputs": outputs_klass}
-            ),
+            exec_body=lambda ns: ns.update({"Outputs": outputs_klass}),
         )
     else:
         # Ensure that the class has it's own annotations dict so we can modify it without
         # messing up other classes
         klass.__annotations__ = copy(klass.__annotations__)
-        klass.Task = task_type
         klass.Outputs = outputs_klass
     # Now that we have saved the attributes in lists to be
     for arg in inputs.values():

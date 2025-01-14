@@ -38,7 +38,7 @@ def test_native_1(tmp_path):
     shelly_subm = ShellTask(
         name="shelly_subm", executable=cmd, cache_dir=newcache("shelly_subm")
     )
-    with Submitter(plugin="cf") as sub:
+    with Submitter(worker="cf") as sub:
         shelly_subm(submitter=sub, environment=Native())
     assert env_res == shelly_subm.result().output.__dict__
 
@@ -97,14 +97,14 @@ def test_docker_1_subm(tmp_path, docker):
         cache_dir=newcache("shelly_env"),
         environment=docker,
     )
-    with Submitter(plugin="cf") as sub:
+    with Submitter(worker="cf") as sub:
         shelly_env(submitter=sub)
     assert env_res == shelly_env.result().output.__dict__
 
     shelly_call = ShellTask(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
-    with Submitter(plugin="cf") as sub:
+    with Submitter(worker="cf") as sub:
         shelly_call(submitter=sub, environment=docker)
     assert env_res == shelly_call.result().output.__dict__
 
@@ -155,14 +155,14 @@ def test_singularity_1_subm(tmp_path, plugin):
         cache_dir=newcache("shelly_env"),
         environment=sing,
     )
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         shelly_env(submitter=sub)
     assert env_res == shelly_env.result().output.__dict__
 
     shelly_call = ShellTask(
         name="shelly", executable=cmd, cache_dir=newcache("shelly_call")
     )
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         shelly_call(submitter=sub, environment=sing)
     for key in [
         "stdout",
@@ -299,14 +299,14 @@ def test_docker_fileinp_subm(tmp_path, plugin):
         tempdir=tmp_path, filename=filename, name="shelly_env", executable=["cat"]
     )
     shelly_env.environment = docker
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         shelly_env(submitter=sub)
     assert env_res == shelly_env.result().output.__dict__
 
     shelly_call = create_shelly_inputfile(
         tempdir=tmp_path, filename=filename, name="shelly_call", executable=["cat"]
     )
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         shelly_call(submitter=sub, environment=docker)
     assert env_res == shelly_call.result().output.__dict__
 

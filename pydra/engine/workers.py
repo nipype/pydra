@@ -20,7 +20,7 @@ from .helpers import (
 )
 
 import logging
-
+from pydra.engine.environments import Environment
 import random
 
 logger = logging.getLogger("pydra.worker")
@@ -34,7 +34,7 @@ class Worker:
         logger.debug(f"Initializing {self.__class__.__name__}")
         self.loop = loop
 
-    def run_el(self, interface, **kwargs):
+    def run(self, task: "Task", **kwargs):
         """Return coroutine for task execution."""
         raise NotImplementedError
 
@@ -134,18 +134,26 @@ class SerialWorker(Worker):
         """Initialize worker."""
         logger.debug("Initialize SerialWorker")
 
-    def run_el(self, interface, rerun=False, environment=None, **kwargs):
+    def run(
+        self,
+        task: "Task",
+        rerun: bool = False,
+        environment: Environment | None = None,
+        **kwargs,
+    ):
         """Run a task."""
-        return self.exec_serial(interface, rerun=rerun, environment=environment)
+        return self.exec_serial(task, rerun=rerun, environment=environment)
 
     def close(self):
         """Return whether the task is finished."""
 
-    async def exec_serial(self, runnable, rerun=False, environment=None):
-        if isinstance(runnable, Task):
-            return runnable._run(rerun, environment=environment)
+    async def exec_serial(
+        self, task: "Task", rerun: bool = False, environment: Environment | None = None
+    ):
+        if isinstance(task, Task):
+            return task.run(rerun, environment=environment)
         else:  # it could be tuple that includes pickle files with tasks and inputs
-            task_main_pkl, _ = runnable
+            task_main_pkl, _ = task
             return load_and_run(task_main_pkl, rerun, environment=environment)
 
     async def fetch_finished(self, futures):
@@ -170,10 +178,16 @@ class ConcurrentFuturesWorker(Worker):
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
-    def run_el(self, runnable, rerun=False, environment=None, **kwargs):
+    def run(
+        self,
+        task: "Task",
+        rerun: bool = False,
+        environment: Environment | None = None,
+        **kwargs,
+    ):
         """Run a task."""
         assert self.loop, "No event loop available to submit tasks"
-        return self.exec_as_coro(runnable, rerun=rerun, environment=environment)
+        return self.exec_as_coro(task, rerun=rerun, environment=environment)
 
     async def exec_as_coro(self, runnable, rerun=False, environment=None):
         """Run a task (coroutine wrapper)."""
@@ -182,9 +196,9 @@ class ConcurrentFuturesWorker(Worker):
                 self.pool, runnable._run, rerun, environment
             )
         else:  # it could be tuple that includes pickle files with tasks and inputs
-            ind, task_main_pkl, task_orig = runnable
+            task_main_pkl, task_orig = runnable
             res = await self.loop.run_in_executor(
-                self.pool, load_and_run, task_main_pkl, ind, rerun, environment
+                self.pool, load_and_run, task_main_pkl, rerun, environment
             )
         return res
 
@@ -223,19 +237,21 @@ class SlurmWorker(DistributedWorker):
         self.sbatch_args = sbatch_args or ""
         self.error = {}
 
-    def run_el(self, runnable, rerun=False, environment=None):
+    def run(
+        self, task: "Task", rerun: bool = False, environment: Environment | None = None
+    ):
         """Worker submission API."""
-        script_dir, batch_script = self._prepare_runscripts(runnable, rerun=rerun)
+        script_dir, batch_script = self._prepare_runscripts(task, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
-        if isinstance(runnable, Task):
-            cache_dir = runnable.cache_dir
-            name = runnable.name
-            uid = runnable.uid
+        if isinstance(task, Task):
+            cache_dir = task.cache_dir
+            name = task.name
+            uid = task.uid
         else:  # runnable is a tuple (ind, pkl file, task)
-            cache_dir = runnable[-1].cache_dir
-            name = runnable[-1].name
-            uid = f"{runnable[-1].uid}_{runnable[0]}"
+            cache_dir = task[-1].cache_dir
+            name = task[-1].name
+            uid = f"{task[-1].uid}_{task[0]}"
 
         return self._submit_job(batch_script, name=name, uid=uid, cache_dir=cache_dir)
 
@@ -453,7 +469,9 @@ class SGEWorker(DistributedWorker):
         self.default_qsub_args = default_qsub_args
         self.max_mem_free = max_mem_free
 
-    def run_el(self, runnable, rerun=False):  # TODO: add env
+    def run(
+        self, task: "Task", rerun: bool = False, environment: Environment | None = None
+    ):  # TODO: add env
         """Worker submission API."""
         (
             script_dir,
@@ -462,17 +480,17 @@ class SGEWorker(DistributedWorker):
             ind,
             output_dir,
             task_qsub_args,
-        ) = self._prepare_runscripts(runnable, rerun=rerun)
+        ) = self._prepare_runscripts(task, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
             logger.warning("Temporary directories may not be shared across computers")
-        if isinstance(runnable, Task):
-            cache_dir = runnable.cache_dir
-            name = runnable.name
-            uid = runnable.uid
+        if isinstance(task, Task):
+            cache_dir = task.cache_dir
+            name = task.name
+            uid = task.uid
         else:  # runnable is a tuple (ind, pkl file, task)
-            cache_dir = runnable[-1].cache_dir
-            name = runnable[-1].name
-            uid = f"{runnable[-1].uid}_{runnable[0]}"
+            cache_dir = task[-1].cache_dir
+            name = task[-1].name
+            uid = f"{task[-1].uid}_{task[0]}"
 
         return self._submit_job(
             batch_script,
@@ -881,20 +899,28 @@ class DaskWorker(Worker):
         self.client_args = kwargs
         logger.debug("Initialize Dask")
 
-    def run_el(self, runnable, rerun=False, **kwargs):
+    def run(
+        self,
+        task: "Task",
+        rerun: bool = False,
+        environment: Environment | None = None,
+        **kwargs,
+    ):
         """Run a task."""
-        return self.exec_dask(runnable, rerun=rerun)
+        return self.exec_dask(task, rerun=rerun, environment=environment)
 
-    async def exec_dask(self, runnable, rerun=False):
+    async def exec_dask(
+        self, task: "Task", rerun: bool = False, environment: Environment | None = None
+    ):
         """Run a task (coroutine wrapper)."""
         from dask.distributed import Client
 
         async with Client(**self.client_args, asynchronous=True) as client:
-            if isinstance(runnable, Task):
-                future = client.submit(runnable._run, rerun)
+            if isinstance(task, Task):
+                future = client.submit(task._run, rerun)
                 result = await future
             else:  # it could be tuple that includes pickle files with tasks and inputs
-                ind, task_main_pkl, task_orig = runnable
+                ind, task_main_pkl, task_orig = task
                 future = client.submit(load_and_run, task_main_pkl, ind, rerun)
                 result = await future
         return result
@@ -924,9 +950,15 @@ class PsijWorker(Worker):
         logger.debug("Initialize PsijWorker")
         self.psij = psij
 
-    def run_el(self, interface, rerun=False, **kwargs):
+    def run(
+        self,
+        task: "Task",
+        rerun: bool = False,
+        environment: Environment | None = None,
+        **kwargs,
+    ):
         """Run a task."""
-        return self.exec_psij(interface, rerun=rerun)
+        return self.exec_psij(task, rerun=rerun, environment=environment)
 
     def make_spec(self, cmd=None, arg=None):
         """
@@ -970,7 +1002,9 @@ class PsijWorker(Worker):
         job.definition = definition
         return job
 
-    async def exec_psij(self, runnable, rerun=False):
+    async def exec_psij(
+        self, task: "Task", rerun: bool = False, environment: Environment | None = None
+    ):
         """
         Run a task (coroutine wrapper).
 
@@ -989,18 +1023,18 @@ class PsijWorker(Worker):
         jex = self.psij.JobExecutor.get_instance(self.subtype)
         absolute_path = Path(__file__).parent
 
-        if isinstance(runnable, Task):
-            cache_dir = runnable.cache_dir
+        if isinstance(task, Task):
+            cache_dir = task.cache_dir
             file_path = cache_dir / "runnable_function.pkl"
             with open(file_path, "wb") as file:
-                pickle.dump(runnable._run, file)
+                pickle.dump(task._run, file)
             func_path = absolute_path / "run_pickled.py"
             definition = self.make_spec("python", [func_path, file_path])
         else:  # it could be tuple that includes pickle files with tasks and inputs
-            cache_dir = runnable[-1].cache_dir
+            cache_dir = task[-1].cache_dir
             file_path_1 = cache_dir / "taskmain.pkl"
             file_path_2 = cache_dir / "ind.pkl"
-            ind, task_main_pkl, task_orig = runnable
+            ind, task_main_pkl, task_orig = task
             with open(file_path_1, "wb") as file:
                 pickle.dump(task_main_pkl, file)
             with open(file_path_2, "wb") as file:

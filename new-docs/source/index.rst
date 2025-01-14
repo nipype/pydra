@@ -3,40 +3,41 @@
 Pydra
 =====
 
-Pydra is a lightweight Python dataflow engine for scientific analysis.
-Although designed as a successor to Nipype_, Pydra is supports analytics in any domain.
-Pydra helps build reproducible, scalable, reusable workflows that link processing tasks
-implemented in Python or shell commands to be executed on distributed compute platforms.
-
-The power of Pydra lies in ease of constructing workflows containing complex
-multiparameter map-reduce operations in Python code (see :ref:`Design philosophy` for
-the rationale behind its design).
+Pydra is a lightweight dataflow engine written in Python. Although designed to succeed
+Nipype_ in order to address the needs of the neuroimaging community, Pydra can be used
+for analytics in any scientific domain. Pydra facilitates the design of reproducible,
+scalable and robust workflows that can link diverse processing tasks implemented as
+shell commands or Python functions.
 
 **Key features:**
 
-* Combine diverse tasks (`Python functions <./tutorial/3-python.html>`__ or `shell commands <./tutorial/4-shell.html>`__) into coherent `workflows <./tutorial/5-workflow.html>`__
-* Concurrent execution on `choice of computing platform (e.g. workstation, SLURM, SGE, Dask, etc...) <./tutorial/2-advanced-execution.html#Workers>`__
+* Combine diverse tasks (`Python functions <./tutorial/3-python.html>`__ or `shell commands <./tutorial/4-shell.html>`__) into coherent, robust `workflows <./tutorial/5-workflow.html>`__
 * Dynamic workflow construction using Python code (see :ref:`Dynamic construction`)
+* Concurrent execution on `choice of computing platform (e.g. workstation, SLURM, SGE, Dask, etc...) <./tutorial/2-advanced-execution.html#Workers>`__
 * Map-reduce-like semantics (see :ref:`Splitting and combining`)
 * Global caching to reduce recomputation (see :ref:`Caches and hashes`)
 * Tasks can be executed in separate software environments, e.g. containers (see :ref:`Software environments`)
 * Strong type-checking, including file types, before execution (see :ref:`Typing and file-formats`)
 
+See :ref:`Design philosophy` for more details on the rationale behind Pydra's design.
+
 
 Installation
 ------------
 
-Pydra itself is a pure-Python package, which has only a handful of dependencies,
-therefore, it is straightforward to install via pip for Python >= 3.11
+Pydra is implemented purely in Python and has a small number of dependencies
+It is easy to install via pip for Python >= 3.11 (preferably within a
+`virtual environment`_):
 
 .. code-block:: bash
 
    $ pip install pydra
 
-Pre-designed tasks are available under the `pydra.tasks.*` package namespace. These tasks
-are implemented within separate packages that are typically specific to a given
-shell-command toolkit such as FSL_, AFNI_ or ANTs_, or a collection of related
-tasks/workflows (e.g. `niworkflows`_). Pip can be used to install these packages as well:
+Pre-designed tasks are available under the `pydra.tasks.*` namespace. These tasks
+are typically implemented within separate packages that are specific to a given
+shell-command toolkit, such as FSL_ (*pydra-fsl*), AFNI_ (*pydra-afni*) or
+ANTs_ (*pydra-ants*), or a collection of related tasks/workflows, such as Niworkflows
+(*pydra-niworkflows*). Pip can be used to install these extension packages as well:
 
 .. code-block:: bash
 
@@ -50,13 +51,15 @@ to run them (see :ref:`Software environments`).
 Tutorials and notebooks
 -----------------------
 
-The following tutorials provide a step-by-step guide to using Pydra.
-They can be read in any order, but it is recommended to start with :ref:`Getting started`.
-The tutorials are implemented as Jupyter notebooks, which can be downloaded and run locally
+The following tutorials provide a step-by-step guide to using Pydra. They can be
+studied in any order, but it is recommended to start with :ref:`Getting started` and
+step through the list from there.
+
+The tutorials are written in Jupyter notebooks, which can be downloaded and run locally
 or run online using the |Binder| button within each tutorial.
 
 If you decide to download the notebooks and run locally, be sure to install the necessary
-dependencies with
+dependencies (ideally within a  `virtual environment`_):
 
 .. code-block:: bash
 
@@ -74,7 +77,8 @@ Learn how to execute existing tasks (including workflows) on different systems
 Design
 ~~~~~~
 
-Learn how to design your own tasks
+Learn how to design your own tasks, wrapped shell commands or Python functions, or
+workflows,
 
 * :ref:`Python-tasks`
 * :ref:`Shell-tasks`
@@ -171,5 +175,6 @@ See the full reference documentation for Pydra
 .. _AFNI: https://afni.nimh.nih.gov/
 .. _niworkflows: https://niworkflows.readthedocs.io/en/latest/
 .. _Nipype: https://nipype.readthedocs.io/en/latest/
+.. _virtual environment: https://docs.python.org/3/library/venv.html
 .. |Binder| image:: https://mybinder.org/badge_logo.svg
    :target: https://mybinder.org/v2/gh/nipype/pydra/develop

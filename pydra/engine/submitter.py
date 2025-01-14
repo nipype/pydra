@@ -3,22 +3,49 @@
 import asyncio
 import typing as ty
 import pickle
-from uuid import uuid4
+import os
+from pathlib import Path
+from tempfile import mkdtemp
+from copy import copy
+from collections import defaultdict
 from .workers import Worker, WORKERS
 from .core import is_workflow
+from .graph import DiGraph
 from .helpers import get_open_loop, load_and_run_async
 from pydra.utils.hash import PersistentCache
+from .state import StateIndex
+from .audit import Audit
+from .core import Task
+from pydra.utils.messenger import AuditFlag, Messenger
 
 import logging
 
 logger = logging.getLogger("pydra.submitter")
 
+if ty.TYPE_CHECKING:
+    from .node import Node
+    from .specs import TaskDef, WorkflowDef
+    from .environments import Environment
 
-# TODO: runnable in init or run
+# Used to flag development mode of Audit
+develop = False
+
+
 class Submitter:
     """Send a task to the execution backend."""
 
-    def __init__(self, plugin: ty.Union[str, ty.Type[Worker]] = "cf", **kwargs):
+    def __init__(
+        self,
+        worker: ty.Union[str, ty.Type[Worker]] = "cf",
+        cache_dir: os.PathLike | None = None,
+        cache_locations: list[os.PathLike] | None = None,
+        environment: "Environment | None" = None,
+        audit_flags: AuditFlag = AuditFlag.NONE,
+        messengers: ty.Iterable[Messenger] | None = None,
+        messenger_args: dict[str, ty.Any] | None = None,
+        rerun: bool = False,
+        **kwargs,
+    ):
         """
         Initialize task submission.
 
@@ -31,41 +58,46 @@ class Submitter:
             Additional keyword arguments to pass to the worker.
 
         """
+
+        self.audit = Audit(
+            audit_flags=audit_flags,
+            messengers=messengers,
+            messenger_args=messenger_args,
+            develop=develop,
+        )
+        self.cache_dir = cache_dir
+        self.cache_locations = cache_locations
+        self.environment = environment
+        self.rerun = rerun
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
-        if isinstance(plugin, str):
-            self.plugin = plugin
+        if isinstance(worker, str):
+            self.plugin = worker
             try:
                 worker_cls = WORKERS[self.plugin]
             except KeyError:
                 raise NotImplementedError(f"No worker for '{self.plugin}' plugin")
         else:
             try:
-                self.plugin = plugin.plugin_name
+                self.plugin = worker.plugin_name
             except AttributeError:
                 raise ValueError("Worker class must have a 'plugin_name' str attribute")
-            worker_cls = plugin
+            worker_cls = worker
         self.worker = worker_cls(**kwargs)
         self.worker.loop = self.loop
 
-    def __call__(self, runnable, cache_locations=None, rerun=False, environment=None):
+    def __call__(
+        self,
+        task_def: "TaskDef",
+    ):
         """Submitter run function."""
-        from pydra.engine.core import TaskDef
 
-        if cache_locations is not None:
-            runnable.cache_locations = cache_locations
-        if isinstance(runnable, TaskDef):
-            runnable = runnable.Task(
-                runnable,
-                cache_locations=cache_locations,
-            )
-        self.loop.run_until_complete(
-            self.submit_from_call(runnable, rerun, environment)
-        )
+        task = Task(task_def, submitter=self, name="task")
+        self.loop.run_until_complete(self.submit_from_call(task))
         PersistentCache().clean_up()
-        return runnable.result()
+        return task.result()
 
-    async def submit_from_call(self, runnable, rerun, environment):
+    async def submit_from_call(self, task: "Task"):
         """
         This coroutine should only be called once per Submitter call,
         and serves as the bridge between sync/async lands.
@@ -79,26 +111,25 @@ class Submitter:
         Once Python 3.10 is the minimum, this should probably be refactored into using
         structural pattern matching.
         """
-        if is_workflow(runnable):  # TODO: env to wf
+        if is_workflow(task):  # TODO: env to wf
             # connect and calculate the checksum of the graph before running
-            runnable._connect_and_propagate_to_tasks(override_task_caches=True)
+            task._create_graph_connections()  # override_task_caches=True)
             # 0
-            if runnable.plugin and runnable.plugin != self.plugin:
+            if task.plugin and task.plugin != self.plugin:
                 # if workflow has a different plugin it's treated as a single element
-                await self.worker.run_el(runnable, rerun=rerun)
+                await self.worker.run(task, rerun=self.rerun)
             # 1
-            if runnable.state is None:
-                await runnable._run(self, rerun=rerun)
-            # 3
-            else:
-                await self.expand_runnable(runnable, wait=True, rerun=rerun)
-            runnable._reset()
+            # if runnable.state is None:
+            #     await runnable._run(self, rerun=rerun)
+            # # 3
+            # else:
+            await self.expand_runnable(task, wait=True)
         else:
             # 2
-            await self.expand_runnable(runnable, wait=True, rerun=rerun)  # TODO
+            await self.expand_runnable(task, wait=True)  # TODO
         return True
 
-    async def expand_runnable(self, runnable, wait=False, rerun=False):
+    async def expand_runnable(self, runnable: "Task", wait=False):
         """
         This coroutine handles state expansion.
 
@@ -132,10 +163,10 @@ class Submitter:
             # job has no state anymore
             futures.add(
                 # This unpickles and runs workflow - why are we pickling?
-                asyncio.create_task(load_and_run_async(task_pkl, self, rerun))
+                asyncio.create_task(load_and_run_async(task_pkl, self, self.rerun))
             )
         else:
-            futures.add(self.worker.run_el((task_pkl, runnable), rerun=rerun))
+            futures.add(self.worker.run((task_pkl, runnable), rerun=self.rerun))
 
         if wait and futures:
             # if wait is True, we are at the end of the graph / state expansion.
@@ -145,40 +176,37 @@ class Submitter:
         # pass along futures to be awaited independently
         return futures
 
-    async def expand_workflow(self, wf, rerun=False):
+    async def expand_workflow(self, task: "Task[WorkflowDef]"):
         """
         Expand and execute a stateless :class:`~pydra.engine.core.Workflow`.
         This method is only reached by `Workflow._run_task`.
 
         Parameters
         ----------
-        wf : :obj:`~pydra.engine.core.Workflow`
+        task : :obj:`~pydra.engine.core.WorkflowTask`
             Workflow Task object
 
         Returns
         -------
-        wf : :obj:`pydra.engine.core.Workflow`
+        wf : :obj:`pydra.engine.workflow.Workflow`
             The computed workflow
 
         """
-        # creating a copy of the graph that will be modified
-        # the copy contains new lists with original runnable objects
-        graph_copy = wf.graph.copy()
-        # resetting uid for nodes in the copied workflows
-        for nd in graph_copy.nodes:
-            nd._uid = uuid4().hex
+        wf = task.definition.construct()
+        # Generate the execution graph
+        exec_graph = wf.execution_graph(submitter=self)
         # keep track of pending futures
         task_futures = set()
-        tasks, tasks_follow_errored = get_runnable_tasks(graph_copy)
-        while tasks or task_futures or graph_copy.nodes:
+        tasks = self.get_runnable_tasks(exec_graph)
+        while tasks or task_futures or any(not n.done for n in exec_graph.nodes):
             if not tasks and not task_futures:
                 # it's possible that task_futures is empty, but not able to get any
                 # tasks from graph_copy (using get_runnable_tasks)
                 # this might be related to some delays saving the files
-                # so try to get_runnable_tasks for another minut
+                # so try to get_runnable_tasks for another minute
                 ii = 0
-                while not tasks and graph_copy.nodes:
-                    tasks, follow_err = get_runnable_tasks(graph_copy)
+                while not tasks and exec_graph.nodes:
+                    tasks, follow_err = self.get_runnable_tasks(exec_graph)
                     ii += 1
                     # don't block the event loop!
                     await asyncio.sleep(1)
@@ -189,11 +217,11 @@ class Submitter:
                             "results predecessors:\n\n"
                         )
                         # Get blocked tasks and the predecessors they are waiting on
-                        outstanding = {
+                        outstanding: dict[Task, list[Task]] = {
                             t: [
-                                p for p in graph_copy.predecessors[t.name] if not p.done
+                                p for p in exec_graph.predecessors[t.name] if not p.done
                             ]
-                            for t in graph_copy.sorted_nodes
+                            for t in exec_graph.sorted_nodes
                         }
 
                         hashes_have_changed = False
@@ -236,25 +264,18 @@ class Submitter:
                 # grab inputs if needed
                 logger.debug(f"Retrieving inputs for {task}")
                 # TODO: add state idx to retrieve values to reduce waiting
-                task.inputs.retrieve_values(wf)
+                task.definition._retrieve_values(wf)
                 if task.state:
-                    for fut in await self.expand_runnable(task, rerun=rerun):
+                    for fut in await self.expand_runnable(task):
                         task_futures.add(fut)
                 # expand that workflow
                 elif is_workflow(task):
-                    await task._run(self, rerun=rerun)
+                    await task.run(self)
                 # single task
                 else:
-                    task_futures.add(self.worker.run_el(task, rerun=rerun))
+                    task_futures.add(self.worker.run(task, rerun=self.rerun))
             task_futures = await self.worker.fetch_finished(task_futures)
-            tasks, follow_err = get_runnable_tasks(graph_copy)
-            # updating tasks_errored
-            for key, val in follow_err.items():
-                tasks_follow_errored.setdefault(key, [])
-                tasks_follow_errored[key] += val
-
-        for key, val in tasks_follow_errored.items():
-            setattr(getattr(wf, key), "_errored", val)
+            tasks = self.get_runnable_tasks(exec_graph)
         return wf
 
     def __enter__(self):
@@ -274,67 +295,223 @@ class Submitter:
         if self._own_loop:
             self.loop.close()
 
+    def get_runnable_tasks(
+        self,
+        graph: DiGraph,
+    ) -> tuple[list["Task"], dict["NodeExecution", list[str]]]:
+        """Parse a graph and return all runnable tasks.
 
-def get_runnable_tasks(graph):
-    """Parse a graph and return all runnable tasks."""
-    tasks = []
-    to_remove = []
-    # tasks that follow task that raises an error
-    following_err = dict()
-    for tsk in graph.sorted_nodes:
-        if tsk not in graph.sorted_nodes:
-            continue
-        # since the list is sorted (breadth-first) we can stop
-        # when we find a task that depends on any task that is already in tasks
-        if set(graph.predecessors[tsk.name]).intersection(set(tasks)):
-            break
-        _is_runnable = is_runnable(graph, tsk)
-        if _is_runnable is True:
-            tasks.append(tsk)
-            to_remove.append(tsk)
-        elif _is_runnable is False:
-            continue
-        else:  # a previous task had an error
-            errored_task = _is_runnable
-            # removing all successors of the errored task
-            for task_err in errored_task:
-                task_to_remove = graph.remove_successors_nodes(task_err)
-                for tsk in task_to_remove:
-                    # adding tasks that were removed from the graph
-                    # due to the error in the errored_task
-                    following_err.setdefault(tsk, [])
-                    following_err[tsk].append(task_err.name)
+        Parameters
+        ----------
+        graph : :obj:`~pydra.engine.graph.DiGraph`
+            Graph object
 
-    # removing tasks that are ready to run from the graph
-    for nd in to_remove:
-        graph.remove_nodes(nd)
-    return tasks, following_err
+        Returns
+        -------
+        tasks : list of :obj:`~pydra.engine.core.Task`
+            List of runnable tasks
+        following_err : dict[NodeToExecute, list[str]]
+            Dictionary of tasks that are blocked by errored tasks
+        """
+        tasks = []
+        not_started = set()
+        node: NodeExecution
+        for node in graph.sorted_nodes:
+            if node.done:
+                continue
+            # since the list is sorted (breadth-first) we can stop
+            # when we find a task that depends on any task that is already in tasks
+            if set(graph.predecessors[node.name]).intersection(not_started):
+                break
+            # Record if the node has not been started
+            if not node.started:
+                not_started.add(node)
+            tasks.extend(node.get_runnable_tasks(graph, self))
+        return tasks
+
+    @property
+    def cache_dir(self):
+        """Get the location of the cache directory."""
+        return self._cache_dir
+
+    @cache_dir.setter
+    def cache_dir(self, location):
+        if location is not None:
+            self._cache_dir = Path(location).resolve()
+            self._cache_dir.mkdir(parents=False, exist_ok=True)
+        else:
+            self._cache_dir = mkdtemp()
+            self._cache_dir = Path(self._cache_dir).resolve()
 
 
-def is_runnable(graph, obj):
-    """Check if a task within a graph is runnable."""
-    connections_to_remove = []
-    pred_errored = []
-    is_done = None
-    for pred in graph.predecessors[obj.name]:
+class NodeExecution:
+    """A wrapper around a workflow node containing the execution state of the tasks that
+    are generated from it"""
+
+    name: str
+    node: "Node"
+    submitter: Submitter
+
+    # List of tasks that were completed successfully
+    successful: dict[StateIndex | None, list["Task"]]
+    # List of tasks that failed
+    errored: dict[StateIndex | None, "Task"]
+    # List of tasks that couldn't be run due to upstream errors
+    unrunnable: dict[StateIndex | None, list["Task"]]
+    # List of tasks that are running
+    running: dict[StateIndex | None, "Task"]
+    # List of tasks that are waiting on other tasks to complete before they can be run
+    waiting: dict[StateIndex | None, "Task"]
+
+    _tasks: dict[StateIndex | None, "Task"] | None
+
+    def __init__(self, node: "Node", submitter: Submitter):
+        self.name = node.name
+        self.node = node
+        self.submitter = submitter
+        # Initialize the state dictionaries
+        self._tasks = None
+        self.waiting = []
+        self.successful = []
+        self.errored = []
+        self.running = []
+        self.unrunnable = defaultdict(list)
+        self.state_names = self.node.state_names
+
+    def __getattr__(self, name: str) -> ty.Any:
+        """Delegate attribute access to the underlying node."""
+        return getattr(self.node, name)
+
+    @property
+    def tasks(self) -> ty.Iterable["Task"]:
+        if self._tasks is None:
+            self._tasks = {t.state_index: t for t in self._generate_tasks()}
+        return self._tasks.values()
+
+    def task(self, index: StateIndex | None = None) -> "Task":
+        """Get a task object for a given state index."""
+        self.tasks  # Ensure tasks are loaded
         try:
-            is_done = pred.done
-        except ValueError:
-            pred_errored.append(pred)
+            return self._tasks[index]
+        except KeyError:
+            if index is None:
+                raise KeyError(
+                    f"{self!r} has been split, so a state index must be provided"
+                ) from None
+            raise
 
-        if is_done is True:
-            connections_to_remove.append(pred)
-        elif is_done is False:
-            return False
+    @property
+    def started(self) -> bool:
+        return (
+            self.successful
+            or self.errored
+            or self.unrunnable
+            or self.running
+            or self.waiting
+        )
 
-    if pred_errored:
-        return pred_errored
+    @property
+    def done(self) -> bool:
+        return self.started and not (self.running or self.waiting)
 
-    # removing nodes that are done from connections
-    for nd in connections_to_remove:
-        graph.remove_nodes_connections(nd)
+    @property
+    def all_failed(self) -> bool:
+        return (self.unrunnable or self.errored) and not (
+            self.successful or self.waiting or self.running
+        )
 
-    return True
+    def _generate_tasks(self) -> ty.Iterable["Task"]:
+        if self.node.state is None:
+            yield Task(
+                definition=self.node._definition,
+                submitter=self.submitter,
+                name=self.node.name,
+            )
+        else:
+            for index, split_defn in self.node._split_definition().items():
+                yield Task(
+                    definition=split_defn,
+                    submitter=self.submitter,
+                    name=self.node.name,
+                    state_index=index,
+                )
+
+        #     if state_index is None:
+        #         # if state_index=None, collecting all results
+        #         if self.node.state.combiner:
+        #             return self._combined_output(return_inputs=return_inputs)
+        #         else:
+        #             results = []
+        #             for ind in range(len(self.node.state.inputs_ind)):
+        #                 checksum = self.checksum_states(state_index=ind)
+        #                 result = load_result(checksum, cache_locations)
+        #                 if result is None:
+        #                     return None
+        #                 results.append(result)
+        #             if return_inputs is True or return_inputs == "val":
+        #                 return list(zip(self.node.state.states_val, results))
+        #             elif return_inputs == "ind":
+        #                 return list(zip(self.node.state.states_ind, results))
+        #             else:
+        #                 return results
+        #     else:  # state_index is not None
+        #         if self.node.state.combiner:
+        #             return self._combined_output(return_inputs=return_inputs)[
+        #                 state_index
+        #             ]
+        #         result = load_result(self.checksum_states(state_index), cache_locations)
+        #         if return_inputs is True or return_inputs == "val":
+        #             return (self.node.state.states_val[state_index], result)
+        #         elif return_inputs == "ind":
+        #             return (self.node.state.states_ind[state_index], result)
+        #         else:
+        #             return result
+        # else:
+        #     return load_result(self._definition._checksum, cache_locations)
+
+    def get_runnable_tasks(self, graph: DiGraph) -> list["Task"]:
+        """For a given node, check to see which tasks have been successfully run, are ready
+        to run, can't be run due to upstream errors, or are waiting on other tasks to complete.
+
+        Parameters
+        ----------
+        node : :obj:`~pydra.engine.node.Node`
+            The node object to get the tasks for
+        graph : :obj:`~pydra.engine.graph.DiGraph`
+            Graph object
+
+
+        Returns
+        -------
+        runnable : list[NodeExecution]
+            List of tasks that are ready to run
+        """
+        runnable: list["Task"] = []
+        if not self.started:
+            self.waiting = copy(self._tasks)
+        # Check to see if any previously running tasks have completed
+        for index, task in copy(self.running.items()):
+            if task.done:
+                self.successful[task.state_index] = self.running.pop(index)
+            elif task.errored:
+                self.errored[task.state_index] = self.running.pop(index)
+        # Check to see if any waiting tasks are now runnable/unrunnable
+        for index, task in copy(self.waiting.items()):
+            pred: NodeExecution
+            is_runnable = True
+            for pred in graph.predecessors[self.node.name]:
+                if index not in pred.successful:
+                    is_runnable = False
+                    if index in pred.errored:
+                        self.unrunnable[index].append(self.waiting.pop(index))
+                    if index in pred.unrunnable:
+                        self.unrunnable[index].extend(pred.unrunnable[index])
+                        self.waiting.pop(index)
+                    break
+            if is_runnable:
+                runnable.append(self.waiting.pop(index))
+        self.running.update({t.state_index: t for t in runnable})
+        return runnable
 
 
 async def prepare_runnable(runnable):

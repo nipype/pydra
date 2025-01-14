@@ -43,7 +43,7 @@ def result_submitter(shell_task, plugin):
     """helper function to return result when running with submitter
     with specific plugin
     """
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         shell_task(submitter=sub)
     return shell_task.result()
 

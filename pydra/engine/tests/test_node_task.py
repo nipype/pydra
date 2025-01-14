@@ -368,7 +368,7 @@ def test_task_nostate_1(plugin_dask_opt, tmp_path):
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -409,7 +409,7 @@ def test_task_nostate_1_call_subm(plugin_dask_opt, tmp_path):
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         nn(submitter=sub)
 
     # checking the results
@@ -457,7 +457,7 @@ def test_task_nostate_2(plugin, tmp_path):
     assert np.allclose(nn.inputs.lst, [2, 3, 4])
     assert nn.state is None
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -473,7 +473,7 @@ def test_task_nostate_3(plugin, tmp_path):
     nn.cache_dir = tmp_path
     assert nn.inputs.d == {"a": "ala", "b": "bala"}
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -560,7 +560,7 @@ def test_task_nostate_cachedir(plugin_dask_opt, tmp_path):
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -579,7 +579,7 @@ def test_task_nostate_cachedir_relativepath(tmp_path, plugin_dask_opt):
     assert np.allclose(nn.inputs.a, [3])
     assert nn.state is None
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -601,11 +601,11 @@ def test_task_nostate_cachelocations(plugin_dask_opt, tmp_path):
     cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
 
     nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn2)
 
     # checking the results
@@ -629,11 +629,11 @@ def test_task_nostate_cachelocations_forcererun(plugin, tmp_path):
     cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn2, rerun=True)
 
     # checking the results
@@ -711,12 +711,12 @@ def test_task_nostate_cachelocations_updated(plugin, tmp_path):
     cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir)
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     nn2 = fun_addtwo(name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir)
     # updating cache location to non-existing dir
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn2, cache_locations=cache_dir1)
 
     # checking the results
@@ -746,7 +746,7 @@ def test_task_state_1(plugin_dask_opt, input_type, tmp_path):
     assert nn.state.splitter_rpn == ["NA.a"]
     assert (nn.inputs.a == np.array([3, 5])).all()
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -787,7 +787,7 @@ def test_task_state_1a(plugin, tmp_path):
     assert nn.state.splitter_rpn == ["NA.a"]
     assert (nn.inputs.a == np.array([3, 5])).all()
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -811,7 +811,7 @@ def test_task_state_singl_1(plugin, tmp_path):
     assert nn.state.splitter_final == "NA.a"
     assert nn.state.splitter_rpn_final == ["NA.a"]
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -881,7 +881,7 @@ def test_task_state_2(
     assert nn.state.splitter_final == state_splitter
     assert nn.state.splitter_rpn_final == state_rpn
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -918,7 +918,7 @@ def test_task_state_3(plugin, tmp_path):
     assert nn.state.splitter_rpn == ["NA.a"]
     assert nn.inputs.a == []
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -943,7 +943,7 @@ def test_task_state_4(plugin, input_type, tmp_path):
     assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
     assert nn.state.splitter == "NA.lst"
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking that split is done across dim 0
@@ -972,7 +972,7 @@ def test_task_state_4a(plugin, tmp_path):
     assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
     assert nn.state.splitter == "NA.lst"
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -996,7 +996,7 @@ def test_task_state_5(plugin, tmp_path):
     assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
     assert nn.state.splitter == ("NA.n", "NA.lst")
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -1023,7 +1023,7 @@ def test_task_state_5_exception(plugin, tmp_path):
     assert nn.state.splitter == ("NA.n", "NA.lst")
 
     with pytest.raises(Exception) as excinfo:
-        with Submitter(plugin=plugin) as sub:
+        with Submitter(worker=plugin) as sub:
             sub(nn)
     assert "shape" in str(excinfo.value)
 
@@ -1039,7 +1039,7 @@ def test_task_state_6(plugin, tmp_path):
     assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
     assert nn.state.splitter == ["NA.n", "NA.lst"]
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -1063,7 +1063,7 @@ def test_task_state_6a(plugin, tmp_path):
     assert np.allclose(nn.inputs.lst, [[2, 3, 4], [1, 2, 3]])
     assert nn.state.splitter == ["NA.n", "NA.lst"]
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -1090,7 +1090,7 @@ def test_task_state_comb_1(plugin_dask_opt, tmp_path):
     assert nn.state.splitter_final is None
     assert nn.state.splitter_rpn_final == []
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
 
     assert nn.state.states_ind == [{"NA.a": 0}, {"NA.a": 1}]
@@ -1228,7 +1228,7 @@ def test_task_state_comb_2(
     assert nn.state.splitter_rpn == state_rpn
     assert nn.state.combiner == state_combiner
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     assert nn.state.splitter_final == state_splitter_final
@@ -1275,7 +1275,7 @@ def test_task_state_comb_singl_1(plugin, tmp_path):
     assert nn.state.splitter_final is None
     assert nn.state.splitter_rpn_final == []
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -1299,7 +1299,7 @@ def test_task_state_comb_3(plugin, tmp_path):
     assert nn.state.splitter_rpn == ["NA.a"]
     assert nn.inputs.a == []
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     # checking the results
@@ -1463,7 +1463,7 @@ def test_task_state_cachedir(plugin_dask_opt, tmp_path):
     assert nn.state.splitter == "NA.a"
     assert (nn.inputs.a == np.array([3, 5])).all()
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
 
     # checking the results
@@ -1484,13 +1484,13 @@ def test_task_state_cachelocations(plugin, tmp_path):
     cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir).split(splitter="a", a=[3, 5])
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     nn2 = fun_addtwo(
         name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir
     ).split(splitter="a", a=[3, 5])
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn2)
 
     # checking the results
@@ -1515,13 +1515,13 @@ def test_task_state_cachelocations_forcererun(plugin, tmp_path):
     cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", a=3, cache_dir=cache_dir).split(splitter="a", a=[3, 5])
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     nn2 = fun_addtwo(
         name="NA", a=3, cache_dir=cache_dir2, cache_locations=cache_dir
     ).split(splitter="a", a=[3, 5])
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn2, rerun=True)
 
     # checking the results
@@ -1550,13 +1550,13 @@ def test_task_state_cachelocations_updated(plugin, tmp_path):
     cache_dir2.mkdir()
 
     nn = fun_addtwo(name="NA", cache_dir=cache_dir).split(splitter="a", a=[3, 5])
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn)
 
     nn2 = fun_addtwo(name="NA", cache_dir=cache_dir2, cache_locations=cache_dir).split(
         splitter="a", a=[3, 5]
     )
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         sub(nn2, cache_locations=cache_dir1)
 
     # checking the results
@@ -1588,13 +1588,13 @@ def test_task_files_cachelocations(plugin_dask_opt, tmp_path):
     input2.write_text("test")
 
     nn = fun_file(name="NA", filename=input1, cache_dir=cache_dir)
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn)
 
     nn2 = fun_file(
         name="NA", filename=input2, cache_dir=cache_dir2, cache_locations=cache_dir
     )
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(nn2)
 
     # checking the results

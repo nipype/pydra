@@ -14,7 +14,7 @@ from .base import (
 )
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.workflow.base import Workflow
+    from pydra.engine.core import Workflow
     from pydra.engine.specs import TaskDef, TaskOutputs, WorkflowDef
 
 
@@ -128,7 +128,6 @@ def define(
     TaskDef
         The interface for the function or class.
     """
-    from pydra.engine.core import WorkflowTask
     from pydra.engine.specs import TaskDef, WorkflowDef, WorkflowOutputs
 
     if lazy is None:
@@ -174,7 +173,6 @@ def define(
         interface = make_task_def(
             WorkflowDef,
             WorkflowOutputs,
-            WorkflowTask,
             parsed_inputs,
             parsed_outputs,
             name=name,
@@ -208,12 +206,12 @@ def this() -> "Workflow":
 OutputsType = ty.TypeVar("OutputsType", bound="TaskOutputs")
 
 
-def add(task_spec: "TaskDef[OutputsType]", name: str = None) -> OutputsType:
+def add(task_def: "TaskDef[OutputsType]", name: str = None) -> OutputsType:
     """Add a node to the workflow currently being constructed
 
     Parameters
     ----------
-    task_spec : TaskDef
+    task_def : TaskDef
         The definition of the task to add to the workflow as a node
     name : str, optional
         The name of the node, by default it will be the name of the task definition
@@ -224,4 +222,4 @@ def add(task_spec: "TaskDef[OutputsType]", name: str = None) -> OutputsType:
     Outputs
         The outputs definition of the node
     """
-    return this().add(task_spec, name=name)
+    return this().add(task_def, name=name)

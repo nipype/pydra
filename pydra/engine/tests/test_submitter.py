@@ -149,7 +149,7 @@ def test_wf2(plugin_dask_opt, tmpdir):
     wf.set_output([("out", wf.wfnd.lzout.out)])
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(wf)
 
     res = wf.result()
@@ -166,7 +166,7 @@ def test_wf_with_state(plugin_dask_opt, tmpdir):
     wf.set_output([("out", wf.taskb.lzout.out)])
     wf.cache_dir = tmpdir
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         sub(wf)
 
     res = wf.result()
@@ -702,7 +702,7 @@ def test_byo_worker():
 
     task1 = add_env_var_task(x=1)
 
-    with Submitter(plugin=BYOAddVarWorker, add_var=10) as sub:
+    with Submitter(worker=BYOAddVarWorker, add_var=10) as sub:
         assert sub.plugin == "byo_add_env_var"
         result = task1(submitter=sub)
 
@@ -710,7 +710,7 @@ def test_byo_worker():
 
     task2 = add_env_var_task(x=2)
 
-    with Submitter(plugin="serial") as sub:
+    with Submitter(worker="serial") as sub:
         result = task2(submitter=sub)
 
     assert result.output.out == 2
@@ -719,7 +719,7 @@ def test_byo_worker():
 def test_bad_builtin_worker():
 
     with pytest.raises(NotImplementedError, match="No worker for 'bad-worker' plugin"):
-        Submitter(plugin="bad-worker")
+        Submitter(worker="bad-worker")
 
 
 def test_bad_byo_worker():
@@ -730,4 +730,4 @@ def test_bad_byo_worker():
     with pytest.raises(
         ValueError, match="Worker class must have a 'plugin_name' str attribute"
     ):
-        Submitter(plugin=BadWorker)
+        Submitter(worker=BadWorker)

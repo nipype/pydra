@@ -34,7 +34,7 @@ def test_docker_1(plugin):
     cmd = "whoami"
     docky = shell.define(cmd)(environment=Docker(image="busybox"))
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         docky(submitter=sub)
 
     res = docky.result()

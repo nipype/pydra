@@ -80,7 +80,7 @@ def test_singularity_2(plugin, tmp_path):
     )
     assert singu.cmdline == " ".join(cmd)
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         singu(submitter=sub)
     res = singu.result()
     assert res.output.stdout.strip() == " ".join(cmd[1:])
@@ -105,7 +105,7 @@ def test_singularity_2a(plugin, tmp_path):
     )
     assert singu.cmdline == f"{cmd_exec} {' '.join(cmd_args)}"
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         singu(submitter=sub)
     res = singu.result()
     assert res.output.stdout.strip() == " ".join(cmd_args)
@@ -182,7 +182,7 @@ def test_singularity_outputspec_1(plugin, tmp_path):
         cache_dir=tmp_path,
     )
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         singu(submitter=sub)
 
     res = singu.result()
@@ -662,7 +662,7 @@ def test_singularity_wf_inputspec_1(plugin, tmp_path):
 
     wf.set_output([("out", wf.singu.lzout.stdout)])
 
-    with Submitter(plugin="serial") as sub:
+    with Submitter(worker="serial") as sub:
         wf(submitter=sub)
 
     res = wf.result()
@@ -718,7 +718,7 @@ def test_singularity_wf_state_inputspec_1(plugin, tmp_path):
 
     wf.set_output([("out", wf.singu.lzout.stdout)])
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()
@@ -774,7 +774,7 @@ def test_singularity_wf_ndst_inputspec_1(plugin, tmp_path):
 
     wf.set_output([("out", wf.singu.lzout.stdout)])
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()

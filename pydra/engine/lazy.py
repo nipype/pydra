@@ -120,6 +120,10 @@ class LazyOutField(LazyField[T]):
     node: node.Node
     attr_type = "output"
 
+    @property
+    def name(self) -> str:
+        return self.node.name
+
     def get_value(self, wf: "Workflow", state_index: ty.Optional[int] = None) -> ty.Any:
         """Return the value of a lazy field.
 

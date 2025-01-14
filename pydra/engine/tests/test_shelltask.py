@@ -265,7 +265,7 @@ def test_wf_shell_cmd_1(plugin, tmp_path):
     wf.set_output([("out", wf.shelly_ls.lzout.stdout)])
     wf.cache_dir = tmp_path
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()
@@ -1597,7 +1597,7 @@ def test_shell_cmd_inputspec_11(tmp_path):
     # XXX: Figure out why this fails with "cf". Occurs in CI when using Ubuntu + Python >= 3.10
     #      (but not when using macOS + Python >= 3.10). Same error occurs in test_shell_cmd_outputspec_7a
     #      see https://github.com/nipype/pydra/issues/671
-    with Submitter(plugin="serial") as sub:
+    with Submitter(worker="serial") as sub:
         sub(wf)
     result = wf.result()
 
@@ -2212,7 +2212,7 @@ def test_wf_shell_cmd_2(plugin_dask_opt, tmp_path):
 
     wf.set_output([("out_f", wf.shelly.lzout.out1), ("out", wf.shelly.lzout.stdout)])
 
-    with Submitter(plugin=plugin_dask_opt) as sub:
+    with Submitter(worker=plugin_dask_opt) as sub:
         wf(submitter=sub)
 
     res = wf.result()
@@ -2259,7 +2259,7 @@ def test_wf_shell_cmd_2a(plugin, tmp_path):
 
     wf.set_output([("out_f", wf.shelly.lzout.out1), ("out", wf.shelly.lzout.stdout)])
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()
@@ -2352,7 +2352,7 @@ def test_wf_shell_cmd_3(plugin, tmp_path):
         ]
     )
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()
@@ -2449,7 +2449,7 @@ def test_wf_shell_cmd_3a(plugin, tmp_path):
         ]
     )
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()
@@ -2544,7 +2544,7 @@ def test_wf_shell_cmd_state_1(plugin, tmp_path):
         ]
     )
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         wf(submitter=sub)
 
     res_l = wf.result()
@@ -2641,7 +2641,7 @@ def test_wf_shell_cmd_ndst_1(plugin, tmp_path):
         ]
     )
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()
@@ -2709,7 +2709,7 @@ def test_shell_cmd_outputspec_1b_exception(plugin, tmp_path):
     )
 
     with pytest.raises(Exception) as exinfo:
-        with Submitter(plugin=plugin) as sub:
+        with Submitter(worker=plugin) as sub:
             shelly(submitter=sub)
     assert "does not exist" in str(exinfo.value)
 
@@ -2751,7 +2751,7 @@ def test_shell_cmd_outputspec_2a_exception(plugin, tmp_path):
     )
 
     with pytest.raises(Exception) as excinfo:
-        with Submitter(plugin=plugin) as sub:
+        with Submitter(worker=plugin) as sub:
             shelly(submitter=sub)
     assert "no file matches" in str(excinfo.value)
 
@@ -3388,7 +3388,7 @@ def test_shell_cmd_outputspec_wf_1(plugin, tmp_path):
         [("stdout", wf.shelly.lzout.stdout), ("newfile", wf.shelly.lzout.newfile)]
     )
 
-    with Submitter(plugin=plugin) as sub:
+    with Submitter(worker=plugin) as sub:
         wf(submitter=sub)
 
     res = wf.result()
