@@ -72,7 +72,7 @@ Execution
 Learn how to execute existing tasks (including workflows) on different systems
 
 * :ref:`Getting started`
-* :ref:`Advanced execution`
+* :ref:`Execution options`
 
 Design
 ~~~~~~
