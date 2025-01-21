@@ -566,7 +566,27 @@ PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 
 class PythonDef(TaskDef[PythonOutputsType]):
-    pass
+
+    def _run(self, environment=None):
+        inputs = attrs_values(self)
+        del inputs["function"]
+        self.output_ = None
+        output = self.function(**inputs)
+        output_names = [f.name for f in attrs.fields(self.Outputs)]
+        if output is None:
+            self.output_ = {nm: None for nm in output_names}
+        elif len(output_names) == 1:
+            # if only one element in the fields, everything should be returned together
+            self.output_ = {output_names[0]: output}
+        elif isinstance(output, tuple) and len(output_names) == len(output):
+            self.output_ = dict(zip(output_names, output))
+        elif isinstance(output, dict):
+            self.output_ = {key: output.get(key, None) for key in output_names}
+        else:
+            raise RuntimeError(
+                f"expected {len(list_fields(self.Outputs))} elements, "
+                f"but {output} were returned"
+            )
 
 
 class WorkflowOutputs(TaskOutputs):
