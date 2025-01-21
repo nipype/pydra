@@ -1,15 +1,12 @@
 """Basic processing graph elements."""
 
-import abc
 import json
 import logging
 import os
 import sys
 from pathlib import Path
 import typing as ty
-from copy import deepcopy
 from uuid import uuid4
-import inspect
 import shutil
 from traceback import format_exception
 import attr
@@ -18,6 +15,7 @@ from copy import copy
 from operator import itemgetter
 from typing_extensions import Self
 import attrs
+from filelock import SoftFileLock
 from pydra.engine.specs import TaskDef, WorkflowDef, TaskOutputs, WorkflowOutputs
 from pydra.engine.graph import DiGraph
 from pydra.engine import state
@@ -35,14 +33,13 @@ from .helpers import (
     create_checksum,
     attrs_fields,
     attrs_values,
-    print_help,
     load_result,
     save,
-    ensure_list,
     record_error,
     PydraFileLock,
     list_fields,
     is_lazy,
+    ensure_list,
 )
 from .helpers_file import copy_nested_files, template_update
 from pydra.utils.messenger import AuditFlag
@@ -115,27 +112,6 @@ class Task(ty.Generic[DefType]):
                b. Gets killed -> restart
             3. No cache or other process -> start
             4. Two or more concurrent new processes get to start
-
-        Parameters
-        ----------
-        name : :obj:`str`
-            Unique name of this node
-        audit_flags : :class:`AuditFlag`, optional
-            Configure provenance tracking. Default is no provenance tracking.
-            See available flags at :class:`~pydra.utils.messenger.AuditFlag`.
-        cache_dir : :obj:`os.pathlike`
-            Set a custom directory of previously computed nodes.
-        cache_locations :
-            TODO
-        inputs : :obj:`typing.Text`, or :class:`File`, or :obj:`dict`, or `None`.
-            Set particular inputs to this node.
-        cont_dim : :obj:`dict`, or `None`
-            Container dimensions for input fields,
-            if any of the container should be treated as a container
-        messenger_args :
-            TODO
-        messengers :
-            TODO
         """
         from . import check_latest_version
 
@@ -147,7 +123,6 @@ class Task(ty.Generic[DefType]):
 
         self.definition = definition
         self.name = name
-        self.submitter = submitter
         self.state_index = state_index
 
         # checking if metadata is set properly
@@ -163,11 +138,34 @@ class Task(ty.Generic[DefType]):
         self.allow_cache_override = True
         self._checksum = None
         self._uid = uuid4().hex
-
-        self.plugin = None
         self.hooks = TaskHook()
         self._errored = False
         self._lzout = None
+
+        # Save the submitter attributes needed to run the task later
+        self.audit = submitter.audit
+        self.cache_dir = submitter.cache_dir
+        self.cache_locations = submitter.cache_locations
+
+    @property
+    def cache_dir(self):
+        return self._cache_dir
+
+    @cache_dir.setter
+    def cache_dir(self, path: os.PathLike):
+        self._cache_dir = Path(path)
+
+    @property
+    def cache_locations(self):
+        """Get the list of cache sources."""
+        return self._cache_locations + ensure_list(self.cache_dir)
+
+    @cache_locations.setter
+    def cache_locations(self, locations):
+        if locations is not None:
+            self._cache_locations = [Path(loc) for loc in ensure_list(locations)]
+        else:
+            self._cache_locations = []
 
     def __str__(self):
         return self.name
@@ -181,17 +179,6 @@ class Task(ty.Generic[DefType]):
         state["definition"] = cp.loads(state["definition"])
         self.__dict__.update(state)
 
-    def help(self, returnhelp=False):
-        """Print class help."""
-        help_obj = print_help(self)
-        if returnhelp:
-            return help_obj
-
-    @property
-    def version(self):
-        """Get version of this task structure."""
-        return self._version
-
     @property
     def errored(self):
         """Check if the task has raised an error"""
@@ -204,9 +191,15 @@ class Task(ty.Generic[DefType]):
         and to create nodes checksums needed for graph checksums
         (before the tasks have inputs etc.)
         """
+        if self._checksum is not None:
+            return self._checksum
         input_hash = self.definition._hash
         self._checksum = create_checksum(self.__class__.__name__, input_hash)
         return self._checksum
+
+    @property
+    def lockfile(self):
+        return self.output_dir.with_suffix(".lock")
 
     @property
     def uid(self):
@@ -239,12 +232,12 @@ class Task(ty.Generic[DefType]):
     @property
     def output_names(self):
         """Get the names of the outputs from the task's output_spec
-        (not everything has to be generated, see generated_output_names).
+        (not everything has to be generated, see _generated_output_names).
         """
         return [f.name for f in attr.fields(self.definition.Outputs)]
 
     @property
-    def generated_output_names(self):
+    def _generated_output_names(self):
         return self.output_names
 
     @property
@@ -252,41 +245,10 @@ class Task(ty.Generic[DefType]):
         """Whether the task accepts checkpoint-restart."""
         return self._can_resume
 
-    @abc.abstractmethod
-    def _run_task(self, environment=None):
-        pass
-
-    @property
-    def cache_locations(self):
-        """Get the list of cache sources."""
-        return self._cache_locations + ensure_list(self._cache_dir)
-
-    @cache_locations.setter
-    def cache_locations(self, locations):
-        if locations is not None:
-            self._cache_locations = [Path(loc) for loc in ensure_list(locations)]
-        else:
-            self._cache_locations = []
-
     @property
     def output_dir(self):
         """Get the filesystem path where outputs will be written."""
-        return self._cache_dir / self.checksum
-
-    @property
-    def cont_dim(self):
-        # adding inner_cont_dim to the general container_dimension provided by the users
-        cont_dim_all = deepcopy(self._cont_dim)
-        for k, v in self._inner_cont_dim.items():
-            cont_dim_all[k] = cont_dim_all.get(k, 1) + v
-        return cont_dim_all
-
-    @cont_dim.setter
-    def cont_dim(self, cont_dim):
-        if cont_dim is None:
-            self._cont_dim = {}
-        else:
-            self._cont_dim = cont_dim
+        return self.cache_dir / self.checksum
 
     @property
     def inputs(self) -> dict[str, ty.Any]:
@@ -335,7 +297,7 @@ class Task(ty.Generic[DefType]):
         )
         return self._inputs
 
-    def _populate_filesystem(self, checksum, output_dir):
+    def _populate_filesystem(self):
         """
         Invoked immediately after the lockfile is generated, this function:
         - Creates the cache file
@@ -347,45 +309,43 @@ class Task(ty.Generic[DefType]):
         # adding info file with the checksum in case the task was cancelled
         # and the lockfile has to be removed
         with open(self.cache_dir / f"{self.uid}_info.json", "w") as jsonfile:
-            json.dump({"checksum": checksum}, jsonfile)
-        if not self.can_resume and output_dir.exists():
-            shutil.rmtree(output_dir)
-        output_dir.mkdir(parents=False, exist_ok=self.can_resume)
+            json.dump({"checksum": self.checksum}, jsonfile)
+        if not self.can_resume and self.output_dir.exists():
+            shutil.rmtree(self.output_dir)
+        self.output_dir.mkdir(parents=False, exist_ok=self.can_resume)
 
-    async def run(self, submitter: "Submitter"):
-        checksum = self.checksum
-        output_dir = self.output_dir
-        lockfile = self.cache_dir / (checksum + ".lock")
+    def run(self, rerun: bool = False):
         self.hooks.pre_run(self)
-        logger.debug("'%s' is attempting to acquire lock on %s", self.name, lockfile)
-        async with PydraFileLock(lockfile):
-            if not (submitter.rerun):
+        logger.debug(
+            "'%s' is attempting to acquire lock on %s", self.name, self.lockfile
+        )
+        with SoftFileLock(self.lockfile):
+            if not (rerun):
                 result = self.result()
                 if result is not None and not result.errored:
                     return result
             cwd = os.getcwd()
-            self._populate_filesystem(checksum, output_dir)
-            result = Result(output=None, runtime=None, errored=False)
+            self._populate_filesystem()
+            os.chdir(self.output_dir)
+            result = Result(outputs=None, runtime=None, errored=False, task=self)
             self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=output_dir)
+            self.audit.start_audit(odir=self.output_dir)
+            if self.audit.audit_check(AuditFlag.PROV):
+                self.audit.audit_task(task=self)
             try:
                 self.audit.monitor()
-                if inspect.iscoroutinefunction(self._run_task):
-                    await self.definition._run(self, submitter)
-                else:
-                    self.definition._run(self, submitter)
-                result.output = self.definition.Outputs.from_task(self)
+                run_outputs = self.definition._run(self)
+                result.outputs = self.definition.Outputs.from_task(self, run_outputs)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
-                record_error(output_dir, error=traceback)
+                record_error(self.output_dir, error=traceback)
                 result.errored = True
-                self._errored = True
                 raise
             finally:
                 self.hooks.post_run_task(self, result)
                 self.audit.finalize_audit(result=result)
-                save(output_dir, result=result, task=self)
+                save(self.output_dir, result=result, task=self)
                 # removing the additional file with the checksum
                 (self.cache_dir / f"{self.uid}_info.json").unlink()
                 os.chdir(cwd)
@@ -397,7 +357,7 @@ class Task(ty.Generic[DefType]):
 
     def pickle_task(self):
         """Pickling the tasks with full inputs"""
-        pkl_files = self.submitter.cache_dir / "pkl_files"
+        pkl_files = self.cache_dir / "pkl_files"
         pkl_files.mkdir(exist_ok=True, parents=True)
         task_main_path = pkl_files / f"{self.name}_{self.uid}_task.pklz"
         save(task_path=pkl_files, task=self, name_prefix=f"{self.name}_{self.uid}")
@@ -410,33 +370,12 @@ class Task(ty.Generic[DefType]):
         if has_lazy(self.definition):
             return False
         _result = self.result()
-        if self.state:
-            # TODO: only check for needed state result
-            if _result and all(_result):
-                if self.state.combiner and isinstance(_result[0], list):
-                    for res_l in _result:
-                        if any([res.errored for res in res_l]):
-                            raise ValueError(f"Task {self.name} raised an error")
-                    return True
-                else:
-                    if any([res.errored for res in _result]):
-                        raise ValueError(f"Task {self.name} raised an error")
-                    return True
-            # checking if self.result() is not an empty list only because
-            # the states_ind is an empty list (input field might be an empty list)
-            elif (
-                _result == []
-                and hasattr(self.state, "states_ind")
-                and self.state.states_ind == []
-            ):
+        if _result:
+            if _result.errored:
+                self._errored = True
+                raise ValueError(f"Task {self.name} raised an error")
+            else:
                 return True
-        else:
-            if _result:
-                if _result.errored:
-                    self._errored = True
-                    raise ValueError(f"Task {self.name} raised an error")
-                else:
-                    return True
         return False
 
     def _combined_output(self, return_inputs=False):
@@ -479,7 +418,7 @@ class Task(ty.Generic[DefType]):
         # TODO: check if result is available in load_result and
         # return a future if not
         if self.errored:
-            return Result(output=None, runtime=None, errored=True)
+            return Result(outputs=None, runtime=None, errored=True, task=self)
 
         if state_index is not None:
             raise ValueError("Task does not have a state")
@@ -542,6 +481,58 @@ class Task(ty.Generic[DefType]):
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.any
+
+
+class WorkflowTask(Task):
+
+    def __init__(
+        self,
+        definition: DefType,
+        submitter: "Submitter",
+        name: str,
+        state_index: "state.StateIndex | None" = None,
+    ):
+        super().__init__(definition, submitter, name, state_index)
+        self.submitter = submitter
+
+    async def run(self, rerun: bool = False):
+        self.hooks.pre_run(self)
+        logger.debug(
+            "'%s' is attempting to acquire lock on %s", self.name, self.lockfile
+        )
+        async with PydraFileLock(self.lockfile):
+            if not rerun:
+                result = self.result()
+                if result is not None and not result.errored:
+                    return result
+            cwd = os.getcwd()
+            self._populate_filesystem()
+            result = Result(outputs=None, runtime=None, errored=False, task=self)
+            self.hooks.pre_run_task(self)
+            self.audit.start_audit(odir=self.output_dir)
+            try:
+                self.audit.monitor()
+                await self.submitter.expand_workflow(self)
+                result.outputs = self.definition.Outputs.from_task(self)
+            except Exception:
+                etype, eval, etr = sys.exc_info()
+                traceback = format_exception(etype, eval, etr)
+                record_error(self.output_dir, error=traceback)
+                result.errored = True
+                self._errored = True
+                raise
+            finally:
+                self.hooks.post_run_task(self, result)
+                self.audit.finalize_audit(result=result)
+                save(self.output_dir, result=result, task=self)
+                # removing the additional file with the checksum
+                (self.cache_dir / f"{self.uid}_info.json").unlink()
+                os.chdir(cwd)
+        self.hooks.post_run(self, result)
+        # Check for any changes to the input hashes that have occurred during the execution
+        # of the task
+        self._check_for_hash_changes()
+        return result
 
 
 logger = logging.getLogger("pydra")
@@ -631,7 +622,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             output_lazy_fields = constructor(**input_values)
             # Check to see whether any mandatory inputs are not set
             for node in wf.nodes:
-                node._spec._check_rules()
+                node._definition._check_rules()
             # Check that the outputs are set correctly, either directly by the constructor
             # or via returned values that can be zipped with the output names
             if output_lazy_fields:
@@ -719,6 +710,8 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
     _constructed: dict[int, "Workflow[ty.Any]"] = {}
 
     def execution_graph(self, submitter: "Submitter") -> DiGraph:
+        from pydra.engine.submitter import NodeExecution
+
         return self._create_graph([NodeExecution(n, submitter) for n in self.nodes])
 
     @property
@@ -746,7 +739,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         DiGraph
             The graph of the workflow
         """
-        graph: DiGraph = attrs.field(factory=DiGraph)
+        graph: DiGraph = DiGraph()
         for node in nodes:
             graph.add_nodes(node)
         # TODO: create connection is run twice
@@ -812,6 +805,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                         other_states=other_states,
                         combiner=combiner,
                     )
+        return graph
 
     def create_dotfile(self, type="simple", export=None, name=None, output_dir=None):
         """creating a graph - dotfile and optionally exporting to other formats"""
@@ -861,8 +855,10 @@ def is_task(obj):
 def is_workflow(obj):
     """Check whether an object is a :class:`Workflow` instance."""
     from pydra.engine.specs import WorkflowDef
+    from pydra.engine.core import Workflow
+    from pydra.engine.core import WorkflowTask
 
-    return isinstance(obj, WorkflowDef)
+    return isinstance(obj, (WorkflowDef, WorkflowTask, Workflow))
 
 
 def has_lazy(obj):

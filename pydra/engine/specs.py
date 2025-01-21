@@ -3,6 +3,7 @@
 from pathlib import Path
 import re
 from copy import copy
+import os
 import inspect
 import itertools
 import platform
@@ -14,7 +15,8 @@ from copy import deepcopy
 from typing_extensions import Self
 import attrs
 import cloudpickle as cp
-from pydra.engine.audit import AuditFlag
+from fileformats.generic import FileSet
+from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.typing import TypeParser
 from .helpers import (
     attrs_fields,
@@ -25,7 +27,7 @@ from .helpers import (
     ensure_list,
     parse_format_string,
 )
-from .helpers_file import template_update
+from .helpers_file import template_update, template_update_single
 from . import helpers_state as hlpst
 from . import lazy
 from pydra.utils.hash import hash_function, Cache
@@ -37,7 +39,8 @@ if ty.TYPE_CHECKING:
     from pydra.engine.core import Task
     from pydra.engine.task import ShellTask
     from pydra.engine.core import Workflow
-    from pydra.engine.submitter import Submitter
+    from pydra.engine.environments import Environment
+    from pydra.engine.workers import Worker
 
 
 def is_set(value: ty.Any) -> bool:
@@ -118,11 +121,92 @@ class TaskDef(ty.Generic[OutputsType]):
     Task: "ty.Type[core.Task]"
 
     # The following fields are used to store split/combine state information
-    _splitter = attrs.field(default=None, init=False)
-    _combiner = attrs.field(default=None, init=False)
-    _cont_dim = attrs.field(default=None, init=False)
+    _splitter = attrs.field(default=None, init=False, repr=False)
+    _combiner = attrs.field(default=None, init=False, repr=False)
+    _cont_dim = attrs.field(default=None, init=False, repr=False)
+    _hashes = attrs.field(default=None, init=False, eq=False, repr=False)
 
     RESERVED_FIELD_NAMES = ("split", "combine")
+
+    def __call__(
+        self,
+        cache_dir: os.PathLike | None = None,
+        worker: "str | ty.Type[Worker] | Worker" = "cf",
+        environment: "Environment | None" = None,
+        rerun: bool = False,
+        cache_locations: ty.Iterable[os.PathLike] | None = None,
+        audit_flags: AuditFlag = AuditFlag.NONE,
+        messengers: ty.Iterable[Messenger] | None = None,
+        messenger_args: dict[str, ty.Any] | None = None,
+        **kwargs: ty.Any,
+    ) -> OutputsType:
+        """Create a task from this definition and execute it to produce a result.
+
+        Parameters
+        ----------
+        cache_dir : os.PathLike, optional
+            Cache directory where the working directory/results for the task will be
+            stored, by default None
+        worker : str or Worker, optional
+            The worker to use, by default "cf"
+        environment: Environment, optional
+            The execution environment to use, by default None
+        rerun : bool, optional
+            Whether to force the re-computation of the task results even if existing
+            results are found, by default False
+        cache_locations : list[os.PathLike], optional
+            Alternate cache locations to check for pre-computed results, by default None
+        audit_flags : AuditFlag, optional
+            Auditing configuration, by default AuditFlag.NONE
+        messengers : list, optional
+            Messengers, by default None
+        messenger_args : dict, optional
+            Messenger arguments, by default None
+        **kwargs : dict
+            Keyword arguments to pass on to the worker initialisation
+
+        Returns
+        -------
+        OutputsType or list[OutputsType]
+            The output interface of the task, or in the case of split tasks, a list of
+            output interfaces
+        """
+        from pydra.engine.submitter import (  # noqa: F811
+            Submitter,
+            WORKER_KWARG_FAIL_NOTE,
+        )
+
+        try:
+            with Submitter(
+                audit_flags=audit_flags,
+                cache_dir=cache_dir,
+                cache_locations=cache_locations,
+                messenger_args=messenger_args,
+                messengers=messengers,
+                rerun=rerun,
+                environment=environment,
+                worker=worker,
+                **kwargs,
+            ) as sub:
+                result = sub(self)
+        except TypeError as e:
+            if hasattr(e, "__notes__") and WORKER_KWARG_FAIL_NOTE in e.__notes__:
+                if match := re.match(
+                    r".*got an unexpected keyword argument '(\w+)'", str(e)
+                ):
+                    if match.group(1) in self:
+                        e.add_note(
+                            f"Note that the unrecognised argument, {match.group(1)!r}, is "
+                            f"an input of the task definition {self!r} that has already been "
+                            f"parameterised (it is being called to execute it)"
+                        )
+            raise
+        if result.errored:
+            raise RuntimeError(
+                f"Task {self} failed @ {result.errors['time of crash']} with following errors:\n"
+                + "\n".join(result.errors["error message"])
+            )
+        return result.outputs
 
     def split(
         self,
@@ -148,7 +232,7 @@ class TaskDef(ty.Generic[OutputsType]):
             If input name is not in cont_dim, it is assumed that the input values has
             a container dimension of 1, so only the most outer dim will be used for splitting.
         **inputs
-            fields to split over, will automatically be wrapped in a StateArray object
+            fields to split over, will be automatically wrapped in a StateArray object
             and passed to the node inputs
 
         Returns
@@ -188,8 +272,7 @@ class TaskDef(ty.Generic[OutputsType]):
                     f"Container dimension for {field_name} is provided but the field "
                     f"is not present in the inputs"
                 )
-        self._splitter = splitter
-        self._cont_dim = cont_dim
+        split_inputs = {}
         for name, value in inputs.items():
             if isinstance(value, lazy.LazyField):
                 split_val = value.split(splitter)
@@ -199,8 +282,11 @@ class TaskDef(ty.Generic[OutputsType]):
                 split_val = StateArray(value)
             else:
                 raise TypeError(f"Could not split {value} as it is not a sequence type")
-            setattr(self, name, split_val)
-        return self
+            split_inputs[name] = split_val
+        split_def = attrs.evolve(self, **split_inputs)
+        split_def._splitter = splitter
+        split_def._cont_dim = cont_dim
+        return split_def
 
     def combine(
         self,
@@ -238,86 +324,9 @@ class TaskDef(ty.Generic[OutputsType]):
             raise ValueError(
                 f"Combiner fields {unrecognised} are not present in the task definition"
             )
-        self._combiner = combiner
-        return self
-
-    def __call__(
-        self,
-        name: str | None = None,
-        audit_flags: AuditFlag = AuditFlag.NONE,
-        cache_dir=None,
-        cache_locations=None,
-        messengers=None,
-        messenger_args=None,
-        rerun=False,
-        **exec_kwargs,
-    ) -> OutputsType:
-        """Create a task from this definition and execute it to produce a result.
-
-        Parameters
-        ----------
-        name : str, optional
-            The name of the task, by default None
-        audit_flags : AuditFlag, optional
-            Auditing configuration, by default AuditFlag.NONE
-        cache_dir : os.PathLike, optional
-            Cache directory where the working directory/results for the task will be
-            stored, by default None
-        cache_locations : list[os.PathLike], optional
-            Alternate cache locations to check for pre-computed results, by default None
-        messenger_args : dict, optional
-            Messenger arguments, by default None
-        messengers : list, optional
-            Messengers, by default None
-        rerun : bool, optional
-            Whether to force the re-computation of the task results even if existing
-            results are found, by default False
-        exec_kwargs : dict
-            Keyword arguments to pass on to the Submitter object used to execute the task
-
-        Returns
-        -------
-        OutputsType or list[OutputsType]
-            The output interface of the task, or in the case of split tasks, a list of
-            output interfaces
-        """
-        from pydra.engine.submitter import Submitter
-
-        self._check_rules()
-        if self._splitter:
-            # Create an implicit workflow to hold the split nodes
-            from pydra.design import workflow
-
-            outputs = {o.name: list[o.type] for o in list_fields(self.Outputs)}
-
-            @workflow.define(outputs=outputs)
-            def Split():
-                node = workflow.add(self)
-                return tuple(getattr(node, o) for o in outputs)
-
-            definition = Split()
-
-        elif self._combiner:
-            raise ValueError(
-                f"Task {self} is marked for combining, but not splitting. "
-                "Use the `split` method to split the task before combining."
-            )
-        else:
-            definition = self
-
-        with Submitter(
-            audit_flags=audit_flags,
-            cache_dir=cache_dir,
-            cache_locations=cache_locations,
-            messenger_args=messenger_args,
-            messengers=messengers,
-            rerun=rerun,
-            **exec_kwargs,
-        ) as sub:
-            result = sub(definition)
-        if result.errored:
-            raise ValueError(f"Task {definition} failed with an error")
-        return result.output
+        combined_def = copy(self)
+        combined_def._combiner = combiner
+        return combined_def
 
     def __iter__(self) -> ty.Generator[str, None, None]:
         """Iterate through all the names in the definition"""
@@ -359,7 +368,7 @@ class TaskDef(ty.Generic[OutputsType]):
     def _compute_hashes(self) -> ty.Tuple[bytes, ty.Dict[str, bytes]]:
         """Compute a basic hash for any given set of fields."""
         inp_dict = {}
-        for field in attrs_fields(self):
+        for field in list_fields(self):
             if isinstance(field, Out):
                 continue  # Skip output fields
             # removing values that are not set from hash calculation
@@ -486,19 +495,20 @@ class Runtime:
 class Result(ty.Generic[OutputsType]):
     """Metadata regarding the outputs of processing."""
 
-    output: OutputsType | None = None
+    task: "Task"
+    outputs: OutputsType | None = None
     runtime: Runtime | None = None
     errored: bool = False
 
     def __getstate__(self):
         state = attrs_values(self)
-        if state["output"] is not None:
-            state["output"] = cp.dumps(state["output"])
+        if state["outputs"] is not None:
+            state["outputs"] = cp.dumps(state["outputs"])
         return state
 
     def __setstate__(self, state):
-        if state["output"] is not None:
-            state["output"] = cp.loads(state["output"])
+        if state["outputs"] is not None:
+            state["outputs"] = cp.loads(state["outputs"])
         for name, val in state.items():
             setattr(self, name, val)
 
@@ -511,9 +521,16 @@ class Result(ty.Generic[OutputsType]):
             Name of field in LazyField object
         """
         if field_name == "all_":
-            return attrs_values(self.output)
+            return attrs_values(self.outputs)
         else:
-            return getattr(self.output, field_name)
+            return getattr(self.outputs, field_name)
+
+    @property
+    def errors(self):
+        if self.errored:
+            with open(self.task.output_dir / "_error.pklz", "rb") as f:
+                return cp.load(f)
+        return None
 
 
 @attrs.define(kw_only=True)
@@ -616,9 +633,6 @@ class WorkflowDef(TaskDef[WorkflowOutputsType]):
         self._constructed = Workflow.construct(self)
         return self._constructed
 
-    async def _run(self, task: "Task", submitter: "Submitter") -> Result:
-        await submitter.expand_workflow(task)
-
 
 RETURN_CODE_HELP = """The process' exit code."""
 STDOUT_HELP = """The standard output stream produced by the command."""
@@ -674,7 +688,7 @@ class ShellOutputs(TaskOutputs):
             elif is_set(fld.default):
                 resolved_value = cls._resolve_default_value(fld, task.output_dir)
             else:
-                resolved_value = task.resolve_value(fld, outputs.stdout, outputs.stderr)
+                resolved_value = cls._resolve_value(fld, outputs.stdout, outputs.stderr)
             # Set the resolved value
             setattr(outputs, fld.name, resolved_value)
         return outputs
@@ -730,6 +744,61 @@ class ShellOutputs(TaskOutputs):
         # Check to see if any of the requirement sets are satisfied
         return any(rs.satisfied(inputs) for rs in requirements)
 
+    @classmethod
+    def _resolve_value(
+        cls,
+        fld: "shell.out",
+        task: "Task",
+        outputs: dict[str, ty.Any],
+    ) -> ty.Any:
+        """Collect output file if metadata specified."""
+        from pydra.design import shell
+
+        if not cls._required_fields_satisfied(fld, task.definition):
+            return None
+        elif isinstance(fld, shell.outarg) and fld.path_template:
+            return template_update_single(
+                fld,
+                definition=task.definition,
+                output_dir=task.output_dir,
+                spec_type="output",
+            )
+        elif fld.callable:
+            callable_ = fld.callable
+            if isinstance(fld.callable, staticmethod):
+                # In case callable is defined as a static method,
+                # retrieve the function wrapped in the descriptor.
+                callable_ = fld.callable.__func__
+            call_args = inspect.getfullargspec(callable_)
+            call_args_val = {}
+            for argnm in call_args.args:
+                if argnm == "field":
+                    call_args_val[argnm] = fld
+                elif argnm == "output_dir":
+                    call_args_val[argnm] = task.output_dir
+                elif argnm == "inputs":
+                    call_args_val[argnm] = task.inputs
+                elif argnm == "stdout":
+                    call_args_val[argnm] = outputs["stdout"]
+                elif argnm == "stderr":
+                    call_args_val[argnm] = outputs["stderr"]
+                else:
+                    try:
+                        call_args_val[argnm] = task.inputs[argnm]
+                    except KeyError as e:
+                        e.add_note(
+                            f"arguments of the callable function from {fld.name} "
+                            f"has to be in inputs or be field or output_dir, "
+                            f"but {argnm} is used"
+                        )
+                        raise
+            return callable_(**call_args_val)
+        else:
+            raise Exception(
+                f"Metadata for '{fld.name}', does not not contain any of the required fields "
+                f'("callable", "output_file_template" or "value"): {fld}.'
+            )
+
 
 ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
@@ -737,6 +806,10 @@ ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 class ShellDef(TaskDef[ShellOutputsType]):
 
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("cmdline",)
+
+    def _run(self, environment: "Environment") -> None:
+        """Run the shell command."""
+        return environment.execute(self)
 
     @property
     def cmdline(self) -> str:
@@ -940,6 +1013,74 @@ class ShellDef(TaskDef[ShellOutputsType]):
             if cmd_el_str:
                 cmd_add += split_cmd(cmd_el_str)
         return field.position, cmd_add
+
+    def _get_bindings(self, root: str | None = None) -> dict[str, tuple[str, str]]:
+        """Return bindings necessary to run task in an alternative root.
+
+        This is primarily intended for contexts when a task is going
+        to be run in a container with mounted volumes.
+
+        Arguments
+        ---------
+        root: str
+
+        Returns
+        -------
+        bindings: dict
+          Mapping from paths in the host environment to the target environment
+        """
+
+        if root is None:
+            return {}
+        else:
+            self._prepare_bindings(root=root)
+            return self.bindings
+
+    def _prepare_bindings(self, root: str):
+        """Prepare input files to be passed to the task
+
+        This updates the ``bindings`` attribute of the current task to make files available
+        in an ``Environment``-defined ``root``.
+        """
+        fld: Arg
+        for fld in attrs_fields(self):
+            if TypeParser.contains_type(FileSet, fld.type):
+                fileset: FileSet = self[fld.name]
+                if not isinstance(fileset, FileSet):
+                    raise NotImplementedError(
+                        "Generating environment bindings for nested FileSets are not "
+                        "yet supported"
+                    )
+                copy = fld.copy_mode == FileSet.CopyMode.copy
+
+                host_path, env_path = fileset.parent, Path(f"{root}{fileset.parent}")
+
+                # Default to mounting paths as read-only, but respect existing modes
+                old_mode = self.bindings.get(host_path, ("", "ro"))[1]
+                self.bindings[host_path] = (env_path, "rw" if copy else old_mode)
+
+                # Provide in-container paths without type-checking
+                self.inputs_mod_root[fld.name] = tuple(
+                    env_path / rel for rel in fileset.relative_fspaths
+                )
+
+    def _generated_output_names(self, stdout: str, stderr: str):
+        """Returns a list of all outputs that will be generated by the task.
+        Takes into account the task input and the requires list for the output fields.
+        TODO: should be in all Output specs?
+        """
+        # checking the input (if all mandatory fields are provided, etc.)
+        self._check_rules()
+        output_names = ["return_code", "stdout", "stderr"]
+        for fld in list_fields(self):
+            # assuming that field should have either default or metadata, but not both
+            if is_set(fld.default):
+                output_names.append(fld.name)
+            elif is_set(self.Outputs._resolve_output_value(fld, stdout, stderr)):
+                output_names.append(fld.name)
+        return output_names
+
+    DEFAULT_COPY_COLLATION = FileSet.CopyCollation.adjacent
 
 
 def donothing(*args: ty.Any, **kwargs: ty.Any) -> None:

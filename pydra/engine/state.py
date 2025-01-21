@@ -5,11 +5,13 @@ import itertools
 from collections import OrderedDict
 from functools import reduce
 import typing as ty
-import attrs
 from . import helpers_state as hlpst
 from .helpers import ensure_list, attrs_values
 
 # from .specs import BaseDef
+if ty.TYPE_CHECKING:
+    from .specs import TaskDef
+
 
 # TODO: move to State
 op = {".": zip, "*": itertools.product}
@@ -35,7 +37,7 @@ class StateIndex:
         if indices is None:
             self.indices = OrderedDict()
         else:
-            self.indices = OrderedDict(sorted(indices))
+            self.indices = OrderedDict(sorted(indices.items()))
 
     def __hash__(self):
         return hash(tuple(self.indices.items()))
@@ -112,7 +114,15 @@ class State:
 
     """
 
-    def __init__(self, name, splitter=None, combiner=None, other_states=None):
+    def __init__(
+        self,
+        name,
+        definition: "TaskDef",
+        splitter=None,
+        combiner=None,
+        cont_dim=None,
+        other_states=None,
+    ):
         """
         Initialize a state.
 
@@ -130,10 +140,13 @@ class State:
 
         """
         self.name = name
+        self.definition = definition
         self.other_states = other_states
         self.splitter = splitter
         # temporary combiner
         self.combiner = combiner
+        self.cont_dim = cont_dim or {}
+        self._inputs_ind = None
         # if other_states, the connections have to be updated
         if self.other_states:
             self.update_connections()
@@ -144,6 +157,26 @@ class State:
             f"State for {self.name} with a splitter: {self.splitter} "
             f"and combiner: {self.combiner}"
         )
+
+    @property
+    def names(self):
+        """Return the names of the states."""
+        # analysing states from connected tasks if inner_inputs
+        previous_states_keys = {
+            f"_{v.name}": v.keys_final for v in self.inner_inputs.values()
+        }
+        names = []
+        # iterating splitter_rpn
+        for token in self.splitter_rpn:
+            if token in [".", "*"]:  # token is one of the input var
+                continue
+                # adding variable to the stack
+            if token.startswith("_"):
+                new_keys = previous_states_keys[token]
+                names += new_keys
+            else:
+                names.append(token)
+        return names
 
     @property
     def depth(self) -> int:
@@ -248,6 +281,16 @@ class State:
             return self._current_splitter
         else:
             return self.splitter
+
+    @property
+    def inputs_ind(self):
+        """dictionary for every state that contains indices for all task inputs
+        (i.e. inputs that are relevant for current task, can be outputs from previous nodes)
+        """
+        if self._inputs_ind is None:
+            self.prepare_states()
+            self.prepare_inputs()
+        return self._inputs_ind
 
     @current_splitter.setter
     def current_splitter(self, current_splitter):
@@ -796,7 +839,11 @@ class State:
             if set(self._combiner) - set(self.splitter_rpn):
                 raise hlpst.PydraStateError("all combiners have to be in the splitter")
 
-    def prepare_states(self, inputs, cont_dim=None):
+    def prepare_states(
+        self,
+        inputs: dict[str, ty.Any] | None = None,
+        cont_dim: dict[str, int] | None = None,
+    ):
         """
         Prepare a full list of state indices and state values.
 
@@ -805,28 +852,21 @@ class State:
 
         State Values
             specific elements from inputs that can be used running interfaces
-
-        Parameters
-        ----------
-        inputs : :obj:`dict`
-            inputs of the task
-        cont_dim : :obj:`dict` or `None`
-            container's dimensions for a specific input's fields
         """
         # checking if splitter and combiner have valid forms
         self.splitter_validation()
         self.combiner_validation()
         self.set_input_groups()
         # container dimension for each input, specifies how nested the input is
-        if cont_dim:
-            self.cont_dim = cont_dim
-        else:
-            self.cont_dim = {}
-        if attrs.has(inputs):
-            self.inputs = attrs_values(inputs)
-        else:
-            self.inputs = inputs
+        if inputs is None:
+            inputs = {
+                f"{self.name}.{n}": v for n, v in attrs_values(self.definition).items()
+            }
+        self.inputs = inputs
+        if not self.cont_dim:
+            self.cont_dim = cont_dim or {}
         if self.other_states:
+            st: State
             for nm, (st, _) in self.other_states.items():
                 # I think now this if is never used
                 if not hasattr(st, "states_ind"):
@@ -951,7 +991,7 @@ class State:
 
         """
         if not self.other_states:
-            self.inputs_ind = self.states_ind
+            self._inputs_ind = self.states_ind
         else:
             # elements from the current node (the current part of the splitter)
             if self.current_splitter_rpn:
@@ -1002,11 +1042,11 @@ class State:
                 inputs_ind = []
 
             # iter_splits using inputs from current state/node
-            self.inputs_ind = list(hlpst.iter_splits(inputs_ind, keys_inp))
+            self._inputs_ind = list(hlpst.iter_splits(inputs_ind, keys_inp))
             # removing elements that are connected to inner splitter
             # TODO - add tests to test_workflow.py (not sure if we want to remove it)
             for el in connected_to_inner:
-                [dict.pop(el) for dict in self.inputs_ind]
+                [dict.pop(el) for dict in self._inputs_ind]
 
     def splits(self, splitter_rpn):
         """
@@ -1150,20 +1190,3 @@ class State:
             val = op["*"](val_ind)
             keys = [op_single]
             return val, keys
-
-    # def split(self, task_def: TaskDef[OutputsType]) -> list["TaskDef[OutputsType]"]:
-    #     """
-    #     Split the task definition containing state-array fields into multiple tasks
-    #     without splitters and non-state-array values.
-
-    #     Parameters
-    #     ----------
-    #     task_def: TaskDef
-    #         a task definition
-
-    #     Returns
-    #     -------
-    #     List[TaskDef]
-    #         a list of task definitions
-    #     """
-    #     return hlpst.map_splits(self.states_ind, task_def, cont_dim=task_def._cont_dim)

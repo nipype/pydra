@@ -11,12 +11,16 @@ from collections import defaultdict
 from .workers import Worker, WORKERS
 from .core import is_workflow
 from .graph import DiGraph
-from .helpers import get_open_loop, load_and_run_async
+from .helpers import (
+    get_open_loop,
+    list_fields,
+)
 from pydra.utils.hash import PersistentCache
 from .state import StateIndex
 from .audit import Audit
 from .core import Task
 from pydra.utils.messenger import AuditFlag, Messenger
+from pydra.utils import user_cache_dir
 
 import logging
 
@@ -30,34 +34,48 @@ if ty.TYPE_CHECKING:
 # Used to flag development mode of Audit
 develop = False
 
+WORKER_KWARG_FAIL_NOTE = "Attempting to instantiate worker submitter"
+
 
 class Submitter:
-    """Send a task to the execution backend."""
+    """Send a task to the execution backend.
+
+    Parameters
+    ----------
+    cache_dir : os.PathLike, optional
+        Cache directory where the working directory/results for the task will be
+        stored, by default None
+    worker : str or Worker, optional
+        The worker to use, by default "cf"
+    environment: Environment, optional
+        The execution environment to use, by default None
+    rerun : bool, optional
+        Whether to force the re-computation of the task results even if existing
+        results are found, by default False
+    cache_locations : list[os.PathLike], optional
+        Alternate cache locations to check for pre-computed results, by default None
+    audit_flags : AuditFlag, optional
+        Auditing configuration, by default AuditFlag.NONE
+    messengers : list, optional
+        Messengers, by default None
+    messenger_args : dict, optional
+        Messenger arguments, by default None
+    **kwargs : dict
+        Keyword arguments to pass on to the worker initialisation
+    """
 
     def __init__(
         self,
-        worker: ty.Union[str, ty.Type[Worker]] = "cf",
         cache_dir: os.PathLike | None = None,
-        cache_locations: list[os.PathLike] | None = None,
+        worker: ty.Union[str, ty.Type[Worker]] = "cf",
         environment: "Environment | None" = None,
+        rerun: bool = False,
+        cache_locations: list[os.PathLike] | None = None,
         audit_flags: AuditFlag = AuditFlag.NONE,
         messengers: ty.Iterable[Messenger] | None = None,
         messenger_args: dict[str, ty.Any] | None = None,
-        rerun: bool = False,
         **kwargs,
     ):
-        """
-        Initialize task submission.
-
-        Parameters
-        ----------
-        plugin : :obj:`str` or :obj:`ty.Type[pydra.engine.core.Worker]`
-            Either the identifier of the execution backend or the worker class itself.
-            Default is ``cf`` (Concurrent Futures).
-        **kwargs
-            Additional keyword arguments to pass to the worker.
-
-        """
 
         self.audit = Audit(
             audit_flags=audit_flags,
@@ -65,6 +83,11 @@ class Submitter:
             messenger_args=messenger_args,
             develop=develop,
         )
+        if cache_dir is None:
+            cache_dir = user_cache_dir / "run-cache"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+        elif not cache_dir.exists():
+            raise ValueError(f"Cache directory {str(cache_dir)!r} does not exist")
         self.cache_dir = cache_dir
         self.cache_locations = cache_locations
         self.environment = environment
@@ -72,19 +95,31 @@ class Submitter:
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
         if isinstance(worker, str):
-            self.plugin = worker
+            self.worker_name = worker
             try:
-                worker_cls = WORKERS[self.plugin]
+                worker_cls = WORKERS[self.worker_name]
             except KeyError:
-                raise NotImplementedError(f"No worker for '{self.plugin}' plugin")
+                raise NotImplementedError(f"No worker for '{self.worker_name}' plugin")
         else:
             try:
-                self.plugin = worker.plugin_name
+                self.worker_name = worker.plugin_name
             except AttributeError:
                 raise ValueError("Worker class must have a 'plugin_name' str attribute")
             worker_cls = worker
-        self.worker = worker_cls(**kwargs)
-        self.worker.loop = self.loop
+        try:
+            self._worker = worker_cls(**kwargs)
+        except TypeError as e:
+            e.add_note(WORKER_KWARG_FAIL_NOTE)
+            raise
+        self._worker.loop = self.loop
+
+    @property
+    def worker(self):
+        if self._worker is None:
+            raise RuntimeError(
+                "Cannot access worker of unpickeld submitter (typically in subprocess)"
+            )
+        return self._worker
 
     def __call__(
         self,
@@ -92,44 +127,64 @@ class Submitter:
     ):
         """Submitter run function."""
 
-        task = Task(task_def, submitter=self, name="task")
-        self.loop.run_until_complete(self.submit_from_call(task))
+        task_def._check_rules()
+        # If the outer task is split, create an implicit workflow to hold the split nodes
+        if task_def._splitter:
+
+            from pydra.design import workflow
+
+            output_types = {o.name: list[o.type] for o in list_fields(task_def.Outputs)}
+
+            # We need to use a new variable as task_def will be overwritten by the time
+            # the Split workflow constructor is called
+            node_def = task_def
+
+            @workflow.define(outputs=output_types)
+            def Split():
+                node = workflow.add(node_def)
+                return tuple(getattr(node, o) for o in output_types)
+
+            task_def = Split()
+
+        elif task_def._combiner:
+            raise ValueError(
+                f"Task {self} is marked for combining, but not splitting. "
+                "Use the `split` method to split the task before combining."
+            )
+        task = task_def.Task(task_def, submitter=self, name="task")
+        print(str(task.output_dir))
+        self.loop.run_until_complete(self.expand_runnable(task))
         PersistentCache().clean_up()
-        return task.result()
+        print(str(task.output_dir))
+        result = task.result()
+        if result is None:
+            if task.lockfile.exists():
+                raise RuntimeError(
+                    f"Task {task} has a lockfile, but no result was found. "
+                    "This may be due to another submission process running, or the hard "
+                    "interrupt (e.g. a debugging abortion) interrupting a previous run. "
+                    f"In the case of an interrupted run, please remove {str(task.lockfile)!r} "
+                    "and resubmit."
+                )
+            raise RuntimeError(f"Task {task} has no result in {str(task.output_dir)!r}")
+        return result
 
-    async def submit_from_call(self, task: "Task"):
-        """
-        This coroutine should only be called once per Submitter call,
-        and serves as the bridge between sync/async lands.
+    # def __getstate__(self):
+    #     state = self.__dict__.copy()
+    #     # Remove the unpicklable entries or those that should not be pickled
+    #     # When unpickled (in another process) the submitter can't be called
+    #     state["loop"] = None
+    #     state["_worker"] = None
+    #     return state
 
-        There are 4 potential paths based on the type of runnable:
-        0) Workflow has a different plugin than a submitter
-        1) Workflow without State
-        2) Task without State
-        3) (Workflow or Task) with State
+    # def __setstate__(self, state):
+    #     self.__dict__.update(state)
+    #     # Restore the loop and worker
+    #     self.loop = get_open_loop()
+    #     self.worker = WORKERS[self.plugin](**self.worker.__dict__)
+    #     self.worker.loop = self.loop
 
-        Once Python 3.10 is the minimum, this should probably be refactored into using
-        structural pattern matching.
-        """
-        if is_workflow(task):  # TODO: env to wf
-            # connect and calculate the checksum of the graph before running
-            task._create_graph_connections()  # override_task_caches=True)
-            # 0
-            if task.plugin and task.plugin != self.plugin:
-                # if workflow has a different plugin it's treated as a single element
-                await self.worker.run(task, rerun=self.rerun)
-            # 1
-            # if runnable.state is None:
-            #     await runnable._run(self, rerun=rerun)
-            # # 3
-            # else:
-            await self.expand_runnable(task, wait=True)
-        else:
-            # 2
-            await self.expand_runnable(task, wait=True)  # TODO
-        return True
-
-    async def expand_runnable(self, runnable: "Task", wait=False):
+    async def expand_runnable(self, task: "Task", wait=False):
         """
         This coroutine handles state expansion.
 
@@ -152,21 +207,13 @@ class Submitter:
             Coroutines for :class:`~pydra.engine.core.TaskBase` execution.
 
         """
-        if runnable.plugin and runnable.plugin != self.plugin:
-            raise NotImplementedError()
-
         futures = set()
 
-        task_pkl = await prepare_runnable(runnable)
-
-        if is_workflow(runnable):
-            # job has no state anymore
-            futures.add(
-                # This unpickles and runs workflow - why are we pickling?
-                asyncio.create_task(load_and_run_async(task_pkl, self, self.rerun))
-            )
+        if is_workflow(task):
+            futures.add(asyncio.create_task(task.run(self.rerun)))
         else:
-            futures.add(self.worker.run((task_pkl, runnable), rerun=self.rerun))
+            task_pkl = await prepare_runnable(task)
+            futures.add(self.worker.run((task_pkl, task), rerun=self.rerun))
 
         if wait and futures:
             # if wait is True, we are at the end of the graph / state expansion.
@@ -265,11 +312,7 @@ class Submitter:
                 logger.debug(f"Retrieving inputs for {task}")
                 # TODO: add state idx to retrieve values to reduce waiting
                 task.definition._retrieve_values(wf)
-                if task.state:
-                    for fut in await self.expand_runnable(task):
-                        task_futures.add(fut)
-                # expand that workflow
-                elif is_workflow(task):
+                if is_workflow(task):
                     await task.run(self)
                 # single task
                 else:
@@ -326,7 +369,7 @@ class Submitter:
             # Record if the node has not been started
             if not node.started:
                 not_started.add(node)
-            tasks.extend(node.get_runnable_tasks(graph, self))
+            tasks.extend(node.get_runnable_tasks(graph))
         return tasks
 
     @property
@@ -371,12 +414,12 @@ class NodeExecution:
         self.submitter = submitter
         # Initialize the state dictionaries
         self._tasks = None
-        self.waiting = []
-        self.successful = []
-        self.errored = []
-        self.running = []
+        self.waiting = {}
+        self.successful = {}
+        self.errored = {}
+        self.running = {}
         self.unrunnable = defaultdict(list)
-        self.state_names = self.node.state_names
+        self.state_names = self.node.state.names
 
     def __getattr__(self, name: str) -> ty.Any:
         """Delegate attribute access to the underlying node."""
@@ -422,14 +465,14 @@ class NodeExecution:
 
     def _generate_tasks(self) -> ty.Iterable["Task"]:
         if self.node.state is None:
-            yield Task(
+            yield self.node._definition.Task(
                 definition=self.node._definition,
                 submitter=self.submitter,
                 name=self.node.name,
             )
         else:
             for index, split_defn in self.node._split_definition().items():
-                yield Task(
+                yield self.node._definition.Task(
                     definition=split_defn,
                     submitter=self.submitter,
                     name=self.node.name,
@@ -487,16 +530,17 @@ class NodeExecution:
             List of tasks that are ready to run
         """
         runnable: list["Task"] = []
+        self.tasks  # Ensure tasks are loaded
         if not self.started:
             self.waiting = copy(self._tasks)
         # Check to see if any previously running tasks have completed
-        for index, task in copy(self.running.items()):
+        for index, task in list(self.running.items()):
             if task.done:
                 self.successful[task.state_index] = self.running.pop(index)
             elif task.errored:
                 self.errored[task.state_index] = self.running.pop(index)
         # Check to see if any waiting tasks are now runnable/unrunnable
-        for index, task in copy(self.waiting.items()):
+        for index, task in list(self.waiting.items()):
             pred: NodeExecution
             is_runnable = True
             for pred in graph.predecessors[self.node.name]:

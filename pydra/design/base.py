@@ -388,7 +388,8 @@ def make_task_def(
     klass : type
         The class created using the attrs package
     """
-    from pydra.engine.specs import TaskDef
+    from pydra.engine.specs import TaskDef, WorkflowDef
+    from pydra.engine.core import Task, WorkflowTask
 
     spec_type._check_arg_refs(inputs, outputs)
 
@@ -399,6 +400,7 @@ def make_task_def(
             f"{reserved_names} are reserved and cannot be used for {spec_type} field names"
         )
     outputs_klass = make_outputs_spec(out_type, outputs, outputs_bases, name)
+    task_type = WorkflowTask if issubclass(spec_type, WorkflowDef) else Task
     if klass is None or not issubclass(klass, spec_type):
         if name is None:
             raise ValueError("name must be provided if klass is not")
@@ -417,13 +419,19 @@ def make_task_def(
             name=name,
             bases=bases,
             kwds={},
-            exec_body=lambda ns: ns.update({"Outputs": outputs_klass}),
+            exec_body=lambda ns: ns.update(
+                {
+                    "Outputs": outputs_klass,
+                    "Task": task_type,
+                }
+            ),
         )
     else:
         # Ensure that the class has it's own annotations dict so we can modify it without
         # messing up other classes
         klass.__annotations__ = copy(klass.__annotations__)
         klass.Outputs = outputs_klass
+        klass.Task = task_type
     # Now that we have saved the attributes in lists to be
     for arg in inputs.values():
         # If an outarg input then the field type should be Path not a FileSet
@@ -769,7 +777,11 @@ def extract_function_inputs_and_outputs(
     type_hints = ty.get_type_hints(function)
     input_types = {}
     input_defaults = {}
+    has_varargs = False
     for p in sig.parameters.values():
+        if p.kind is p.VAR_POSITIONAL or p.kind is p.VAR_KEYWORD:
+            has_varargs = True
+            continue
         input_types[p.name] = type_hints.get(p.name, ty.Any)
         if p.default is not inspect.Parameter.empty:
             input_defaults[p.name] = p.default
@@ -779,11 +791,12 @@ def extract_function_inputs_and_outputs(
                 f"Input names ({inputs}) should not be provided when "
                 "wrapping/decorating a function as "
             )
-        if unrecognised := set(inputs) - set(input_types):
-            raise ValueError(
-                f"Unrecognised input names ({unrecognised}) not present in the signature "
-                f"of the function {function!r}"
-            )
+        if not has_varargs:
+            if unrecognised := set(inputs) - set(input_types):
+                raise ValueError(
+                    f"Unrecognised input names ({unrecognised}) not present in the signature "
+                    f"of the function {function!r}"
+                )
         for inpt_name, type_ in input_types.items():
             try:
                 inpt = inputs[inpt_name]

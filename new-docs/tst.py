@@ -11,4 +11,4 @@ load_json = LoadJson(file=json_file)
 result = load_json(plugin="serial")
 
 # Print the output interface of the of the task (LoadJson.Outputs)
-print(result.output)
+print(result.outputs)

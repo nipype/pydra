@@ -18,7 +18,8 @@ import cloudpickle as cp
 from fileformats.core import FileSet
 
 if ty.TYPE_CHECKING:
-    from .specs import TaskDef
+    from .specs import TaskDef, Result
+    from .core import Task
     from pydra.design.base import Field
 
 
@@ -128,7 +129,12 @@ def load_result(checksum, cache_locations):
     return None
 
 
-def save(task_path: Path, result=None, task=None, name_prefix=None) -> None:
+def save(
+    task_path: Path,
+    result: "Result | None" = None,
+    task: "Task | None" = None,
+    name_prefix: str = None,
+) -> None:
     """
     Save a :class:`~pydra.engine.core.TaskBase` object and/or results.
 
@@ -154,7 +160,7 @@ def save(task_path: Path, result=None, task=None, name_prefix=None) -> None:
     lockfile = task_path.parent / (task_path.name + "_save.lock")
     with SoftFileLock(lockfile):
         if result:
-            if task_path.name.startswith("Workflow") and result.output is not None:
+            if task_path.name.startswith("Workflow") and result.outputs is not None:
                 # copy files to the workflow directory
                 result = copyfile_workflow(wf_path=task_path, result=result)
             with (task_path / f"{name_prefix}_result.pklz").open("wb") as fp:
@@ -168,12 +174,12 @@ def copyfile_workflow(wf_path: os.PathLike, result):
     """if file in the wf results, the file will be copied to the workflow directory"""
     from .helpers_file import copy_nested_files
 
-    for field in attrs_fields(result.output):
-        value = getattr(result.output, field.name)
+    for field in attrs_fields(result.outputs):
+        value = getattr(result.outputs, field.name)
         # if the field is a path or it can contain a path _copyfile_single_value is run
         # to move all files and directories to the workflow directory
         new_value = copy_nested_files(value, wf_path, mode=FileSet.CopyMode.hardlink)
-        setattr(result.output, field.name, new_value)
+        setattr(result.outputs, field.name, new_value)
     return result
 
 
@@ -424,16 +430,26 @@ def get_available_cpus():
     return os.cpu_count()
 
 
-def load_and_run(task_pkl, rerun=False, submitter=None, plugin=None, **kwargs):
+def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
     """
     loading a task from a pickle file, settings proper input
     and running the task
+
+    Parameters
+    ----------
+    task_pkl : :obj:`Path`
+        The path to pickled task file
+
+    Returns
+    -------
+    resultfile : :obj:`Path`
+        The path to the pickled result file
     """
 
     from .specs import Result
 
     try:
-        task = load_task(task_pkl=task_pkl)
+        task: Task = load_task(task_pkl=task_pkl)
     except Exception:
         if task_pkl.parent.exists():
             etype, eval, etr = sys.exc_info()
@@ -445,7 +461,7 @@ def load_and_run(task_pkl, rerun=False, submitter=None, plugin=None, **kwargs):
 
     resultfile = task.output_dir / "_result.pklz"
     try:
-        task(rerun=rerun, plugin=plugin, submitter=submitter, **kwargs)
+        task(rerun=rerun)
     except Exception as e:
         # creating result and error files if missing
         errorfile = task.output_dir / "_error.pklz"
@@ -461,13 +477,13 @@ def load_and_run(task_pkl, rerun=False, submitter=None, plugin=None, **kwargs):
     return resultfile
 
 
-async def load_and_run_async(task_pkl, submitter=None, rerun=False, **kwargs):
+async def load_and_run_async(task_pkl):
     """
     loading a task from a pickle file, settings proper input
     and running the workflow
     """
     task = load_task(task_pkl=task_pkl)
-    await task._run(submitter=submitter, rerun=rerun, **kwargs)
+    await task()
 
 
 def load_task(task_pkl):

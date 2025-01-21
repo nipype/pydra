@@ -216,9 +216,6 @@ class Node(ty.Generic[OutputType]):
             return checksum_ind
         else:
             checksum_list = []
-            if not hasattr(self.state, "inputs_ind"):
-                self.state.prepare_states(self._definition, cont_dim=self.cont_dim)
-                self.state.prepare_inputs()
             for ind in range(len(self.state.inputs_ind)):
                 checksum_list.append(self._checksum_states(state_index=ind))
             return checksum_list
@@ -269,6 +266,7 @@ class Node(ty.Generic[OutputType]):
         else:
             self._state = State(
                 self.name,
+                self._definition,
                 splitter=splitter,
                 other_states=other_states,
                 combiner=combiner,
@@ -295,16 +293,16 @@ class Node(ty.Generic[OutputType]):
     def _extract_input_el(self, inputs, inp_nm, ind):
         """
         Extracting element of the inputs taking into account
-        container dimension of the specific element that can be set in self.cont_dim.
+        container dimension of the specific element that can be set in self.state.cont_dim.
         If input name is not in cont_dim, it is assumed that the input values has
         a container dimension of 1, so only the most outer dim will be used for splitting.
         If
         """
-        if f"{self.name}.{inp_nm}" in self.cont_dim:
+        if f"{self.name}.{inp_nm}" in self.state.cont_dim:
             return list(
                 hlpst.flatten(
                     ensure_list(getattr(inputs, inp_nm)),
-                    max_depth=self.cont_dim[f"{self.name}.{inp_nm}"],
+                    max_depth=self.state.cont_dim[f"{self.name}.{inp_nm}"],
                 )
             )[ind]
         else:
@@ -326,7 +324,7 @@ class Node(ty.Generic[OutputType]):
                         ind=input_ind[f"{self.name}.{inp}"],
                     )
             split_defs[StateIndex(input_ind)] = attrs.evolve(
-                self._definition, inputs_dict
+                self._definition, **inputs_dict
             )
         return split_defs
 

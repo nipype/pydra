@@ -170,7 +170,7 @@ def define(
         for inpt_name in lazy:
             parsed_inputs[inpt_name].lazy = True
 
-        interface = make_task_def(
+        defn = make_task_def(
             WorkflowDef,
             WorkflowOutputs,
             parsed_inputs,
@@ -181,7 +181,7 @@ def define(
             outputs_bases=outputs_bases,
         )
 
-        return interface
+        return defn
 
     if wrapped is not None:
         if not isinstance(wrapped, (ty.Callable, type)):
@@ -198,7 +198,7 @@ def this() -> "Workflow":
     Workflow
         The workflow currently being constructed.
     """
-    from pydra.engine.workflow.base import Workflow
+    from pydra.engine.core import Workflow
 
     return Workflow.under_construction
 

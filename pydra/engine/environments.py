@@ -17,7 +17,7 @@ class Environment:
     def setup(self):
         pass
 
-    def execute(self, task: "ShellTask"):
+    def execute(self, task: "ShellTask") -> dict[str, ty.Any]:
         """
         Execute the task in the environment.
 
@@ -28,7 +28,7 @@ class Environment:
 
         Returns
         -------
-        output
+        output: dict[str, Any]
             Output of the task.
         """
         raise NotImplementedError
@@ -42,9 +42,9 @@ class Native(Environment):
     Native environment, i.e. the tasks are executed in the current python environment.
     """
 
-    def execute(self, task: "ShellTask"):
+    def execute(self, task: "ShellTask") -> dict[str, ty.Any]:
         keys = ["return_code", "stdout", "stderr"]
-        values = execute(task.command_args(), strip=task.strip)
+        values = execute(task.definition._command_args(), strip=task.strip)
         output = dict(zip(keys, values))
         if output["return_code"]:
             msg = f"Error running '{task.name}' task with {task.command_args()}:"
@@ -90,10 +90,10 @@ class Container(Environment):
 class Docker(Container):
     """Docker environment."""
 
-    def execute(self, task: "ShellTask"):
+    def execute(self, task: "ShellTask") -> dict[str, ty.Any]:
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts = task.get_bindings(root=self.root)
+        mounts = task.definition._get_bindings(root=self.root)
 
         docker_args = [
             "docker",
@@ -111,7 +111,7 @@ class Docker(Container):
         keys = ["return_code", "stdout", "stderr"]
 
         values = execute(
-            docker_args + [docker_img] + task.command_args(root=self.root),
+            docker_args + [docker_img] + task.definition._command_args(root=self.root),
             strip=task.strip,
         )
         output = dict(zip(keys, values))
@@ -126,10 +126,10 @@ class Docker(Container):
 class Singularity(Container):
     """Singularity environment."""
 
-    def execute(self, task: "ShellTask"):
+    def execute(self, task: "ShellTask") -> dict[str, ty.Any]:
         singularity_img = f"{self.image}:{self.tag}"
         # mounting all input locations
-        mounts = task.get_bindings(root=self.root)
+        mounts = task.definition._get_bindings(root=self.root)
 
         # todo adding xargsy etc
         singularity_args = [
@@ -148,7 +148,9 @@ class Singularity(Container):
         keys = ["return_code", "stdout", "stderr"]
 
         values = execute(
-            singularity_args + [singularity_img] + task.command_args(root=self.root),
+            singularity_args
+            + [singularity_img]
+            + task.definition._command_args(root=self.root),
             strip=task.strip,
         )
         output = dict(zip(keys, values))

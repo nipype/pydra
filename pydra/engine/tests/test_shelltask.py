@@ -2813,7 +2813,7 @@ def test_shell_cmd_outputspec_5(plugin, results_function, tmp_path):
     assert all([file.fspath.exists() for file in res.output.newfile])
     assert (
         shelly.output_names
-        == shelly.generated_output_names
+        == shelly._generated_output_names
         == ["return_code", "stdout", "stderr", "newfile"]
     )
 
@@ -3314,7 +3314,7 @@ def test_shell_cmd_outputspec_8d(tmp_path, plugin, results_function):
     )
     assert (
         shelly.output_names
-        == shelly.generated_output_names
+        == shelly._generated_output_names
         == ["return_code", "stdout", "stderr", "resultsDir"]
     )
     res = results_function(shelly, plugin)
@@ -3559,10 +3559,10 @@ def test_shell_cmd_inputspec_outputspec_2():
     )
     shelly.definition.file1 = "new_file_1.txt"
     shelly.definition.file2 = "new_file_2.txt"
-    # all fields from output_spec should be in output_names and generated_output_names
+    # all fields from output_spec should be in output_names and _generated_output_names
     assert (
         shelly.output_names
-        == shelly.generated_output_names
+        == shelly._generated_output_names
         == ["return_code", "stdout", "stderr", "newfile1", "newfile2"]
     )
 
@@ -3625,7 +3625,7 @@ def test_shell_cmd_inputspec_outputspec_2a():
         output_spec=my_output_spec,
     )
     shelly.definition.file1 = "new_file_1.txt"
-    # generated_output_names should know that newfile2 will not be generated
+    # _generated_output_names should know that newfile2 will not be generated
     assert shelly.output_names == [
         "return_code",
         "stdout",
@@ -3633,7 +3633,7 @@ def test_shell_cmd_inputspec_outputspec_2a():
         "newfile1",
         "newfile2",
     ]
-    assert shelly.generated_output_names == [
+    assert shelly._generated_output_names == [
         "return_code",
         "stdout",
         "stderr",
@@ -3759,7 +3759,7 @@ def test_shell_cmd_inputspec_outputspec_3a():
     )
     shelly.definition.file1 = "new_file_1.txt"
     shelly.definition.file2 = "new_file_2.txt"
-    # generated_output_names should know that newfile2 will not be generated
+    # _generated_output_names should know that newfile2 will not be generated
     assert shelly.output_names == [
         "return_code",
         "stdout",
@@ -3767,7 +3767,7 @@ def test_shell_cmd_inputspec_outputspec_3a():
         "newfile1",
         "newfile2",
     ]
-    assert shelly.generated_output_names == [
+    assert shelly._generated_output_names == [
         "return_code",
         "stdout",
         "stderr",
@@ -3823,10 +3823,10 @@ def test_shell_cmd_inputspec_outputspec_4():
     )
     shelly.definition.file1 = "new_file_1.txt"
     shelly.definition.additional_inp = 2
-    # generated_output_names should be the same as output_names
+    # _generated_output_names should be the same as output_names
     assert (
         shelly.output_names
-        == shelly.generated_output_names
+        == shelly._generated_output_names
         == ["return_code", "stdout", "stderr", "newfile1"]
     )
 

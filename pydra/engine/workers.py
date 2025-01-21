@@ -142,7 +142,7 @@ class SerialWorker(Worker):
         **kwargs,
     ):
         """Run a task."""
-        return self.exec_serial(task, rerun=rerun, environment=environment)
+        return self.exec_serial(task)
 
     def close(self):
         """Return whether the task is finished."""
@@ -151,13 +151,14 @@ class SerialWorker(Worker):
         self, task: "Task", rerun: bool = False, environment: Environment | None = None
     ):
         if isinstance(task, Task):
-            return task.run(rerun, environment=environment)
+            return task.run(rerun=rerun)
         else:  # it could be tuple that includes pickle files with tasks and inputs
             task_main_pkl, _ = task
-            return load_and_run(task_main_pkl, rerun, environment=environment)
+            return load_and_run(task_main_pkl, rerun=rerun)
 
     async def fetch_finished(self, futures):
-        await asyncio.gather(*futures)
+        for future in futures:
+            await future
         return set()
 
     # async def fetch_finished(self, futures):
@@ -198,7 +199,7 @@ class ConcurrentFuturesWorker(Worker):
         else:  # it could be tuple that includes pickle files with tasks and inputs
             task_main_pkl, task_orig = runnable
             res = await self.loop.run_in_executor(
-                self.pool, load_and_run, task_main_pkl, rerun, environment
+                self.pool, load_and_run, task_main_pkl
             )
         return res
 
@@ -917,11 +918,11 @@ class DaskWorker(Worker):
 
         async with Client(**self.client_args, asynchronous=True) as client:
             if isinstance(task, Task):
-                future = client.submit(task._run, rerun)
+                future = client.submit(task)
                 result = await future
-            else:  # it could be tuple that includes pickle files with tasks and inputs
-                ind, task_main_pkl, task_orig = task
-                future = client.submit(load_and_run, task_main_pkl, ind, rerun)
+            else:  # it could be a path to a pickled task file
+                assert isinstance(task, Path)
+                future = client.submit(load_and_run, task)
                 result = await future
         return result
 
