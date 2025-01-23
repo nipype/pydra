@@ -237,7 +237,7 @@ class TaskDef(ty.Generic[OutputsType]):
                 "set 'overwrite=True' to do so"
             )
         if splitter:
-            unwraped_split = hlpst.unwrap_splitter(splitter)
+            unwraped_split = list(hlpst.unwrap_splitter(splitter))
             if duplicated := [f for f, c in Counter(unwraped_split).items() if c > 1]:
                 raise ValueError(f"Splitter fields {duplicated} are duplicated")
             split_names = set(
@@ -584,17 +584,17 @@ class PythonDef(TaskDef[PythonOutputsType]):
         # Run the actual function
         returned = self.function(**inputs)
         # Collect the outputs and save them into the task.return_values dictionary
-        self.return_values = {f.name: f.default for f in attrs.fields(self.Outputs)}
-        return_names = list(self.return_values)
+        task.return_values = {f.name: f.default for f in attrs.fields(self.Outputs)}
+        return_names = list(task.return_values)
         if returned is None:
-            self.return_values = {nm: None for nm in return_names}
-        elif len(self.return_values) == 1:
+            task.return_values = {nm: None for nm in return_names}
+        elif len(task.return_values) == 1:
             # if only one element in the fields, everything should be returned together
-            self.return_values = {list(self.return_values)[0]: returned}
+            task.return_values = {list(task.return_values)[0]: returned}
         elif isinstance(returned, tuple) and len(return_names) == len(returned):
-            self.return_values = dict(zip(return_names, returned))
+            task.return_values = dict(zip(return_names, returned))
         elif isinstance(returned, dict):
-            self.return_values = {key: returned.get(key, None) for key in return_names}
+            task.return_values = {key: returned.get(key, None) for key in return_names}
         else:
             raise RuntimeError(
                 f"expected {len(return_names)} elements, but {returned} were returned"

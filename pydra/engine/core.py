@@ -128,7 +128,7 @@ class Task(ty.Generic[DefType]):
         self.definition = copy(definition)
         # We save the submitter is the definition is a workflow otherwise we don't
         # so the task can be pickled
-        self.submitter = submitter if is_workflow(definition) else None
+        self.submitter = submitter
         self.environment = environment if environment is not None else Native()
         self.name = name
         self.state_index = state_index
