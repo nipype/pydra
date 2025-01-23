@@ -40,10 +40,12 @@ if ty.TYPE_CHECKING:
     from pydra.engine.graph import DiGraph
     from pydra.engine.submitter import NodeExecution
     from pydra.engine.lazy import LazyOutField
-    from pydra.engine.task import ShellTask
     from pydra.engine.core import Workflow
     from pydra.engine.environments import Environment
     from pydra.engine.workers import Worker
+
+
+DefType = ty.TypeVar("DefType", bound="TaskDef")
 
 
 def is_set(value: ty.Any) -> bool:
@@ -372,7 +374,7 @@ class TaskDef(ty.Generic[OutputsType]):
         }
         return hash_function(sorted(field_hashes.items())), field_hashes
 
-    def _retrieve_values(self, wf, state_index=None):
+    def _resolve_lazy_fields(self, wf, state_index=None):
         """Parse output results."""
         temp_values = {}
         for field in attrs_fields(self):
@@ -482,7 +484,7 @@ class Runtime:
 class Result(ty.Generic[OutputsType]):
     """Metadata regarding the outputs of processing."""
 
-    task: "Task"
+    task: "Task[DefType]"
     outputs: OutputsType | None = None
     runtime: Runtime | None = None
     errored: bool = False
@@ -548,13 +550,13 @@ class RuntimeSpec:
 class PythonOutputs(TaskOutputs):
 
     @classmethod
-    def _from_task(cls, task: "Task") -> Self:
+    def _from_task(cls, task: "Task[PythonDef]") -> Self:
         """Collect the outputs of a task from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
         Parameters
         ----------
-        task : Task
+        task : Task[PythonDef]
             The task whose outputs are being collected.
         outputs_dict : dict[str, ty.Any]
             The outputs of the task, as a dictionary
@@ -575,7 +577,7 @@ PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 class PythonDef(TaskDef[PythonOutputsType]):
 
-    def _run(self, task: "Task") -> None:
+    def _run(self, task: "Task[PythonDef]") -> None:
         # Prepare the inputs to the function
         inputs = attrs_values(self)
         del inputs["function"]
@@ -602,12 +604,12 @@ class PythonDef(TaskDef[PythonOutputsType]):
 class WorkflowOutputs(TaskOutputs):
 
     @classmethod
-    def _from_task(cls, task: "Task") -> Self:
+    def _from_task(cls, task: "Task[WorkflowDef]") -> Self:
         """Collect the outputs of a workflow task from the outputs of the nodes in the
 
         Parameters
         ----------
-        task : Task
+        task : Task[WorfklowDef]
             The task whose outputs are being collected.
 
         Returns
@@ -659,12 +661,13 @@ class WorkflowDef(TaskDef[WorkflowOutputsType]):
 
     _constructed = attrs.field(default=None, init=False)
 
-    def _run(self, task: "Task") -> None:
+    def _run(self, task: "Task[WorkflowDef]") -> None:
         """Run the workflow."""
-        if task.submitter.worker.is_async:
-            task.submitter.expand_workflow_async(task)
-        else:
-            task.submitter.expand_workflow(task)
+        task.submitter.expand_workflow(task)
+
+    async def _run_async(self, task: "Task[WorkflowDef]") -> None:
+        """Run the workflow asynchronously."""
+        await task.submitter.expand_workflow_async(task)
 
     def construct(self) -> "Workflow":
         from pydra.engine.core import Workflow
@@ -688,7 +691,7 @@ class ShellOutputs(TaskOutputs):
     stderr: str = shell.out(help=STDERR_HELP)
 
     @classmethod
-    def _from_task(cls, task: "ShellTask") -> Self:
+    def _from_task(cls, task: "Task[ShellDef]") -> Self:
         """Collect the outputs of a shell process from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
@@ -784,7 +787,7 @@ class ShellOutputs(TaskOutputs):
     def _resolve_value(
         cls,
         fld: "shell.out",
-        task: "Task",
+        task: "Task[DefType]",
     ) -> ty.Any:
         """Collect output file if metadata specified."""
         from pydra.design import shell
@@ -842,7 +845,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
 
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("cmdline",)
 
-    def _run(self, task: "Task") -> None:
+    def _run(self, task: "Task[ShellDef]") -> None:
         """Run the shell command."""
         task.return_values = task.environment.execute(task)
 

@@ -4,13 +4,13 @@ import asyncio
 import sys
 import json
 import re
+import typing as ty
 from tempfile import gettempdir
 from pathlib import Path
 from shutil import copyfile, which
-
 import concurrent.futures as cf
-
 from .core import Task
+from .specs import TaskDef
 from .helpers import (
     get_available_cpus,
     read_and_display_async,
@@ -20,10 +20,11 @@ from .helpers import (
 )
 
 import logging
-from pydra.engine.environments import Environment
 import random
 
 logger = logging.getLogger("pydra.worker")
+
+DefType = ty.TypeVar("DefType", bound="TaskDef")
 
 
 class Worker:
@@ -37,7 +38,7 @@ class Worker:
         logger.debug(f"Initializing {self.__class__.__name__}")
         self.loop = loop
 
-    def run(self, task: "Task", **kwargs):
+    def run(self, task: "Task[DefType]", **kwargs):
         """Return coroutine for task execution."""
         raise NotImplementedError
 
@@ -140,7 +141,7 @@ class DebugWorker(Worker):
 
     def run(
         self,
-        task: "Task | tuple[Path, Task]",
+        task: "Task[DefType] | tuple[Path, Task[DefType]]",
         rerun: bool = False,
     ):
         """Run a task."""
@@ -178,21 +179,18 @@ class ConcurrentFuturesWorker(Worker):
 
     def run(
         self,
-        task: "Task",
+        task: "Task[DefType]",
         rerun: bool = False,
-        environment: Environment | None = None,
         **kwargs,
     ):
         """Run a task."""
         assert self.loop, "No event loop available to submit tasks"
-        return self.exec_as_coro(task, rerun=rerun, environment=environment)
+        return self.exec_as_coro(task, rerun=rerun)
 
-    async def exec_as_coro(self, runnable, rerun=False, environment=None):
+    async def exec_as_coro(self, runnable: "Task[DefType]", rerun: bool = False):
         """Run a task (coroutine wrapper)."""
         if isinstance(runnable, Task):
-            res = await self.loop.run_in_executor(
-                self.pool, runnable._run, rerun, environment
-            )
+            res = await self.loop.run_in_executor(self.pool, runnable.run, rerun)
         else:  # it could be tuple that includes pickle files with tasks and inputs
             task_main_pkl, task_orig = runnable
             res = await self.loop.run_in_executor(
@@ -235,9 +233,7 @@ class SlurmWorker(DistributedWorker):
         self.sbatch_args = sbatch_args or ""
         self.error = {}
 
-    def run(
-        self, task: "Task", rerun: bool = False, environment: Environment | None = None
-    ):
+    def run(self, task: "Task[DefType]", rerun: bool = False):
         """Worker submission API."""
         script_dir, batch_script = self._prepare_runscripts(task, rerun=rerun)
         if (script_dir / script_dir.parts[1]) == gettempdir():
@@ -467,9 +463,7 @@ class SGEWorker(DistributedWorker):
         self.default_qsub_args = default_qsub_args
         self.max_mem_free = max_mem_free
 
-    def run(
-        self, task: "Task", rerun: bool = False, environment: Environment | None = None
-    ):  # TODO: add env
+    def run(self, task: "Task[DefType]", rerun: bool = False):  # TODO: add env
         """Worker submission API."""
         (
             script_dir,
@@ -899,17 +893,14 @@ class DaskWorker(Worker):
 
     def run(
         self,
-        task: "Task",
+        task: "Task[DefType]",
         rerun: bool = False,
-        environment: Environment | None = None,
         **kwargs,
     ):
         """Run a task."""
-        return self.exec_dask(task, rerun=rerun, environment=environment)
+        return self.exec_dask(task, rerun=rerun)
 
-    async def exec_dask(
-        self, task: "Task", rerun: bool = False, environment: Environment | None = None
-    ):
+    async def exec_dask(self, task: "Task[DefType]", rerun: bool = False):
         """Run a task (coroutine wrapper)."""
         from dask.distributed import Client
 
@@ -950,13 +941,12 @@ class PsijWorker(Worker):
 
     def run(
         self,
-        task: "Task",
+        task: "Task[DefType]",
         rerun: bool = False,
-        environment: Environment | None = None,
         **kwargs,
     ):
         """Run a task."""
-        return self.exec_psij(task, rerun=rerun, environment=environment)
+        return self.exec_psij(task, rerun=rerun)
 
     def make_spec(self, cmd=None, arg=None):
         """
@@ -1001,7 +991,9 @@ class PsijWorker(Worker):
         return job
 
     async def exec_psij(
-        self, task: "Task", rerun: bool = False, environment: Environment | None = None
+        self,
+        task: "Task[DefType]",
+        rerun: bool = False,
     ):
         """
         Run a task (coroutine wrapper).
@@ -1025,7 +1017,7 @@ class PsijWorker(Worker):
             cache_dir = task.cache_dir
             file_path = cache_dir / "runnable_function.pkl"
             with open(file_path, "wb") as file:
-                pickle.dump(task._run, file)
+                pickle.dump(task.run, file)
             func_path = absolute_path / "run_pickled.py"
             definition = self.make_spec("python", [func_path, file_path])
         else:  # it could be tuple that includes pickle files with tasks and inputs

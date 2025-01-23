@@ -409,7 +409,7 @@ class Task(ty.Generic[DefType]):
             self.audit.start_audit(odir=self.output_dir)
             try:
                 self.audit.monitor()
-                await self.definition._run(self)
+                await self.definition._run_async(self)
                 result.outputs = self.definition.Outputs._from_task(self)
             except Exception:
                 etype, eval, etr = sys.exc_info()

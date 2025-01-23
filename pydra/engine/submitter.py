@@ -32,6 +32,8 @@ if ty.TYPE_CHECKING:
     from .specs import TaskDef, WorkflowDef
     from .environments import Environment
 
+DefType = ty.TypeVar("DefType", bound="TaskDef")
+
 # Used to flag development mode of Audit
 develop = False
 
@@ -155,9 +157,9 @@ class Submitter:
             )
         task = Task(task_def, submitter=self, name="task", environment=self.environment)
         if task.is_async:
-            self.loop.run_until_complete(self.expand_runnable_async(task))
+            self.loop.run_until_complete(task.run_async(rerun=self.rerun))
         else:
-            self.expand_runnable(task)
+            task.run(rerun=self.rerun)
         PersistentCache().clean_up()
         result = task.result()
         if result is None:
@@ -187,72 +189,6 @@ class Submitter:
         self._worker = WORKERS[self.worker_name](**self.worker_kwargs)
         self.worker.loop = self.loop
 
-    def expand_runnable(self, task: "Task"):
-        """
-        This coroutine handles state expansion.
-
-        Removes any states from `runnable`. If `wait` is
-        set to False (default), aggregates all worker
-        execution coroutines and returns them. If `wait` is
-        True, waits for all coroutines to complete / error
-        and returns None.
-
-        Parameters
-        ----------
-        runnable : pydra Task
-            Task instance (`Task`, `Workflow`)
-        wait : bool (False)
-            Await all futures before completing
-
-        Returns
-        -------
-        futures : set or None
-            Coroutines for :class:`~pydra.engine.core.TaskBase` execution.
-
-        """
-        task.run(rerun=self.rerun)
-
-    async def expand_runnable_async(
-        self, task: "Task", wait=False
-    ) -> set[ty.Coroutine] | None:
-        """
-        This coroutine handles state expansion.
-
-        Removes any states from `runnable`. If `wait` is
-        set to False (default), aggregates all worker
-        execution coroutines and returns them. If `wait` is
-        True, waits for all coroutines to complete / error
-        and returns None.
-
-        Parameters
-        ----------
-        runnable : pydra Task
-            Task instance (`Task`, `Workflow`)
-        wait : bool (False)
-            Await all futures before completing
-
-        Returns
-        -------
-        futures : set or None
-            Coroutines for :class:`~pydra.engine.core.TaskBase` execution.
-
-        """
-        futures = set()
-
-        if is_workflow(task.definition):
-            futures.add(asyncio.create_task(task.run(self.rerun)))
-        else:
-            task_pkl = await prepare_runnable(task)
-            futures.add(self.worker.run((task_pkl, task), rerun=self.rerun))
-
-        if wait and futures:
-            # if wait is True, we are at the end of the graph / state expansion.
-            # Once the remaining jobs end, we will exit `submit_from_call`
-            await asyncio.gather(*futures)
-            return
-        # pass along futures to be awaited independently
-        return futures
-
     def expand_workflow(self, workflow_task: "Task[WorkflowDef]") -> None:
         """Expands and executes a workflow task synchronously. Typically only used during
         debugging and testing, as the asynchronous version is more efficient.
@@ -273,12 +209,12 @@ class Submitter:
                 # grab inputs if needed
                 logger.debug(f"Retrieving inputs for {task}")
                 # TODO: add state idx to retrieve values to reduce waiting
-                task.definition._retrieve_values(wf)
+                task.definition._resolve_lazy_fields(wf)
                 self.worker.run(task, rerun=self.rerun)
             tasks = self.get_runnable_tasks(exec_graph)
         workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
 
-    async def expand_workflow_async(self, task: "Task[WorkflowDef]") -> None:
+    async def expand_workflow_async(self, workflow_task: "Task[WorkflowDef]") -> None:
         """
         Expand and execute a workflow task asynchronously.
 
@@ -287,7 +223,7 @@ class Submitter:
         task : :obj:`~pydra.engine.core.Task[WorkflowDef]`
             Workflow Task object
         """
-        wf = task.definition.construct()
+        wf = workflow_task.definition.construct()
         # Generate the execution graph
         exec_graph = wf.execution_graph(submitter=self)
         # keep track of pending futures
@@ -301,7 +237,7 @@ class Submitter:
                 # so try to get_runnable_tasks for another minute
                 ii = 0
                 while not tasks and exec_graph.nodes:
-                    tasks, follow_err = self.get_runnable_tasks(exec_graph)
+                    tasks = self.get_runnable_tasks(exec_graph)
                     ii += 1
                     # don't block the event loop!
                     await asyncio.sleep(1)
@@ -312,7 +248,7 @@ class Submitter:
                             "results predecessors:\n\n"
                         )
                         # Get blocked tasks and the predecessors they are waiting on
-                        outstanding: dict[Task, list[Task]] = {
+                        outstanding: dict[Task[DefType], list[Task[DefType]]] = {
                             t: [
                                 p for p in exec_graph.predecessors[t.name] if not p.done
                             ]
@@ -359,7 +295,7 @@ class Submitter:
                 # grab inputs if needed
                 logger.debug(f"Retrieving inputs for {task}")
                 # TODO: add state idx to retrieve values to reduce waiting
-                task.definition._retrieve_values(wf)
+                task.definition._resolve_lazy_fields(wf)
                 if is_workflow(task):
                     await task.run(self)
                 # single task
@@ -367,7 +303,7 @@ class Submitter:
                     task_futures.add(self.worker.run(task, rerun=self.rerun))
             task_futures = await self.worker.fetch_finished(task_futures)
             tasks = self.get_runnable_tasks(exec_graph)
-        task.return_values = {"workflow": wf, "exec_graph": exec_graph}
+        workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
 
     def __enter__(self):
         return self
@@ -386,10 +322,7 @@ class Submitter:
         if self._own_loop:
             self.loop.close()
 
-    def get_runnable_tasks(
-        self,
-        graph: DiGraph,
-    ) -> tuple[list["Task"], dict["NodeExecution", list[str]]]:
+    def get_runnable_tasks(self, graph: DiGraph) -> list["Task[DefType]"]:
         """Parse a graph and return all runnable tasks.
 
         Parameters
@@ -435,7 +368,7 @@ class Submitter:
             self._cache_dir = Path(self._cache_dir).resolve()
 
 
-class NodeExecution:
+class NodeExecution(ty.Generic[DefType]):
     """A wrapper around a workflow node containing the execution state of the tasks that
     are generated from it"""
 
@@ -444,17 +377,17 @@ class NodeExecution:
     submitter: Submitter
 
     # List of tasks that were completed successfully
-    successful: dict[StateIndex | None, list["Task"]]
+    successful: dict[StateIndex | None, list["Task[DefType]"]]
     # List of tasks that failed
-    errored: dict[StateIndex | None, "Task"]
+    errored: dict[StateIndex | None, "Task[DefType]"]
     # List of tasks that couldn't be run due to upstream errors
-    unrunnable: dict[StateIndex | None, list["Task"]]
+    unrunnable: dict[StateIndex | None, list["Task[DefType]"]]
     # List of tasks that are running
-    running: dict[StateIndex | None, "Task"]
+    running: dict[StateIndex | None, "Task[DefType]"]
     # List of tasks that are waiting on other tasks to complete before they can be run
-    waiting: dict[StateIndex | None, "Task"]
+    waiting: dict[StateIndex | None, "Task[DefType]"]
 
-    _tasks: dict[StateIndex | None, "Task"] | None
+    _tasks: dict[StateIndex | None, "Task[DefType]"] | None
 
     def __init__(self, node: "Node", submitter: Submitter):
         self.name = node.name
@@ -478,12 +411,12 @@ class NodeExecution:
         return self.node._definition
 
     @property
-    def tasks(self) -> ty.Iterable["Task"]:
+    def tasks(self) -> ty.Iterable["Task[DefType]"]:
         if self._tasks is None:
             self._tasks = {t.state_index: t for t in self._generate_tasks()}
         return self._tasks.values()
 
-    def task(self, index: StateIndex | None = None) -> "Task | list[Task]":
+    def task(self, index: StateIndex | None = None) -> "Task | list[Task[DefType]]":
         """Get a task object for a given state index."""
         self.tasks  # Ensure tasks are loaded
         try:
@@ -513,7 +446,7 @@ class NodeExecution:
             self.successful or self.waiting or self.running
         )
 
-    def _generate_tasks(self) -> ty.Iterable["Task"]:
+    def _generate_tasks(self) -> ty.Iterable["Task[DefType]"]:
         if self.node.state is None:
             yield Task(
                 definition=self.node._definition,
@@ -529,40 +462,7 @@ class NodeExecution:
                     state_index=index,
                 )
 
-        #     if state_index is None:
-        #         # if state_index=None, collecting all results
-        #         if self.node.state.combiner:
-        #             return self._combined_output(return_inputs=return_inputs)
-        #         else:
-        #             results = []
-        #             for ind in range(len(self.node.state.inputs_ind)):
-        #                 checksum = self.checksum_states(state_index=ind)
-        #                 result = load_result(checksum, cache_locations)
-        #                 if result is None:
-        #                     return None
-        #                 results.append(result)
-        #             if return_inputs is True or return_inputs == "val":
-        #                 return list(zip(self.node.state.states_val, results))
-        #             elif return_inputs == "ind":
-        #                 return list(zip(self.node.state.states_ind, results))
-        #             else:
-        #                 return results
-        #     else:  # state_index is not None
-        #         if self.node.state.combiner:
-        #             return self._combined_output(return_inputs=return_inputs)[
-        #                 state_index
-        #             ]
-        #         result = load_result(self.checksum_states(state_index), cache_locations)
-        #         if return_inputs is True or return_inputs == "val":
-        #             return (self.node.state.states_val[state_index], result)
-        #         elif return_inputs == "ind":
-        #             return (self.node.state.states_ind[state_index], result)
-        #         else:
-        #             return result
-        # else:
-        #     return load_result(self._definition._checksum, cache_locations)
-
-    def get_runnable_tasks(self, graph: DiGraph) -> list["Task"]:
+    def get_runnable_tasks(self, graph: DiGraph) -> list["Task[DefType]"]:
         """For a given node, check to see which tasks have been successfully run, are ready
         to run, can't be run due to upstream errors, or are waiting on other tasks to complete.
 
@@ -579,7 +479,7 @@ class NodeExecution:
         runnable : list[NodeExecution]
             List of tasks that are ready to run
         """
-        runnable: list["Task"] = []
+        runnable: list["Task[DefType]"] = []
         self.tasks  # Ensure tasks are loaded
         if not self.started:
             self.waiting = copy(self._tasks)

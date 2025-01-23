@@ -4,6 +4,7 @@ from pathlib import Path
 
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Task
+    from pydra.engine.specs import ShellDef
 
 
 class Environment:
@@ -17,7 +18,7 @@ class Environment:
     def setup(self):
         pass
 
-    def execute(self, task: "Task") -> dict[str, ty.Any]:
+    def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         """
         Execute the task in the environment.
 
@@ -42,7 +43,7 @@ class Native(Environment):
     Native environment, i.e. the tasks are executed in the current python environment.
     """
 
-    def execute(self, task: "Task") -> dict[str, ty.Any]:
+    def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         keys = ["return_code", "stdout", "stderr"]
         values = execute(task.definition._command_args())
         output = dict(zip(keys, values))
@@ -90,7 +91,7 @@ class Container(Environment):
 class Docker(Container):
     """Docker environment."""
 
-    def execute(self, task: "Task") -> dict[str, ty.Any]:
+    def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         docker_img = f"{self.image}:{self.tag}"
         # mounting all input locations
         mounts = task.definition._get_bindings(root=self.root)
@@ -125,7 +126,7 @@ class Docker(Container):
 class Singularity(Container):
     """Singularity environment."""
 
-    def execute(self, task: "Task") -> dict[str, ty.Any]:
+    def execute(self, task: "Task[ShellDef]") -> dict[str, ty.Any]:
         singularity_img = f"{self.image}:{self.tag}"
         # mounting all input locations
         mounts = task.definition._get_bindings(root=self.root)

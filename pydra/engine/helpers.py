@@ -25,6 +25,8 @@ if ty.TYPE_CHECKING:
 
 PYDRA_ATTR_METADATA = "__PYDRA_METADATA__"
 
+DefType = ty.TypeVar("DefType", bound="TaskDef")
+
 
 def attrs_fields(definition, exclude_names=()) -> list[attrs.Attribute]:
     """Get the fields of a definition, excluding some names."""
@@ -132,7 +134,7 @@ def load_result(checksum, cache_locations):
 def save(
     task_path: Path,
     result: "Result | None" = None,
-    task: "Task | None" = None,
+    task: "Task[DefType] | None" = None,
     name_prefix: str = None,
 ) -> None:
     """
@@ -449,7 +451,7 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
     from .specs import Result
 
     try:
-        task: Task = load_task(task_pkl=task_pkl)
+        task: Task[DefType] = load_task(task_pkl=task_pkl)
     except Exception:
         if task_pkl.parent.exists():
             etype, eval, etr = sys.exc_info()

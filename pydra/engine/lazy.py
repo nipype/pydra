@@ -10,9 +10,11 @@ if ty.TYPE_CHECKING:
     from .graph import DiGraph
     from .submitter import NodeExecution
     from .core import Task, Workflow
+    from .specs import TaskDef
 
 
 T = ty.TypeVar("T")
+DefType = ty.TypeVar("DefType", bound="TaskDef")
 
 TypeOrAny = ty.Union[type, ty.Any]
 
@@ -150,7 +152,7 @@ class LazyOutField(LazyField[T]):
         task = graph.node(self.node.name).task(state_index)
         _, split_depth = TypeParser.strip_splits(self.type)
 
-        def get_nested(task: "Task", depth: int):
+        def get_nested(task: "Task[DefType]", depth: int):
             if isinstance(task, StateArray):
                 val = [get_nested(task=t, depth=depth - 1) for t in task]
                 if depth:
