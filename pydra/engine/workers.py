@@ -29,6 +29,9 @@ logger = logging.getLogger("pydra.worker")
 class Worker:
     """A base class for execution of tasks."""
 
+    plugin_name: str
+    is_async: bool = True
+
     def __init__(self, loop=None):
         """Initialize the worker."""
         logger.debug(f"Initializing {self.__class__.__name__}")
@@ -125,10 +128,11 @@ class DistributedWorker(Worker):
         return pending.union(unqueued)
 
 
-class SerialWorker(Worker):
+class DebugWorker(Worker):
     """A worker to execute linearly."""
 
-    plugin_name = "serial"
+    plugin_name: str = "debug"
+    is_async: bool = False
 
     def __init__(self, **kwargs):
         """Initialize worker."""
@@ -136,25 +140,18 @@ class SerialWorker(Worker):
 
     def run(
         self,
-        task: "Task",
+        task: "Task | tuple[Path, Task]",
         rerun: bool = False,
-        environment: Environment | None = None,
-        **kwargs,
     ):
         """Run a task."""
-        return self.exec_serial(task)
-
-    def close(self):
-        """Return whether the task is finished."""
-
-    async def exec_serial(
-        self, task: "Task", rerun: bool = False, environment: Environment | None = None
-    ):
         if isinstance(task, Task):
             return task.run(rerun=rerun)
         else:  # it could be tuple that includes pickle files with tasks and inputs
             task_main_pkl, _ = task
             return load_and_run(task_main_pkl, rerun=rerun)
+
+    def close(self):
+        """Return whether the task is finished."""
 
     async def fetch_finished(self, futures):
         for future in futures:
@@ -1091,7 +1088,7 @@ class PsijSlurmWorker(PsijWorker):
 WORKERS = {
     w.plugin_name: w
     for w in (
-        SerialWorker,
+        DebugWorker,
         ConcurrentFuturesWorker,
         SlurmWorker,
         DaskWorker,

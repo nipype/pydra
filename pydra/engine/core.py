@@ -43,6 +43,7 @@ from .helpers import (
 )
 from .helpers_file import copy_nested_files, template_update
 from pydra.utils.messenger import AuditFlag
+from pydra.engine.environments import Environment, Native
 
 logger = logging.getLogger("pydra")
 
@@ -85,7 +86,8 @@ class Task(ty.Generic[DefType]):
 
     name: str
     definition: DefType
-    submitter: "Submitter"
+    submitter: "Submitter | None"
+    environment: "Environment | None"
     state_index: state.StateIndex
 
     _inputs: dict[str, ty.Any] | None = None
@@ -95,6 +97,7 @@ class Task(ty.Generic[DefType]):
         definition: DefType,
         submitter: "Submitter",
         name: str,
+        environment: "Environment | None" = None,
         state_index: "state.StateIndex | None" = None,
     ):
         """
@@ -121,14 +124,16 @@ class Task(ty.Generic[DefType]):
         if state_index is None:
             state_index = state.StateIndex()
 
-        self.definition = definition
+        # Copy the definition, so lazy fields can be resolved and replaced at runtime
+        self.definition = copy(definition)
+        # We save the submitter is the definition is a workflow otherwise we don't
+        # so the task can be pickled
+        self.submitter = submitter if is_workflow(definition) else None
+        self.environment = environment if environment is not None else Native()
         self.name = name
         self.state_index = state_index
 
-        # checking if metadata is set properly
-        self.definition._check_resolved()
-        self.definition._check_rules()
-        self._output = {}
+        self.return_values = {}
         self._result = {}
         # flag that says if node finished all jobs
         self._done = False
@@ -150,6 +155,11 @@ class Task(ty.Generic[DefType]):
     @property
     def cache_dir(self):
         return self._cache_dir
+
+    @property
+    def is_async(self) -> bool:
+        """Check to see if the task should be run asynchronously."""
+        return self.submitter.worker.is_async and is_workflow(self.definition)
 
     @cache_dir.setter
     def cache_dir(self, path: os.PathLike):
@@ -315,6 +325,21 @@ class Task(ty.Generic[DefType]):
         self.output_dir.mkdir(parents=False, exist_ok=self.can_resume)
 
     def run(self, rerun: bool = False):
+        """Prepare the task working directory, execute the task definition, and save the
+        results.
+
+        Parameters
+        ----------
+        rerun : bool
+            If True, the task will be re-run even if a result already exists. Will
+            propagated to all tasks within workflow tasks.
+        """
+        # TODO: After these changes have been merged, will refactor this function and
+        # run_async to use common helper methods for pre/post run tasks
+
+        # checking if the definition is fully resolved and ready to run
+        self.definition._check_resolved()
+        self.definition._check_rules()
         self.hooks.pre_run(self)
         logger.debug(
             "'%s' is attempting to acquire lock on %s", self.name, self.lockfile
@@ -334,13 +359,64 @@ class Task(ty.Generic[DefType]):
                 self.audit.audit_task(task=self)
             try:
                 self.audit.monitor()
-                run_outputs = self.definition._run(self)
-                result.outputs = self.definition.Outputs.from_task(self, run_outputs)
+                self.definition._run(self)
+                result.outputs = self.definition.Outputs._from_task(self)
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
                 record_error(self.output_dir, error=traceback)
                 result.errored = True
+                raise
+            finally:
+                self.hooks.post_run_task(self, result)
+                self.audit.finalize_audit(result=result)
+                save(self.output_dir, result=result, task=self)
+                # removing the additional file with the checksum
+                (self.cache_dir / f"{self.uid}_info.json").unlink()
+                os.chdir(cwd)
+        self.hooks.post_run(self, result)
+        # Check for any changes to the input hashes that have occurred during the execution
+        # of the task
+        self._check_for_hash_changes()
+        return result
+
+    async def run_async(self, rerun: bool = False):
+        """Prepare the task working directory, execute the task definition asynchronously,
+        and save the results. NB: only workflows are run asynchronously at the moment.
+
+        Parameters
+        ----------
+        rerun : bool
+            If True, the task will be re-run even if a result already exists. Will
+            propagated to all tasks within workflow tasks.
+        """
+        # checking if the definition is fully resolved and ready to run
+        self.definition._check_resolved()
+        self.definition._check_rules()
+        self.hooks.pre_run(self)
+        logger.debug(
+            "'%s' is attempting to acquire lock on %s", self.name, self.lockfile
+        )
+        async with PydraFileLock(self.lockfile):
+            if not rerun:
+                result = self.result()
+                if result is not None and not result.errored:
+                    return result
+            cwd = os.getcwd()
+            self._populate_filesystem()
+            result = Result(outputs=None, runtime=None, errored=False, task=self)
+            self.hooks.pre_run_task(self)
+            self.audit.start_audit(odir=self.output_dir)
+            try:
+                self.audit.monitor()
+                await self.definition._run(self)
+                result.outputs = self.definition.Outputs._from_task(self)
+            except Exception:
+                etype, eval, etr = sys.exc_info()
+                traceback = format_exception(etype, eval, etr)
+                record_error(self.output_dir, error=traceback)
+                result.errored = True
+                self._errored = True
                 raise
             finally:
                 self.hooks.post_run_task(self, result)
@@ -398,7 +474,7 @@ class Task(ty.Generic[DefType]):
         else:
             return combined_results
 
-    def result(self, state_index=None, return_inputs=False):
+    def result(self, return_inputs=False):
         """
         Retrieve the outcomes of this particular task.
 
@@ -415,13 +491,9 @@ class Task(ty.Generic[DefType]):
         result : Result
             the result of the task
         """
-        # TODO: check if result is available in load_result and
-        # return a future if not
         if self.errored:
             return Result(outputs=None, runtime=None, errored=True, task=self)
 
-        if state_index is not None:
-            raise ValueError("Task does not have a state")
         checksum = self.checksum
         result = load_result(checksum, self.cache_locations)
         if result and result.errored:
@@ -481,58 +553,6 @@ class Task(ty.Generic[DefType]):
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.any
-
-
-class WorkflowTask(Task):
-
-    def __init__(
-        self,
-        definition: DefType,
-        submitter: "Submitter",
-        name: str,
-        state_index: "state.StateIndex | None" = None,
-    ):
-        super().__init__(definition, submitter, name, state_index)
-        self.submitter = submitter
-
-    async def run(self, rerun: bool = False):
-        self.hooks.pre_run(self)
-        logger.debug(
-            "'%s' is attempting to acquire lock on %s", self.name, self.lockfile
-        )
-        async with PydraFileLock(self.lockfile):
-            if not rerun:
-                result = self.result()
-                if result is not None and not result.errored:
-                    return result
-            cwd = os.getcwd()
-            self._populate_filesystem()
-            result = Result(outputs=None, runtime=None, errored=False, task=self)
-            self.hooks.pre_run_task(self)
-            self.audit.start_audit(odir=self.output_dir)
-            try:
-                self.audit.monitor()
-                await self.submitter.expand_workflow(self)
-                result.outputs = self.definition.Outputs.from_task(self)
-            except Exception:
-                etype, eval, etr = sys.exc_info()
-                traceback = format_exception(etype, eval, etr)
-                record_error(self.output_dir, error=traceback)
-                result.errored = True
-                self._errored = True
-                raise
-            finally:
-                self.hooks.post_run_task(self, result)
-                self.audit.finalize_audit(result=result)
-                save(self.output_dir, result=result, task=self)
-                # removing the additional file with the checksum
-                (self.cache_dir / f"{self.uid}_info.json").unlink()
-                os.chdir(cwd)
-        self.hooks.post_run(self, result)
-        # Check for any changes to the input hashes that have occurred during the execution
-        # of the task
-        self._check_for_hash_changes()
-        return result
 
 
 logger = logging.getLogger("pydra")
@@ -847,18 +867,12 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             return dotfile, formatted_dot
 
 
-def is_task(obj):
-    """Check whether an object looks like a task."""
-    return hasattr(obj, "_run_task")
-
-
 def is_workflow(obj):
     """Check whether an object is a :class:`Workflow` instance."""
     from pydra.engine.specs import WorkflowDef
     from pydra.engine.core import Workflow
-    from pydra.engine.core import WorkflowTask
 
-    return isinstance(obj, (WorkflowDef, WorkflowTask, Workflow))
+    return isinstance(obj, (WorkflowDef, Workflow))
 
 
 def has_lazy(obj):

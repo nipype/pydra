@@ -37,6 +37,9 @@ from pydra.design import shell
 
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Task
+    from pydra.engine.graph import DiGraph
+    from pydra.engine.submitter import NodeExecution
+    from pydra.engine.lazy import LazyOutField
     from pydra.engine.task import ShellTask
     from pydra.engine.core import Workflow
     from pydra.engine.environments import Environment
@@ -53,32 +56,24 @@ class TaskOutputs:
 
     RESERVED_FIELD_NAMES = ("inputs",)
 
-    @classmethod
-    def from_task(cls, task: "Task") -> Self:
-        """Collect the outputs of a task from a combination of the provided inputs,
-        the objects in the output directory, and the stdout and stderr of the process.
-
-        Parameters
-        ----------
-        task : Task
-            The task whose outputs are being collected.
-
-        Returns
-        -------
-        outputs : Outputs
-            The outputs of the task
-        """
-        return cls(
-            **{
-                f.name: task.output_.get(f.name, attrs.NOTHING)
-                for f in attrs_fields(cls)
-            }
-        )
-
     @property
     def inputs(self):
         """The inputs object associated with a lazy-outputs object"""
         return self._get_node().inputs
+
+    @classmethod
+    def _from_defaults(cls) -> Self:
+        """Create an output object from the default values of the fields"""
+        return cls(
+            **{
+                f.name: (
+                    f.default.factory()
+                    if isinstance(f.default, attrs.Factory)
+                    else f.default
+                )
+                for f in attrs_fields(cls)
+            }
+        )
 
     def _get_node(self):
         try:
@@ -88,12 +83,8 @@ class TaskOutputs:
                 f"{self} outputs object is not a lazy output of a workflow node"
             ) from None
 
-    def __iter__(self) -> ty.Generator[str, None, None]:
-        """Iterate through all the names in the definition"""
-        return (f.name for f in list_fields(self))
-
     def __getitem__(self, name: str) -> ty.Any:
-        """Return the value for the given attribute, resolving any templates
+        """Return the value for the given attribute
 
         Parameters
         ----------
@@ -117,8 +108,6 @@ OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
 @attrs.define(kw_only=True, auto_attribs=False)
 class TaskDef(ty.Generic[OutputsType]):
     """Base class for all task definitions"""
-
-    Task: "ty.Type[core.Task]"
 
     # The following fields are used to store split/combine state information
     _splitter = attrs.field(default=None, init=False, repr=False)
@@ -387,7 +376,7 @@ class TaskDef(ty.Generic[OutputsType]):
         """Parse output results."""
         temp_values = {}
         for field in attrs_fields(self):
-            value = getattr(self, field.name)
+            value: "LazyOutField" = getattr(self, field.name)
             if is_lazy(value):
                 temp_values[field.name] = value.get_value(wf, state_index=state_index)
         for field, val in temp_values.items():
@@ -397,43 +386,36 @@ class TaskDef(ty.Generic[OutputsType]):
         """Check if all rules are satisfied."""
 
         field: Arg
+        errors = []
         for field in list_fields(self):
             value = getattr(self, field.name)
 
             if is_lazy(value):
                 continue
 
+            if value is attrs.NOTHING:
+                errors.append(f"Mandatory field {field.name!r} is not set")
+
             # Collect alternative fields associated with this field.
             if field.xor:
-                alternative_fields = {
-                    name: getattr(self, name)
-                    for name in field.xor
-                    if name != field.name
-                }
-                set_alternatives = {n: v for n, v in alternative_fields.items() if v}
-
-                # Raise error if no field in mandatory alternative group is set.
-                if not is_set(value):
-                    if set_alternatives:
-                        continue
-                    message = f"{field.name} is mandatory and unset."
-                    if alternative_fields:
-                        raise AttributeError(
-                            message[:-1]
-                            + f", and no alternative provided in {list(alternative_fields)}."
-                        )
-                    else:
-                        raise AttributeError(message)
-
-                # Raise error if multiple alternatives are set.
-                elif set_alternatives:
-                    raise AttributeError(
-                        f"{field.name} is mutually exclusive with {set_alternatives}"
+                mutually_exclusive = {name: getattr(self, name) for name in field.xor}
+                are_set = [
+                    f"{n}={v!r}" for n, v in mutually_exclusive.items() if v is not None
+                ]
+                if len(are_set) > 1:
+                    errors.append(
+                        f"Mutually exclusive fields {field.xor} are set together: "
+                        + ", ".join(are_set)
+                    )
+                elif not are_set:
+                    errors.append(
+                        f"At least one of the mutually exclusive fields {field.xor} "
+                        f"should be set"
                     )
 
             # Raise error if any required field is unset.
             if (
-                value
+                value is not None
                 and field.requires
                 and not any(rs.satisfied(self) for rs in field.requires)
             ):
@@ -443,9 +425,14 @@ class TaskDef(ty.Generic[OutputsType]):
                     )
                 else:
                     qualification = ""
-                raise ValueError(
+                errors.append(
                     f"{field.name!r} requires{qualification} {[str(r) for r in field.requires]}"
                 )
+        if errors:
+            raise ValueError(
+                f"Found the following errors in task {self} definition:\n"
+                + "\n".join(errors)
+            )
 
     @classmethod
     def _check_arg_refs(cls, inputs: list[Arg], outputs: list[Out]) -> None:
@@ -472,10 +459,10 @@ class TaskDef(ty.Generic[OutputsType]):
 
     def _check_resolved(self):
         """Checks that all the fields in the definition have been resolved"""
-        if has_lazy_values := [n for n, v in attrs_values(self).items() if is_lazy(v)]:
+        if lazy_values := [n for n, v in attrs_values(self).items() if is_lazy(v)]:
             raise ValueError(
                 f"Cannot execute {self} because the following fields "
-                f"still have lazy values {has_lazy_values}"
+                f"still have lazy values {lazy_values}"
             )
 
 
@@ -559,7 +546,28 @@ class RuntimeSpec:
 
 
 class PythonOutputs(TaskOutputs):
-    pass
+
+    @classmethod
+    def _from_task(cls, task: "Task") -> Self:
+        """Collect the outputs of a task from a combination of the provided inputs,
+        the objects in the output directory, and the stdout and stderr of the process.
+
+        Parameters
+        ----------
+        task : Task
+            The task whose outputs are being collected.
+        outputs_dict : dict[str, ty.Any]
+            The outputs of the task, as a dictionary
+
+        Returns
+        -------
+        outputs : Outputs
+            The outputs of the task in dataclass
+        """
+        outputs = cls._from_defaults()
+        for name, val in task.return_values.items():
+            setattr(outputs, name, val)
+        return outputs
 
 
 PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
@@ -567,32 +575,34 @@ PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 class PythonDef(TaskDef[PythonOutputsType]):
 
-    def _run(self, environment=None):
+    def _run(self, task: "Task") -> None:
+        # Prepare the inputs to the function
         inputs = attrs_values(self)
         del inputs["function"]
-        self.output_ = None
-        output = self.function(**inputs)
-        output_names = [f.name for f in attrs.fields(self.Outputs)]
-        if output is None:
-            self.output_ = {nm: None for nm in output_names}
-        elif len(output_names) == 1:
+        # Run the actual function
+        returned = self.function(**inputs)
+        # Collect the outputs and save them into the task.return_values dictionary
+        self.return_values = {f.name: f.default for f in attrs.fields(self.Outputs)}
+        return_names = list(self.return_values)
+        if returned is None:
+            self.return_values = {nm: None for nm in return_names}
+        elif len(self.return_values) == 1:
             # if only one element in the fields, everything should be returned together
-            self.output_ = {output_names[0]: output}
-        elif isinstance(output, tuple) and len(output_names) == len(output):
-            self.output_ = dict(zip(output_names, output))
-        elif isinstance(output, dict):
-            self.output_ = {key: output.get(key, None) for key in output_names}
+            self.return_values = {list(self.return_values)[0]: returned}
+        elif isinstance(returned, tuple) and len(return_names) == len(returned):
+            self.return_values = dict(zip(return_names, returned))
+        elif isinstance(returned, dict):
+            self.return_values = {key: returned.get(key, None) for key in return_names}
         else:
             raise RuntimeError(
-                f"expected {len(list_fields(self.Outputs))} elements, "
-                f"but {output} were returned"
+                f"expected {len(return_names)} elements, but {returned} were returned"
             )
 
 
 class WorkflowOutputs(TaskOutputs):
 
     @classmethod
-    def from_task(cls, task: "Task") -> Self:
+    def _from_task(cls, task: "Task") -> Self:
         """Collect the outputs of a workflow task from the outputs of the nodes in the
 
         Parameters
@@ -605,24 +615,28 @@ class WorkflowOutputs(TaskOutputs):
         outputs : Outputs
             The outputs of the task
         """
-        outputs = super().from_task(task)
-        wf = task.definition.construct()
+        outputs = cls._from_defaults()
         # collecting outputs from tasks
         output_wf = {}
-        for name, lazy_field in wf.outputs.items():
+        lazy_field: lazy.LazyOutField
+        workflow: "Workflow" = task.return_values["workflow"]
+        exec_graph: "DiGraph[NodeExecution]" = task.return_values["exec_graph"]
+        nodes_dict = {n.name: n for n in exec_graph.nodes}
+        for name, lazy_field in attrs_values(workflow.outputs).items():
             try:
-                val_out = lazy_field.get_value(wf)
+                val_out = lazy_field.get_value(exec_graph)
                 output_wf[name] = val_out
-            except (ValueError, AttributeError) as e:
+            except (ValueError, AttributeError):
                 output_wf[name] = None
-                node = wf[lazy_field.name]
+                node: "NodeExecution" = nodes_dict[lazy_field.name]
                 # checking if the tasks has predecessors that raises error
-                if isinstance(node._errored, list):
+                if isinstance(node.errored, list):
                     raise ValueError(f"Tasks {node._errored} raised an error")
                 else:
                     err_files = [(t.output_dir / "_error.pklz") for t in node.tasks]
-                    if not all(err_files):
-                        raise e
+                    err_files = [f for f in err_files if f.exists()]
+                    if not err_files:
+                        raise
                     raise ValueError(
                         f"Task {lazy_field.name} raised an error, full crash report is "
                         f"here: "
@@ -644,6 +658,13 @@ class WorkflowDef(TaskDef[WorkflowOutputsType]):
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("construct",)
 
     _constructed = attrs.field(default=None, init=False)
+
+    def _run(self, task: "Task") -> None:
+        """Run the workflow."""
+        if task.submitter.worker.is_async:
+            task.submitter.expand_workflow_async(task)
+        else:
+            task.submitter.expand_workflow(task)
 
     def construct(self) -> "Workflow":
         from pydra.engine.core import Workflow
@@ -667,10 +688,7 @@ class ShellOutputs(TaskOutputs):
     stderr: str = shell.out(help=STDERR_HELP)
 
     @classmethod
-    def from_task(
-        cls,
-        task: "ShellTask",
-    ) -> Self:
+    def _from_task(cls, task: "ShellTask") -> Self:
         """Collect the outputs of a shell process from a combination of the provided inputs,
         the objects in the output directory, and the stdout and stderr of the process.
 
@@ -692,23 +710,21 @@ class ShellOutputs(TaskOutputs):
         outputs : ShellOutputs
             The outputs of the shell process
         """
-
-        outputs = super().from_task(task)
-
+        outputs = cls._from_defaults()
         fld: shell.out
         for fld in list_fields(cls):
             if fld.name in ["return_code", "stdout", "stderr"]:
-                continue
+                resolved_value = task.return_values[fld.name]
             # Get the corresponding value from the inputs if it exists, which will be
             # passed through to the outputs, to permit manual overrides
-            if isinstance(fld, shell.outarg) and is_set(
+            elif isinstance(fld, shell.outarg) and is_set(
                 getattr(task.definition, fld.name)
             ):
                 resolved_value = task.inputs[fld.name]
             elif is_set(fld.default):
                 resolved_value = cls._resolve_default_value(fld, task.output_dir)
             else:
-                resolved_value = cls._resolve_value(fld, outputs.stdout, outputs.stderr)
+                resolved_value = cls._resolve_value(fld, task)
             # Set the resolved value
             setattr(outputs, fld.name, resolved_value)
         return outputs
@@ -769,7 +785,6 @@ class ShellOutputs(TaskOutputs):
         cls,
         fld: "shell.out",
         task: "Task",
-        outputs: dict[str, ty.Any],
     ) -> ty.Any:
         """Collect output file if metadata specified."""
         from pydra.design import shell
@@ -799,9 +814,9 @@ class ShellOutputs(TaskOutputs):
                 elif argnm == "inputs":
                     call_args_val[argnm] = task.inputs
                 elif argnm == "stdout":
-                    call_args_val[argnm] = outputs["stdout"]
+                    call_args_val[argnm] = task.return_values["stdout"]
                 elif argnm == "stderr":
-                    call_args_val[argnm] = outputs["stderr"]
+                    call_args_val[argnm] = task.return_values["stderr"]
                 else:
                     try:
                         call_args_val[argnm] = task.inputs[argnm]
@@ -827,9 +842,9 @@ class ShellDef(TaskDef[ShellOutputsType]):
 
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("cmdline",)
 
-    def _run(self, environment: "Environment") -> None:
+    def _run(self, task: "Task") -> None:
         """Run the shell command."""
-        return environment.execute(self)
+        task.return_values = task.environment.execute(task)
 
     @property
     def cmdline(self) -> str:
@@ -1189,6 +1204,3 @@ def argstr_formatting(
         .strip()
     )
     return argstr_formatted
-
-
-from pydra.engine import core  # noqa: E402

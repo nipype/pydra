@@ -19,7 +19,7 @@ from .utils import (
 )
 from ..core import Task
 from ..submitter import Submitter
-from ..workers import SerialWorker
+from ..workers import DebugWorker
 from pydra.design import python
 from pathlib import Path
 from datetime import datetime
@@ -675,7 +675,7 @@ def to_tuple(x, y):
     return (x, y)
 
 
-class BYOAddVarWorker(SerialWorker):
+class BYOAddVarWorker(DebugWorker):
     """A dummy worker that adds 1 to the output of the task"""
 
     plugin_name = "byo_add_env_var"

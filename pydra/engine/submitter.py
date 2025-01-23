@@ -17,6 +17,7 @@ from .helpers import (
 )
 from pydra.utils.hash import PersistentCache
 from .state import StateIndex
+from pydra.utils.typing import StateArray
 from .audit import Audit
 from .core import Task
 from pydra.utils.messenger import AuditFlag, Messenger
@@ -111,6 +112,7 @@ class Submitter:
         except TypeError as e:
             e.add_note(WORKER_KWARG_FAIL_NOTE)
             raise
+        self.worker_kwargs = kwargs
         self._worker.loop = self.loop
 
     @property
@@ -151,11 +153,12 @@ class Submitter:
                 f"Task {self} is marked for combining, but not splitting. "
                 "Use the `split` method to split the task before combining."
             )
-        task = task_def.Task(task_def, submitter=self, name="task")
-        print(str(task.output_dir))
-        self.loop.run_until_complete(self.expand_runnable(task))
+        task = Task(task_def, submitter=self, name="task", environment=self.environment)
+        if task.is_async:
+            self.loop.run_until_complete(self.expand_runnable_async(task))
+        else:
+            self.expand_runnable(task)
         PersistentCache().clean_up()
-        print(str(task.output_dir))
         result = task.result()
         if result is None:
             if task.lockfile.exists():
@@ -169,22 +172,49 @@ class Submitter:
             raise RuntimeError(f"Task {task} has no result in {str(task.output_dir)!r}")
         return result
 
-    # def __getstate__(self):
-    #     state = self.__dict__.copy()
-    #     # Remove the unpicklable entries or those that should not be pickled
-    #     # When unpickled (in another process) the submitter can't be called
-    #     state["loop"] = None
-    #     state["_worker"] = None
-    #     return state
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Remove the unpicklable entries or those that should not be pickled
+        # When unpickled (in another process) the submitter can't be called
+        state["loop"] = None
+        state["_worker"] = None
+        return state
 
-    # def __setstate__(self, state):
-    #     self.__dict__.update(state)
-    #     # Restore the loop and worker
-    #     self.loop = get_open_loop()
-    #     self.worker = WORKERS[self.plugin](**self.worker.__dict__)
-    #     self.worker.loop = self.loop
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Restore the loop and worker
+        self.loop = get_open_loop()
+        self._worker = WORKERS[self.worker_name](**self.worker_kwargs)
+        self.worker.loop = self.loop
 
-    async def expand_runnable(self, task: "Task", wait=False):
+    def expand_runnable(self, task: "Task"):
+        """
+        This coroutine handles state expansion.
+
+        Removes any states from `runnable`. If `wait` is
+        set to False (default), aggregates all worker
+        execution coroutines and returns them. If `wait` is
+        True, waits for all coroutines to complete / error
+        and returns None.
+
+        Parameters
+        ----------
+        runnable : pydra Task
+            Task instance (`Task`, `Workflow`)
+        wait : bool (False)
+            Await all futures before completing
+
+        Returns
+        -------
+        futures : set or None
+            Coroutines for :class:`~pydra.engine.core.TaskBase` execution.
+
+        """
+        task.run(rerun=self.rerun)
+
+    async def expand_runnable_async(
+        self, task: "Task", wait=False
+    ) -> set[ty.Coroutine] | None:
         """
         This coroutine handles state expansion.
 
@@ -209,7 +239,7 @@ class Submitter:
         """
         futures = set()
 
-        if is_workflow(task):
+        if is_workflow(task.definition):
             futures.add(asyncio.create_task(task.run(self.rerun)))
         else:
             task_pkl = await prepare_runnable(task)
@@ -223,21 +253,39 @@ class Submitter:
         # pass along futures to be awaited independently
         return futures
 
-    async def expand_workflow(self, task: "Task[WorkflowDef]"):
-        """
-        Expand and execute a stateless :class:`~pydra.engine.core.Workflow`.
-        This method is only reached by `Workflow._run_task`.
+    def expand_workflow(self, workflow_task: "Task[WorkflowDef]") -> None:
+        """Expands and executes a workflow task synchronously. Typically only used during
+        debugging and testing, as the asynchronous version is more efficient.
 
         Parameters
         ----------
-        task : :obj:`~pydra.engine.core.WorkflowTask`
+        task : :obj:`~pydra.engine.core.Task[WorkflowDef]`
             Workflow Task object
 
-        Returns
-        -------
-        wf : :obj:`pydra.engine.workflow.Workflow`
-            The computed workflow
+        """
+        # Construct the workflow
+        wf = workflow_task.definition.construct()
+        # Generate the execution graph
+        exec_graph = wf.execution_graph(submitter=self)
+        tasks = self.get_runnable_tasks(exec_graph)
+        while tasks or any(not n.done for n in exec_graph.nodes):
+            for task in tasks:
+                # grab inputs if needed
+                logger.debug(f"Retrieving inputs for {task}")
+                # TODO: add state idx to retrieve values to reduce waiting
+                task.definition._retrieve_values(wf)
+                self.worker.run(task, rerun=self.rerun)
+            tasks = self.get_runnable_tasks(exec_graph)
+        workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
 
+    async def expand_workflow_async(self, task: "Task[WorkflowDef]") -> None:
+        """
+        Expand and execute a workflow task asynchronously.
+
+        Parameters
+        ----------
+        task : :obj:`~pydra.engine.core.Task[WorkflowDef]`
+            Workflow Task object
         """
         wf = task.definition.construct()
         # Generate the execution graph
@@ -319,7 +367,7 @@ class Submitter:
                     task_futures.add(self.worker.run(task, rerun=self.rerun))
             task_futures = await self.worker.fetch_finished(task_futures)
             tasks = self.get_runnable_tasks(exec_graph)
-        return wf
+        task.return_values = {"workflow": wf, "exec_graph": exec_graph}
 
     def __enter__(self):
         return self
@@ -421,9 +469,13 @@ class NodeExecution:
         self.unrunnable = defaultdict(list)
         self.state_names = self.node.state.names
 
-    def __getattr__(self, name: str) -> ty.Any:
-        """Delegate attribute access to the underlying node."""
-        return getattr(self.node, name)
+    @property
+    def inputs(self) -> "Node.Inputs":
+        return self.node.inputs
+
+    @property
+    def _definition(self) -> "Node":
+        return self.node._definition
 
     @property
     def tasks(self) -> ty.Iterable["Task"]:
@@ -431,16 +483,14 @@ class NodeExecution:
             self._tasks = {t.state_index: t for t in self._generate_tasks()}
         return self._tasks.values()
 
-    def task(self, index: StateIndex | None = None) -> "Task":
+    def task(self, index: StateIndex | None = None) -> "Task | list[Task]":
         """Get a task object for a given state index."""
         self.tasks  # Ensure tasks are loaded
         try:
             return self._tasks[index]
         except KeyError:
             if index is None:
-                raise KeyError(
-                    f"{self!r} has been split, so a state index must be provided"
-                ) from None
+                return StateArray(self._tasks.values())
             raise
 
     @property
@@ -465,14 +515,14 @@ class NodeExecution:
 
     def _generate_tasks(self) -> ty.Iterable["Task"]:
         if self.node.state is None:
-            yield self.node._definition.Task(
+            yield Task(
                 definition=self.node._definition,
                 submitter=self.submitter,
                 name=self.node.name,
             )
         else:
             for index, split_defn in self.node._split_definition().items():
-                yield self.node._definition.Task(
+                yield Task(
                     definition=split_defn,
                     submitter=self.submitter,
                     name=self.node.name,

@@ -7,7 +7,9 @@ from pydra.utils.hash import hash_single
 from . import node
 
 if ty.TYPE_CHECKING:
-    from .base import Workflow
+    from .graph import DiGraph
+    from .submitter import NodeExecution
+    from .core import Task, Workflow
 
 
 T = ty.TypeVar("T")
@@ -124,7 +126,9 @@ class LazyOutField(LazyField[T]):
     def name(self) -> str:
         return self.node.name
 
-    def get_value(self, wf: "Workflow", state_index: ty.Optional[int] = None) -> ty.Any:
+    def get_value(
+        self, graph: "DiGraph[NodeExecution]", state_index: ty.Optional[int] = None
+    ) -> ty.Any:
         """Return the value of a lazy field.
 
         Parameters
@@ -143,49 +147,44 @@ class LazyOutField(LazyField[T]):
             TypeParser,
         )  # pylint: disable=import-outside-toplevel
 
-        result = self.node.result(state_index=state_index)
-        if result is None:
-            raise RuntimeError(
-                f"Could not find results of '{self.node.name}' node in a sub-directory "
-                f"named '{self.node.checksum}' in any of the cache locations.\n"
-                + "\n".join(str(p) for p in set(self.node.cache_locations))
-                + f"\n\nThis is likely due to hash changes in '{self.name}' node inputs. "
-                f"Current values and hashes: {self.node.inputs}, "
-                f"{self.node.inputs._hashes}\n\n"
-                "Set loglevel to 'debug' in order to track hash changes "
-                "throughout the execution of the workflow.\n\n "
-                "These issues may have been caused by `bytes_repr()` methods "
-                "that don't return stable hash values for specific object "
-                "types across multiple processes (see bytes_repr() "
-                '"singledispatch "function in pydra/utils/hash.py).'
-                "You may need to write specific `bytes_repr()` "
-                "implementations (see `pydra.utils.hash.register_serializer`) or a "
-                "`__bytes_repr__()` dunder methods to handle one or more types in "
-                "your interface inputs."
-            )
+        task = graph.node(self.node.name).task(state_index)
         _, split_depth = TypeParser.strip_splits(self.type)
 
-        def get_nested_results(res, depth: int):
-            if isinstance(res, list):
-                if not depth:
-                    val = [r.get_output_field(self.field) for r in res]
-                else:
-                    val = StateArray[self.type](
-                        get_nested_results(res=r, depth=depth - 1) for r in res
-                    )
+        def get_nested(task: "Task", depth: int):
+            if isinstance(task, StateArray):
+                val = [get_nested(task=t, depth=depth - 1) for t in task]
+                if depth:
+                    val = StateArray[self.type](val)
             else:
-                if res.errored:
+                if task.errored:
                     raise ValueError(
                         f"Cannot retrieve value for {self.field} from {self.name} as "
                         "the node errored"
                     )
+                res = task.result()
+                if res is None:
+                    raise RuntimeError(
+                        f"Could not find results of '{task.name}' node in a sub-directory "
+                        f"named '{{{task.checksum}}}' in any of the cache locations.\n"
+                        + "\n".join(str(p) for p in set(task.cache_locations))
+                        + f"\n\nThis is likely due to hash changes in '{task.name}' node inputs. "
+                        f"Current values and hashes: {task.inputs}, "
+                        f"{task.definition._hash}\n\n"
+                        "Set loglevel to 'debug' in order to track hash changes "
+                        "throughout the execution of the workflow.\n\n "
+                        "These issues may have been caused by `bytes_repr()` methods "
+                        "that don't return stable hash values for specific object "
+                        "types across multiple processes (see bytes_repr() "
+                        '"singledispatch "function in pydra/utils/hash.py).'
+                        "You may need to write specific `bytes_repr()` "
+                        "implementations (see `pydra.utils.hash.register_serializer`) or a "
+                        "`__bytes_repr__()` dunder methods to handle one or more types in "
+                        "your interface inputs."
+                    )
                 val = res.get_output_field(self.field)
-                if depth and not wf._pre_split:
-                    assert isinstance(val, ty.Sequence) and not isinstance(val, str)
-                    val = StateArray[self.type](val)
             return val
 
-        value = get_nested_results(result, depth=split_depth)
+        value = get_nested(task, depth=split_depth)
         value = self._apply_cast(value)
         return value
 

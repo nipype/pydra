@@ -388,8 +388,7 @@ def make_task_def(
     klass : type
         The class created using the attrs package
     """
-    from pydra.engine.specs import TaskDef, WorkflowDef
-    from pydra.engine.core import Task, WorkflowTask
+    from pydra.engine.specs import TaskDef
 
     spec_type._check_arg_refs(inputs, outputs)
 
@@ -400,7 +399,6 @@ def make_task_def(
             f"{reserved_names} are reserved and cannot be used for {spec_type} field names"
         )
     outputs_klass = make_outputs_spec(out_type, outputs, outputs_bases, name)
-    task_type = WorkflowTask if issubclass(spec_type, WorkflowDef) else Task
     if klass is None or not issubclass(klass, spec_type):
         if name is None:
             raise ValueError("name must be provided if klass is not")
@@ -419,19 +417,13 @@ def make_task_def(
             name=name,
             bases=bases,
             kwds={},
-            exec_body=lambda ns: ns.update(
-                {
-                    "Outputs": outputs_klass,
-                    "Task": task_type,
-                }
-            ),
+            exec_body=lambda ns: ns.update({"Outputs": outputs_klass}),
         )
     else:
         # Ensure that the class has it's own annotations dict so we can modify it without
         # messing up other classes
         klass.__annotations__ = copy(klass.__annotations__)
         klass.Outputs = outputs_klass
-        klass.Task = task_type
     # Now that we have saved the attributes in lists to be
     for arg in inputs.values():
         # If an outarg input then the field type should be Path not a FileSet

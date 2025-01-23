@@ -2,15 +2,28 @@
 
 from copy import copy
 from pathlib import Path
+import typing as ty
 import subprocess as sp
 
 from .helpers import ensure_list
 
 
-class DiGraph:
+NodeType = ty.TypeVar("NodeType")
+
+
+class DiGraph(ty.Generic[NodeType]):
     """A simple Directed Graph object."""
 
-    def __init__(self, name=None, nodes=None, edges=None):
+    name: str
+    nodes: list[NodeType]
+    edges: list[tuple[NodeType, NodeType]]
+
+    def __init__(
+        self,
+        name: str | None = None,
+        nodes: ty.Iterable[NodeType] | None = None,
+        edges: ty.Iterable[tuple[NodeType, NodeType]] | None = None,
+    ):
         """
         Initialize a directed graph.
 
@@ -32,6 +45,7 @@ class DiGraph:
         self._sorted_nodes = None
         self._node_wip = []
         self._nodes_details = {}
+        self._node_lookup = {}
 
     def copy(self):
         """
@@ -59,20 +73,31 @@ class DiGraph:
         return new_graph
 
     @property
-    def nodes(self):
+    def nodes(self) -> list[NodeType]:
         """Get a list of the nodes currently contained in the graph."""
         return self._nodes
 
     @nodes.setter
-    def nodes(self, nodes):
+    def nodes(self, nodes: ty.Iterable[NodeType]) -> None:
         if nodes:
             nodes = ensure_list(nodes)
             if len(set(nodes)) != len(nodes):
                 raise Exception("nodes have repeated elements")
             self._nodes = nodes
 
+    def node(self, name: str) -> NodeType:
+        """Get a node by its name, caching the lookup directory"""
+        try:
+            return self._node_lookup[name]
+        except KeyError:
+            self._node_lookup = self.nodes_names_map
+            try:
+                return self._node_lookup[name]
+            except KeyError:
+                raise KeyError(f"Node {name!r} not found in graph") from None
+
     @property
-    def nodes_names_map(self):
+    def nodes_names_map(self) -> dict[str, NodeType]:
         """Get a map of node names to nodes."""
         return {nd.name: nd for nd in self.nodes}
 
@@ -257,6 +282,8 @@ class DiGraph:
                     self._sorted_nodes.remove(nd)
                 # starting from the previous sorted list, so is faster
                 self.sorting(presorted=self.sorted_nodes)
+        # Reset the node lookup
+        self._node_lookup = {}
 
     def remove_nodes_connections(self, nodes):
         """
@@ -278,6 +305,8 @@ class DiGraph:
             self.successors.pop(nd.name)
             self.predecessors.pop(nd.name)
             self._node_wip.remove(nd)
+        # Reset the node lookup
+        self._node_lookup = {}
 
     def remove_previous_connections(self, nodes):
         """
@@ -300,6 +329,8 @@ class DiGraph:
             self.successors.pop(nd.name)
             self.predecessors.pop(nd.name)
             self._node_wip.remove(nd)
+        # Reset the node lookup
+        self._node_lookup = {}
 
     def _checking_successors_nodes(self, node, remove=True):
         if self.successors[node.name]:
