@@ -206,7 +206,7 @@ class Task(ty.Generic[DefType]):
         if self._checksum is not None:
             return self._checksum
         input_hash = self.definition._hash
-        self._checksum = create_checksum(self.__class__.__name__, input_hash)
+        self._checksum = create_checksum(self.definition.__class__.__name__, input_hash)
         return self._checksum
 
     @property
@@ -352,7 +352,9 @@ class Task(ty.Generic[DefType]):
             cwd = os.getcwd()
             self._populate_filesystem()
             os.chdir(self.output_dir)
-            result = Result(outputs=None, runtime=None, errored=False, task=self)
+            result = Result(
+                outputs=None, runtime=None, errored=False, output_dir=self.output_dir
+            )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.output_dir)
             if self.audit.audit_check(AuditFlag.PROV):
@@ -402,7 +404,9 @@ class Task(ty.Generic[DefType]):
                     return result
             cwd = os.getcwd()
             self._populate_filesystem()
-            result = Result(outputs=None, runtime=None, errored=False, task=self)
+            result = Result(
+                outputs=None, runtime=None, errored=False, output_dir=self.output_dir
+            )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.output_dir)
             try:
@@ -548,6 +552,10 @@ class Task(ty.Generic[DefType]):
             self.definition,
             self.definition._hashes,
         )
+
+    def _write_notebook(self):
+        """Writes a notebook into the"""
+        raise NotImplementedError
 
     SUPPORTED_COPY_MODES = FileSet.CopyMode.any
     DEFAULT_COPY_COLLATION = FileSet.CopyCollation.any

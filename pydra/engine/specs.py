@@ -517,7 +517,7 @@ class Runtime:
 class Result(ty.Generic[OutputsType]):
     """Metadata regarding the outputs of processing."""
 
-    task: "Task[DefType]"
+    output_dir: Path
     outputs: OutputsType | None = None
     runtime: Runtime | None = None
     errored: bool = False
@@ -550,7 +550,7 @@ class Result(ty.Generic[OutputsType]):
     @property
     def errors(self):
         if self.errored:
-            with open(self.task.output_dir / "_error.pklz", "rb") as f:
+            with open(self.output_dir / "_error.pklz", "rb") as f:
                 return cp.load(f)
         return None
 

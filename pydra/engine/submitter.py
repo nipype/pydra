@@ -386,7 +386,6 @@ class NodeExecution(ty.Generic[DefType]):
         node: "Node",
         submitter: Submitter,
         workflow_inputs: "WorkflowDef",
-        exec_graph: DiGraph["NodeExecution"],
     ):
         self.name = node.name
         self.node = node
@@ -462,7 +461,7 @@ class NodeExecution(ty.Generic[DefType]):
                 yield Task(
                     definition=split_defn._resolve_lazy_inputs(
                         workflow_inputs=self.workflow_inputs,
-                        exec_graph=self.graph,
+                        graph=self.graph,
                         state_index=index,
                     ),
                     submitter=self.submitter,
