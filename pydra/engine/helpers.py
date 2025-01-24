@@ -463,7 +463,7 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
 
     resultfile = task.output_dir / "_result.pklz"
     try:
-        task(rerun=rerun)
+        task.run(rerun=rerun)
     except Exception as e:
         # creating result and error files if missing
         errorfile = task.output_dir / "_error.pklz"
@@ -479,16 +479,16 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
     return resultfile
 
 
-async def load_and_run_async(task_pkl):
-    """
-    loading a task from a pickle file, settings proper input
-    and running the workflow
-    """
-    task = load_task(task_pkl=task_pkl)
-    await task()
+# async def load_and_run_async(task_pkl):
+#     """
+#     loading a task from a pickle file, settings proper input
+#     and running the workflow
+#     """
+#     task = load_task(task_pkl=task_pkl)
+#     await task()
 
 
-def load_task(task_pkl):
+def load_task(task_pkl: Path | str) -> "Task[DefType]":
     """loading a task from a pickle file, settings proper input for the specific ind"""
     if isinstance(task_pkl, str):
         task_pkl = Path(task_pkl)

@@ -876,6 +876,11 @@ ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
 class ShellDef(TaskDef[ShellOutputsType]):
 
+    arguments: ty.List[str] = shell.arg(
+        default=attrs.Factory(list),
+        help="Additional arguments to pass to the command.",
+    )
+
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("cmdline",)
 
     def _run(self, task: "Task[ShellDef]") -> None:
@@ -952,7 +957,9 @@ class ShellDef(TaskDef[ShellOutputsType]):
         # Sort command and arguments by position
         cmd_args = position_sort(pos_args)
         # pos_args values are each a list of arguments, so concatenate lists after sorting
-        return sum(cmd_args, [])
+        command_args = sum(cmd_args, [])
+        command_args += self.arguments
+        return command_args
 
     def _command_shelltask_executable(
         self, field: shell.arg, value: ty.Any

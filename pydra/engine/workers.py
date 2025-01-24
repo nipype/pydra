@@ -3,11 +3,14 @@
 import asyncio
 import sys
 import json
+import abc
 import re
+import inspect
 import typing as ty
 from tempfile import gettempdir
 from pathlib import Path
 from shutil import copyfile, which
+import cloudpickle as cp
 import concurrent.futures as cf
 from .core import Task
 from .specs import TaskDef
@@ -15,7 +18,6 @@ from .helpers import (
     get_available_cpus,
     read_and_display_async,
     save,
-    load_and_run,
     load_task,
 )
 
@@ -24,26 +26,37 @@ import random
 
 logger = logging.getLogger("pydra.worker")
 
+if ty.TYPE_CHECKING:
+    from .specs import Result
+
 DefType = ty.TypeVar("DefType", bound="TaskDef")
 
 
-class Worker:
+class Worker(metaclass=abc.ABCMeta):
     """A base class for execution of tasks."""
 
     plugin_name: str
-    is_async: bool = True
 
     def __init__(self, loop=None):
         """Initialize the worker."""
         logger.debug(f"Initializing {self.__class__.__name__}")
         self.loop = loop
 
-    def run(self, task: "Task[DefType]", **kwargs):
+    @abc.abstractmethod
+    def run(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
         """Return coroutine for task execution."""
-        raise NotImplementedError
+        pass
+
+    async def run_async(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
+        return await task.run_async(rerun=rerun)
 
     def close(self):
         """Close this worker."""
+
+    @property
+    def is_async(self) -> bool:
+        """Return whether the worker is asynchronous."""
+        return inspect.iscoroutinefunction(self.run)
 
     async def fetch_finished(self, futures):
         """
@@ -133,7 +146,6 @@ class DebugWorker(Worker):
     """A worker to execute linearly."""
 
     plugin_name: str = "debug"
-    is_async: bool = False
 
     def __init__(self, **kwargs):
         """Initialize worker."""
@@ -141,26 +153,17 @@ class DebugWorker(Worker):
 
     def run(
         self,
-        task: "Task[DefType] | tuple[Path, Task[DefType]]",
+        task: "Task[DefType]",
         rerun: bool = False,
-    ):
+    ) -> "Result":
         """Run a task."""
-        if isinstance(task, Task):
-            return task.run(rerun=rerun)
-        else:  # it could be tuple that includes pickle files with tasks and inputs
-            task_main_pkl, _ = task
-            return load_and_run(task_main_pkl, rerun=rerun)
+        return task.run(rerun=rerun)
 
     def close(self):
         """Return whether the task is finished."""
 
     async def fetch_finished(self, futures):
-        for future in futures:
-            await future
-        return set()
-
-    # async def fetch_finished(self, futures):
-    #     return await asyncio.wait(futures)
+        raise NotImplementedError("DebugWorker does not support async execution")
 
 
 class ConcurrentFuturesWorker(Worker):
@@ -168,7 +171,10 @@ class ConcurrentFuturesWorker(Worker):
 
     plugin_name = "cf"
 
-    def __init__(self, n_procs=None):
+    n_procs: int
+    loop: cf.ProcessPoolExecutor
+
+    def __init__(self, n_procs: int | None = None):
         """Initialize Worker."""
         super().__init__()
         self.n_procs = get_available_cpus() if n_procs is None else n_procs
@@ -177,26 +183,23 @@ class ConcurrentFuturesWorker(Worker):
         # self.loop = asyncio.get_event_loop()
         logger.debug("Initialize ConcurrentFuture")
 
-    def run(
+    async def run(
         self,
         task: "Task[DefType]",
         rerun: bool = False,
-        **kwargs,
-    ):
+    ) -> "Result":
         """Run a task."""
         assert self.loop, "No event loop available to submit tasks"
-        return self.exec_as_coro(task, rerun=rerun)
+        task_pkl = cp.dumps(task)
+        return await self.loop.run_in_executor(
+            self.pool, self.unpickle_and_run, task_pkl, rerun
+        )
 
-    async def exec_as_coro(self, runnable: "Task[DefType]", rerun: bool = False):
-        """Run a task (coroutine wrapper)."""
-        if isinstance(runnable, Task):
-            res = await self.loop.run_in_executor(self.pool, runnable.run, rerun)
-        else:  # it could be tuple that includes pickle files with tasks and inputs
-            task_main_pkl, task_orig = runnable
-            res = await self.loop.run_in_executor(
-                self.pool, load_and_run, task_main_pkl
-            )
-        return res
+    @classmethod
+    def unpickle_and_run(cls, task_pkl: Path, rerun: bool) -> "Result":
+        """Unpickle and run a task."""
+        task: Task[DefType] = cp.loads(task_pkl)
+        return task.run(rerun=rerun)
 
     def close(self):
         """Finalize the internal pool of tasks."""
@@ -233,22 +236,6 @@ class SlurmWorker(DistributedWorker):
         self.sbatch_args = sbatch_args or ""
         self.error = {}
 
-    def run(self, task: "Task[DefType]", rerun: bool = False):
-        """Worker submission API."""
-        script_dir, batch_script = self._prepare_runscripts(task, rerun=rerun)
-        if (script_dir / script_dir.parts[1]) == gettempdir():
-            logger.warning("Temporary directories may not be shared across computers")
-        if isinstance(task, Task):
-            cache_dir = task.cache_dir
-            name = task.name
-            uid = task.uid
-        else:  # runnable is a tuple (ind, pkl file, task)
-            cache_dir = task[-1].cache_dir
-            name = task[-1].name
-            uid = f"{task[-1].uid}_{task[0]}"
-
-        return self._submit_job(batch_script, name=name, uid=uid, cache_dir=cache_dir)
-
     def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
         if isinstance(task, Task):
             cache_dir = task.cache_dir
@@ -274,7 +261,7 @@ class SlurmWorker(DistributedWorker):
         batchscript = script_dir / f"batchscript_{uid}.sh"
         python_string = (
             f"""'from pydra.engine.helpers import load_and_run; """
-            f"""load_and_run(task_pkl="{task_pkl}", ind={ind}, rerun={rerun}) '"""
+            f"""load_and_run("{task_pkl}", rerun={rerun}) '"""
         )
         bcmd = "\n".join(
             (
@@ -287,13 +274,16 @@ class SlurmWorker(DistributedWorker):
             fp.writelines(bcmd)
         return script_dir, batchscript
 
-    async def _submit_job(self, batchscript, name, uid, cache_dir):
-        """Coroutine that submits task runscript and polls job until completion or error."""
-        script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
+    async def run(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
+        """Worker submission API."""
+        script_dir, batch_script = self._prepare_runscripts(task, rerun=rerun)
+        if (script_dir / script_dir.parts[1]) == gettempdir():
+            logger.warning("Temporary directories may not be shared across computers")
+        script_dir = task.cache_dir / f"{self.__class__.__name__}_scripts" / task.uid
         sargs = self.sbatch_args.split()
         jobname = re.search(r"(?<=-J )\S+|(?<=--job-name=)\S+", self.sbatch_args)
         if not jobname:
-            jobname = ".".join((name, uid))
+            jobname = ".".join((task.name, task.uid))
             sargs.append(f"--job-name={jobname}")
         output = re.search(r"(?<=-o )\S+|(?<=--output=)\S+", self.sbatch_args)
         if not output:
@@ -305,7 +295,7 @@ class SlurmWorker(DistributedWorker):
             sargs.append(f"--error={error_file}")
         else:
             error_file = None
-        sargs.append(str(batchscript))
+        sargs.append(str(batch_script))
         # TO CONSIDER: add random sleep to avoid overloading calls
         rc, stdout, stderr = await read_and_display_async(
             "sbatch", *sargs, hide_display=True
@@ -332,12 +322,12 @@ class SlurmWorker(DistributedWorker):
                     and "--no-requeue" not in self.sbatch_args
                 ):
                     # loading info about task with a specific uid
-                    info_file = cache_dir / f"{uid}_info.json"
+                    info_file = task.cache_dir / f"{task.uid}_info.json"
                     if info_file.exists():
                         checksum = json.loads(info_file.read_text())["checksum"]
-                        if (cache_dir / f"{checksum}.lock").exists():
+                        if (task.cache_dir / f"{checksum}.lock").exists():
                             # for pyt3.8 we could you missing_ok=True
-                            (cache_dir / f"{checksum}.lock").unlink()
+                            (task.cache_dir / f"{checksum}.lock").unlink()
                     cmd_re = ("scontrol", "requeue", jobid)
                     await read_and_display_async(*cmd_re, hide_display=True)
                 else:
@@ -463,38 +453,6 @@ class SGEWorker(DistributedWorker):
         self.default_qsub_args = default_qsub_args
         self.max_mem_free = max_mem_free
 
-    def run(self, task: "Task[DefType]", rerun: bool = False):  # TODO: add env
-        """Worker submission API."""
-        (
-            script_dir,
-            batch_script,
-            task_pkl,
-            ind,
-            output_dir,
-            task_qsub_args,
-        ) = self._prepare_runscripts(task, rerun=rerun)
-        if (script_dir / script_dir.parts[1]) == gettempdir():
-            logger.warning("Temporary directories may not be shared across computers")
-        if isinstance(task, Task):
-            cache_dir = task.cache_dir
-            name = task.name
-            uid = task.uid
-        else:  # runnable is a tuple (ind, pkl file, task)
-            cache_dir = task[-1].cache_dir
-            name = task[-1].name
-            uid = f"{task[-1].uid}_{task[0]}"
-
-        return self._submit_job(
-            batch_script,
-            name=name,
-            uid=uid,
-            cache_dir=cache_dir,
-            task_pkl=task_pkl,
-            ind=ind,
-            output_dir=output_dir,
-            task_qsub_args=task_qsub_args,
-        )
-
     def _prepare_runscripts(self, task, interpreter="/bin/sh", rerun=False):
         if isinstance(task, Task):
             cache_dir = task.cache_dir
@@ -566,17 +524,19 @@ class SGEWorker(DistributedWorker):
                 del self.result_files_by_jobid[jobid][task]
                 self.threads_used -= threads_requested
 
-    async def _submit_jobs(
-        self,
-        batchscript,
-        name,
-        uid,
-        cache_dir,
-        output_dir,
-        task_qsub_args,
-        interpreter="/bin/sh",
-    ):
-        # Get the number of slots requested for this task
+    async def run(self, task: "Task[DefType]", rerun: bool = False) -> "Result":
+        """Worker submission API."""
+        (
+            script_dir,
+            batch_script,
+            task_pkl,
+            ind,
+            output_dir,
+            task_qsub_args,
+        ) = self._prepare_runscripts(task, rerun=rerun)
+        if (script_dir / script_dir.parts[1]) == gettempdir():
+            logger.warning("Temporary directories may not be shared across computers")
+        interpreter = "/bin/sh"
         threads_requested = self.default_threads_per_task
         if "smp" in task_qsub_args:
             smp_index = task_qsub_args.split().index("smp")
@@ -618,12 +578,11 @@ class SGEWorker(DistributedWorker):
             python_string = f"""import sys; from pydra.engine.helpers import load_and_run; \
                 task_pkls={[task_tuple for task_tuple in tasks_to_run]}; \
                 task_index=int(sys.argv[1])-1; \
-                load_and_run(task_pkl=task_pkls[task_index][0], \
-                ind=task_pkls[task_index][1], rerun=task_pkls[task_index][2])"""
+                load_and_run(task_pkls[task_index][0], rerun=task_pkls[task_index][1])"""
             bcmd_job = "\n".join(
                 (
                     f"#!{interpreter}",
-                    f"{sys.executable} {Path(batchscript).with_suffix('.py')}"
+                    f"{sys.executable} {Path(batch_script).with_suffix('.py')}"
                     + " $SGE_TASK_ID",
                 )
             )
@@ -632,13 +591,15 @@ class SGEWorker(DistributedWorker):
 
             # Better runtime when the python contents are written to file
             # rather than given by cmdline arg -c
-            with Path(batchscript).with_suffix(".py").open("wt") as fp:
+            with Path(batch_script).with_suffix(".py").open("wt") as fp:
                 fp.write(bcmd_py)
 
-            with batchscript.open("wt") as fp:
+            with batch_script.open("wt") as fp:
                 fp.writelines(bcmd_job)
 
-            script_dir = cache_dir / f"{self.__class__.__name__}_scripts" / uid
+            script_dir = (
+                task.cache_dir / f"{self.__class__.__task.name__}_scripts" / task.uid
+            )
             script_dir.mkdir(parents=True, exist_ok=True)
             sargs = ["-t"]
             sargs.append(f"1-{len(tasks_to_run)}")
@@ -647,7 +608,7 @@ class SGEWorker(DistributedWorker):
             jobname = re.search(r"(?<=-N )\S+", task_qsub_args)
 
             if not jobname:
-                jobname = ".".join((name, uid))
+                jobname = ".".join((task.name, task.uid))
                 sargs.append("-N")
                 sargs.append(jobname)
             output = re.search(r"(?<=-o )\S+", self.qsub_args)
@@ -665,7 +626,7 @@ class SGEWorker(DistributedWorker):
                     sargs.append(error_file)
             else:
                 error_file = None
-            sargs.append(str(batchscript))
+            sargs.append(str(batch_script))
 
             await asyncio.sleep(random.uniform(0, 5))
 
@@ -697,7 +658,12 @@ class SGEWorker(DistributedWorker):
                         exit_status = await self._verify_exit_code(jobid)
                         if exit_status == "ERRORED":
                             jobid = await self._rerun_job_array(
-                                cache_dir, uid, sargs, tasks_to_run, error_file, jobid
+                                task.cache_dir,
+                                task.uid,
+                                sargs,
+                                tasks_to_run,
+                                error_file,
+                                jobid,
                             )
                         else:
                             for task_pkl, ind, rerun in tasks_to_run:
@@ -710,17 +676,27 @@ class SGEWorker(DistributedWorker):
                         exit_status = await self._verify_exit_code(jobid)
                         if exit_status == "ERRORED":
                             jobid = await self._rerun_job_array(
-                                cache_dir, uid, sargs, tasks_to_run, error_file, jobid
+                                task.cache_dir,
+                                task.uid,
+                                sargs,
+                                tasks_to_run,
+                                error_file,
+                                jobid,
                             )
                         poll_counter = 0
                     poll_counter += 1
                     await asyncio.sleep(self.poll_delay)
                 else:
-                    done = await self._poll_job(jobid, cache_dir)
+                    done = await self._poll_job(jobid, task.cache_dir)
                     if done:
                         if done == "ERRORED":  # If the SGE job was evicted, rerun it
                             jobid = await self._rerun_job_array(
-                                cache_dir, uid, sargs, tasks_to_run, error_file, jobid
+                                task.cache_dir,
+                                task.uid,
+                                sargs,
+                                tasks_to_run,
+                                error_file,
+                                jobid,
                             )
                         else:
                             self.job_completed_by_jobid[jobid] = True
@@ -891,28 +867,15 @@ class DaskWorker(Worker):
         self.client_args = kwargs
         logger.debug("Initialize Dask")
 
-    def run(
+    async def run(
         self,
         task: "Task[DefType]",
         rerun: bool = False,
-        **kwargs,
-    ):
-        """Run a task."""
-        return self.exec_dask(task, rerun=rerun)
-
-    async def exec_dask(self, task: "Task[DefType]", rerun: bool = False):
-        """Run a task (coroutine wrapper)."""
+    ) -> "Result":
         from dask.distributed import Client
 
         async with Client(**self.client_args, asynchronous=True) as client:
-            if isinstance(task, Task):
-                future = client.submit(task)
-                result = await future
-            else:  # it could be a path to a pickled task file
-                assert isinstance(task, Path)
-                future = client.submit(load_and_run, task)
-                result = await future
-        return result
+            return await client.submit(task.run, rerun)
 
     def close(self):
         """Finalize the internal pool of tasks."""
@@ -939,15 +902,6 @@ class PsijWorker(Worker):
         logger.debug("Initialize PsijWorker")
         self.psij = psij
 
-    def run(
-        self,
-        task: "Task[DefType]",
-        rerun: bool = False,
-        **kwargs,
-    ):
-        """Run a task."""
-        return self.exec_psij(task, rerun=rerun)
-
     def make_spec(self, cmd=None, arg=None):
         """
         Create a PSI/J job specification.
@@ -964,13 +918,13 @@ class PsijWorker(Worker):
         psij.JobDef
             PSI/J job specification.
         """
-        definition = self.psij.JobDef()
-        definition.executable = cmd
-        definition.arguments = arg
+        spec = self.psij.JobSpec()
+        spec.executable = cmd
+        spec.arguments = arg
 
-        return definition
+        return spec
 
-    def make_job(self, definition, attributes):
+    def make_job(self, spec, attributes):
         """
         Create a PSI/J job.
 
@@ -987,14 +941,14 @@ class PsijWorker(Worker):
             PSI/J job.
         """
         job = self.psij.Job()
-        job.definition = definition
+        job.spec = spec
         return job
 
-    async def exec_psij(
+    async def run(
         self,
         task: "Task[DefType]",
         rerun: bool = False,
-    ):
+    ) -> "Result":
         """
         Run a task (coroutine wrapper).
 
@@ -1013,50 +967,31 @@ class PsijWorker(Worker):
         jex = self.psij.JobExecutor.get_instance(self.subtype)
         absolute_path = Path(__file__).parent
 
-        if isinstance(task, Task):
-            cache_dir = task.cache_dir
-            file_path = cache_dir / "runnable_function.pkl"
-            with open(file_path, "wb") as file:
-                pickle.dump(task.run, file)
-            func_path = absolute_path / "run_pickled.py"
-            definition = self.make_spec("python", [func_path, file_path])
-        else:  # it could be tuple that includes pickle files with tasks and inputs
-            cache_dir = task[-1].cache_dir
-            file_path_1 = cache_dir / "taskmain.pkl"
-            file_path_2 = cache_dir / "ind.pkl"
-            ind, task_main_pkl, task_orig = task
-            with open(file_path_1, "wb") as file:
-                pickle.dump(task_main_pkl, file)
-            with open(file_path_2, "wb") as file:
-                pickle.dump(ind, file)
-            func_path = absolute_path / "run_pickled.py"
-            definition = self.make_spec(
-                "python",
-                [
-                    func_path,
-                    file_path_1,
-                    file_path_2,
-                ],
-            )
+        cache_dir = task.cache_dir
+        file_path = cache_dir / "runnable_function.pkl"
+        with open(file_path, "wb") as file:
+            pickle.dump(task.run, file)
+        func_path = absolute_path / "run_pickled.py"
+        spec = self.make_spec("python", [func_path, file_path])
 
         if rerun:
-            definition.arguments.append("--rerun")
+            spec.arguments.append("--rerun")
 
-        definition.stdout_path = cache_dir / "demo.stdout"
-        definition.stderr_path = cache_dir / "demo.stderr"
+        spec.stdout_path = cache_dir / "demo.stdout"
+        spec.stderr_path = cache_dir / "demo.stderr"
 
-        job = self.make_job(definition, None)
+        job = self.make_job(spec, None)
         jex.submit(job)
         job.wait()
 
-        if definition.stderr_path.stat().st_size > 0:
-            with open(definition.stderr_path, "r") as stderr_file:
+        if spec.stderr_path.stat().st_size > 0:
+            with open(spec.stderr_path, "r") as stderr_file:
                 stderr_contents = stderr_file.read()
             raise Exception(
-                f"stderr_path '{definition.stderr_path}' is not empty. Contents:\n{stderr_contents}"
+                f"stderr_path '{spec.stderr_path}' is not empty. Contents:\n{stderr_contents}"
             )
 
-        return
+        return task.result()
 
     def close(self):
         """Finalize the internal pool of tasks."""

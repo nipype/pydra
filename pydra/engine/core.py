@@ -325,6 +325,8 @@ class Task(ty.Generic[DefType]):
         if not self.can_resume and self.output_dir.exists():
             shutil.rmtree(self.output_dir)
         self.output_dir.mkdir(parents=False, exist_ok=self.can_resume)
+        # Save task pkl into the output directory for future reference
+        save(self.output_dir, task=self)
 
     def run(self, rerun: bool = False):
         """Prepare the task working directory, execute the task definition, and save the
@@ -382,7 +384,7 @@ class Task(ty.Generic[DefType]):
         self._check_for_hash_changes()
         return result
 
-    async def run_async(self, rerun: bool = False):
+    async def run_async(self, rerun: bool = False) -> Result:
         """Prepare the task working directory, execute the task definition asynchronously,
         and save the results. NB: only workflows are run asynchronously at the moment.
 

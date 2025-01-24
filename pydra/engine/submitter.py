@@ -9,7 +9,6 @@ from tempfile import mkdtemp
 from copy import copy
 from collections import defaultdict
 from .workers import Worker, WORKERS
-from .core import is_workflow
 from .graph import DiGraph
 from .helpers import (
     get_open_loop,
@@ -153,10 +152,10 @@ class Submitter:
                 "Use the `split` method to split the task before combining."
             )
         task = Task(task_def, submitter=self, name="task", environment=self.environment)
-        if task.is_async:
-            self.loop.run_until_complete(task.run_async(rerun=self.rerun))
+        if task.is_async:  # Only workflow tasks can be async
+            self.loop.run_until_complete(self.worker.run_async(task, rerun=self.rerun))
         else:
-            task.run(rerun=self.rerun)
+            self.worker.run(rerun=self.rerun)
         PersistentCache().clean_up()
         result = task.result()
         if result is None:
@@ -285,8 +284,8 @@ class Submitter:
                             )
                         raise RuntimeError(msg)
             for task in tasks:
-                if is_workflow(task):
-                    await task.run_async(rerun=self.rerun)
+                if task.is_async:
+                    await self.worker.run_async(task, rerun=self.rerun)
                 else:
                     task_futures.add(self.worker.run(task, rerun=self.rerun))
             task_futures = await self.worker.fetch_finished(task_futures)
