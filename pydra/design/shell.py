@@ -662,6 +662,8 @@ def remaining_positions(
     # Check for multiple positions
     positions = defaultdict(list)
     for arg in args:
+        if arg.name == "arguments":
+            continue
         if arg.position is not None:
             if arg.position >= 0:
                 positions[arg.position].append(arg)

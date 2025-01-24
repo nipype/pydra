@@ -496,7 +496,9 @@ class Task(ty.Generic[DefType]):
             the result of the task
         """
         if self.errored:
-            return Result(outputs=None, runtime=None, errored=True, task=self)
+            return Result(
+                outputs=None, runtime=None, errored=True, output_dir=self.output_dir
+            )
 
         checksum = self.checksum
         result = load_result(checksum, self.cache_locations)

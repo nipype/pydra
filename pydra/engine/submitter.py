@@ -69,7 +69,7 @@ class Submitter:
     def __init__(
         self,
         cache_dir: os.PathLike | None = None,
-        worker: ty.Union[str, ty.Type[Worker]] = "cf",
+        worker: ty.Union[str, ty.Type[Worker]] = "debug",
         environment: "Environment | None" = None,
         rerun: bool = False,
         cache_locations: list[os.PathLike] | None = None,
@@ -140,7 +140,7 @@ class Submitter:
             output_types = {o.name: list[o.type] for o in list_fields(task_def.Outputs)}
 
             @workflow.define(outputs=output_types)
-            def Split(defn: TaskDef) -> tuple:
+            def Split(defn: TaskDef):
                 node = workflow.add(defn)
                 return tuple(getattr(node, o) for o in output_types)
 
@@ -155,7 +155,7 @@ class Submitter:
         if task.is_async:  # Only workflow tasks can be async
             self.loop.run_until_complete(self.worker.run_async(task, rerun=self.rerun))
         else:
-            self.worker.run(rerun=self.rerun)
+            self.worker.run(task, rerun=self.rerun)
         PersistentCache().clean_up()
         result = task.result()
         if result is None:

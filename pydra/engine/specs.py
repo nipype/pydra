@@ -134,7 +134,7 @@ class TaskDef(ty.Generic[OutputsType]):
     def __call__(
         self,
         cache_dir: os.PathLike | None = None,
-        worker: "str | ty.Type[Worker] | Worker" = "cf",
+        worker: "str | ty.Type[Worker] | Worker" = "debug",
         environment: "Environment | None" = None,
         rerun: bool = False,
         cache_locations: ty.Iterable[os.PathLike] | None = None,
@@ -205,10 +205,14 @@ class TaskDef(ty.Generic[OutputsType]):
                         )
             raise
         if result.errored:
-            raise RuntimeError(
-                f"Task {self} failed @ {result.errors['time of crash']} with following errors:\n"
-                + "\n".join(result.errors["error message"])
-            )
+            if isinstance(self, WorkflowDef) or self._splitter:
+                raise RuntimeError(f"Workflow {self} failed with errors:")
+            else:
+                errors = result.errors
+                raise RuntimeError(
+                    f"Task {self} failed @ {errors['time of crash']} with following errors:\n"
+                    + "\n".join(errors["error message"])
+                )
         return result.outputs
 
     def split(
@@ -550,8 +554,10 @@ class Result(ty.Generic[OutputsType]):
     @property
     def errors(self):
         if self.errored:
-            with open(self.output_dir / "_error.pklz", "rb") as f:
-                return cp.load(f)
+            error_file = self.output_dir / "_error.pklz"
+            if error_file.exists():
+                with open(error_file, "rb") as f:
+                    return cp.load(f)
         return None
 
 
@@ -878,7 +884,8 @@ class ShellDef(TaskDef[ShellOutputsType]):
 
     arguments: ty.List[str] = shell.arg(
         default=attrs.Factory(list),
-        help="Additional arguments to pass to the command.",
+        sep=" ",
+        help="Additional free-form arguments to append to the end of the command.",
     )
 
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("cmdline",)
@@ -930,6 +937,8 @@ class ShellDef(TaskDef[ShellOutputsType]):
                 continue
             if name == "executable":
                 pos_args.append(self._command_shelltask_executable(field, value))
+            elif name == "arguments":
+                continue
             elif name == "args":
                 pos_val = self._command_shelltask_args(field, value)
                 if pos_val:
