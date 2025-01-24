@@ -10,7 +10,8 @@ if ty.TYPE_CHECKING:
     from .graph import DiGraph
     from .submitter import NodeExecution
     from .core import Task, Workflow
-    from .specs import TaskDef
+    from .specs import TaskDef, WorkflowDef
+    from .state import StateIndex
 
 
 T = ty.TypeVar("T")
@@ -65,7 +66,10 @@ class LazyInField(LazyField[T]):
     def source(self):
         return self.workflow
 
-    def get_value(self, wf: "Workflow", state_index: ty.Optional[int] = None) -> ty.Any:
+    def get_value(
+        self,
+        workflow_def: "WorkflowDef",
+    ) -> ty.Any:
         """Return the value of a lazy field.
 
         Parameters
@@ -80,20 +84,7 @@ class LazyInField(LazyField[T]):
         value : Any
             the resolved value of the lazy-field
         """
-        from pydra.utils.typing import (
-            TypeParser,
-        )  # pylint: disable=import-outside-toplevel
-
-        value = getattr(wf.inputs, self.field)
-        if TypeParser.is_subclass(self.type, StateArray) and not wf._pre_split:
-            _, split_depth = TypeParser.strip_splits(self.type)
-
-            def apply_splits(obj, depth):
-                if depth < 1:
-                    return obj
-                return StateArray[self.type](apply_splits(i, depth - 1) for i in obj)
-
-            value = apply_splits(value, split_depth)
+        value = workflow_def[self.field]
         value = self._apply_cast(value)
         return value
 
@@ -129,7 +120,9 @@ class LazyOutField(LazyField[T]):
         return self.node.name
 
     def get_value(
-        self, graph: "DiGraph[NodeExecution]", state_index: ty.Optional[int] = None
+        self,
+        graph: "DiGraph[NodeExecution]",
+        state_index: "StateIndex | None" = None,
     ) -> ty.Any:
         """Return the value of a lazy field.
 
@@ -184,10 +177,10 @@ class LazyOutField(LazyField[T]):
                         "your interface inputs."
                     )
                 val = res.get_output_field(self.field)
+                val = self._apply_cast(val)
             return val
 
         value = get_nested(task, depth=split_depth)
-        value = self._apply_cast(value)
         return value
 
     @property

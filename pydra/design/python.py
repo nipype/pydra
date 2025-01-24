@@ -75,9 +75,12 @@ class out(Out):
         The converter for the field passed through to the attrs.field, by default it is None
     validator: callable | iterable[callable], optional
         The validator(s) for the field passed through to the attrs.field, by default it is None
+    position : int
+        The position of the output in the output list, allows for tuple unpacking of
+        outputs
     """
 
-    pass
+    position: int = attrs.field(default=None)
 
 
 @dataclass_transform(

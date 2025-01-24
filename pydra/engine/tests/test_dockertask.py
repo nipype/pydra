@@ -140,7 +140,7 @@ def test_docker_inputspec_1(tmp_path):
         shell.arg(
             name="file",
             type=File,
-            position=1,
+            argpos=1,
             argstr="",
             help="input file",
         )
@@ -173,7 +173,7 @@ def test_docker_inputspec_1a(tmp_path):
             name="file",
             type=File,
             default=filename,
-            position=1,
+            argpos=1,
             argstr="",
             help="input file",
         )
@@ -206,7 +206,7 @@ def test_docker_inputspec_2(plugin, tmp_path):
         shell.arg(
             name="file1",
             type=File,
-            position=1,
+            argpos=1,
             argstr="",
             help="input file 1",
         ),
@@ -214,7 +214,7 @@ def test_docker_inputspec_2(plugin, tmp_path):
             name="file2",
             type=File,
             default=filename_2,
-            position=2,
+            argpos=2,
             argstr="",
             help="input file 2",
         ),
@@ -250,14 +250,14 @@ def test_docker_inputspec_2a_except(plugin, tmp_path):
             name="file1",
             type=File,
             default=filename_1,
-            position=1,
+            argpos=1,
             argstr="",
             help="input file 1",
         ),
         shell.arg(
             name="file2",
             type=File,
-            position=2,
+            argpos=2,
             argstr="",
             help="input file 2",
         ),
@@ -295,14 +295,14 @@ def test_docker_inputspec_2a(plugin, tmp_path):
             name="file1",
             type=File,
             default=filename_1,
-            position=1,
+            argpos=1,
             argstr="",
             help="input file 1",
         ),
         shell.arg(
             name="file2",
             type=File,
-            position=2,
+            argpos=2,
             argstr="",
             help="input file 2",
         ),
@@ -332,7 +332,7 @@ def test_docker_inputspec_3(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            position=1,
+            argpos=1,
             argstr="",
             help="input file",
             container_path=True,
@@ -368,7 +368,7 @@ def test_docker_cmd_inputspec_copyfile_1(plugin, tmp_path):
         shell.arg(
             name="orig_file",
             type=File,
-            position=1,
+            argpos=1,
             argstr="",
             help="orig file",
             copyfile="copy",
@@ -418,7 +418,7 @@ def test_docker_inputspec_state_1(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            position=1,
+            argpos=1,
             argstr="",
             help="input file",
         )
@@ -454,7 +454,7 @@ def test_docker_inputspec_state_1b(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            position=1,
+            argpos=1,
             argstr="",
             help="input file",
         )
@@ -483,7 +483,7 @@ def test_docker_wf_inputspec_1(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            position=1,
+            argpos=1,
             argstr="",
             help="input file",
         )
@@ -525,7 +525,7 @@ def test_docker_wf_state_inputspec_1(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            position=1,
+            argpos=1,
             argstr="",
             help="input file",
         )
@@ -569,7 +569,7 @@ def test_docker_wf_ndst_inputspec_1(plugin, tmp_path):
         shell.arg(
             name="file",
             type=File,
-            position=1,
+            argpos=1,
             argstr="",
             help="input file",
         )

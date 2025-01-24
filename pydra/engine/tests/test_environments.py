@@ -177,7 +177,7 @@ def create_shelly_inputfile(tempdir, filename, name, executable):
         shell.arg(
             name="file",
             type=File,
-            position=1,
+            argpos=1,
             help="files",
             argstr="",
         )
@@ -352,7 +352,7 @@ def create_shelly_outputfile(tempdir, filename, name, executable="cp"):
         shell.arg(
             name="file_orig",
             type=File,
-            position=2,
+            argpos=2,
             help="new file",
             argstr="",
         ),

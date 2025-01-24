@@ -240,7 +240,7 @@ class Arg(Field):
     readonly: bool = False
 
 
-@attrs.define(kw_only=True)
+@attrs.define(kw_only=True, slots=False)
 class Out(Field):
     """Base class for output fields of task definitions
 
@@ -261,9 +261,11 @@ class Out(Field):
         The converter for the field passed through to the attrs.field, by default it is None
     validator: callable | iterable[callable], optional
         The validator(s) for the field passed through to the attrs.field, by default it is None
+    order : int
+        The order of the output in the output list, allows for tuple unpacking of outputs
     """
 
-    pass
+    order: int = attrs.field(default=None)
 
 
 def extract_fields_from_class(
@@ -391,6 +393,10 @@ def make_task_def(
     from pydra.engine.specs import TaskDef
 
     spec_type._check_arg_refs(inputs, outputs)
+
+    # Set positions for outputs to allow for tuple unpacking
+    for i, output in enumerate(outputs.values()):
+        output.order = i
 
     if name is None and klass is not None:
         name = klass.__name__

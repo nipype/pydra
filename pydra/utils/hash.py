@@ -4,9 +4,12 @@ import sys
 import os
 import struct
 import inspect
+import re
 from datetime import datetime
 import typing as ty
 import types
+import ast
+import cloudpickle as cp
 from pathlib import Path
 from collections.abc import Mapping
 from functools import singledispatch
@@ -25,6 +28,8 @@ from fileformats.core.fileset import FileSet, MockMixin
 from . import user_cache_dir, add_exc_note
 
 logger = logging.getLogger("pydra")
+
+FUNCTION_SRC_CHUNK_LEN_DEFAULT = 8192
 
 try:
     from typing import Protocol
@@ -522,8 +527,28 @@ def bytes_repr_set(obj: Set, cache: Cache) -> Iterator[bytes]:
 
 @register_serializer
 def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
+    """Serialize a function, attempting to use the AST of the source code if available
+    otherwise falling back to using cloudpickle to serialize the byte-code of the
+    function."""
+    try:
+        src = inspect.getsource(obj)
+    except OSError:
+        # Fallback to using cloudpickle to serialize the function if the source
+        # code is not available
+        bytes_repr = cp.dumps(obj)
+    else:
+        indent = re.match(r"(\s*)", src).group(1)
+        if indent:
+            src = re.sub(f"^{indent}", "", src, flags=re.MULTILINE)
+        src_ast = ast.parse(src)
+        # Remove the function definition from the source code
+        bytes_repr = ast.dump(
+            src_ast, annotate_fields=False, include_attributes=False
+        ).encode()
+
     yield b"function:("
-    yield hash_single(inspect.getsource(obj), cache)
+    for i in range(0, len(bytes_repr), FUNCTION_SRC_CHUNK_LEN_DEFAULT):
+        yield hash_single(bytes_repr[i : i + FUNCTION_SRC_CHUNK_LEN_DEFAULT], cache)
     yield b")"
 
 

@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 from copy import copy
 import os
+from operator import attrgetter
 import inspect
 import itertools
 import platform
@@ -34,13 +35,14 @@ from pydra.utils.hash import hash_function, Cache
 from pydra.utils.typing import StateArray
 from pydra.design.base import Field, Arg, Out, RequirementSet, EMPTY
 from pydra.design import shell
+from pydra.engine.lazy import LazyInField, LazyOutField
 
 if ty.TYPE_CHECKING:
     from pydra.engine.core import Task
     from pydra.engine.graph import DiGraph
     from pydra.engine.submitter import NodeExecution
-    from pydra.engine.lazy import LazyOutField
     from pydra.engine.core import Workflow
+    from pydra.engine.state import StateIndex
     from pydra.engine.environments import Environment
     from pydra.engine.workers import Worker
 
@@ -85,7 +87,7 @@ class TaskOutputs:
                 f"{self} outputs object is not a lazy output of a workflow node"
             ) from None
 
-    def __getitem__(self, name: str) -> ty.Any:
+    def __getitem__(self, name_or_index: str | int) -> ty.Any:
         """Return the value for the given attribute
 
         Parameters
@@ -98,10 +100,20 @@ class TaskOutputs:
         Any
             the value of the attribute
         """
+        if isinstance(name_or_index, int):
+            return list(self)[name_or_index]
         try:
-            return getattr(self, name)
+            return getattr(self, name_or_index)
         except AttributeError:
-            raise KeyError(f"{self} doesn't have an attribute {name}") from None
+            raise KeyError(
+                f"{self} doesn't have an attribute {name_or_index}"
+            ) from None
+
+    def __iter__(self) -> ty.Generator[ty.Any, None, None]:
+        """Iterate through all the values in the definition, allows for tuple unpacking"""
+        fields = sorted(attrs_fields(self), key=attrgetter("order"))
+        for field in fields:
+            yield getattr(self, field.name)
 
 
 OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
@@ -374,15 +386,36 @@ class TaskDef(ty.Generic[OutputsType]):
         }
         return hash_function(sorted(field_hashes.items())), field_hashes
 
-    def _resolve_lazy_fields(self, wf, state_index=None):
-        """Parse output results."""
-        temp_values = {}
-        for field in attrs_fields(self):
-            value: "LazyOutField" = getattr(self, field.name)
-            if is_lazy(value):
-                temp_values[field.name] = value.get_value(wf, state_index=state_index)
-        for field, val in temp_values.items():
-            setattr(self, field, val)
+    def _resolve_lazy_inputs(
+        self,
+        workflow_inputs: "WorkflowDef",
+        graph: "DiGraph[NodeExecution]",
+        state_index: "StateIndex | None" = None,
+    ) -> Self:
+        """Resolves lazy fields in the task definition by replacing them with their
+        actual values.
+
+        Parameters
+        ----------
+        workflow : Workflow
+            The workflow the task is part of
+        graph : DiGraph[NodeExecution]
+            The execution graph of the workflow
+        state_index : StateIndex, optional
+            The state index for the workflow, by default None
+
+        Returns
+        -------
+        Self
+            The task definition with all lazy fields resolved
+        """
+        resolved = {}
+        for name, value in attrs_values(self).items():
+            if isinstance(value, LazyInField):
+                resolved[name] = value.get_value(workflow_inputs)
+            elif isinstance(value, LazyOutField):
+                resolved[name] = value.get_value(graph, state_index)
+        return attrs.evolve(self, **resolved)
 
     def _check_rules(self):
         """Check if all rules are satisfied."""

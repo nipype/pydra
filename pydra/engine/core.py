@@ -124,8 +124,10 @@ class Task(ty.Generic[DefType]):
         if state_index is None:
             state_index = state.StateIndex()
 
-        # Copy the definition, so lazy fields can be resolved and replaced at runtime
-        self.definition = copy(definition)
+        # Check that the definition is fully resolved and ready to run
+        definition._check_resolved()
+        definition._check_rules()
+        self.definition = definition
         # We save the submitter is the definition is a workflow otherwise we don't
         # so the task can be pickled
         self.submitter = submitter
@@ -338,8 +340,6 @@ class Task(ty.Generic[DefType]):
         # run_async to use common helper methods for pre/post run tasks
 
         # checking if the definition is fully resolved and ready to run
-        self.definition._check_resolved()
-        self.definition._check_rules()
         self.hooks.pre_run(self)
         logger.debug(
             "'%s' is attempting to acquire lock on %s", self.name, self.lockfile
@@ -391,8 +391,6 @@ class Task(ty.Generic[DefType]):
             propagated to all tasks within workflow tasks.
         """
         # checking if the definition is fully resolved and ready to run
-        self.definition._check_resolved()
-        self.definition._check_rules()
         self.hooks.pre_run(self)
         logger.debug(
             "'%s' is attempting to acquire lock on %s", self.name, self.lockfile
@@ -732,7 +730,15 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
     def execution_graph(self, submitter: "Submitter") -> DiGraph:
         from pydra.engine.submitter import NodeExecution
 
-        return self._create_graph([NodeExecution(n, submitter) for n in self.nodes])
+        exec_nodes = [
+            NodeExecution(n, submitter, workflow_inputs=self.inputs) for n in self.nodes
+        ]
+        graph = self._create_graph(exec_nodes)
+        # Set the graph attribute of the nodes so lazy fields can be resolved as tasks
+        # are created
+        for node in exec_nodes:
+            node.graph = graph
+        return graph
 
     @property
     def graph(self) -> DiGraph:

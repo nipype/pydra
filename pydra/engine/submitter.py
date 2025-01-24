@@ -136,19 +136,16 @@ class Submitter:
         if task_def._splitter:
 
             from pydra.design import workflow
+            from pydra.engine.specs import TaskDef
 
             output_types = {o.name: list[o.type] for o in list_fields(task_def.Outputs)}
 
-            # We need to use a new variable as task_def will be overwritten by the time
-            # the Split workflow constructor is called
-            node_def = task_def
-
             @workflow.define(outputs=output_types)
-            def Split():
-                node = workflow.add(node_def)
+            def Split(defn: TaskDef) -> tuple:
+                node = workflow.add(defn)
                 return tuple(getattr(node, o) for o in output_types)
 
-            task_def = Split()
+            task_def = Split(defn=task_def)
 
         elif task_def._combiner:
             raise ValueError(
@@ -206,10 +203,6 @@ class Submitter:
         tasks = self.get_runnable_tasks(exec_graph)
         while tasks or any(not n.done for n in exec_graph.nodes):
             for task in tasks:
-                # grab inputs if needed
-                logger.debug(f"Retrieving inputs for {task}")
-                # TODO: add state idx to retrieve values to reduce waiting
-                task.definition._resolve_lazy_fields(wf)
                 self.worker.run(task, rerun=self.rerun)
             tasks = self.get_runnable_tasks(exec_graph)
         workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
@@ -292,13 +285,8 @@ class Submitter:
                             )
                         raise RuntimeError(msg)
             for task in tasks:
-                # grab inputs if needed
-                logger.debug(f"Retrieving inputs for {task}")
-                # TODO: add state idx to retrieve values to reduce waiting
-                task.definition._resolve_lazy_fields(wf)
                 if is_workflow(task):
-                    await task.run(self)
-                # single task
+                    await task.run_async(rerun=self.rerun)
                 else:
                     task_futures.add(self.worker.run(task, rerun=self.rerun))
             task_futures = await self.worker.fetch_finished(task_futures)
@@ -389,7 +377,17 @@ class NodeExecution(ty.Generic[DefType]):
 
     _tasks: dict[StateIndex | None, "Task[DefType]"] | None
 
-    def __init__(self, node: "Node", submitter: Submitter):
+    workflow_inputs: "WorkflowDef"
+
+    graph: DiGraph["NodeExecution"] | None
+
+    def __init__(
+        self,
+        node: "Node",
+        submitter: Submitter,
+        workflow_inputs: "WorkflowDef",
+        exec_graph: DiGraph["NodeExecution"],
+    ):
         self.name = node.name
         self.node = node
         self.submitter = submitter
@@ -401,6 +399,8 @@ class NodeExecution(ty.Generic[DefType]):
         self.running = {}
         self.unrunnable = defaultdict(list)
         self.state_names = self.node.state.names
+        self.workflow_inputs = workflow_inputs
+        self.graph = None
 
     @property
     def inputs(self) -> "Node.Inputs":
@@ -449,14 +449,22 @@ class NodeExecution(ty.Generic[DefType]):
     def _generate_tasks(self) -> ty.Iterable["Task[DefType]"]:
         if self.node.state is None:
             yield Task(
-                definition=self.node._definition,
+                definition=self.node._definition._resolve_lazy_inputs(
+                    workflow_inputs=self.workflow_inputs,
+                    exec_graph=self.graph,
+                    state_index=None,
+                ),
                 submitter=self.submitter,
                 name=self.node.name,
             )
         else:
             for index, split_defn in self.node._split_definition().items():
                 yield Task(
-                    definition=split_defn,
+                    definition=split_defn._resolve_lazy_inputs(
+                        workflow_inputs=self.workflow_inputs,
+                        exec_graph=self.graph,
+                        state_index=index,
+                    ),
                     submitter=self.submitter,
                     name=self.node.name,
                     state_index=index,

@@ -124,6 +124,8 @@ class out(Out):
         to the function), output_dir (task output_dir will be used), stdout, stderr
         (stdout and stderr of the task will be sent) inputs (entire inputs will be
         passed) or any input field name (a specific input field will be sent).
+    order : int
+        The order of the output in the output list, allows for tuple unpacking of outputs
     """
 
     callable: ty.Callable | None = None
@@ -135,7 +137,7 @@ class out(Out):
 
 
 @attrs.define(kw_only=True)
-class outarg(Out, arg):
+class outarg(arg, Out):
     """An input field that specifies where to save the output file
 
     Parameters
@@ -174,7 +176,7 @@ class outarg(Out, arg):
         the flag is used before every element if a list is provided as a value. If no
         argstr is used the field is not part of the command.
     position: int, optional
-        Position of the field in the command, could be nonnegative or negative integer.
+        Position of the field in the command line, could be nonnegative or negative integer.
         If nothing is provided the field will be inserted between all fields with
         nonnegative positions and fields with negative positions.
     sep: str, optional

@@ -35,10 +35,10 @@ def test_interface_template():
             validator=attrs.validators.min_len(1),
             default="cp",
             type=str | ty.Sequence[str],
-            position=0,
+            argpos=0,
             help=shell.EXECUTABLE_HELP_STRING,
         ),
-        shell.arg(name="in_path", type=FsObject, position=1),
+        shell.arg(name="in_path", type=FsObject, argpos=1),
         output,
     ]
     assert sorted_fields(Cp.Outputs) == [
@@ -82,10 +82,10 @@ def test_interface_template_w_types_and_path_template_ext():
             validator=attrs.validators.min_len(1),
             default="trim-png",
             type=str | ty.Sequence[str],
-            position=0,
+            argpos=0,
             help=shell.EXECUTABLE_HELP_STRING,
         ),
-        shell.arg(name="in_image", type=image.Png, position=1),
+        shell.arg(name="in_image", type=image.Png, argpos=1),
         output,
     ]
     assert sorted_fields(TrimPng.Outputs) == [
@@ -122,12 +122,10 @@ def test_interface_template_w_modify():
             validator=attrs.validators.min_len(1),
             default="trim-png",
             type=str | ty.Sequence[str],
-            position=0,
+            argpos=0,
             help=shell.EXECUTABLE_HELP_STRING,
         ),
-        shell.arg(
-            name="image", type=image.Png, position=1, copy_mode=File.CopyMode.copy
-        ),
+        shell.arg(name="image", type=image.Png, argpos=1, copy_mode=File.CopyMode.copy),
     ]
     assert sorted_fields(TrimPng.Outputs) == [
         shell.out(
@@ -180,34 +178,34 @@ def test_interface_template_more_complex():
             validator=attrs.validators.min_len(1),
             default="cp",
             type=str | ty.Sequence[str],
-            position=0,
+            argpos=0,
             help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
-            name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
+            name="in_fs_objects", type=MultiInputObj[FsObject], argpos=1, sep=" "
         ),
         output,
-        shell.arg(name="recursive", argstr="-R", type=bool, default=False, position=3),
+        shell.arg(name="recursive", argstr="-R", type=bool, default=False, argpos=3),
         shell.arg(
             name="text_arg",
             argstr="--text-arg",
             type=str | None,
             default=None,
-            position=4,
+            argpos=4,
         ),
         shell.arg(
             name="int_arg",
             argstr="--int-arg",
             type=int | None,
             default=None,
-            position=5,
+            argpos=5,
         ),
         shell.arg(
             name="tuple_arg",
             argstr="--tuple-arg",
             type=tuple[int, str] | None,
             default=None,
-            position=6,
+            argpos=6,
         ),
     ]
     assert sorted_fields(Cp.Outputs) == [
@@ -278,11 +276,11 @@ def test_interface_template_with_overrides_and_optionals():
                 validator=attrs.validators.min_len(1),
                 default="cp",
                 type=str | ty.Sequence[str],
-                position=0,
+                argpos=0,
                 help=shell.EXECUTABLE_HELP_STRING,
             ),
             shell.arg(
-                name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
+                name="in_fs_objects", type=MultiInputObj[FsObject], argpos=1, sep=" "
             ),
             shell.arg(
                 name="recursive",
@@ -290,21 +288,21 @@ def test_interface_template_with_overrides_and_optionals():
                 type=bool,
                 default=False,
                 help=RECURSIVE_HELP,
-                position=2,
+                argpos=2,
             ),
-            shell.arg(name="text_arg", argstr="--text-arg", type=str, position=3),
+            shell.arg(name="text_arg", argstr="--text-arg", type=str, argpos=3),
             shell.arg(
                 name="int_arg",
                 argstr="--int-arg",
                 type=int | None,
                 default=None,
-                position=4,
+                argpos=4,
             ),
             shell.arg(
                 name="tuple_arg",
                 argstr="--tuple-arg",
                 type=tuple[int, str],
-                position=5,
+                argpos=5,
             ),
         ]
         + outargs
@@ -353,24 +351,24 @@ def test_interface_template_with_defaults():
             validator=attrs.validators.min_len(1),
             default="cp",
             type=str | ty.Sequence[str],
-            position=0,
+            argpos=0,
             help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
-            name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
+            name="in_fs_objects", type=MultiInputObj[FsObject], argpos=1, sep=" "
         ),
         output,
-        shell.arg(name="recursive", argstr="-R", type=bool, default=True, position=3),
+        shell.arg(name="recursive", argstr="-R", type=bool, default=True, argpos=3),
         shell.arg(
-            name="text_arg", argstr="--text-arg", type=str, position=4, default="foo"
+            name="text_arg", argstr="--text-arg", type=str, argpos=4, default="foo"
         ),
-        shell.arg(name="int_arg", argstr="--int-arg", type=int, position=5, default=99),
+        shell.arg(name="int_arg", argstr="--int-arg", type=int, argpos=5, default=99),
         shell.arg(
             name="tuple_arg",
             argstr="--tuple-arg",
             type=tuple[int, str],
             default=(1, "bar"),
-            position=6,
+            argpos=6,
         ),
     ]
     assert sorted_fields(Cp.Outputs) == [
@@ -421,26 +419,26 @@ def test_interface_template_with_type_overrides():
             validator=attrs.validators.min_len(1),
             default="cp",
             type=str | ty.Sequence[str],
-            position=0,
+            argpos=0,
             help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
-            name="in_fs_objects", type=MultiInputObj[FsObject], position=1, sep=" "
+            name="in_fs_objects", type=MultiInputObj[FsObject], argpos=1, sep=" "
         ),
         output,
-        shell.arg(name="recursive", argstr="-R", type=bool, default=False, position=3),
-        shell.arg(name="text_arg", argstr="--text-arg", type=str, position=4),
+        shell.arg(name="recursive", argstr="-R", type=bool, default=False, argpos=3),
+        shell.arg(name="text_arg", argstr="--text-arg", type=str, argpos=4),
         shell.arg(
             name="int_arg",
             argstr="--int-arg",
             type=int | None,
-            position=5,
+            argpos=5,
         ),
         shell.arg(
             name="tuple_arg",
             argstr="--tuple-arg",
             type=tuple[int, str],
-            position=6,
+            argpos=6,
         ),
     ]
     assert sorted_fields(Cp.Outputs) == [
@@ -474,7 +472,7 @@ def Ls(request):
             directory: Directory = shell.arg(
                 help="the directory to list the contents of",
                 argstr="",
-                position=-1,
+                argpos=-1,
             )
             hidden: bool = shell.arg(
                 help=("display hidden FS objects"),
@@ -525,7 +523,7 @@ def Ls(request):
                     type=Directory,
                     help="the directory to list the contents of",
                     argstr="",
-                    position=-1,
+                    argpos=-1,
                 ),
                 "hidden": shell.arg(
                     type=bool,
@@ -649,7 +647,7 @@ def A(request):
 
             executable = "cp"
 
-            x: File = shell.arg(argstr="", position=1)
+            x: File = shell.arg(argstr="", argpos=1)
 
             class Outputs:
                 """The outputs of the example shell interface
@@ -669,7 +667,7 @@ def A(request):
                     type=File,
                     help="an input file",
                     argstr="",
-                    position=1,
+                    argpos=1,
                 ),
             },
             outputs={
@@ -699,7 +697,7 @@ def test_shell_output_field_name_static():
 
         executable = "cp"
 
-        x: File = shell.arg(help="an input file", argstr="", position=1)
+        x: File = shell.arg(help="an input file", argstr="", argpos=1)
 
         class Outputs:
             y: File = shell.outarg(
@@ -731,7 +729,7 @@ def test_shell_output_field_name_static():
             default="cp",
             type=str | ty.Sequence[str],
             argstr="",
-            position=0,
+            argpos=0,
             help=shell.EXECUTABLE_HELP_STRING,
         ),
         shell.arg(
@@ -739,7 +737,7 @@ def test_shell_output_field_name_static():
             type=File,
             help="an input file",
             argstr="",
-            position=1,
+            argpos=1,
         ),
         output,
     ]
@@ -772,7 +770,7 @@ def test_shell_output_field_name_dynamic():
                 type=File,
                 help="an input file",
                 argstr="",
-                position=1,
+                argpos=1,
             ),
         },
         outputs={
@@ -796,7 +794,7 @@ def get_file_size(y: Path):
 def test_shell_bases_dynamic(A, tmp_path):
     B = shell.define(
         name="B",
-        inputs={"y": shell.arg(type=File, help="output file", argstr="", position=-1)},
+        inputs={"y": shell.arg(type=File, help="output file", argstr="", argpos=-1)},
         outputs={
             "out_file_size": {
                 "type": int,
@@ -863,7 +861,7 @@ def test_shell_inputs_outputs_bases_dynamic(tmp_path):
                 type=Directory,
                 help="input directory",
                 argstr="",
-                position=-1,
+                argpos=-1,
             )
         },
         outputs={
@@ -904,7 +902,7 @@ def test_shell_inputs_outputs_bases_static(tmp_path):
     class A:
         executable = "ls"
 
-        directory: Directory = shell.arg(help="input directory", argstr="", position=-1)
+        directory: Directory = shell.arg(help="input directory", argstr="", argpos=-1)
 
         class Outputs:
             entries: list = shell.out(
@@ -937,7 +935,7 @@ def test_shell_missing_executable_static():
         @shell.define
         class A:
             directory: Directory = shell.arg(
-                help="input directory", argstr="", position=-1
+                help="input directory", argstr="", argpos=-1
             )
 
             class Outputs:
@@ -959,7 +957,7 @@ def test_shell_missing_executable_dynamic():
                     type=Directory,
                     help="input directory",
                     argstr="",
-                    position=-1,
+                    argpos=-1,
                 ),
             },
             outputs={
