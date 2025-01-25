@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import inspect
 import sys
 from pathlib import Path
 import typing as ty
@@ -23,6 +24,7 @@ from .lazy import LazyInField, LazyOutField
 from pydra.utils.hash import hash_function
 from pydra.utils.typing import TypeParser, StateArray
 from .node import Node
+from datetime import datetime
 from fileformats.generic import FileSet
 from .specs import (
     RuntimeSpec,
@@ -458,6 +460,13 @@ class Task(ty.Generic[DefType]):
                 return True
         return False
 
+    @property
+    def run_start_time(self) -> datetime | None:
+        """Check whether the task is currently running."""
+        if not self.lockfile.exists():
+            return None
+        return datetime.fromtimestamp(self.lockfile.stat().st_ctime)
+
     def _combined_output(self, return_inputs=False):
         combined_results = []
         for gr, ind_l in self.state.final_combined_ind_mapping.items():
@@ -523,7 +532,7 @@ class Task(ty.Generic[DefType]):
             field = getattr(attr.fields(type(self.definition)), changed)
             val = getattr(self.definition, changed)
             field_type = type(val)
-            if issubclass(field.type, FileSet):
+            if inspect.isclass(field.type) and issubclass(field.type, FileSet):
                 details += (
                     f"- {changed}: value passed to the {field.type} field is of type "
                     f"{field_type} ('{val}'). If it is intended to contain output data "

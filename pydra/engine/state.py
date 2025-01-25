@@ -39,6 +39,11 @@ class StateIndex:
         else:
             self.indices = OrderedDict(sorted(indices.items()))
 
+    def __repr__(self):
+        return (
+            "StateIndex(" + ", ".join(f"{n}={v}" for n, v in self.indices.items()) + ")"
+        )
+
     def __hash__(self):
         return hash(tuple(self.indices.items()))
 

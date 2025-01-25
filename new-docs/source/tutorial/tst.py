@@ -9,7 +9,7 @@ if __name__ == "__main__":
     ten_to_the_power = TenToThePower().split(p=[1, 2, 3, 4, 5])
 
     # Run the 5 tasks in parallel split across 3 processes
-    outputs = ten_to_the_power(worker="cf", n_procs=3)
+    outputs = ten_to_the_power(worker="cf", n_procs=3, clean_stale_locks=True)
 
     p1, p2, p3, p4, p5 = outputs.out
 

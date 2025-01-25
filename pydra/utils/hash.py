@@ -4,12 +4,9 @@ import sys
 import os
 import struct
 import inspect
-import re
 from datetime import datetime
 import typing as ty
 import types
-import ast
-import cloudpickle as cp
 from pathlib import Path
 from collections.abc import Mapping
 from functools import singledispatch
@@ -331,7 +328,17 @@ def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     elif hasattr(obj, "__slots__"):
         dct = {attr: getattr(obj, attr) for attr in obj.__slots__}
     else:
-        dct = obj.__dict__
+        try:
+            dct = obj.__dict__
+        except AttributeError:
+            dct = {
+                n: getattr(obj, n)
+                for n in dir(obj)
+                if not (
+                    (n.startswith("__") and n.endswith("__"))
+                    or inspect.ismethod(getattr(obj, n))
+                )
+            }
     yield from bytes_repr_mapping_contents(dct, cache)
     yield b"}"
 
@@ -526,30 +533,38 @@ def bytes_repr_set(obj: Set, cache: Cache) -> Iterator[bytes]:
 
 
 @register_serializer
+def bytes_repr_code(obj: types.CodeType, cache: Cache) -> Iterator[bytes]:
+    yield b"code:("
+    yield from bytes_repr_sequence_contents(
+        (
+            obj.co_argcount,
+            obj.co_posonlyargcount,
+            obj.co_kwonlyargcount,
+            obj.co_nlocals,
+            obj.co_stacksize,
+            obj.co_flags,
+            obj.co_code,
+            obj.co_consts,
+            obj.co_names,
+            obj.co_varnames,
+            obj.co_filename,
+            obj.co_freevars,
+            obj.co_name,
+            obj.co_firstlineno,
+            obj.co_lnotab,
+            obj.co_cellvars,
+        ),
+        cache,
+    )
+    yield b")"
+
+
+@register_serializer
 def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
     """Serialize a function, attempting to use the AST of the source code if available
     otherwise falling back to using cloudpickle to serialize the byte-code of the
     function."""
-    try:
-        src = inspect.getsource(obj)
-    except OSError:
-        # Fallback to using cloudpickle to serialize the function if the source
-        # code is not available
-        bytes_repr = cp.dumps(obj)
-    else:
-        indent = re.match(r"(\s*)", src).group(1)
-        if indent:
-            src = re.sub(f"^{indent}", "", src, flags=re.MULTILINE)
-        src_ast = ast.parse(src)
-        # Remove the function definition from the source code
-        bytes_repr = ast.dump(
-            src_ast, annotate_fields=False, include_attributes=False
-        ).encode()
-
-    yield b"function:("
-    for i in range(0, len(bytes_repr), FUNCTION_SRC_CHUNK_LEN_DEFAULT):
-        yield hash_single(bytes_repr[i : i + FUNCTION_SRC_CHUNK_LEN_DEFAULT], cache)
-    yield b")"
+    yield from bytes_repr(obj.__code__, cache)
 
 
 def bytes_repr_mapping_contents(mapping: Mapping, cache: Cache) -> Iterator[bytes]:
