@@ -13,7 +13,7 @@ shell commands or Python functions.
 
 * Combine diverse tasks (`Python functions <./tutorial/3-python.html>`__ or `shell commands <./tutorial/4-shell.html>`__) into coherent, robust `workflows <./tutorial/5-workflow.html>`__
 * Dynamic workflow construction using Python code (see :ref:`Dynamic construction`)
-* Concurrent execution on `choice of computing platform (e.g. workstation, SLURM, SGE, Dask, etc...) <./tutorial/2-advanced-execution.html#Workers>`__
+* Concurrent execution on `choice of computing platform (e.g. workstation, SLURM, SGE, Dask, etc...) <./tutorial/3-advanced-execution.html#Workers>`__
 * Map-reduce-like semantics (see :ref:`Splitting and combining`)
 * Global caching to reduce recomputation (see :ref:`Caches and hashes`)
 * Tasks can be executed in separate software environments, e.g. containers (see :ref:`Software environments`)
@@ -72,7 +72,8 @@ Execution
 Learn how to execute existing tasks (including workflows) on different systems
 
 * :ref:`Getting started`
-* :ref:`Execution options`
+* :ref:`Troubleshooting`
+* :ref:`Advanced execution`
 
 Design
 ~~~~~~
@@ -119,17 +120,18 @@ See the full reference documentation for Pydra
     :hidden:
 
     tutorial/1-getting-started
-    tutorial/2-advanced-execution
+    tutorial/2-troubleshooting
+    tutorial/3-advanced-execution
 
 .. toctree::
     :maxdepth: 2
     :caption: Tutorials: Design
     :hidden:
 
-    tutorial/3-python
-    tutorial/4-shell
-    tutorial/5-workflow
-    tutorial/6-canonical-form
+    tutorial/4-python
+    tutorial/5-shell
+    tutorial/6-workflow
+    tutorial/7-canonical-form
 
 
 .. toctree::
@@ -154,12 +156,13 @@ See the full reference documentation for Pydra
    :caption: Explanation
    :hidden:
 
+   explanation/design-approach
    explanation/splitting-combining
    explanation/conditional-lazy
    explanation/environments
    explanation/hashing-caching
    explanation/typing
-   explanation/design-approach
+
 
 .. toctree::
    :maxdepth: 2

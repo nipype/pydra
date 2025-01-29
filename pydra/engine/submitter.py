@@ -114,23 +114,31 @@ class Submitter:
         self.rerun = rerun
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
-        if isinstance(worker, str):
-            self.worker_name = worker
-            try:
-                worker_cls = WORKERS[self.worker_name]
-            except KeyError:
-                raise NotImplementedError(f"No worker for '{self.worker_name}' plugin")
+        if isinstance(worker, Worker):
+            self._worker = worker
+            self.worker_name = worker.plugin_name
         else:
+            if isinstance(worker, str):
+                self.worker_name = worker
+                try:
+                    worker_cls = WORKERS[self.worker_name]
+                except KeyError:
+                    raise NotImplementedError(
+                        f"No worker for '{self.worker_name}' plugin"
+                    )
+            else:
+                try:
+                    self.worker_name = worker.plugin_name
+                except AttributeError:
+                    raise ValueError(
+                        "Worker class must have a 'plugin_name' str attribute"
+                    )
+                worker_cls = worker
             try:
-                self.worker_name = worker.plugin_name
-            except AttributeError:
-                raise ValueError("Worker class must have a 'plugin_name' str attribute")
-            worker_cls = worker
-        try:
-            self._worker = worker_cls(**kwargs)
-        except TypeError as e:
-            e.add_note(WORKER_KWARG_FAIL_NOTE)
-            raise
+                self._worker = worker_cls(**kwargs)
+            except TypeError as e:
+                e.add_note(WORKER_KWARG_FAIL_NOTE)
+                raise
         self.run_start_time = None
         self.clean_stale_locks = (
             clean_stale_locks
