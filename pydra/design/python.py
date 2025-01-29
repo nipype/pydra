@@ -80,7 +80,7 @@ class out(Out):
         outputs
     """
 
-    position: int = attrs.field(default=None)
+    pass
 
 
 @dataclass_transform(

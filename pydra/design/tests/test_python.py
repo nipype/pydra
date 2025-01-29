@@ -26,10 +26,10 @@ def test_interface_wrap_function():
         python.arg(name="a", type=int),
         python.arg(name="function", type=ty.Callable, default=func),
     ]
-    assert outputs == [python.out(name="out", type=float)]
+    assert outputs == [python.out(name="out", type=float, order=0)]
     definition = SampleDef(a=1)
-    result = definition()
-    assert result.output.out == 2.0
+    outputs = definition()
+    assert outputs.out == 2.0
     with pytest.raises(TypeError):
         SampleDef(a=1.5)
 
@@ -49,9 +49,9 @@ def test_interface_wrap_function_with_default():
         python.arg(name="function", type=ty.Callable, default=func),
         python.arg(name="k", type=float, default=2.0),
     ]
-    assert outputs == [python.out(name="out", type=float)]
-    assert SampleDef(a=1)().output.out == 2.0
-    assert SampleDef(a=10, k=3.0)().output.out == 30.0
+    assert outputs == [python.out(name="out", type=float, order=0)]
+    assert SampleDef(a=1)().out == 2.0
+    assert SampleDef(a=10, k=3.0)().out == 30.0
 
 
 def test_interface_wrap_function_overrides():
@@ -73,7 +73,7 @@ def test_interface_wrap_function_overrides():
         python.arg(name="function", type=ty.Callable, default=func),
     ]
     assert outputs == [
-        python.out(name="b", type=Decimal, help="the doubled output"),
+        python.out(name="b", type=Decimal, help="the doubled output", order=0),
     ]
     outputs = SampleDef.Outputs(b=Decimal(2.0))
     assert isinstance(outputs.b, Decimal)
@@ -97,7 +97,7 @@ def test_interface_wrap_function_types():
         python.arg(name="a", type=float),
         python.arg(name="function", type=ty.Callable, default=func),
     ]
-    assert outputs == [python.out(name="b", type=float)]
+    assert outputs == [python.out(name="b", type=float, order=0)]
     intf = SampleDef(a=1)
     assert isinstance(intf.a, float)
     outputs = SampleDef.Outputs(b=2.0)
@@ -111,7 +111,6 @@ def test_decorated_function_interface():
         return a + b, a * b
 
     assert issubclass(SampleDef, PythonDef)
-    assert SampleDef.Task is PythonTask
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -124,36 +123,8 @@ def test_decorated_function_interface():
         ),
     ]
     assert outputs == [
-        python.out(name="c", type=float),
-        python.out(name="d", type=float),
-    ]
-    assert attrs.fields(SampleDef).function.default.__name__ == "SampleDef"
-    SampleDef.Outputs(c=1.0, d=2.0)
-
-
-def test_interface_with_function_implicit_outputs_from_return_stmt():
-    @python.define
-    def SampleDef(a: int, b: float) -> tuple[float, float]:
-        """Sample function for testing"""
-        c = a + b
-        d = a * b
-        return c, d
-
-    assert SampleDef.Task is PythonTask
-    inputs = sorted(list_fields(SampleDef), key=sort_key)
-    outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
-    assert inputs == [
-        python.arg(name="a", type=int),
-        python.arg(name="b", type=float),
-        python.arg(
-            name="function",
-            type=ty.Callable,
-            default=attrs.fields(SampleDef).function.default,
-        ),
-    ]
-    assert outputs == [
-        python.out(name="c", type=float),
-        python.out(name="d", type=float),
+        python.out(name="c", type=float, order=0),
+        python.out(name="d", type=float, order=1),
     ]
     assert attrs.fields(SampleDef).function.default.__name__ == "SampleDef"
     SampleDef.Outputs(c=1.0, d=2.0)
@@ -171,7 +142,6 @@ def test_interface_with_function_docstr():
         """
         return a + b, a * b
 
-    assert SampleDef.Task is PythonTask
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -184,8 +154,8 @@ def test_interface_with_function_docstr():
         ),
     ]
     assert outputs == [
-        python.out(name="c", type=float, help="Sum of a and b"),
-        python.out(name="d", type=float, help="product of a and b"),
+        python.out(name="c", type=float, help="Sum of a and b", order=0),
+        python.out(name="d", type=float, help="product of a and b", order=1),
     ]
     assert attrs.fields(SampleDef).function.default.__name__ == "SampleDef"
 
@@ -206,7 +176,6 @@ def test_interface_with_function_google_docstr():
         """
         return a + b, a * b
 
-    assert SampleDef.Task is PythonTask
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -219,8 +188,8 @@ def test_interface_with_function_google_docstr():
         ),
     ]
     assert outputs == [
-        python.out(name="c", type=float, help="Sum of a and b"),
-        python.out(name="d", type=float, help="Product of a and b"),
+        python.out(name="c", type=float, help="Sum of a and b", order=0),
+        python.out(name="d", type=float, help="Product of a and b", order=1),
     ]
     assert attrs.fields(SampleDef).function.default.__name__ == "SampleDef"
 
@@ -249,7 +218,6 @@ def test_interface_with_function_numpy_docstr():
         """
         return a + b, a * b
 
-    assert SampleDef.Task is PythonTask
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -262,8 +230,8 @@ def test_interface_with_function_numpy_docstr():
         ),
     ]
     assert outputs == [
-        python.out(name="c", type=float, help="Sum of a and b"),
-        python.out(name="d", type=float, help="Product of a and b"),
+        python.out(name="c", type=float, help="Sum of a and b", order=0),
+        python.out(name="d", type=float, help="Product of a and b", order=1),
     ]
     assert attrs.fields(SampleDef).function.default.__name__ == "SampleDef"
 
@@ -297,7 +265,6 @@ def test_interface_with_class():
             return a + b, a * b
 
     assert issubclass(SampleDef, PythonDef)
-    assert SampleDef.Task is PythonTask
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -310,8 +277,8 @@ def test_interface_with_class():
         ),
     ]
     assert outputs == [
-        python.out(name="c", type=float, help="Sum of a and b"),
-        python.out(name="d", type=float, help="Product of a and b"),
+        python.out(name="c", type=float, help="Sum of a and b", order=0),
+        python.out(name="d", type=float, help="Product of a and b", order=1),
     ]
     assert SampleDef.function.__name__ == "function"
     SampleDef(a=1)
@@ -368,7 +335,6 @@ def test_interface_with_class_no_auto_attribs():
         def function(a, b):
             return a + b, a * b
 
-    assert SampleDef.Task is PythonTask
     inputs = sorted(list_fields(SampleDef), key=sort_key)
     outputs = sorted(list_fields(SampleDef.Outputs), key=sort_key)
     assert inputs == [
@@ -381,8 +347,8 @@ def test_interface_with_class_no_auto_attribs():
         ),
     ]
     assert outputs == [
-        python.out(name="c", type=float, help="Sum of a and b"),
-        python.out(name="d", type=float, help="Product of a and b"),
+        python.out(name="c", type=float, help="Sum of a and b", order=0),
+        python.out(name="d", type=float, help="Product of a and b", order=1),
     ]
     assert SampleDef.function.__name__ == "function"
     SampleDef(a=1, b=2.0)
