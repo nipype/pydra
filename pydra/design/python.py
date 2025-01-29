@@ -80,7 +80,7 @@ class out(Out):
         outputs
     """
 
-    pass
+    order: int = attrs.field(default=None)
 
 
 @dataclass_transform(
@@ -160,6 +160,11 @@ def define(
         parsed_inputs["function"] = arg(
             name="function", type=ty.Callable, default=function
         )
+
+        # Set positions for outputs to allow for tuple unpacking
+        output: out
+        for i, output in enumerate(parsed_outputs.values()):
+            output.order = i
 
         interface = make_task_def(
             PythonDef,

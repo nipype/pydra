@@ -750,9 +750,9 @@ def test_typing_implicit_cast_from_super(tmp_path, generic_task, specific_task):
 
     in_file = MyFormatX.sample()
 
-    result = wf(in_file=in_file, plugin="serial")
+    outputs = wf(in_file=in_file, plugin="serial")
 
-    out_file: MyFormatX = result.output.out_file
+    out_file: MyFormatX = outputs.out_file
     assert type(out_file) is MyFormatX
     assert out_file.parent != in_file.parent
     assert type(out_file.header) is MyHeader
@@ -818,9 +818,9 @@ def test_typing_cast(tmp_path, specific_task, other_specific_task):
 
     in_file = MyFormatX.sample()
 
-    result = wf(in_file=in_file, plugin="serial")
+    outputs = wf(in_file=in_file, plugin="serial")
 
-    out_file: MyFormatX = result.output.out_file
+    out_file: MyFormatX = outputs.out_file
     assert type(out_file) is MyFormatX
     assert out_file.parent != in_file.parent
     assert type(out_file.header) is MyHeader

@@ -105,11 +105,12 @@ class arg(Arg):
             value is not None
             and self.type is not ty.Any
             and ty.get_origin(self.type) is not MultiInputObj
-            and not issubclass(self.type, ty.Iterable)
         ):
-            raise ValueError(
-                f"sep ({value!r}) can only be provided when type is iterable"
-            )
+            tp = ty.get_origin(self.type) or self.type
+            if not issubclass(tp, ty.Iterable):
+                raise ValueError(
+                    f"sep ({value!r}) can only be provided when type is iterable"
+                )
 
 
 @attrs.define(kw_only=True)
@@ -353,6 +354,12 @@ def define(
             if class_name[0].isdigit():
                 class_name = f"_{class_name}"
 
+            # Add in fields from base classes
+            parsed_inputs.update({n: getattr(ShellDef, n) for n in ShellDef.BASE_NAMES})
+            parsed_outputs.update(
+                {n: getattr(ShellOutputs, n) for n in ShellOutputs.BASE_NAMES}
+            )
+
         # Update the inputs (overriding inputs from base classes) with the executable
         # and the output argument fields
         parsed_inputs.update(
@@ -371,10 +378,12 @@ def define(
         # Set positions for the remaining inputs that don't have an explicit position
         position_stack = remaining_positions(list(parsed_inputs.values()))
         for inpt in parsed_inputs.values():
+            if inpt.name == "additional_args":
+                continue
             if inpt.position is None:
                 inpt.position = position_stack.pop(0)
 
-        interface = make_task_def(
+        defn = make_task_def(
             ShellDef,
             ShellOutputs,
             parsed_inputs,
@@ -384,7 +393,7 @@ def define(
             bases=bases,
             outputs_bases=outputs_bases,
         )
-        return interface
+        return defn
 
     # If a name is provided (and hence not being used as a decorator), check to see if
     # we are extending from a class that already defines an executable
@@ -479,17 +488,19 @@ def parse_command_line_template(
         outputs = {}
     parts = template.split()
     executable = []
-    for i, part in enumerate(parts, start=1):
+    start_args_index = 0
+    for part in parts:
         if part.startswith("<") or part.startswith("-"):
             break
         executable.append(part)
+        start_args_index += 1
     if not executable:
         raise ValueError(f"Found no executable in command line template: {template}")
     if len(executable) == 1:
         executable = executable[0]
-    if i == len(parts):
+    args_str = " ".join(parts[start_args_index:])
+    if not args_str:
         return executable, inputs, outputs
-    args_str = " ".join(parts[i - 1 :])
     tokens = re.split(r"\s+", args_str.strip())
     arg_pattern = r"<([:a-zA-Z0-9_,\|\-\.\/\+]+(?:\?|=[^>]+)?)>"
     opt_pattern = r"--?[a-zA-Z0-9_]+"
@@ -662,7 +673,7 @@ def remaining_positions(
     # Check for multiple positions
     positions = defaultdict(list)
     for arg in args:
-        if arg.name == "arguments":
+        if arg.name == "additional_args":
             continue
         if arg.position is not None:
             if arg.position >= 0:

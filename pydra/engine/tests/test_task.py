@@ -88,10 +88,10 @@ def test_annotated_func():
     # assert funky.inputs.hash == '17772c3aec9540a8dd3e187eecd2301a09c9a25c6e371ddd86e31e3a1ecfeefa'
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
-    result = funky()
+    outputs = funky()
     assert hasattr(result, "output")
-    assert hasattr(result.output, "out_out")
-    assert result.output.out_out == 1.1
+    assert hasattr(outputs, "out_out")
+    assert outputs.out_out == 1.1
 
     assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
     funky.result()  # should not recompute
@@ -100,7 +100,7 @@ def test_annotated_func():
     assert funky.result() is None
     funky()
     result = funky.result()
-    assert result.output.out_out == 2.1
+    assert outputs.out_out == 2.1
 
     help = funky.help(returnhelp=True)
     assert help == [
@@ -123,16 +123,16 @@ def test_annotated_func_dictreturn():
         return dict(sum=a + b, diff=a - b)
 
     task = testfunc(a=2, b=3)
-    result = task()
+    outputs = task()
 
     # Part of the annotation and returned, should be exposed to output.
-    assert result.output.sum == 5
+    assert outputs.sum == 5
 
     # Part of the annotation but not returned, should be coalesced to None
-    assert result.output.mul is None
+    assert outputs.mul is None
 
     # Not part of the annotation, should be discarded.
-    assert not hasattr(result.output, "diff")
+    assert not hasattr(outputs, "diff")
 
 
 def test_annotated_func_multreturn():
@@ -154,13 +154,13 @@ def test_annotated_func_multreturn():
     assert set(funky.output_names) == {"fractional", "integer"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
-    result = funky()
+    outputs = funky()
     assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
     assert hasattr(result, "output")
-    assert hasattr(result.output, "fractional")
-    assert result.output.fractional == 0.5
-    assert hasattr(result.output, "integer")
-    assert result.output.integer == 3
+    assert hasattr(outputs, "fractional")
+    assert outputs.fractional == 0.5
+    assert hasattr(outputs, "integer")
+    assert outputs.integer == 3
 
     help = funky.help(returnhelp=True)
     assert help == [
@@ -453,10 +453,10 @@ def test_halfannotated_func():
     assert set(funky.output_names) == {"out"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
-    result = funky()
+    outputs = funky()
     assert hasattr(result, "output")
-    assert hasattr(result.output, "out")
-    assert result.output.out == 30
+    assert hasattr(outputs, "out")
+    assert outputs.out == 30
 
     assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
 
@@ -465,7 +465,7 @@ def test_halfannotated_func():
     assert funky.result() is None
     funky()
     result = funky.result()
-    assert result.output.out == 31
+    assert outputs.out == 31
     help = funky.help(returnhelp=True)
 
     assert help == [
@@ -494,10 +494,10 @@ def test_halfannotated_func_multreturn():
     assert set(funky.output_names) == {"out1", "out2"}
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
-    result = funky()
+    outputs = funky()
     assert hasattr(result, "output")
-    assert hasattr(result.output, "out1")
-    assert result.output.out1 == 11
+    assert hasattr(outputs, "out1")
+    assert outputs.out1 == 11
 
     assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
 
@@ -506,7 +506,7 @@ def test_halfannotated_func_multreturn():
     assert funky.result() is None
     funky()
     result = funky.result()
-    assert result.output.out1 == 12
+    assert outputs.out1 == 12
     help = funky.help(returnhelp=True)
 
     assert help == [
@@ -533,8 +533,8 @@ def test_notannotated_func():
 
     result = natask._run()
     assert hasattr(result, "output")
-    assert hasattr(result.output, "out")
-    assert result.output.out == 20.2
+    assert hasattr(outputs, "out")
+    assert outputs.out == 20.2
 
 
 def test_notannotated_func_returnlist():
@@ -544,8 +544,8 @@ def test_notannotated_func_returnlist():
 
     natask = no_annots(c=17, d=3.2)
     result = natask._run()
-    assert hasattr(result.output, "out")
-    assert result.output.out == [17, 3.2]
+    assert hasattr(outputs, "out")
+    assert outputs.out == [17, 3.2]
 
 
 def test_halfannotated_func_multrun_returnlist():
@@ -556,10 +556,10 @@ def test_halfannotated_func_multrun_returnlist():
     natask = no_annots(c=17, d=3.2)
     result = natask._run()
 
-    assert hasattr(result.output, "out1")
-    assert hasattr(result.output, "out2")
-    assert result.output.out1 == [17, 3.2]
-    assert result.output.out2 == 20.2
+    assert hasattr(outputs, "out1")
+    assert hasattr(outputs, "out2")
+    assert outputs.out1 == [17, 3.2]
+    assert outputs.out2 == 20.2
 
 
 def test_notannotated_func_multreturn():
@@ -578,8 +578,8 @@ def test_notannotated_func_multreturn():
 
     result = natask._run()
     assert hasattr(result, "output")
-    assert hasattr(result.output, "out")
-    assert result.output.out == (20.2, 13.8)
+    assert hasattr(outputs, "out")
+    assert outputs.out == (20.2, 13.8)
 
 
 def test_input_spec_func_1():
@@ -1427,10 +1427,10 @@ def test_taskhooks_3(tmpdir, capsys):
     foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
 
     def myhook_postrun_task(task, result, *args):
-        print(f"postrun task hook, the result is {result.output.out}")
+        print(f"postrun task hook, the result is {outputs.out}")
 
     def myhook_postrun(task, result, *args):
-        print(f"postrun hook, the result is {result.output.out}")
+        print(f"postrun hook, the result is {outputs.out}")
 
     foo.hooks.post_run = myhook_postrun
     foo.hooks.post_run_task = myhook_postrun_task
@@ -1572,8 +1572,8 @@ def test_object_input():
     def testfunc(a: A):
         return a.x
 
-    result = testfunc(a=A(x=7))()
-    assert result.output.out == 7
+    outputs = testfunc(a=A(x=7))()
+    assert outputs.out == 7
 
 
 def test_argstr_formatting():

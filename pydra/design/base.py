@@ -54,7 +54,7 @@ EMPTY = _Empty.EMPTY  # To provide a blank placeholder for the default field
 
 def convert_default_value(value: ty.Any, self_: "Field") -> ty.Any:
     """Ensure the default value has been coerced into the correct type"""
-    if value is EMPTY:
+    if value is EMPTY or isinstance(value, attrs.Factory):
         return value
     return TypeParser[self_.type](self_.type, label=self_.name)(value)
 
@@ -197,6 +197,10 @@ class Field:
         """Check if all the requirements are satisfied by the inputs"""
         return any(req.satisfied(inputs) for req in self.requires)
 
+    @property
+    def mandatory(self):
+        return self.default is EMPTY
+
 
 @attrs.define(kw_only=True)
 class Arg(Field):
@@ -240,7 +244,7 @@ class Arg(Field):
     readonly: bool = False
 
 
-@attrs.define(kw_only=True, slots=False)
+@attrs.define(kw_only=True)
 class Out(Field):
     """Base class for output fields of task definitions
 
@@ -265,7 +269,7 @@ class Out(Field):
         The order of the output in the output list, allows for tuple unpacking of outputs
     """
 
-    order: int = attrs.field(default=None)
+    pass
 
 
 def extract_fields_from_class(
@@ -394,10 +398,6 @@ def make_task_def(
 
     spec_type._check_arg_refs(inputs, outputs)
 
-    # Set positions for outputs to allow for tuple unpacking
-    for i, output in enumerate(outputs.values()):
-        output.order = i
-
     if name is None and klass is not None:
         name = klass.__name__
     if reserved_names := [n for n in inputs if n in spec_type.RESERVED_FIELD_NAMES]:
@@ -405,11 +405,11 @@ def make_task_def(
             f"{reserved_names} are reserved and cannot be used for {spec_type} field names"
         )
     outputs_klass = make_outputs_spec(out_type, outputs, outputs_bases, name)
+    if issubclass(klass, TaskDef) and not issubclass(klass, spec_type):
+        raise ValueError(f"Cannot change type of definition {klass} to {spec_type}")
     if klass is None or not issubclass(klass, spec_type):
         if name is None:
             raise ValueError("name must be provided if klass is not")
-        if klass is not None and issubclass(klass, TaskDef):
-            raise ValueError(f"Cannot change type of definition {klass} to {spec_type}")
         bases = tuple(bases)
         # Ensure that TaskDef is a base class
         if not any(issubclass(b, spec_type) for b in bases):
@@ -518,16 +518,17 @@ def make_outputs_spec(
             field.name = name
             field.type = base.__annotations__.get(name, ty.Any)
         outputs.update(base_outputs)
+    assert all(o.name == n for n, o in outputs.items())
     outputs_klass = type(
         spec_name + "Outputs",
         tuple(outputs_bases),
         {
-            o.name: attrs.field(
+            n: attrs.field(
                 converter=make_converter(o, f"{spec_name}.Outputs"),
                 metadata={PYDRA_ATTR_METADATA: o},
                 **_get_default(o),
             )
-            for o in outputs.values()
+            for n, o in outputs.items()
         },
     )
     outputs_klass.__annotations__.update((o.name, o.type) for o in outputs.values())

@@ -1601,7 +1601,7 @@ def test_shell_cmd_inputspec_11(tmp_path):
         sub(wf)
     result = wf.result()
 
-    for out_file in result.output.out:
+    for out_file in outputs.out:
         assert out_file.fspath.name == "test1" or out_file.fspath.name == "test2"
 
 
@@ -4383,8 +4383,8 @@ def test_shell_cmd_optional_output_file1(tmp_path):
     )
     file1 = tmp_path / "file1.txt"
     file1.write_text("foo")
-    result = my_cp(input=file1, unused=False)
-    assert result.output.output.fspath.read_text() == "foo"
+    outputs = my_cp(input=file1, unused=False)
+    assert outputs.output.fspath.read_text() == "foo"
 
 
 def test_shell_cmd_optional_output_file2(tmp_path):
@@ -4421,8 +4421,8 @@ def test_shell_cmd_optional_output_file2(tmp_path):
     )
     file1 = tmp_path / "file1.txt"
     file1.write_text("foo")
-    result = my_cp(input=file1, output=True)
-    assert result.output.output.fspath.read_text() == "foo"
+    outputs = my_cp(input=file1, output=True)
+    assert outputs.output.fspath.read_text() == "foo"
 
     file2 = tmp_path / "file2.txt"
     file2.write_text("bar")

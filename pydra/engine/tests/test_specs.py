@@ -401,5 +401,5 @@ def test_wf_lzin_split():
     outer.add(inner.split(x=outer.lzin.x))
     outer.set_output(("out", outer.inner.lzout.out))
 
-    result = outer(x=[1, 2, 3])
-    assert result.output.out == StateArray([1, 2, 3])
+    outputs = outer(x=[1, 2, 3])
+    assert outputs.out == StateArray([1, 2, 3])

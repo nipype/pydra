@@ -704,16 +704,16 @@ def test_byo_worker():
 
     with Submitter(worker=BYOAddVarWorker, add_var=10) as sub:
         assert sub.plugin == "byo_add_env_var"
-        result = task1(submitter=sub)
+        result = sub(task1)
 
-    assert result.output.out == 11
+    assert outputs.out == 11
 
     task2 = add_env_var_task(x=2)
 
     with Submitter(worker="serial") as sub:
-        result = task2(submitter=sub)
+        result = sub(task2)
 
-    assert result.output.out == 2
+    assert outputs.out == 2
 
 
 def test_bad_builtin_worker():

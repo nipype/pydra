@@ -16,7 +16,7 @@ interf_inputs = [shell.arg(name="test", type=ty.Any, help="test")]
 interf_outputs = [shell.out(name="test_out", type=File, callable=find_txt)]
 
 
-Interf_1 = shell.define(inputs=interf_inputs, outputs=interf_outputs)
+Interf_1 = shell.define("testing", inputs=interf_inputs, outputs=interf_outputs)
 Interf_2 = shell.define("testing command", inputs=interf_inputs, outputs=interf_outputs)
 
 

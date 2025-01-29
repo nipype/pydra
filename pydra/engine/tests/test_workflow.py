@@ -112,9 +112,9 @@ def test_wf_dict_input_and_output_spec():
         exc_info, "Could not coerce object, 'bad-value', to any of the union types"
     )
 
-    result = wf()
-    assert result.output.a == "any-string"
-    assert result.output.b == {"foo": 1, "bar": False}
+    outputs = wf()
+    assert outputs.a == "any-string"
+    assert outputs.b == {"foo": 1, "bar": False}
 
 
 def test_wf_name_conflict1():
@@ -3931,11 +3931,11 @@ def test_workflow_combine1(tmpdir):
         }
     )
     wf1.cache_dir = tmpdir
-    result = wf1()
+    outputs = wf1()
 
-    assert result.output.out_pow == [1, 1, 4, 8]
-    assert result.output.out_iden1 == [[1, 4], [1, 8]]
-    assert result.output.out_iden2 == [[1, 4], [1, 8]]
+    assert outputs.out_pow == [1, 1, 4, 8]
+    assert outputs.out_iden1 == [[1, 4], [1, 8]]
+    assert outputs.out_iden2 == [[1, 4], [1, 8]]
 
 
 def test_workflow_combine2(tmpdir):
@@ -3946,10 +3946,10 @@ def test_workflow_combine2(tmpdir):
     wf1.add(identity(name="identity", x=wf1.power.lzout.out).combine("power.b"))
     wf1.set_output({"out_pow": wf1.power.lzout.out, "out_iden": wf1.identity.lzout.out})
     wf1.cache_dir = tmpdir
-    result = wf1()
+    outputs = wf1()
 
-    assert result.output.out_pow == [[1, 4], [1, 8]]
-    assert result.output.out_iden == [[1, 4], [1, 8]]
+    assert outputs.out_pow == [[1, 4], [1, 8]]
+    assert outputs.out_iden == [[1, 4], [1, 8]]
 
 
 # testing lzout.all to collect all of the results and let PythonTask deal with it

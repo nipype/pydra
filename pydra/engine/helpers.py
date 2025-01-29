@@ -164,7 +164,7 @@ def save(
         if result:
             if task_path.name.startswith("Workflow") and result.outputs is not None:
                 # copy files to the workflow directory
-                result = copyfile_workflow(wf_path=task_path, result=result)
+                result.outputs = copyfile_workflow(wf_path=task_path, result=result)
             with (task_path / f"{name_prefix}_result.pklz").open("wb") as fp:
                 cp.dump(result, fp)
         if task:
@@ -172,7 +172,7 @@ def save(
                 cp.dump(task, fp)
 
 
-def copyfile_workflow(wf_path: os.PathLike, result):
+def copyfile_workflow(wf_path: os.PathLike, result: "Result") -> "Result":
     """if file in the wf results, the file will be copied to the workflow directory"""
     from .helpers_file import copy_nested_files
 

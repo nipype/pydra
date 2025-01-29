@@ -109,12 +109,6 @@ class TaskOutputs:
                 f"{self} doesn't have an attribute {name_or_index}"
             ) from None
 
-    def __iter__(self) -> ty.Generator[ty.Any, None, None]:
-        """Iterate through all the values in the definition, allows for tuple unpacking"""
-        fields = sorted(attrs_fields(self), key=attrgetter("order"))
-        for field in fields:
-            yield getattr(self, field.name)
-
 
 OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
 
@@ -427,7 +421,7 @@ class TaskDef(ty.Generic[OutputsType]):
         field: Arg
         errors = []
         for field in list_fields(self):
-            value = getattr(self, field.name)
+            value = self[field.name]
 
             if is_lazy(value):
                 continue
@@ -437,7 +431,7 @@ class TaskDef(ty.Generic[OutputsType]):
 
             # Collect alternative fields associated with this field.
             if field.xor:
-                mutually_exclusive = {name: getattr(self, name) for name in field.xor}
+                mutually_exclusive = {name: self[name] for name in field.xor}
                 are_set = [
                     f"{n}={v!r}" for n, v in mutually_exclusive.items() if v is not None
                 ]
@@ -446,7 +440,7 @@ class TaskDef(ty.Generic[OutputsType]):
                         f"Mutually exclusive fields {field.xor} are set together: "
                         + ", ".join(are_set)
                     )
-                elif not are_set:
+                elif field.mandatory and not are_set:
                     errors.append(
                         f"At least one of the mutually exclusive fields {field.xor} "
                         f"should be set"
@@ -588,6 +582,12 @@ class RuntimeSpec:
 
 class PythonOutputs(TaskOutputs):
 
+    def __iter__(self) -> ty.Generator[ty.Any, None, None]:
+        """Iterate through all the values in the definition, allows for tuple unpacking"""
+        fields = sorted(attrs_fields(self), key=attrgetter("order"))
+        for field in fields:
+            yield getattr(self, field.name)
+
     @classmethod
     def _from_task(cls, task: "Task[PythonDef]") -> Self:
         """Collect the outputs of a task from a combination of the provided inputs,
@@ -725,9 +725,11 @@ STDERR_HELP = """The standard error stream produced by the command."""
 class ShellOutputs(TaskOutputs):
     """Output definition of a generic shell process."""
 
-    return_code: int = shell.out(help=RETURN_CODE_HELP)
-    stdout: str = shell.out(help=STDOUT_HELP)
-    stderr: str = shell.out(help=STDERR_HELP)
+    BASE_NAMES = ["return_code", "stdout", "stderr"]
+
+    return_code: int = shell.out(name="return_code", type=int, help=RETURN_CODE_HELP)
+    stdout: str = shell.out(name="stdout", type=str, help=STDOUT_HELP)
+    stderr: str = shell.out(name="stderr", type=str, help=STDERR_HELP)
 
     @classmethod
     def _from_task(cls, task: "Task[ShellDef]") -> Self:
@@ -882,8 +884,12 @@ ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
 class ShellDef(TaskDef[ShellOutputsType]):
 
-    arguments: ty.List[str] = shell.arg(
+    BASE_NAMES = ["additional_args"]
+
+    additional_args: list[str] = shell.arg(
+        name="additional_args",
         default=attrs.Factory(list),
+        type=list[str],
         sep=" ",
         help="Additional free-form arguments to append to the end of the command.",
     )
@@ -937,7 +943,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
                 continue
             if name == "executable":
                 pos_args.append(self._command_shelltask_executable(field, value))
-            elif name == "arguments":
+            elif name == "additional_args":
                 continue
             elif name == "args":
                 pos_val = self._command_shelltask_args(field, value)
@@ -967,7 +973,7 @@ class ShellDef(TaskDef[ShellOutputsType]):
         cmd_args = position_sort(pos_args)
         # pos_args values are each a list of arguments, so concatenate lists after sorting
         command_args = sum(cmd_args, [])
-        command_args += self.arguments
+        command_args += inputs["additional_args"]
         return command_args
 
     def _command_shelltask_executable(
