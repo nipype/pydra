@@ -4,11 +4,8 @@ import attr
 import pytest
 
 from ..task import ShellTask
-from pydra.engine.specs import (
-    ShellOutputs,
-    ShellDef,
-    File,
-)
+from pydra.engine.specs import ShellOutputs, ShellDef
+from fileformats.generic import File
 from pydra.design import shell
 
 

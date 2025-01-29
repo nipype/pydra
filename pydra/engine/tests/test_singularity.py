@@ -5,7 +5,8 @@ import attr
 
 from ..task import ShellTask
 from ..submitter import Submitter
-from ..specs import ShellOutputs, File, ShellDef
+from ..specs import ShellOutputs, ShellDef
+from fileformats.generic import File
 from ..environments import Singularity
 
 

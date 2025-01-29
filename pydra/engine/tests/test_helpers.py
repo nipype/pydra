@@ -15,7 +15,6 @@ from ..helpers import (
     save,
     load_and_run,
     position_sort,
-    parse_copyfile,
     parse_format_string,
 )
 from pydra.utils.hash import hash_function

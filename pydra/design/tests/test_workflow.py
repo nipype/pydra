@@ -2,8 +2,7 @@ from operator import attrgetter
 from copy import copy
 import pytest
 import attrs
-from pydra.engine.workflow.base import Workflow
-from pydra.engine.workflow.lazy import LazyInField, LazyOutField
+from pydra.engine.lazy import LazyInField, LazyOutField
 import typing as ty
 from pydra.design import shell, python, workflow
 from pydra.engine.helpers import list_fields

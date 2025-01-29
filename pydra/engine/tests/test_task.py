@@ -18,8 +18,8 @@ from pydra.utils.typing import (
 )
 from ..specs import (
     ShellDef,
-    File,
 )
+from fileformats.generic import File
 from pydra.utils.hash import hash_function
 
 

@@ -5,14 +5,13 @@ import attrs
 
 # from copy import deepcopy
 import time
-
+from fileformats.generic import File
 from ..specs import (
-    File,
     Runtime,
     Result,
     ShellDef,
 )
-from pydra.engine.workflow.lazy import (
+from pydra.engine.lazy import (
     LazyInField,
     LazyOutField,
 )

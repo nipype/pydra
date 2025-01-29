@@ -3,9 +3,7 @@ from pathlib import Path
 from ..environments import Native, Docker, Singularity
 from ..task import ShellTask
 from ..submitter import Submitter
-from ..specs import (
-    File,
-)
+from fileformats.generic import File
 from pydra.design import shell
 from .utils import no_win, need_docker, need_singularity
 import pytest
