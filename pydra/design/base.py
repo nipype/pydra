@@ -273,6 +273,8 @@ class Out(Field):
 
 
 def extract_fields_from_class(
+    spec_type: type["TaskDef"],
+    outputs_type: type["TaskOutputs"],
     klass: type,
     arg_type: type[Arg],
     out_type: type[Out],
@@ -341,6 +343,12 @@ def extract_fields_from_class(
                     )
         return fields_dict
 
+    if not issubclass(klass, spec_type):
+        raise ValueError(
+            f"The canonical form of {spec_type.__module__.split('.')[-1]} task definitions, "
+            f"{klass}, must inherit from {spec_type}"
+        )
+
     inputs = get_fields(klass, arg_type, auto_attribs, input_helps)
 
     try:
@@ -349,6 +357,12 @@ def extract_fields_from_class(
         raise AttributeError(
             f"Nested Outputs class not found in {klass.__name__}"
         ) from None
+    if not issubclass(outputs_klass, outputs_type):
+        raise ValueError(
+            f"The canonical form of {spec_type.__module__.split('.')[-1]} task definitions, "
+            f"{klass}, must inherit from {spec_type}"
+        )
+
     output_helps, _ = parse_doc_string(outputs_klass.__doc__)
     outputs = get_fields(outputs_klass, out_type, auto_attribs, output_helps)
 
@@ -394,8 +408,6 @@ def make_task_def(
     klass : type
         The class created using the attrs package
     """
-    from pydra.engine.specs import TaskDef
-
     spec_type._check_arg_refs(inputs, outputs)
 
     if name is None and klass is not None:
@@ -405,9 +417,7 @@ def make_task_def(
             f"{reserved_names} are reserved and cannot be used for {spec_type} field names"
         )
     outputs_klass = make_outputs_spec(out_type, outputs, outputs_bases, name)
-    if issubclass(klass, TaskDef) and not issubclass(klass, spec_type):
-        raise ValueError(f"Cannot change type of definition {klass} to {spec_type}")
-    if klass is None or not issubclass(klass, spec_type):
+    if klass is None:
         if name is None:
             raise ValueError("name must be provided if klass is not")
         bases = tuple(bases)

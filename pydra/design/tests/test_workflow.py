@@ -7,6 +7,7 @@ import typing as ty
 from pydra.design import shell, python, workflow
 from pydra.engine.helpers import list_fields
 from pydra.engine.specs import WorkflowDef, WorkflowOutputs
+from pydra.engine.core import Workflow
 from fileformats import video, image
 
 # NB: We use PascalCase for interfaces and workflow functions as it is translated into a class
@@ -72,7 +73,7 @@ def test_workflow():
 
 def test_shell_workflow():
 
-    @workflow.define
+    @workflow.define(outputs=["output_video"])
     def MyTestShellWorkflow(
         input_video: video.Mp4,
         watermark: image.Png,
@@ -98,7 +99,7 @@ def test_shell_workflow():
             name="resize",
         ).out_video
 
-        return output_video  # test implicit detection of output name
+        return output_video
 
     constructor = MyTestShellWorkflow().constructor
     assert constructor.__name__ == "MyTestShellWorkflow"
@@ -330,7 +331,7 @@ def test_workflow_split_combine1():
 
     @workflow.define
     def MyTestWorkflow(a: list[int], b: list[float]) -> list[float]:
-        mul = workflow.add(Mul()).split(x=a, y=b).combine("x")
+        mul = workflow.add(Mul().split(x=a, y=b).combine("x"))
         sum = workflow.add(Sum(x=mul.out))
         return sum.out
 
@@ -354,8 +355,8 @@ def test_workflow_split_combine2():
 
     @workflow.define
     def MyTestWorkflow(a: list[int], b: list[float], c: float) -> list[float]:
-        mul = workflow.add(Mul()).split(x=a, y=b)
-        add = workflow.add(Add(x=mul.out, y=c)).combine("Mul.x")
+        mul = workflow.add(Mul().split(x=a, y=b))
+        add = workflow.add(Add(x=mul.out, y=c).combine("Mul.x"))
         sum = workflow.add(Sum(x=add.out))
         return sum.out
 
@@ -367,32 +368,6 @@ def test_workflow_split_combine2():
     assert wf.outputs.out == LazyOutField(
         node=wf["Sum"], field="out", type=list[float], type_checked=True
     )
-
-
-def test_workflow_split_after_access_fail():
-    """It isn't possible to split/combine a node after one of its outputs has been type
-    checked as this changes the type of the outputs and renders the type checking
-    invalid
-    """
-
-    @python.define
-    def Add(x: float, y: float) -> float:
-        return x + y
-
-    @python.define
-    def Mul(x: float, y: float) -> float:
-        return x * y
-
-    @workflow.define
-    def MyTestWorkflow(a: list[int], b: list[float]) -> list[float]:
-
-        add = workflow.add(Add())
-        mul = workflow.add(Mul(x=add.out, y=2.0))  # << Add.out is accessed here
-        add.split(x=a, y=b).combine("x")
-        return mul.out
-
-    with pytest.raises(RuntimeError, match="Outputs .* have already been accessed"):
-        Workflow.construct(MyTestWorkflow(a=[1, 2, 3], b=[1.0, 10.0, 100.0]))
 
 
 def test_nested_workflow():
@@ -434,7 +409,7 @@ def test_nested_workflow():
         node=wf["NestedWorkflow"], field="out", type=float, type_checked=True
     )
     assert list(wf.node_names) == ["Divide", "NestedWorkflow"]
-    nwf_spec = copy(wf["NestedWorkflow"]._spec)
+    nwf_spec = copy(wf["NestedWorkflow"]._definition)
     nwf_spec.a = 100.0
     nwf = Workflow.construct(nwf_spec)
     nwf.inputs.a == 100.0

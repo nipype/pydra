@@ -645,7 +645,7 @@ def A(request):
     if request.param == "static":
 
         @shell.define
-        class A:
+        class A(ShellDef["A.Outputs"]):
             """An example shell interface described in a class
 
             Parameters
@@ -658,7 +658,7 @@ def A(request):
 
             x: File = shell.arg(argstr="", position=1)
 
-            class Outputs:
+            class Outputs(ShellOutputs):
                 """The outputs of the example shell interface
 
                 Parameters
@@ -701,14 +701,14 @@ def test_shell_output_path_template(A):
 
 def test_shell_output_field_name_static():
     @shell.define
-    class A:
+    class A(ShellDef["A.Outputs"]):
         """Copy a file"""
 
         executable = "cp"
 
         x: File = shell.arg(help="an input file", argstr="", position=1)
 
-        class Outputs:
+        class Outputs(ShellOutputs):
             y: File = shell.outarg(
                 help="the output file",
                 path_template="{x}_out",
@@ -717,6 +717,7 @@ def test_shell_output_field_name_static():
             )
 
     assert sorted([a.name for a in attrs.fields(A) if not a.name.startswith("_")]) == [
+        "additional_args",
         "executable",
         "x",
         "y",
@@ -839,7 +840,7 @@ def test_shell_bases_static(A, tmp_path):
 
         y: text.Plain = shell.arg()  # Override the output arg in A
 
-        class Outputs:
+        class Outputs(ShellOutputs):
             """
             Args:
                 out_file_size: size of the output directory
@@ -913,12 +914,12 @@ def test_shell_inputs_outputs_bases_dynamic(tmp_path):
 
 def test_shell_inputs_outputs_bases_static(tmp_path):
     @shell.define
-    class A:
+    class A(ShellDef["A.Outputs"]):
         executable = "ls"
 
         directory: Directory = shell.arg(help="input directory", argstr="", position=-1)
 
-        class Outputs:
+        class Outputs(ShellOutputs):
             entries: list = shell.out(
                 help="list of entries returned by ls command",
                 callable=list_entries,

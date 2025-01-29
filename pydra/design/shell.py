@@ -320,7 +320,7 @@ def define(
             class_name = klass.__name__
             check_explicit_fields_are_none(klass, inputs, outputs)
             parsed_inputs, parsed_outputs = extract_fields_from_class(
-                klass, arg, out, auto_attribs
+                ShellDef, ShellOutputs, klass, arg, out, auto_attribs
             )
         else:
             if not isinstance(wrapped, str):

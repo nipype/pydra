@@ -4,9 +4,8 @@ from decimal import Decimal
 import attrs
 import pytest
 from pydra.engine.helpers import list_fields
-from pydra.engine.specs import PythonDef
+from pydra.engine.specs import PythonDef, PythonOutputs
 from pydra.design import python
-from pydra.engine.task import PythonTask
 
 
 sort_key = attrgetter("name")
@@ -238,7 +237,7 @@ def test_interface_with_function_numpy_docstr():
 
 def test_interface_with_class():
     @python.define
-    class SampleDef:
+    class SampleDef(PythonDef["SampleDef.Outputs"]):
         """Sample class for testing
 
         Args:
@@ -250,7 +249,7 @@ def test_interface_with_class():
         a: int
         b: float = 2.0
 
-        class Outputs:
+        class Outputs(PythonOutputs):
             """
             Args:
                 c: Sum of a and b
@@ -300,7 +299,7 @@ def test_interface_with_inheritance():
         a: int
         b: float
 
-        class Outputs:
+        class Outputs(PythonOutputs):
             """
             Args:
                 c: Sum of a and b
@@ -319,13 +318,13 @@ def test_interface_with_inheritance():
 
 def test_interface_with_class_no_auto_attribs():
     @python.define(auto_attribs=False)
-    class SampleDef:
+    class SampleDef(PythonDef["SampleDef.Outputs"]):
         a: int = python.arg(help="First input to be inputted")
         b: float = python.arg(help="Second input")
 
         x: int
 
-        class Outputs:
+        class Outputs(PythonOutputs):
             c: float = python.out(help="Sum of a and b")
             d: float = python.out(help="Product of a and b")
 
