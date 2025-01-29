@@ -14,6 +14,8 @@ user_cache_dir = Path(
     )
 )
 
+default_run_cache_dir = user_cache_dir / "run-cache"
+
 
 def add_exc_note(e: Exception, note: str) -> Exception:
     """Adds a note to an exception in a Python <3.11 compatible way

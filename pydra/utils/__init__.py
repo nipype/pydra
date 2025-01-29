@@ -1,1 +1,6 @@
-from .misc import user_cache_dir, add_exc_note, exc_info_matches  # noqa: F401
+from .misc import (  # noqa: F401
+    user_cache_dir,
+    default_run_cache_dir,
+    add_exc_note,
+    exc_info_matches,
+)

@@ -21,7 +21,7 @@ from pydra.utils.typing import StateArray
 from .audit import Audit
 from .core import Task
 from pydra.utils.messenger import AuditFlag, Messenger
-from pydra.utils import user_cache_dir
+from pydra.utils import default_run_cache_dir
 from pydra.design import workflow
 import logging
 
@@ -104,7 +104,7 @@ class Submitter:
             develop=develop,
         )
         if cache_dir is None:
-            cache_dir = user_cache_dir / "run-cache"
+            cache_dir = default_run_cache_dir
             cache_dir.mkdir(parents=True, exist_ok=True)
         elif not cache_dir.exists():
             raise ValueError(f"Cache directory {str(cache_dir)!r} does not exist")
