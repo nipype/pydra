@@ -200,7 +200,7 @@ def this() -> "Workflow":
     """
     from pydra.engine.core import Workflow
 
-    return Workflow.under_construction
+    return Workflow.under_construction()
 
 
 OutputsType = ty.TypeVar("OutputsType", bound="TaskOutputs")
