@@ -30,40 +30,32 @@ no_win = pytest.mark.skipif(
 
 
 @python.define
-def funaddtwo(a):
+def FunAddTwo(a):
     return a + 2
 
 
 def test_output():
-    nn = funaddtwo(a=3)
-    res = nn._run()
-    assert res.output.out == 5
-
-
-def test_name_conflict():
-    """raise error if task name conflicts with a class attribute or method"""
-    with pytest.raises(ValueError) as excinfo1:
-        funaddtwo(name="split", a=3)
-    assert "Cannot use names of attributes or methods" in str(excinfo1.value)
-    with pytest.raises(ValueError) as excinfo2:
-        funaddtwo(name="checksum", a=3)
-    assert "Cannot use names of attributes or methods" in str(excinfo2.value)
+    nn = FunAddTwo(a=3)
+    outputs = nn()
+    assert outputs.out == 5
 
 
 def test_numpy():
     """checking if mark.task works for numpy functions"""
     np = pytest.importorskip("numpy")
-    fft = mark.annotate({"a": np.ndarray, "return": np.ndarray})(np.fft.fft)
-    fft = mark.task(fft)()
+    FFT = python.define(inputs={"a": np.ndarray}, outputs={"out": np.ndarray})(
+        np.fft.fft
+    )
+
     arr = np.array([[1, 10], [2, 20]])
-    fft.definition.a = arr
-    res = fft()
-    assert np.allclose(np.fft.fft(arr), res.output.out)
+    fft = FFT(a=arr)
+    outputs = fft()
+    assert np.allclose(np.fft.fft(arr), outputs.out)
 
 
 @pytest.mark.xfail(reason="cp.dumps(func) depends on the system/setup, TODO!!")
 def test_checksum():
-    nn = funaddtwo(a=3)
+    nn = FunAddTwo(a=3)
     assert (
         nn.checksum
         == "PythonTask_abb4e7cc03b13d0e73884b87d142ed5deae6a312275187a9d8df54407317d7d3"
@@ -71,10 +63,8 @@ def test_checksum():
 
 
 def test_annotated_func():
-    @python.define
-    def testfunc(
-        a: int, b: float = 0.1
-    ) -> ty.NamedTuple("Output", [("out_out", float)]):
+    @python.define(outputs=["out_out"])
+    def testfunc(a: int, b: float = 0.1) -> float:
         return a + b
 
     funky = testfunc(a=1)
@@ -89,7 +79,6 @@ def test_annotated_func():
     assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
 
     outputs = funky()
-    assert hasattr(result, "output")
     assert hasattr(outputs, "out_out")
     assert outputs.out_out == 1.1
 
@@ -1319,18 +1308,18 @@ def test_shell_cmd(tmpdir):
 
 def test_functask_callable(tmpdir):
     # no submitter or plugin
-    foo = funaddtwo(a=1)
+    foo = FunAddTwo(a=1)
     res = foo()
     assert res.output.out == 3
     assert foo.plugin is None
 
     # plugin
-    bar = funaddtwo(a=2)
+    bar = FunAddTwo(a=2)
     res = bar(plugin="cf")
     assert res.output.out == 4
     assert bar.plugin is None
 
-    foo2 = funaddtwo(a=3)
+    foo2 = FunAddTwo(a=3)
     foo2.plugin = "cf"
     res = foo2()
     assert res.output.out == 5
@@ -1338,7 +1327,7 @@ def test_functask_callable(tmpdir):
 
 
 def test_taskhooks_1(tmpdir, capsys):
-    foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
+    foo = FunAddTwo(name="foo", a=1, cache_dir=tmpdir)
     assert foo.hooks
     # ensure all hooks are defined
     for attr in ("pre_run", "post_run", "pre_run_task", "post_run_task"):
@@ -1369,7 +1358,7 @@ def test_taskhooks_1(tmpdir, capsys):
     del captured
 
     # hooks are independent across tasks by default
-    bar = funaddtwo(name="bar", a=3, cache_dir=tmpdir)
+    bar = FunAddTwo(name="bar", a=3, cache_dir=tmpdir)
     assert bar.hooks is not foo.hooks
     # but can be shared across tasks
     bar.hooks = foo.hooks
@@ -1393,7 +1382,7 @@ def test_taskhooks_1(tmpdir, capsys):
 
 def test_taskhooks_2(tmpdir, capsys):
     """checking order of the hooks; using task's attributes"""
-    foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
+    foo = FunAddTwo(name="foo", a=1, cache_dir=tmpdir)
 
     def myhook_prerun(task, *args):
         print(f"i. prerun hook was called from {task.name}")
@@ -1424,7 +1413,7 @@ def test_taskhooks_2(tmpdir, capsys):
 
 def test_taskhooks_3(tmpdir, capsys):
     """checking results in the post run hooks"""
-    foo = funaddtwo(name="foo", a=1, cache_dir=tmpdir)
+    foo = FunAddTwo(name="foo", a=1, cache_dir=tmpdir)
 
     def myhook_postrun_task(task, result, *args):
         print(f"postrun task hook, the result is {outputs.out}")
@@ -1445,7 +1434,7 @@ def test_taskhooks_3(tmpdir, capsys):
 
 def test_taskhooks_4(tmpdir, capsys):
     """task raises an error: postrun task should be called, postrun shouldn't be called"""
-    foo = funaddtwo(name="foo", a="one", cache_dir=tmpdir)
+    foo = FunAddTwo(name="foo", a="one", cache_dir=tmpdir)
 
     def myhook_postrun_task(task, result, *args):
         print(f"postrun task hook was called, result object is {result}")
