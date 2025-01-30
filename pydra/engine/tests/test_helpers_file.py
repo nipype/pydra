@@ -1,12 +1,11 @@
 import typing as ty
 import sys
 from pathlib import Path
-import attr
 from unittest.mock import Mock
 import pytest
 from fileformats.generic import File
-from ..specs import ShellDef
-from ..task import ShellTask
+from pydra.engine.specs import ShellDef, ShellOutputs
+from pydra.design import shell
 from ..helpers_file import (
     ensure_list,
     MountIndentifier,
@@ -354,52 +353,34 @@ def test_output_template(tmp_path):
     filename = str(tmp_path / "file.txt")
     with open(filename, "w") as f:
         f.write("hello from pydra")
-    in_file = File(filename)
 
-    my_input_spec = SpecInfo(
-        name="Input",
-        fields=[
-            (
-                "in_file",
-                attr.ib(
-                    type=File,
-                    metadata={
-                        "mandatory": True,
-                        "position": 1,
-                        "argstr": "",
-                        "help": "input file",
-                    },
-                ),
-            ),
-            (
-                "optional",
-                attr.ib(
-                    type=ty.Union[Path, bool],
-                    default=False,
-                    metadata={
-                        "position": 2,
-                        "argstr": "--opt",
-                        "output_file_template": "{in_file}.out",
-                        "help": "optional file output",
-                    },
-                ),
-            ),
-        ],
-        bases=(ShellDef,),
-    )
+    @shell.define
+    class MyCommand(ShellDef["MyCommand.Outputs"]):
+        in_file: File = shell.arg(
+            position=1,
+            argstr="",
+            help="input file",
+        )
+        optional: File | None = shell.outarg(
+            position=2,
+            argstr="--opt",
+            path_template="{in_file}.out",
+            help="optional file output",
+        )
 
-    class MyCommand(ShellTask):
+        class Outputs(ShellOutputs):
+            pass
+
         executable = "my"
-        input_spec = my_input_spec
 
-    task = MyCommand(in_file=filename)
-    assert task.cmdline == f"my {filename}"
-    task.definition.optional = True
-    assert task.cmdline == f"my {filename} --opt {task.output_dir / 'file.out'}"
-    task.definition.optional = False
-    assert task.cmdline == f"my {filename}"
-    task.definition.optional = "custom-file-out.txt"
-    assert task.cmdline == f"my {filename} --opt custom-file-out.txt"
+    defn = MyCommand(in_file=filename)
+    assert defn.cmdline == f"my {filename}"
+    defn.optional = True
+    assert defn.cmdline == f"my {filename} --opt 'file.out'"
+    defn.optional = False
+    assert defn.cmdline == f"my {filename}"
+    defn.optional = "custom-file-out.txt"
+    assert defn.cmdline == f"my {filename} --opt custom-file-out.txt"
 
 
 def test_template_formatting(tmp_path):

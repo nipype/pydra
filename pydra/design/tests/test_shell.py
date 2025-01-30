@@ -435,6 +435,7 @@ def test_interface_template_with_type_overrides():
             name="int_arg",
             argstr="--int-arg",
             type=int | None,
+            default=None,
             position=5,
         ),
         shell.arg(
