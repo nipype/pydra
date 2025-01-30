@@ -1,25 +1,31 @@
 import pytest
 import random
 import typing as ty
-
+import inspect
+import re
+import ast
 from pydra.design import python
-from pydra.engine.helpers import list_fields
+from pydra.engine.specs import PythonDef, PythonOutputs
+from pydra.engine.helpers import list_fields, attrs_values
+from pydra.utils.hash import bytes_repr
 
 
 def test_task_equivalence():
-    def add_two(a):
+    """testing equivalence of tasks created in different ways"""
+
+    def add_two(a: int) -> int:
         return a + 2
 
     @python.define
-    class Canonical:
+    class Canonical(PythonDef["Canonical.Outputs"]):
 
         a: ty.Any
 
-        class Outputs:
+        class Outputs(PythonOutputs):
             out: ty.Any
 
         @staticmethod
-        def function(a):
+        def function(a: int) -> int:
             return a + 2
 
     canonical = Canonical(a=3)
@@ -27,19 +33,20 @@ def test_task_equivalence():
     decorated1 = python.define(add_two)(a=3)
 
     @python.define
-    def addtwo(a):
+    def addtwo(a: int) -> int:
         return a + 2
 
     decorated2 = addtwo(a=3)
 
-    assert canonical.checksum == decorated1.checksum
+    assert canonical._compute_hashes()[1] == decorated1._compute_hashes()[1]
+    assert canonical._compute_hashes()[1] == decorated2._compute_hashes()[1]
 
-    c_res = canonical._run()
-    d1_res = decorated1._run()
-    d2_res = decorated2._run()
+    c_outputs = canonical()
+    d1_outputs = decorated1()
+    d2_outputs = decorated2()
 
-    assert c_res.output.hash == d1_res.output.hash
-    assert c_res.output.hash == d2_res.output.hash
+    assert attrs_values(c_outputs) == attrs_values(d1_outputs)
+    assert attrs_values(c_outputs) == attrs_values(d2_outputs)
 
 
 def test_annotation_equivalence_1():
@@ -48,26 +55,29 @@ def test_annotation_equivalence_1():
     def direct(a: int) -> int:
         return a + 2
 
+    Direct = python.define(direct)
+
     @python.define(outputs={"out": int})
-    def partial(a: int):
+    def Partial(a: int):
         return a + 2
 
-    @python.define(inputs={"a": int}, outputs={"return": int})
-    def indirect(a):
+    @python.define(inputs={"a": int}, outputs={"out": int})
+    def Indirect(a):
         return a + 2
 
-    # checking if the annotations are equivalent
-    assert direct.__annotations__ == partial.__annotations__
-    assert direct.__annotations__ == indirect.__annotations__
+    assert list_fields(Direct) == list_fields(Partial)
+    assert list_fields(Direct) == list_fields(Indirect)
+
+    assert list_fields(Direct.Outputs) == list_fields(Partial.Outputs)
+    assert list_fields(Direct.Outputs) == list_fields(Indirect.Outputs)
 
     # Run functions to ensure behavior is unaffected
     a = random.randint(0, (1 << 32) - 3)
-    assert direct(a) == partial(a)
-    assert direct(a) == indirect(a)
+    assert attrs_values(Direct(a)) == attrs_values(Partial(a))
+    assert attrs_values(Direct(a)) == attrs_values(Indirect(a))
 
     # checking if the annotation is properly converted to output_spec if used in task
-    task_direct = python.define(direct)()
-    assert list_fields(task_direct.Outputs)[0] == python.out(name="out", type=int)
+    assert list_fields(Direct.Outputs)[0] == python.out(name="out", type=int)
 
 
 def test_annotation_equivalence_2():
