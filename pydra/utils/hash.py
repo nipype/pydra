@@ -2,6 +2,8 @@
 
 import sys
 import os
+import re
+import ast
 import struct
 import inspect
 from datetime import datetime
@@ -550,7 +552,6 @@ def bytes_repr_code(obj: types.CodeType, cache: Cache) -> Iterator[bytes]:
             obj.co_filename,
             obj.co_freevars,
             obj.co_name,
-            obj.co_firstlineno,
             obj.co_lnotab,
             obj.co_cellvars,
         ),
@@ -562,9 +563,30 @@ def bytes_repr_code(obj: types.CodeType, cache: Cache) -> Iterator[bytes]:
 @register_serializer
 def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes]:
     """Serialize a function, attempting to use the AST of the source code if available
-    otherwise falling back to using cloudpickle to serialize the byte-code of the
-    function."""
-    yield from bytes_repr(obj.__code__, cache)
+    otherwise falling back to the byte-code of the function."""
+    yield b"function:("
+    try:
+        src = inspect.getsource(obj)
+    except OSError:
+        # Fallback to using the bytes representation of the code object
+        yield from bytes_repr(obj.__code__, cache)
+    else:
+
+        def dump_ast(node: ast.AST) -> bytes:
+            return ast.dump(
+                node, annotate_fields=False, include_attributes=False
+            ).encode()
+
+        indent = re.match(r"(\s*)", src).group(1)
+        if indent:
+            src = re.sub(f"^{indent}", "", src, flags=re.MULTILINE)
+        func_ast = ast.parse(src).body[0]
+        yield dump_ast(func_ast.args)
+        if func_ast.returns:
+            yield dump_ast(func_ast.returns)
+        for stmt in func_ast.body:
+            yield dump_ast(stmt)
+    yield b")"
 
 
 def bytes_repr_mapping_contents(mapping: Mapping, cache: Cache) -> Iterator[bytes]:
