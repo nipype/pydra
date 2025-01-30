@@ -31,6 +31,7 @@ if ty.TYPE_CHECKING:
     from .node import Node
     from .specs import TaskDef, WorkflowDef
     from .environments import Environment
+    from .state import State
 
 DefType = ty.TypeVar("DefType", bound="TaskDef")
 
@@ -456,7 +457,7 @@ class NodeExecution(ty.Generic[DefType]):
         self.queued = {}
         self.running = {}  # Not used in logic, but may be useful for progress tracking
         self.unrunnable = defaultdict(list)
-        self.state_names = self.node.state.names
+        self.state_names = self.node.state.names if self.node.state else []
         self.workflow_inputs = workflow_inputs
         self.graph = None
 
@@ -467,6 +468,10 @@ class NodeExecution(ty.Generic[DefType]):
     @property
     def _definition(self) -> "Node":
         return self.node._definition
+
+    @property
+    def state(self) -> "State":
+        return self.node.state
 
     @property
     def tasks(self) -> ty.Iterable["Task[DefType]"]:
@@ -535,7 +540,7 @@ class NodeExecution(ty.Generic[DefType]):
             yield Task(
                 definition=self.node._definition._resolve_lazy_inputs(
                     workflow_inputs=self.workflow_inputs,
-                    exec_graph=self.graph,
+                    graph=self.graph,
                     state_index=None,
                 ),
                 submitter=self.submitter,

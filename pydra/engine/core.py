@@ -357,7 +357,11 @@ class Task(ty.Generic[DefType]):
             self._populate_filesystem()
             os.chdir(self.output_dir)
             result = Result(
-                outputs=None, runtime=None, errored=False, output_dir=self.output_dir
+                outputs=None,
+                runtime=None,
+                errored=False,
+                output_dir=self.output_dir,
+                definition=self.definition,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.output_dir)
@@ -409,7 +413,11 @@ class Task(ty.Generic[DefType]):
             cwd = os.getcwd()
             self._populate_filesystem()
             result = Result(
-                outputs=None, runtime=None, errored=False, output_dir=self.output_dir
+                outputs=None,
+                runtime=None,
+                errored=False,
+                output_dir=self.output_dir,
+                definition=self.definition,
             )
             self.hooks.pre_run_task(self)
             self.audit.start_audit(odir=self.output_dir)
@@ -506,7 +514,11 @@ class Task(ty.Generic[DefType]):
         """
         if self.errored:
             return Result(
-                outputs=None, runtime=None, errored=True, output_dir=self.output_dir
+                outputs=None,
+                runtime=None,
+                errored=True,
+                output_dir=self.output_dir,
+                definition=self.definition,
             )
 
         checksum = self.checksum
@@ -801,8 +813,8 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                     # adding an edge to the graph if task id expecting output from a different task
                     if lf.name != self.name:
                         # checking if the connection is already in the graph
-                        if (self[lf.name], node) not in graph.edges:
-                            graph.add_edges((self[lf.name], node))
+                        if (graph.node(lf.name), node) not in graph.edges:
+                            graph.add_edges((graph.node(lf.name), node))
                         if detailed:
                             graph.add_edges_description(
                                 (node.name, field.name, lf.name, lf.field)
@@ -810,8 +822,8 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                         logger.debug("Connecting %s to %s", lf.name, node.name)
                         # adding a state from the previous task to other_states
                         if (
-                            self[lf.name].state
-                            and self[lf.name].state.splitter_rpn_final
+                            graph.node(lf.name).state
+                            and graph.node(lf.name).state.splitter_rpn_final
                         ):
                             # variables that are part of inner splitters should be
                             # treated as a containers
@@ -823,7 +835,7 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                             # adding task_name: (task.state, [a field from the connection]
                             if lf.name not in other_states:
                                 other_states[lf.name] = (
-                                    self[lf.name].state,
+                                    graph.node(lf.name).state,
                                     [field.name],
                                 )
                             else:

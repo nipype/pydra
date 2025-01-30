@@ -10,7 +10,7 @@ import pytest
 import typing as ty
 from fileformats.application import Zip, Json
 from fileformats.text import TextFile
-from ..hash import (
+from pydra.utils.hash import (
     Cache,
     bytes_repr,
     hash_object,
@@ -190,9 +190,9 @@ def test_bytes_repr_type2():
     class MyClass(ty.Generic[T]):
         pass
 
-    obj_repr = join_bytes_repr(MyClass[int])
-    assert (
-        obj_repr == b"type:(pydra.utils.tests.test_hash.MyClass[type:(builtins.int)])"
+    obj_repr = join_bytes_repr(MyClass[int]).decode()
+    assert re.match(
+        r"type:\([\w\.]*test_hash.MyClass\[type:\(builtins.int\)\]\)", obj_repr
     )
 
 

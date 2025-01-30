@@ -1,12 +1,11 @@
-from fileformats.generic import File
+from fileformats.generic import File, BinaryFile
 from fileformats.core.mixin import WithSeparateHeader, WithMagicNumber
-from pydra.design import python
 from pydra.engine.task import ShellTask
 from pydra.engine import specs
 from pydra.design import shell, python
 
 
-class MyFormat(WithMagicNumber, File):
+class MyFormat(WithMagicNumber, BinaryFile):
     ext = ".my"
     magic_number = b"MYFORMAT"
 
@@ -19,14 +18,14 @@ class MyFormatX(WithSeparateHeader, MyFormat):
     header_type = MyHeader
 
 
-class MyOtherFormatX(WithMagicNumber, WithSeparateHeader, File):
+class MyOtherFormatX(WithMagicNumber, WithSeparateHeader, BinaryFile):
     magic_number = b"MYFORMAT"
     ext = ".my"
     header_type = MyHeader
 
 
 @python.define
-def generic_func_task(in_file: File) -> File:
+def GenericFuncTask(in_file: File) -> File:
     return in_file
 
 
@@ -52,7 +51,7 @@ class GenericShellTask(specs.ShellDef["GenericShellTask.Outputs"]):
 
 
 @python.define
-def specific_func_task(in_file: MyFormatX) -> MyFormatX:
+def SpecificFuncTask(in_file: MyFormatX) -> MyFormatX:
     return in_file
 
 
@@ -77,7 +76,7 @@ class SpecificShellTask(specs.ShellDef["SpecificShellTask.Outputs"]):
 
 
 @python.define
-def other_specific_func_task(in_file: MyOtherFormatX) -> MyOtherFormatX:
+def OtherSpecificFuncTask(in_file: MyOtherFormatX) -> MyOtherFormatX:
     return in_file
 
 

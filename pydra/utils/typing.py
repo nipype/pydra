@@ -623,6 +623,12 @@ class TypeParser(ty.Generic[T]):
             If the object cannot be coerced into the target type depending on the explicit
             inclusions and exclusions set in the `coercible` and `not_coercible` member attrs
         """
+        if (
+            isinstance(source, ty.Sequence)
+            and issubclass(target, generic.FileSet)
+            and all(isinstance(p, os.PathLike) for p in source)
+        ):
+            return True
         self.check_type_coercible(type(source), target, source_repr=repr(source))
 
     def check_type_coercible(

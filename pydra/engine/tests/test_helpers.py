@@ -7,6 +7,9 @@ import typing as ty
 import pytest
 import cloudpickle as cp
 from unittest.mock import Mock
+from pydra.engine.submitter import Submitter
+from pydra.engine.specs import Result
+from pydra.engine.core import Task
 from fileformats.generic import Directory, File
 from fileformats.core import FileSet
 from .utils import Multiply, RaiseXeq1
@@ -24,24 +27,24 @@ def test_save(tmpdir):
     outdir = Path(tmpdir)
     with pytest.raises(ValueError):
         save(tmpdir)
-    foo = Multiply(name="mult", x=1, y=2)
+    foo = Task(name="mult", definition=Multiply(x=1, y=2), submitter=Submitter())
     # save task
     save(outdir, task=foo)
     del foo
     # load saved task
     task_pkl = outdir / "_task.pklz"
-    foo = cp.loads(task_pkl.read_bytes())
+    foo: Task = cp.loads(task_pkl.read_bytes())
     assert foo.name == "mult"
-    assert foo.inputs.x == 1 and foo.inputs.y == 2
+    assert foo.inputs["x"] == 1 and foo.inputs["y"] == 2
     # execute task and save result
-    res = foo()
-    assert res.output.out == 2
+    res: Result = foo.run()
+    assert res.outputs.out == 2
     save(outdir, result=res)
     del res
     # load saved result
     res_pkl = outdir / "_result.pklz"
-    res = cp.loads(res_pkl.read_bytes())
-    assert res.output.out == 2
+    res: Result = cp.loads(res_pkl.read_bytes())
+    assert res.outputs.out == 2
 
 
 def test_hash_file(tmpdir):

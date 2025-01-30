@@ -519,6 +519,7 @@ class Result(ty.Generic[OutputsType]):
     outputs: OutputsType | None = None
     runtime: Runtime | None = None
     errored: bool = False
+    definition: TaskDef[OutputsType] | None = None
 
     def __getstate__(self):
         state = attrs_values(self)

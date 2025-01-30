@@ -18,7 +18,7 @@ import cloudpickle as cp
 from fileformats.core import FileSet
 
 if ty.TYPE_CHECKING:
-    from .specs import TaskDef, Result
+    from .specs import TaskDef, Result, WorkflowOutputs
     from .core import Task
     from pydra.design.base import Field
 
@@ -149,6 +149,7 @@ def save(
     task : :class:`~pydra.engine.core.TaskBase`
         Task to pickle and write
     """
+    from pydra.engine.core import is_workflow
 
     if task is None and result is None:
         raise ValueError("Nothing to be saved")
@@ -162,9 +163,15 @@ def save(
     lockfile = task_path.parent / (task_path.name + "_save.lock")
     with SoftFileLock(lockfile):
         if result:
-            if task_path.name.startswith("Workflow") and result.outputs is not None:
+            if (
+                result.definition
+                and is_workflow(result.definition)
+                and result.outputs is not None
+            ):
                 # copy files to the workflow directory
-                result.outputs = copyfile_workflow(wf_path=task_path, result=result)
+                result.outputs = copyfile_workflow(
+                    wf_path=task_path, outputs=result.outputs
+                )
             with (task_path / f"{name_prefix}_result.pklz").open("wb") as fp:
                 cp.dump(result, fp)
         if task:
@@ -172,17 +179,19 @@ def save(
                 cp.dump(task, fp)
 
 
-def copyfile_workflow(wf_path: os.PathLike, result: "Result") -> "Result":
+def copyfile_workflow(
+    wf_path: os.PathLike, outputs: "WorkflowOutputs"
+) -> "WorkflowOutputs":
     """if file in the wf results, the file will be copied to the workflow directory"""
     from .helpers_file import copy_nested_files
 
-    for field in attrs_fields(result.outputs):
-        value = getattr(result.outputs, field.name)
+    for field in attrs_fields(outputs):
+        value = getattr(outputs, field.name)
         # if the field is a path or it can contain a path _copyfile_single_value is run
         # to move all files and directories to the workflow directory
         new_value = copy_nested_files(value, wf_path, mode=FileSet.CopyMode.hardlink)
-        setattr(result.outputs, field.name, new_value)
-    return result
+        setattr(outputs, field.name, new_value)
+    return outputs
 
 
 def gather_runtime_info(fname):
@@ -457,7 +466,7 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
             errorfile = record_error(task_pkl.parent, error=traceback)
-            result = Result(output=None, runtime=None, errored=True)
+            result = Result(output=None, runtime=None, errored=True, definition=None)
             save(task_pkl.parent, result=result)
         raise
 
@@ -472,7 +481,7 @@ def load_and_run(task_pkl: Path, rerun: bool = False) -> Path:
             traceback = format_exception(etype, eval, etr)
             errorfile = record_error(task.output_dir, error=traceback)
         if not resultfile.exists():  # not sure if this is needed
-            result = Result(output=None, runtime=None, errored=True)
+            result = Result(output=None, runtime=None, errored=True, definition=None)
             save(task.output_dir, result=result)
         e.add_note(f" full crash report is here: {errorfile}")
         raise
