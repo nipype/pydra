@@ -669,7 +669,7 @@ def remaining_positions(
         If multiple fields have the same position
     """
     if num_args is None:
-        num_args = len(args)
+        num_args = len(args) - 1  # Subtract 1 for the 'additional_args' field
     # Check for multiple positions
     positions = defaultdict(list)
     for arg in args:

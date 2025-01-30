@@ -1,12 +1,14 @@
 import typing as ty
 import sys
+import os
 from pathlib import Path
 from unittest.mock import Mock
 import pytest
 from fileformats.generic import File
 from pydra.engine.specs import ShellDef, ShellOutputs
 from pydra.design import shell
-from ..helpers_file import (
+from pydra.engine.helpers import list_fields
+from pydra.engine.helpers_file import (
     ensure_list,
     MountIndentifier,
     copy_nested_files,
@@ -376,18 +378,21 @@ def test_output_template(tmp_path):
     defn = MyCommand(in_file=filename)
     assert defn.cmdline == f"my {filename}"
     defn.optional = True
-    assert defn.cmdline == f"my {filename} --opt 'file.out'"
+    file_out_path = os.path.join(os.getcwd(), "file.out")
+    if " " in file_out_path:
+        file_out_path = f"'{file_out_path}'"
+    assert defn.cmdline == f"my {filename} --opt {file_out_path}"
     defn.optional = False
     assert defn.cmdline == f"my {filename}"
     defn.optional = "custom-file-out.txt"
     assert defn.cmdline == f"my {filename} --opt custom-file-out.txt"
 
 
-def test_template_formatting(tmp_path):
+def test_template_formatting(tmp_path: Path):
     field = Mock()
     field.name = "grad"
     field.argstr = "--grad"
-    field.metadata = {"output_file_template": ("{in_file}.bvec", "{in_file}.bval")}
+    field.path_template = ("{in_file}.bvec", "{in_file}.bval")
     inputs = Mock()
     inputs_dict = {"in_file": "/a/b/c/file.txt", "grad": True}
 

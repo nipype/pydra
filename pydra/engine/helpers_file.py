@@ -119,10 +119,9 @@ def template_update(
         for field in list_fields(definition)
         if isinstance(field, shell.outarg)
         and field.path_template
-        and getattr(definition, field.name) is not False
+        and getattr(definition, field.name)
         and all(
-            getattr(definition, required_field) is not None
-            for required_field in field.requires
+            getattr(definition, required_field) for required_field in field.requires
         )
     ]
 
@@ -164,7 +163,7 @@ def template_update_single(
             raise TypeError(
                 f"type of '{field.name}' is Path, consider using Union[Path, bool]"
             )
-        if inp_val_set is not attr.NOTHING and not is_lazy(inp_val_set):
+        if inp_val_set is not None and not is_lazy(inp_val_set):
             inp_val_set = TypeParser(ty.Union[OUTPUT_TEMPLATE_TYPES])(inp_val_set)
     elif spec_type == "output":
         if not TypeParser.contains_type(FileSet, field.type):
@@ -252,6 +251,8 @@ def _string_template_formatting(field, template, definition, input_values):
         if fld_name not in input_values:
             raise AttributeError(f"{fld_name} is not provided in the input")
         fld_value = input_values[fld_name]
+        if isinstance(fld_value, Path):  # Remove path
+            fld_value = fld_value.name
         if fld_value is attr.NOTHING:
             # if value is NOTHING, nothing should be added to the command
             return attr.NOTHING

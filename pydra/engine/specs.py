@@ -945,27 +945,14 @@ class ShellDef(TaskDef[ShellOutputsType]):
                 pos_args.append(self._command_shelltask_executable(field, value))
             elif name == "additional_args":
                 continue
-            elif name == "args":
-                pos_val = self._command_shelltask_args(field, value)
-                if pos_val:
-                    pos_args.append(pos_val)
             else:
-                if name in modified_inputs:
-                    pos_val = self._command_pos_args(
-                        field=field,
-                        value=value,
-                        inputs=inputs,
-                        root=root,
-                        output_dir=output_dir,
-                    )
-                else:
-                    pos_val = self._command_pos_args(
-                        field=field,
-                        value=value,
-                        output_dir=output_dir,
-                        inputs=inputs,
-                        root=root,
-                    )
+                pos_val = self._command_pos_args(
+                    field=field,
+                    value=value,
+                    inputs=inputs,
+                    root=root,
+                    output_dir=output_dir,
+                )
                 if pos_val:
                     pos_args.append(pos_val)
 
@@ -1023,10 +1010,6 @@ class ShellDef(TaskDef[ShellOutputsType]):
                 )
 
             self._positions_provided.append(field.position)
-
-            # Shift non-negatives up to allow executable to be 0
-            # Shift negatives down to allow args to be -1
-            field.position += 1 if field.position >= 0 else -1
 
         if value and isinstance(value, str):
             if root:  # values from templates
