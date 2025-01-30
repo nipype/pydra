@@ -13,9 +13,9 @@ from fileformats.generic import Directory
 from .utils import (
     need_sge,
     need_slurm,
-    gen_basic_wf,
-    gen_basic_wf_with_threadcount,
-    gen_basic_wf_with_threadcount_concurrent,
+    BasicWorkflow,
+    BasicWorkflowWithThreadCount,
+    BasicWorkflowWithThreadCountConcurrent,
 )
 from ..core import Task
 from ..submitter import Submitter
@@ -32,30 +32,30 @@ def sleep_add_one(x):
 
 
 def test_callable_wf(plugin, tmpdir):
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     res = wf()
     assert res.output.out == 9
     del wf, res
 
     # providing plugin
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     res = wf(plugin="cf")
     assert res.output.out == 9
     del wf, res
 
     # providing plugin_kwargs
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     res = wf(plugin="cf", plugin_kwargs={"n_procs": 2})
     assert res.output.out == 9
     del wf, res
 
     # providing wrong plugin_kwargs
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     with pytest.raises(TypeError, match="an unexpected keyword argument"):
         wf(plugin="cf", plugin_kwargs={"sbatch_args": "-N2"})
 
     # providing submitter
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     wf.cache_dir = tmpdir
     sub = Submitter(plugin)
     res = wf(submitter=sub)
@@ -178,14 +178,14 @@ def test_wf_with_state(plugin_dask_opt, tmpdir):
 
 def test_serial_wf():
     # Use serial plugin to execute workflow instead of CF
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     res = wf(plugin="serial")
     assert res.output.out == 9
 
 
 @need_slurm
 def test_slurm_wf(tmpdir):
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     wf.cache_dir = tmpdir
     # submit workflow and every task as slurm job
     with Submitter("slurm") as sub:
@@ -202,7 +202,7 @@ def test_slurm_wf(tmpdir):
 @need_slurm
 def test_slurm_wf_cf(tmpdir):
     # submit entire workflow as single job executing with cf worker
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     wf.cache_dir = tmpdir
     wf.plugin = "cf"
     with Submitter("slurm") as sub:
@@ -220,7 +220,7 @@ def test_slurm_wf_cf(tmpdir):
 
 @need_slurm
 def test_slurm_wf_state(tmpdir):
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     wf.split("x", x=[5, 6])
     wf.cache_dir = tmpdir
     with Submitter("slurm") as sub:
@@ -395,7 +395,7 @@ def test_slurm_cancel_rerun_2(tmpdir):
 @need_sge
 def test_sge_wf(tmpdir):
     """testing that a basic workflow can be run with the SGEWorker"""
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     wf.cache_dir = tmpdir
     # submit workflow and every task as sge job
     with Submitter(
@@ -416,7 +416,7 @@ def test_sge_wf_cf(tmpdir):
     """testing the SGEWorker can submit SGE tasks while the workflow
     uses the concurrent futures plugin"""
     # submit entire workflow as single job executing with cf worker
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     wf.cache_dir = tmpdir
     wf.plugin = "cf"
     with Submitter("sge") as sub:
@@ -435,7 +435,7 @@ def test_sge_wf_cf(tmpdir):
 @need_sge
 def test_sge_wf_state(tmpdir):
     """testing the SGEWorker can be used with a workflow with state"""
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     wf.split("x")
     wf.inputs.x = [5, 6]
     wf.cache_dir = tmpdir
@@ -469,7 +469,7 @@ def qacct_output_to_dict(qacct_output):
 def test_sge_set_threadcount(tmpdir):
     """testing the number of threads for an SGEWorker task can be set
     using the input_spec variable sgeThreads"""
-    wf = gen_basic_wf_with_threadcount()
+    wf = BasicWorkflowWithThreadCount()
     wf.inputs.x = 5
     wf.cache_dir = tmpdir
 
@@ -499,7 +499,7 @@ def test_sge_set_threadcount(tmpdir):
 def test_sge_limit_maxthreads(tmpdir):
     """testing the ability to limit the number of threads used by the SGE
     at one time with the max_threads argument to SGEWorker"""
-    wf = gen_basic_wf_with_threadcount_concurrent()
+    wf = BasicWorkflowWithThreadCountConcurrent()
     wf.inputs.x = [5, 6]
     wf.split("x")
     wf.cache_dir = tmpdir
@@ -543,7 +543,7 @@ def test_sge_limit_maxthreads(tmpdir):
 def test_sge_no_limit_maxthreads(tmpdir):
     """testing unlimited threads can be used at once by SGE
     when max_threads is not set"""
-    wf = gen_basic_wf_with_threadcount_concurrent()
+    wf = BasicWorkflowWithThreadCountConcurrent()
     wf.inputs.x = [5, 6]
     wf.split("x")
     wf.cache_dir = tmpdir

@@ -8,7 +8,7 @@ import pytest
 
 from ..submitter import Submitter
 from pydra.design import python, workflow
-from .utils import identity
+from .utils import Identity
 from pydra.utils.hash import hash_function
 
 if importlib.util.find_spec("numpy") is None:
@@ -81,7 +81,7 @@ def test_numpy_hash_3():
 
 def test_task_numpyinput_1(tmp_path: Path):
     """task with numeric numpy array as an input"""
-    nn = identity(name="NA")
+    nn = Identity(name="NA")
     nn.cache_dir = tmp_path
     nn.split(x=[np.array([1, 2]), np.array([3, 4])])
     # checking the results
@@ -92,7 +92,7 @@ def test_task_numpyinput_1(tmp_path: Path):
 
 def test_task_numpyinput_2(tmp_path: Path):
     """task with numpy array of type object as an input"""
-    nn = identity(name="NA")
+    nn = Identity(name="NA")
     nn.cache_dir = tmp_path
     nn.split(x=[np.array(["VAL1"], dtype=object), np.array(["VAL2"], dtype=object)])
     # checking the results

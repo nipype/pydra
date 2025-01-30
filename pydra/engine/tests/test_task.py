@@ -11,7 +11,7 @@ from pydra.design import python
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from ..task import AuditFlag, ShellTask
 from pydra.engine.specs import argstr_formatting
-from .utils import gen_basic_wf
+from .utils import BasicWorkflow
 from pydra.utils.typing import (
     MultiInputObj,
     MultiOutputObj,
@@ -1374,7 +1374,7 @@ def test_taskhooks_1(tmpdir, capsys):
     # but can be shared across tasks
     bar.hooks = foo.hooks
     # and workflows
-    wf = gen_basic_wf()
+    wf = BasicWorkflow()
     wf.tmpdir = tmpdir
     wf.hooks = bar.hooks
     assert foo.hooks == bar.hooks == wf.hooks

@@ -56,6 +56,8 @@ def convert_default_value(value: ty.Any, self_: "Field") -> ty.Any:
     """Ensure the default value has been coerced into the correct type"""
     if value is EMPTY or isinstance(value, attrs.Factory):
         return value
+    if self_.type is ty.Callable and isinstance(value, ty.Callable):
+        return value
     return TypeParser[self_.type](self_.type, label=self_.name)(value)
 
 

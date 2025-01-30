@@ -19,7 +19,7 @@ from pydra.engine.lazy import (
 from pydra.utils.typing import StateArray
 
 # from ..helpers import make_klass
-from .utils import foo
+from .utils import Foo
 from pydra.design import python
 import pytest
 
@@ -344,7 +344,7 @@ def test_input_file_hash_5(tmp_path):
 
 
 def test_lazy_field_cast():
-    task = foo(a="a", b=1, c=2.0, name="foo")
+    task = Foo(a="a", b=1, c=2.0, name="foo")
 
     assert task.lzout.y.type == int
     assert task.lzout.y.cast(float).type == float

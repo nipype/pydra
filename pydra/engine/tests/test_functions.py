@@ -1,13 +1,22 @@
 import pytest
 import random
 import typing as ty
-import inspect
-import re
-import ast
+from pydra.design.base import Field
 from pydra.design import python
 from pydra.engine.specs import PythonDef, PythonOutputs
 from pydra.engine.helpers import list_fields, attrs_values
-from pydra.utils.hash import bytes_repr
+
+
+def non_func_fields(defn: PythonDef) -> list[Field]:
+    return [f for f in list_fields(defn) if f.name != "function"]
+
+
+def non_func_values(defn: PythonDef) -> dict:
+    return {n: v for n, v in attrs_values(defn).items() if n != "function"}
+
+
+def hashes(defn: PythonDef) -> dict[str, str]:
+    return defn._compute_hashes()[1]
 
 
 def test_task_equivalence():
@@ -45,8 +54,11 @@ def test_task_equivalence():
     d1_outputs = decorated1()
     d2_outputs = decorated2()
 
-    assert attrs_values(c_outputs) == attrs_values(d1_outputs)
-    assert attrs_values(c_outputs) == attrs_values(d2_outputs)
+    assert (
+        non_func_values(c_outputs)
+        == non_func_values(d1_outputs)
+        == non_func_values(d2_outputs)
+    )
 
 
 def test_annotation_equivalence_1():
@@ -65,113 +77,116 @@ def test_annotation_equivalence_1():
     def Indirect(a):
         return a + 2
 
-    assert list_fields(Direct) == list_fields(Partial)
-    assert list_fields(Direct) == list_fields(Indirect)
+    assert non_func_fields(Direct) == non_func_fields(Partial)
+    assert non_func_fields(Direct) == non_func_fields(Indirect)
 
     assert list_fields(Direct.Outputs) == list_fields(Partial.Outputs)
     assert list_fields(Direct.Outputs) == list_fields(Indirect.Outputs)
 
     # Run functions to ensure behavior is unaffected
     a = random.randint(0, (1 << 32) - 3)
-    assert attrs_values(Direct(a)) == attrs_values(Partial(a))
-    assert attrs_values(Direct(a)) == attrs_values(Indirect(a))
+    assert non_func_values(Direct(a=a)) == non_func_values(Partial(a=a))
+    assert non_func_values(Direct(a=a)) == non_func_values(Indirect(a=a))
 
     # checking if the annotation is properly converted to output_spec if used in task
-    assert list_fields(Direct.Outputs)[0] == python.out(name="out", type=int)
+    assert list_fields(Direct.Outputs)[0] == python.out(name="out", type=int, order=0)
 
 
 def test_annotation_equivalence_2():
     """testing various ways of annotation: multiple outputs, using a tuple for output annot."""
 
-    def direct(a: int) -> (int, float):
+    def direct(a: int) -> tuple[int, float]:
         return a + 2, a + 2.0
 
-    @python.define(outputs={"out": (int, float)})
-    def partial(a: int):
+    Direct = python.define(direct, outputs=["out1", "out2"])
+
+    @python.define(outputs={"out1": int, "out2": float})
+    def Partial(a: int):
         return a + 2, a + 2.0
 
-    @python.define(inputs={"a": int})
-    def indirect(a) -> tuple[int, float]:
+    @python.define(inputs={"a": int}, outputs=["out1", "out2"])
+    def Indirect(a) -> tuple[int, float]:
         return a + 2, a + 2.0
 
     # checking if the annotations are equivalent
-    assert direct.__annotations__ == partial.__annotations__
-    assert direct.__annotations__ == indirect.__annotations__
+    assert (
+        non_func_fields(Direct) == non_func_fields(Partial) == non_func_fields(Indirect)
+    )
 
     # Run functions to ensure behavior is unaffected
     a = random.randint(0, (1 << 32) - 3)
-    assert direct(a) == partial(a)
-    assert direct(a) == indirect(a)
+    assert hashes(Direct(a=a)) == hashes(Partial(a=a)) == hashes(Indirect(a=a))
 
     # checking if the annotation is properly converted to output_spec if used in task
-    task_direct = python.define(direct)()
-    assert task_direct.output_spec.fields == [("out1", int), ("out2", float)]
+    assert list_fields(Direct.Outputs) == [
+        python.out(name="out1", type=int, order=0),
+        python.out(name="out2", type=float, order=1),
+    ]
 
 
 def test_annotation_equivalence_3():
     """testing various ways of annotation: using dictionary for output annot."""
 
-    @python.define(outputs=["out1"])
     def direct(a: int) -> int:
         return a + 2
 
-    @python.define(inputs={"return": {"out1": int}})
-    def partial(a: int):
+    Direct = python.define(direct, outputs=["out1"])
+
+    @python.define(outputs={"out1": int})
+    def Partial(a: int):
         return a + 2
 
     @python.define(inputs={"a": int}, outputs={"out1": int})
-    def indirect(a):
+    def Indirect(a):
         return a + 2
 
     # checking if the annotations are equivalent
-    assert direct.__annotations__ == partial.__annotations__
-    assert direct.__annotations__ == indirect.__annotations__
+    assert (
+        non_func_fields(Direct) == non_func_fields(Partial) == non_func_fields(Indirect)
+    )
 
     # Run functions to ensure behavior is unaffected
     a = random.randint(0, (1 << 32) - 3)
-    assert direct(a) == partial(a)
-    assert direct(a) == indirect(a)
+    assert hashes(Direct(a=a)) == hashes(Partial(a=a)) == hashes(Indirect(a=a))
 
     # checking if the annotation is properly converted to output_spec if used in task
-    task_direct = python.define(direct)()
-    assert task_direct.output_spec.fields[0] == ("out1", int)
+    assert list_fields(Direct.Outputs)[0] == python.out(name="out1", type=int, order=0)
 
 
 def test_annotation_equivalence_4():
     """testing various ways of annotation: using ty.NamedTuple for the output"""
 
     @python.define(outputs=["sum", "sub"])
-    def direct(a: int) -> tuple[int, int]:
+    def Direct(a: int) -> tuple[int, int]:
         return a + 2, a - 2
 
     @python.define(outputs={"sum": int, "sub": int})
-    def partial(a: int):
+    def Partial(a: int):
         return a + 2, a - 2
 
     @python.define(inputs={"a": int}, outputs={"sum": int, "sub": int})
-    def indirect(a):
+    def Indirect(a):
         return a + 2, a - 2
 
     # checking if the annotations are equivalent
     assert (
-        direct.__annotations__["return"].__annotations__
-        == partial.__annotations__["return"].__annotations__
-        == indirect.__annotations__["return"].__annotations__
+        list_fields(Direct.Outputs)
+        == list_fields(Partial.Outputs)
+        == list_fields(Indirect.Outputs)
     )
     assert (
-        direct.__annotations__["return"].__name__
-        == partial.__annotations__["return"].__name__
-        == indirect.__annotations__["return"].__name__
+        list_fields(Direct.Outputs)
+        == list_fields(Partial.Outputs)
+        == list_fields(Indirect.Outputs)
     )
 
     # Run functions to ensure behavior is unaffected
     a = random.randint(0, (1 << 32) - 3)
-    assert direct(a) == partial(a)
-    assert direct(a) == indirect(a)
+    assert Direct(a=a) == Partial(a=a)
+    assert Direct(a=a) == Indirect(a=a)
 
     # checking if the annotation is properly converted to output_spec if used in task
-    task_direct = python.define(direct)()
-    assert list_fields(task_direct.Outputs) == [
+    assert list_fields(Direct.Outputs) == [
         python.arg(name="sum", type=int),
         python.arg(name="sub", type=int),
     ]

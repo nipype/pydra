@@ -9,7 +9,7 @@ import cloudpickle as cp
 from unittest.mock import Mock
 from fileformats.generic import Directory, File
 from fileformats.core import FileSet
-from .utils import multiply, raise_xeq1
+from .utils import Multiply, RaiseXeq1
 from ..helpers import (
     get_available_cpus,
     save,
@@ -24,7 +24,7 @@ def test_save(tmpdir):
     outdir = Path(tmpdir)
     with pytest.raises(ValueError):
         save(tmpdir)
-    foo = multiply(name="mult", x=1, y=2)
+    foo = Multiply(name="mult", x=1, y=2)
     # save task
     save(outdir, task=foo)
     del foo
@@ -177,7 +177,7 @@ def test_load_and_run(tmpdir):
     """testing load_and_run for pickled task"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
 
-    task = multiply(name="mult", y=10).split(x=[1, 2])
+    task = Multiply(name="mult", y=10).split(x=[1, 2])
     task.state.prepare_states(inputs=task.inputs)
     task.state.prepare_inputs()
     with task_pkl.open("wb") as fp:
@@ -195,7 +195,7 @@ def test_load_and_run(tmpdir):
 def test_load_and_run_exception_load(tmpdir):
     """testing raising exception and saving info in crashfile when when load_and_run"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
-    raise_xeq1(name="raise").split("x", x=[1, 2])
+    RaiseXeq1(name="raise").split("x", x=[1, 2])
     with pytest.raises(FileNotFoundError):
         load_and_run(task_pkl=task_pkl, ind=0)
 
@@ -204,7 +204,7 @@ def test_load_and_run_exception_run(tmpdir):
     """testing raising exception and saving info in crashfile when when load_and_run"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
 
-    task = raise_xeq1(name="raise").split("x", x=[1, 2])
+    task = RaiseXeq1(name="raise").split("x", x=[1, 2])
     task.state.prepare_states(inputs=task.inputs)
     task.state.prepare_inputs()
 
@@ -236,7 +236,7 @@ def test_load_and_run_wf(tmpdir):
     wf_pkl = Path(tmpdir.join("wf_main.pkl"))
 
     wf = Workflow(name="wf", input_spec=["x", "y"], y=10)
-    wf.add(multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
+    wf.add(Multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
     wf.split("x", x=[1, 2])
 
     wf.set_output([("out", wf.mult.lzout.out)])

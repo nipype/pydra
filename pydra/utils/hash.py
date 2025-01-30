@@ -574,13 +574,23 @@ def bytes_repr_function(obj: types.FunctionType, cache: Cache) -> Iterator[bytes
                 node, annotate_fields=False, include_attributes=False
             ).encode()
 
+        def strip_annotations(node: ast.AST):
+            """Remove annotations from function arguments."""
+            for arg in node.args.args:
+                arg.annotation = None
+            for arg in node.args.kwonlyargs:
+                arg.annotation = None
+            if node.args.vararg:
+                node.args.vararg.annotation = None
+            if node.args.kwarg:
+                node.args.kwarg.annotation = None
+
         indent = re.match(r"(\s*)", src).group(1)
         if indent:
             src = re.sub(f"^{indent}", "", src, flags=re.MULTILINE)
         func_ast = ast.parse(src).body[0]
+        strip_annotations(func_ast)
         yield dump_ast(func_ast.args)
-        if func_ast.returns:
-            yield dump_ast(func_ast.returns)
         for stmt in func_ast.body:
             yield dump_ast(stmt)
     yield b")"

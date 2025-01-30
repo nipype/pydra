@@ -56,12 +56,12 @@ else:
 
 
 @python.define
-def op_4var(a, b, c, d) -> str:
+def Op4Var(a, b, c, d) -> str:
     return f"{a} {b} {c} {d}"
 
 
 @python.define
-def fun_addtwo(a: int) -> int:
+def FunAddTwo(a: int) -> int:
     import time
 
     time.sleep(1)
@@ -71,7 +71,7 @@ def fun_addtwo(a: int) -> int:
 
 
 @python.define
-def fun_addtwo_notype(a):
+def FunAddTwoNoType(a):
     import time
 
     time.sleep(1)
@@ -81,7 +81,7 @@ def fun_addtwo_notype(a):
 
 
 @python.define
-def fun_addtwo_with_threadcount(a: int, sgeThreads: int = 1) -> int:
+def FunAddTwoWithThreadCount(a: int, sgeThreads: int = 1) -> int:
     import time
 
     time.sleep(1)
@@ -91,24 +91,22 @@ def fun_addtwo_with_threadcount(a: int, sgeThreads: int = 1) -> int:
 
 
 @python.define
-def fun_addvar(
-    a: ty.Union[int, float], b: ty.Union[int, float]
-) -> ty.Union[int, float]:
+def FunAddVar(a: ty.Union[int, float], b: ty.Union[int, float]) -> ty.Union[int, float]:
     return a + b
 
 
 @python.define
-def fun_addvar_notype(a, b):
+def FunAddVarNoType(a, b):
     return a + b
 
 
 @python.define(outputs={"sum": float, "sub": float})
-def fun_addsubvar(a: float, b: float):
+def FunAddSubVar(a: float, b: float):
     return a + b, a - b
 
 
 @python.define
-def fun_addvar_none(a: int, b: ty.Optional[int]) -> int:
+def FunAddVarNone(a: int, b: ty.Optional[int]) -> int:
     if b is None:
         return a
     else:
@@ -116,127 +114,127 @@ def fun_addvar_none(a: int, b: ty.Optional[int]) -> int:
 
 
 @python.define
-def fun_addvar_default(a: int, b: int = 1) -> int:
+def FunAddVarDefault(a: int, b: int = 1) -> int:
     return a + b
 
 
 @python.define
-def fun_addvar_default_notype(a, b=1):
+def FunAddVarDefaultNoType(a, b=1):
     return a + b
 
 
 @python.define
-def fun_addvar3(a: int, b: int, c: int) -> int:
+def FunAddVar3(a: int, b: int, c: int) -> int:
     return a + b + c
 
 
 @python.define
-def fun_addvar4(a: int, b: int, c: int, d: int) -> int:
+def FunAddVar4(a: int, b: int, c: int, d: int) -> int:
     return a + b + c + d
 
 
 @python.define
-def moment(lst: ty.List[float], n: float) -> float:
+def Moment(lst: ty.List[float], n: float) -> float:
     return sum([i**n for i in lst]) / len(lst)
 
 
 @python.define
-def fun_div(a: ty.Union[int, float], b: ty.Union[int, float]) -> float:
+def FunDiv(a: ty.Union[int, float], b: ty.Union[int, float]) -> float:
     return a / b
 
 
 @python.define
-def multiply(x: int, y: int) -> int:
+def Multiply(x: int, y: int) -> int:
     return x * y
 
 
 @python.define
-def multiply_list(x: list, y: int) -> list:
+def MultiplyList(x: list, y: int) -> list:
     return x * y
 
 
 @python.define
-def multiply_mixed(x: list, y: int) -> list:
+def MultiplyMixed(x: list, y: int) -> list:
     return x * y
 
 
 @python.define
-def add2(x: int) -> int:
+def Add2(x: int) -> int:
     if x == 1 or x == 12:
         time.sleep(1)
     return x + 2
 
 
 @python.define
-def raise_xeq1(x: int) -> int:
+def RaiseXeq1(x: int) -> int:
     if x == 1:
         raise Exception("x is 1, so i'm raising an exception!")
     return x
 
 
 @python.define(outputs={"out_add": float, "out_sub": float})
-def add2_sub2_res(res):
+def Add2Sub2Res(res):
     """function that takes entire output as an input"""
     return res["out"] + 2, res["out"] - 2
 
 
 @python.define(outputs={"out_add": ty.List[float], "out_sub": ty.List[float]})
-def add2_sub2_res_list(res):
+def Add2Sub2ResList(res):
     """function that takes entire output as an input"""
     return [r["out"] + 2 for r in res], [r["out"] - 2 for r in res]
 
 
 @python.define
-def power(a: int, b: int) -> int:
+def Power(a: int, b: int) -> int:
     return a**b
 
 
 @python.define
-def identity(x):
+def Identity(x):
     return x
 
 
 @python.define(outputs={"out1": ty.Any, "out2": ty.Any})
-def identity_2flds(x1, x2):
+def Identity2Flds(x1, x2):
     return x1, x2
 
 
 @python.define
-def ten(x) -> int:
+def Ten(x) -> int:
     return 10
 
 
 @python.define
-def add2_wait(x: int) -> int:
+def Add2Wait(x: int) -> int:
     time.sleep(2)
     return x + 2
 
 
 @python.define
-def list_output(x: int) -> ty.List[int]:
+def ListOutput(x: int) -> ty.List[int]:
     return [x, 2 * x, 3 * x]
 
 
 @python.define
-def list_sum(x: ty.Sequence[ty.Union[int, float]]) -> ty.Union[int, float]:
+def ListSum(x: ty.Sequence[ty.Union[int, float]]) -> ty.Union[int, float]:
     return sum(x)
 
 
 @python.define
-def fun_dict(d: dict) -> str:
+def FunDict(d: dict) -> str:
     kv_list = [f"{k}:{v}" for (k, v) in d.items()]
     return "_".join(kv_list)
 
 
 @python.define
-def fun_write_file(filename: Path, text="hello") -> File:
+def FunWriteFile(filename: Path, text="hello") -> File:
     with open(filename, "w") as f:
         f.write(text)
     return File(filename)
 
 
 @python.define
-def fun_write_file_list(
+def FunWriteFileList(
     filename_list: ty.List[ty.Union[str, File, Path]], text="hi"
 ) -> ty.List[File]:
     for ii, filename in enumerate(filename_list):
@@ -247,7 +245,7 @@ def fun_write_file_list(
 
 
 @python.define
-def fun_write_file_list2dict(
+def FunWriteFileList2Dict(
     filename_list: ty.List[ty.Union[str, File, Path]], text="hi"
 ) -> ty.Dict[str, ty.Union[File, int]]:
     filename_dict = {}
@@ -261,14 +259,14 @@ def fun_write_file_list2dict(
 
 
 @python.define
-def fun_file(filename: File):
+def FunFile(filename: File):
     with open(filename) as f:
         txt = f.read()
     return txt
 
 
 @python.define
-def fun_file_list(filename_list: ty.List[File]):
+def FunFileList(filename_list: ty.List[File]):
     txt_list = []
     for filename in filename_list:
         with open(filename) as f:
@@ -276,79 +274,36 @@ def fun_file_list(filename_list: ty.List[File]):
     return " ".join(txt_list)
 
 
-def gen_basic_wf(name="basic-wf"):
-    """
-    Generates `Workflow` of two tasks
-
-    Task Input
-    ----------
-    x : int (5)
-
-    Task Output
-    -----------
-    out : int (9)
-    """
-
-    @workflow.define(outputs=["out"])
-    def Workflow(x):
-        task1 = workflow.add(fun_addtwo(a=x, b=0))
-        task2 = workflow.add(fun_addvar(a=task1.out, b=2))
-        return task2.out
-
-    return Workflow(x=5)
+@workflow.define(outputs=["out"])
+def BasicWorkflow(x):
+    task1 = workflow.add(FunAddTwo(a=x, b=0))
+    task2 = workflow.add(FunAddVar(a=task1.out, b=2))
+    return task2.out
 
 
-def gen_basic_wf_with_threadcount(name="basic-wf-with-threadcount"):
-    """
-    Generates `Workflow` of two tasks
-
-    Task Input
-    ----------
-    x : int (5)
-
-    Task Output
-    -----------
-    out : int (9)
-    """
-
-    @workflow.define(outputs=["out"])
-    def Workflow(x):
-        task1 = workflow.add(fun_addtwo_with_threadcount(a=x, sgeThreads=4))
-        task2 = workflow.add(fun_addvar(a=task1.out, b=2))
-        return task2.out
-
-    return Workflow(x=5)
+@workflow.define(outputs=["out"])
+def BasicWorkflowWithThreadCount(x):
+    task1 = workflow.add(FunAddTwoWithThreadCount(a=x, sgeThreads=4))
+    task2 = workflow.add(FunAddVar(a=task1.out, b=2))
+    return task2.out
 
 
-def gen_basic_wf_with_threadcount_concurrent(name="basic-wf-with-threadcount"):
-    """
-    Generates `Workflow` of two tasks
+@workflow.define(outputs=["out1", "out2"])
+def BasicWorkflowWithThreadCountConcurrent(x):
+    task1_1 = workflow.add(FunAddTwoWithThreadCount(a=x, sgeThreads=4))
+    task1_2 = workflow.add(FunAddTwoWithThreadCount(a=x, sgeThreads=2))
+    task2 = workflow.add(FunAddVar(a=task1_1.out, b=2))
+    return task2.out, task1_2.out
 
-    Task Input
-    ----------
-    x : int (5)
-
-    Task Output
-    -----------
-    out : int (9)
-    """
-
-    @workflow.define(outputs=["out1", "out2"])
-    def Workflow(x):
-        task1_1 = workflow.add(fun_addtwo_with_threadcount(a=x, sgeThreads=4))
-        task1_2 = workflow.add(fun_addtwo_with_threadcount(a=x, sgeThreads=2))
-        task2 = workflow.add(fun_addvar(a=task1_1.out, b=2))
-        return task2.out, task1_2.out
-
-    return Workflow(x=5)
+    # return Workflow(x=5)
 
 
 @python.define(outputs={"sum": int, "products": ty.List[int]})
-def list_mult_sum(scalar: int, in_list: ty.List[int]) -> ty.Tuple[int, ty.List[int]]:
+def ListMultSum(scalar: int, in_list: ty.List[int]) -> ty.Tuple[int, ty.List[int]]:
     products = [scalar * x for x in in_list]
     return functools.reduce(operator.add, products, 0), products
 
 
 @python.define(outputs={"x": str, "y": int, "z": float})
-def foo(a: str, b: int, c: float) -> ty.Tuple[str, int, float]:
+def Foo(a: str, b: int, c: float) -> ty.Tuple[str, int, float]:
     return a, b, c
