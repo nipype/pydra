@@ -29,6 +29,7 @@ class StateIndex:
     indices : dict[str, int]
         a dictionary of indices for each input field
     """
+
     indices: OrderedDict[str, int]
 
     def __init__(self, indices: dict[str, int] | None = None):
@@ -53,7 +54,7 @@ class StateIndex:
 
     def __str__(self):
         return "__".join(f"{n}-{i}" for n, i in self.indices.items())
-    
+
     def __bool__(self):
         return bool(self.indices)
 

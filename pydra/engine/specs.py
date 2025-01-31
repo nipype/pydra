@@ -408,7 +408,7 @@ class TaskDef(ty.Generic[OutputsType]):
             The task definition with all lazy fields resolved
         """
         from pydra.engine.state import StateIndex
-        
+
         if state_index is None:
             state_index = StateIndex()
         resolved = {}

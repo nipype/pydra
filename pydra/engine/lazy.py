@@ -142,7 +142,7 @@ class LazyOutField(LazyField[T]):
             TypeParser,
         )  # pylint: disable=import-outside-toplevel
         from pydra.engine.state import StateIndex
-        
+
         if state_index is None:
             state_index = StateIndex()
 
