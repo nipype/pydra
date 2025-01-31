@@ -4,7 +4,7 @@ import ast
 import inspect
 import platformdirs
 import builtins
-from pydra._version import __version__
+from pydra.engine._version import __version__
 
 user_cache_dir = Path(
     platformdirs.user_cache_dir(

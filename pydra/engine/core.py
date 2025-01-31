@@ -14,7 +14,7 @@ import attr
 import cloudpickle as cp
 from copy import copy
 from operator import itemgetter
-from typing_extensions import Self
+from typing import Self
 import attrs
 from filelock import SoftFileLock
 from pydra.engine.specs import TaskDef, WorkflowDef, TaskOutputs, WorkflowOutputs
@@ -25,7 +25,7 @@ from pydra.utils.hash import hash_function
 from pydra.utils.typing import TypeParser, StateArray
 from .node import Node
 from datetime import datetime
-from fileformats.generic import FileSet
+from fileformats.core import FileSet
 from .specs import (
     RuntimeSpec,
     Result,

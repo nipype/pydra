@@ -1,16 +1,27 @@
-from pydra.design import python
+from pydra.design import python, workflow
+from pydra.engine.submitter import Submitter
 
-if __name__ == "__main__":
+@python.define
+def Add(x: float, y: float) -> float:
+    return x + y
 
-    @python.define
-    def TenToThePower(p: int) -> int:
-        return 10**p
+@python.define
+def Subtract(x: float, y: float) -> float:
+    return x - y
 
-    ten_to_the_power = TenToThePower().split(p=[1, 2, 3, 4, 5])
+@python.define
+def Divide(x: float, y: float) -> float:
+    return x / y
 
-    # Run the 5 tasks in parallel split across 3 processes
-    outputs = ten_to_the_power(worker="cf", n_procs=3, clean_stale_locks=True)
+@workflow.define
+def UnsafeWorkflow(a: float, b: float, c: float) -> float:
+    add = workflow.add(Add(x=a, y=b))
+    divide = workflow.add(Divide(x=add.out, y=c))
+    subtract = workflow.add(Subtract(x=divide.out, y=b))
+    return subtract.out
 
-    p1, p2, p3, p4, p5 = outputs.out
+# This workflow will fail because we are trying to divide by 0
+failing_workflow = UnsafeWorkflow(a=10, b=5).split(c=[3, 2 ,0])
 
-    print(f"10^5 = {p5}")
+with Submitter() as sub:
+    result = sub(failing_workflow)

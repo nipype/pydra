@@ -1,6 +1,6 @@
 import typing as ty
 import inspect
-from typing_extensions import dataclass_transform
+from typing import dataclass_transform
 import attrs
 from .base import (
     Arg,

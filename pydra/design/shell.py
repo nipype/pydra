@@ -8,7 +8,7 @@ import inspect
 from copy import copy
 import attrs
 import builtins
-from typing_extensions import dataclass_transform
+from typing import dataclass_transform
 from fileformats.core import from_mime
 from fileformats import generic
 from fileformats.core.exceptions import FormatRecognitionError

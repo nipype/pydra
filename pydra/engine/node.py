@@ -154,7 +154,7 @@ class Node(ty.Generic[OutputType]):
             return ()
         return self._state.combiner
 
-    def _checksum_states(self, state_index=None):
+    def _checksum_states(self, state_index: StateIndex = StateIndex()):
         """
         Calculate a checksum for the specific state or all of the states of the task.
         Replaces state-arrays in the inputs fields with a specific values for states.
@@ -172,7 +172,7 @@ class Node(ty.Generic[OutputType]):
         #     }
         from pydra.engine.specs import WorkflowDef
 
-        if state_index is not None:
+        if state_index:
             inputs_copy = copy(self._definition)
             for key, ind in self.state.inputs_ind[state_index].items():
                 val = self._extract_input_el(

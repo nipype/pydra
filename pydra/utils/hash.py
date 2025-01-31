@@ -33,12 +33,12 @@ FUNCTION_SRC_CHUNK_LEN_DEFAULT = 8192
 try:
     from typing import Protocol
 except ImportError:
-    from typing_extensions import Protocol  # type: ignore
+    from typing import Protocol  # type: ignore
 
 try:
     from typing import runtime_checkable
 except ImportError:
-    from typing_extensions import runtime_checkable  # type: ignore
+    from typing import runtime_checkable  # type: ignore
 
 
 try:

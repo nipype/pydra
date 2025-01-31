@@ -1,6 +1,6 @@
 import typing as ty
 import abc
-from typing_extensions import Self
+from typing import Self
 import attrs
 from pydra.utils.typing import StateArray
 from pydra.utils.hash import hash_single
@@ -141,6 +141,10 @@ class LazyOutField(LazyField[T]):
         from pydra.utils.typing import (
             TypeParser,
         )  # pylint: disable=import-outside-toplevel
+        from pydra.engine.state import StateIndex
+        
+        if state_index is None:
+            state_index = StateIndex()
 
         task = graph.node(self.node.name).task(state_index)
         _, split_depth = TypeParser.strip_splits(self.type)

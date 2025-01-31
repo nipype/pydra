@@ -5,7 +5,7 @@ import re
 import enum
 from pathlib import Path
 from copy import copy
-from typing_extensions import Self
+from typing import Self
 import attrs.validators
 from attrs.converters import default_if_none
 from fileformats.generic import File

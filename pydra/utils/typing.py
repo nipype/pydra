@@ -16,7 +16,7 @@ try:
     from typing import get_origin, get_args
 except ImportError:
     # Python < 3.8
-    from typing_extensions import get_origin, get_args  # type: ignore
+    from typing import get_origin, get_args  # type: ignore
 
 if sys.version_info >= (3, 10):
     UNION_TYPES = (ty.Union, types.UnionType)
@@ -625,7 +625,7 @@ class TypeParser(ty.Generic[T]):
         """
         if (
             isinstance(source, ty.Sequence)
-            and issubclass(target, generic.FileSet)
+            and issubclass(target, core.FileSet)
             and all(isinstance(p, os.PathLike) for p in source)
         ):
             return True

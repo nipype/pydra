@@ -72,8 +72,8 @@ Execution
 Learn how to execute existing tasks (including workflows) on different systems
 
 * :ref:`Getting started`
-* :ref:`Troubleshooting`
 * :ref:`Advanced execution`
+* :ref:`Troubleshooting`
 
 Design
 ~~~~~~
@@ -120,8 +120,8 @@ See the full reference documentation for Pydra
     :hidden:
 
     tutorial/1-getting-started
-    tutorial/2-troubleshooting
-    tutorial/3-advanced-execution
+    tutorial/2-advanced-execution
+    tutorial/3-troubleshooting
 
 .. toctree::
     :maxdepth: 2

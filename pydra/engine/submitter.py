@@ -541,7 +541,6 @@ class NodeExecution(ty.Generic[DefType]):
                 definition=self.node._definition._resolve_lazy_inputs(
                     workflow_inputs=self.workflow_inputs,
                     graph=self.graph,
-                    state_index=None,
                 ),
                 submitter=self.submitter,
                 name=self.node.name,

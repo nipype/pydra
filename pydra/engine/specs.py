@@ -13,10 +13,10 @@ from collections import Counter
 import typing as ty
 from glob import glob
 from copy import deepcopy
-from typing_extensions import Self
+from typing import Self
 import attrs
 import cloudpickle as cp
-from fileformats.generic import FileSet
+from fileformats.core import FileSet
 from pydra.utils.messenger import AuditFlag, Messenger
 from pydra.utils.typing import TypeParser
 from .helpers import (
@@ -407,6 +407,10 @@ class TaskDef(ty.Generic[OutputsType]):
         Self
             The task definition with all lazy fields resolved
         """
+        from pydra.engine.state import StateIndex
+        
+        if state_index is None:
+            state_index = StateIndex()
         resolved = {}
         for name, value in attrs_values(self).items():
             if isinstance(value, LazyInField):
