@@ -118,10 +118,6 @@ class Task(ty.Generic[DefType]):
             3. No cache or other process -> start
             4. Two or more concurrent new processes get to start
         """
-        from . import check_latest_version
-
-        if Task._etelemetry_version_data is None:
-            Task._etelemetry_version_data = check_latest_version()
 
         if state_index is None:
             state_index = state.StateIndex()
@@ -208,7 +204,7 @@ class Task(ty.Generic[DefType]):
         if self._checksum is not None:
             return self._checksum
         input_hash = self.definition._hash
-        self._checksum = create_checksum(self.definition.__class__.__name__, input_hash)
+        self._checksum = create_checksum(self.definition._task_type, input_hash)
         return self._checksum
 
     @property

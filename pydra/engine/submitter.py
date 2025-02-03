@@ -98,6 +98,11 @@ class Submitter:
         **kwargs,
     ):
 
+        from . import check_latest_version
+
+        if Task._etelemetry_version_data is None:
+            Task._etelemetry_version_data = check_latest_version()
+
         self.audit = Audit(
             audit_flags=audit_flags,
             messengers=messengers,
@@ -199,7 +204,7 @@ class Submitter:
             if task.lockfile.exists():
                 raise RuntimeError(
                     f"Task {task} has a lockfile, but no result was found. "
-                    "This may be due to another submission process queued, or the hard "
+                    "This may be due to another submission that is currently running, or the hard "
                     "interrupt (e.g. a debugging abortion) interrupting a previous run. "
                     f"In the case of an interrupted run, please remove {str(task.lockfile)!r} "
                     "and resubmit."

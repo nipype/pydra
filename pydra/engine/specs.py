@@ -117,6 +117,8 @@ OutputsType = ty.TypeVar("OutputType", bound=TaskOutputs)
 class TaskDef(ty.Generic[OutputsType]):
     """Base class for all task definitions"""
 
+    _task_type: str
+
     # The following fields are used to store split/combine state information
     _splitter = attrs.field(default=None, init=False, repr=False)
     _combiner = attrs.field(default=None, init=False, repr=False)
@@ -621,6 +623,8 @@ PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 class PythonDef(TaskDef[PythonOutputsType]):
 
+    _task_type: str = "python"
+
     def _run(self, task: "Task[PythonDef]") -> None:
         # Prepare the inputs to the function
         inputs = attrs_values(self)
@@ -700,6 +704,8 @@ WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 @attrs.define(kw_only=True)
 class WorkflowDef(TaskDef[WorkflowOutputsType]):
+
+    _task_type: str = "workflow"
 
     RESERVED_FIELD_NAMES = TaskDef.RESERVED_FIELD_NAMES + ("construct",)
 
@@ -888,6 +894,8 @@ ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
 
 class ShellDef(TaskDef[ShellOutputsType]):
+
+    _task_type: str = "shell"
 
     BASE_NAMES = ["additional_args"]
 

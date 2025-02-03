@@ -350,7 +350,7 @@ def create_checksum(name, inputs):
         String of inputs.
 
     """
-    return "_".join((name, inputs))
+    return "-".join((name, inputs))
 
 
 def record_error(error_path, error):
