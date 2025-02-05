@@ -166,7 +166,7 @@ def define(
         for i, output in enumerate(parsed_outputs.values()):
             output.order = i
 
-        interface = make_task_def(
+        defn = make_task_def(
             PythonDef,
             PythonOutputs,
             parsed_inputs,
@@ -177,7 +177,7 @@ def define(
             outputs_bases=outputs_bases,
         )
 
-        return interface
+        return defn
 
     if wrapped is not None:
         if not isinstance(wrapped, (ty.Callable, type)):

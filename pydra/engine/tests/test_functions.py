@@ -182,18 +182,17 @@ def test_annotation_equivalence_4():
 
     # Run functions to ensure behavior is unaffected
     a = random.randint(0, (1 << 32) - 3)
-    assert Direct(a=a) == Partial(a=a)
-    assert Direct(a=a) == Indirect(a=a)
+    assert hashes(Direct(a=a)) == hashes(Partial(a=a)) == hashes(Indirect(a=a))
 
     # checking if the annotation is properly converted to output_spec if used in task
     assert list_fields(Direct.Outputs) == [
-        python.arg(name="sum", type=int),
-        python.arg(name="sub", type=int),
+        python.out(name="sum", type=int, order=0),
+        python.out(name="sub", type=int, order=1),
     ]
 
 
 def test_invalid_annotation():
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError, match="Unrecognised input names"):
 
         @python.define(inputs={"b": int})
         def addtwo(a):
@@ -202,50 +201,51 @@ def test_invalid_annotation():
 
 def test_annotated_task():
 
-    def square(in_val: float):
+    @python.define
+    def Square(in_val: float):
         return in_val**2
 
-    res = square(in_val=2.0)()
-    assert res.output.out == 4.0
+    outputs = Square(in_val=2.0)()
+    assert outputs.out == 4.0
 
 
 def test_return_annotated_task():
 
     @python.define(inputs={"in_val": float}, outputs={"squared": float})
-    def square(in_val):
+    def Square(in_val):
         return in_val**2
 
-    res = square(in_val=2.0)()
-    assert res.output.squared == 4.0
+    outputs = Square(in_val=2.0)()
+    assert outputs.squared == 4.0
 
 
 def test_return_halfannotated_annotated_task():
 
     @python.define(inputs={"in_val": float}, outputs={"out": float})
-    def square(in_val):
+    def Square(in_val):
         return in_val**2
 
-    res = square(in_val=2.0)()
-    assert res.output.out == 4.0
+    outputs = Square(in_val=2.0)()
+    assert outputs.out == 4.0
 
 
 def test_return_annotated_task_multiple_output():
 
     @python.define(inputs={"in_val": float}, outputs={"squared": float, "cubed": float})
-    def square(in_val):
+    def Square(in_val):
         return in_val**2, in_val**3
 
-    res = square(in_val=2.0)()
-    assert res.output.squared == 4.0
-    assert res.output.cubed == 8.0
+    outputs = Square(in_val=2.0)()
+    assert outputs.squared == 4.0
+    assert outputs.cubed == 8.0
 
 
 def test_return_halfannotated_task_multiple_output():
 
     @python.define(inputs={"in_val": float}, outputs=(float, float))
-    def square(in_val):
+    def Square(in_val):
         return in_val**2, in_val**3
 
-    res = square(in_val=2.0)()
-    assert res.output.out1 == 4.0
-    assert res.output.out2 == 8.0
+    outputs = Square(in_val=2.0)()
+    assert outputs.out1 == 4.0
+    assert outputs.out2 == 8.0

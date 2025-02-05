@@ -5,7 +5,7 @@ from pydra.engine.submitter import Submitter
 wf = UnsafeDivisionWorkflow(a=10, b=5, denominator=2)
 
 if __name__ == "__main__":
-    with Submitter(worker="cf") as sub:
+    with Submitter(worker="cf", rerun=True) as sub:
         result = sub(wf)
 
 

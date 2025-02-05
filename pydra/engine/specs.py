@@ -380,6 +380,8 @@ class TaskDef(ty.Generic[OutputsType]):
             if getattr(field, "container_path", False):
                 continue
             inp_dict[field.name] = getattr(self, field.name)
+        # Include the outputs class, just in case any names or types have changed
+        inp_dict["Outputs"] = self.Outputs
         hash_cache = Cache()
         field_hashes = {
             k: hash_function(v, cache=hash_cache) for k, v in inp_dict.items()
