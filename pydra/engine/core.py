@@ -721,7 +721,12 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         """Clear the cache of constructed workflows"""
         cls._constructed.clear()
 
-    def add(self, task_spec: TaskDef[OutputsType], name=None) -> OutputsType:
+    def add(
+        self,
+        task_def: TaskDef[OutputsType],
+        name: str | None = None,
+        environment: Environment | None = None,
+    ) -> OutputsType:
         """Add a node to the workflow
 
         Parameters
@@ -738,10 +743,17 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
             The outputs definition of the node
         """
         if name is None:
-            name = type(task_spec).__name__
+            name = type(task_def).__name__
         if name in self._nodes:
             raise ValueError(f"Node with name {name!r} already exists in the workflow")
-        node = Node[OutputsType](name=name, definition=task_spec, workflow=self)
+        if environment and task_def._task_type != "shell":
+            raise ValueError(
+                "Environments can only be used with 'shell' tasks not "
+                f"{task_def._task_type!r} tasks ({task_def!r})"
+            )
+        node = Node[OutputsType](
+            name=name, definition=task_def, workflow=self, environment=environment
+        )
         self._nodes[name] = node
         return node.lzout
 

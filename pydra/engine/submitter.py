@@ -541,13 +541,14 @@ class NodeExecution(ty.Generic[DefType]):
         )
 
     def _generate_tasks(self) -> ty.Iterable["Task[DefType]"]:
-        if self.node.state is None:
+        if not self.node.state:
             yield Task(
                 definition=self.node._definition._resolve_lazy_inputs(
                     workflow_inputs=self.workflow_inputs,
                     graph=self.graph,
                 ),
                 submitter=self.submitter,
+                environment=self.node._environment,
                 name=self.node.name,
             )
         else:
@@ -559,6 +560,7 @@ class NodeExecution(ty.Generic[DefType]):
                         state_index=index,
                     ),
                     submitter=self.submitter,
+                    environment=self.node._environment,
                     name=self.node.name,
                     state_index=index,
                 )
