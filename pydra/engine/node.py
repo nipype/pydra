@@ -43,9 +43,9 @@ class Node(ty.Generic[OutputType]):
     name: str
     _definition: "TaskDef[OutputType]"
     _environment: "Environment | None" = None
-    _workflow: "Workflow" = attrs.field(default=None, eq=False, hash=False)
+    _workflow: "Workflow" = attrs.field(default=None, eq=False, hash=False, repr=False)
     _lzout: OutputType | None = attrs.field(
-        init=False, default=None, eq=False, hash=False
+        init=False, default=None, eq=False, hash=False, repr=False
     )
     _state: State | None = attrs.field(init=False, default=NOT_SET)
     _cont_dim: dict[str, int] | None = attrs.field(

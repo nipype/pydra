@@ -25,6 +25,7 @@ from filelock import SoftFileLock
 import attrs.exceptions
 from fileformats.core.fileset import FileSet, MockMixin
 from . import user_cache_dir, add_exc_note
+from .misc import is_standard_library_type
 
 logger = logging.getLogger("pydra")
 
@@ -458,29 +459,69 @@ def bytes_repr_dict(obj: dict, cache: Cache) -> Iterator[bytes]:
 @register_serializer(ty._SpecialForm)
 @register_serializer(type)
 def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
-    def type_name(tp):
+    from pydra.engine.helpers import list_fields
+
+    def type_location(tp: type) -> bytes:
+        """Return the module and name of the type in a ASCII byte string"""
         try:
-            name = tp.__name__
+            type_name = tp.__name__
         except AttributeError:
-            name = tp._name
-        return name
+            type_name = tp._name
+        return f"{klass.__module__}.{type_name}".encode()
 
     yield b"type:("
     origin = ty.get_origin(klass)
-    if origin:
-        yield f"{origin.__module__}.{type_name(origin)}[".encode()
-        for arg in ty.get_args(klass):
+    args = ty.get_args(klass)
+    if origin and args:
+        yield b"origin:("
+        yield from bytes_repr_type(origin, cache)
+        yield b"),args:("
+        for arg in args:
             if isinstance(
                 arg, list
             ):  # sometimes (e.g. Callable) the args of a type is a list
-                yield b"["
                 yield from (b for t in arg for b in bytes_repr_type(t, cache))
-                yield b"]"
             else:
                 yield from bytes_repr_type(arg, cache)
-        yield b"]"
+        yield b")"
     else:
-        yield f"{klass.__module__}.{type_name(klass)}".encode()
+        if is_standard_library_type(klass):
+            yield type_location(klass)
+        elif issubclass(klass, FileSet):
+            yield b"mime-like:(" + klass.mime_like.encode() + b")"
+        elif fields := list_fields(klass):
+            yield b"fields:("
+            yield from bytes_repr_sequence_contents(fields, cache)
+            yield b")"
+        elif attrs.has(fields):
+            yield b"attrs:("
+            yield from bytes_repr_sequence_contents(attrs.fields(klass), cache)
+            yield b")"
+        else:
+            try:
+                dct = {
+                    n: v for n, v in klass.__dict__.items() if not n.startswith("__")
+                }
+            except AttributeError:
+                yield type_location(klass)
+            else:
+                yield b"dict:("
+                yield from bytes_repr_mapping_contents(dct, cache)
+                yield b")"
+                # Include annotations
+                try:
+                    annotations = klass.__annotations__
+                except AttributeError:
+                    pass
+                else:
+                    yield b",annotations:("
+                    yield from bytes_repr_mapping_contents(annotations, cache)
+                    yield b")"
+                yield b",mro:("
+                yield from (
+                    b for t in klass.mro()[1:-1] for b in bytes_repr_type(t, cache)
+                )
+                yield b")"
     yield b")"
 
 
@@ -612,6 +653,7 @@ def bytes_repr_mapping_contents(mapping: Mapping, cache: Cache) -> Iterator[byte
         yield from bytes_repr(key, cache)
         yield b"="
         yield bytes(hash_single(mapping[key], cache))
+        yield b","
 
 
 def bytes_repr_sequence_contents(seq: Sequence, cache: Cache) -> Iterator[bytes]:

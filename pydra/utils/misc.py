@@ -2,8 +2,10 @@ from pathlib import Path
 import re
 import ast
 import inspect
+import sys
 import platformdirs
 import builtins
+import pkgutil
 from pydra.engine._version import __version__
 
 user_cache_dir = Path(
@@ -143,3 +145,28 @@ def get_builtin_type_names():
         A set of built-in object type names.
     """
     return set(name for name, obj in vars(builtins).items() if isinstance(obj, type))
+
+
+def is_standard_library_type(obj):
+    """Check if a type is in the standard library."""
+    module = inspect.getmodule(obj)
+    if module is None:
+        return False
+    return module.__name__ in STANDARD_LIBRARY_MODULES or module.__name__.startswith(
+        "builtins"
+    )
+
+
+def _standard_library_modules() -> frozenset[str]:
+    """List all standard library modules."""
+    std_lib_modules = set(sys.builtin_module_names)
+    for _, modname, ispkg in pkgutil.iter_modules():
+        if not ispkg:
+            std_lib_modules.add(modname)
+    return frozenset(std_lib_modules)
+
+
+STANDARD_LIBRARY_MODULES: frozenset[str] = _standard_library_modules()
+
+# Example usage:
+# print(list_standard_library_modules())

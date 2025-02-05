@@ -181,18 +181,23 @@ def test_bytes_repr_type1():
 
 def test_bytes_repr_type1a():
     obj_repr = join_bytes_repr(Zip[Json])
-    assert obj_repr == rb"type:(fileformats.application.archive.Json__Zip)"
+    assert obj_repr == rb"type:(mime-like:(application/json+zip))"
 
 
 def test_bytes_repr_type2():
     T = ty.TypeVar("T")
 
     class MyClass(ty.Generic[T]):
-        pass
 
-    obj_repr = join_bytes_repr(MyClass[int]).decode()
-    assert re.match(
-        r"type:\([\w\.]*test_hash.MyClass\[type:\(builtins.int\)\]\)", obj_repr
+        a: int
+        b: str
+
+        def method(self, f: float) -> float:
+            return f + 1
+
+    assert join_bytes_repr(MyClass[int]) == (
+        rb"type:(origin:(type:(dict:(),annotations:(),mro:(type:(typing.Generic)))),"
+        rb"args:(type:(builtins.int)))"
     )
 
 

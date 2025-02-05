@@ -54,6 +54,7 @@ def is_set(value: ty.Any) -> bool:
     return value not in (attrs.NOTHING, EMPTY)
 
 
+@attrs.define
 class TaskOutputs:
     """Base class for all output definitions"""
 
@@ -592,6 +593,7 @@ class RuntimeSpec:
     network: bool = False
 
 
+@attrs.define(kw_only=True, auto_attribs=False)
 class PythonOutputs(TaskOutputs):
 
     @classmethod
@@ -620,6 +622,7 @@ class PythonOutputs(TaskOutputs):
 PythonOutputsType = ty.TypeVar("OutputType", bound=PythonOutputs)
 
 
+@attrs.define(kw_only=True, auto_attribs=False)
 class PythonDef(TaskDef[PythonOutputsType]):
 
     _task_type: str = "python"
@@ -648,6 +651,7 @@ class PythonDef(TaskDef[PythonOutputsType]):
             )
 
 
+@attrs.define(kw_only=True, auto_attribs=False)
 class WorkflowOutputs(TaskOutputs):
 
     @classmethod
@@ -701,7 +705,7 @@ class WorkflowOutputs(TaskOutputs):
 WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 
-@attrs.define(kw_only=True)
+@attrs.define(kw_only=True, auto_attribs=False)
 class WorkflowDef(TaskDef[WorkflowOutputsType]):
 
     _task_type: str = "workflow"
@@ -732,6 +736,7 @@ STDOUT_HELP = """The standard output stream produced by the command."""
 STDERR_HELP = """The standard error stream produced by the command."""
 
 
+@attrs.define(kw_only=True, auto_attribs=False)
 class ShellOutputs(TaskOutputs):
     """Output definition of a generic shell process."""
 
@@ -892,6 +897,7 @@ class ShellOutputs(TaskOutputs):
 ShellOutputsType = ty.TypeVar("OutputType", bound=ShellOutputs)
 
 
+@attrs.define(kw_only=True, auto_attribs=False)
 class ShellDef(TaskDef[ShellOutputsType]):
 
     _task_type: str = "shell"
