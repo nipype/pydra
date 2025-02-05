@@ -4,7 +4,6 @@ from pathlib import Path
 import re
 from copy import copy
 import os
-from operator import attrgetter
 import inspect
 import itertools
 import platform
@@ -86,6 +85,10 @@ class TaskOutputs:
             raise AttributeError(
                 f"{self} outputs object is not a lazy output of a workflow node"
             ) from None
+
+    def __iter__(self) -> list[str]:
+        """The names of the fields in the output object"""
+        return sorted(f.name for f in attrs_fields(self))
 
     def __getitem__(self, name_or_index: str | int) -> ty.Any:
         """Return the value for the given attribute
@@ -590,12 +593,6 @@ class RuntimeSpec:
 
 
 class PythonOutputs(TaskOutputs):
-
-    def __iter__(self) -> ty.Generator[ty.Any, None, None]:
-        """Iterate through all the values in the definition, allows for tuple unpacking"""
-        fields = sorted(attrs_fields(self), key=attrgetter("order"))
-        for field in fields:
-            yield getattr(self, field.name)
 
     @classmethod
     def _from_task(cls, task: "Task[PythonDef]") -> Self:

@@ -267,8 +267,6 @@ class Out(Field):
         The converter for the field passed through to the attrs.field, by default it is None
     validator: callable | iterable[callable], optional
         The validator(s) for the field passed through to the attrs.field, by default it is None
-    order : int
-        The order of the output in the output list, allows for tuple unpacking of outputs
     """
 
     pass

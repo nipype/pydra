@@ -89,7 +89,7 @@ def test_annotation_equivalence_1():
     assert non_func_values(Direct(a=a)) == non_func_values(Indirect(a=a))
 
     # checking if the annotation is properly converted to output_spec if used in task
-    assert list_fields(Direct.Outputs)[0] == python.out(name="out", type=int, order=0)
+    assert list_fields(Direct.Outputs)[0] == python.out(name="out", type=int)
 
 
 def test_annotation_equivalence_2():
@@ -119,8 +119,8 @@ def test_annotation_equivalence_2():
 
     # checking if the annotation is properly converted to output_spec if used in task
     assert list_fields(Direct.Outputs) == [
-        python.out(name="out1", type=int, order=0),
-        python.out(name="out2", type=float, order=1),
+        python.out(name="out1", type=int),
+        python.out(name="out2", type=float),
     ]
 
 
@@ -150,7 +150,7 @@ def test_annotation_equivalence_3():
     assert hashes(Direct(a=a)) == hashes(Partial(a=a)) == hashes(Indirect(a=a))
 
     # checking if the annotation is properly converted to output_spec if used in task
-    assert list_fields(Direct.Outputs)[0] == python.out(name="out1", type=int, order=0)
+    assert list_fields(Direct.Outputs)[0] == python.out(name="out1", type=int)
 
 
 def test_annotation_equivalence_4():
@@ -186,8 +186,8 @@ def test_annotation_equivalence_4():
 
     # checking if the annotation is properly converted to output_spec if used in task
     assert list_fields(Direct.Outputs) == [
-        python.out(name="sum", type=int, order=0),
-        python.out(name="sub", type=int, order=1),
+        python.out(name="sum", type=int),
+        python.out(name="sub", type=int),
     ]
 
 

@@ -125,8 +125,6 @@ class out(Out):
         to the function), output_dir (task output_dir will be used), stdout, stderr
         (stdout and stderr of the task will be sent) inputs (entire inputs will be
         passed) or any input field name (a specific input field will be sent).
-    order : int
-        The order of the output in the output list, allows for tuple unpacking of outputs
     """
 
     callable: ty.Callable | None = None
