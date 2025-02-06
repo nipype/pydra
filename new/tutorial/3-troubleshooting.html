@@ -331,124 +331,7 @@
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev190+ge7c82921
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-2&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-3&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Divide&#39;&gt;: attribute lookup Divide on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Divide&#39;&gt;: attribute lookup Divide on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Divide&#39;&gt;: attribute lookup Divide on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-4&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed
+A newer version (0.25) of nipype/pydra is available. You are using 0.25.dev191+g955fe384
 </pre></div></div>
 </div>
 <p>This allows the secondary processes to import the script without executing it. Without such a block Pydra will lock up and not process the workflow. On Linux this is not an issue due to the way that processes are forked, but is good practice in any case for code portability.</p>
@@ -476,8 +359,9 @@ cause the Pydra to hang waiting for the lock to be released. If you suspect this
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># This workflow will fail because we are trying to divide by 0</span>
 <span class="n">wf</span> <span class="o">=</span> <span class="n">UnsafeDivisionWorkflow</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">denominator</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span> <span class="p">,</span><span class="mi">0</span><span class="p">])</span>
 
-<span class="k">with</span> <span class="n">Submitter</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="s2">&quot;cf&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">sub</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span><span class="n">wf</span><span class="p">)</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">Submitter</span><span class="p">(</span><span class="n">worker</span><span class="o">=</span><span class="s2">&quot;cf&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">sub</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">sub</span><span class="p">(</span><span class="n">wf</span><span class="p">)</span>
 
 <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">errored</span><span class="p">:</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Workflow failed with errors:</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">errors</span><span class="p">))</span>
@@ -492,162 +376,6 @@ cause the Pydra to hang waiting for the lock to be released. If you suspect this
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
 Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-6&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-7&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Divide&#39;&gt;: attribute lookup Divide on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Divide&#39;&gt;: attribute lookup Divide on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Divide&#39;&gt;: attribute lookup Divide on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-8&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-9&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-Task exception was never retrieved
 future: &lt;Task finished name=&#39;Task-10&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=ZeroDivisionError(&#39;float division by zero&#39;)&gt;
 concurrent.futures.process._RemoteTraceback:
 &#34;&#34;&#34;
@@ -660,7 +388,7 @@ Traceback (most recent call last):
   File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/core.py&#34;, line 368, in run
     self.definition._run(self)
     ~~~~~~~~~~~~~~~~~~~~^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py&#34;, line 633, in _run
+  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py&#34;, line 637, in _run
     returned = self.function(**inputs)
   File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/tasks/testing/__init__.py&#34;, line 11, in Divide
     return x / y
@@ -698,12 +426,12 @@ ZeroDivisionError: float division by zero
 <div class="highlight"><pre>
 <span class="ansi-red-fg">---------------------------------------------------------------------------</span>
 <span class="ansi-red-fg">ValueError</span>                                Traceback (most recent call last)
-Cell <span class="ansi-green-fg">In[3], line 5</span>
-<span class="ansi-green-intense-fg ansi-bold">      2</span> wf <span style="color: rgb(98,98,98)">=</span> UnsafeDivisionWorkflow(a<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(98,98,98)">10</span>, b<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(98,98,98)">5</span>)<span style="color: rgb(98,98,98)">.</span>split(denominator<span style="color: rgb(98,98,98)">=</span>[<span style="color: rgb(98,98,98)">3</span>, <span style="color: rgb(98,98,98)">2</span> ,<span style="color: rgb(98,98,98)">0</span>])
-<span class="ansi-green-intense-fg ansi-bold">      4</span> <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> Submitter(worker<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">cf</span><span style="color: rgb(175,0,0)">&#34;</span>) <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> sub:
-<span class="ansi-green-fg">----&gt; 5</span>     result <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">sub</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">wf</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">      7</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> result<span style="color: rgb(98,98,98)">.</span>errored:
-<span class="ansi-green-intense-fg ansi-bold">      8</span>     <span style="color: rgb(0,135,0)">print</span>(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Workflow failed with errors:</span><span class="ansi-bold" style="color: rgb(175,95,0)">\n</span><span style="color: rgb(175,0,0)">&#34;</span> <span style="color: rgb(98,98,98)">+</span> <span style="color: rgb(0,135,0)">str</span>(result<span style="color: rgb(98,98,98)">.</span>errors))
+Cell <span class="ansi-green-fg">In[3], line 6</span>
+<span class="ansi-green-intense-fg ansi-bold">      4</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> <span style="color: rgb(0,0,135)">__name__</span> <span style="color: rgb(98,98,98)">==</span> <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">__main__</span><span style="color: rgb(175,0,0)">&#34;</span>:
+<span class="ansi-green-intense-fg ansi-bold">      5</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">with</span> Submitter(worker<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">cf</span><span style="color: rgb(175,0,0)">&#34;</span>) <span class="ansi-bold" style="color: rgb(0,135,0)">as</span> sub:
+<span class="ansi-green-fg">----&gt; 6</span>         result <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">sub</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">wf</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">      8</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> result<span style="color: rgb(98,98,98)">.</span>errored:
+<span class="ansi-green-intense-fg ansi-bold">      9</span>     <span style="color: rgb(0,135,0)">print</span>(<span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Workflow failed with errors:</span><span class="ansi-bold" style="color: rgb(175,95,0)">\n</span><span style="color: rgb(175,0,0)">&#34;</span> <span style="color: rgb(98,98,98)">+</span> <span style="color: rgb(0,135,0)">str</span>(result<span style="color: rgb(98,98,98)">.</span>errors))
 
 File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/submitter.py:194</span>, in <span class="ansi-cyan-fg">Submitter.__call__</span><span class="ansi-blue-fg">(self, task_def)</span>
 <span class="ansi-green-intense-fg ansi-bold">    192</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>run_start_time <span style="color: rgb(98,98,98)">=</span> datetime<span style="color: rgb(98,98,98)">.</span>now()
@@ -746,10 +474,10 @@ File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/pyth
 <span class="ansi-green-intense-fg ansi-bold">    423</span>     result<span style="color: rgb(98,98,98)">.</span>outputs <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>definition<span style="color: rgb(98,98,98)">.</span>Outputs<span style="color: rgb(98,98,98)">.</span>_from_task(<span style="color: rgb(0,135,0)">self</span>)
 <span class="ansi-green-intense-fg ansi-bold">    424</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span>:
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:721</span>, in <span class="ansi-cyan-fg">WorkflowDef._run_async</span><span class="ansi-blue-fg">(self, task)</span>
-<span class="ansi-green-intense-fg ansi-bold">    719</span> <span class="ansi-bold" style="color: rgb(0,135,0)">async</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">_run_async</span>(<span style="color: rgb(0,135,0)">self</span>, task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[WorkflowDef]</span><span style="color: rgb(175,0,0)">&#34;</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    720</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Run the workflow asynchronously.&#34;&#34;&#34;</span>
-<span class="ansi-green-fg">--&gt; 721</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> task<span style="color: rgb(98,98,98)">.</span>submitter<span style="color: rgb(98,98,98)">.</span>expand_workflow_async(task)
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:725</span>, in <span class="ansi-cyan-fg">WorkflowDef._run_async</span><span class="ansi-blue-fg">(self, task)</span>
+<span class="ansi-green-intense-fg ansi-bold">    723</span> <span class="ansi-bold" style="color: rgb(0,135,0)">async</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">_run_async</span>(<span style="color: rgb(0,135,0)">self</span>, task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[WorkflowDef]</span><span style="color: rgb(175,0,0)">&#34;</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
+<span class="ansi-green-intense-fg ansi-bold">    724</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Run the workflow asynchronously.&#34;&#34;&#34;</span>
+<span class="ansi-green-fg">--&gt; 725</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> task<span style="color: rgb(98,98,98)">.</span>submitter<span style="color: rgb(98,98,98)">.</span>expand_workflow_async(task)
 
 File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/submitter.py:342</span>, in <span class="ansi-cyan-fg">Submitter.expand_workflow_async</span><span class="ansi-blue-fg">(self, workflow_task)</span>
 <span class="ansi-green-intense-fg ansi-bold">    340</span> <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> task <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> tasks:
@@ -769,10 +497,10 @@ File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/pyth
 <span class="ansi-green-intense-fg ansi-bold">    423</span>     result<span style="color: rgb(98,98,98)">.</span>outputs <span style="color: rgb(98,98,98)">=</span> <span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>definition<span style="color: rgb(98,98,98)">.</span>Outputs<span style="color: rgb(98,98,98)">.</span>_from_task(<span style="color: rgb(0,135,0)">self</span>)
 <span class="ansi-green-intense-fg ansi-bold">    424</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span>:
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:721</span>, in <span class="ansi-cyan-fg">WorkflowDef._run_async</span><span class="ansi-blue-fg">(self, task)</span>
-<span class="ansi-green-intense-fg ansi-bold">    719</span> <span class="ansi-bold" style="color: rgb(0,135,0)">async</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">_run_async</span>(<span style="color: rgb(0,135,0)">self</span>, task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[WorkflowDef]</span><span style="color: rgb(175,0,0)">&#34;</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
-<span class="ansi-green-intense-fg ansi-bold">    720</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Run the workflow asynchronously.&#34;&#34;&#34;</span>
-<span class="ansi-green-fg">--&gt; 721</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> task<span style="color: rgb(98,98,98)">.</span>submitter<span style="color: rgb(98,98,98)">.</span>expand_workflow_async(task)
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:725</span>, in <span class="ansi-cyan-fg">WorkflowDef._run_async</span><span class="ansi-blue-fg">(self, task)</span>
+<span class="ansi-green-intense-fg ansi-bold">    723</span> <span class="ansi-bold" style="color: rgb(0,135,0)">async</span> <span class="ansi-bold" style="color: rgb(0,135,0)">def</span><span style="color: rgb(188,188,188)"> </span><span style="color: rgb(0,0,255)">_run_async</span>(<span style="color: rgb(0,135,0)">self</span>, task: <span style="color: rgb(175,0,0)">&#34;</span><span style="color: rgb(175,0,0)">Task[WorkflowDef]</span><span style="color: rgb(175,0,0)">&#34;</span>) <span style="color: rgb(98,98,98)">-</span><span style="color: rgb(98,98,98)">&gt;</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
+<span class="ansi-green-intense-fg ansi-bold">    724</span> <span style="color: rgb(188,188,188)">    </span><span style="color: rgb(175,0,0)">&#34;&#34;&#34;Run the workflow asynchronously.&#34;&#34;&#34;</span>
+<span class="ansi-green-fg">--&gt; 725</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">await</span> task<span style="color: rgb(98,98,98)">.</span>submitter<span style="color: rgb(98,98,98)">.</span>expand_workflow_async(task)
 
 File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/submitter.py:346</span>, in <span class="ansi-cyan-fg">Submitter.expand_workflow_async</span><span class="ansi-blue-fg">(self, workflow_task)</span>
 <span class="ansi-green-intense-fg ansi-bold">    344</span>             task_futures<span style="color: rgb(98,98,98)">.</span>add(<span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>worker<span style="color: rgb(98,98,98)">.</span>run(task, rerun<span style="color: rgb(98,98,98)">=</span><span style="color: rgb(0,135,0)">self</span><span style="color: rgb(98,98,98)">.</span>rerun))
@@ -876,364 +604,6 @@ all the task dirs in your cache root to find the issue.</p>
 </pre></div>
 </div>
 </div>
-<div class="nboutput docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-12&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-13&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.SafeDivide&#39;&gt;: attribute lookup SafeDivide on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.SafeDivide&#39;&gt;: attribute lookup SafeDivide on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.SafeDivide&#39;&gt;: attribute lookup SafeDivide on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-14&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-15&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-16&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.SafeDivide&#39;&gt;: attribute lookup SafeDivide on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.SafeDivide&#39;&gt;: attribute lookup SafeDivide on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.SafeDivide&#39;&gt;: attribute lookup SafeDivide on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-17&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-18&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Add&#39;&gt;: attribute lookup Add on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-19&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.SafeDivide&#39;&gt;: attribute lookup SafeDivide on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.SafeDivide&#39;&gt;: attribute lookup SafeDivide on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.SafeDivide&#39;&gt;: attribute lookup SafeDivide on types failed
-Task exception was never retrieved
-future: &lt;Task finished name=&#39;Task-20&#39; coro=&lt;ConcurrentFuturesWorker.run() done, defined at /opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py:186&gt; exception=PicklingError(&#34;Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed&#34;)&gt;
-concurrent.futures.process._RemoteTraceback:
-&#34;&#34;&#34;
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/concurrent/futures/process.py&#34;, line 210, in _sendback_result
-    result_queue.put(_ResultItem(work_id, result=result,
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                 exception=exception, exit_pid=exit_pid))
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/queues.py&#34;, line 391, in put
-    obj = _ForkingPickler.dumps(obj)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/multiprocessing/reduction.py&#34;, line 51, in dumps
-    cls(buf, protocol).dump(obj)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed
-&#34;&#34;&#34;
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 306, in __step_run_and_handle_result
-    result = coro.throw(exc)
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/workers.py&#34;, line 194, in run
-    return await self.loop.run_in_executor(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pool, self.unpickle_and_run, task_pkl, rerun
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 286, in __await__
-    yield self  # This tells Task to wait for completion.
-    ^^^^^^^^^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/tasks.py&#34;, line 375, in __wakeup
-    future.result()
-    ~~~~~~~~~~~~~^^
-  File &#34;/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/asyncio/futures.py&#34;, line 199, in result
-    raise self._exception.with_traceback(self._exception_tb)
-_pickle.PicklingError: Can&#39;t pickle &lt;class &#39;types.Subtract&#39;&gt;: attribute lookup Subtract on types failed
-</pre></div></div>
-</div>
 <div class="nboutput nblast docutils container">
 <div class="prompt empty docutils container">
 </div>
@@ -1288,12 +658,12 @@ File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/pyth
 <span class="ansi-green-intense-fg ansi-bold">    424</span> <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> <span class="ansi-bold" style="color: rgb(215,95,95)">Exception</span>:
 <span class="ansi-green-intense-fg ansi-bold">    425</span>     etype, <span style="color: rgb(0,135,0)">eval</span>, etr <span style="color: rgb(98,98,98)">=</span> sys<span style="color: rgb(98,98,98)">.</span>exc_info()
 
-File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:678</span>, in <span class="ansi-cyan-fg">WorkflowOutputs._from_task</span><span class="ansi-blue-fg">(cls, task)</span>
-<span class="ansi-green-intense-fg ansi-bold">    676</span> <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> name, lazy_field <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> attrs_values(workflow<span style="color: rgb(98,98,98)">.</span>outputs)<span style="color: rgb(98,98,98)">.</span>items():
-<span class="ansi-green-intense-fg ansi-bold">    677</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
-<span class="ansi-green-fg">--&gt; 678</span>         val_out <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">lazy_field</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_get_value</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">exec_graph</span><span class="ansi-yellow-bg">)</span>
-<span class="ansi-green-intense-fg ansi-bold">    679</span>         output_wf[name] <span style="color: rgb(98,98,98)">=</span> val_out
-<span class="ansi-green-intense-fg ansi-bold">    680</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> (<span class="ansi-bold" style="color: rgb(215,95,95)">ValueError</span>, <span class="ansi-bold" style="color: rgb(215,95,95)">AttributeError</span>):
+File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/specs.py:682</span>, in <span class="ansi-cyan-fg">WorkflowOutputs._from_task</span><span class="ansi-blue-fg">(cls, task)</span>
+<span class="ansi-green-intense-fg ansi-bold">    680</span> <span class="ansi-bold" style="color: rgb(0,135,0)">for</span> name, lazy_field <span class="ansi-bold" style="color: rgb(175,0,255)">in</span> attrs_values(workflow<span style="color: rgb(98,98,98)">.</span>outputs)<span style="color: rgb(98,98,98)">.</span>items():
+<span class="ansi-green-intense-fg ansi-bold">    681</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">try</span>:
+<span class="ansi-green-fg">--&gt; 682</span>         val_out <span style="color: rgb(98,98,98)">=</span> <span class="ansi-yellow-bg">lazy_field</span><span class="ansi-yellow-bg" style="color: rgb(98,98,98)">.</span><span class="ansi-yellow-bg">_get_value</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">exec_graph</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-intense-fg ansi-bold">    683</span>         output_wf[name] <span style="color: rgb(98,98,98)">=</span> val_out
+<span class="ansi-green-intense-fg ansi-bold">    684</span>     <span class="ansi-bold" style="color: rgb(0,135,0)">except</span> (<span class="ansi-bold" style="color: rgb(215,95,95)">ValueError</span>, <span class="ansi-bold" style="color: rgb(215,95,95)">AttributeError</span>):
 
 File <span class="ansi-green-fg">/opt/hostedtoolcache/Python/3.13.1/x64/lib/python3.13/site-packages/pydra/engine/lazy.py:133</span>, in <span class="ansi-cyan-fg">LazyOutField._get_value</span><span class="ansi-blue-fg">(self, graph, state_index)</span>
 <span class="ansi-green-intense-fg ansi-bold">    130</span> <span class="ansi-bold" style="color: rgb(0,135,0)">if</span> state_index <span class="ansi-bold" style="color: rgb(175,0,255)">is</span> <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>:
