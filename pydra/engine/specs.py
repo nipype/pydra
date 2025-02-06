@@ -531,15 +531,19 @@ class Result(ty.Generic[OutputsType]):
     errored: bool = False
     definition: TaskDef[OutputsType] | None = None
 
+    CLOUD_PICKLE_ATTRS = ("outputs", "definition")
+
     def __getstate__(self):
         state = attrs_values(self)
-        if state["outputs"] is not None:
-            state["outputs"] = cp.dumps(state["outputs"])
+        for attr in self.CLOUD_PICKLE_ATTRS:
+            if state[attr] is not None:
+                state[attr] = cp.dumps(state[attr])
         return state
 
     def __setstate__(self, state):
-        if state["outputs"] is not None:
-            state["outputs"] = cp.loads(state["outputs"])
+        for attr in self.CLOUD_PICKLE_ATTRS:
+            if state[attr] is not None:
+                state[attr] = cp.loads(state[attr])
         for name, val in state.items():
             setattr(self, name, val)
 
