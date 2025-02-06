@@ -86,6 +86,10 @@ def print_help(defn: "TaskDef[DefType]") -> list[str]:
     if list_fields(defn):
         lines += ["Input Parameters:"]
     for f in list_fields(defn):
+        if (defn._task_type == "python" and f.name == "function") or (
+            defn._task_type == "workflow" and f.name == "constructor"
+        ):
+            continue
         default = ""
         if f.default is not EMPTY and not f.name.startswith("_"):
             default = f" (default: {f.default})"

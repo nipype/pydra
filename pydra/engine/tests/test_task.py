@@ -66,10 +66,10 @@ def test_checksum():
 
 def test_annotated_func():
     @python.define(outputs=["out_out"])
-    def testfunc(a: int, b: float = 0.1) -> float:
+    def TestFunc(a: int, b: float = 0.1) -> float:
         return a + b
 
-    funky = testfunc(a=1)
+    funky = TestFunc(a=1)
     assert hasattr(funky, "a")
     assert hasattr(funky, "b")
     assert hasattr(funky, "function")
@@ -92,11 +92,10 @@ def test_annotated_func():
 
     help = print_help(funky)
     assert help == [
-        "Help for PythonTask",
+        "Help for TestFunc",
         "Input Parameters:",
         "- a: int",
         "- b: float (default: 0.1)",
-        "- _func: bytes",
         "Output Parameters:",
         "- out_out: float",
     ]
@@ -125,36 +124,35 @@ def test_annotated_func_dictreturn():
 def test_annotated_func_multreturn():
     """the function has two elements in the return statement"""
 
-    @python.define
-    def testfunc(
+    @python.define(outputs={"fractional": float, "integer": int})
+    def TestFunc(
         a: float,
-    ) -> ty.NamedTuple("Output", [("fractional", float), ("integer", int)]):
+    ):
         import math
 
         return math.modf(a)[0], int(math.modf(a)[1])
 
-    funky = testfunc(a=3.5)
+    funky = TestFunc(a=3.5)
     assert hasattr(funky, "a")
-    assert hasattr(funky, "_func")
+    assert hasattr(funky, "function")
     assert getattr(funky, "a") == 3.5
-    assert getattr(funky, "_func") is not None
-    assert set(funky.output_names) == {"fractional", "integer"}
-    assert funky.__class__.__name__ + "_" + funky.hash == funky.checksum
+    assert getattr(funky, "function") is not None
+    assert set(f.name for f in list_fields(funky.Outputs)) == {"fractional", "integer"}
 
     outputs = funky()
-    assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
-    assert hasattr(result, "output")
+    assert os.path.exists(
+        default_run_cache_dir / f"python-{funky._hash}" / "_result.pklz"
+    )
     assert hasattr(outputs, "fractional")
     assert outputs.fractional == 0.5
     assert hasattr(outputs, "integer")
     assert outputs.integer == 3
 
-    help = funky.help(returnhelp=True)
+    help = print_help(funky)
     assert help == [
-        "Help for PythonTask",
+        "Help for TestFunc",
         "Input Parameters:",
         "- a: float",
-        "- _func: bytes",
         "Output Parameters:",
         "- fractional: float",
         "- integer: int",
