@@ -6,12 +6,11 @@ import platform
 import typing as ty
 import pytest
 import cloudpickle as cp
-from unittest.mock import Mock
 from pydra.engine.submitter import Submitter
 from pydra.engine.specs import Result
 from pydra.engine.core import Task
+from pydra.design import workflow
 from fileformats.generic import Directory, File
-from fileformats.core import FileSet
 from .utils import Multiply, RaiseXeq1
 from ..helpers import (
     get_available_cpus,
@@ -179,47 +178,39 @@ def test_get_available_cpus():
 def test_load_and_run(tmpdir):
     """testing load_and_run for pickled task"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
-
-    task = Multiply(name="mult", y=10).split(x=[1, 2])
-    task.state.prepare_states(inputs=task.inputs)
-    task.state.prepare_inputs()
+    # Note that tasks now don't have state arrays and indices, just a single resolved
+    # set of parameters that are ready to run
+    task = Task(name="mult", definition=Multiply(x=2, y=10), submitter=Submitter())
     with task_pkl.open("wb") as fp:
         cp.dump(task, fp)
-
-    resultfile_0 = load_and_run(task_pkl=task_pkl, ind=0)
-    resultfile_1 = load_and_run(task_pkl=task_pkl, ind=1)
+    resultfile = load_and_run(task_pkl=task_pkl)
     # checking the result files
-    result_0 = cp.loads(resultfile_0.read_bytes())
-    result_1 = cp.loads(resultfile_1.read_bytes())
-    assert result_0.output.out == 10
-    assert result_1.output.out == 20
-
-
-def test_load_and_run_exception_load(tmpdir):
-    """testing raising exception and saving info in crashfile when when load_and_run"""
-    task_pkl = Path(tmpdir.join("task_main.pkl"))
-    RaiseXeq1(name="raise").split("x", x=[1, 2])
-    with pytest.raises(FileNotFoundError):
-        load_and_run(task_pkl=task_pkl, ind=0)
+    result = cp.loads(resultfile.read_bytes())
+    assert result.outputs.out == 20
 
 
 def test_load_and_run_exception_run(tmpdir):
     """testing raising exception and saving info in crashfile when when load_and_run"""
     task_pkl = Path(tmpdir.join("task_main.pkl"))
+    cache_root = Path(tmpdir.join("cache"))
+    cache_root.mkdir()
 
-    task = RaiseXeq1(name="raise").split("x", x=[1, 2])
-    task.state.prepare_states(inputs=task.inputs)
-    task.state.prepare_inputs()
+    task = Task(
+        definition=RaiseXeq1(x=1),
+        name="raise",
+        submitter=Submitter(worker="cf", cache_dir=cache_root),
+    )
 
     with task_pkl.open("wb") as fp:
         cp.dump(task, fp)
 
     with pytest.raises(Exception) as excinfo:
-        load_and_run(task_pkl=task_pkl, ind=0)
-    assert "i'm raising an exception!" in str(excinfo.value)
+        load_and_run(task_pkl=task_pkl)
+    exc_msg = excinfo.value.args[0]
+    assert "i'm raising an exception!" in exc_msg
     # checking if the crashfile has been created
-    assert "crash" in str(excinfo.value)
-    errorfile = Path(str(excinfo.value).split("here: ")[1][:-2])
+    assert "crash" in exc_msg
+    errorfile = Path(exc_msg.split("here: ")[1][:-2])
     assert errorfile.exists()
 
     resultfile = errorfile.parent / "_result.pklz"
@@ -228,37 +219,35 @@ def test_load_and_run_exception_run(tmpdir):
     result_exception = cp.loads(resultfile.read_bytes())
     assert result_exception.errored is True
 
+    task = Task(definition=RaiseXeq1(x=2), name="wont_raise", submitter=Submitter())
+
+    with task_pkl.open("wb") as fp:
+        cp.dump(task, fp)
+
     # the second task should be fine
-    resultfile = load_and_run(task_pkl=task_pkl, ind=1)
+    resultfile = load_and_run(task_pkl=task_pkl)
     result_1 = cp.loads(resultfile.read_bytes())
-    assert result_1.output.out == 2
+    assert result_1.outputs.out == 2
 
 
 def test_load_and_run_wf(tmpdir):
     """testing load_and_run for pickled task"""
     wf_pkl = Path(tmpdir.join("wf_main.pkl"))
 
-    wf = Workflow(name="wf", input_spec=["x", "y"], y=10)
-    wf.add(Multiply(name="mult", x=wf.lzin.x, y=wf.lzin.y))
-    wf.split("x", x=[1, 2])
+    @workflow.define
+    def Workflow(x, y=10):
+        multiply = workflow.add(Multiply(x=x, y=y))
+        return multiply.out
 
-    wf.set_output([("out", wf.mult.lzout.out)])
-
-    # task = multiply(name="mult", x=[1, 2], y=10).split("x")
-    wf.state.prepare_states(inputs=wf.inputs)
-    wf.state.prepare_inputs()
-    wf.plugin = "cf"
+    task = Task(name="mult", definition=Workflow(x=2), submitter=Submitter(worker="cf"))
 
     with wf_pkl.open("wb") as fp:
-        cp.dump(wf, fp)
+        cp.dump(task, fp)
 
-    resultfile_0 = load_and_run(ind=0, task_pkl=wf_pkl)
-    resultfile_1 = load_and_run(ind=1, task_pkl=wf_pkl)
+    resultfile = load_and_run(task_pkl=wf_pkl)
     # checking the result files
-    result_0 = cp.loads(resultfile_0.read_bytes())
-    result_1 = cp.loads(resultfile_1.read_bytes())
-    assert result_0.output.out == 10
-    assert result_1.output.out == 20
+    result = cp.loads(resultfile.read_bytes())
+    assert result.outputs.out == 20
 
 
 @pytest.mark.parametrize(
@@ -274,45 +263,6 @@ def test_load_and_run_wf(tmpdir):
 def test_position_sort(pos_args):
     final_args = position_sort(pos_args)
     assert final_args == ["a", "b", "c"]
-
-
-def test_parse_copyfile():
-    Mode = FileSet.CopyMode
-    Collation = FileSet.CopyCollation
-
-    def mock_field(copyfile):
-        mock = Mock(["metadata"])
-        mock.metadata = {"copyfile": copyfile}
-        return mock
-
-    assert parse_copyfile(mock_field((Mode.any, Collation.any))) == (
-        Mode.any,
-        Collation.any,
-    )
-    assert parse_copyfile(mock_field("copy"), default_collation=Collation.siblings) == (
-        Mode.copy,
-        Collation.siblings,
-    )
-    assert parse_copyfile(mock_field("link,adjacent")) == (
-        Mode.link,
-        Collation.adjacent,
-    )
-    assert parse_copyfile(mock_field(True)) == (
-        Mode.copy,
-        Collation.any,
-    )
-    assert parse_copyfile(mock_field(False)) == (
-        Mode.link,
-        Collation.any,
-    )
-    assert parse_copyfile(mock_field(None)) == (
-        Mode.any,
-        Collation.any,
-    )
-    with pytest.raises(TypeError, match="Unrecognised type for mode copyfile"):
-        parse_copyfile(mock_field((1, 2)))
-    with pytest.raises(TypeError, match="Unrecognised type for collation copyfile"):
-        parse_copyfile(mock_field((Mode.copy, 2)))
 
 
 def test_parse_format_string1():

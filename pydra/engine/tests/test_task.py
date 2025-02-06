@@ -11,7 +11,9 @@ from pydra.design import python
 from pydra.utils.messenger import FileMessenger, PrintMessenger, collect_messages
 from ..task import AuditFlag, ShellTask
 from pydra.engine.specs import argstr_formatting
+from pydra.engine.helpers import list_fields, print_help
 from .utils import BasicWorkflow
+from pydra.utils import default_run_cache_dir
 from pydra.utils.typing import (
     MultiInputObj,
     MultiOutputObj,
@@ -68,30 +70,27 @@ def test_annotated_func():
         return a + b
 
     funky = testfunc(a=1)
-    assert hasattr(funky.inputs, "a")
-    assert hasattr(funky.inputs, "b")
-    assert hasattr(funky.inputs, "_func")
-    assert getattr(funky.inputs, "a") == 1
-    assert getattr(funky.inputs, "b") == 0.1
-    assert getattr(funky.inputs, "_func") is not None
-    assert set(funky.output_names) == {"out_out"}
-    # assert funky.inputs.hash == '17772c3aec9540a8dd3e187eecd2301a09c9a25c6e371ddd86e31e3a1ecfeefa'
-    assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
+    assert hasattr(funky, "a")
+    assert hasattr(funky, "b")
+    assert hasattr(funky, "function")
+    assert getattr(funky, "a") == 1
+    assert getattr(funky, "b") == 0.1
+    assert getattr(funky, "function") is not None
+    assert set(f.name for f in list_fields(funky.Outputs)) == {"out_out"}
 
     outputs = funky()
     assert hasattr(outputs, "out_out")
     assert outputs.out_out == 1.1
 
-    assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
-    funky.result()  # should not recompute
-    funky.inputs.a = 2
-    # assert funky.checksum == '537d25885fd2ea5662b7701ba02c132c52a9078a3a2d56aa903a777ea90e5536'
-    assert funky.result() is None
-    funky()
-    result = funky.result()
+    assert os.path.exists(
+        default_run_cache_dir / f"python-{funky._hash}" / "_result.pklz"
+    )
+    funky()  # should not recompute
+    funky.a = 2
+    outputs = funky()
     assert outputs.out_out == 2.1
 
-    help = funky.help(returnhelp=True)
+    help = print_help(funky)
     assert help == [
         "Help for PythonTask",
         "Input Parameters:",
@@ -106,8 +105,7 @@ def test_annotated_func():
 def test_annotated_func_dictreturn():
     """Test mapping from returned dictionary to output definition."""
 
-    @python.define
-    @mark.annotate({"return": {"sum": int, "mul": ty.Optional[int]}})
+    @python.define(outputs={"sum": int, "mul": ty.Optional[int]})
     def testfunc(a: int, b: int):
         return dict(sum=a + b, diff=a - b)
 
@@ -136,12 +134,12 @@ def test_annotated_func_multreturn():
         return math.modf(a)[0], int(math.modf(a)[1])
 
     funky = testfunc(a=3.5)
-    assert hasattr(funky.inputs, "a")
-    assert hasattr(funky.inputs, "_func")
-    assert getattr(funky.inputs, "a") == 3.5
-    assert getattr(funky.inputs, "_func") is not None
+    assert hasattr(funky, "a")
+    assert hasattr(funky, "_func")
+    assert getattr(funky, "a") == 3.5
+    assert getattr(funky, "_func") is not None
     assert set(funky.output_names) == {"fractional", "integer"}
-    assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
+    assert funky.__class__.__name__ + "_" + funky.hash == funky.checksum
 
     outputs = funky()
     assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
@@ -171,7 +169,7 @@ def test_annotated_input_func_1():
         return a
 
     funky = testfunc(a=3.5)
-    assert getattr(funky.inputs, "a") == 3.5
+    assert getattr(funky, "a") == 3.5
 
 
 def test_annotated_input_func_2():
@@ -194,7 +192,7 @@ def test_annotated_input_func_2a():
 
     funky = testfunc()
     with pytest.raises(TypeError):
-        funky.inputs.a = 3.5
+        funky.a = 3.5
 
 
 def test_annotated_input_func_3():
@@ -205,7 +203,7 @@ def test_annotated_input_func_3():
         return sum(a)
 
     funky = testfunc(a=[1, 3.5])
-    assert getattr(funky.inputs, "a") == [1, 3.5]
+    assert getattr(funky, "a") == [1, 3.5]
 
 
 def test_annotated_input_func_3a():
@@ -216,7 +214,7 @@ def test_annotated_input_func_3a():
         return sum(a)
 
     funky = testfunc(a=[1.0, 3.5])
-    assert getattr(funky.inputs, "a") == [1.0, 3.5]
+    assert getattr(funky, "a") == [1.0, 3.5]
 
 
 def test_annotated_input_func_3b():
@@ -229,7 +227,7 @@ def test_annotated_input_func_3b():
         return sum(a)
 
     funky = testfunc(a=[1, 3.5])
-    assert getattr(funky.inputs, "a") == [1, 3.5]
+    assert getattr(funky, "a") == [1, 3.5]
 
 
 def test_annotated_input_func_3c_excep():
@@ -253,7 +251,7 @@ def test_annotated_input_func_4():
         return sum(a.values())
 
     funky = testfunc(a={"el1": 1, "el2": 3.5})
-    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+    assert getattr(funky, "a") == {"el1": 1, "el2": 3.5}
 
 
 def test_annotated_input_func_4a():
@@ -264,7 +262,7 @@ def test_annotated_input_func_4a():
         return sum(a.values())
 
     funky = testfunc(a={"el1": 1, "el2": 3.5})
-    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+    assert getattr(funky, "a") == {"el1": 1, "el2": 3.5}
 
 
 def test_annotated_input_func_4b_excep():
@@ -289,7 +287,7 @@ def test_annotated_input_func_5():
         return sum(a["el1"])
 
     funky = testfunc(a={"el1": [1, 3.5]})
-    assert getattr(funky.inputs, "a") == {"el1": [1, 3.5]}
+    assert getattr(funky, "a") == {"el1": [1, 3.5]}
 
 
 def test_annotated_input_func_5a_except():
@@ -315,7 +313,7 @@ def test_annotated_input_func_6():
         return sum(a["el1"])
 
     funky = testfunc(a={"el1": 1, "el2": 3.5})
-    assert getattr(funky.inputs, "a") == {"el1": 1, "el2": 3.5}
+    assert getattr(funky, "a") == {"el1": 1, "el2": 3.5}
 
 
 def test_annotated_input_func_6a_excep():
@@ -342,7 +340,7 @@ def test_annotated_input_func_7():
         return a
 
     funky = testfunc().split("a", a=[3.5, 2.1])
-    assert getattr(funky.inputs, "a") == [3.5, 2.1]
+    assert getattr(funky, "a") == [3.5, 2.1]
 
 
 def test_annotated_input_func_7a_excep():
@@ -368,7 +366,7 @@ def test_annotated_input_func_8():
         return len(a)
 
     funky = testfunc(a=3.5)
-    assert getattr(funky.inputs, "a") == [3.5]
+    assert getattr(funky, "a") == [3.5]
     res = funky()
     assert res.output.out == 1
 
@@ -383,7 +381,7 @@ def test_annotated_input_func_8a():
         return len(a)
 
     funky = testfunc(a=[3.5])
-    assert getattr(funky.inputs, "a") == [3.5]
+    assert getattr(funky, "a") == [3.5]
     res = funky()
     assert res.output.out == 1
 
@@ -400,8 +398,8 @@ def test_annotated_input_func_8b():
 
     funky = testfunc()
     # setting a after init
-    funky.inputs.a = 3.5
-    assert getattr(funky.inputs, "a") == [3.5]
+    funky.a = 3.5
+    assert getattr(funky, "a") == [3.5]
     res = funky()
     assert res.output.out == 1
 
@@ -433,14 +431,14 @@ def test_halfannotated_func():
         return a + b
 
     funky = testfunc(a=10, b=20)
-    assert hasattr(funky.inputs, "a")
-    assert hasattr(funky.inputs, "b")
-    assert hasattr(funky.inputs, "_func")
-    assert getattr(funky.inputs, "a") == 10
-    assert getattr(funky.inputs, "b") == 20
-    assert getattr(funky.inputs, "_func") is not None
+    assert hasattr(funky, "a")
+    assert hasattr(funky, "b")
+    assert hasattr(funky, "_func")
+    assert getattr(funky, "a") == 10
+    assert getattr(funky, "b") == 20
+    assert getattr(funky, "_func") is not None
     assert set(funky.output_names) == {"out"}
-    assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
+    assert funky.__class__.__name__ + "_" + funky.hash == funky.checksum
 
     outputs = funky()
     assert hasattr(result, "output")
@@ -450,7 +448,7 @@ def test_halfannotated_func():
     assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
 
     funky.result()  # should not recompute
-    funky.inputs.a = 11
+    funky.a = 11
     assert funky.result() is None
     funky()
     result = funky.result()
@@ -474,14 +472,14 @@ def test_halfannotated_func_multreturn():
         return a + 1, b + 1
 
     funky = testfunc(a=10, b=20)
-    assert hasattr(funky.inputs, "a")
-    assert hasattr(funky.inputs, "b")
-    assert hasattr(funky.inputs, "_func")
-    assert getattr(funky.inputs, "a") == 10
-    assert getattr(funky.inputs, "b") == 20
-    assert getattr(funky.inputs, "_func") is not None
+    assert hasattr(funky, "a")
+    assert hasattr(funky, "b")
+    assert hasattr(funky, "_func")
+    assert getattr(funky, "a") == 10
+    assert getattr(funky, "b") == 20
+    assert getattr(funky, "_func") is not None
     assert set(funky.output_names) == {"out1", "out2"}
-    assert funky.__class__.__name__ + "_" + funky.inputs.hash == funky.checksum
+    assert funky.__class__.__name__ + "_" + funky.hash == funky.checksum
 
     outputs = funky()
     assert hasattr(result, "output")
@@ -491,7 +489,7 @@ def test_halfannotated_func_multreturn():
     assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
 
     funky.result()  # should not recompute
-    funky.inputs.a = 11
+    funky.a = 11
     assert funky.result() is None
     funky()
     result = funky.result()
@@ -516,9 +514,9 @@ def test_notannotated_func():
         return c + d
 
     natask = no_annots(c=17, d=3.2)
-    assert hasattr(natask.inputs, "c")
-    assert hasattr(natask.inputs, "d")
-    assert hasattr(natask.inputs, "_func")
+    assert hasattr(natask, "c")
+    assert hasattr(natask, "d")
+    assert hasattr(natask, "_func")
 
     result = natask._run()
     assert hasattr(result, "output")
@@ -561,9 +559,9 @@ def test_notannotated_func_multreturn():
         return c + d, c - d
 
     natask = no_annots(c=17, d=3.2)
-    assert hasattr(natask.inputs, "c")
-    assert hasattr(natask.inputs, "d")
-    assert hasattr(natask.inputs, "_func")
+    assert hasattr(natask, "c")
+    assert hasattr(natask, "d")
+    assert hasattr(natask, "_func")
 
     result = natask._run()
     assert hasattr(result, "output")
@@ -585,7 +583,7 @@ def test_input_spec_func_1():
     )
 
     funky = testfunc(a=3.5, input_spec=my_input_spec)
-    assert getattr(funky.inputs, "a") == 3.5
+    assert getattr(funky, "a") == 3.5
 
 
 def test_input_spec_func_1a_except():
@@ -660,7 +658,7 @@ def test_input_spec_func_2():
     )
 
     funky = testfunc(a=3.5, input_spec=my_input_spec)
-    assert getattr(funky.inputs, "a") == 3.5
+    assert getattr(funky, "a") == 3.5
 
 
 def test_input_spec_func_2a():
@@ -680,7 +678,7 @@ def test_input_spec_func_2a():
     )
 
     funky = testfunc(a=3.5, input_spec=my_input_spec)
-    assert getattr(funky.inputs, "a") == 3.5
+    assert getattr(funky, "a") == 3.5
 
 
 def test_input_spec_func_3():
@@ -707,7 +705,7 @@ def test_input_spec_func_3():
     )
 
     funky = testfunc(a=2, input_spec=my_input_spec)
-    assert getattr(funky.inputs, "a") == 2
+    assert getattr(funky, "a") == 2
 
 
 def test_input_spec_func_3a_except():
@@ -808,7 +806,7 @@ def test_input_spec_func_5():
     )
 
     funky = testfunc(a=3.5, input_spec=my_input_spec)
-    assert getattr(funky.inputs, "a") == MultiInputObj([3.5])
+    assert getattr(funky, "a") == MultiInputObj([3.5])
     res = funky()
     assert res.output.out == 1
 
@@ -1254,7 +1252,7 @@ def test_audit_prov_wf(
     )
     wf.add(testfunc(name="testfunc", a=wf.lzin.x))
     wf.set_output([("out", wf.testfunc.lzout.out)])
-    wf.inputs.x = 2
+    wf.x = 2
 
     wf(plugin="cf")
     # default path
@@ -1351,7 +1349,7 @@ def test_taskhooks_1(tmpdir, capsys):
     foo.hooks.post_run = myhook
     foo.hooks.pre_run_task = myhook
     foo.hooks.post_run_task = myhook
-    foo.inputs.a = 2  # ensure not pre-cached
+    foo.a = 2  # ensure not pre-cached
     foo()
     captured = capsys.readouterr()
     assert captured.out.count("I was called\n") == 4
