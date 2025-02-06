@@ -209,8 +209,8 @@ def test_load_and_run_exception_run(tmpdir):
     exc_msg = excinfo.value.args[0]
     assert "i'm raising an exception!" in exc_msg
     # checking if the crashfile has been created
-    assert "crash" in exc_msg
-    errorfile = Path(exc_msg.split("here: ")[1][:-2])
+    assert "crash" in excinfo.value.__notes__[0]
+    errorfile = Path(excinfo.value.__notes__[0].split("here: ")[1])
     assert errorfile.exists()
 
     resultfile = errorfile.parent / "_result.pklz"
