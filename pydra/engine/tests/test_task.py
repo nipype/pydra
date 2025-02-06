@@ -105,10 +105,10 @@ def test_annotated_func_dictreturn():
     """Test mapping from returned dictionary to output definition."""
 
     @python.define(outputs={"sum": int, "mul": ty.Optional[int]})
-    def testfunc(a: int, b: int):
+    def TestFunc(a: int, b: int):
         return dict(sum=a + b, diff=a - b)
 
-    task = testfunc(a=2, b=3)
+    task = TestFunc(a=2, b=3)
     outputs = task()
 
     # Part of the annotation and returned, should be exposed to output.
@@ -163,10 +163,10 @@ def test_annotated_input_func_1():
     """the function with annotated input (float)"""
 
     @python.define
-    def testfunc(a: float):
+    def TestFunc(a: float):
         return a
 
-    funky = testfunc(a=3.5)
+    funky = TestFunc(a=3.5)
     assert getattr(funky, "a") == 3.5
 
 
@@ -174,21 +174,21 @@ def test_annotated_input_func_2():
     """the function with annotated input (int, but float provided)"""
 
     @python.define
-    def testfunc(a: int):
+    def TestFunc(a: int):
         return a
 
     with pytest.raises(TypeError):
-        testfunc(a=3.5)
+        TestFunc(a=3.5)
 
 
 def test_annotated_input_func_2a():
     """the function with annotated input (int, but float provided)"""
 
     @python.define
-    def testfunc(a: int):
+    def TestFunc(a: int):
         return a
 
-    funky = testfunc()
+    funky = TestFunc()
     with pytest.raises(TypeError):
         funky.a = 3.5
 
@@ -197,10 +197,10 @@ def test_annotated_input_func_3():
     """the function with annotated input (list)"""
 
     @python.define
-    def testfunc(a: list):
+    def TestFunc(a: list):
         return sum(a)
 
-    funky = testfunc(a=[1, 3.5])
+    funky = TestFunc(a=[1, 3.5])
     assert getattr(funky, "a") == [1, 3.5]
 
 
@@ -208,10 +208,10 @@ def test_annotated_input_func_3a():
     """the function with annotated input (list of floats)"""
 
     @python.define
-    def testfunc(a: ty.List[float]):
+    def TestFunc(a: ty.List[float]):
         return sum(a)
 
-    funky = testfunc(a=[1.0, 3.5])
+    funky = TestFunc(a=[1.0, 3.5])
     assert getattr(funky, "a") == [1.0, 3.5]
 
 
@@ -221,10 +221,10 @@ def test_annotated_input_func_3b():
     """
 
     @python.define
-    def testfunc(a: ty.List[float]):
+    def TestFunc(a: ty.List[float]):
         return sum(a)
 
-    funky = testfunc(a=[1, 3.5])
+    funky = TestFunc(a=[1, 3.5])
     assert getattr(funky, "a") == [1, 3.5]
 
 
@@ -234,21 +234,21 @@ def test_annotated_input_func_3c_excep():
     """
 
     @python.define
-    def testfunc(a: ty.List[int]):
+    def TestFunc(a: ty.List[int]):
         return sum(a)
 
     with pytest.raises(TypeError):
-        testfunc(a=[1, 3.5])
+        TestFunc(a=[1, 3.5])
 
 
 def test_annotated_input_func_4():
     """the function with annotated input (dictionary)"""
 
     @python.define
-    def testfunc(a: dict):
+    def TestFunc(a: dict):
         return sum(a.values())
 
-    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    funky = TestFunc(a={"el1": 1, "el2": 3.5})
     assert getattr(funky, "a") == {"el1": 1, "el2": 3.5}
 
 
@@ -256,10 +256,10 @@ def test_annotated_input_func_4a():
     """the function with annotated input (dictionary of floats)"""
 
     @python.define
-    def testfunc(a: ty.Dict[str, float]):
+    def TestFunc(a: ty.Dict[str, float]):
         return sum(a.values())
 
-    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    funky = TestFunc(a={"el1": 1, "el2": 3.5})
     assert getattr(funky, "a") == {"el1": 1, "el2": 3.5}
 
 
@@ -267,11 +267,11 @@ def test_annotated_input_func_4b_excep():
     """the function with annotated input (dictionary of ints, but float provided)"""
 
     @python.define
-    def testfunc(a: ty.Dict[str, int]):
+    def TestFunc(a: ty.Dict[str, int]):
         return sum(a.values())
 
     with pytest.raises(TypeError):
-        testfunc(a={"el1": 1, "el2": 3.5})
+        TestFunc(a={"el1": 1, "el2": 3.5})
 
 
 def test_annotated_input_func_5():
@@ -281,10 +281,10 @@ def test_annotated_input_func_5():
     """
 
     @python.define
-    def testfunc(a: ty.Dict[str, ty.List]):
+    def TestFunc(a: ty.Dict[str, ty.List]):
         return sum(a["el1"])
 
-    funky = testfunc(a={"el1": [1, 3.5]})
+    funky = TestFunc(a={"el1": [1, 3.5]})
     assert getattr(funky, "a") == {"el1": [1, 3.5]}
 
 
@@ -294,11 +294,11 @@ def test_annotated_input_func_5a_except():
     """
 
     @python.define
-    def testfunc(a: ty.Dict[str, ty.Dict[str, float]]):
+    def TestFunc(a: ty.Dict[str, ty.Dict[str, float]]):
         return sum(a["el1"])
 
     with pytest.raises(TypeError):
-        testfunc(a={"el1": [1, 3.5]})
+        TestFunc(a={"el1": [1, 3.5]})
 
 
 def test_annotated_input_func_6():
@@ -307,10 +307,10 @@ def test_annotated_input_func_6():
     """
 
     @python.define
-    def testfunc(a: ty.Dict[str, ty.Union[float, int]]):
+    def TestFunc(a: ty.Dict[str, ty.Union[float, int]]):
         return sum(a["el1"])
 
-    funky = testfunc(a={"el1": 1, "el2": 3.5})
+    funky = TestFunc(a={"el1": 1, "el2": 3.5})
     assert getattr(funky, "a") == {"el1": 1, "el2": 3.5}
 
 
@@ -320,11 +320,11 @@ def test_annotated_input_func_6a_excep():
     """
 
     @python.define
-    def testfunc(a: ty.Dict[str, ty.Union[str, int]]):
+    def TestFunc(a: ty.Dict[str, ty.Union[str, int]]):
         return sum(a["el1"])
 
     with pytest.raises(TypeError):
-        testfunc(a={"el1": 1, "el2": 3.5})
+        TestFunc(a={"el1": 1, "el2": 3.5})
 
 
 def test_annotated_input_func_7():
@@ -334,10 +334,10 @@ def test_annotated_input_func_7():
     """
 
     @python.define
-    def testfunc(a: float):
+    def TestFunc(a: float):
         return a
 
-    funky = testfunc().split("a", a=[3.5, 2.1])
+    funky = TestFunc().split("a", a=[3.5, 2.1])
     assert getattr(funky, "a") == [3.5, 2.1]
 
 
@@ -347,11 +347,11 @@ def test_annotated_input_func_7a_excep():
     """
 
     @python.define
-    def testfunc(a: int):
+    def TestFunc(a: int):
         return a
 
     with pytest.raises(TypeError):
-        testfunc(a=[3.5, 2.1]).split("a")
+        TestFunc(a=[3.5, 2.1]).split("a")
 
 
 def test_annotated_input_func_8():
@@ -360,13 +360,13 @@ def test_annotated_input_func_8():
     """
 
     @python.define
-    def testfunc(a: MultiInputObj):
+    def TestFunc(a: MultiInputObj):
         return len(a)
 
-    funky = testfunc(a=3.5)
+    funky = TestFunc(a=3.5)
     assert getattr(funky, "a") == [3.5]
-    res = funky()
-    assert res.output.out == 1
+    outputs = funky()
+    assert outputs.out == 1
 
 
 def test_annotated_input_func_8a():
@@ -375,13 +375,13 @@ def test_annotated_input_func_8a():
     """
 
     @python.define
-    def testfunc(a: MultiInputObj):
+    def TestFunc(a: MultiInputObj):
         return len(a)
 
-    funky = testfunc(a=[3.5])
+    funky = TestFunc(a=[3.5])
     assert getattr(funky, "a") == [3.5]
-    res = funky()
-    assert res.output.out == 1
+    outputs = funky()
+    assert outputs.out == 1
 
 
 def test_annotated_input_func_8b():
@@ -391,15 +391,15 @@ def test_annotated_input_func_8b():
     """
 
     @python.define
-    def testfunc(a: MultiInputObj):
+    def TestFunc(a: MultiInputObj):
         return len(a)
 
-    funky = testfunc()
+    funky = TestFunc()
     # setting a after init
     funky.a = 3.5
     assert getattr(funky, "a") == [3.5]
-    res = funky()
-    assert res.output.out == 1
+    outputs = funky()
+    assert outputs.out == 1
 
 
 def test_annotated_func_multreturn_exception():
@@ -408,7 +408,7 @@ def test_annotated_func_multreturn_exception():
     """
 
     @python.define
-    def testfunc(
+    def TestFunc(
         a: float,
     ) -> ty.NamedTuple(
         "Output", [("fractional", float), ("integer", int), ("who_knows", int)]
@@ -417,7 +417,7 @@ def test_annotated_func_multreturn_exception():
 
         return math.modf(a)
 
-    funky = testfunc(a=3.5)
+    funky = TestFunc(a=3.5)
     with pytest.raises(Exception) as excinfo:
         funky()
     assert "expected 3 elements" in str(excinfo.value)
@@ -425,40 +425,38 @@ def test_annotated_func_multreturn_exception():
 
 def test_halfannotated_func():
     @python.define
-    def testfunc(a, b) -> int:
+    def TestFunc(a, b) -> int:
         return a + b
 
-    funky = testfunc(a=10, b=20)
+    funky = TestFunc(a=10, b=20)
     assert hasattr(funky, "a")
     assert hasattr(funky, "b")
-    assert hasattr(funky, "_func")
+    assert hasattr(funky, "function")
     assert getattr(funky, "a") == 10
     assert getattr(funky, "b") == 20
-    assert getattr(funky, "_func") is not None
-    assert set(funky.output_names) == {"out"}
-    assert funky.__class__.__name__ + "_" + funky.hash == funky.checksum
+    assert getattr(funky, "function") is not None
+    assert set(f.name for f in list_fields(funky.Outputs)) == {"out"}
 
     outputs = funky()
-    assert hasattr(result, "output")
     assert hasattr(outputs, "out")
     assert outputs.out == 30
 
-    assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
+    assert os.path.exists(
+        default_run_cache_dir / f"python-{funky._hash}" / "_result.pklz"
+    )
 
     funky.result()  # should not recompute
     funky.a = 11
     assert funky.result() is None
-    funky()
-    result = funky.result()
+    outputs = funky()
     assert outputs.out == 31
     help = funky.help(returnhelp=True)
 
     assert help == [
-        "Help for PythonTask",
+        "Help for TestFunc",
         "Input Parameters:",
         "- a: _empty",
         "- b: _empty",
-        "- _func: bytes",
         "Output Parameters:",
         "- out: int",
     ]
@@ -466,40 +464,38 @@ def test_halfannotated_func():
 
 def test_halfannotated_func_multreturn():
     @python.define
-    def testfunc(a, b) -> (int, int):
+    def TestFunc(a, b) -> (int, int):
         return a + 1, b + 1
 
-    funky = testfunc(a=10, b=20)
+    funky = TestFunc(a=10, b=20)
     assert hasattr(funky, "a")
     assert hasattr(funky, "b")
-    assert hasattr(funky, "_func")
+    assert hasattr(funky, "function")
     assert getattr(funky, "a") == 10
     assert getattr(funky, "b") == 20
-    assert getattr(funky, "_func") is not None
-    assert set(funky.output_names) == {"out1", "out2"}
-    assert funky.__class__.__name__ + "_" + funky.hash == funky.checksum
+    assert getattr(funky, "function") is not None
+    assert set(f.name for f in list_fields(funky.Outputs)) == {"out1", "out2"}
 
     outputs = funky()
-    assert hasattr(result, "output")
     assert hasattr(outputs, "out1")
     assert outputs.out1 == 11
 
-    assert os.path.exists(funky.cache_dir / funky.checksum / "_result.pklz")
+    assert os.path.exists(
+        default_run_cache_dir / f"python-{funky._hash}" / "_result.pklz"
+    )
 
     funky.result()  # should not recompute
     funky.a = 11
     assert funky.result() is None
-    funky()
-    result = funky.result()
+    outputs = funky()
     assert outputs.out1 == 12
     help = funky.help(returnhelp=True)
 
     assert help == [
-        "Help for PythonTask",
+        "Help for TestFunc",
         "Input Parameters:",
         "- a: _empty",
         "- b: _empty",
-        "- _func: bytes",
         "Output Parameters:",
         "- out1: int",
         "- out2: int",
@@ -514,7 +510,7 @@ def test_notannotated_func():
     natask = no_annots(c=17, d=3.2)
     assert hasattr(natask, "c")
     assert hasattr(natask, "d")
-    assert hasattr(natask, "_func")
+    assert hasattr(natask, "function")
 
     result = natask._run()
     assert hasattr(result, "output")
@@ -559,7 +555,7 @@ def test_notannotated_func_multreturn():
     natask = no_annots(c=17, d=3.2)
     assert hasattr(natask, "c")
     assert hasattr(natask, "d")
-    assert hasattr(natask, "_func")
+    assert hasattr(natask, "function")
 
     result = natask._run()
     assert hasattr(result, "output")
@@ -571,7 +567,7 @@ def test_input_spec_func_1():
     """the function w/o annotated, but input_spec is used"""
 
     @python.define
-    def testfunc(a):
+    def TestFunc(a):
         return a
 
     my_input_spec = SpecInfo(
@@ -580,7 +576,7 @@ def test_input_spec_func_1():
         bases=(FunctionDef,),
     )
 
-    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    funky = TestFunc(a=3.5, input_spec=my_input_spec)
     assert getattr(funky, "a") == 3.5
 
 
@@ -590,7 +586,7 @@ def test_input_spec_func_1a_except():
     """
 
     @python.define
-    def testfunc(a):
+    def TestFunc(a):
         return a
 
     my_input_spec = SpecInfo(
@@ -599,7 +595,7 @@ def test_input_spec_func_1a_except():
         bases=(FunctionDef,),
     )
     with pytest.raises(TypeError):
-        testfunc(a=3.5, input_spec=my_input_spec)
+        TestFunc(a=3.5, input_spec=my_input_spec)
 
 
 def test_input_spec_func_1b_except():
@@ -608,7 +604,7 @@ def test_input_spec_func_1b_except():
     """
 
     @python.define
-    def testfunc(a):
+    def TestFunc(a):
         return a
 
     my_input_spec = SpecInfo(
@@ -622,7 +618,7 @@ def test_input_spec_func_1b_except():
         bases=(FunctionDef,),
     )
     with pytest.raises(AttributeError, match="only these keys are supported"):
-        testfunc(a=3.5, input_spec=my_input_spec)
+        TestFunc(a=3.5, input_spec=my_input_spec)
 
 
 def test_input_spec_func_1d_except():
@@ -631,11 +627,11 @@ def test_input_spec_func_1d_except():
     """
 
     @python.define
-    def testfunc(a):
+    def TestFunc(a):
         return a
 
     my_input_spec = SpecInfo(name="Input", fields=[], bases=(FunctionDef,))
-    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    funky = TestFunc(a=3.5, input_spec=my_input_spec)
     with pytest.raises(TypeError, match="missing 1 required positional argument"):
         funky()
 
@@ -646,7 +642,7 @@ def test_input_spec_func_2():
     """
 
     @python.define
-    def testfunc(a: int):
+    def TestFunc(a: int):
         return a
 
     my_input_spec = SpecInfo(
@@ -655,7 +651,7 @@ def test_input_spec_func_2():
         bases=(FunctionDef,),
     )
 
-    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    funky = TestFunc(a=3.5, input_spec=my_input_spec)
     assert getattr(funky, "a") == 3.5
 
 
@@ -666,7 +662,7 @@ def test_input_spec_func_2a():
     """
 
     @python.define
-    def testfunc(a: int):
+    def TestFunc(a: int):
         return a
 
     my_input_spec = SpecInfo(
@@ -675,7 +671,7 @@ def test_input_spec_func_2a():
         bases=(FunctionDef,),
     )
 
-    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    funky = TestFunc(a=3.5, input_spec=my_input_spec)
     assert getattr(funky, "a") == 3.5
 
 
@@ -685,7 +681,7 @@ def test_input_spec_func_3():
     """
 
     @python.define
-    def testfunc(a):
+    def TestFunc(a):
         return a
 
     my_input_spec = SpecInfo(
@@ -702,7 +698,7 @@ def test_input_spec_func_3():
         bases=(FunctionDef,),
     )
 
-    funky = testfunc(a=2, input_spec=my_input_spec)
+    funky = TestFunc(a=2, input_spec=my_input_spec)
     assert getattr(funky, "a") == 2
 
 
@@ -712,7 +708,7 @@ def test_input_spec_func_3a_except():
     """
 
     @python.define
-    def testfunc(a):
+    def TestFunc(a):
         return a
 
     my_input_spec = SpecInfo(
@@ -730,7 +726,7 @@ def test_input_spec_func_3a_except():
     )
 
     with pytest.raises(ValueError, match="value of a has to be"):
-        testfunc(a=3, input_spec=my_input_spec)
+        TestFunc(a=3, input_spec=my_input_spec)
 
 
 def test_input_spec_func_4():
@@ -739,7 +735,7 @@ def test_input_spec_func_4():
     """
 
     @python.define
-    def testfunc(a, b=1):
+    def TestFunc(a, b=1):
         return a + b
 
     my_input_spec = SpecInfo(
@@ -757,7 +753,7 @@ def test_input_spec_func_4():
         bases=(FunctionDef,),
     )
 
-    funky = testfunc(a=2, input_spec=my_input_spec)
+    funky = TestFunc(a=2, input_spec=my_input_spec)
     with pytest.raises(Exception, match="b is mandatory"):
         funky()
 
@@ -768,7 +764,7 @@ def test_input_spec_func_4a():
     """
 
     @python.define
-    def testfunc(a, b=1):
+    def TestFunc(a, b=1):
         return a + b
 
     my_input_spec = SpecInfo(
@@ -783,9 +779,9 @@ def test_input_spec_func_4a():
         bases=(FunctionDef,),
     )
 
-    funky = testfunc(a=2, input_spec=my_input_spec)
-    res = funky()
-    assert res.output.out == 12
+    funky = TestFunc(a=2, input_spec=my_input_spec)
+    outputs = funky()
+    assert outputs.out == 12
 
 
 def test_input_spec_func_5():
@@ -794,7 +790,7 @@ def test_input_spec_func_5():
     """
 
     @python.define
-    def testfunc(a):
+    def TestFunc(a):
         return len(a)
 
     my_input_spec = SpecInfo(
@@ -803,17 +799,17 @@ def test_input_spec_func_5():
         bases=(FunctionDef,),
     )
 
-    funky = testfunc(a=3.5, input_spec=my_input_spec)
+    funky = TestFunc(a=3.5, input_spec=my_input_spec)
     assert getattr(funky, "a") == MultiInputObj([3.5])
-    res = funky()
-    assert res.output.out == 1
+    outputs = funky()
+    assert outputs.out == 1
 
 
 def test_output_spec_func_1():
     """the function w/o annotated, but output_spec is used"""
 
     @python.define
-    def testfunc(a):
+    def TestFunc(a):
         return a
 
     my_output_spec = SpecInfo(
@@ -822,9 +818,9 @@ def test_output_spec_func_1():
         bases=(BaseDef,),
     )
 
-    funky = testfunc(a=3.5, output_spec=my_output_spec)
-    res = funky()
-    assert res.output.out1 == 3.5
+    funky = TestFunc(a=3.5, output_spec=my_output_spec)
+    outputs = funky()
+    assert outputs.out1 == 3.5
 
 
 def test_output_spec_func_1a_except():
@@ -833,7 +829,7 @@ def test_output_spec_func_1a_except():
     """
 
     @python.define
-    def testfunc(a):
+    def TestFunc(a):
         return a
 
     my_output_spec = SpecInfo(
@@ -842,7 +838,7 @@ def test_output_spec_func_1a_except():
         bases=(BaseDef,),
     )
 
-    funky = testfunc(a=3.5, output_spec=my_output_spec)
+    funky = TestFunc(a=3.5, output_spec=my_output_spec)
     with pytest.raises(TypeError):
         funky()
 
@@ -853,7 +849,7 @@ def test_output_spec_func_2():
     """
 
     @python.define
-    def testfunc(a) -> int:
+    def TestFunc(a) -> int:
         return a
 
     my_output_spec = SpecInfo(
@@ -862,9 +858,9 @@ def test_output_spec_func_2():
         bases=(BaseDef,),
     )
 
-    funky = testfunc(a=3.5, output_spec=my_output_spec)
-    res = funky()
-    assert res.output.out1 == 3.5
+    funky = TestFunc(a=3.5, output_spec=my_output_spec)
+    outputs = funky()
+    assert outputs.out1 == 3.5
 
 
 def test_output_spec_func_2a():
@@ -874,7 +870,7 @@ def test_output_spec_func_2a():
     """
 
     @python.define
-    def testfunc(a) -> int:
+    def TestFunc(a) -> int:
         return a
 
     my_output_spec = SpecInfo(
@@ -883,9 +879,9 @@ def test_output_spec_func_2a():
         bases=(BaseDef,),
     )
 
-    funky = testfunc(a=3.5, output_spec=my_output_spec)
-    res = funky()
-    assert res.output.out1 == 3.5
+    funky = TestFunc(a=3.5, output_spec=my_output_spec)
+    outputs = funky()
+    assert outputs.out1 == 3.5
 
 
 def test_output_spec_func_3():
@@ -894,7 +890,7 @@ def test_output_spec_func_3():
     """
 
     @python.define
-    def testfunc(a, b):
+    def TestFunc(a, b):
         return [a, b]
 
     my_output_spec = SpecInfo(
@@ -908,9 +904,9 @@ def test_output_spec_func_3():
         bases=(BaseDef,),
     )
 
-    funky = testfunc(a=3.5, b=1, output_spec=my_output_spec)
-    res = funky()
-    assert res.output.out_list == [3.5, 1]
+    funky = TestFunc(a=3.5, b=1, output_spec=my_output_spec)
+    outputs = funky()
+    assert outputs.out_list == [3.5, 1]
 
 
 def test_output_spec_func_4():
@@ -919,7 +915,7 @@ def test_output_spec_func_4():
     """
 
     @python.define
-    def testfunc(a):
+    def TestFunc(a):
         return [a]
 
     my_output_spec = SpecInfo(
@@ -933,9 +929,9 @@ def test_output_spec_func_4():
         bases=(BaseDef,),
     )
 
-    funky = testfunc(a=3.5, output_spec=my_output_spec)
-    res = funky()
-    assert res.output.out_1el == 3.5
+    funky = TestFunc(a=3.5, output_spec=my_output_spec)
+    outputs = funky()
+    assert outputs.out_1el == 3.5
 
 
 def test_exception_func():
@@ -955,8 +951,8 @@ def test_result_none_1():
         return None
 
     task = fun_none(name="none", x=3)
-    res = task()
-    assert res.output.out is None
+    outputs = task()
+    assert outputs.out is None
 
 
 def test_result_none_2():
@@ -967,25 +963,25 @@ def test_result_none_2():
         return None
 
     task = fun_none(name="none", x=3)
-    res = task()
-    assert res.output.out1 is None
-    assert res.output.out2 is None
+    outputs = task()
+    assert outputs.out1 is None
+    assert outputs.out2 is None
 
 
 def test_audit_prov(
     tmpdir,
 ):
     @python.define
-    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
     # printing the audit message
-    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky = TestFunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
     funky.cache_dir = tmpdir
     funky()
 
     # saving the audit message into the file
-    funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    funky = TestFunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     funky.cache_dir = tmpdir
     funky()
     # this should be the default loctaion
@@ -998,12 +994,12 @@ def test_audit_prov(
 
 def test_audit_task(tmpdir):
     @python.define
-    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
     from glob import glob
 
-    funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    funky = TestFunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     funky.cache_dir = tmpdir
     funky()
     message_path = tmpdir / funky.checksum / "messages"
@@ -1013,7 +1009,7 @@ def test_audit_task(tmpdir):
             data = json.load(f)
             if "@type" in data:
                 if "AssociatedWith" in data:
-                    assert "testfunc" in data["Label"]
+                    assert "TestFunc" in data["Label"]
 
             if "@type" in data:
                 if data["@type"] == "input":
@@ -1178,16 +1174,16 @@ def test_audit_prov_messdir_1(
     """customized messenger dir"""
 
     @python.define
-    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
     # printing the audit message
-    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky = TestFunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
     funky.cache_dir = tmpdir
     funky()
 
     # saving the audit message into the file
-    funky = testfunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
+    funky = TestFunc(a=2, audit_flags=AuditFlag.PROV, messengers=FileMessenger())
     # user defined path
     message_path = tmpdir / funky.checksum / "my_messages"
     funky.cache_dir = tmpdir
@@ -1206,18 +1202,18 @@ def test_audit_prov_messdir_2(
     """customized messenger dir in init"""
 
     @python.define
-    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
     # printing the audit message
-    funky = testfunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
+    funky = TestFunc(a=1, audit_flags=AuditFlag.PROV, messengers=PrintMessenger())
     funky.cache_dir = tmpdir
     funky()
 
     # user defined path (doesn't depend on checksum, can be defined before init)
     message_path = tmpdir / "my_messages"
     # saving the audit message into the file
-    funky = testfunc(
+    funky = TestFunc(
         a=2,
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
@@ -1238,7 +1234,7 @@ def test_audit_prov_wf(
     """FileMessenger for wf"""
 
     @python.define
-    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
     wf = Workflow(
@@ -1248,8 +1244,8 @@ def test_audit_prov_wf(
         audit_flags=AuditFlag.PROV,
         messengers=FileMessenger(),
     )
-    wf.add(testfunc(name="testfunc", a=wf.lzin.x))
-    wf.set_output([("out", wf.testfunc.lzout.out)])
+    wf.add(TestFunc(name="TestFunc", a=wf.lzin.x))
+    wf.set_output([("out", wf.TestFunc.lzout.out)])
     wf.x = 2
 
     wf(plugin="cf")
@@ -1265,10 +1261,10 @@ def test_audit_all(
     tmpdir,
 ):
     @python.define
-    def testfunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
+    def TestFunc(a: int, b: float = 0.1) -> ty.NamedTuple("Output", [("out", float)]):
         return a + b
 
-    funky = testfunc(a=2, audit_flags=AuditFlag.ALL, messengers=FileMessenger())
+    funky = TestFunc(a=2, audit_flags=AuditFlag.ALL, messengers=FileMessenger())
     message_path = tmpdir / funky.checksum / "messages"
     funky.cache_dir = tmpdir
     funky.audit.messenger_args = dict(message_dir=message_path)
@@ -1290,35 +1286,35 @@ def test_shell_cmd(tmpdir):
     # all args given as executable
     shelly = ShellTask(name="shelly", executable=cmd)
     assert shelly.cmdline == " ".join(cmd)
-    res = shelly._run()
-    assert res.output.stdout == " ".join(cmd[1:]) + "\n"
+    outputs = shelly()
+    assert outputs.stdout == " ".join(cmd[1:]) + "\n"
 
     # separate command into exec + args
     shelly = ShellTask(executable=cmd[0], args=cmd[1:])
     assert shelly.definition.executable == "echo"
     assert shelly.cmdline == " ".join(cmd)
-    res = shelly._run()
-    assert res.output.return_code == 0
-    assert res.output.stdout == " ".join(cmd[1:]) + "\n"
+    outputs = shelly()
+    assert outputs.return_code == 0
+    assert outputs.stdout == " ".join(cmd[1:]) + "\n"
 
 
 def test_functask_callable(tmpdir):
     # no submitter or plugin
     foo = FunAddTwo(a=1)
-    res = foo()
-    assert res.output.out == 3
+    outputs = foo()
+    assert outputs.out == 3
     assert foo.plugin is None
 
     # plugin
     bar = FunAddTwo(a=2)
-    res = bar(plugin="cf")
-    assert res.output.out == 4
+    outputs = bar(plugin="cf")
+    assert outputs.out == 4
     assert bar.plugin is None
 
     foo2 = FunAddTwo(a=3)
     foo2.plugin = "cf"
-    res = foo2()
-    assert res.output.out == 5
+    outputs = foo2()
+    assert outputs.out == 5
     assert foo2.plugin == "cf"
 
 
@@ -1554,10 +1550,10 @@ def test_object_input():
     """Test function tasks with object inputs"""
 
     @python.define
-    def testfunc(a: A):
+    def TestFunc(a: A):
         return a.x
 
-    outputs = testfunc(a=A(x=7))()
+    outputs = TestFunc(a=A(x=7))()
     assert outputs.out == 7
 
 
