@@ -53,6 +53,7 @@ doc = [
     "pandoc",
     "numpy",
     "scipy",
+    "fileformats-medimage",
     # "pydra-mrtrix3",
     "sphinx_rtd_theme",
     "sphinx-click",
